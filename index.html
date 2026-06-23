@@ -43,8 +43,49 @@
 
       <main class="app-main" tabindex="-1">
         <section class="screen" id="screen-today" data-screen-panel="today" aria-labelledby="title-today">
-          <h1 id="title-today">Hoje</h1>
-          <div class="empty-state">
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Seu plano</p>
+              <h1 id="title-today">Hoje</h1>
+            </div>
+            <p id="today-date-label"></p>
+          </div>
+
+          <div class="review-dashboard" id="review-dashboard">
+            <section class="review-block review-block-overdue" id="block-overdue" aria-labelledby="title-overdue" hidden>
+              <div class="block-heading">
+                <h2 id="title-overdue">Atrasadas</h2>
+                <span class="block-count" data-count-for="overdue"></span>
+              </div>
+              <div class="review-list" data-review-list="overdue"></div>
+            </section>
+
+            <section class="review-block" id="block-today" aria-labelledby="title-review-today" hidden>
+              <div class="block-heading">
+                <h2 id="title-review-today">Hoje</h2>
+                <span class="block-count" data-count-for="today"></span>
+              </div>
+              <div class="review-list" data-review-list="today"></div>
+            </section>
+
+            <section class="review-block review-block-done" id="block-done-today" aria-labelledby="title-done-today" hidden>
+              <div class="block-heading">
+                <h2 id="title-done-today">Feitas hoje</h2>
+                <span class="block-count" data-count-for="doneToday"></span>
+              </div>
+              <div class="review-list" data-review-list="doneToday"></div>
+            </section>
+
+            <section class="review-block" id="block-tomorrow" aria-labelledby="title-tomorrow" hidden>
+              <div class="block-heading">
+                <h2 id="title-tomorrow">Amanhã</h2>
+                <span class="block-count" data-count-for="tomorrow"></span>
+              </div>
+              <div class="review-list" data-review-list="tomorrow"></div>
+            </section>
+          </div>
+
+          <div class="empty-state" id="today-empty-state">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M6 3v3M18 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 12h2M14 12h2M8 16h2M14 16h2" />
             </svg>

@@ -33,7 +33,7 @@
 | TASK-003 | Cadastro de disciplinas | [x] | TASK-002 |
 | TASK-004 | Cadastro de estudo (studyRecord) | [x] | TASK-003 |
 | TASK-005 | Geração automática de revisões | [x] | TASK-004 |
-| TASK-006 | Tela Hoje — cards mobile | [ ] | TASK-005 |
+| TASK-006 | Tela Hoje — cards mobile | [x] | TASK-005 |
 | TASK-007 | Tela Hoje — tabela desktop | [ ] | TASK-006 |
 | TASK-008 | Marcar revisão como feita | [ ] | TASK-006 |
 | TASK-009 | Registrar questões e acertos | [ ] | TASK-006 |
@@ -346,7 +346,7 @@ Ao salvar um estudo, gerar automaticamente 16 tarefas de revisão com as datas c
 
 ## TASK-006 — Tela Hoje — cards mobile
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-005
 
 **Objetivo:**

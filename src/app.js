@@ -17,12 +17,126 @@ const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
 const studySourceInput = document.querySelector("#study-source");
 const studyMessage = document.querySelector("#study-message");
+const todayDateLabel = document.querySelector("#today-date-label");
+const todayEmptyState = document.querySelector("#today-empty-state");
+const reviewGroups = {
+  overdue: document.querySelector("#block-overdue"),
+  today: document.querySelector("#block-today"),
+  doneToday: document.querySelector("#block-done-today"),
+  tomorrow: document.querySelector("#block-tomorrow"),
+};
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatDate(dateValue, options = {}) {
+  if (!dateValue) return "—";
+  const date = new Date(`${dateValue.slice(0, 10)}T12:00:00`);
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    ...options,
+  }).format(date);
+}
+
+function getTomorrowValue(today) {
+  const date = new Date(`${today}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function createTextElement(tagName, className, text) {
+  const element = document.createElement(tagName);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function createReviewCard(task, studyRecord, subject, groupName) {
+  const card = document.createElement("article");
+  card.className = "review-card";
+  card.dataset.reviewId = String(task.id);
+
+  const topline = document.createElement("div");
+  topline.className = "review-card-topline";
+  topline.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
+
+  const badgeText = groupName === "overdue"
+    ? `Atrasada · R${task.reviewNumber}`
+    : groupName === "doneToday"
+      ? `Feita · R${task.reviewNumber}`
+      : `${groupName === "tomorrow" ? "Amanhã" : "Hoje"} · R${task.reviewNumber}`;
+  const badge = createTextElement("span", "review-badge", badgeText);
+  if (groupName === "overdue") badge.classList.add("is-overdue");
+  if (groupName === "doneToday") badge.classList.add("is-done");
+  topline.append(badge);
+  card.append(topline);
+
+  card.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+  if (studyRecord?.source) {
+    card.append(createTextElement("p", "review-source", studyRecord.source));
+  }
+
+  const meta = document.createElement("dl");
+  meta.className = "review-meta";
+  for (const [label, value] of [
+    ["Estudado em", formatDate(studyRecord?.studyDate)],
+    ["Revisão prevista", formatDate(task.dueDate)],
+  ]) {
+    const item = document.createElement("div");
+    item.append(
+      createTextElement("dt", "", label),
+      createTextElement("dd", "", value),
+    );
+    meta.append(item);
+  }
+  card.append(meta);
+  return card;
+}
+
+export async function renderToday() {
+  const today = getLocalDateValue();
+  const tomorrow = getTomorrowValue(today);
+  const [overdue, dueToday, doneToday, dueTomorrow, studyRecords, subjects] = await Promise.all([
+    DB.reviewTasks.getOverdue(today),
+    DB.reviewTasks.getForToday(today),
+    DB.reviewTasks.getCompletedToday(today),
+    DB.reviewTasks.getTomorrow(tomorrow),
+    DB.studyRecords.getAll(),
+    DB.subjects.getAll(),
+  ]);
+  const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
+  const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
+  const groups = { overdue, today: dueToday, doneToday, tomorrow: dueTomorrow };
+  let totalVisible = 0;
+
+  for (const [groupName, tasks] of Object.entries(groups)) {
+    const block = reviewGroups[groupName];
+    const list = block.querySelector(`[data-review-list="${groupName}"]`);
+    const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    list.replaceChildren();
+    count.textContent = String(tasks.length);
+    block.hidden = tasks.length === 0;
+    totalVisible += tasks.length;
+
+    for (const task of tasks) {
+      const studyRecord = studiesById.get(task.studyRecordId);
+      const subject = subjectsById.get(studyRecord?.subjectId);
+      list.append(createReviewCard(task, studyRecord, subject, groupName));
+    }
+  }
+
+  todayEmptyState.hidden = totalVisible > 0;
+  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  }).format(new Date());
 }
 
 const REVIEW_DAY_OFFSETS = [
@@ -105,6 +219,10 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (focus) {
     mainContent?.focus({ preventScroll: true });
   }
+
+  if (nextScreen === "today") {
+    renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
+  }
 }
 
 for (const item of navigationItems) {
@@ -185,4 +303,5 @@ studyForm.addEventListener("submit", async (event) => {
 
 studyDateInput.value = getLocalDateValue();
 await renderSubjects();
+await renderToday();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

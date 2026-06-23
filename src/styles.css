@@ -169,6 +169,151 @@ h1 {
   letter-spacing: -0.045em;
 }
 
+.screen-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.screen-heading .eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.screen-heading > p {
+  margin: 0 0 0.25rem;
+  color: var(--color-muted);
+  font-weight: 550;
+}
+
+.review-dashboard {
+  display: grid;
+  gap: 2rem;
+}
+
+.review-block[hidden] {
+  display: none;
+}
+
+.block-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.block-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+}
+
+.block-count {
+  min-width: 1.65rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: #e8eef7;
+  color: #41536c;
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-align: center;
+}
+
+.review-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.review-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.9rem;
+  background: var(--color-surface);
+  box-shadow: 0 0.5rem 1.5rem rgb(23 36 59 / 5%);
+}
+
+.review-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.review-subject {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.review-badge {
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+
+.review-badge.is-overdue {
+  background: #fff3d6;
+  color: #854d0e;
+}
+
+.review-badge.is-done {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.review-content {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.review-source {
+  margin: -0.6rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.review-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.review-meta div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.review-meta dt {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-meta dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .form-card {
   width: min(100%, 42rem);
   margin-top: 2rem;
@@ -340,6 +485,10 @@ h1 {
   text-align: center;
 }
 
+.empty-state[hidden] {
+  display: none;
+}
+
 .empty-state > svg {
   width: 4.5rem;
   height: 4.5rem;
@@ -456,6 +605,16 @@ h1 {
 
   .form-card {
     margin-top: 1.5rem;
+  }
+
+  .screen-heading {
+    align-items: start;
+    flex-direction: column;
+    margin-bottom: 1.5rem;
+  }
+
+  .screen-heading > p {
+    font-size: 0.9rem;
   }
 
   .inline-form-row {

@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-005 concluída. Cada estudo gera 16 revisões em transação atômica.
+- **Fase:** TASK-006 concluída. Tela Hoje agrupa revisões em cards mobile.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-006 — Tela Hoje em cards mobile
+- **Próxima ação:** Executar TASK-007 — Tela Hoje em tabela desktop
 
 ---
 
@@ -134,6 +134,7 @@ Nenhum.
 - [x] TASK-003 executada em 2026-06-23: criação, validação e seleção persistente de disciplinas.
 - [x] TASK-004 executada em 2026-06-23: formulário validado e persistência de sessões de estudo.
 - [x] TASK-005 executada em 2026-06-23: 16 revisões geradas com datas fixas e gravação atômica.
+- [x] TASK-006 executada em 2026-06-23: cards e quatro grupos dinâmicos da Tela Hoje.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
