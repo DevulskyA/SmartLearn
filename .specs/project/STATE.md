@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-013 concluída. Backup JSON pode ser exportado localmente.
+- **Fase:** TASK-014 concluída. Backup JSON pode substituir os dados com validação e atomicidade.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-014 — Importar backup JSON
+- **Próxima ação:** Executar TASK-015 — Validação Android e preparação iOS
 
 ---
 
@@ -142,6 +142,7 @@ Nenhum.
 - [x] TASK-011 executada em 2026-06-23: métricas gerais e médias por disciplina.
 - [x] TASK-012 executada em 2026-06-23: gráfico Canvas nativo com notas em ordem cronológica.
 - [x] TASK-013 executada em 2026-06-23: exportação JSON e registro do último backup.
+- [x] TASK-014 executada em 2026-06-23: importação JSON validada e transacional.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).

@@ -42,6 +42,7 @@ const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
 const lastBackupLabel = document.querySelector("#last-backup-label");
 const backupMessage = document.querySelector("#backup-message");
+const importBackupInput = document.querySelector("#import-backup");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -305,6 +306,34 @@ export async function exportBackup() {
   }
 }
 
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(file);
+  });
+}
+
+export async function importBackup(file) {
+  backupMessage.classList.remove("is-error");
+  backupMessage.textContent = "";
+  try {
+    const data = JSON.parse(await readFileText(file));
+    await DB.importAll(data);
+    await renderSubjects();
+    await Promise.all([renderToday(), renderStats(), renderSettings()]);
+    backupMessage.textContent = "Backup importado com sucesso.";
+    showScreen("today", { focus: true });
+  } catch (error) {
+    backupMessage.classList.add("is-error");
+    backupMessage.textContent = error instanceof SyntaxError
+      ? "O arquivo selecionado não contém JSON válido."
+      : "O backup é inválido ou não pôde ser importado.";
+    console.error("Falha ao importar backup.", error);
+  }
+}
+
 const REVIEW_DAY_OFFSETS = [
   1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
 ];
@@ -457,6 +486,14 @@ reviewDashboard.addEventListener("change", async (event) => {
 });
 
 exportBackupButton.addEventListener("click", exportBackup);
+
+importBackupInput.addEventListener("change", async () => {
+  const [file] = importBackupInput.files;
+  if (!file) return;
+  const confirmed = window.confirm("Isso substituirá todos os dados atuais. Continuar?");
+  if (confirmed) await importBackup(file);
+  importBackupInput.value = "";
+});
 
 reviewDashboard.addEventListener("focusout", async (event) => {
   const input = event.target.closest('[data-action="comment"]');

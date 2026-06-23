@@ -671,7 +671,8 @@ h1 {
 }
 
 .text-button,
-.primary-button {
+.primary-button,
+.secondary-button {
   min-height: 2.75rem;
   border-radius: 0.65rem;
   font-weight: 650;
@@ -693,8 +694,35 @@ h1 {
   color: #fff;
 }
 
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+  border: 1px solid #b9c5d5;
+  background: #fff;
+  color: var(--color-text);
+}
+
+.file-button {
+  cursor: pointer;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .text-button:focus-visible,
-.primary-button:focus-visible {
+.primary-button:focus-visible,
+.secondary-button:focus-visible {
   outline: 3px solid rgb(11 91 211 / 28%);
   outline-offset: 2px;
 }

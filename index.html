@@ -210,6 +210,8 @@
             </div>
             <div class="settings-actions">
               <button class="primary-button" id="export-backup" type="button">Exportar backup</button>
+              <label class="secondary-button file-button" for="import-backup">Importar backup</label>
+              <input class="visually-hidden" id="import-backup" type="file" accept=".json,application/json" />
               <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
             </div>
             <p class="form-message" id="backup-message" role="status" aria-live="polite"></p>

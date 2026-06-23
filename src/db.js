@@ -134,94 +134,54 @@ function assertImportData(data) {
   }
 }
 
-async function insertSubjects(rows) {
-  const db = requireDatabase();
-  for (const row of rows) {
-    await db.execute(
-      `INSERT INTO subjects (id, name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4)`,
-      [row.id, normalizeName(row.name), row.createdAt, row.updatedAt],
-    );
+function buildImportStatements(data) {
+  const statements = [
+    { query: "DELETE FROM review_tasks", values: [] },
+    { query: "DELETE FROM study_records", values: [] },
+    { query: "DELETE FROM subjects", values: [] },
+    { query: "DELETE FROM settings", values: [] },
+  ];
+  for (const row of data.subjects) {
+    statements.push({
+      query: `INSERT INTO subjects (id, name, created_at, updated_at)
+        VALUES ($1, $2, $3, $4)`,
+      values: [row.id, normalizeName(row.name), row.createdAt, row.updatedAt],
+    });
   }
-}
-
-async function insertStudyRecords(rows) {
-  const db = requireDatabase();
-  for (const row of rows) {
-    await db.execute(
-      `INSERT INTO study_records
+  for (const row of data.studyRecords) {
+    statements.push({
+      query: `INSERT INTO study_records
         (id, subject_id, study_date, content, source, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        row.id,
-        row.subjectId,
-        row.studyDate,
-        row.content,
-        row.source ?? null,
-        row.createdAt,
-        row.updatedAt,
-      ],
-    );
+        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      values: [row.id, row.subjectId, row.studyDate, row.content, row.source ?? null, row.createdAt, row.updatedAt],
+    });
   }
-}
-
-async function insertReviewTasks(rows) {
-  const db = requireDatabase();
-  for (const row of rows) {
-    await db.execute(
-      `INSERT INTO review_tasks
+  for (const row of data.reviewTasks) {
+    statements.push({
+      query: `INSERT INTO review_tasks
         (id, study_record_id, review_number, due_date, completed_at,
          review_done, questions_done, questions_count, correct_count,
          score_percent, comment, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [
-        row.id,
-        row.studyRecordId,
-        row.reviewNumber,
-        row.dueDate,
-        row.completedAt ?? null,
-        row.reviewDone ? 1 : 0,
-        row.questionsDone ? 1 : 0,
-        row.questionsCount ?? null,
-        row.correctCount ?? null,
-        row.scorePercent ?? null,
-        row.comment ?? null,
-        row.createdAt,
-        row.updatedAt,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      values: [
+        row.id, row.studyRecordId, row.reviewNumber, row.dueDate,
+        row.completedAt ?? null, row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
+        row.questionsCount ?? null, row.correctCount ?? null, row.scorePercent ?? null,
+        row.comment ?? null, row.createdAt, row.updatedAt,
       ],
-    );
+    });
   }
-}
-
-async function replaceSettings(settings) {
-  const row = (Array.isArray(settings) ? settings[0] : settings) ?? {};
-
-  await requireDatabase().execute(
-    `INSERT OR REPLACE INTO settings
-      (key, app_version, review_schedule, last_backup_at)
-     VALUES ('main', $1, $2, $3)`,
-    [
-      row.appVersion ?? "1.0.0",
-      JSON.stringify(row.reviewSchedule ?? REVIEW_SCHEDULE),
-      row.lastBackupAt ?? null,
+  const settings = (Array.isArray(data.settings) ? data.settings[0] : data.settings) ?? {};
+  statements.push({
+    query: `INSERT INTO settings (key, app_version, review_schedule, last_backup_at)
+      VALUES ('main', $1, $2, $3)`,
+    values: [
+      settings.appVersion ?? "1.0.0",
+      JSON.stringify(settings.reviewSchedule ?? REVIEW_SCHEDULE),
+      settings.lastBackupAt ?? null,
     ],
-  );
-}
-
-async function clearAll() {
-  const db = requireDatabase();
-  await db.execute("DELETE FROM review_tasks");
-  await db.execute("DELETE FROM study_records");
-  await db.execute("DELETE FROM subjects");
-  await db.execute("DELETE FROM settings");
-}
-
-async function restoreAll(data) {
-  await clearAll();
-  await insertSubjects(data.subjects);
-  await insertStudyRecords(data.studyRecords);
-  await insertReviewTasks(data.reviewTasks);
-  await replaceSettings(data.settings);
+  });
+  return statements;
 }
 
 export const DB = {
@@ -527,22 +487,9 @@ export const DB = {
 
   async importAll(data) {
     assertImportData(data);
-    const currentData = await DB.exportAll();
-
-    try {
-      await restoreAll(data);
-    } catch (error) {
-      try {
-        await restoreAll(currentData);
-      } catch (restoreError) {
-        throw new AggregateError(
-          [error, restoreError],
-          "A importação falhou e o estado anterior não pôde ser restaurado.",
-        );
-      }
-      throw error;
-    }
-
+    await invoke("execute_sqlite_transaction", {
+      statements: buildImportStatements(data),
+    });
     return DB.exportAll();
   },
 };
