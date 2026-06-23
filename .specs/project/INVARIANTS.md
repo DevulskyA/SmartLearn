@@ -37,6 +37,14 @@ No fluxo normal, o aluno seleciona uma disciplina existente; ele não digita o n
 como texto livre a cada estudo. O sistema deve evitar digitação repetitiva e esforço cognitivo
 desnecessário.
 
+## INV-05B — Fonte é entidade reutilizável, não texto repetido
+
+Fonte é cadastrada uma vez e reutilizada nos fluxos de estudo/RP.
+No fluxo normal, o aluno seleciona uma fonte existente; ele não digita o nome da fonte
+como texto livre a cada estudo. `study_records` deve referenciar fonte por `source_id`.
+Disciplina e fonte devem ser normalizadas antes de salvar: `trim()`, colapso de espaços
+múltiplos e comparação case-insensitive para impedir duplicatas por caixa ou espaço.
+
 ## INV-06 — Registro de exercícios é simples
 
 Registrar exercícios não pode ser complexo. O aluno está cansado.

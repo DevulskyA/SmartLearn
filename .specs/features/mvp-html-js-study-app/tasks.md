@@ -1,8 +1,8 @@
 # tasks.md — MVP HTML/JS Study App
 
 **Feature:** mvp-html-js-study-app
-**Total de tasks:** 18
-**Status geral:** Concluído
+**Total de tasks:** 19
+**Status geral:** TASK-018 pendente antes de considerar o MVP concluído
 
 ---
 
@@ -45,6 +45,7 @@
 | TASK-015 | Tauri 2 — validação Android e preparação iOS | [x] | TASK-002 |
 | TASK-016 | Polimento — acessibilidade e responsividade | [x] | TASK-014, TASK-015 |
 | TASK-017 | Correção obrigatória: disciplinas como entidade reutilizável | [x] | TASK-016 |
+| TASK-018 | Correção obrigatória: fontes como entidade reutilizável e seed inicial | [ ] | TASK-017 |
 
 ---
 
@@ -301,6 +302,10 @@ Implementar o formulário de cadastro de estudo com os 4 campos obrigatórios/op
 3. Clicar em "Salvar". Verificar mensagem de sucesso.
 4. No console, executar `await DB.studyRecords.getAll()` e verificar o registro.
 5. Tentar salvar sem conteúdo e verificar o erro.
+
+**Correção posterior obrigatória:** TASK-018 substitui o contrato normal `source`/`source TEXT` por
+`sourceId`/`study_records.source_id`, torna Fonte obrigatória e adiciona `sources` como entidade
+reutilizável. Esta task permanece como histórico da implementação original.
 
 ---
 
@@ -910,3 +915,133 @@ com migration idempotente; `study_records` valida disciplina ativa por `subject_
 disciplinas lista, edita, desativa/reativa e exclui em cascata; quick add mantém a nova disciplina
 selecionada. Exclusão destrutiva remove `review_tasks`, `study_records` e `subjects` em transação
 após confirmação explícita.
+
+---
+
+## TASK-018 — Correção obrigatória: fontes como entidade reutilizável e seed inicial
+
+**Status:** [ ] Pendente
+**Depende de:** TASK-017
+
+**Objetivo:**
+Corrigir a modelagem e a UX para garantir que Fonte seja entidade própria em `sources`, cadastrada
+uma vez e reutilizada por seleção no fluxo RP/Cadastro. O fluxo normal não deve salvar `source TEXT`
+nem exigir que o aluno digite a fonte manualmente a cada estudo.
+
+Esta task também introduz seed inicial idempotente para disciplinas e fontes, sem importar conteúdos
+históricos/aulas como `study_records`.
+
+**Arquivos afetados esperados:**
+- `src/db.js` (schema/migration, seed idempotente, API `DB.sources.*` e contrato de `studyRecords`)
+- `index.html` (select de fonte, quick add de fonte e área de fontes)
+- `src/app.js` (listar/criar/editar/desativar fontes; integração com estudo)
+- `src/styles.css` (estilos da área de fontes e quick add)
+- `.specs/project/STATE.md` (registrar execução quando ocorrer)
+
+**Modelo obrigatório:**
+1. Criar tabela `sources` com:
+   - `id`
+   - `name`
+   - `created_at`
+   - `updated_at`
+   - `is_active`
+   - `sort_order`
+2. Confirmar `subjects` com:
+   - `id`
+   - `name`
+   - `created_at`
+   - `updated_at`
+   - `is_active`
+   - `sort_order`
+3. Substituir o contrato normal de `study_records.source TEXT` por
+   `study_records.source_id INTEGER NOT NULL REFERENCES sources(id)`.
+4. `study_records` deve salvar:
+   - `subject_id`
+   - `source_id`
+   - `study_date`
+   - `content`
+
+**Seed inicial obrigatório:**
+1. Inserir disciplinas iniciais, de forma idempotente:
+   - `Língua Portuguesa`
+   - `Conhecimentos sobre o DF`
+   - `Legislação`
+   - `Administração`
+   - `AFO`
+   - `Arquivologia`
+   - `Recursos Materiais`
+2. Inserir fontes iniciais, de forma idempotente:
+   - `Grancursos`
+3. Rodar seed em `DB.init()` ou função interna chamada por ele.
+4. Rodar várias vezes sem duplicar registros.
+5. Preservar `sort_order`.
+6. Não sobrescrever registros existentes.
+
+**Normalização obrigatória:**
+Antes de salvar disciplina ou fonte:
+1. Aplicar `trim()`.
+2. Colapsar espaços múltiplos.
+3. Comparar nomes case-insensitive.
+4. Impedir duplicatas por espaço ou caixa, como `Administração`, `Administração ` e `administração`.
+
+**API obrigatória:**
+1. Adicionar/confirmar:
+   - `DB.sources.getAll()`
+   - `DB.sources.getActive()`
+   - `DB.sources.create(name)`
+   - `DB.sources.update(id, fields)`
+   - `DB.sources.deactivate(id)`
+2. Manter:
+   - `DB.subjects.getAll()`
+   - `DB.subjects.create(name)`
+3. Atualizar:
+   - `DB.studyRecords.create({ subjectId, sourceId, studyDate, content })`
+4. Remover do contrato normal:
+   - `source`
+
+**UI obrigatória no RP/Cadastro:**
+1. Disciplina: select/autocomplete de `subjects` ativos.
+2. `+ Nova disciplina`:
+   - cria sem sair do fluxo;
+   - seleciona automaticamente a disciplina recém-criada.
+3. Data da aula: date.
+4. Conteúdo: text.
+5. Fonte: select/autocomplete de `sources` ativas.
+6. `+ Nova fonte`:
+   - cria sem sair do fluxo;
+   - seleciona automaticamente a fonte recém-criada.
+7. Disciplina obrigatória.
+8. Fonte obrigatória.
+9. Se houver apenas uma fonte ativa, pré-selecionar automaticamente.
+10. Como o seed inicial cria `Grancursos`, `Grancursos` deve vir selecionado por padrão na primeira abertura.
+
+**Backup/importação:**
+1. Exportar/importar `sources` junto com `subjects`, `studyRecords`, `reviewTasks` e `settings`.
+2. Preservar `isActive` e `sortOrder` de `sources`.
+3. A importação de estudos históricos/aulas não faz parte desta task.
+
+**Critérios de aceite:**
+- `sources` existe como entidade reutilizável.
+- `Grancursos` existe automaticamente na primeira abertura.
+- Disciplinas iniciais existem automaticamente na primeira abertura.
+- Seed roda repetidamente sem duplicar.
+- Nomes de disciplinas e fontes são normalizados antes de salvar.
+- Duplicatas por caixa/espaço são recusadas.
+- RP/Cadastro usa `subject_id` e `source_id`.
+- Não é possível salvar estudo sem `subjectId` válido.
+- Não é possível salvar estudo sem `sourceId` válido.
+- Quick add de disciplina seleciona automaticamente a nova disciplina.
+- Quick add de fonte seleciona automaticamente a nova fonte.
+- `source TEXT` não é usado no contrato normal de `study_records`.
+- Backup JSON inclui `sources`.
+- Commit local contém somente a TASK-018 e deixa Windows/Android funcionais.
+
+**Como testar manualmente:**
+1. Abrir o app em banco limpo e confirmar que as disciplinas iniciais aparecem.
+2. Confirmar que `Grancursos` aparece em Fonte e fica selecionado por padrão.
+3. Tentar criar `Administração ` depois de `Administração`; confirmar rejeição.
+4. Tentar criar `grancursos` depois de `Grancursos`; confirmar rejeição.
+5. Criar nova fonte por `+ Nova fonte`; confirmar que ela fica selecionada.
+6. Salvar estudo e confirmar `study_records.subject_id` e `study_records.source_id`.
+7. Exportar backup e confirmar presença de `sources`.
+8. Importar backup e confirmar preservação das fontes.

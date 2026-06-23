@@ -2,7 +2,7 @@
 
 **Feature:** mvp-html-js-study-app
 **Fase:** 1 — MVP Local
-**Status:** Especificação aprovada. Pronta para implementação.
+**Status:** Especificação aprovada com correção obrigatória de modelagem para `sources`. TASK-018 pendente antes de retomar implementação funcional.
 
 ---
 
@@ -43,7 +43,8 @@ A lista de disciplinas ativas é usada como select no cadastro de estudo.
 
 **Critérios de aceite:**
 - Campo nome obrigatório.
-- Disciplina duplicada não é aceita (mesmo nome, case-insensitive).
+- Antes de salvar, o nome é normalizado com `trim()`, colapso de espaços múltiplos e comparação case-insensitive.
+- Disciplina duplicada não é aceita, incluindo variações por caixa ou espaço.
 - Após criar, aparece imediatamente no select de cadastro de estudo/RP.
 - Editar disciplina atualiza a lista sem quebrar estudos antigos.
 - Desativar disciplina remove do fluxo normal de novos estudos, mas preserva vínculos históricos.
@@ -52,13 +53,64 @@ A lista de disciplinas ativas é usada como select no cadastro de estudo.
 - Excluir disciplina exige confirmação explícita informando que todos os dados relacionados serão apagados.
 - Não há limite de disciplinas no MVP.
 
+**Seed inicial obrigatório de disciplinas:**
+- `Língua Portuguesa`
+- `Conhecimentos sobre o DF`
+- `Legislação`
+- `Administração`
+- `AFO`
+- `Arquivologia`
+- `Recursos Materiais`
+
+O seed roda na inicialização do banco, é idempotente, não duplica registros, preserva `sort_order`
+e não sobrescreve registros existentes.
+
+---
+
+### RF-01A — Cadastro de fontes
+
+O aluno pode gerenciar fontes de estudo em entidade própria `sources` (ex: "Grancursos").
+Fonte é entidade reutilizável do sistema, não texto livre opcional repetido no cadastro de estudo/RP.
+A lista de fontes ativas é usada como select no cadastro de estudo.
+
+**Campos mínimos da entidade `sources`:**
+| Campo | Tipo | Obrigatório | Observação |
+|-------|------|-------------|------------|
+| `id` | INTEGER | Sim | Chave primária |
+| `name` | TEXT | Sim | Único, case-insensitive |
+| `created_at` | TEXT | Sim | ISO string |
+| `updated_at` | TEXT | Sim | ISO string |
+| `is_active` | INTEGER | Sim | 1 = ativa, 0 = desativada |
+| `sort_order` | INTEGER | Sim | Ordem manual/futura; padrão incremental |
+
+**Ações obrigatórias:**
+- Listar fontes.
+- Criar fonte.
+- Editar nome da fonte.
+- Desativar fonte sem apagar histórico.
+
+**Critérios de aceite:**
+- Campo nome obrigatório.
+- Antes de salvar, o nome é normalizado com `trim()`, colapso de espaços múltiplos e comparação case-insensitive.
+- Fonte duplicada não é aceita, incluindo variações por caixa ou espaço.
+- Após criar, aparece imediatamente no select de cadastro de estudo/RP.
+- Se houver apenas uma fonte ativa, ela é pré-selecionada automaticamente.
+- O seed inicial cria `Grancursos`; portanto, `Grancursos` aparece selecionado por padrão na primeira abertura.
+
+**Seed inicial obrigatório de fontes:**
+- `Grancursos`
+
+O seed roda na inicialização do banco, é idempotente, não duplica registros, preserva `sort_order`
+e não sobrescreve registros existentes.
+
 ---
 
 ### RF-02 — Cadastro de estudo (modelo RP)
 
 O aluno registra o que estudou: disciplina, data da aula, conteúdo e fonte.
 A disciplina é selecionada por `subject_id` a partir das disciplinas cadastradas e ativas.
-O fluxo normal não permite digitar nome de disciplina como texto livre.
+A fonte é selecionada por `source_id` a partir das fontes cadastradas e ativas.
+O fluxo normal não permite digitar nome de disciplina nem fonte como texto livre.
 
 **Campos:**
 | Campo | Tipo | Obrigatório |
@@ -66,7 +118,7 @@ O fluxo normal não permite digitar nome de disciplina como texto livre.
 | Disciplina | Select (lista de `subjects` ativos, valor = `subject_id`) | Sim |
 | Data da aula | Date | Sim |
 | Conteúdo | Text | Sim |
-| Fonte | Text | Não |
+| Fonte | Select (lista de `sources` ativas, valor = `source_id`) | Sim |
 
 **Criação rápida de disciplina:**
 - A tela RP/Cadastro deve oferecer `+ Nova disciplina` próximo ao select.
@@ -75,10 +127,19 @@ O fluxo normal não permite digitar nome de disciplina como texto livre.
   no cadastro atual.
 - O objetivo é reduzir cliques e evitar digitação repetitiva.
 
+**Criação rápida de fonte:**
+- A tela RP/Cadastro deve oferecer `+ Nova fonte` próximo ao select.
+- A criação rápida abre input inline, sem modal e sem trocar de tela.
+- Ao concluir, cria a fonte em `sources`, recarrega a lista e deixa a nova fonte selecionada
+  no cadastro atual.
+- Se `Grancursos` for a única fonte ativa, ela fica pré-selecionada automaticamente.
+
 **Critérios de aceite:**
 - Data da aula padrão = hoje.
 - Salvar sem disciplina válida é proibido.
+- Salvar sem fonte válida é proibido.
 - `study_records.subject_id` é obrigatório e referencia `subjects.id`.
+- `study_records.source_id` é obrigatório e referencia `sources.id`.
 - Ao salvar, cria `studyRecord` e gera `reviewTasks` automaticamente.
 - O aluno não clica em "gerar revisões". Acontece automaticamente.
 - Formulário limpa após salvar.
@@ -231,7 +292,7 @@ O aluno pode exportar todos os dados como arquivo JSON.
 **Critérios de aceite:**
 - Botão "Exportar backup" disponível em Settings ou na navegação.
 - Arquivo gerado: `smartlearn-backup-YYYY-MM-DD.json`.
-- Conteúdo: todos os `subjects`, `studyRecords`, `reviewTasks` e `settings`.
+- Conteúdo: todos os `subjects`, `sources`, `studyRecords`, `reviewTasks` e `settings`.
 - Arquivo JSON gerado e disponibilizado pelo runtime Tauri 2.
 - `settings.lastBackupAt` atualizado após exportação.
 
@@ -246,7 +307,7 @@ O aluno pode importar um arquivo JSON de backup.
 - Antes de importar, exibe aviso: "Isso substituirá todos os dados atuais. Continuar?"
 - Após confirmação, apaga o banco atual e importa os dados do arquivo.
 - Exibe mensagem de sucesso ou erro.
-- Não importa arquivo inválido (sem estrutura esperada).
+- Não importa arquivo inválido (sem estrutura esperada, incluindo `sources`).
 
 ---
 
@@ -282,7 +343,7 @@ App abre em menos de 2 segundos após acionamento (assets locais, sem rede neces
 - Não depende apenas de cor para transmitir informação.
 
 ### RNF-04 — Usabilidade
-- Máximo 3 campos obrigatórios para cadastrar um estudo.
+- Máximo 4 campos obrigatórios para cadastrar um estudo.
 - Salvamento automático nos campos de exercícios (blur/Enter).
 - Sem modais desnecessários.
 - Sem menus profundos (máximo 1 nível de navegação).
@@ -323,15 +384,28 @@ CREATE TABLE IF NOT EXISTS subjects (
 );
 ```
 
+### Tabela: sources
+
+```sql
+CREATE TABLE IF NOT EXISTS sources (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT    NOT NULL,
+  updated_at TEXT    NOT NULL,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+```
+
 ### Tabela: study_records
 
 ```sql
 CREATE TABLE IF NOT EXISTS study_records (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   subject_id INTEGER NOT NULL REFERENCES subjects(id),
+  source_id  INTEGER NOT NULL REFERENCES sources(id),
   study_date TEXT    NOT NULL,
   content    TEXT    NOT NULL,
-  source     TEXT,
   created_at TEXT    NOT NULL,
   updated_at TEXT    NOT NULL
 );

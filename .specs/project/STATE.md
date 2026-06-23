@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-017 concluída. Disciplinas agora são entidade reutilizável com CRUD e exclusão em cascata.
+- **Fase:** Specs corrigidas para fontes como entidade reutilizável e seed inicial. TASK-018 pendente.
 - **Data:** 2026-06-23
-- **Próxima ação:** Revisão humana final, push da branch atualizada e release Windows/Android quando aprovado.
+- **Próxima ação:** Revisão humana da correção de modelagem; depois executar TASK-018.
 
 ---
 
@@ -121,6 +121,27 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 - **Status:** Implementada na TASK-017.
 - **Irreversível no MVP:** Sim.
 
+### DEC-013 — Disciplinas e fontes como entidades reutilizáveis com seed inicial
+- **Data:** 2026-06-23
+- **Decisão:** Disciplina e fonte não serão digitadas repetidamente no fluxo normal de RP. Ambas
+  são entidades próprias: `subjects` e `sources`. O cadastro RP usa `subject_id` e `source_id`.
+  O banco recebe seed inicial com as disciplinas da planilha original e a fonte `Grancursos`.
+- **Seed inicial de disciplinas:** `Língua Portuguesa`, `Conhecimentos sobre o DF`, `Legislação`,
+  `Administração`, `AFO`, `Arquivologia`, `Recursos Materiais`.
+- **Seed inicial de fontes:** `Grancursos`.
+- **Normalização obrigatória:** antes de salvar disciplina ou fonte, aplicar `trim()`, colapsar
+  espaços múltiplos e comparar case-insensitive para impedir duplicatas por caixa ou espaço.
+- **Consequências:**
+  - `sources` deve ter `id`, `name`, `created_at`, `updated_at`, `is_active` e `sort_order`.
+  - `study_records.source TEXT` deixa de ser o contrato normal; o vínculo correto é
+    `study_records.source_id INTEGER NOT NULL REFERENCES sources(id)`.
+  - `DB.studyRecords.create()` recebe `{ subjectId, sourceId, studyDate, content }`.
+  - RP/Cadastro deve selecionar fonte por lista/autocomplete e oferecer quick add `+ Nova fonte`.
+  - `Grancursos` deve existir automaticamente e ficar pré-selecionado quando for a única fonte ativa.
+  - Importação de estudos históricos/aulas fica fora desta correção e deve ser task separada.
+- **Status:** Pendente de implementação na TASK-018.
+- **Irreversível no MVP:** Sim.
+
 ### DEC-007 — Correções de consistência das specs antes da implementação
 - **Data:** 2026-06-22
 - **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.
@@ -166,6 +187,7 @@ Nenhum.
 - [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
 - [x] TASK-016 executada em 2026-06-23: polimento de acessibilidade, responsividade 320px e safe-area mobile.
 - [x] TASK-017 executada em 2026-06-23: disciplinas com CRUD, desativação, exclusão destrutiva em cascata e quick add.
+- [ ] TASK-018 pendente: fontes como entidade reutilizável, seed inicial de disciplinas/fontes e troca de `source TEXT` por `source_id`.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).

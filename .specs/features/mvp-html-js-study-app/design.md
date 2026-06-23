@@ -112,7 +112,12 @@ DB.subjects.create(name)                // INSERT INTO subjects ...
 DB.subjects.update(id, fields)          // editar name, isActive, sortOrder
 DB.subjects.deactivate(id)              // is_active = 0, preservando histórico
 DB.subjects.deleteCascade(id)           // apaga review_tasks, study_records e subject da disciplina
-DB.studyRecords.create(data)           // INSERT INTO study_records ...
+DB.sources.getAll()                     // SELECT * FROM sources ORDER BY sort_order, name
+DB.sources.getActive()                  // SELECT fontes ativas para o select de estudo/RP
+DB.sources.create(name)                 // INSERT INTO sources ...
+DB.sources.update(id, fields)           // editar name, isActive, sortOrder
+DB.sources.deactivate(id)               // is_active = 0, preservando histórico
+DB.studyRecords.create(data)           // INSERT INTO study_records com subjectId e sourceId
 DB.studyRecords.getAll()               // SELECT * FROM study_records
 DB.reviewTasks.getAll()                // SELECT * FROM review_tasks
 DB.reviewTasks.getForToday(today)      // WHERE due_date = ? AND review_done = 0
@@ -121,12 +126,20 @@ DB.reviewTasks.getCompletedToday(today)// WHERE completed_at LIKE ? AND review_d
 DB.reviewTasks.getTomorrow(tomorrow)   // WHERE due_date = ? AND review_done = 0
 DB.reviewTasks.update(id, fields)      // UPDATE review_tasks SET ... WHERE id = ?
 DB.reviewTasks.createBulk(tasks)       // INSERT em transação única
-DB.exportAll()                         // retorna { subjects, studyRecords, reviewTasks, settings }
+DB.exportAll()                         // retorna { subjects, sources, studyRecords, reviewTasks, settings }
 DB.importAll(data)                     // DROP + CREATE + INSERT de todos os dados
 ```
 
 `today` e `tomorrow` são strings `"YYYY-MM-DD"` passadas de `app.js`.
 `getCompletedToday(today)` usa `completed_at LIKE '2026-06-22%'` para comparar apenas a data.
+
+`DB.init()` também executa seed idempotente inicial:
+- disciplinas: `Língua Portuguesa`, `Conhecimentos sobre o DF`, `Legislação`, `Administração`,
+  `AFO`, `Arquivologia`, `Recursos Materiais`;
+- fontes: `Grancursos`.
+
+O seed normaliza nomes antes de comparar, não duplica registros, preserva `sort_order` e não
+sobrescreve dados existentes.
 
 **Padrão de query parametrizada:**
 ```javascript
@@ -224,8 +237,9 @@ Cabeçalho do bloco colapsável (opcional, mas não obrigatório no MVP).
 │ Conteúdo *                   │
 │ [________________________] │
 │                              │
-│ Fonte                        │
-│ [________________________] │
+│ Fonte *                      │
+│ [Select ▼                 ] │
+│ [+ Nova fonte]               │
 │                              │
 │ [    Salvar e gerar revisões ] │
 └─────────────────────────────┘
@@ -235,6 +249,11 @@ Cabeçalho do bloco colapsável (opcional, mas não obrigatório no MVP).
 Ao confirmar, a disciplina é persistida em `subjects`, o select é recarregado e a nova disciplina
 fica selecionada no cadastro atual. O fluxo normal usa seleção por `subject_id`; não há digitação
 livre de nome de disciplina no estudo.
+
+"Nova fonte" segue o mesmo padrão: input inline, persistência em `sources`, recarga do select e
+seleção automática da fonte recém-criada. Se `Grancursos` for a única fonte ativa, fica
+pré-selecionada automaticamente. O fluxo normal usa seleção por `source_id`; não há digitação livre
+de fonte no estudo.
 
 ---
 
@@ -255,12 +274,37 @@ livre de nome de disciplina no estudo.
 Regras:
 - Listar disciplinas por `sort_order`, depois `name`.
 - Criar disciplina com nome obrigatório.
+- Normalizar nome com `trim()`, colapso de espaços múltiplos e comparação case-insensitive antes de salvar.
 - Editar disciplina inline ou em bloco simples, sem fluxo profundo.
 - Desativar disciplina com `is_active = 0`; não apagar registros históricos.
 - Excluir disciplina é destrutivo: apagar `review_tasks` dos estudos da disciplina, depois
   `study_records` da disciplina e por fim a linha em `subjects`.
 - Excluir exige confirmação explícita com aviso de perda de todos os dados relacionados.
 - Disciplinas desativadas não aparecem no select normal de novo estudo.
+
+---
+
+## Layout — Área de Fontes
+
+Área própria para gerenciamento de fontes, acessível pela tela Cadastro/RP ou seção equivalente.
+
+```
+┌─────────────────────────────┐
+│ Fontes                      │
+│ [Nova fonte]                │
+│                             │
+│ Grancursos        [Editar] [Desativar] │
+└─────────────────────────────┘
+```
+
+Regras:
+- Listar fontes por `sort_order`, depois `name`.
+- Criar fonte com nome obrigatório.
+- Normalizar nome com `trim()`, colapso de espaços múltiplos e comparação case-insensitive antes de salvar.
+- Editar fonte inline ou em bloco simples, sem fluxo profundo.
+- Desativar fonte com `is_active = 0`; não apagar registros históricos.
+- Fontes desativadas não aparecem no select normal de novo estudo.
+- `Grancursos` vem do seed inicial e deve existir automaticamente na primeira abertura.
 
 ---
 
@@ -382,6 +426,12 @@ migrations e queries ficam encapsuladas em `src/db.js`; nenhum componente de UI 
 O app nunca usa nome digitado livremente como vínculo normal entre estudo e disciplina.
 Desativar disciplina preserva histórico. Excluir disciplina remove em cascata todos os dados ligados
 a ela no SQLite: revisões, estudos e a própria disciplina.
+
+**Modelo de fontes:**
+`sources` é entidade própria e reutilizável, com `id`, `name`, `created_at`, `updated_at`,
+`is_active` e `sort_order`. `study_records.source_id` é o vínculo obrigatório com a fonte.
+O app nunca usa `source TEXT` como contrato normal do fluxo RP/Cadastro. Fonte é selecionada por lista
+e pode ser criada por quick add sem sair do cadastro atual.
 
 ---
 
