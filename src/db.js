@@ -13,6 +13,7 @@ const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
   "CREATE TABLE IF NOT EXISTS sources (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
   "CREATE TABLE IF NOT EXISTS study_records (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_id INTEGER NOT NULL REFERENCES sources(id),\n    study_date TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
+  "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_study_record_id\n    ON review_tasks(study_record_id)",
   "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
@@ -153,13 +154,13 @@ async function getSourceIdByName(name) {
 }
 function assertImportData(data) {
   if (!data || typeof data !== 'object') {
-    throw new Error('O backup precisa ser um objeto JSON v?lido.');
+    throw new Error('O backup precisa ser um objeto JSON válido.');
   }
 
   for (const key of ['subjects', 'sources', 'studyRecords', 'reviewTasks']) {
     if (!Array.isArray(data[key])) {
       throw new Error(
-        'O backup n?o cont?m a lista obrigat?ria "' + key + '".',
+        'O backup não contém a lista obrigatória "' + key + '".',
       );
     }
   }
@@ -292,10 +293,10 @@ export const DB = {
       await ensureNamedRows(
         'subjects',
         [
-          'L?ngua Portuguesa',
+          'Língua Portuguesa',
           'Conhecimentos sobre o DF',
-          'Legisla??o',
-          'Administra??o',
+          'Legislação',
+          'Administração',
           'AFO',
           'Arquivologia',
           'Recursos Materiais',
@@ -340,7 +341,7 @@ export const DB = {
         sortOrder: ['sort_order', (value) => Number(value) || 0],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error('Nenhum campo v?lido para atualizar.');
+      if (entries.length === 0) throw new Error('Nenhum campo válido para atualizar.');
 
       const values = entries.map(([key, value]) => columns[key][1](value));
       values.push(nowIso(), id);
@@ -448,7 +449,7 @@ export const DB = {
         sortOrder: ['sort_order', (value) => Number(value) || 0],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error('Nenhum campo v?lido para atualizar.');
+      if (entries.length === 0) throw new Error('Nenhum campo válido para atualizar.');
 
       const values = entries.map(([key, value]) => columns[key][1](value));
       values.push(nowIso(), id);
@@ -550,7 +551,7 @@ export const DB = {
 
     async createWithReviews(data, tasks) {
       if (!Array.isArray(tasks) || tasks.length === 0) {
-        throw new Error('Informe ao menos uma revis?o para o estudo.');
+        throw new Error('Informe ao menos uma revisão para o estudo.');
       }
 
       await assertActiveSubject(data.subjectId);

@@ -176,6 +176,7 @@ Nenhum.
 ---
 
 ## Pendências
+- [x] Quick fix executado: criação da tabela review_tasks no schema e reparo de textos UTF-8.
 
 - [x] Revisão humana de todas as specs (concluída em 2026-06-22, 9 correções aplicadas).
 - [x] Revisão humana da correção arquitetural Tauri 2 + Git.

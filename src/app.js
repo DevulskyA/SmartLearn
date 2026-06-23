@@ -664,8 +664,8 @@ newSourceForm.addEventListener("submit", async (event) => {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSourceMessage(
       isDuplicate
-        ? "Essa fonte j? est? cadastrada."
-        : "N?o foi poss?vel adicionar a fonte. Tente novamente.",
+        ? "Essa fonte já está cadastrada."
+        : "Não foi possível adicionar a fonte. Tente novamente.",
     );
     newSourceInput.focus();
   }
@@ -747,8 +747,8 @@ sourceList.addEventListener("click", async (event) => {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSourceManagerMessage(
       isDuplicate
-        ? "Essa fonte j? est? cadastrada."
-        : "N?o foi poss?vel alterar a fonte.",
+        ? "Essa fonte já está cadastrada."
+        : "Não foi possível alterar a fonte.",
     );
     console.error("Falha ao alterar fonte.", error);
   }
@@ -850,7 +850,7 @@ studyForm.addEventListener("submit", async (event) => {
 
   if (!subjectId || !sourceId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
-    studyMessage.textContent = "Preencha a disciplina, a fonte, a data e o conte?do.";
+    studyMessage.textContent = "Preencha a disciplina, a fonte, a data e o conteúdo.";
     if (!subjectId) subjectSelect.focus();
     else if (!sourceId) studySourceSelect.focus();
     else if (!studyDate) studyDateInput.focus();
