@@ -83,6 +83,35 @@
                 <p class="field-message" id="subject-message" role="alert" aria-live="polite"></p>
               </div>
             </form>
+
+            <form class="study-form" id="study-form" novalidate>
+              <div class="section-heading compact-heading">
+                <p class="eyebrow">Sessão de estudo</p>
+                <h2>O que você estudou?</h2>
+              </div>
+
+              <div class="form-grid">
+                <div class="field-group">
+                  <label for="study-date">Data da aula</label>
+                  <input id="study-date" name="studyDate" type="date" required />
+                </div>
+
+                <div class="field-group form-grid-wide">
+                  <label for="study-content">Conteúdo estudado</label>
+                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
+                </div>
+
+                <div class="field-group form-grid-wide">
+                  <label for="study-source">Fonte <span class="label-optional">(opcional)</span></label>
+                  <input id="study-source" name="studySource" type="text" maxlength="240" placeholder="Ex.: Aula 12, capítulo 4" />
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Salvar estudo</button>
+                <p class="form-message" id="study-message" role="status" aria-live="polite"></p>
+              </div>
+            </form>
           </div>
         </section>
 

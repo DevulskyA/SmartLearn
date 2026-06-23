@@ -37,7 +37,8 @@ body {
 button,
 a,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -216,7 +217,8 @@ h1 {
 }
 
 .field-group input,
-.field-group select {
+.field-group select,
+.field-group textarea {
   width: 100%;
   min-height: 2.9rem;
   padding: 0.68rem 0.8rem;
@@ -227,7 +229,8 @@ h1 {
 }
 
 .field-group input:focus,
-.field-group select:focus {
+.field-group select:focus,
+.field-group textarea:focus {
   border-color: var(--color-primary);
   outline: 3px solid rgb(11 91 211 / 16%);
 }
@@ -283,6 +286,49 @@ h1 {
   color: #b42318;
   font-size: 0.88rem;
   line-height: 1.4;
+}
+
+.study-form {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.compact-heading {
+  margin-bottom: 1.25rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.45fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.form-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.label-optional {
+  color: var(--color-muted);
+  font-weight: 450;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.form-message {
+  margin: 0;
+  color: #067647;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.form-message.is-error {
+  color: #b42318;
 }
 
 .empty-state {
@@ -414,6 +460,15 @@ h1 {
 
   .inline-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

@@ -12,6 +12,18 @@ const showSubjectFormButton = document.querySelector("#show-subject-form");
 const newSubjectForm = document.querySelector("#new-subject-form");
 const newSubjectInput = document.querySelector("#new-subject-input");
 const subjectMessage = document.querySelector("#subject-message");
+const studyForm = document.querySelector("#study-form");
+const studyDateInput = document.querySelector("#study-date");
+const studyContentInput = document.querySelector("#study-content");
+const studySourceInput = document.querySelector("#study-source");
+const studyMessage = document.querySelector("#study-message");
+
+function getLocalDateValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function setSubjectMessage(message = "") {
   subjectMessage.textContent = message;
@@ -106,5 +118,42 @@ newSubjectForm.addEventListener("submit", async (event) => {
   }
 });
 
+studyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  studyMessage.classList.remove("is-error");
+  studyMessage.textContent = "";
+
+  const subjectId = Number(subjectSelect.value);
+  const studyDate = studyDateInput.value;
+  const content = studyContentInput.value.trim();
+
+  if (!subjectId || !studyDate || !content) {
+    studyMessage.classList.add("is-error");
+    studyMessage.textContent = "Preencha a disciplina, a data e o conteúdo.";
+    if (!subjectId) subjectSelect.focus();
+    else if (!studyDate) studyDateInput.focus();
+    else studyContentInput.focus();
+    return;
+  }
+
+  try {
+    await DB.studyRecords.create({
+      subjectId,
+      studyDate,
+      content,
+      source: studySourceInput.value.trim(),
+    });
+    studyContentInput.value = "";
+    studySourceInput.value = "";
+    studyDateInput.value = getLocalDateValue();
+    studyMessage.textContent = "Estudo salvo.";
+    studyContentInput.focus();
+  } catch {
+    studyMessage.classList.add("is-error");
+    studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
+  }
+});
+
+studyDateInput.value = getLocalDateValue();
 await renderSubjects();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

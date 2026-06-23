@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-003 concluída. Cadastro persistente de disciplinas pronto.
+- **Fase:** TASK-004 concluída. Cadastro persistente de sessões de estudo pronto.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-004 — Cadastro de estudo
+- **Próxima ação:** Executar TASK-005 — Geração automática de revisões
 
 ---
 
@@ -130,6 +130,7 @@ Nenhum.
 - [x] TASK-001 executada em 2026-06-23: shell visual, navegação e responsividade desktop/mobile.
 - [x] TASK-002 executada em 2026-06-23: plugin SQL, schema, API `DB.*`, persistência e backup lógico.
 - [x] TASK-003 executada em 2026-06-23: criação, validação e seleção persistente de disciplinas.
+- [x] TASK-004 executada em 2026-06-23: formulário validado e persistência de sessões de estudo.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).

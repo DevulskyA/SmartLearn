@@ -31,7 +31,7 @@
 | TASK-001 | Estrutura visual mínima + navegação | [x] | TASK-000 |
 | TASK-002 | Camada SQLite via Tauri SQL (`src/db.js`) | [x] | TASK-001 |
 | TASK-003 | Cadastro de disciplinas | [x] | TASK-002 |
-| TASK-004 | Cadastro de estudo (studyRecord) | [ ] | TASK-003 |
+| TASK-004 | Cadastro de estudo (studyRecord) | [x] | TASK-003 |
 | TASK-005 | Geração automática de revisões | [ ] | TASK-004 |
 | TASK-006 | Tela Hoje — cards mobile | [ ] | TASK-005 |
 | TASK-007 | Tela Hoje — tabela desktop | [ ] | TASK-006 |
@@ -263,7 +263,7 @@ Disciplinas alimentam o select do formulário de estudo.
 
 ## TASK-004 — Cadastro de estudo (studyRecord)
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-003
 
 **Objetivo:**
