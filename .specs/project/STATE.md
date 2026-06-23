@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-010 concluída. Cada revisão aceita comentário com salvamento automático.
+- **Fase:** TASK-011 concluída. Estatísticas exibem totais, médias e status das revisões.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-011 — Métricas da tela Estatísticas
+- **Próxima ação:** Executar TASK-012 — Gráfico de evolução
 
 ---
 
@@ -139,6 +139,7 @@ Nenhum.
 - [x] TASK-008 executada em 2026-06-23: conclusão reversível de revisões com atualização da tela.
 - [x] TASK-009 executada em 2026-06-23: questões, acertos e percentual com autosave controlado.
 - [x] TASK-010 executada em 2026-06-23: comentário opcional persistido por revisão.
+- [x] TASK-011 executada em 2026-06-23: métricas gerais e médias por disciplina.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).

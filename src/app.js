@@ -1,5 +1,6 @@
 import "./styles.css";
 import { DB } from "./db.js";
+import { Stats } from "./stats.js";
 
 await DB.init();
 
@@ -26,6 +27,16 @@ const reviewGroups = {
   doneToday: document.querySelector("#block-done-today"),
   tomorrow: document.querySelector("#block-tomorrow"),
 };
+const metricElements = {
+  totalQuestions: document.querySelector("#metric-questions"),
+  totalCorrect: document.querySelector("#metric-correct"),
+  avgScore: document.querySelector("#metric-average"),
+  reviewsDone: document.querySelector("#metric-reviews-done"),
+  reviewsPending: document.querySelector("#metric-reviews-pending"),
+  reviewsOverdue: document.querySelector("#metric-reviews-overdue"),
+};
+const subjectAveragesBody = document.querySelector("#subject-averages-body");
+const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -210,6 +221,34 @@ export async function renderToday() {
   }).format(new Date());
 }
 
+export async function renderStats() {
+  const [reviewTasks, studyRecords, subjects] = await Promise.all([
+    DB.reviewTasks.getAll(),
+    DB.studyRecords.getAll(),
+    DB.subjects.getAll(),
+  ]);
+  const stats = Stats.calculate(reviewTasks, studyRecords, subjects);
+  metricElements.totalQuestions.textContent = String(stats.totalQuestions);
+  metricElements.totalCorrect.textContent = String(stats.totalCorrect);
+  metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
+  metricElements.reviewsDone.textContent = String(stats.reviewsDone);
+  metricElements.reviewsPending.textContent = String(stats.reviewsPending);
+  metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);
+
+  subjectAveragesBody.replaceChildren();
+  subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
+  for (const subject of stats.avgBySubject) {
+    const row = document.createElement("tr");
+    const name = document.createElement("th");
+    name.scope = "row";
+    name.textContent = subject.subjectName;
+    const average = document.createElement("td");
+    average.textContent = `${subject.avgScore.toFixed(1).replace(".", ",")}%`;
+    row.append(name, average);
+    subjectAveragesBody.append(row);
+  }
+}
+
 const REVIEW_DAY_OFFSETS = [
   1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
 ];
@@ -293,6 +332,10 @@ export function showScreen(screenId, { focus = false } = {}) {
 
   if (nextScreen === "today") {
     renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
+  }
+
+  if (nextScreen === "stats") {
+    renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
 }
 

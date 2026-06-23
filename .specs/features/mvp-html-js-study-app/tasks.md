@@ -38,7 +38,7 @@
 | TASK-008 | Marcar revisão como feita | [x] | TASK-006 |
 | TASK-009 | Registrar questões e acertos | [x] | TASK-006 |
 | TASK-010 | Comentário por tarefa | [x] | TASK-009 |
-| TASK-011 | Tela Estatísticas — métricas | [ ] | TASK-009 |
+| TASK-011 | Tela Estatísticas — métricas | [x] | TASK-009 |
 | TASK-012 | Gráfico de evolução das notas | [ ] | TASK-011 |
 | TASK-013 | Exportar backup JSON | [ ] | TASK-002 |
 | TASK-014 | Importar backup JSON | [ ] | TASK-013 |
@@ -538,7 +538,7 @@ Implementar campo de comentário opcional por revisão com salvamento automátic
 
 ## TASK-011 — Tela Estatísticas — métricas
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-009
 
 **Objetivo:**

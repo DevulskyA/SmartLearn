@@ -161,7 +161,43 @@
         </section>
 
         <section class="screen" id="screen-stats" data-screen-panel="stats" aria-labelledby="title-stats" hidden>
-          <h1 id="title-stats">Estatísticas</h1>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Seu desempenho</p>
+              <h1 id="title-stats">Estatísticas</h1>
+            </div>
+          </div>
+
+          <div class="metric-grid" aria-label="Resumo de desempenho">
+            <article class="metric-card"><span>Questões</span><strong id="metric-questions">0</strong></article>
+            <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
+            <article class="metric-card"><span>Média geral</span><strong id="metric-average">0,0%</strong></article>
+            <article class="metric-card"><span>Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
+            <article class="metric-card"><span>Pendentes</span><strong id="metric-reviews-pending">0</strong></article>
+            <article class="metric-card metric-card-warning"><span>Atrasadas</span><strong id="metric-reviews-overdue">0</strong></article>
+          </div>
+
+          <section class="stats-panel" aria-labelledby="subject-averages-title">
+            <div class="stats-panel-heading">
+              <div>
+                <p class="eyebrow">Comparativo</p>
+                <h2 id="subject-averages-title">Média por disciplina</h2>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="stats-table">
+                <thead><tr><th scope="col">Disciplina</th><th scope="col">Média</th></tr></thead>
+                <tbody id="subject-averages-body"></tbody>
+              </table>
+            </div>
+            <p class="panel-empty" id="subject-averages-empty">Registre questões concluídas para ver as médias.</p>
+          </section>
+
+          <section class="stats-panel chart-panel" aria-labelledby="evolution-title">
+            <div class="stats-panel-heading"><div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução das notas</h2></div></div>
+            <canvas id="evolution-chart" hidden></canvas>
+            <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
+          </section>
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
