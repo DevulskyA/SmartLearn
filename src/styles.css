@@ -523,6 +523,32 @@ h1 {
   background: var(--color-surface);
 }
 
+.settings-card {
+  width: min(100%, 42rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: 0 1rem 2.5rem rgb(23 36 59 / 6%);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.backup-date {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.settings-card > .form-message {
+  margin-top: 0.85rem;
+}
+
 .stats-panel-heading {
   margin-bottom: 1rem;
 }

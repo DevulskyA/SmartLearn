@@ -40,7 +40,7 @@
 | TASK-010 | Comentário por tarefa | [x] | TASK-009 |
 | TASK-011 | Tela Estatísticas — métricas | [x] | TASK-009 |
 | TASK-012 | Gráfico de evolução das notas | [x] | TASK-011 |
-| TASK-013 | Exportar backup JSON | [ ] | TASK-002 |
+| TASK-013 | Exportar backup JSON | [x] | TASK-002 |
 | TASK-014 | Importar backup JSON | [ ] | TASK-013 |
 | TASK-015 | Tauri 2 — validação Android e preparação iOS | [ ] | TASK-002 |
 | TASK-016 | Polimento — acessibilidade e responsividade | [ ] | TASK-014, TASK-015 |
@@ -634,7 +634,7 @@ Implementar o gráfico de evolução do percentual de acertos ao longo do tempo 
 
 ## TASK-013 — Exportar backup JSON
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-002
 
 **Objetivo:**

@@ -201,7 +201,19 @@
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
-          <h1 id="title-settings">Configurações</h1>
+          <div class="screen-heading"><div><p class="eyebrow">Dados locais</p><h1 id="title-settings">Configurações</h1></div></div>
+          <section class="settings-card" aria-labelledby="backup-title">
+            <div class="section-heading">
+              <p class="eyebrow">Segurança dos dados</p>
+              <h2 id="backup-title">Backup</h2>
+              <p>Salve uma cópia de disciplinas, estudos, revisões e configurações.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="primary-button" id="export-backup" type="button">Exportar backup</button>
+              <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
+            </div>
+            <p class="form-message" id="backup-message" role="status" aria-live="polite"></p>
+          </section>
         </section>
       </main>
     </div>

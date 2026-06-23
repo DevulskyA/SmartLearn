@@ -39,6 +39,9 @@ const subjectAveragesBody = document.querySelector("#subject-averages-body");
 const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
+const exportBackupButton = document.querySelector("#export-backup");
+const lastBackupLabel = document.querySelector("#last-backup-label");
+const backupMessage = document.querySelector("#backup-message");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -267,6 +270,41 @@ export async function renderStats() {
   }
 }
 
+export async function renderSettings() {
+  const settings = await DB.settings.get();
+  lastBackupLabel.textContent = settings?.lastBackupAt
+    ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
+    : "Nenhum backup exportado.";
+}
+
+export async function exportBackup() {
+  exportBackupButton.disabled = true;
+  backupMessage.classList.remove("is-error");
+  backupMessage.textContent = "";
+  try {
+    const data = await DB.exportAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `smartlearn-backup-${getLocalDateValue()}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    await renderSettings();
+    backupMessage.textContent = "Backup exportado com sucesso.";
+  } catch (error) {
+    backupMessage.classList.add("is-error");
+    backupMessage.textContent = "Não foi possível exportar o backup.";
+    console.error("Falha ao exportar backup.", error);
+  } finally {
+    exportBackupButton.disabled = false;
+  }
+}
+
 const REVIEW_DAY_OFFSETS = [
   1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
 ];
@@ -355,6 +393,9 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (nextScreen === "stats") {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
+  if (nextScreen === "settings") {
+    renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+  }
 }
 
 for (const item of navigationItems) {
@@ -414,6 +455,8 @@ reviewDashboard.addEventListener("change", async (event) => {
     console.error("Falha ao atualizar a revisão.", error);
   }
 });
+
+exportBackupButton.addEventListener("click", exportBackup);
 
 reviewDashboard.addEventListener("focusout", async (event) => {
   const input = event.target.closest('[data-action="comment"]');

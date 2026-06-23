@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-012 concluída. Estatísticas incluem gráfico nativo de evolução.
+- **Fase:** TASK-013 concluída. Backup JSON pode ser exportado localmente.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-013 — Exportar backup JSON
+- **Próxima ação:** Executar TASK-014 — Importar backup JSON
 
 ---
 
@@ -141,6 +141,7 @@ Nenhum.
 - [x] TASK-010 executada em 2026-06-23: comentário opcional persistido por revisão.
 - [x] TASK-011 executada em 2026-06-23: métricas gerais e médias por disciplina.
 - [x] TASK-012 executada em 2026-06-23: gráfico Canvas nativo com notas em ordem cronológica.
+- [x] TASK-013 executada em 2026-06-23: exportação JSON e registro do último backup.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
