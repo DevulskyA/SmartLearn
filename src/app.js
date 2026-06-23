@@ -77,10 +77,13 @@ function createReviewCard(task, studyRecord, subject, groupName) {
   topline.append(badge);
   card.append(topline);
 
-  card.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+  const study = document.createElement("div");
+  study.className = "review-study";
+  study.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
   if (studyRecord?.source) {
-    card.append(createTextElement("p", "review-source", studyRecord.source));
+    study.append(createTextElement("p", "review-source", studyRecord.source));
   }
+  card.append(study);
 
   const meta = document.createElement("dl");
   meta.className = "review-meta";

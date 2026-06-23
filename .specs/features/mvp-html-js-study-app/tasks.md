@@ -34,7 +34,7 @@
 | TASK-004 | Cadastro de estudo (studyRecord) | [x] | TASK-003 |
 | TASK-005 | Geração automática de revisões | [x] | TASK-004 |
 | TASK-006 | Tela Hoje — cards mobile | [x] | TASK-005 |
-| TASK-007 | Tela Hoje — tabela desktop | [ ] | TASK-006 |
+| TASK-007 | Tela Hoje — tabela desktop | [x] | TASK-006 |
 | TASK-008 | Marcar revisão como feita | [ ] | TASK-006 |
 | TASK-009 | Registrar questões e acertos | [ ] | TASK-006 |
 | TASK-010 | Comentário por tarefa | [ ] | TASK-009 |
@@ -392,7 +392,7 @@ Implementar a Tela Hoje com os 4 blocos e os cards de revisão para mobile.
 
 ## TASK-007 — Tela Hoje — tabela desktop
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-006
 
 **Objetivo:**
