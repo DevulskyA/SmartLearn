@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-001 concluída. Shell visual responsivo e navegação entre quatro telas prontos.
+- **Fase:** TASK-002 concluída. Persistência SQLite nativa e API isolada `DB.*` prontas.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-002 — Camada SQLite via Tauri SQL (`src/db.js`)
+- **Próxima ação:** Executar TASK-003 — Cadastro de disciplinas
 
 ---
 
@@ -87,6 +87,18 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
   - Claude não cria repositório GitHub nem faz push remoto sem instrução explícita.
 - **Irreversível no MVP:** Sim.
 
+### DEC-011 — Contrato da camada SQLite
+- **Data:** 2026-06-23
+- **Decisão:** `src/db.js` é o único arquivo autorizado a executar SQL da aplicação. As colunas
+  permanecem em snake_case no SQLite e todos os objetos públicos `DB.*` usam camelCase.
+  O schema é inicializado de forma idempotente por `DB.init()` antes da renderização da interface.
+- **Consequências:**
+  - UI, estatísticas e demais módulos não importam o driver SQL diretamente.
+  - O plugin oficial `tauri-plugin-sql` 2.4.0 usa a feature SQLite e permissões mínimas de
+    leitura/fechamento e execução.
+  - Exportação e importação usam o mesmo contrato camelCase da API pública.
+- **Irreversível no MVP:** Sim.
+
 ### DEC-007 — Correções de consistência das specs antes da implementação
 - **Data:** 2026-06-22
 - **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.
@@ -116,7 +128,7 @@ Nenhum.
 - [x] Revisão humana da correção arquitetural Tauri 2 + Git.
 - [x] TASK-000 executada em 2026-06-22: Git, Vite, Tauri 2, Rust/MSVC e scaffold desktop.
 - [x] TASK-001 executada em 2026-06-23: shell visual, navegação e responsividade desktop/mobile.
-- [ ] Registrar e configurar funcionalmente o plugin SQL apenas na TASK-002.
+- [x] TASK-002 executada em 2026-06-23: plugin SQL, schema, API `DB.*`, persistência e backup lógico.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
@@ -144,6 +156,8 @@ Nenhum.
 - O repositório remoto já possuía histórico antes da TASK-000; ele foi preservado sem force-push.
 - O bundle identifier não deve terminar em `.app`, pois conflita com bundles macOS.
 - O Vite deve ignorar `src-tauri/target/**` para não observar executáveis Rust bloqueados no Windows.
+- O README publicado no pacote npm do plugin SQL estava desatualizado sobre iOS; o repositório
+  oficial atual classifica SQLite como suporte completo em desktop, Android e iOS.
 
 ---
 

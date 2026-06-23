@@ -1,4 +1,7 @@
 import "./styles.css";
+import { DB } from "./db.js";
+
+await DB.init();
 
 const DEFAULT_SCREEN = "today";
 const navigationItems = [...document.querySelectorAll("[data-screen]")];

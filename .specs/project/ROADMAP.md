@@ -4,7 +4,7 @@
 
 **Meta:** Substituir a planilha. Funcionar offline. Sem login. Sem servidor.
 
-**Status:** Correção arquitetural documentada. TASK-000 aguarda execução após revisão humana.
+**Status:** Base, navegação e persistência SQLite concluídas até a TASK-002.
 
 ### Milestones
 
