@@ -30,6 +30,13 @@ O usuário não clica em "gerar revisões". Isso acontece no momento do cadastro
 No fluxo normal, o usuário nunca cria uma revisão manualmente.
 Revisões só existem porque um estudo foi cadastrado.
 
+## INV-05A — Disciplina é entidade reutilizável, não texto repetido
+
+Disciplina é cadastrada uma vez e reutilizada nos fluxos de estudo/RP.
+No fluxo normal, o aluno seleciona uma disciplina existente; ele não digita o nome da disciplina
+como texto livre a cada estudo. O sistema deve evitar digitação repetitiva e esforço cognitivo
+desnecessário.
+
 ## INV-06 — Registro de exercícios é simples
 
 Registrar exercícios não pode ser complexo. O aluno está cansado.

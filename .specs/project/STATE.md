@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-016 concluída. MVP local concluído conforme specs aprovadas.
+- **Fase:** TASK-017 concluída. Disciplinas agora são entidade reutilizável com CRUD e exclusão em cascata.
 - **Data:** 2026-06-23
-- **Próxima ação:** Publicar branch/PR no GitHub ou gerar release local, conforme decisão humana.
+- **Próxima ação:** Revisão humana final, push da branch atualizada e release Windows/Android quando aprovado.
 
 ---
 
@@ -101,6 +101,26 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
   - Exportação e importação usam o mesmo contrato camelCase da API pública.
 - **Irreversível no MVP:** Sim.
 
+### DEC-012 — Disciplina como entidade própria e reutilizável
+- **Data:** 2026-06-23
+- **Decisão:** Disciplina é entidade própria em `subjects`, cadastrada uma vez e reutilizada por
+  `study_records.subject_id`. O fluxo normal de RP/Cadastro seleciona disciplina ativa em lista;
+  não digita nome livremente a cada estudo.
+- **Campos obrigatórios em `subjects`:** `id`, `name`, `created_at`, `updated_at`, `is_active`,
+  `sort_order`.
+- **Consequências:**
+  - Deve existir área própria para listar, criar, editar e desativar disciplinas.
+  - Deve existir exclusão destrutiva de disciplina, apagando todos os dados relacionados no banco.
+  - RP/Cadastro deve oferecer quick add `+ Nova disciplina`, sem sair do fluxo, selecionando a
+    disciplina recém-criada.
+  - Desativação usa `is_active = 0` e preserva histórico, revisões, estatísticas e backups.
+  - Exclusão remove `review_tasks` relacionadas, `study_records` da disciplina e a própria linha em
+    `subjects`, em transação e após confirmação explícita.
+  - Salvar estudo sem `subject_id` válido é proibido.
+  - O sistema deve reduzir digitação repetitiva e esforço cognitivo.
+- **Status:** Implementada na TASK-017.
+- **Irreversível no MVP:** Sim.
+
 ### DEC-007 — Correções de consistência das specs antes da implementação
 - **Data:** 2026-06-22
 - **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.
@@ -145,6 +165,7 @@ Nenhum.
 - [x] TASK-014 executada em 2026-06-23: importação JSON validada e transacional.
 - [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
 - [x] TASK-016 executada em 2026-06-23: polimento de acessibilidade, responsividade 320px e safe-area mobile.
+- [x] TASK-017 executada em 2026-06-23: disciplinas com CRUD, desativação, exclusão destrutiva em cascata e quick add.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).

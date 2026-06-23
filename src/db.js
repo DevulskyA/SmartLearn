@@ -14,7 +14,9 @@ const schemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS study_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +74,8 @@ function mapSubject(row) {
     name: row.name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isActive: Boolean(row.is_active),
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -122,6 +126,16 @@ function normalizeName(name) {
   return normalized;
 }
 
+async function assertActiveSubject(subjectId) {
+  const [subject] = await requireDatabase().select(
+    "SELECT id FROM subjects WHERE id = $1 AND is_active = 1",
+    [subjectId],
+  );
+  if (!subject) {
+    throw new Error("Selecione uma disciplina ativa.");
+  }
+}
+
 function assertImportData(data) {
   if (!data || typeof data !== "object") {
     throw new Error("O backup precisa ser um objeto JSON válido.");
@@ -143,9 +157,16 @@ function buildImportStatements(data) {
   ];
   for (const row of data.subjects) {
     statements.push({
-      query: `INSERT INTO subjects (id, name, created_at, updated_at)
-        VALUES ($1, $2, $3, $4)`,
-      values: [row.id, normalizeName(row.name), row.createdAt, row.updatedAt],
+      query: `INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order)
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+      values: [
+        row.id,
+        normalizeName(row.name),
+        row.createdAt,
+        row.updatedAt,
+        (row.isActive ?? row.is_active ?? true) ? 1 : 0,
+        row.sortOrder ?? row.sort_order ?? 0,
+      ],
     });
   }
   for (const row of data.studyRecords) {
@@ -197,6 +218,7 @@ export const DB = {
             : [];
           await database.execute(statement, params);
         }
+        await DB.subjects.ensureColumns();
 
         return DB;
       })().catch((error) => {
@@ -210,9 +232,31 @@ export const DB = {
   },
 
   subjects: {
+    async ensureColumns() {
+      const columns = await requireDatabase().select("PRAGMA table_info(subjects)");
+      const names = new Set(columns.map((column) => column.name));
+      if (!names.has("is_active")) {
+        await requireDatabase().execute(
+          "ALTER TABLE subjects ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
+        );
+      }
+      if (!names.has("sort_order")) {
+        await requireDatabase().execute(
+          "ALTER TABLE subjects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+        );
+      }
+    },
+
     async getAll() {
       const rows = await requireDatabase().select(
-        "SELECT * FROM subjects ORDER BY name COLLATE NOCASE",
+        "SELECT * FROM subjects ORDER BY sort_order, name COLLATE NOCASE",
+      );
+      return rows.map(mapSubject);
+    },
+
+    async getActive() {
+      const rows = await requireDatabase().select(
+        "SELECT * FROM subjects WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE",
       );
       return rows.map(mapSubject);
     },
@@ -220,16 +264,74 @@ export const DB = {
     async create(name) {
       const value = normalizeName(name);
       const timestamp = nowIso();
+      const [{ next_order: nextOrder = 0 } = {}] = await requireDatabase().select(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM subjects",
+      );
       const result = await requireDatabase().execute(
-        `INSERT INTO subjects (name, created_at, updated_at)
-         VALUES ($1, $2, $3)`,
-        [value, timestamp, timestamp],
+        `INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order)
+         VALUES ($1, $2, $3, 1, $4)`,
+        [value, timestamp, timestamp, nextOrder],
       );
       const [row] = await requireDatabase().select(
         "SELECT * FROM subjects WHERE id = $1",
         [result.lastInsertId],
       );
       return mapSubject(row);
+    },
+
+    async update(id, fields) {
+      const columns = {
+        name: ["name", normalizeName],
+        isActive: ["is_active", (value) => (value ? 1 : 0)],
+        sortOrder: ["sort_order", (value) => Number(value) || 0],
+      };
+      const entries = Object.entries(fields).filter(([key]) => columns[key]);
+      if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
+
+      const values = entries.map(([key, value]) => columns[key][1](value));
+      values.push(nowIso(), id);
+      const assignments = entries.map(
+        ([key], index) => `${columns[key][0]} = $${index + 1}`,
+      );
+      assignments.push(`updated_at = $${entries.length + 1}`);
+
+      await requireDatabase().execute(
+        `UPDATE subjects SET ${assignments.join(", ")}
+         WHERE id = $${entries.length + 2}`,
+        values,
+      );
+      const [row] = await requireDatabase().select(
+        "SELECT * FROM subjects WHERE id = $1",
+        [id],
+      );
+      return row ? mapSubject(row) : null;
+    },
+
+    async deactivate(id) {
+      return DB.subjects.update(id, { isActive: false });
+    },
+
+    async deleteCascade(id) {
+      await invoke("execute_sqlite_transaction", {
+        statements: [
+          {
+            query: `DELETE FROM review_tasks
+              WHERE study_record_id IN (
+                SELECT id FROM study_records WHERE subject_id = $1
+              )`,
+            values: [id],
+          },
+          {
+            query: "DELETE FROM study_records WHERE subject_id = $1",
+            values: [id],
+          },
+          {
+            query: "DELETE FROM subjects WHERE id = $1",
+            values: [id],
+          },
+        ],
+      });
+      return true;
     },
   },
 
@@ -242,6 +344,7 @@ export const DB = {
     },
 
     async create(data) {
+      await assertActiveSubject(data.subjectId);
       const timestamp = nowIso();
       const result = await requireDatabase().execute(
         `INSERT INTO study_records
@@ -268,6 +371,7 @@ export const DB = {
         throw new Error("Informe ao menos uma revisão para o estudo.");
       }
 
+      await assertActiveSubject(data.subjectId);
       const timestamp = nowIso();
       const reviewValues = [];
       const reviewPlaceholders = tasks.map((task, taskIndex) => {

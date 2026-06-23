@@ -20,13 +20,36 @@ na mesma base para build real em ambiente Apple/Mac.
 
 ### RF-01 — Cadastro de disciplinas
 
-O aluno pode criar disciplinas (ex: "Direito Constitucional", "Matemática").
-Cada disciplina tem nome. A lista de disciplinas é usada como select no cadastro de estudo.
+O aluno pode gerenciar disciplinas em área própria (ex: "Direito Constitucional", "Matemática").
+Disciplina é entidade reutilizável do sistema, não texto livre repetido no cadastro de estudo/RP.
+A lista de disciplinas ativas é usada como select no cadastro de estudo.
+
+**Campos mínimos da entidade `subjects`:**
+| Campo | Tipo | Obrigatório | Observação |
+|-------|------|-------------|------------|
+| `id` | INTEGER | Sim | Chave primária |
+| `name` | TEXT | Sim | Único, case-insensitive |
+| `created_at` | TEXT | Sim | ISO string |
+| `updated_at` | TEXT | Sim | ISO string |
+| `is_active` | INTEGER | Sim | 1 = ativa, 0 = desativada |
+| `sort_order` | INTEGER | Sim | Ordem manual/futura; padrão incremental |
+
+**Ações obrigatórias:**
+- Listar disciplinas.
+- Criar disciplina.
+- Editar nome da disciplina.
+- Desativar disciplina sem apagar histórico.
+- Excluir disciplina apagando todos os dados relacionados no banco.
 
 **Critérios de aceite:**
 - Campo nome obrigatório.
 - Disciplina duplicada não é aceita (mesmo nome, case-insensitive).
-- Após criar, aparece imediatamente no select de cadastro de estudo.
+- Após criar, aparece imediatamente no select de cadastro de estudo/RP.
+- Editar disciplina atualiza a lista sem quebrar estudos antigos.
+- Desativar disciplina remove do fluxo normal de novos estudos, mas preserva vínculos históricos.
+- Excluir disciplina é ação destrutiva: apaga a disciplina, seus estudos (`study_records`) e todas as
+  revisões relacionadas (`review_tasks`).
+- Excluir disciplina exige confirmação explícita informando que todos os dados relacionados serão apagados.
 - Não há limite de disciplinas no MVP.
 
 ---
@@ -34,17 +57,28 @@ Cada disciplina tem nome. A lista de disciplinas é usada como select no cadastr
 ### RF-02 — Cadastro de estudo (modelo RP)
 
 O aluno registra o que estudou: disciplina, data da aula, conteúdo e fonte.
+A disciplina é selecionada por `subject_id` a partir das disciplinas cadastradas e ativas.
+O fluxo normal não permite digitar nome de disciplina como texto livre.
 
 **Campos:**
 | Campo | Tipo | Obrigatório |
 |-------|------|-------------|
-| Disciplina | Select (lista de subjects) | Sim |
+| Disciplina | Select (lista de `subjects` ativos, valor = `subject_id`) | Sim |
 | Data da aula | Date | Sim |
 | Conteúdo | Text | Sim |
 | Fonte | Text | Não |
 
+**Criação rápida de disciplina:**
+- A tela RP/Cadastro deve oferecer `+ Nova disciplina` próximo ao select.
+- A criação rápida abre input inline, sem modal e sem trocar de tela.
+- Ao concluir, cria a disciplina em `subjects`, recarrega a lista e deixa a nova disciplina selecionada
+  no cadastro atual.
+- O objetivo é reduzir cliques e evitar digitação repetitiva.
+
 **Critérios de aceite:**
 - Data da aula padrão = hoje.
+- Salvar sem disciplina válida é proibido.
+- `study_records.subject_id` é obrigatório e referencia `subjects.id`.
 - Ao salvar, cria `studyRecord` e gera `reviewTasks` automaticamente.
 - O aluno não clica em "gerar revisões". Acontece automaticamente.
 - Formulário limpa após salvar.
@@ -283,7 +317,9 @@ CREATE TABLE IF NOT EXISTS subjects (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   created_at TEXT    NOT NULL,
-  updated_at TEXT    NOT NULL
+  updated_at TEXT    NOT NULL,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0
 );
 ```
 

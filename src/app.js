@@ -13,6 +13,9 @@ const showSubjectFormButton = document.querySelector("#show-subject-form");
 const newSubjectForm = document.querySelector("#new-subject-form");
 const newSubjectInput = document.querySelector("#new-subject-input");
 const subjectMessage = document.querySelector("#subject-message");
+const subjectList = document.querySelector("#subject-list");
+const subjectsEmpty = document.querySelector("#subjects-empty");
+const subjectManagerMessage = document.querySelector("#subject-manager-message");
 const studyForm = document.querySelector("#study-form");
 const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
@@ -368,6 +371,10 @@ function setSubjectMessage(message = "") {
   subjectMessage.textContent = message;
 }
 
+function setSubjectManagerMessage(message = "") {
+  subjectManagerMessage.textContent = message;
+}
+
 function setSubjectFormVisible(visible) {
   newSubjectForm.hidden = !visible;
   showSubjectFormButton.setAttribute("aria-expanded", String(visible));
@@ -379,15 +386,63 @@ function setSubjectFormVisible(visible) {
 }
 
 async function renderSubjects(selectedId = subjectSelect.value) {
-  const subjects = await DB.subjects.getAll();
+  const [activeSubjects, allSubjects] = await Promise.all([
+    DB.subjects.getActive(),
+    DB.subjects.getAll(),
+  ]);
   subjectSelect.replaceChildren(new Option("Selecione...", ""));
 
-  for (const subject of subjects) {
+  for (const subject of activeSubjects) {
     subjectSelect.add(new Option(subject.name, String(subject.id)));
   }
 
   if (selectedId !== undefined && selectedId !== null) {
     subjectSelect.value = String(selectedId);
+  }
+
+  renderSubjectList(allSubjects);
+}
+
+function renderSubjectList(subjects) {
+  subjectList.replaceChildren();
+  subjectsEmpty.hidden = subjects.length > 0;
+
+  for (const subject of subjects) {
+    const row = document.createElement("article");
+    row.className = "subject-row";
+    row.classList.toggle("is-inactive", !subject.isActive);
+    row.dataset.subjectId = String(subject.id);
+
+    const info = document.createElement("div");
+    info.append(createTextElement("p", "subject-name", subject.name));
+    info.append(createTextElement("span", "subject-status", subject.isActive ? "Ativa" : "Desativada"));
+
+    const actions = document.createElement("div");
+    actions.className = "subject-actions";
+
+    const editButton = document.createElement("button");
+    editButton.className = "small-button";
+    editButton.type = "button";
+    editButton.dataset.action = "edit-subject";
+    editButton.dataset.subjectName = subject.name;
+    editButton.textContent = "Editar";
+
+    const toggleButton = document.createElement("button");
+    toggleButton.className = "small-button";
+    toggleButton.type = "button";
+    toggleButton.dataset.action = subject.isActive ? "deactivate-subject" : "activate-subject";
+    toggleButton.textContent = subject.isActive ? "Desativar" : "Ativar";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "small-button is-danger";
+    deleteButton.type = "button";
+    deleteButton.dataset.action = "delete-subject";
+    deleteButton.dataset.subjectName = subject.name;
+    deleteButton.textContent = "Excluir";
+
+    actions.append(editButton, toggleButton, deleteButton);
+    row.append(info, actions);
+    subjectList.append(row);
   }
 }
 
@@ -422,6 +477,9 @@ export function showScreen(screenId, { focus = false } = {}) {
 
   if (nextScreen === "stats") {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
+  }
+  if (nextScreen === "register") {
+    renderSubjects().catch((error) => console.error("Falha ao carregar disciplinas.", error));
   }
   if (nextScreen === "settings") {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
@@ -465,6 +523,52 @@ newSubjectForm.addEventListener("submit", async (event) => {
         : "Não foi possível adicionar a disciplina. Tente novamente.",
     );
     newSubjectInput.focus();
+  }
+});
+
+subjectList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  const row = event.target.closest(".subject-row");
+  if (!button || !row) return;
+
+  const subjectId = Number(row.dataset.subjectId);
+  const currentName = button.dataset.subjectName;
+  const action = button.dataset.action;
+
+  try {
+    if (action === "edit-subject") {
+      const nextName = window.prompt("Novo nome da disciplina:", currentName);
+      if (nextName === null) return;
+      await DB.subjects.update(subjectId, { name: nextName });
+    }
+
+    if (action === "deactivate-subject") {
+      await DB.subjects.deactivate(subjectId);
+    }
+
+    if (action === "activate-subject") {
+      await DB.subjects.update(subjectId, { isActive: true });
+    }
+
+    if (action === "delete-subject") {
+      const confirmed = window.confirm(
+        `Excluir "${currentName}" apagará todos os estudos e revisões ligados a essa disciplina. Continuar?`,
+      );
+      if (!confirmed) return;
+      await DB.subjects.deleteCascade(subjectId);
+    }
+
+    setSubjectMessage();
+    setSubjectManagerMessage();
+    await Promise.all([renderSubjects(), renderToday(), renderStats()]);
+  } catch (error) {
+    const isDuplicate = /unique|duplicate/i.test(String(error));
+    setSubjectManagerMessage(
+      isDuplicate
+        ? "Essa disciplina já está cadastrada."
+        : "Não foi possível alterar a disciplina.",
+    );
+    console.error("Falha ao alterar disciplina.", error);
   }
 });
 

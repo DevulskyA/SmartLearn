@@ -1,7 +1,7 @@
 # tasks.md — MVP HTML/JS Study App
 
 **Feature:** mvp-html-js-study-app
-**Total de tasks:** 17
+**Total de tasks:** 18
 **Status geral:** Concluído
 
 ---
@@ -44,6 +44,7 @@
 | TASK-014 | Importar backup JSON | [x] | TASK-013 |
 | TASK-015 | Tauri 2 — validação Android e preparação iOS | [x] | TASK-002 |
 | TASK-016 | Polimento — acessibilidade e responsividade | [x] | TASK-014, TASK-015 |
+| TASK-017 | Correção obrigatória: disciplinas como entidade reutilizável | [x] | TASK-016 |
 
 ---
 
@@ -822,3 +823,90 @@ safe-area para topo/rodapé mobile, padding inferior para não sobrepor a navega
 mínimo em inputs numéricos, layout de métricas para 320px e importação de backup por botão focável.
 Validação executada por `npm run build`, build Android debug x86_64, instalação no emulador
 `SmartLearn_API_36`, abertura do app, captura ADB e verificação de Logcat sem crash.
+
+---
+
+## TASK-017 — Correção obrigatória: disciplinas como entidade reutilizável
+
+**Status:** [x] Concluída em 2026-06-23
+**Depende de:** TASK-016
+
+**Objetivo:**
+Corrigir modelagem e UX para garantir que disciplina seja entidade própria, cadastrada uma vez e
+reutilizada por seleção no fluxo RP/Cadastro. O aluno não deve digitar o nome da disciplina
+manualmente no fluxo normal de estudo.
+
+**Arquivos afetados esperados:**
+- `src/db.js` (schema/migration e API `DB.subjects.*`)
+- `index.html` (área de disciplinas, select e quick add)
+- `src/app.js` (listar/criar/editar/desativar/excluir disciplinas; integração com estudo)
+- `src/styles.css` (estilos da área de disciplinas e quick add)
+- `.specs/project/STATE.md` (registrar execução quando ocorrer)
+
+**Passos:**
+1. Atualizar migration de `subjects` para garantir os campos:
+   - `id`
+   - `name`
+   - `created_at`
+   - `updated_at`
+   - `is_active`
+   - `sort_order`
+2. Garantir que `study_records` use `subject_id INTEGER NOT NULL REFERENCES subjects(id)`.
+3. Implementar/confirmar API:
+   - `DB.subjects.getAll()`
+   - `DB.subjects.getActive()`
+   - `DB.subjects.create(name)`
+   - `DB.subjects.update(id, fields)`
+   - `DB.subjects.deactivate(id)`
+   - `DB.subjects.deleteCascade(id)`
+4. Criar área própria para disciplinas:
+   - listar disciplinas;
+   - criar disciplina;
+   - editar nome;
+   - desativar sem apagar histórico;
+   - excluir apagando todos os dados relacionados.
+5. Ajustar RP/Cadastro de estudo:
+   - campo Disciplina é select de disciplinas ativas;
+   - valor salvo é `subjectId`;
+   - salvar sem disciplina válida é bloqueado.
+6. Implementar quick add `+ Nova disciplina` no fluxo RP:
+   - input inline, sem modal;
+   - cria disciplina sem sair do fluxo;
+   - nova disciplina fica selecionada no cadastro atual.
+7. Garantir que backups JSON preservem `isActive` e `sortOrder` de subjects.
+8. Validar que nenhuma UI do fluxo normal exige digitar disciplina livremente para cada estudo.
+9. Implementar exclusão destrutiva com confirmação explícita:
+   - apagar `review_tasks` ligadas aos `study_records` da disciplina;
+   - apagar `study_records` da disciplina;
+   - apagar a linha de `subjects`;
+   - executar a sequência em transação.
+
+**Critérios de aceite:**
+- Disciplina é cadastrada uma vez e reutilizada.
+- RP/Cadastro de estudo usa select de `subjects` ativos.
+- Não é possível salvar estudo sem `subjectId` válido.
+- Criar disciplina por quick add seleciona automaticamente a nova disciplina.
+- Editar disciplina não quebra estudos/revisões existentes.
+- Desativar disciplina remove do select de novos estudos, preservando histórico e estatísticas.
+- Excluir disciplina apaga a disciplina e tudo que depende dela no banco.
+- Excluir disciplina exige confirmação explícita antes da ação destrutiva.
+- Backup exporta/importa `subjects` com `is_active`/`sort_order`.
+- Busca no código confirma que estudo não salva nome de disciplina livre como vínculo.
+- Commit local contém somente a TASK-017 e deixa Windows/Android funcionais.
+
+**Como testar manualmente:**
+1. Abrir Cadastro/RP.
+2. Criar disciplina pela área própria.
+3. Confirmar que aparece no select de estudo.
+4. Criar disciplina por `+ Nova disciplina` e confirmar que fica selecionada.
+5. Salvar estudo e confirmar que `study_records.subject_id` foi preenchido.
+6. Editar nome da disciplina e confirmar que estudos antigos exibem o novo nome.
+7. Desativar disciplina e confirmar que ela não aparece para novos estudos.
+8. Excluir disciplina e confirmar que estudos/revisões relacionados desapareceram do banco.
+9. Exportar/importar backup e confirmar que disciplinas mantêm estado ativo e ordem.
+
+**Nota da execução:** Implementado em 2026-06-23. `subjects` recebeu `is_active` e `sort_order`
+com migration idempotente; `study_records` valida disciplina ativa por `subject_id`; área de
+disciplinas lista, edita, desativa/reativa e exclui em cascata; quick add mantém a nova disciplina
+selecionada. Exclusão destrutiva remove `review_tasks`, `study_records` e `subjects` em transação
+após confirmação explícita.

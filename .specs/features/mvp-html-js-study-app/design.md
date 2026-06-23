@@ -106,8 +106,12 @@ Nenhum outro arquivo pode importar o plugin SQL nem executar comandos SQL.
 
 ```javascript
 DB.init()                               // abre o banco SQLite, cria tabelas, insere settings
-DB.subjects.getAll()                    // SELECT * FROM subjects ORDER BY name
-DB.subjects.create(name)               // INSERT INTO subjects ...
+DB.subjects.getAll()                    // SELECT * FROM subjects ORDER BY sort_order, name
+DB.subjects.getActive()                 // SELECT ativos para o select de estudo/RP
+DB.subjects.create(name)                // INSERT INTO subjects ...
+DB.subjects.update(id, fields)          // editar name, isActive, sortOrder
+DB.subjects.deactivate(id)              // is_active = 0, preservando histórico
+DB.subjects.deleteCascade(id)           // apaga review_tasks, study_records e subject da disciplina
 DB.studyRecords.create(data)           // INSERT INTO study_records ...
 DB.studyRecords.getAll()               // SELECT * FROM study_records
 DB.reviewTasks.getAll()                // SELECT * FROM review_tasks
@@ -228,6 +232,35 @@ Cabeçalho do bloco colapsável (opcional, mas não obrigatório no MVP).
 ```
 
 "Nova disciplina" abre um input inline (sem modal).
+Ao confirmar, a disciplina é persistida em `subjects`, o select é recarregado e a nova disciplina
+fica selecionada no cadastro atual. O fluxo normal usa seleção por `subject_id`; não há digitação
+livre de nome de disciplina no estudo.
+
+---
+
+## Layout — Área de Disciplinas
+
+Área própria para gerenciamento de disciplinas, acessível pela tela Cadastro/RP ou seção equivalente.
+
+```
+┌─────────────────────────────┐
+│ Disciplinas                 │
+│ [Nova disciplina]           │
+│                             │
+│ Matemática        [Editar] [Desativar] [Excluir] │
+│ Direito Civil     [Editar] [Desativar] [Excluir] │
+└─────────────────────────────┘
+```
+
+Regras:
+- Listar disciplinas por `sort_order`, depois `name`.
+- Criar disciplina com nome obrigatório.
+- Editar disciplina inline ou em bloco simples, sem fluxo profundo.
+- Desativar disciplina com `is_active = 0`; não apagar registros históricos.
+- Excluir disciplina é destrutivo: apagar `review_tasks` dos estudos da disciplina, depois
+  `study_records` da disciplina e por fim a linha em `subjects`.
+- Excluir exige confirmação explícita com aviso de perda de todos os dados relacionados.
+- Disciplinas desativadas não aparecem no select normal de novo estudo.
 
 ---
 
@@ -342,6 +375,13 @@ sem backend e sem depender de armazenamento do navegador como banco principal.
 **SQLite nativo:**
 O plugin `@tauri-apps/plugin-sql` abre o banco local da aplicação. A URL/conexão SQLite,
 migrations e queries ficam encapsuladas em `src/db.js`; nenhum componente de UI acessa SQL.
+
+**Modelo de disciplinas:**
+`subjects` é entidade própria e reutilizável, com `id`, `name`, `created_at`, `updated_at`,
+`is_active` e `sort_order`. `study_records.subject_id` é o vínculo obrigatório com a disciplina.
+O app nunca usa nome digitado livremente como vínculo normal entre estudo e disciplina.
+Desativar disciplina preserva histórico. Excluir disciplina remove em cascata todos os dados ligados
+a ela no SQLite: revisões, estudos e a própria disciplina.
 
 ---
 
