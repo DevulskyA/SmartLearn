@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** Specs corrigidas para fontes como entidade reutilizável e seed inicial. TASK-018 pendente.
+- **Fase:** UX linear e fontes como entidades reutilizáveis concluídas. TASK-019 concluída.
 - **Data:** 2026-06-23
-- **Próxima ação:** Revisão humana da correção de modelagem; depois executar TASK-018.
+- **Próxima ação:** Revisão humana da UX linear e validação final em Windows/Android.
 
 ---
 
@@ -139,7 +139,17 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
   - RP/Cadastro deve selecionar fonte por lista/autocomplete e oferecer quick add `+ Nova fonte`.
   - `Grancursos` deve existir automaticamente e ficar pré-selecionado quando for a única fonte ativa.
   - Importação de estudos históricos/aulas fica fora desta correção e deve ser task separada.
-- **Status:** Pendente de implementação na TASK-018.
+- **Status:** Implementada na TASK-018.
+- **Irreversível no MVP:** Sim.
+
+### DEC-014 — Tela Hoje linear com ReviewRow e cadastro minimalista
+- **Data:** 2026-06-23
+- **Decisão:** A Tela Hoje deve ser apresentada como uma linha operacional ReviewRow, com os blocos em ordem Atrasadas, Hoje, Amanhã e Feitas hoje. O cadastro deve priorizar Novo estudo, manter disciplina, fonte e data após salvar e tratar o gerenciamento de disciplinas e fontes como ação secundária.
+- **Consequências:**
+  - As ações diárias ficam sempre visíveis, sem modal, accordion ou card solto como affordance principal.
+  - Desktop usa leitura quase tabular; mobile preserva a mesma ordem visual em linha empilhada.
+  - Cor por disciplina continua proibida; cores ficam reservadas para status, ação, alerta, erro e sucesso.
+- **Status:** Implementada na TASK-019.
 - **Irreversível no MVP:** Sim.
 
 ### DEC-007 — Correções de consistência das specs antes da implementação
@@ -187,7 +197,8 @@ Nenhum.
 - [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
 - [x] TASK-016 executada em 2026-06-23: polimento de acessibilidade, responsividade 320px e safe-area mobile.
 - [x] TASK-017 executada em 2026-06-23: disciplinas com CRUD, desativação, exclusão destrutiva em cascata e quick add.
-- [ ] TASK-018 pendente: fontes como entidade reutilizável, seed inicial de disciplinas/fontes e troca de `source TEXT` por `source_id`.
+- [x] TASK-018 executada em 2026-06-23: fontes como entidade reutilizável, seed inicial e contrato `source_id`.
+- [x] TASK-019 executada em 2026-06-23: Tela Hoje linear com ReviewRow e cadastro minimalista.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).

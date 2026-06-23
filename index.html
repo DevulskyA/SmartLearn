@@ -57,7 +57,7 @@
                 <h2 id="title-overdue">Atrasadas</h2>
                 <span class="block-count" data-count-for="overdue"></span>
               </div>
-              <div class="review-table-head" aria-hidden="true"><span>Disciplina / status</span><span>Conteúdo / fonte</span><span>Estudado em</span><span>Revisão prevista</span><span>Ações</span></div>
+              <div class="review-table-head" aria-hidden="true"><span>Disciplina</span><span>Conteúdo</span><span>Fonte / data</span><span>Status</span><span>Rev. feita</span><span>Q. feitas</span><span>Questões</span><span>Acertos</span><span>%</span></div>
               <div class="review-list" data-review-list="overdue"></div>
             </section>
 
@@ -66,17 +66,8 @@
                 <h2 id="title-review-today">Hoje</h2>
                 <span class="block-count" data-count-for="today"></span>
               </div>
-              <div class="review-table-head" aria-hidden="true"><span>Disciplina / status</span><span>Conteúdo / fonte</span><span>Estudado em</span><span>Revisão prevista</span><span>Ações</span></div>
+              <div class="review-table-head" aria-hidden="true"><span>Disciplina</span><span>Conteúdo</span><span>Fonte / data</span><span>Status</span><span>Rev. feita</span><span>Q. feitas</span><span>Questões</span><span>Acertos</span><span>%</span></div>
               <div class="review-list" data-review-list="today"></div>
-            </section>
-
-            <section class="review-block review-block-done" id="block-done-today" aria-labelledby="title-done-today" hidden>
-              <div class="block-heading">
-                <h2 id="title-done-today">Feitas hoje</h2>
-                <span class="block-count" data-count-for="doneToday"></span>
-              </div>
-              <div class="review-table-head" aria-hidden="true"><span>Disciplina / status</span><span>Conteúdo / fonte</span><span>Estudado em</span><span>Revisão prevista</span><span>Ações</span></div>
-              <div class="review-list" data-review-list="doneToday"></div>
             </section>
 
             <section class="review-block" id="block-tomorrow" aria-labelledby="title-tomorrow" hidden>
@@ -84,8 +75,17 @@
                 <h2 id="title-tomorrow">Amanhã</h2>
                 <span class="block-count" data-count-for="tomorrow"></span>
               </div>
-              <div class="review-table-head" aria-hidden="true"><span>Disciplina / status</span><span>Conteúdo / fonte</span><span>Estudado em</span><span>Revisão prevista</span><span>Ações</span></div>
+              <div class="review-table-head" aria-hidden="true"><span>Disciplina</span><span>Conteúdo</span><span>Fonte / data</span><span>Status</span><span>Rev. feita</span><span>Q. feitas</span><span>Questões</span><span>Acertos</span><span>%</span></div>
               <div class="review-list" data-review-list="tomorrow"></div>
+            </section>
+
+            <section class="review-block review-block-done" id="block-done-today" aria-labelledby="title-done-today" hidden>
+              <div class="block-heading">
+                <h2 id="title-done-today">Feitas hoje</h2>
+                <span class="block-count" data-count-for="doneToday"></span>
+              </div>
+              <div class="review-table-head" aria-hidden="true"><span>Disciplina</span><span>Conteúdo</span><span>Fonte / data</span><span>Status</span><span>Rev. feita</span><span>Q. feitas</span><span>Questões</span><span>Acertos</span><span>%</span></div>
+              <div class="review-list" data-review-list="doneToday"></div>
             </section>
           </div>
 
@@ -101,22 +101,56 @@
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
           <h1 id="title-register">Cadastro</h1>
           <div class="form-card">
-            <div class="section-heading">
-              <p class="eyebrow">Organização</p>
-              <h2>Disciplina</h2>
-              <p>Escolha uma disciplina existente ou crie uma nova para organizar seus estudos.</p>
-            </div>
+            <form class="study-form" id="study-form" novalidate>
+              <div class="section-heading">
+                <p class="eyebrow">Novo estudo</p>
+                <h2>Cadastro rápido</h2>
+                <p>Escolha disciplina e fonte, depois informe data e conteúdo. Os cadastros auxiliares ficam abaixo.</p>
+              </div>
 
-            <div class="field-group">
-              <label for="subject-select">Disciplina</label>
-              <select id="subject-select" name="subject">
-                <option value="">Selecione...</option>
-              </select>
-            </div>
+              <div class="form-grid">
+                <div class="field-group form-grid-wide">
+                  <label for="subject-select">Disciplina</label>
+                  <div class="inline-form-row inline-select-row">
+                    <select id="subject-select" name="subject">
+                      <option value="">Selecione...</option>
+                    </select>
+                    <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
+                      <span aria-hidden="true">＋</span> Nova disciplina
+                    </button>
+                  </div>
+                  <p class="field-message" id="subject-message" role="alert" aria-live="polite"></p>
+                </div>
 
-            <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
-              <span aria-hidden="true">＋</span> Nova disciplina
-            </button>
+                <div class="field-group form-grid-wide">
+                  <label for="study-source">Fonte</label>
+                  <div class="inline-form-row inline-select-row">
+                    <select id="study-source" name="studySource" required>
+                      <option value="">Selecione...</option>
+                    </select>
+                    <button class="text-button" id="show-source-form" type="button" aria-expanded="false" aria-controls="new-source-form">
+                      <span aria-hidden="true">＋</span> Nova fonte
+                    </button>
+                  </div>
+                  <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
+                </div>
+
+                <div class="field-group">
+                  <label for="study-date">Data da aula</label>
+                  <input id="study-date" name="studyDate" type="date" required />
+                </div>
+
+                <div class="field-group form-grid-wide">
+                  <label for="study-content">Conteúdo estudado</label>
+                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Salvar estudo</button>
+                <p class="form-message" id="study-message" role="status" aria-live="polite"></p>
+              </div>
+            </form>
 
             <form class="inline-form" id="new-subject-form" hidden novalidate>
               <div class="field-group inline-form-field">
@@ -125,7 +159,16 @@
                   <input id="new-subject-input" name="subjectName" type="text" maxlength="100" autocomplete="off" />
                   <button class="primary-button" type="submit">Adicionar</button>
                 </div>
-                <p class="field-message" id="subject-message" role="alert" aria-live="polite"></p>
+              </div>
+            </form>
+
+            <form class="inline-form" id="new-source-form" hidden novalidate>
+              <div class="field-group inline-form-field">
+                <label for="new-source-input">Nome da nova fonte</label>
+                <div class="inline-form-row">
+                  <input id="new-source-input" name="sourceName" type="text" maxlength="100" autocomplete="off" />
+                  <button class="primary-button" type="submit">Adicionar</button>
+                </div>
               </div>
             </form>
 
@@ -144,60 +187,12 @@
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Fontes cadastradas</p>
                 <h2 id="source-manager-title">Gerenciar fontes</h2>
-                <p>Edite ou desative fontes. Fonte ? selecionada no cadastro de estudo.</p>
+                <p>Edite ou desative fontes. Fonte é selecionada no cadastro de estudo.</p>
               </div>
               <div class="source-list" id="source-list" aria-live="polite"></div>
               <p class="panel-empty" id="sources-empty">Nenhuma fonte cadastrada.</p>
               <p class="field-message" id="source-manager-message" role="alert" aria-live="polite"></p>
             </section>
-
-            <form class="inline-form" id="new-source-form" hidden novalidate>
-              <div class="field-group inline-form-field">
-                <label for="new-source-input">Nome da nova fonte</label>
-                <div class="inline-form-row">
-                  <input id="new-source-input" name="sourceName" type="text" maxlength="100" autocomplete="off" />
-                  <button class="primary-button" type="submit">Adicionar</button>
-                </div>
-                <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
-              </div>
-            </form>
-
-            <form class="study-form" id="study-form" novalidate>
-              <div class="section-heading compact-heading">
-                <p class="eyebrow">Sessão de estudo</p>
-                <h2>O que você estudou?</h2>
-              </div>
-
-              <div class="form-grid">
-                <div class="field-group">
-                  <label for="study-date">Data da aula</label>
-                  <input id="study-date" name="studyDate" type="date" required />
-                </div>
-
-                <div class="field-group form-grid-wide">
-                  <label for="study-content">Conteúdo estudado</label>
-                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
-                </div>
-
-                                <div class="field-group form-grid-wide">
-                  <label for="study-source">Fonte</label>
-                  <div class="inline-form-row inline-select-row">
-                    <select id="study-source" name="studySource" required>
-                      <option value="">Selecione...</option>
-                    </select>
-                    <button class="text-button" id="show-source-form" type="button" aria-expanded="false" aria-controls="new-source-form">
-                      <span aria-hidden="true">?</span> Nova fonte
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              <div class="form-actions">
-                <button class="primary-button" type="submit">Salvar estudo</button>
-                <p class="form-message" id="study-message" role="status" aria-live="polite"></p>
-              </div>
-            </form>
           </div>
         </section>
 

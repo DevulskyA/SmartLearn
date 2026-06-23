@@ -1,4 +1,4 @@
-import "./styles.css";
+﻿import "./styles.css";
 import { DB } from "./db.js";
 import { Stats } from "./stats.js";
 
@@ -86,114 +86,143 @@ function createTextElement(tagName, className, text) {
   return element;
 }
 
-function createReviewCard(task, studyRecord, subject, source, groupName) {
-  const card = document.createElement("article");
-  card.className = "review-card";
-  card.dataset.reviewId = String(task.id);
-
-  const topline = document.createElement("div");
-  topline.className = "review-card-topline";
-  topline.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
-
-  const badgeText = groupName === "overdue"
-    ? `Atrasada ? R${task.reviewNumber}`
+function getReviewStatusLabel(groupName, task) {
+  const prefix = groupName === "overdue"
+    ? "Atrasada"
     : groupName === "doneToday"
-      ? `Feita ? R${task.reviewNumber}`
-      : `${groupName === "tomorrow" ? "Amanh?" : "Hoje"} ? R${task.reviewNumber}`;
-  const badge = createTextElement("span", "review-badge", badgeText);
-  if (groupName === "overdue") badge.classList.add("is-overdue");
-  if (groupName === "doneToday") badge.classList.add("is-done");
-  topline.append(badge);
-  card.append(topline);
+      ? "Feita"
+      : groupName === "tomorrow"
+        ? "Amanhã"
+        : "Hoje";
+  return `${prefix} · R${task.reviewNumber}`;
+}
 
-  const study = document.createElement("div");
-  study.className = "review-study";
-  study.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conte?do indispon?vel"));
-  study.append(createTextElement("p", "review-source", source?.name ?? "Fonte indispon?vel"));
-  card.append(study);
+function createReviewRow(task, studyRecord, subject, source, groupName) {
+  const row = document.createElement("article");
+  row.className = "review-row";
+  row.dataset.reviewId = String(task.id);
+  row.dataset.group = groupName;
 
-  const meta = document.createElement("dl");
-  meta.className = "review-meta";
-  for (const [label, value] of [
-    ["Estudado em", formatDate(studyRecord?.studyDate)],
-    ["Revis?o prevista", formatDate(task.dueDate)],
-  ]) {
-    const item = document.createElement("div");
-    item.append(
-      createTextElement("dt", "", label),
-      createTextElement("dd", "", value),
-    );
-    meta.append(item);
-  }
-  card.append(meta);
+  const main = document.createElement("div");
+  main.className = "review-row-main";
 
-  const actions = document.createElement("div");
-  actions.className = "review-actions";
+  const subjectCell = document.createElement("div");
+  subjectCell.className = "review-cell review-subject-cell";
+  subjectCell.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
+
+  const contentCell = document.createElement("div");
+  contentCell.className = "review-cell review-content-cell";
+  contentCell.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+
+  const sourceCell = document.createElement("div");
+  sourceCell.className = "review-cell review-source-cell";
+  sourceCell.append(createTextElement("p", "review-source", source?.name ?? "Fonte indisponível"));
+  sourceCell.append(createTextElement("p", "review-study-date", formatDate(studyRecord?.studyDate)));
+
+  const statusCell = document.createElement("div");
+  statusCell.className = "review-cell review-status-cell";
+  const statusBadge = createTextElement("span", "review-status", getReviewStatusLabel(groupName, task));
+  statusBadge.classList.add(groupName === "doneToday" ? "is-done" : `is-${groupName}`);
+  statusCell.append(statusBadge);
+
+  const reviewDoneCell = document.createElement("div");
+  reviewDoneCell.className = "review-cell review-toggle-cell";
   const reviewDoneLabel = document.createElement("label");
-  reviewDoneLabel.className = "check-control";
+  reviewDoneLabel.className = "check-control review-toggle";
   const reviewDoneInput = document.createElement("input");
   reviewDoneInput.type = "checkbox";
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
   reviewDoneInput.dataset.reviewId = String(task.id);
-  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev feita"));
+  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev. feita"));
+  reviewDoneCell.append(reviewDoneLabel);
 
+  const questionsDoneCell = document.createElement("div");
+  questionsDoneCell.className = "review-cell review-toggle-cell";
   const questionsDoneLabel = document.createElement("label");
-  questionsDoneLabel.className = "check-control";
+  questionsDoneLabel.className = "check-control review-toggle";
   const questionsDoneInput = document.createElement("input");
   questionsDoneInput.type = "checkbox";
   questionsDoneInput.checked = task.questionsDone;
   questionsDoneInput.dataset.action = "questions-done";
   questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Q feita"));
+  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Q. feitas"));
+  questionsDoneCell.append(questionsDoneLabel);
 
-  const exerciseControls = document.createElement("div");
-  exerciseControls.className = "exercise-controls";
-  for (const [field, label, value] of [
-    ["questionsCount", "Quest?es", task.questionsCount],
-    ["correctCount", "Acertos", task.correctCount],
-  ]) {
-    const fieldLabel = document.createElement("label");
-    fieldLabel.className = "number-control";
-    fieldLabel.append(createTextElement("span", "", label));
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.step = "1";
-    input.inputMode = "numeric";
-    input.value = value ?? "";
-    input.dataset.action = "score-input";
-    input.dataset.field = field;
-    input.dataset.reviewId = String(task.id);
-    input.setAttribute("aria-label", `${label} da revis?o R${task.reviewNumber}`);
-    fieldLabel.append(input);
-    exerciseControls.append(fieldLabel);
-  }
+  const questionsCell = document.createElement("div");
+  questionsCell.className = "review-cell review-score-cell";
+  const questionsLabel = document.createElement("label");
+  questionsLabel.className = "number-control review-number-control";
+  questionsLabel.append(createTextElement("span", "review-field-label", "Questões"));
+  const questionsInput = document.createElement("input");
+  questionsInput.type = "number";
+  questionsInput.min = "0";
+  questionsInput.step = "1";
+  questionsInput.inputMode = "numeric";
+  questionsInput.value = task.questionsCount ?? "";
+  questionsInput.dataset.action = "score-input";
+  questionsInput.dataset.field = "questionsCount";
+  questionsInput.dataset.reviewId = String(task.id);
+  questionsInput.setAttribute("aria-label", `Questões da revisão R${task.reviewNumber}`);
+  questionsLabel.append(questionsInput);
+  questionsCell.append(questionsLabel);
+
+  const correctCell = document.createElement("div");
+  correctCell.className = "review-cell review-score-cell";
+  const correctLabel = document.createElement("label");
+  correctLabel.className = "number-control review-number-control";
+  correctLabel.append(createTextElement("span", "review-field-label", "Acertos"));
+  const correctInput = document.createElement("input");
+  correctInput.type = "number";
+  correctInput.min = "0";
+  correctInput.step = "1";
+  correctInput.inputMode = "numeric";
+  correctInput.value = task.correctCount ?? "";
+  correctInput.dataset.action = "score-input";
+  correctInput.dataset.field = "correctCount";
+  correctInput.dataset.reviewId = String(task.id);
+  correctInput.setAttribute("aria-label", `Acertos da revisão R${task.reviewNumber}`);
+  correctLabel.append(correctInput);
+  correctCell.append(correctLabel);
+
+  const scoreCell = document.createElement("div");
+  scoreCell.className = "review-cell review-score-cell review-score-cell-percent";
   const score = createTextElement(
     "span",
-    "score-value",
-    task.scorePercent == null ? "?" : `${Number(task.scorePercent).toFixed(1)}%`,
+    "score-value review-score-value",
+    task.scorePercent == null ? "—" : `${Number(task.scorePercent).toFixed(1)}%`,
   );
   score.dataset.scoreFor = String(task.id);
   score.setAttribute("aria-label", "Percentual de acertos");
-  exerciseControls.append(score);
+  scoreCell.append(score);
+
+  main.append(
+    subjectCell,
+    contentCell,
+    sourceCell,
+    statusCell,
+    reviewDoneCell,
+    questionsDoneCell,
+    questionsCell,
+    correctCell,
+    scoreCell,
+  );
 
   const commentLabel = document.createElement("label");
-  commentLabel.className = "comment-control";
-  commentLabel.append(createTextElement("span", "", "Coment?rio"));
+  commentLabel.className = "comment-control review-note";
+  commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
   const commentInput = document.createElement("textarea");
   commentInput.rows = 2;
   commentInput.maxLength = 500;
   commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma d?vida ou ponto importante";
+  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
   commentInput.dataset.action = "comment";
   commentInput.dataset.reviewId = String(task.id);
-  commentInput.setAttribute("aria-label", `Coment?rio da revis?o R${task.reviewNumber}`);
+  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
   commentLabel.append(commentInput);
 
-  actions.append(reviewDoneLabel, questionsDoneLabel, exerciseControls, commentLabel);
-  card.append(actions);
-  return card;
+  row.append(main, commentLabel);
+  return row;
 }
 
 export async function renderToday() {
@@ -211,7 +240,7 @@ export async function renderToday() {
   const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const sourcesById = new Map(sources.map((source) => [source.id, source]));
-  const groups = { overdue, today: dueToday, doneToday, tomorrow: dueTomorrow };
+  const groups = { overdue, today: dueToday, tomorrow: dueTomorrow, doneToday: doneToday };
   let totalVisible = 0;
 
   for (const [groupName, tasks] of Object.entries(groups)) {
@@ -227,7 +256,7 @@ export async function renderToday() {
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
       const source = sourcesById.get(studyRecord?.sourceId);
-      list.append(createReviewCard(task, studyRecord, subject, source, groupName));
+      list.append(createReviewRow(task, studyRecord, subject, source, groupName));
     }
   }
 
@@ -785,14 +814,14 @@ function updateScoreDisplay(card) {
 
 reviewDashboard.addEventListener("input", (event) => {
   if (!event.target.matches('[data-action="score-input"]')) return;
-  updateScoreDisplay(event.target.closest(".review-card"));
+  updateScoreDisplay(event.target.closest(".review-row"));
 });
 
 reviewDashboard.addEventListener("focusout", async (event) => {
   const input = event.target.closest('[data-action="score-input"]');
   if (!input) return;
-  const card = input.closest(".review-card");
-  await DB.reviewTasks.update(Number(input.dataset.reviewId), updateScoreDisplay(card));
+  const row = input.closest(".review-row");
+  await DB.reviewTasks.update(Number(input.dataset.reviewId), updateScoreDisplay(row));
 });
 
 reviewDashboard.addEventListener("keydown", (event) => {
@@ -837,8 +866,7 @@ studyForm.addEventListener("submit", async (event) => {
       content,
     });
     studyContentInput.value = "";
-    studyDateInput.value = getLocalDateValue();
-    studyMessage.textContent = "Estudo salvo! Revisões geradas.";
+    studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
   } catch {
     studyMessage.classList.add("is-error");

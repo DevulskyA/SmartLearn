@@ -1,8 +1,8 @@
-# tasks.md — MVP HTML/JS Study App
+﻿# tasks.md — MVP HTML/JS Study App
 
 **Feature:** mvp-html-js-study-app
-**Total de tasks:** 19
-**Status geral:** TASK-018 pendente antes de considerar o MVP concluído
+**Total de tasks:** 20
+**Status geral:** TASK-019 concluída; restam validações finais.
 
 ---
 
@@ -45,7 +45,8 @@
 | TASK-015 | Tauri 2 — validação Android e preparação iOS | [x] | TASK-002 |
 | TASK-016 | Polimento — acessibilidade e responsividade | [x] | TASK-014, TASK-015 |
 | TASK-017 | Correção obrigatória: disciplinas como entidade reutilizável | [x] | TASK-016 |
-| TASK-018 | Correção obrigatória: fontes como entidade reutilizável e seed inicial | [ ] | TASK-017 |
+| TASK-018 | Correção obrigatória: fontes como entidade reutilizável e seed inicial | [x] | TASK-017 |
+| TASK-019 | Correção obrigatória: Tela Hoje linear com ReviewRow e cadastro minimalista | [x] | TASK-018 |
 
 ---
 
@@ -920,7 +921,7 @@ após confirmação explícita.
 
 ## TASK-018 — Correção obrigatória: fontes como entidade reutilizável e seed inicial
 
-**Status:** [ ] Pendente
+**Status:** [x] Conclu?da em 2026-06-23
 **Depende de:** TASK-017
 
 **Objetivo:**
@@ -1045,3 +1046,70 @@ Antes de salvar disciplina ou fonte:
 6. Salvar estudo e confirmar `study_records.subject_id` e `study_records.source_id`.
 7. Exportar backup e confirmar presença de `sources`.
 8. Importar backup e confirmar preservação das fontes.
+
+---
+
+## TASK-019 ? Corre??o obrigat?ria: Tela Hoje linear com ReviewRow e cadastro minimalista
+
+**Status:** [x] Concluída em 2026-06-23
+**Depende de:** TASK-018
+
+**Objetivo:**
+Reorganizar somente a UX da interface para preservar a melhor qualidade da planilha original, mas
+em uma aplica??o moderna e responsiva. A Tela Hoje deve ficar linear, previs?vel e com a??es
+di?rias sempre vis?veis, sem card decorativo como affordance principal.
+
+**Arquivos afetados esperados:**
+- `index.html` (ordem da Tela Hoje, ordem do Cadastro e blocos principais)
+- `src/app.js` (renderiza??o da Tela Hoje como `ReviewRow`, ordem dos blocos e textos de status)
+- `src/styles.css` (layout linear desktop/mobile, tokens visuais e hierarquia)
+- `.specs/project/STATE.md` (registrar a decis?o de UX quando conclu?da)
+
+**Decis?o obrigat?ria:**
+1. Usar um ?nico componente conceitual, `ReviewRow`, para a Tela Hoje.
+2. N?o usar card solto como affordance principal da rotina di?ria.
+3. No desktop, a linha pode parecer tabela.
+4. No mobile, a mesma linha deve empilhar os campos, sem mudar a ordem visual.
+5. A ordem da Tela Hoje deve ser:
+   - Atrasadas
+   - Hoje
+   - Amanh?
+   - Feitas hoje
+
+**Ordem obrigat?ria dentro de cada revis?o:**
+1. Disciplina
+2. Conte?do
+3. Fonte/Data
+4. Status da revis?o
+5. Revis?o feita
+6. Quest?es feitas
+7. Quest?es
+8. Acertos
+9. Percentual
+
+**Cadastro:**
+1. A tela Cadastro deve come?ar por `Novo estudo`.
+2. Disciplina, fonte, data e conte?do devem vir antes das ?reas de gerenciamento.
+3. `Gerenciar disciplinas` e `Gerenciar fontes` permanecem como a??es secund?rias.
+4. Ap?s salvar um estudo, manter disciplina, fonte e data selecionadas, limpando apenas o conte?do.
+
+**Cores e hierarquia:**
+1. N?o usar cor por disciplina.
+2. Reservar cor para status, a??o, alerta, erro e sucesso.
+3. Disciplina deve ser identificada por texto/chip neutro.
+
+**Crit?rios de aceite:**
+- Tela Hoje parece uma lista linear, n?o um mural de cards.
+- As a??es di?rias aparecem sem clique extra.
+- Desktop fica tabular ou quase tabular.
+- Mobile preserva a mesma ordem em linha empilhada.
+- Cadastro prioriza rapidez de lan?amento.
+- A interface continua funcionando em Windows e Android.
+
+**Como testar manualmente:**
+1. Abrir Hoje e confirmar a ordem dos blocos.
+2. Verificar que cada revis?o mostra as a??es di?rias sem expans?o.
+3. Testar desktop e mobile para confirmar que a mesma ordem visual se mant?m.
+4. Abrir Cadastro e confirmar que `Novo estudo` aparece antes das ?reas de gerenciamento.
+5. Salvar um estudo e confirmar que os campos de disciplina, fonte e data permanecem.
+6. Commit local contém somente a TASK-019 e deixa Windows/Android funcionais.
