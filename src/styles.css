@@ -35,7 +35,9 @@ body {
 }
 
 button,
-a {
+a,
+input,
+select {
   font: inherit;
 }
 
@@ -166,6 +168,123 @@ h1 {
   letter-spacing: -0.045em;
 }
 
+.form-card {
+  width: min(100%, 42rem);
+  margin-top: 2rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: 0 1rem 2.5rem rgb(23 36 59 / 6%);
+}
+
+.section-heading {
+  margin-bottom: 1.75rem;
+}
+
+.section-heading .eyebrow {
+  margin: 0 0 0.45rem;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+.section-heading > p:last-child {
+  max-width: 34rem;
+  margin: 0.55rem 0 0;
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+
+.field-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.field-group label {
+  color: #26364f;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.field-group input,
+.field-group select {
+  width: 100%;
+  min-height: 2.9rem;
+  padding: 0.68rem 0.8rem;
+  border: 1px solid #b9c5d5;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: var(--color-text);
+}
+
+.field-group input:focus,
+.field-group select:focus {
+  border-color: var(--color-primary);
+  outline: 3px solid rgb(11 91 211 / 16%);
+}
+
+.text-button,
+.primary-button {
+  min-height: 2.75rem;
+  border-radius: 0.65rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.text-button {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.primary-button {
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.text-button:focus-visible,
+.primary-button:focus-visible {
+  outline: 3px solid rgb(11 91 211 / 28%);
+  outline-offset: 2px;
+}
+
+.inline-form {
+  margin-top: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.inline-form[hidden] {
+  display: none;
+}
+
+.inline-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.field-message {
+  min-height: 1.25rem;
+  margin: 0;
+  color: #b42318;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .empty-state {
   min-height: 26rem;
   display: grid;
@@ -287,6 +406,14 @@ h1 {
   .empty-state {
     min-height: calc(100vh - 14rem);
     padding: 2rem 0.5rem 4rem;
+  }
+
+  .form-card {
+    margin-top: 1.5rem;
+  }
+
+  .inline-form-row {
+    grid-template-columns: 1fr;
   }
 }
 

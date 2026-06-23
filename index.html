@@ -55,6 +55,35 @@
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
           <h1 id="title-register">Cadastro</h1>
+          <div class="form-card">
+            <div class="section-heading">
+              <p class="eyebrow">Organização</p>
+              <h2>Disciplina</h2>
+              <p>Escolha uma disciplina existente ou crie uma nova para organizar seus estudos.</p>
+            </div>
+
+            <div class="field-group">
+              <label for="subject-select">Disciplina</label>
+              <select id="subject-select" name="subject">
+                <option value="">Selecione...</option>
+              </select>
+            </div>
+
+            <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
+              <span aria-hidden="true">＋</span> Nova disciplina
+            </button>
+
+            <form class="inline-form" id="new-subject-form" hidden novalidate>
+              <div class="field-group inline-form-field">
+                <label for="new-subject-input">Nome da nova disciplina</label>
+                <div class="inline-form-row">
+                  <input id="new-subject-input" name="subjectName" type="text" maxlength="100" autocomplete="off" />
+                  <button class="primary-button" type="submit">Adicionar</button>
+                </div>
+                <p class="field-message" id="subject-message" role="alert" aria-live="polite"></p>
+              </div>
+            </form>
+          </div>
         </section>
 
         <section class="screen" id="screen-stats" data-screen-panel="stats" aria-labelledby="title-stats" hidden>

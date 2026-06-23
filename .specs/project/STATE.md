@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-002 concluída. Persistência SQLite nativa e API isolada `DB.*` prontas.
+- **Fase:** TASK-003 concluída. Cadastro persistente de disciplinas pronto.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-003 — Cadastro de disciplinas
+- **Próxima ação:** Executar TASK-004 — Cadastro de estudo
 
 ---
 
@@ -129,6 +129,7 @@ Nenhum.
 - [x] TASK-000 executada em 2026-06-22: Git, Vite, Tauri 2, Rust/MSVC e scaffold desktop.
 - [x] TASK-001 executada em 2026-06-23: shell visual, navegação e responsividade desktop/mobile.
 - [x] TASK-002 executada em 2026-06-23: plugin SQL, schema, API `DB.*`, persistência e backup lógico.
+- [x] TASK-003 executada em 2026-06-23: criação, validação e seleção persistente de disciplinas.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
