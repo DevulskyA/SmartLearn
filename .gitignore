@@ -10,6 +10,7 @@ src-tauri/gen/
 !.env.example
 
 *.log
+inst_user_settings.tmp
 *.db
 *.db-*
 *.sqlite

@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-014 concluída. Backup JSON pode substituir os dados com validação e atomicidade.
+- **Fase:** TASK-015 concluída. Android validado em emulador com APK debug Tauri 2.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-015 — Validação Android e preparação iOS
+- **Próxima ação:** Executar TASK-016 — Polimento de acessibilidade e responsividade
 
 ---
 
@@ -143,7 +143,7 @@ Nenhum.
 - [x] TASK-012 executada em 2026-06-23: gráfico Canvas nativo com notas em ordem cronológica.
 - [x] TASK-013 executada em 2026-06-23: exportação JSON e registro do último backup.
 - [x] TASK-014 executada em 2026-06-23: importação JSON validada e transacional.
-- [ ] Preparar toolchain Android em task posterior.
+- [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).

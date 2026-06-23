@@ -42,7 +42,7 @@
 | TASK-012 | Gráfico de evolução das notas | [x] | TASK-011 |
 | TASK-013 | Exportar backup JSON | [x] | TASK-002 |
 | TASK-014 | Importar backup JSON | [x] | TASK-013 |
-| TASK-015 | Tauri 2 — validação Android e preparação iOS | [ ] | TASK-002 |
+| TASK-015 | Tauri 2 — validação Android e preparação iOS | [x] | TASK-002 |
 | TASK-016 | Polimento — acessibilidade e responsividade | [ ] | TASK-014, TASK-015 |
 
 ---
@@ -714,7 +714,7 @@ Implementar a importação de um arquivo JSON de backup, substituindo todos os d
 
 ## TASK-015 — Tauri 2 — validação Android e preparação iOS
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-002
 
 > **Desktop é o primeiro alvo funcional. Esta task valida Android posteriormente e confirma
@@ -763,6 +763,14 @@ mesmo modelo SQLite do desktop, sem criar uma segunda aplicação ou base de có
 4. Fechar e reabrir o app; confirmar persistência.
 5. Desativar a rede e confirmar funcionamento offline.
 6. Verificar logs Android e confirmar ausência de erros do plugin SQL.
+
+**Nota da execução:** Android SDK/NDK foi preparado em instalação portátil sob
+`C:\Users\Ariel\AppData\Local\Android\Sdk`. O alvo Android foi inicializado com
+`npx tauri android init --ci`, o APK debug x86_64 foi gerado por
+`npx tauri android build --debug --target x86_64 --apk --ci`, instalado no emulador
+`SmartLearn_API_36` e iniciado como `com.devulsky.smartlearn.debug`. Evidência: Activity exibida,
+PID ativo e captura ADB da Tela Hoje sem tela branca. iOS segue documentado como preparado na mesma
+base, mas não validado por exigir macOS/Xcode.
 
 ---
 

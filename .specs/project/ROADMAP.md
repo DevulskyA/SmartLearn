@@ -4,7 +4,7 @@
 
 **Meta:** Substituir a planilha. Funcionar offline. Sem login. Sem servidor.
 
-**Status:** Base, navegação e persistência SQLite concluídas até a TASK-002.
+**Status:** Funcionalidades do MVP e validação Android concluídas até a TASK-015.
 
 ### Milestones
 
@@ -17,7 +17,7 @@
 | M4 | Exercícios | Registrar questões, acertos, percentual automático | Concluído |
 | M5 | Estatísticas | Totais, médias, gráfico de evolução das notas | Concluído |
 | M6 | Backup | Exportar e importar JSON | Concluído |
-| M7 | Mobile | Validar Android e manter iOS preparado na mesma base Tauri 2 | Pendente |
+| M7 | Mobile | Validar Android e manter iOS preparado na mesma base Tauri 2 | Concluído |
 | M8 | Polimento | Acessibilidade, responsividade, testes manuais finais | Pendente |
 
 ### Entregável da Fase 1
