@@ -19,6 +19,7 @@ const studySourceInput = document.querySelector("#study-source");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
+const reviewDashboard = document.querySelector("#review-dashboard");
 const reviewGroups = {
   overdue: document.querySelector("#block-overdue"),
   today: document.querySelector("#block-today"),
@@ -99,6 +100,19 @@ function createReviewCard(task, studyRecord, subject, groupName) {
     meta.append(item);
   }
   card.append(meta);
+
+  const actions = document.createElement("div");
+  actions.className = "review-actions";
+  const reviewDoneLabel = document.createElement("label");
+  reviewDoneLabel.className = "check-control";
+  const reviewDoneInput = document.createElement("input");
+  reviewDoneInput.type = "checkbox";
+  reviewDoneInput.checked = task.reviewDone;
+  reviewDoneInput.dataset.action = "review-done";
+  reviewDoneInput.dataset.reviewId = String(task.id);
+  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev feita"));
+  actions.append(reviewDoneLabel);
+  card.append(actions);
   return card;
 }
 
@@ -265,6 +279,24 @@ newSubjectForm.addEventListener("submit", async (event) => {
         : "Não foi possível adicionar a disciplina. Tente novamente.",
     );
     newSubjectInput.focus();
+  }
+});
+
+reviewDashboard.addEventListener("change", async (event) => {
+  const input = event.target.closest('[data-action="review-done"]');
+  if (!input) return;
+
+  input.disabled = true;
+  try {
+    await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+      reviewDone: input.checked,
+      completedAt: input.checked ? new Date().toISOString() : null,
+    });
+    await renderToday();
+  } catch (error) {
+    input.checked = !input.checked;
+    input.disabled = false;
+    console.error("Falha ao atualizar a revisão.", error);
   }
 });
 

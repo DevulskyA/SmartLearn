@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-007 concluída. Tela Hoje usa cards mobile e linhas tabulares no desktop.
+- **Fase:** TASK-008 concluída. Revisões podem ser concluídas e reabertas.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-008 — Marcar revisão como feita
+- **Próxima ação:** Executar TASK-009 — Registrar questões e acertos
 
 ---
 
@@ -136,6 +136,7 @@ Nenhum.
 - [x] TASK-005 executada em 2026-06-23: 16 revisões geradas com datas fixas e gravação atômica.
 - [x] TASK-006 executada em 2026-06-23: cards e quatro grupos dinâmicos da Tela Hoje.
 - [x] TASK-007 executada em 2026-06-23: layout tabular responsivo da Tela Hoje no desktop.
+- [x] TASK-008 executada em 2026-06-23: conclusão reversível de revisões com atualização da tela.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
