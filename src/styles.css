@@ -14,6 +14,8 @@
   --radius-md: 0.75rem;
   --header-height: 4.5rem;
   --nav-width: 16rem;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * {
@@ -60,7 +62,7 @@ button {
   z-index: 2;
   display: flex;
   align-items: center;
-  padding: 0 2rem;
+  padding: var(--safe-area-top) 2rem 0;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
@@ -385,7 +387,7 @@ h1 {
 
 .number-control input {
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0.45rem 0.55rem;
   border: 1px solid #b9c5d5;
   border-radius: 0.55rem;
@@ -838,7 +840,7 @@ h1 {
 
 @media (max-width: 47.99rem) {
   :root {
-    --header-height: 4rem;
+    --header-height: calc(4rem + var(--safe-area-top));
   }
 
   .app-shell {
@@ -849,7 +851,7 @@ h1 {
     position: sticky;
     top: 0;
     height: var(--header-height);
-    padding: 0 1.25rem;
+    padding: var(--safe-area-top) 1.25rem 0;
   }
 
   .brand {
@@ -862,11 +864,11 @@ h1 {
     bottom: 0;
     left: 0;
     z-index: 3;
-    height: 4.75rem;
+    height: calc(4.75rem + var(--safe-area-bottom));
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
-    padding: 0;
+    padding: 0 0 var(--safe-area-bottom);
     border-top: 1px solid var(--color-border);
     border-right: 0;
   }
@@ -905,7 +907,7 @@ h1 {
   }
 
   .app-main {
-    padding: 1.75rem 1.25rem;
+    padding: 1.75rem 1.25rem calc(6rem + var(--safe-area-bottom));
   }
 
   .screen {
@@ -950,6 +952,22 @@ h1 {
   .form-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 22rem) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primary-button,
+  .secondary-button {
+    width: 100%;
   }
 }
 

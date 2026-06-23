@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-015 concluída. Android validado em emulador com APK debug Tauri 2.
+- **Fase:** TASK-016 concluída. MVP local concluído conforme specs aprovadas.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-016 — Polimento de acessibilidade e responsividade
+- **Próxima ação:** Publicar branch/PR no GitHub ou gerar release local, conforme decisão humana.
 
 ---
 
@@ -144,6 +144,7 @@ Nenhum.
 - [x] TASK-013 executada em 2026-06-23: exportação JSON e registro do último backup.
 - [x] TASK-014 executada em 2026-06-23: importação JSON validada e transacional.
 - [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
+- [x] TASK-016 executada em 2026-06-23: polimento de acessibilidade, responsividade 320px e safe-area mobile.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).

@@ -40,6 +40,7 @@ const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
+const chooseBackupFileButton = document.querySelector("#choose-backup-file");
 const lastBackupLabel = document.querySelector("#last-backup-label");
 const backupMessage = document.querySelector("#backup-message");
 const importBackupInput = document.querySelector("#import-backup");
@@ -486,6 +487,10 @@ reviewDashboard.addEventListener("change", async (event) => {
 });
 
 exportBackupButton.addEventListener("click", exportBackup);
+
+chooseBackupFileButton.addEventListener("click", () => {
+  importBackupInput.click();
+});
 
 importBackupInput.addEventListener("change", async () => {
   const [file] = importBackupInput.files;

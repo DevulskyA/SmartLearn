@@ -2,7 +2,7 @@
 
 **Feature:** mvp-html-js-study-app
 **Total de tasks:** 17
-**Status geral:** Pendente (correção arquitetural aguardando revisão humana)
+**Status geral:** Concluído
 
 ---
 
@@ -43,7 +43,7 @@
 | TASK-013 | Exportar backup JSON | [x] | TASK-002 |
 | TASK-014 | Importar backup JSON | [x] | TASK-013 |
 | TASK-015 | Tauri 2 — validação Android e preparação iOS | [x] | TASK-002 |
-| TASK-016 | Polimento — acessibilidade e responsividade | [ ] | TASK-014, TASK-015 |
+| TASK-016 | Polimento — acessibilidade e responsividade | [x] | TASK-014, TASK-015 |
 
 ---
 
@@ -776,7 +776,7 @@ base, mas não validado por exigir macOS/Xcode.
 
 ## TASK-016 — Polimento — acessibilidade e responsividade
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-014, TASK-015
 
 **Objetivo:**
@@ -816,3 +816,9 @@ Só faz sentido executar depois que backup/importação (TASK-014) e a validaç�
 4. Testar no dispositivo físico Android se disponível.
 5. Verificar Logcat: nenhum erro ou crash.
 6. Verificar console do runtime Tauri durante o desenvolvimento: nenhum warning inesperado.
+
+**Nota da execução:** Ajustes finais aplicados em 2026-06-23: viewport com `viewport-fit=cover`,
+safe-area para topo/rodapé mobile, padding inferior para não sobrepor a navegação fixa, alvo de toque
+mínimo em inputs numéricos, layout de métricas para 320px e importação de backup por botão focável.
+Validação executada por `npm run build`, build Android debug x86_64, instalação no emulador
+`SmartLearn_API_36`, abertura do app, captura ADB e verificação de Logcat sem crash.

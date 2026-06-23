@@ -4,7 +4,7 @@
 
 **Meta:** Substituir a planilha. Funcionar offline. Sem login. Sem servidor.
 
-**Status:** Funcionalidades do MVP e validação Android concluídas até a TASK-015.
+**Status:** MVP local concluído até a TASK-016.
 
 ### Milestones
 
@@ -18,7 +18,7 @@
 | M5 | Estatísticas | Totais, médias, gráfico de evolução das notas | Concluído |
 | M6 | Backup | Exportar e importar JSON | Concluído |
 | M7 | Mobile | Validar Android e manter iOS preparado na mesma base Tauri 2 | Concluído |
-| M8 | Polimento | Acessibilidade, responsividade, testes manuais finais | Pendente |
+| M8 | Polimento | Acessibilidade, responsividade, testes manuais finais | Concluído |
 
 ### Entregável da Fase 1
 
