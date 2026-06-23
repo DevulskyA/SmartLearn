@@ -36,7 +36,7 @@
 | TASK-006 | Tela Hoje — cards mobile | [x] | TASK-005 |
 | TASK-007 | Tela Hoje — tabela desktop | [x] | TASK-006 |
 | TASK-008 | Marcar revisão como feita | [x] | TASK-006 |
-| TASK-009 | Registrar questões e acertos | [ ] | TASK-006 |
+| TASK-009 | Registrar questões e acertos | [x] | TASK-006 |
 | TASK-010 | Comentário por tarefa | [ ] | TASK-009 |
 | TASK-011 | Tela Estatísticas — métricas | [ ] | TASK-009 |
 | TASK-012 | Gráfico de evolução das notas | [ ] | TASK-011 |
@@ -460,7 +460,7 @@ Implementar a ação de marcar uma revisão como feita (e reverter).
 
 ## TASK-009 — Registrar questões e acertos
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-006
 
 **Objetivo:**

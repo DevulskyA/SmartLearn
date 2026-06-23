@@ -14,7 +14,7 @@
 | M1 | Fundação | Estrutura visual HTML/CSS/JS e navegação entre telas no desktop Tauri | Concluído |
 | M2 | Cadastro | Disciplinas + estudos + geração automática de revisões | Concluído |
 | M3 | Tela Hoje | Detalhes/Hoje com cards mobile e tabela desktop | Concluído |
-| M4 | Exercícios | Registrar questões, acertos, percentual automático | Pendente |
+| M4 | Exercícios | Registrar questões, acertos, percentual automático | Concluído |
 | M5 | Estatísticas | Totais, médias, gráfico de evolução das notas | Pendente |
 | M6 | Backup | Exportar e importar JSON | Pendente |
 | M7 | Mobile | Validar Android e manter iOS preparado na mesma base Tauri 2 | Pendente |

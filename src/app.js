@@ -111,7 +111,48 @@ function createReviewCard(task, studyRecord, subject, groupName) {
   reviewDoneInput.dataset.action = "review-done";
   reviewDoneInput.dataset.reviewId = String(task.id);
   reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev feita"));
-  actions.append(reviewDoneLabel);
+
+  const questionsDoneLabel = document.createElement("label");
+  questionsDoneLabel.className = "check-control";
+  const questionsDoneInput = document.createElement("input");
+  questionsDoneInput.type = "checkbox";
+  questionsDoneInput.checked = task.questionsDone;
+  questionsDoneInput.dataset.action = "questions-done";
+  questionsDoneInput.dataset.reviewId = String(task.id);
+  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Q feita"));
+
+  const exerciseControls = document.createElement("div");
+  exerciseControls.className = "exercise-controls";
+  for (const [field, label, value] of [
+    ["questionsCount", "Questões", task.questionsCount],
+    ["correctCount", "Acertos", task.correctCount],
+  ]) {
+    const fieldLabel = document.createElement("label");
+    fieldLabel.className = "number-control";
+    fieldLabel.append(createTextElement("span", "", label));
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "1";
+    input.inputMode = "numeric";
+    input.value = value ?? "";
+    input.dataset.action = "score-input";
+    input.dataset.field = field;
+    input.dataset.reviewId = String(task.id);
+    input.setAttribute("aria-label", `${label} da revisão R${task.reviewNumber}`);
+    fieldLabel.append(input);
+    exerciseControls.append(fieldLabel);
+  }
+  const score = createTextElement(
+    "span",
+    "score-value",
+    task.scorePercent == null ? "—" : `${Number(task.scorePercent).toFixed(1)}%`,
+  );
+  score.dataset.scoreFor = String(task.id);
+  score.setAttribute("aria-label", "Percentual de acertos");
+  exerciseControls.append(score);
+
+  actions.append(reviewDoneLabel, questionsDoneLabel, exerciseControls);
   card.append(actions);
   return card;
 }
@@ -298,6 +339,50 @@ reviewDashboard.addEventListener("change", async (event) => {
     input.disabled = false;
     console.error("Falha ao atualizar a revisão.", error);
   }
+});
+
+function getScoreValues(card) {
+  const questionsInput = card.querySelector('[data-field="questionsCount"]');
+  const correctInput = card.querySelector('[data-field="correctCount"]');
+  const questionsCount = questionsInput.value === "" ? null : Math.max(0, Number.parseInt(questionsInput.value, 10) || 0);
+  const correctCount = correctInput.value === "" ? null : Math.max(0, Number.parseInt(correctInput.value, 10) || 0);
+  const scorePercent = questionsCount > 0
+    ? ((correctCount ?? 0) / questionsCount) * 100
+    : null;
+  return { questionsCount, correctCount, scorePercent };
+}
+
+function updateScoreDisplay(card) {
+  const values = getScoreValues(card);
+  const score = card.querySelector("[data-score-for]");
+  score.textContent = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  return values;
+}
+
+reviewDashboard.addEventListener("input", (event) => {
+  if (!event.target.matches('[data-action="score-input"]')) return;
+  updateScoreDisplay(event.target.closest(".review-card"));
+});
+
+reviewDashboard.addEventListener("focusout", async (event) => {
+  const input = event.target.closest('[data-action="score-input"]');
+  if (!input) return;
+  const card = input.closest(".review-card");
+  await DB.reviewTasks.update(Number(input.dataset.reviewId), updateScoreDisplay(card));
+});
+
+reviewDashboard.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || !event.target.matches('[data-action="score-input"]')) return;
+  event.preventDefault();
+  event.target.blur();
+});
+
+reviewDashboard.addEventListener("change", async (event) => {
+  const input = event.target.closest('[data-action="questions-done"]');
+  if (!input) return;
+  await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+    questionsDone: input.checked,
+  });
 });
 
 studyForm.addEventListener("submit", async (event) => {

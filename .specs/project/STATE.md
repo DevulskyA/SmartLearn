@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-008 concluída. Revisões podem ser concluídas e reabertas.
+- **Fase:** TASK-009 concluída. Questões, acertos e percentual são registrados por revisão.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-009 — Registrar questões e acertos
+- **Próxima ação:** Executar TASK-010 — Comentário por tarefa
 
 ---
 
@@ -137,6 +137,7 @@ Nenhum.
 - [x] TASK-006 executada em 2026-06-23: cards e quatro grupos dinâmicos da Tela Hoje.
 - [x] TASK-007 executada em 2026-06-23: layout tabular responsivo da Tela Hoje no desktop.
 - [x] TASK-008 executada em 2026-06-23: conclusão reversível de revisões com atualização da tela.
+- [x] TASK-009 executada em 2026-06-23: questões, acertos e percentual com autosave controlado.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
