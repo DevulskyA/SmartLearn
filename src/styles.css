@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color: #17243b;
   background: #f4f7fb;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -677,6 +677,57 @@ h1 {
   text-align: right;
 }
 
+.stats-table-exercises th,
+.stats-table-exercises td {
+  vertical-align: top;
+}
+
+.stats-table-exercises td[data-cell="q"],
+.stats-table-exercises td[data-cell="a"],
+.stats-table-exercises td[data-cell="score"] {
+  text-align: right;
+}
+
+.stats-table td[data-cell="avg"] {
+  text-align: right;
+}
+
+.performance-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.8rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.performance-badge--critical {
+  color: #b42318;
+  background: #fef3f2;
+  border-color: #fecdca;
+}
+
+.performance-badge--attention {
+  color: #b54708;
+  background: #fffaeb;
+  border-color: #fedf89;
+}
+
+.performance-badge--good {
+  color: #027a48;
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+
+.performance-badge--strong {
+  color: #0b5bd3;
+  background: #eaf2ff;
+  border-color: #c9dcff;
+}
 .panel-empty {
   margin: 0.5rem 0 0;
   color: var(--color-muted);
@@ -1307,7 +1358,69 @@ h1 {
     min-height: 3.5rem;
   }
 
+  .stats-table-exercises thead {
+    display: none;
+  }
+
+  .stats-table-exercises tbody tr {
+    display: block;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .stats-table-exercises tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .stats-table-exercises th,
+  .stats-table-exercises td {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .stats-table-exercises td[data-cell="content"] {
+    margin-top: 0.15rem;
+    color: var(--color-muted);
+  }
+
+  .stats-table-exercises td[data-cell="q"],
+  .stats-table-exercises td[data-cell="a"],
+  .stats-table-exercises td[data-cell="score"] {
+    display: inline;
+  }
+
+  .stats-table-exercises td[data-cell="q"]::before {
+    content: "Q ";
+    font-weight: 700;
+    color: var(--color-muted);
+  }
+
+  .stats-table-exercises td[data-cell="a"]::before {
+    content: " · A ";
+    font-weight: 700;
+    color: var(--color-muted);
+  }
+
+  .stats-table-exercises td[data-cell="score"]::before {
+    content: " · Nota ";
+    font-weight: 700;
+    color: var(--color-muted);
+  }
+
+  .stats-table-exercises td[data-cell="score"] .performance-badge {
+    padding: 0;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+
   .form-card {
     width: min(100%, 68rem);
   }
 }
+
+

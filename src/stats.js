@@ -1,54 +1,80 @@
-function getLocalDateValue(date = new Date()) {
+﻿function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 export const Stats = {
   calculate(reviewTasks, studyRecords, subjects, today = getLocalDateValue()) {
-    const completedExercises = reviewTasks.filter((task) => task.questionsDone);
+    const completedExercises = reviewTasks
+      .filter((task) => task.questionsDone)
+      .map((task) => {
+        const studyRecord = studyRecords.find((record) => record.id === task.studyRecordId);
+        const subject = subjects.find((item) => item.id === studyRecord?.subjectId);
+        const questionsCount = toNumber(task.questionsCount);
+        const correctCount = toNumber(task.correctCount);
+        const scorePercent = questionsCount > 0 ? (correctCount / questionsCount) * 100 : null;
+
+        return {
+          id: task.id,
+          subjectName: subject?.name ?? "Sem disciplina",
+          content: studyRecord?.content ?? "Conteúdo indisponível",
+          questionsCount: questionsCount > 0 ? questionsCount : null,
+          correctCount,
+          scorePercent,
+          completedAt: task.completedAt ?? "",
+        };
+      })
+      .sort((a, b) => {
+        const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
+        if (subjectComparison !== 0) return subjectComparison;
+        const contentComparison = a.content.localeCompare(b.content, "pt-BR");
+        if (contentComparison !== 0) return contentComparison;
+        return b.completedAt.localeCompare(a.completedAt);
+      });
+
     const totalQuestions = completedExercises.reduce(
-      (total, task) => total + (Number(task.questionsCount) || 0),
+      (total, item) => total + (item.questionsCount ?? 0),
       0,
     );
     const totalCorrect = completedExercises.reduce(
-      (total, task) => total + (Number(task.correctCount) || 0),
+      (total, item) => total + item.correctCount,
       0,
     );
     const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
-    const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
-    const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
-    const scoresBySubject = new Map();
 
-    for (const task of completedExercises) {
-      if (task.scorePercent == null) continue;
-      const studyRecord = studiesById.get(task.studyRecordId);
-      const subject = subjectsById.get(studyRecord?.subjectId);
-      if (!subject) continue;
-      const scores = scoresBySubject.get(subject.id) ?? {
-        subjectId: subject.id,
-        subjectName: subject.name,
-        total: 0,
-        count: 0,
+    const scoresBySubject = new Map();
+    for (const item of completedExercises) {
+      if (item.questionsCount == null || item.questionsCount <= 0) continue;
+      const subjectScores = scoresBySubject.get(item.subjectName) ?? {
+        subjectName: item.subjectName,
+        totalQuestions: 0,
+        totalCorrect: 0,
       };
-      scores.total += Number(task.scorePercent);
-      scores.count += 1;
-      scoresBySubject.set(subject.id, scores);
+      subjectScores.totalQuestions += item.questionsCount;
+      subjectScores.totalCorrect += item.correctCount;
+      scoresBySubject.set(item.subjectName, subjectScores);
     }
 
     const avgBySubject = [...scoresBySubject.values()]
       .map((item) => ({
-        subjectId: item.subjectId,
         subjectName: item.subjectName,
-        avgScore: item.count > 0 ? item.total / item.count : 0,
+        totalQuestions: item.totalQuestions,
+        avgScore: item.totalQuestions > 0 ? (item.totalCorrect / item.totalQuestions) * 100 : 0,
       }))
-      .sort((a, b) => a.subjectName.localeCompare(b.subjectName, "pt-BR"));
+      .sort((a, b) => a.avgScore - b.avgScore || a.subjectName.localeCompare(b.subjectName, "pt-BR"));
 
     return {
       totalQuestions,
       totalCorrect,
       avgScore,
+      completedExercises,
       avgBySubject,
       reviewsDone: reviewTasks.filter((task) => task.reviewDone).length,
       reviewsPending: reviewTasks.filter(

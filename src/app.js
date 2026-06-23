@@ -45,6 +45,8 @@ const metricElements = {
   reviewsPending: document.querySelector("#metric-reviews-pending"),
   reviewsOverdue: document.querySelector("#metric-reviews-overdue"),
 };
+const exerciseNotesBody = document.querySelector("#exercise-notes-body");
+const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
 const subjectAveragesBody = document.querySelector("#subject-averages-body");
 const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
@@ -86,6 +88,57 @@ function createTextElement(tagName, className, text) {
   return element;
 }
 
+function formatPerformanceScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  const rounded = Math.round(number * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
+}
+
+function getPerformanceBandClass(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  if (number < 50) return "performance-badge--critical";
+  if (number < 70) return "performance-badge--attention";
+  if (number < 85) return "performance-badge--good";
+  return "performance-badge--strong";
+}
+
+function createPerformanceBadge(value) {
+  const badge = document.createElement("span");
+  badge.className = ["performance-badge", getPerformanceBandClass(value)].filter(Boolean).join(" ");
+  badge.textContent = formatPerformanceScore(value);
+  return badge;
+}
+
+function createExerciseRow(exercise) {
+  const row = document.createElement("tr");
+  row.className = "exercise-row";
+
+  const subjectCell = document.createElement("th");
+  subjectCell.scope = "row";
+  subjectCell.dataset.cell = "subject";
+  subjectCell.textContent = exercise.subjectName;
+
+  const contentCell = document.createElement("td");
+  contentCell.dataset.cell = "content";
+  contentCell.textContent = exercise.content;
+
+  const questionsCell = document.createElement("td");
+  questionsCell.dataset.cell = "q";
+  questionsCell.textContent = exercise.questionsCount == null ? "—" : String(exercise.questionsCount);
+
+  const correctCell = document.createElement("td");
+  correctCell.dataset.cell = "a";
+  correctCell.textContent = String(exercise.correctCount);
+
+  const scoreCell = document.createElement("td");
+  scoreCell.dataset.cell = "score";
+  scoreCell.append(createPerformanceBadge(exercise.scorePercent));
+
+  row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
+  return row;
+}
 function getReviewStatusLabel(groupName, task) {
   const prefix = groupName === "overdue"
     ? "Atrasada"
@@ -282,6 +335,12 @@ export async function renderStats() {
   metricElements.reviewsPending.textContent = String(stats.reviewsPending);
   metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);
 
+  exerciseNotesBody.replaceChildren();
+  exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
+  for (const exercise of stats.completedExercises) {
+    exerciseNotesBody.append(createExerciseRow(exercise));
+  }
+
   subjectAveragesBody.replaceChildren();
   subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
   for (const subject of stats.avgBySubject) {
@@ -290,8 +349,11 @@ export async function renderStats() {
     name.scope = "row";
     name.textContent = subject.subjectName;
     const average = document.createElement("td");
-    average.textContent = `${subject.avgScore.toFixed(1).replace(".", ",")}%`;
-    row.append(name, average);
+    average.dataset.cell = "avg";
+    average.append(createPerformanceBadge(subject.avgScore));
+    const questions = document.createElement("td");
+    questions.textContent = String(subject.totalQuestions);
+    row.append(name, average, questions);
     subjectAveragesBody.append(row);
   }
 
@@ -311,7 +373,6 @@ export async function renderStats() {
     chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
   }
 }
-
 export async function renderSettings() {
   const settings = await DB.settings.get();
   lastBackupLabel.textContent = settings?.lastBackupAt
@@ -878,3 +939,8 @@ studyDateInput.value = getLocalDateValue();
 await renderSubjects();
 await renderToday();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);
+
+
+
+
+
