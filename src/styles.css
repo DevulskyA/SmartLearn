@@ -484,18 +484,21 @@ h1 {
   box-shadow: 0 1rem 2.5rem rgb(23 36 59 / 6%);
 }
 
-.subject-manager {
+.subject-manager,
+.source-manager {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--color-border);
 }
 
-.subject-list {
+.subject-list,
+.source-list {
   display: grid;
   gap: 0.75rem;
 }
 
-.subject-row {
+.subject-row,
+.source-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
@@ -506,17 +509,20 @@ h1 {
   background: #fff;
 }
 
-.subject-row.is-inactive {
+.subject-row.is-inactive,
+.source-row.is-inactive {
   background: #f8fafc;
   color: var(--color-muted);
 }
 
-.subject-name {
+.subject-name,
+.source-name {
   margin: 0;
   font-weight: 700;
 }
 
-.subject-status {
+.subject-status,
+.source-status {
   display: inline-flex;
   width: max-content;
   margin-top: 0.25rem;
@@ -528,12 +534,14 @@ h1 {
   font-weight: 750;
 }
 
-.subject-row.is-inactive .subject-status {
+.subject-row.is-inactive .subject-status,
+.source-row.is-inactive .source-status {
   background: #e8eef7;
   color: #52647c;
 }
 
-.subject-actions {
+.subject-actions,
+.source-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
@@ -819,6 +827,14 @@ h1 {
   gap: 0.65rem;
 }
 
+.inline-select-row {
+  align-items: center;
+}
+
+.inline-select-row select {
+  min-width: 0;
+}
+
 .field-message {
   min-height: 1.25rem;
   margin: 0;
@@ -1028,11 +1044,13 @@ h1 {
     flex-direction: column;
   }
 
-  .subject-row {
+  .subject-row,
+  .source-row {
     grid-template-columns: 1fr;
   }
 
-  .subject-actions {
+  .subject-actions,
+  .source-actions {
     justify-content: stretch;
   }
 

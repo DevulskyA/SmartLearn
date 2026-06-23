@@ -140,6 +140,28 @@
               <p class="field-message" id="subject-manager-message" role="alert" aria-live="polite"></p>
             </section>
 
+            <section class="source-manager" aria-labelledby="source-manager-title">
+              <div class="section-heading compact-heading">
+                <p class="eyebrow">Fontes cadastradas</p>
+                <h2 id="source-manager-title">Gerenciar fontes</h2>
+                <p>Edite ou desative fontes. Fonte ? selecionada no cadastro de estudo.</p>
+              </div>
+              <div class="source-list" id="source-list" aria-live="polite"></div>
+              <p class="panel-empty" id="sources-empty">Nenhuma fonte cadastrada.</p>
+              <p class="field-message" id="source-manager-message" role="alert" aria-live="polite"></p>
+            </section>
+
+            <form class="inline-form" id="new-source-form" hidden novalidate>
+              <div class="field-group inline-form-field">
+                <label for="new-source-input">Nome da nova fonte</label>
+                <div class="inline-form-row">
+                  <input id="new-source-input" name="sourceName" type="text" maxlength="100" autocomplete="off" />
+                  <button class="primary-button" type="submit">Adicionar</button>
+                </div>
+                <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
+              </div>
+            </form>
+
             <form class="study-form" id="study-form" novalidate>
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Sessão de estudo</p>
@@ -157,10 +179,18 @@
                   <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
                 </div>
 
-                <div class="field-group form-grid-wide">
-                  <label for="study-source">Fonte <span class="label-optional">(opcional)</span></label>
-                  <input id="study-source" name="studySource" type="text" maxlength="240" placeholder="Ex.: Aula 12, capítulo 4" />
+                                <div class="field-group form-grid-wide">
+                  <label for="study-source">Fonte</label>
+                  <div class="inline-form-row inline-select-row">
+                    <select id="study-source" name="studySource" required>
+                      <option value="">Selecione...</option>
+                    </select>
+                    <button class="text-button" id="show-source-form" type="button" aria-expanded="false" aria-controls="new-source-form">
+                      <span aria-hidden="true">?</span> Nova fonte
+                    </button>
+                  </div>
                 </div>
+
               </div>
 
               <div class="form-actions">

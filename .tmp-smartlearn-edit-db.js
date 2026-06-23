@@ -1,15 +1,23 @@
-import Database from "@tauri-apps/plugin-sql";
-import { invoke } from "@tauri-apps/api/core";
+﻿const fs = require("fs");
+const path = "src/db.js";
+let text = fs.readFileSync(path, "utf8");
 
-const DATABASE_URL = "sqlite:smartlearn.db";
-const REVIEW_SCHEDULE = [
-  1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
-];
+function replaceSection(startMarker, endMarker, replacement) {
+  const start = text.indexOf(startMarker);
+  if (start === -1) {
+    throw new Error("Start marker not found: " + startMarker);
+  }
+  const end = text.indexOf(endMarker, start + startMarker.length);
+  if (end === -1) {
+    throw new Error("End marker not found: " + endMarker);
+  }
+  text = text.slice(0, start) + replacement + text.slice(end);
+}
 
-let database;
-let initialization;
-
-const schemaStatements = [
+replaceSection(
+  "const schemaStatements = [",
+  "function nowIso() {",
+  `const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
   "CREATE TABLE IF NOT EXISTS sources (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
   "CREATE TABLE IF NOT EXISTS study_records (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_id INTEGER NOT NULL REFERENCES sources(id),\n    study_date TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
@@ -18,19 +26,14 @@ const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
   "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '1.0.0', $1)",
 ];
-function nowIso() {
-  return new Date().toISOString();
-}
 
-function requireDatabase() {
-  if (!database) {
-    throw new Error("O banco ainda não foi inicializado. Execute DB.init() primeiro.");
-  }
+`
+);
 
-  return database;
-}
-
-function mapSubject(row) {
+replaceSection(
+  "function mapSubject(row) {",
+  "function assertImportData(data) {",
+  `function mapSubject(row) {
   return {
     id: row.id,
     name: row.name,
@@ -88,39 +91,39 @@ function mapSettings(row) {
   return {
     key: row.key,
     appVersion: row.app_version,
-    reviewSchedule: JSON.parse(row.review_schedule || '[]'),
+    reviewSchedule: JSON.parse(row.review_schedule || "[]"),
     lastBackupAt: row.last_backup_at,
   };
 }
 
 function normalizeEntityName(name, label) {
-  const normalized = String(name ?? '').replace(/\s+/g, ' ').trim();
-  if (!normalized) throw new Error('Informe ' + label + '.');
+  const normalized = String(name ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) throw new Error("Informe " + label + ".");
   return normalized;
 }
 
 async function assertActiveSubject(subjectId) {
   const [subject] = await requireDatabase().select(
-    'SELECT id FROM subjects WHERE id = $1 AND is_active = 1',
+    "SELECT id FROM subjects WHERE id = $1 AND is_active = 1",
     [subjectId],
   );
   if (!subject) {
-    throw new Error('Selecione uma disciplina ativa.');
+    throw new Error("Selecione uma disciplina ativa.");
   }
 }
 
 async function assertActiveSource(sourceId) {
   const [source] = await requireDatabase().select(
-    'SELECT id FROM sources WHERE id = $1 AND is_active = 1',
+    "SELECT id FROM sources WHERE id = $1 AND is_active = 1",
     [sourceId],
   );
   if (!source) {
-    throw new Error('Selecione uma fonte ativa.');
+    throw new Error("Selecione uma fonte ativa.");
   }
 }
 
 async function getNextSortOrder(tableName) {
-  const query = 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM ' + tableName;
+  const query = "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM " + tableName;
   const [{ next_order: nextOrder = 0 } = {}] = await requireDatabase().select(query);
   return nextOrder;
 }
@@ -131,12 +134,12 @@ async function ensureNamedRows(tableName, names, label) {
 
   for (const name of names) {
     const normalized = normalizeEntityName(name, label);
-    const query = 'SELECT id FROM ' + tableName + ' WHERE name = $1 COLLATE NOCASE';
+    const query = "SELECT id FROM " + tableName + " WHERE name = $1 COLLATE NOCASE";
     const [existing] = await requireDatabase().select(query, [normalized]);
     if (existing) continue;
 
     await requireDatabase().execute(
-      'INSERT INTO ' + tableName + ' (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
+      "INSERT INTO " + tableName + " (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)",
       [normalized, timestamp, timestamp, nextSortOrder],
     );
     nextSortOrder += 1;
@@ -144,22 +147,30 @@ async function ensureNamedRows(tableName, names, label) {
 }
 
 async function getSourceIdByName(name) {
-  const normalized = normalizeEntityName(name, 'o nome da fonte');
+  const normalized = normalizeEntityName(name, "o nome da fonte");
   const [row] = await requireDatabase().select(
-    'SELECT id FROM sources WHERE name = $1 COLLATE NOCASE',
+    "SELECT id FROM sources WHERE name = $1 COLLATE NOCASE",
     [normalized],
   );
   return row?.id ?? null;
 }
+
 function assertImportData(data) {
-  if (!data || typeof data !== 'object') {
-    throw new Error('O backup precisa ser um objeto JSON v?lido.');
+`
+);
+
+replaceSection(
+  "function assertImportData(data) {",
+  "export const DB = {",
+  `function assertImportData(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("O backup precisa ser um objeto JSON válido.");
   }
 
-  for (const key of ['subjects', 'sources', 'studyRecords', 'reviewTasks']) {
+  for (const key of ["subjects", "sources", "studyRecords", "reviewTasks"]) {
     if (!Array.isArray(data[key])) {
       throw new Error(
-        'O backup n?o cont?m a lista obrigat?ria "' + key + '".',
+        "O backup não contém a lista obrigatória \"" + key + "\".",
       );
     }
   }
@@ -167,19 +178,19 @@ function assertImportData(data) {
 
 function buildImportStatements(data) {
   const statements = [
-    { query: 'DELETE FROM review_tasks', values: [] },
-    { query: 'DELETE FROM study_records', values: [] },
-    { query: 'DELETE FROM sources', values: [] },
-    { query: 'DELETE FROM subjects', values: [] },
-    { query: 'DELETE FROM settings', values: [] },
+    { query: "DELETE FROM review_tasks", values: [] },
+    { query: "DELETE FROM study_records", values: [] },
+    { query: "DELETE FROM sources", values: [] },
+    { query: "DELETE FROM subjects", values: [] },
+    { query: "DELETE FROM settings", values: [] },
   ];
 
   for (const row of data.subjects) {
     statements.push({
-      query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)',
+      query: "INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)",
       values: [
         row.id,
-        normalizeEntityName(row.name, 'o nome da disciplina'),
+        normalizeEntityName(row.name, "o nome da disciplina"),
         row.createdAt,
         row.updatedAt,
         (row.isActive ?? row.is_active ?? true) ? 1 : 0,
@@ -190,10 +201,10 @@ function buildImportStatements(data) {
 
   for (const row of data.sources) {
     statements.push({
-      query: 'INSERT INTO sources (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)',
+      query: "INSERT INTO sources (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)",
       values: [
         row.id,
-        normalizeEntityName(row.name, 'o nome da fonte'),
+        normalizeEntityName(row.name, "o nome da fonte"),
         row.createdAt,
         row.updatedAt,
         (row.isActive ?? row.is_active ?? true) ? 1 : 0,
@@ -204,7 +215,7 @@ function buildImportStatements(data) {
 
   for (const row of data.studyRecords) {
     statements.push({
-      query: 'INSERT INTO study_records\n        (id, subject_id, source_id, study_date, content, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      query: "INSERT INTO study_records\n        (id, subject_id, source_id, study_date, content, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)",
       values: [
         row.id,
         row.subjectId,
@@ -219,7 +230,7 @@ function buildImportStatements(data) {
 
   for (const row of data.reviewTasks) {
     statements.push({
-      query: 'INSERT INTO review_tasks\n        (id, study_record_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      query: "INSERT INTO review_tasks\n        (id, study_record_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
       values: [
         row.id, row.studyRecordId, row.reviewNumber, row.dueDate,
         row.completedAt ?? null, row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
@@ -231,9 +242,9 @@ function buildImportStatements(data) {
 
   const settings = (Array.isArray(data.settings) ? data.settings[0] : data.settings) ?? {};
   statements.push({
-    query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES (\'main\', $1, $2, $3)',
+    query: "INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES ('main', $1, $2, $3)",
     values: [
-      settings.appVersion ?? '1.0.0',
+      settings.appVersion ?? "1.0.0",
       JSON.stringify(settings.reviewSchedule ?? REVIEW_SCHEDULE),
       settings.lastBackupAt ?? null,
     ],
@@ -243,11 +254,17 @@ function buildImportStatements(data) {
 }
 
 export const DB = {
-  async init() {
+`
+);
+
+replaceSection(
+  "  async init() {",
+  "  subjects: {",
+  `  async init() {
     if (!initialization) {
       initialization = (async () => {
         database = await Database.load(DATABASE_URL);
-        await database.execute('PRAGMA foreign_keys = ON');
+        await database.execute("PRAGMA foreign_keys = ON");
 
         for (const [index, statement] of schemaStatements.entries()) {
           const params = index === schemaStatements.length - 1
@@ -272,62 +289,68 @@ export const DB = {
     return initialization;
   },
 
-  subjects: {
+`
+);
+
+replaceSection(
+  "  subjects: {",
+  "  reviewTasks: {",
+  `  subjects: {
     async ensureColumns() {
-      const columns = await requireDatabase().select('PRAGMA table_info(subjects)');
+      const columns = await requireDatabase().select("PRAGMA table_info(subjects)");
       const names = new Set(columns.map((column) => column.name));
-      if (!names.has('is_active')) {
+      if (!names.has("is_active")) {
         await requireDatabase().execute(
-          'ALTER TABLE subjects ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
+          "ALTER TABLE subjects ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
         );
       }
-      if (!names.has('sort_order')) {
+      if (!names.has("sort_order")) {
         await requireDatabase().execute(
-          'ALTER TABLE subjects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+          "ALTER TABLE subjects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
         );
       }
     },
 
     async seedInitial() {
       await ensureNamedRows(
-        'subjects',
+        "subjects",
         [
-          'L?ngua Portuguesa',
-          'Conhecimentos sobre o DF',
-          'Legisla??o',
-          'Administra??o',
-          'AFO',
-          'Arquivologia',
-          'Recursos Materiais',
+          "Língua Portuguesa",
+          "Conhecimentos sobre o DF",
+          "Legislação",
+          "Administração",
+          "AFO",
+          "Arquivologia",
+          "Recursos Materiais",
         ],
-        'o nome da disciplina',
+        "o nome da disciplina",
       );
     },
 
     async getAll() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM subjects ORDER BY sort_order, name COLLATE NOCASE',
+        "SELECT * FROM subjects ORDER BY sort_order, name COLLATE NOCASE",
       );
       return rows.map(mapSubject);
     },
 
     async getActive() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM subjects WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE',
+        "SELECT * FROM subjects WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE",
       );
       return rows.map(mapSubject);
     },
 
     async create(name) {
-      const value = normalizeEntityName(name, 'o nome da disciplina');
+      const value = normalizeEntityName(name, "o nome da disciplina");
       const timestamp = nowIso();
-      const nextOrder = await getNextSortOrder('subjects');
+      const nextOrder = await getNextSortOrder("subjects");
       const result = await requireDatabase().execute(
-        'INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
+        "INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)",
         [value, timestamp, timestamp, nextOrder],
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM subjects WHERE id = $1',
+        "SELECT * FROM subjects WHERE id = $1",
         [result.lastInsertId],
       );
       return mapSubject(row);
@@ -335,12 +358,12 @@ export const DB = {
 
     async update(id, fields) {
       const columns = {
-        name: ['name', (value) => normalizeEntityName(value, 'o nome da disciplina')],
-        isActive: ['is_active', (value) => (value ? 1 : 0)],
-        sortOrder: ['sort_order', (value) => Number(value) || 0],
+        name: ["name", (value) => normalizeEntityName(value, "o nome da disciplina")],
+        isActive: ["is_active", (value) => (value ? 1 : 0)],
+        sortOrder: ["sort_order", (value) => Number(value) || 0],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error('Nenhum campo v?lido para atualizar.');
+      if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
 
       const values = entries.map(([key, value]) => columns[key][1](value));
       values.push(nowIso(), id);
@@ -350,11 +373,12 @@ export const DB = {
       assignments.push(`updated_at = $${entries.length + 1}`);
 
       await requireDatabase().execute(
-        'UPDATE subjects SET ' + assignments.join(', ') + '\n         WHERE id = $' + (entries.length + 2),
+        `UPDATE subjects SET ${assignments.join(", ")}
+         WHERE id = $${entries.length + 2}`,
         values,
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM subjects WHERE id = $1',
+        "SELECT * FROM subjects WHERE id = $1",
         [id],
       );
       return row ? mapSubject(row) : null;
@@ -365,7 +389,7 @@ export const DB = {
     },
 
     async deleteCascade(id) {
-      await invoke('execute_sqlite_transaction', {
+      await invoke("execute_sqlite_transaction", {
         statements: [
           {
             query: `DELETE FROM review_tasks
@@ -375,11 +399,11 @@ export const DB = {
             values: [id],
           },
           {
-            query: 'DELETE FROM study_records WHERE subject_id = $1',
+            query: "DELETE FROM study_records WHERE subject_id = $1",
             values: [id],
           },
           {
-            query: 'DELETE FROM subjects WHERE id = $1',
+            query: "DELETE FROM subjects WHERE id = $1",
             values: [id],
           },
         ],
@@ -390,52 +414,52 @@ export const DB = {
 
   sources: {
     async ensureColumns() {
-      const columns = await requireDatabase().select('PRAGMA table_info(sources)');
+      const columns = await requireDatabase().select("PRAGMA table_info(sources)");
       const names = new Set(columns.map((column) => column.name));
-      if (!names.has('is_active')) {
+      if (!names.has("is_active")) {
         await requireDatabase().execute(
-          'ALTER TABLE sources ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
+          "ALTER TABLE sources ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
         );
       }
-      if (!names.has('sort_order')) {
+      if (!names.has("sort_order")) {
         await requireDatabase().execute(
-          'ALTER TABLE sources ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+          "ALTER TABLE sources ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
         );
       }
     },
 
     async seedInitial() {
       await ensureNamedRows(
-        'sources',
-        ['Grancursos'],
-        'o nome da fonte',
+        "sources",
+        ["Grancursos"],
+        "o nome da fonte",
       );
     },
 
     async getAll() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM sources ORDER BY sort_order, name COLLATE NOCASE',
+        "SELECT * FROM sources ORDER BY sort_order, name COLLATE NOCASE",
       );
       return rows.map(mapSource);
     },
 
     async getActive() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM sources WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE',
+        "SELECT * FROM sources WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE",
       );
       return rows.map(mapSource);
     },
 
     async create(name) {
-      const value = normalizeEntityName(name, 'o nome da fonte');
+      const value = normalizeEntityName(name, "o nome da fonte");
       const timestamp = nowIso();
-      const nextOrder = await getNextSortOrder('sources');
+      const nextOrder = await getNextSortOrder("sources");
       const result = await requireDatabase().execute(
-        'INSERT INTO sources (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
+        "INSERT INTO sources (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)",
         [value, timestamp, timestamp, nextOrder],
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM sources WHERE id = $1',
+        "SELECT * FROM sources WHERE id = $1",
         [result.lastInsertId],
       );
       return mapSource(row);
@@ -443,12 +467,12 @@ export const DB = {
 
     async update(id, fields) {
       const columns = {
-        name: ['name', (value) => normalizeEntityName(value, 'o nome da fonte')],
-        isActive: ['is_active', (value) => (value ? 1 : 0)],
-        sortOrder: ['sort_order', (value) => Number(value) || 0],
+        name: ["name", (value) => normalizeEntityName(value, "o nome da fonte")],
+        isActive: ["is_active", (value) => (value ? 1 : 0)],
+        sortOrder: ["sort_order", (value) => Number(value) || 0],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error('Nenhum campo v?lido para atualizar.');
+      if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
 
       const values = entries.map(([key, value]) => columns[key][1](value));
       values.push(nowIso(), id);
@@ -458,11 +482,12 @@ export const DB = {
       assignments.push(`updated_at = $${entries.length + 1}`);
 
       await requireDatabase().execute(
-        'UPDATE sources SET ' + assignments.join(', ') + '\n         WHERE id = $' + (entries.length + 2),
+        `UPDATE sources SET ${assignments.join(", ")}
+         WHERE id = $${entries.length + 2}`,
         values,
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM sources WHERE id = $1',
+        "SELECT * FROM sources WHERE id = $1",
         [id],
       );
       return row ? mapSource(row) : null;
@@ -475,33 +500,28 @@ export const DB = {
 
   studyRecords: {
     async ensureColumns() {
-      const columns = await requireDatabase().select('PRAGMA table_info(study_records)');
+      const columns = await requireDatabase().select("PRAGMA table_info(study_records)");
       const names = new Set(columns.map((column) => column.name));
-      if (!names.has('source_id')) {
+      if (!names.has("source_id")) {
         await requireDatabase().execute(
-          'ALTER TABLE study_records ADD COLUMN source_id INTEGER',
+          "ALTER TABLE study_records ADD COLUMN source_id INTEGER",
         );
       }
 
-      const hasSourceText = names.has('source');
       const rows = await requireDatabase().select(
-        hasSourceText
-          ? 'SELECT id, source FROM study_records WHERE source_id IS NULL'
-          : 'SELECT id FROM study_records WHERE source_id IS NULL',
+        "SELECT id, source FROM study_records WHERE source_id IS NULL",
       );
       if (rows.length === 0) {
         return;
       }
 
-      let fallbackSourceId = await getSourceIdByName('Grancursos');
+      let fallbackSourceId = await getSourceIdByName("Grancursos");
       if (!fallbackSourceId) {
-        fallbackSourceId = (await DB.sources.create('Grancursos')).id;
+        fallbackSourceId = (await DB.sources.create("Grancursos")).id;
       }
 
       for (const row of rows) {
-        const legacySource = hasSourceText
-          ? String(row.source ?? '').replace(/\s+/g, ' ').trim()
-          : '';
+        const legacySource = String(row.source ?? "").replace(/\s+/g, " ").trim();
         let sourceId = fallbackSourceId;
         if (legacySource) {
           sourceId = await getSourceIdByName(legacySource);
@@ -511,7 +531,7 @@ export const DB = {
         }
 
         await requireDatabase().execute(
-          'UPDATE study_records SET source_id = $1 WHERE id = $2',
+          "UPDATE study_records SET source_id = $1 WHERE id = $2",
           [sourceId, row.id],
         );
       }
@@ -519,7 +539,7 @@ export const DB = {
 
     async getAll() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM study_records ORDER BY study_date DESC, id DESC',
+        "SELECT * FROM study_records ORDER BY study_date DESC, id DESC",
       );
       return rows.map(mapStudyRecord);
     },
@@ -536,13 +556,13 @@ export const DB = {
           data.subjectId,
           data.sourceId,
           data.studyDate,
-          String(data.content ?? '').trim(),
+          String(data.content ?? "").trim(),
           timestamp,
           timestamp,
         ],
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE id = $1',
+        "SELECT * FROM study_records WHERE id = $1",
         [result.lastInsertId],
       );
       return mapStudyRecord(row);
@@ -550,7 +570,7 @@ export const DB = {
 
     async createWithReviews(data, tasks) {
       if (!Array.isArray(tasks) || tasks.length === 0) {
-        throw new Error('Informe ao menos uma revis?o para o estudo.');
+        throw new Error("Informe ao menos uma revisão para o estudo.");
       }
 
       await assertActiveSubject(data.subjectId);
@@ -576,10 +596,10 @@ export const DB = {
           { length: 11 },
           (_, fieldIndex) => `$${offset + fieldIndex + 1}`,
         );
-        return `((SELECT MAX(id) FROM study_records), ${fields.join(', ')})`;
+        return `((SELECT MAX(id) FROM study_records), ${fields.join(", ")})`;
       });
 
-      const results = await invoke('execute_sqlite_transaction', {
+      const results = await invoke("execute_sqlite_transaction", {
         statements: [
           {
             query: `INSERT INTO study_records
@@ -589,7 +609,7 @@ export const DB = {
               data.subjectId,
               data.sourceId,
               data.studyDate,
-              String(data.content ?? '').trim(),
+              String(data.content ?? "").trim(),
               timestamp,
               timestamp,
             ],
@@ -599,13 +619,13 @@ export const DB = {
               (study_record_id, review_number, due_date, completed_at,
                review_done, questions_done, questions_count, correct_count,
                score_percent, comment, created_at, updated_at)
-             VALUES ${reviewPlaceholders.join(', ')}`,
+             VALUES ${reviewPlaceholders.join(", ")}`,
             values: reviewValues,
           },
         ],
       });
       const [row] = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE id = $1',
+        "SELECT * FROM study_records WHERE id = $1",
         [results[0].lastInsertId],
       );
       return mapStudyRecord(row);
@@ -613,156 +633,13 @@ export const DB = {
 
   },
 
-  reviewTasks: {
-    async getAll() {
-      const rows = await requireDatabase().select(
-        "SELECT * FROM review_tasks ORDER BY due_date, review_number",
-      );
-      return rows.map(mapReviewTask);
-    },
+`
+);
 
-    async createBulk(tasks) {
-      if (!Array.isArray(tasks) || tasks.length === 0) return [];
-
-      const timestamp = nowIso();
-      const values = [];
-      const placeholders = tasks.map((task, taskIndex) => {
-        const offset = taskIndex * 12;
-        values.push(
-          task.studyRecordId,
-          task.reviewNumber,
-          task.dueDate,
-          task.completedAt ?? null,
-          task.reviewDone ? 1 : 0,
-          task.questionsDone ? 1 : 0,
-          task.questionsCount ?? null,
-          task.correctCount ?? null,
-          task.scorePercent ?? null,
-          task.comment ?? null,
-          task.createdAt ?? timestamp,
-          task.updatedAt ?? timestamp,
-        );
-        return `(${Array.from({ length: 12 }, (_, fieldIndex) => `$${offset + fieldIndex + 1}`).join(", ")})`;
-      });
-
-      await requireDatabase().execute(
-        `INSERT INTO review_tasks
-          (study_record_id, review_number, due_date, completed_at,
-           review_done, questions_done, questions_count, correct_count,
-           score_percent, comment, created_at, updated_at)
-         VALUES ${placeholders.join(", ")}`,
-        values,
-      );
-
-      return DB.reviewTasks.getAll();
-    },
-
-    async getForToday(today) {
-      const rows = await requireDatabase().select(
-        `SELECT * FROM review_tasks
-         WHERE due_date = $1 AND review_done = 0
-         ORDER BY review_number`,
-        [today],
-      );
-      return rows.map(mapReviewTask);
-    },
-
-    async getOverdue(today) {
-      const rows = await requireDatabase().select(
-        `SELECT * FROM review_tasks
-         WHERE due_date < $1 AND review_done = 0
-         ORDER BY due_date, review_number`,
-        [today],
-      );
-      return rows.map(mapReviewTask);
-    },
-
-    async getCompletedToday(today) {
-      const rows = await requireDatabase().select(
-        `SELECT * FROM review_tasks
-         WHERE completed_at LIKE $1 AND review_done = 1
-         ORDER BY completed_at DESC`,
-        [`${today}%`],
-      );
-      return rows.map(mapReviewTask);
-    },
-
-    async getTomorrow(tomorrow) {
-      const rows = await requireDatabase().select(
-        `SELECT * FROM review_tasks
-         WHERE due_date = $1 AND review_done = 0
-         ORDER BY review_number`,
-        [tomorrow],
-      );
-      return rows.map(mapReviewTask);
-    },
-
-    async update(id, fields) {
-      const columns = {
-        studyRecordId: ["study_record_id", (value) => value],
-        reviewNumber: ["review_number", (value) => value],
-        dueDate: ["due_date", (value) => value],
-        completedAt: ["completed_at", (value) => value],
-        reviewDone: ["review_done", (value) => (value ? 1 : 0)],
-        questionsDone: ["questions_done", (value) => (value ? 1 : 0)],
-        questionsCount: ["questions_count", (value) => value],
-        correctCount: ["correct_count", (value) => value],
-        scorePercent: ["score_percent", (value) => value],
-        comment: ["comment", (value) => value],
-      };
-      const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
-
-      const values = entries.map(([key, value]) => columns[key][1](value));
-      values.push(nowIso(), id);
-      const assignments = entries.map(
-        ([key], index) => `${columns[key][0]} = $${index + 1}`,
-      );
-      assignments.push(`updated_at = $${entries.length + 1}`);
-
-      await requireDatabase().execute(
-        `UPDATE review_tasks SET ${assignments.join(", ")}
-         WHERE id = $${entries.length + 2}`,
-        values,
-      );
-      const [row] = await requireDatabase().select(
-        "SELECT * FROM review_tasks WHERE id = $1",
-        [id],
-      );
-      return row ? mapReviewTask(row) : null;
-    },
-  },
-
-  settings: {
-    async get() {
-      const [row] = await requireDatabase().select(
-        "SELECT * FROM settings WHERE key = 'main'",
-      );
-      return mapSettings(row);
-    },
-
-    async update(fields) {
-      const columns = {
-        appVersion: ["app_version", (value) => value],
-        reviewSchedule: ["review_schedule", (value) => JSON.stringify(value)],
-        lastBackupAt: ["last_backup_at", (value) => value],
-      };
-      const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error("Nenhuma configuração válida para atualizar.");
-
-      const values = entries.map(([key, value]) => columns[key][1](value));
-      const assignments = entries.map(
-        ([key], index) => `${columns[key][0]} = $${index + 1}`,
-      );
-      await requireDatabase().execute(
-        `UPDATE settings SET ${assignments.join(", ")} WHERE key = 'main'`,
-        values,
-      );
-      return DB.settings.get();
-    },
-  },
-
-  async exportAll() {
+replaceSection(
+  "  async exportAll() {",
+  "  async importAll(data) {",
+  `  async exportAll() {
     const [subjects, sources, studyRecords, reviewTasks, settings] = await Promise.all([
       DB.subjects.getAll(),
       DB.sources.getAll(),
@@ -773,13 +650,7 @@ export const DB = {
     return { subjects, sources, studyRecords, reviewTasks, settings };
   },
 
-  async importAll(data) {
-    assertImportData(data);
-    await invoke("execute_sqlite_transaction", {
-      statements: buildImportStatements(data),
-    });
-    return DB.exportAll();
-  },
-};
+`
+);
 
-globalThis.DB = DB;
+fs.writeFileSync(path, text, "utf8");

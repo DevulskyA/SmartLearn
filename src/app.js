@@ -19,7 +19,14 @@ const subjectManagerMessage = document.querySelector("#subject-manager-message")
 const studyForm = document.querySelector("#study-form");
 const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
-const studySourceInput = document.querySelector("#study-source");
+const studySourceSelect = document.querySelector("#study-source");
+const showSourceFormButton = document.querySelector("#show-source-form");
+const newSourceForm = document.querySelector("#new-source-form");
+const newSourceInput = document.querySelector("#new-source-input");
+const sourceMessage = document.querySelector("#source-message");
+const sourceList = document.querySelector("#source-list");
+const sourcesEmpty = document.querySelector("#sources-empty");
+const sourceManagerMessage = document.querySelector("#source-manager-message");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
@@ -79,7 +86,7 @@ function createTextElement(tagName, className, text) {
   return element;
 }
 
-function createReviewCard(task, studyRecord, subject, groupName) {
+function createReviewCard(task, studyRecord, subject, source, groupName) {
   const card = document.createElement("article");
   card.className = "review-card";
   card.dataset.reviewId = String(task.id);
@@ -89,10 +96,10 @@ function createReviewCard(task, studyRecord, subject, groupName) {
   topline.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
 
   const badgeText = groupName === "overdue"
-    ? `Atrasada · R${task.reviewNumber}`
+    ? `Atrasada ? R${task.reviewNumber}`
     : groupName === "doneToday"
-      ? `Feita · R${task.reviewNumber}`
-      : `${groupName === "tomorrow" ? "Amanhã" : "Hoje"} · R${task.reviewNumber}`;
+      ? `Feita ? R${task.reviewNumber}`
+      : `${groupName === "tomorrow" ? "Amanh?" : "Hoje"} ? R${task.reviewNumber}`;
   const badge = createTextElement("span", "review-badge", badgeText);
   if (groupName === "overdue") badge.classList.add("is-overdue");
   if (groupName === "doneToday") badge.classList.add("is-done");
@@ -101,17 +108,15 @@ function createReviewCard(task, studyRecord, subject, groupName) {
 
   const study = document.createElement("div");
   study.className = "review-study";
-  study.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
-  if (studyRecord?.source) {
-    study.append(createTextElement("p", "review-source", studyRecord.source));
-  }
+  study.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conte?do indispon?vel"));
+  study.append(createTextElement("p", "review-source", source?.name ?? "Fonte indispon?vel"));
   card.append(study);
 
   const meta = document.createElement("dl");
   meta.className = "review-meta";
   for (const [label, value] of [
     ["Estudado em", formatDate(studyRecord?.studyDate)],
-    ["Revisão prevista", formatDate(task.dueDate)],
+    ["Revis?o prevista", formatDate(task.dueDate)],
   ]) {
     const item = document.createElement("div");
     item.append(
@@ -145,7 +150,7 @@ function createReviewCard(task, studyRecord, subject, groupName) {
   const exerciseControls = document.createElement("div");
   exerciseControls.className = "exercise-controls";
   for (const [field, label, value] of [
-    ["questionsCount", "Questões", task.questionsCount],
+    ["questionsCount", "Quest?es", task.questionsCount],
     ["correctCount", "Acertos", task.correctCount],
   ]) {
     const fieldLabel = document.createElement("label");
@@ -160,14 +165,14 @@ function createReviewCard(task, studyRecord, subject, groupName) {
     input.dataset.action = "score-input";
     input.dataset.field = field;
     input.dataset.reviewId = String(task.id);
-    input.setAttribute("aria-label", `${label} da revisão R${task.reviewNumber}`);
+    input.setAttribute("aria-label", `${label} da revis?o R${task.reviewNumber}`);
     fieldLabel.append(input);
     exerciseControls.append(fieldLabel);
   }
   const score = createTextElement(
     "span",
     "score-value",
-    task.scorePercent == null ? "—" : `${Number(task.scorePercent).toFixed(1)}%`,
+    task.scorePercent == null ? "?" : `${Number(task.scorePercent).toFixed(1)}%`,
   );
   score.dataset.scoreFor = String(task.id);
   score.setAttribute("aria-label", "Percentual de acertos");
@@ -175,15 +180,15 @@ function createReviewCard(task, studyRecord, subject, groupName) {
 
   const commentLabel = document.createElement("label");
   commentLabel.className = "comment-control";
-  commentLabel.append(createTextElement("span", "", "Comentário"));
+  commentLabel.append(createTextElement("span", "", "Coment?rio"));
   const commentInput = document.createElement("textarea");
   commentInput.rows = 2;
   commentInput.maxLength = 500;
   commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
+  commentInput.placeholder = "Anote uma d?vida ou ponto importante";
   commentInput.dataset.action = "comment";
   commentInput.dataset.reviewId = String(task.id);
-  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
+  commentInput.setAttribute("aria-label", `Coment?rio da revis?o R${task.reviewNumber}`);
   commentLabel.append(commentInput);
 
   actions.append(reviewDoneLabel, questionsDoneLabel, exerciseControls, commentLabel);
@@ -194,16 +199,18 @@ function createReviewCard(task, studyRecord, subject, groupName) {
 export async function renderToday() {
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [overdue, dueToday, doneToday, dueTomorrow, studyRecords, subjects] = await Promise.all([
+  const [overdue, dueToday, doneToday, dueTomorrow, studyRecords, subjects, sources] = await Promise.all([
     DB.reviewTasks.getOverdue(today),
     DB.reviewTasks.getForToday(today),
     DB.reviewTasks.getCompletedToday(today),
     DB.reviewTasks.getTomorrow(tomorrow),
     DB.studyRecords.getAll(),
     DB.subjects.getAll(),
+    DB.sources.getAll(),
   ]);
   const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
+  const sourcesById = new Map(sources.map((source) => [source.id, source]));
   const groups = { overdue, today: dueToday, doneToday, tomorrow: dueTomorrow };
   let totalVisible = 0;
 
@@ -219,7 +226,8 @@ export async function renderToday() {
     for (const task of tasks) {
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
-      list.append(createReviewCard(task, studyRecord, subject, groupName));
+      const source = sourcesById.get(studyRecord?.sourceId);
+      list.append(createReviewCard(task, studyRecord, subject, source, groupName));
     }
   }
 
@@ -385,6 +393,82 @@ function setSubjectFormVisible(visible) {
   }
 }
 
+function setSourceMessage(message = "") {
+  sourceMessage.textContent = message;
+}
+
+function setSourceManagerMessage(message = "") {
+  sourceManagerMessage.textContent = message;
+}
+
+function setSourceFormVisible(visible) {
+  newSourceForm.hidden = !visible;
+  showSourceFormButton.setAttribute("aria-expanded", String(visible));
+  setSourceMessage();
+
+  if (visible) {
+    newSourceInput.focus();
+  }
+}
+
+async function renderSources(selectedId = studySourceSelect.value) {
+  const [activeSources, allSources] = await Promise.all([
+    DB.sources.getActive(),
+    DB.sources.getAll(),
+  ]);
+  studySourceSelect.replaceChildren(new Option("Selecione...", ""));
+
+  for (const source of activeSources) {
+    studySourceSelect.add(new Option(source.name, String(source.id)));
+  }
+
+  if (selectedId !== undefined && selectedId !== null) {
+    studySourceSelect.value = String(selectedId);
+  }
+
+  if (!studySourceSelect.value && activeSources.length === 1) {
+    studySourceSelect.value = String(activeSources[0].id);
+  }
+
+  renderSourceList(allSources);
+}
+
+function renderSourceList(sources) {
+  sourceList.replaceChildren();
+  sourcesEmpty.hidden = sources.length > 0;
+
+  for (const source of sources) {
+    const row = document.createElement("article");
+    row.className = "source-row";
+    row.classList.toggle("is-inactive", !source.isActive);
+    row.dataset.sourceId = String(source.id);
+
+    const info = document.createElement("div");
+    info.append(createTextElement("p", "source-name", source.name));
+    info.append(createTextElement("span", "source-status", source.isActive ? "Ativa" : "Desativada"));
+
+    const actions = document.createElement("div");
+    actions.className = "source-actions";
+
+    const editButton = document.createElement("button");
+    editButton.className = "small-button";
+    editButton.type = "button";
+    editButton.dataset.action = "edit-source";
+    editButton.dataset.sourceName = source.name;
+    editButton.textContent = "Editar";
+
+    const toggleButton = document.createElement("button");
+    toggleButton.className = "small-button";
+    toggleButton.type = "button";
+    toggleButton.dataset.action = source.isActive ? "deactivate-source" : "activate-source";
+    toggleButton.textContent = source.isActive ? "Desativar" : "Ativar";
+
+    actions.append(editButton, toggleButton);
+    row.append(info, actions);
+    sourceList.append(row);
+  }
+}
+
 async function renderSubjects(selectedId = subjectSelect.value) {
   const [activeSubjects, allSubjects] = await Promise.all([
     DB.subjects.getActive(),
@@ -479,7 +563,9 @@ export function showScreen(screenId, { focus = false } = {}) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
   if (nextScreen === "register") {
-    renderSubjects().catch((error) => console.error("Falha ao carregar disciplinas.", error));
+    Promise.all([renderSubjects(), renderSources()]).catch((error) => {
+      console.error("Falha ao carregar cadastro.", error);
+    });
   }
   if (nextScreen === "settings") {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
@@ -526,6 +612,36 @@ newSubjectForm.addEventListener("submit", async (event) => {
   }
 });
 
+showSourceFormButton.addEventListener("click", () => {
+  setSourceFormVisible(newSourceForm.hidden);
+});
+
+newSourceForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = newSourceInput.value.trim();
+
+  if (!name) {
+    setSourceMessage("Informe o nome da fonte.");
+    newSourceInput.focus();
+    return;
+  }
+
+  try {
+    const source = await DB.sources.create(name);
+    await renderSources(source.id);
+    newSourceForm.reset();
+    setSourceFormVisible(false);
+  } catch (error) {
+    const isDuplicate = /unique|duplicate/i.test(String(error));
+    setSourceMessage(
+      isDuplicate
+        ? "Essa fonte j? est? cadastrada."
+        : "N?o foi poss?vel adicionar a fonte. Tente novamente.",
+    );
+    newSourceInput.focus();
+  }
+});
+
 subjectList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   const row = event.target.closest(".subject-row");
@@ -569,6 +685,43 @@ subjectList.addEventListener("click", async (event) => {
         : "Não foi possível alterar a disciplina.",
     );
     console.error("Falha ao alterar disciplina.", error);
+  }
+});
+
+sourceList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  const row = event.target.closest(".source-row");
+  if (!button || !row) return;
+
+  const sourceId = Number(row.dataset.sourceId);
+  const currentName = button.dataset.sourceName;
+  const action = button.dataset.action;
+
+  try {
+    if (action === "edit-source") {
+      const nextName = window.prompt("Novo nome da fonte:", currentName);
+      if (nextName === null) return;
+      await DB.sources.update(sourceId, { name: nextName });
+    }
+
+    if (action === "deactivate-source") {
+      await DB.sources.deactivate(sourceId);
+    }
+
+    if (action === "activate-source") {
+      await DB.sources.update(sourceId, { isActive: true });
+    }
+
+    setSourceManagerMessage();
+    await Promise.all([renderSources(), renderToday(), renderStats()]);
+  } catch (error) {
+    const isDuplicate = /unique|duplicate/i.test(String(error));
+    setSourceManagerMessage(
+      isDuplicate
+        ? "Essa fonte j? est? cadastrada."
+        : "N?o foi poss?vel alterar a fonte.",
+    );
+    console.error("Falha ao alterar fonte.", error);
   }
 });
 
@@ -662,13 +815,15 @@ studyForm.addEventListener("submit", async (event) => {
   studyMessage.textContent = "";
 
   const subjectId = Number(subjectSelect.value);
+  const sourceId = Number(studySourceSelect.value);
   const studyDate = studyDateInput.value;
   const content = studyContentInput.value.trim();
 
-  if (!subjectId || !studyDate || !content) {
+  if (!subjectId || !sourceId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
-    studyMessage.textContent = "Preencha a disciplina, a data e o conteúdo.";
+    studyMessage.textContent = "Preencha a disciplina, a fonte, a data e o conte?do.";
     if (!subjectId) subjectSelect.focus();
+    else if (!sourceId) studySourceSelect.focus();
     else if (!studyDate) studyDateInput.focus();
     else studyContentInput.focus();
     return;
@@ -677,12 +832,11 @@ studyForm.addEventListener("submit", async (event) => {
   try {
     await generateReviewTasks({
       subjectId,
+      sourceId,
       studyDate,
       content,
-      source: studySourceInput.value.trim(),
     });
     studyContentInput.value = "";
-    studySourceInput.value = "";
     studyDateInput.value = getLocalDateValue();
     studyMessage.textContent = "Estudo salvo! Revisões geradas.";
     studyContentInput.focus();
