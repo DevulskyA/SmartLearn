@@ -1,0 +1,149 @@
+# STATE.md — SmartLearn
+
+Memória persistente do projeto. Atualizar a cada sessão significativa.
+
+---
+
+## Status atual
+
+- **Fase:** Correção arquitetural aprovada nas specs. Implementação ainda não iniciada.
+- **Data:** 2026-06-22
+- **Próxima ação:** Revisar as specs e, somente após aprovação humana, executar TASK-000 — Preparar Git e base do projeto
+
+---
+
+## Decisões registradas
+
+### DEC-001 — Stack puro sem framework
+- **Data:** 2026-06-22
+- **Decisão:** HTML, CSS e JavaScript puro. Sem React, Vue, Next.js ou TypeScript.
+  Vite é apenas o empacotador mínimo e Tauri 2 é a camada multiplataforma.
+- **Motivo:** MVP deve ser simples, sem dependências pesadas, sem tooling complexo para manter.
+- **Irreversível no MVP:** Sim.
+
+### DEC-002 — ~~IndexedDB como banco local~~ SUBSTITUÍDA por DEC-008
+
+Decisão original (2026-06-22) foi usar IndexedDB. Substituída pela DEC-008 em 2026-06-22.
+Ver DEC-008 para a decisão atual sobre o banco de dados.
+
+### DEC-003 — 16 revisões por estudo cadastrado
+- **Data:** 2026-06-22
+- **Decisão:** Gerar 16 revisões fixas por estudo. R1=D+1, R2=D+7, R3=D+15, R4=D+30, R5+=a cada 30 dias.
+- **Motivo:** Quantidade fixa simplifica a implementação. Suficiente para cobrir ciclos longos.
+- **Revisável:** Sim, em versão futura se houver feedback.
+
+### DEC-004 — Gráfico via Canvas nativo
+- **Data:** 2026-06-22
+- **Decisão:** Usar `<canvas>` nativo para o gráfico de evolução. Sem Chart.js ou bibliotecas externas.
+- **Motivo:** Zero dependências. Gráfico simples de linha não justifica biblioteca no MVP.
+- **Revisável:** Sim, se a implementação nativa for muito custosa.
+
+### DEC-005 — Sem login no MVP
+- **Data:** 2026-06-22
+- **Decisão:** Sem autenticação, sem conta, sem perfil de usuário no MVP local.
+- **Motivo:** Dados são locais. Login adicionaria complexidade sem benefício no MVP.
+- **Irreversível no MVP:** Sim.
+
+### DEC-006 — Backup obrigatório via JSON
+- **Data:** 2026-06-22
+- **Decisão:** Exportar e importar todos os dados como arquivo JSON é parte do MVP, não extra.
+- **Motivo:** Substitui sincronização em nuvem para migração entre dispositivos no MVP.
+- **Irreversível no MVP:** Sim.
+
+### DEC-008 — ~~Substituição do IndexedDB por SQLite nativo via Capacitor~~ SUBSTITUÍDA por DEC-009
+- **Data:** 2026-06-22
+- **Decisão histórica:** Abandonar IndexedDB como banco principal e usar SQLite nativo.
+  A escolha de Capacitor e `@capacitor-community/sqlite` foi substituída pela DEC-009.
+- **Motivo:** IndexedDB é controlado pelo navegador e pode ser apagado pelo sistema operacional.
+  SQLite nativo é mais previsível e não depende das políticas de storage do browser.
+- **Consequências:**
+  - O princípio de SQLite nativo foi preservado.
+  - Driver, empacotador e estrutura foram redefinidos pela DEC-009.
+- **Status:** Substituída.
+
+### DEC-009 — Tauri 2 como alvo único para desktop, iOS e Android
+- **Data:** 2026-06-22
+- **Decisão:** Capacitor foi substituído porque o produto não é apenas Android/iOS. O alvo correto
+  é desktop + iOS + Android com uma única base. Tauri 2 permite empacotar uma interface web para
+  desktop e mobile, preservando HTML/CSS/JS e permitindo SQLite local nativo via plugin SQL.
+- **Consequências:**
+  - Desktop é o primeiro alvo de execução local.
+  - Android é alvo móvel posterior.
+  - iOS permanece preparado na mesma base; o build real exige ambiente Apple/Mac.
+  - Vite é apenas o empacotador mínimo.
+  - `src/db.js` usa `@tauri-apps/plugin-sql` e é o único ponto autorizado a executar SQL.
+  - Não usar IndexedDB nem localStorage como banco principal.
+- **Irreversível no MVP:** Sim.
+
+### DEC-010 — Git obrigatório desde o início
+- **Data:** 2026-06-22
+- **Decisão:** O projeto deve nascer versionado em Git. Cada task deve gerar mudanças pequenas,
+  revisáveis e com commit próprio. Codex cuidará da integração com GitHub, mas o repositório local
+  deve existir antes da implementação.
+- **Consequências:**
+  - TASK-000 inicializa o Git e cria a base do projeto antes do código funcional.
+  - O primeiro commit contém apenas specs aprovadas e estrutura inicial.
+  - Tasks diferentes não podem ser misturadas no mesmo commit.
+  - Claude não cria repositório GitHub nem faz push remoto sem instrução explícita.
+- **Irreversível no MVP:** Sim.
+
+### DEC-007 — Correções de consistência das specs antes da implementação
+- **Data:** 2026-06-22
+- **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.
+- **Motivo:** Revisão humana identificou problemas que causariam bugs na implementação:
+  1. Store `settings` agora usa keyPath `"key"` com valor singleton `"main"`.
+  2. `Stats.calculate` recebe `(reviewTasks, studyRecords, subjects)` — necessário para join de disciplina.
+  3. Bloco "Amanhã" filtra `reviewDone = false` — evita duplicação com "Feitas hoje".
+  4. TASK-016 depende de TASK-014 e TASK-015 — polimento só após todas as features.
+  5. TASK-009 separa `input` (atualiza display) de `blur/Enter` (salva no banco de dados).
+  6. Métodos de query do DB recebem data como parâmetro (`getForToday(today)`, etc.).
+  7. Comparação de `completedAt` com hoje usa `slice(0,10)` — não compara ISO string direta.
+  8. Inputs de questões visíveis mesmo com `questionsDone = false`; só excluídos das stats.
+  9. `dataPoints` do gráfico filtram `questionsDone=true AND scorePercent!=null AND completedAt!=null`.
+- **Irreversível:** Sim (são correções de consistência, não mudanças de escopo).
+
+---
+
+## Bloqueadores ativos
+
+Nenhum.
+
+---
+
+## Pendências
+
+- [x] Revisão humana de todas as specs (concluída em 2026-06-22, 9 correções aplicadas).
+- [ ] Revisão humana da correção arquitetural Tauri 2 + Git.
+- [ ] Executar TASK-000 somente após aprovação humana.
+- [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
+- [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).
+
+---
+
+## Ideias deferidas (não-MVP)
+
+| Ideia | Motivo do adiamento |
+|-------|---------------------|
+| Notificações push | Requer service worker mais complexo + permissão do usuário |
+| Redistribuição inteligente de revisões atrasadas | Complexidade de UX não justificada no MVP |
+| IA para sugerir conteúdo | Fora do escopo do MVP local |
+| Modo turbo (apenas revisões críticas) | Decisão de produto a validar com usuários reais |
+| Compartilhamento de plano de estudos | Requer backend |
+| Banco de questões integrado | Feature independente, não relacionada ao MVP |
+| Código de interface específico em Swift/Kotlin | Fora do MVP; uma base Tauri 2 é obrigatória |
+| Sincronização em nuvem | Fase 2 |
+
+---
+
+## Lições aprendidas
+
+(Preencher após primeiras iterações de implementação.)
+
+---
+
+## Preferências do projeto
+
+- Idioma do código: inglês (nomes de variáveis, funções, stores).
+- Idioma da interface: português brasileiro.
+- Idioma das specs: português brasileiro.
+- Comentários no código: apenas quando o "porquê" não é óbvio.
