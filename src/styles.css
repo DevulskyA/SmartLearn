@@ -407,6 +407,32 @@ h1 {
   text-align: right;
 }
 
+.comment-control {
+  width: 100%;
+  display: grid;
+  gap: 0.3rem;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.comment-control textarea {
+  width: 100%;
+  min-height: 3.4rem;
+  resize: vertical;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #b9c5d5;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.comment-control textarea:focus {
+  border-color: var(--color-primary);
+  outline: 3px solid rgb(11 91 211 / 16%);
+}
+
 .check-control {
   min-height: 2.75rem;
   display: inline-flex;

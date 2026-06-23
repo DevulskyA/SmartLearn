@@ -37,7 +37,7 @@
 | TASK-007 | Tela Hoje — tabela desktop | [x] | TASK-006 |
 | TASK-008 | Marcar revisão como feita | [x] | TASK-006 |
 | TASK-009 | Registrar questões e acertos | [x] | TASK-006 |
-| TASK-010 | Comentário por tarefa | [ ] | TASK-009 |
+| TASK-010 | Comentário por tarefa | [x] | TASK-009 |
 | TASK-011 | Tela Estatísticas — métricas | [ ] | TASK-009 |
 | TASK-012 | Gráfico de evolução das notas | [ ] | TASK-011 |
 | TASK-013 | Exportar backup JSON | [ ] | TASK-002 |
@@ -506,7 +506,7 @@ Implementar o registro de questões feitas, quantidade e acertos com cálculo au
 
 ## TASK-010 — Comentário por tarefa
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-009
 
 **Objetivo:**

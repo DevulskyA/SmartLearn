@@ -152,7 +152,20 @@ function createReviewCard(task, studyRecord, subject, groupName) {
   score.setAttribute("aria-label", "Percentual de acertos");
   exerciseControls.append(score);
 
-  actions.append(reviewDoneLabel, questionsDoneLabel, exerciseControls);
+  const commentLabel = document.createElement("label");
+  commentLabel.className = "comment-control";
+  commentLabel.append(createTextElement("span", "", "Comentário"));
+  const commentInput = document.createElement("textarea");
+  commentInput.rows = 2;
+  commentInput.maxLength = 500;
+  commentInput.value = task.comment ?? "";
+  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
+  commentInput.dataset.action = "comment";
+  commentInput.dataset.reviewId = String(task.id);
+  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
+  commentLabel.append(commentInput);
+
+  actions.append(reviewDoneLabel, questionsDoneLabel, exerciseControls, commentLabel);
   card.append(actions);
   return card;
 }
@@ -339,6 +352,14 @@ reviewDashboard.addEventListener("change", async (event) => {
     input.disabled = false;
     console.error("Falha ao atualizar a revisão.", error);
   }
+});
+
+reviewDashboard.addEventListener("focusout", async (event) => {
+  const input = event.target.closest('[data-action="comment"]');
+  if (!input) return;
+  await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+    comment: input.value.trim() || null,
+  });
 });
 
 function getScoreValues(card) {
