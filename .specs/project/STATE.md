@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-004 concluída. Cadastro persistente de sessões de estudo pronto.
+- **Fase:** TASK-005 concluída. Cada estudo gera 16 revisões em transação atômica.
 - **Data:** 2026-06-23
-- **Próxima ação:** Executar TASK-005 — Geração automática de revisões
+- **Próxima ação:** Executar TASK-006 — Tela Hoje em cards mobile
 
 ---
 
@@ -96,6 +96,8 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
   - UI, estatísticas e demais módulos não importam o driver SQL diretamente.
   - O plugin oficial `tauri-plugin-sql` 2.4.0 usa a feature SQLite e permissões mínimas de
     leitura/fechamento e execução.
+  - Um comando Rust genérico, sem SQL de domínio, executa lotes enviados por `src/db.js` na mesma
+    transação SQLite quando uma regra exige atomicidade.
   - Exportação e importação usam o mesmo contrato camelCase da API pública.
 - **Irreversível no MVP:** Sim.
 
@@ -131,6 +133,7 @@ Nenhum.
 - [x] TASK-002 executada em 2026-06-23: plugin SQL, schema, API `DB.*`, persistência e backup lógico.
 - [x] TASK-003 executada em 2026-06-23: criação, validação e seleção persistente de disciplinas.
 - [x] TASK-004 executada em 2026-06-23: formulário validado e persistência de sessões de estudo.
+- [x] TASK-005 executada em 2026-06-23: 16 revisões geradas com datas fixas e gravação atômica.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).

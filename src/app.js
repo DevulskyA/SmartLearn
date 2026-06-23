@@ -25,6 +25,35 @@ function getLocalDateValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+const REVIEW_DAY_OFFSETS = [
+  1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
+];
+
+export function generateReviewDates(studyDate) {
+  const baseDate = new Date(`${studyDate}T00:00:00.000Z`);
+  if (Number.isNaN(baseDate.getTime())) {
+    throw new Error("A data de estudo é inválida.");
+  }
+
+  return REVIEW_DAY_OFFSETS.map((offset) => {
+    const reviewDate = new Date(baseDate);
+    reviewDate.setUTCDate(reviewDate.getUTCDate() + offset);
+    return reviewDate.toISOString().slice(0, 10);
+  });
+}
+
+async function generateReviewTasks(studyData) {
+  const { studyDate } = studyData;
+  const tasks = generateReviewDates(studyDate).map((dueDate, index) => ({
+    reviewNumber: index + 1,
+    dueDate,
+    reviewDone: false,
+    questionsDone: false,
+  }));
+
+  return DB.studyRecords.createWithReviews(studyData, tasks);
+}
+
 function setSubjectMessage(message = "") {
   subjectMessage.textContent = message;
 }
@@ -137,7 +166,7 @@ studyForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    await DB.studyRecords.create({
+    await generateReviewTasks({
       subjectId,
       studyDate,
       content,
@@ -146,7 +175,7 @@ studyForm.addEventListener("submit", async (event) => {
     studyContentInput.value = "";
     studySourceInput.value = "";
     studyDateInput.value = getLocalDateValue();
-    studyMessage.textContent = "Estudo salvo.";
+    studyMessage.textContent = "Estudo salvo! Revisões geradas.";
     studyContentInput.focus();
   } catch {
     studyMessage.classList.add("is-error");

@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { invoke } from "@tauri-apps/api/core";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const REVIEW_SCHEDULE = [
@@ -301,6 +302,68 @@ export const DB = {
       );
       return mapStudyRecord(row);
     },
+
+    async createWithReviews(data, tasks) {
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        throw new Error("Informe ao menos uma revisão para o estudo.");
+      }
+
+      const timestamp = nowIso();
+      const reviewValues = [];
+      const reviewPlaceholders = tasks.map((task, taskIndex) => {
+        const offset = taskIndex * 11;
+        reviewValues.push(
+          task.reviewNumber,
+          task.dueDate,
+          task.completedAt ?? null,
+          task.reviewDone ? 1 : 0,
+          task.questionsDone ? 1 : 0,
+          task.questionsCount ?? null,
+          task.correctCount ?? null,
+          task.scorePercent ?? null,
+          task.comment ?? null,
+          task.createdAt ?? timestamp,
+          task.updatedAt ?? timestamp,
+        );
+        const fields = Array.from(
+          { length: 11 },
+          (_, fieldIndex) => `$${offset + fieldIndex + 1}`,
+        );
+        return `((SELECT MAX(id) FROM study_records), ${fields.join(", ")})`;
+      });
+
+      const results = await invoke("execute_sqlite_transaction", {
+        statements: [
+          {
+            query: `INSERT INTO study_records
+              (subject_id, study_date, content, source, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            values: [
+              data.subjectId,
+              data.studyDate,
+              String(data.content ?? "").trim(),
+              String(data.source ?? "").trim() || null,
+              timestamp,
+              timestamp,
+            ],
+          },
+          {
+            query: `INSERT INTO review_tasks
+              (study_record_id, review_number, due_date, completed_at,
+               review_done, questions_done, questions_count, correct_count,
+               score_percent, comment, created_at, updated_at)
+             VALUES ${reviewPlaceholders.join(", ")}`,
+            values: reviewValues,
+          },
+        ],
+      });
+      const [row] = await requireDatabase().select(
+        "SELECT * FROM study_records WHERE id = $1",
+        [results[0].lastInsertId],
+      );
+      return mapStudyRecord(row);
+    },
+
   },
 
   reviewTasks: {

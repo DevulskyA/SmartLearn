@@ -32,7 +32,7 @@
 | TASK-002 | Camada SQLite via Tauri SQL (`src/db.js`) | [x] | TASK-001 |
 | TASK-003 | Cadastro de disciplinas | [x] | TASK-002 |
 | TASK-004 | Cadastro de estudo (studyRecord) | [x] | TASK-003 |
-| TASK-005 | Geração automática de revisões | [ ] | TASK-004 |
+| TASK-005 | Geração automática de revisões | [x] | TASK-004 |
 | TASK-006 | Tela Hoje — cards mobile | [ ] | TASK-005 |
 | TASK-007 | Tela Hoje — tabela desktop | [ ] | TASK-006 |
 | TASK-008 | Marcar revisão como feita | [ ] | TASK-006 |
@@ -305,7 +305,7 @@ Implementar o formulário de cadastro de estudo com os 4 campos obrigatórios/op
 
 ## TASK-005 — Geração automática de revisões
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-004
 
 **Objetivo:**
