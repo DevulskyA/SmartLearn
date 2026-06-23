@@ -578,6 +578,16 @@ h1 {
   display: none;
 }
 
+#evolution-chart {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+#evolution-chart[hidden] {
+  display: none;
+}
+
 .section-heading {
   margin-bottom: 1.75rem;
 }

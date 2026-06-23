@@ -37,6 +37,8 @@ const metricElements = {
 };
 const subjectAveragesBody = document.querySelector("#subject-averages-body");
 const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
+const evolutionChart = document.querySelector("#evolution-chart");
+const chartEmpty = document.querySelector("#chart-empty");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -246,6 +248,22 @@ export async function renderStats() {
     average.textContent = `${subject.avgScore.toFixed(1).replace(".", ",")}%`;
     row.append(name, average);
     subjectAveragesBody.append(row);
+  }
+
+  const dataPoints = reviewTasks
+    .filter(
+      (task) => task.questionsDone && task.scorePercent != null && task.completedAt != null,
+    )
+    .sort((a, b) => a.completedAt.localeCompare(b.completedAt))
+    .map((task) => ({
+      date: task.completedAt.slice(0, 10),
+      scorePercent: Number(task.scorePercent),
+    }));
+  const chartRendered = Stats.renderChart(evolutionChart, dataPoints);
+  evolutionChart.hidden = !chartRendered;
+  chartEmpty.hidden = chartRendered;
+  if (!chartRendered) {
+    chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
   }
 }
 

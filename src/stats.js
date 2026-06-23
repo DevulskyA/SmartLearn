@@ -59,4 +59,66 @@ export const Stats = {
       ).length,
     };
   },
+
+  renderChart(canvas, dataPoints) {
+    if (!canvas || dataPoints.length < 2) return false;
+    const width = Math.max(260, Math.floor(canvas.parentElement?.clientWidth ?? 720) - 40);
+    const height = 280;
+    const margin = { top: 20, right: 18, bottom: 52, left: 46 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+    const context = canvas.getContext("2d");
+    if (!context) return false;
+
+    canvas.width = width;
+    canvas.height = height;
+    context.clearRect(0, 0, width, height);
+    context.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.lineWidth = 1;
+    context.textBaseline = "middle";
+
+    for (const score of [0, 25, 50, 75, 100]) {
+      const y = margin.top + plotHeight - (score / 100) * plotHeight;
+      context.beginPath();
+      context.strokeStyle = "#dbe3ee";
+      context.moveTo(margin.left, y);
+      context.lineTo(width - margin.right, y);
+      context.stroke();
+      context.fillStyle = "#64748b";
+      context.textAlign = "right";
+      context.fillText(`${score}%`, margin.left - 8, y);
+    }
+
+    const points = dataPoints.map((point, index) => ({
+      x: margin.left + (index / (dataPoints.length - 1)) * plotWidth,
+      y: margin.top + plotHeight - (Math.min(100, Math.max(0, Number(point.scorePercent))) / 100) * plotHeight,
+      ...point,
+    }));
+
+    context.beginPath();
+    context.strokeStyle = "#0b5bd3";
+    context.lineWidth = 2.5;
+    points.forEach((point, index) => {
+      if (index === 0) context.moveTo(point.x, point.y);
+      else context.lineTo(point.x, point.y);
+    });
+    context.stroke();
+
+    const labelEvery = Math.max(1, Math.ceil(points.length / 6));
+    points.forEach((point, index) => {
+      context.beginPath();
+      context.fillStyle = "#0b5bd3";
+      context.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      context.fill();
+
+      if (index % labelEvery === 0 || index === points.length - 1) {
+        const [, month, day] = point.date.split("-");
+        context.fillStyle = "#64748b";
+        context.textAlign = "center";
+        context.fillText(`${day}/${month}`, point.x, height - 24);
+      }
+    });
+
+    return true;
+  },
 };
