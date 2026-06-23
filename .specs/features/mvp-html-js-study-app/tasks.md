@@ -1,8 +1,8 @@
 ﻿# tasks.md — MVP HTML/JS Study App
 
 **Feature:** mvp-html-js-study-app
-**Total de tasks:** 20
-**Status geral:** TASK-019 concluída; restam validações finais.
+**Total de tasks:** 21
+**Status geral:** TASK-019 concluída; TASK-020 adicionada para reset total da base local.
 
 ---
 
@@ -47,6 +47,7 @@
 | TASK-017 | Correção obrigatória: disciplinas como entidade reutilizável | [x] | TASK-016 |
 | TASK-018 | Correção obrigatória: fontes como entidade reutilizável e seed inicial | [x] | TASK-017 |
 | TASK-019 | Correção obrigatória: Tela Hoje linear com ReviewRow e cadastro minimalista | [x] | TASK-018 |
+| TASK-020 | Correção obrigatória: apagar base local em Configurações | [ ] | TASK-013, TASK-014, TASK-018 |
 
 ---
 
@@ -1113,3 +1114,41 @@ di?rias sempre vis?veis, sem card decorativo como affordance principal.
 4. Abrir Cadastro e confirmar que `Novo estudo` aparece antes das ?reas de gerenciamento.
 5. Salvar um estudo e confirmar que os campos de disciplina, fonte e data permanecem.
 6. Commit local contém somente a TASK-019 e deixa Windows/Android funcionais.
+
+
+## TASK-020 — Correção obrigatória: apagar base local em Configurações
+
+**Status:** [ ] Pendente
+**Depende de:** TASK-013, TASK-014, TASK-018
+
+**Objetivo:**
+Adicionar em Configurações uma ação destrutiva para apagar toda a base local do aluno quando ele quiser encerrar um ciclo de estudo e começar outro do zero. O fluxo deve orientar a exportação do backup antes da limpeza.
+
+**Arquivos afetados esperados:**
+- `src/db.js` (reset/destruição total da base local e reseed inicial)
+- `src/app.js` (ação na tela Configurações, confirmação e mensagem de sucesso/erro)
+- `index.html` (botão/ação em Configurações)
+- `src/styles.css` (estilo do aviso destrutivo, se necessário)
+- `.specs/project/STATE.md` (registrar execução quando ocorrer)
+
+**Comportamento obrigatório:**
+1. Disponibilizar botão "Apagar base local" em Configurações.
+2. Exibir aviso explícito recomendando exportar o backup antes.
+3. Exigir confirmação antes da ação.
+4. Apagar todos os dados locais do usuário.
+5. Reinicializar o banco para o estado inicial com os seeds padrão.
+6. Manter o app pronto para um novo ciclo de estudo após o reset.
+
+**Critérios de aceite:**
+- O usuário consegue exportar antes de apagar.
+- A limpeza é destrutiva e claramente sinalizada.
+- Depois do reset, o banco volta ao estado inicial.
+- O novo estudo começa sem resíduos do ciclo anterior.
+- O app continua funcionando em Windows e Android.
+
+**Como testar manualmente:**
+1. Exportar backup.
+2. Abrir Configurações e clicar em "Apagar base local".
+3. Confirmar o aviso de perda total.
+4. Reabrir o app e verificar que o banco voltou ao estado inicial.
+5. Confirmar que os seeds padrão reapareceram.
