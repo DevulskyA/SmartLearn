@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** Correção arquitetural aprovada nas specs. Implementação ainda não iniciada.
+- **Fase:** TASK-000 concluída. Base Git + Vite + Tauri 2 pronta; produto ainda não implementado.
 - **Data:** 2026-06-22
-- **Próxima ação:** Revisar as specs e, somente após aprovação humana, executar TASK-000 — Preparar Git e base do projeto
+- **Próxima ação:** Revisão humana da base e autorização explícita antes da TASK-001 — Estrutura visual mínima + navegação
 
 ---
 
@@ -113,8 +113,11 @@ Nenhum.
 ## Pendências
 
 - [x] Revisão humana de todas as specs (concluída em 2026-06-22, 9 correções aplicadas).
-- [ ] Revisão humana da correção arquitetural Tauri 2 + Git.
-- [ ] Executar TASK-000 somente após aprovação humana.
+- [x] Revisão humana da correção arquitetural Tauri 2 + Git.
+- [x] TASK-000 executada em 2026-06-22: Git, Vite, Tauri 2, Rust/MSVC e scaffold desktop.
+- [ ] Registrar e configurar funcionalmente o plugin SQL apenas na TASK-002.
+- [ ] Preparar toolchain Android em task posterior.
+- [ ] Executar build real iOS somente em ambiente Apple/Mac.
 - [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
 - [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).
 
@@ -137,7 +140,8 @@ Nenhum.
 
 ## Lições aprendidas
 
-(Preencher após primeiras iterações de implementação.)
+- O repositório remoto já possuía histórico antes da TASK-000; ele foi preservado sem force-push.
+- O bundle identifier não deve terminar em `.app`, pois conflita com bundles macOS.
 
 ---
 

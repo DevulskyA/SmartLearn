@@ -27,7 +27,7 @@
 
 | Task | Título | Status | Depende de |
 |------|--------|--------|------------|
-| TASK-000 | Preparar Git e base do projeto | [ ] | — |
+| TASK-000 | Preparar Git e base do projeto | [x] | — |
 | TASK-001 | Estrutura visual mínima + navegação | [ ] | TASK-000 |
 | TASK-002 | Camada SQLite via Tauri SQL (`src/db.js`) | [ ] | TASK-001 |
 | TASK-003 | Cadastro de disciplinas | [ ] | TASK-002 |
@@ -49,7 +49,7 @@
 
 ## TASK-000 — Preparar Git e base do projeto
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-22
 
 **Objetivo:**
 Criar a base local do projeto, inicializar Git e preparar a estrutura mínima antes da
@@ -95,6 +95,10 @@ implementação funcional.
 - Primeiro commit local criado com specs e estrutura base.
 - Nenhum código funcional do produto implementado.
 - Nenhum repositório GitHub, branch remota, pull request ou push criado por Claude.
+
+**Nota da execução:** O repositório e o remoto já possuíam um commit inicial antes da execução
+desta task. O histórico existente foi preservado; a base técnica foi registrada em commit próprio
+da TASK-000, sem reescrever `main`.
 
 **Como testar manualmente:**
 1. Executar `git status` e confirmar que o repositório local existe.

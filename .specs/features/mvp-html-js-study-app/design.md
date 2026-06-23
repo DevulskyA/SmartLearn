@@ -336,7 +336,7 @@ sem backend e sem depender de armazenamento do navegador como banco principal.
 **Configuração `src-tauri/tauri.conf.json`:**
 - Comandos de desenvolvimento e build apontam para os scripts Vite.
 - Diretório de frontend aponta para a saída do Vite.
-- Identificador da aplicação: `com.smartlearn.app`.
+- Identificador da aplicação: `com.devulsky.smartlearn`.
 - Permissões do plugin SQL são explícitas e mínimas.
 
 **SQLite nativo:**

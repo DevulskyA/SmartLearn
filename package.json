@@ -1,0 +1,35 @@
+{
+  "name": "smartlearn",
+  "version": "0.1.0",
+  "description": "Aplicação local de estudos e revisões periódicas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevulskyA/SmartLearn.git"
+  },
+  "keywords": [
+    "tauri",
+    "sqlite",
+    "study"
+  ],
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/DevulskyA/SmartLearn/issues"
+  },
+  "homepage": "https://github.com/DevulskyA/SmartLearn#readme",
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-sql": "^2.4.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.3",
+    "vite": "^8.0.16"
+  }
+}
