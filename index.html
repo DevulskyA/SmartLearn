@@ -8,9 +8,63 @@
     <script type="module" src="/src/app.js"></script>
   </head>
   <body>
-    <main>
-      <h1>SmartLearn</h1>
-      <p>Base Tauri 2 preparada.</p>
-    </main>
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="brand" href="#today" aria-label="SmartLearn — ir para Hoje">SmartLearn</a>
+      </header>
+
+      <nav class="app-nav" aria-label="Navegação principal">
+        <button class="nav-item" type="button" data-screen="today" aria-controls="screen-today">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5H15v-7H9v7H3.5a.5.5 0 0 1-.5-.5Z" />
+          </svg>
+          <span>Hoje</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="register" aria-controls="screen-register">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M5 3.5h14v17H5zM8 7h8M8 11h8M8 15h5" />
+          </svg>
+          <span>Cadastro</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="stats" aria-controls="screen-stats">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M5 20v-7h4v7M10 20V8h4v12M15 20V4h4v16M3 20.5h18" />
+          </svg>
+          <span>Estatísticas</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+            <path d="m19.4 15 .1.1 1.2 2-2.6 2.6-2-1.2-.1-.1a8 8 0 0 1-2 .8V21h-4v-2.8a8 8 0 0 1-2-.8l-.1.1-2 1.2-2.6-2.6 1.2-2 .1-.1a8 8 0 0 1-.8-2H3V8h2.8a8 8 0 0 1 .8-2l-.1-.1-1.2-2 2.6-2.6 2 1.2.1.1a8 8 0 0 1 2-.8V1h4v.8a8 8 0 0 1 2 .8l.1-.1 2-1.2 2.6 2.6-1.2 2-.1.1a8 8 0 0 1 .8 2H21v4h-1.8a8 8 0 0 1-.8 2Z" />
+          </svg>
+          <span>Configurações</span>
+        </button>
+      </nav>
+
+      <main class="app-main" tabindex="-1">
+        <section class="screen" id="screen-today" data-screen-panel="today" aria-labelledby="title-today">
+          <h1 id="title-today">Hoje</h1>
+          <div class="empty-state">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 3v3M18 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 12h2M14 12h2M8 16h2M14 16h2" />
+            </svg>
+            <h2>Nenhuma revisão para hoje.</h2>
+            <p>Sua rotina de estudos aparecerá aqui.</p>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
+          <h1 id="title-register">Cadastro</h1>
+        </section>
+
+        <section class="screen" id="screen-stats" data-screen-panel="stats" aria-labelledby="title-stats" hidden>
+          <h1 id="title-stats">Estatísticas</h1>
+        </section>
+
+        <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
+          <h1 id="title-settings">Configurações</h1>
+        </section>
+      </main>
+    </div>
   </body>
 </html>

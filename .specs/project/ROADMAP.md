@@ -11,7 +11,7 @@
 | # | Milestone | Descrição | Status |
 |---|-----------|-----------|--------|
 | M0 | Base versionada | Git local, `.gitignore`, Vite, Tauri 2 e estrutura inicial sem código funcional | Concluído |
-| M1 | Fundação | Estrutura visual HTML/CSS/JS e navegação entre telas no desktop Tauri | Pendente |
+| M1 | Fundação | Estrutura visual HTML/CSS/JS e navegação entre telas no desktop Tauri | Concluído |
 | M2 | Cadastro | Disciplinas + estudos + geração automática de revisões | Pendente |
 | M3 | Tela Hoje | Detalhes/Hoje com cards mobile e tabela desktop | Pendente |
 | M4 | Exercícios | Registrar questões, acertos, percentual automático | Pendente |

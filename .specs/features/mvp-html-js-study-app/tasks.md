@@ -28,7 +28,7 @@
 | Task | Título | Status | Depende de |
 |------|--------|--------|------------|
 | TASK-000 | Preparar Git e base do projeto | [x] | — |
-| TASK-001 | Estrutura visual mínima + navegação | [ ] | TASK-000 |
+| TASK-001 | Estrutura visual mínima + navegação | [x] | TASK-000 |
 | TASK-002 | Camada SQLite via Tauri SQL (`src/db.js`) | [ ] | TASK-001 |
 | TASK-003 | Cadastro de disciplinas | [ ] | TASK-002 |
 | TASK-004 | Cadastro de estudo (studyRecord) | [ ] | TASK-003 |
@@ -110,7 +110,7 @@ da TASK-000, sem reescrever `main`.
 
 ## TASK-001 — Estrutura visual mínima + navegação
 
-**Status:** [ ] Pendente
+**Status:** [x] Concluída em 2026-06-23
 **Depende de:** TASK-000
 
 **Objetivo:**

@@ -6,9 +6,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** TASK-000 concluída. Base Git + Vite + Tauri 2 pronta; produto ainda não implementado.
-- **Data:** 2026-06-22
-- **Próxima ação:** Revisão humana da base e autorização explícita antes da TASK-001 — Estrutura visual mínima + navegação
+- **Fase:** TASK-001 concluída. Shell visual responsivo e navegação entre quatro telas prontos.
+- **Data:** 2026-06-23
+- **Próxima ação:** Executar TASK-002 — Camada SQLite via Tauri SQL (`src/db.js`)
 
 ---
 
@@ -115,6 +115,7 @@ Nenhum.
 - [x] Revisão humana de todas as specs (concluída em 2026-06-22, 9 correções aplicadas).
 - [x] Revisão humana da correção arquitetural Tauri 2 + Git.
 - [x] TASK-000 executada em 2026-06-22: Git, Vite, Tauri 2, Rust/MSVC e scaffold desktop.
+- [x] TASK-001 executada em 2026-06-23: shell visual, navegação e responsividade desktop/mobile.
 - [ ] Registrar e configurar funcionalmente o plugin SQL apenas na TASK-002.
 - [ ] Preparar toolchain Android em task posterior.
 - [ ] Executar build real iOS somente em ambiente Apple/Mac.
@@ -142,6 +143,7 @@ Nenhum.
 
 - O repositório remoto já possuía histórico antes da TASK-000; ele foi preservado sem force-push.
 - O bundle identifier não deve terminar em `.app`, pois conflita com bundles macOS.
+- O Vite deve ignorar `src-tauri/target/**` para não observar executáveis Rust bloqueados no Windows.
 
 ---
 
