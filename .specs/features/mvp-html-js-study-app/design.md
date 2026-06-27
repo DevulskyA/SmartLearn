@@ -355,6 +355,17 @@ Regras:
 
 ---
 
+### Reset total da base local
+
+A tela de Configurações deve expor uma ação destrutiva separada do backup/importação. O botão "Apagar base local" fica visualmente agrupado com o backup, mas com tratamento de perigo distinto.
+
+Regras de interface:
+- Exibir aviso antes da ação, reforçando que o backup deve ser exportado previamente.
+- Exigir confirmação explícita antes de executar.
+- Depois da limpeza, o app deve voltar ao estado inicial com os seeds padrão reaplicados.
+- A ação não deve confundir importação com limpeza: importar restaura um arquivo; apagar base reinicia o banco local.
+
+---
 ## Paleta de cores (sugestão inicial)
 
 ```css

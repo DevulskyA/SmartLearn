@@ -152,6 +152,18 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 - **Status:** Implementada na TASK-019.
 - **Irreversível no MVP:** Sim.
 
+
+### DEC-015 — Limpeza total da base local via Configurações
+- **Data:** 2026-06-23
+- **Decisão:** A tela de Configurações deve oferecer uma ação destrutiva para apagar toda a base local, permitindo reiniciar um novo ciclo de estudo a partir de um banco limpo.
+- **Consequências:**
+  - O aluno deve ser orientado a exportar o backup antes da limpeza.
+  - A ação exige confirmação explícita por risco de perda total dos dados locais.
+  - Após a limpeza, o aplicativo volta ao estado inicial com os seeds padrão reaplicados na próxima inicialização.
+- **Irreversível no MVP:** Sim.
+
+---
+
 ### DEC-007 — Correções de consistência das specs antes da implementação
 - **Data:** 2026-06-22
 - **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.

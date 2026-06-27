@@ -16,6 +16,19 @@ na mesma base para build real em ambiente Apple/Mac.
 
 ---
 
+### RF-11 — Apagar base local em Configurações
+
+O aluno pode apagar toda a base local para recomeçar um novo estudo do zero. A ação deve ficar em Configurações, junto do backup, porque o fluxo correto é exportar antes de limpar.
+
+**Critérios de aceite:**
+- Botão "Apagar base local" disponível em Configurações.
+- Antes da ação, exibir aviso claro recomendando exportar o backup.
+- Exigir confirmação explícita antes de apagar.
+- A ação apaga os dados locais e reinicializa o banco para o estado inicial com os seeds padrão.
+- Depois do reset, o aluno consegue iniciar um novo estudo sem restos do ciclo anterior.
+
+---
+
 ## Requisitos funcionais
 
 ### RF-01 — Cadastro de disciplinas

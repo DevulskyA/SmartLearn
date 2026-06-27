@@ -9,59 +9,72 @@ function getLocalDateValue(date = new Date()) {
 
 export const Stats = {
   calculate(reviewTasks, studyRecords, subjects, today = getLocalDateValue()) {
+    const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
+    const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
+
     const completedExercises = reviewTasks
       .filter((task) => task.questionsDone)
-      .map((task) => ({ ...task, ...getReviewScoreValues(task.questionsCount, task.correctCount) }))
-      .filter((task) => !task.isOverflow && task.questionsCount != null && task.correctCount != null);
+      .map((task) => {
+        const studyRecord = studiesById.get(task.studyRecordId);
+        const subject = subjectsById.get(studyRecord?.subjectId);
+        const values = getReviewScoreValues(task.questionsCount, task.correctCount);
+
+        return {
+          ...task,
+          ...values,
+          subjectName: subject?.name ?? "Sem disciplina",
+          content: studyRecord?.content ?? "Conteúdo indisponível",
+          completedAt: task.completedAt ?? "",
+        };
+      })
+      .filter((task) => !task.isOverflow && task.questionsCount != null && task.correctCount != null)
+      .sort((a, b) => {
+        const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
+        if (subjectComparison !== 0) return subjectComparison;
+        const contentComparison = a.content.localeCompare(b.content, "pt-BR");
+        if (contentComparison !== 0) return contentComparison;
+        return b.completedAt.localeCompare(a.completedAt);
+      });
 
     const totalQuestions = completedExercises.reduce(
-      (total, task) => total + task.questionsCount,
+      (total, item) => total + item.questionsCount,
       0,
     );
     const totalCorrect = completedExercises.reduce(
-      (total, task) => total + task.correctCount,
+      (total, item) => total + item.correctCount,
       0,
     );
     const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
-    const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
-    const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
-    const scoresBySubject = new Map();
 
-    for (const task of completedExercises) {
-      const studyRecord = studiesById.get(task.studyRecordId);
-      const subject = subjectsById.get(studyRecord?.subjectId);
-      if (!subject) continue;
-      const scores = scoresBySubject.get(subject.id) ?? {
-        subjectId: subject.id,
-        subjectName: subject.name,
+    const scoresBySubject = new Map();
+    for (const item of completedExercises) {
+      const subjectScores = scoresBySubject.get(item.subjectName) ?? {
+        subjectName: item.subjectName,
         totalQuestions: 0,
         totalCorrect: 0,
       };
-      scores.totalQuestions += task.questionsCount;
-      scores.totalCorrect += task.correctCount;
-      scoresBySubject.set(subject.id, scores);
+      subjectScores.totalQuestions += item.questionsCount;
+      subjectScores.totalCorrect += item.correctCount;
+      scoresBySubject.set(item.subjectName, subjectScores);
     }
 
     const avgBySubject = [...scoresBySubject.values()]
       .map((item) => ({
-        subjectId: item.subjectId,
         subjectName: item.subjectName,
+        totalQuestions: item.totalQuestions,
         avgScore: item.totalQuestions > 0 ? (item.totalCorrect / item.totalQuestions) * 100 : 0,
       }))
-      .sort((a, b) => a.subjectName.localeCompare(b.subjectName, "pt-BR"));
+      .sort((a, b) => a.avgScore - b.avgScore || a.subjectName.localeCompare(b.subjectName, "pt-BR"));
 
     return {
       totalQuestions,
       totalCorrect,
       avgScore,
+      completedExercises,
       avgBySubject,
       reviewsDone: reviewTasks.filter((task) => task.reviewDone).length,
-      reviewsPending: reviewTasks.filter(
-        (task) => !task.reviewDone && task.dueDate >= today,
-      ).length,
-      reviewsOverdue: reviewTasks.filter(
-        (task) => !task.reviewDone && task.dueDate < today,
-      ).length,
+      reviewsPending: reviewTasks.filter((task) => !task.reviewDone).length,
+      reviewsOverdue: reviewTasks.filter((task) => !task.reviewDone && task.dueDate < today).length,
     };
   },
 
@@ -75,6 +88,11 @@ export const Stats = {
     const context = canvas.getContext("2d");
     if (!context) return false;
 
+    const styles = getComputedStyle(canvas);
+    const gridColor = styles.getPropertyValue("--color-border").trim() || "#dbe3ee";
+    const labelColor = styles.getPropertyValue("--color-muted").trim() || "#64748b";
+    const lineColor = styles.getPropertyValue("--color-primary").trim() || "#0b5bd3";
+
     canvas.width = width;
     canvas.height = height;
     context.clearRect(0, 0, width, height);
@@ -85,11 +103,11 @@ export const Stats = {
     for (const score of [0, 25, 50, 75, 100]) {
       const y = margin.top + plotHeight - (score / 100) * plotHeight;
       context.beginPath();
-      context.strokeStyle = "#dbe3ee";
+      context.strokeStyle = gridColor;
       context.moveTo(margin.left, y);
       context.lineTo(width - margin.right, y);
       context.stroke();
-      context.fillStyle = "#64748b";
+      context.fillStyle = labelColor;
       context.textAlign = "right";
       context.fillText(`${score}%`, margin.left - 8, y);
     }
@@ -101,7 +119,7 @@ export const Stats = {
     }));
 
     context.beginPath();
-    context.strokeStyle = "#0b5bd3";
+    context.strokeStyle = lineColor;
     context.lineWidth = 2.5;
     points.forEach((point, index) => {
       if (index === 0) context.moveTo(point.x, point.y);
@@ -112,13 +130,13 @@ export const Stats = {
     const labelEvery = Math.max(1, Math.ceil(points.length / 6));
     points.forEach((point, index) => {
       context.beginPath();
-      context.fillStyle = "#0b5bd3";
+      context.fillStyle = lineColor;
       context.arc(point.x, point.y, 4, 0, Math.PI * 2);
       context.fill();
 
       if (index % labelEvery === 0 || index === points.length - 1) {
         const [, month, day] = point.date.split("-");
-        context.fillStyle = "#64748b";
+        context.fillStyle = labelColor;
         context.textAlign = "center";
         context.fillText(`${day}/${month}`, point.x, height - 24);
       }
