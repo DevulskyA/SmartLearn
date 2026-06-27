@@ -29,6 +29,7 @@ const FALLBACK_SOURCE_NAME = "Sem fonte";
 // Estado de edição inline — null quando nenhuma linha está em modo edição.
 let activeSourceEditId = null;
 let activeSubjectEditId = null;
+let activeStudyEditId = null;
 
 function rememberSelection(key, value) {
   try {
@@ -67,6 +68,9 @@ const sourceMessage = document.querySelector("#source-message");
 const sourceList = document.querySelector("#source-list");
 const sourcesEmpty = document.querySelector("#sources-empty");
 const sourceManagerMessage = document.querySelector("#source-manager-message");
+const studyList = document.querySelector("#study-list");
+const studiesEmpty = document.querySelector("#studies-empty");
+const studyManagerMessage = document.querySelector("#study-manager-message");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
@@ -591,6 +595,10 @@ function setSourceManagerMessage(message = "") {
   sourceManagerMessage.textContent = message;
 }
 
+function setStudyManagerMessage(message = "") {
+  studyManagerMessage.textContent = message;
+}
+
 function setSourceFormVisible(visible) {
   newSourceForm.hidden = !visible;
   showSourceFormButton.setAttribute("aria-expanded", String(visible));
@@ -711,6 +719,118 @@ function renderSourceList(sources) {
 
     row.append(info, actions);
     sourceList.append(row);
+  }
+}
+
+async function renderStudies() {
+  const [studyRecords, subjects, sources, activeSources] = await Promise.all([
+    DB.studyRecords.getAll(),
+    DB.subjects.getAll(),
+    DB.sources.getAll(),
+    DB.sources.getActive(),
+  ]);
+  const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
+  const sourcesById = new Map(sources.map((source) => [source.id, source]));
+
+  studyList.replaceChildren();
+  studiesEmpty.hidden = studyRecords.length > 0;
+
+  for (const record of studyRecords) {
+    const row = document.createElement("article");
+    row.className = "study-row";
+    row.dataset.studyId = String(record.id);
+
+    const info = document.createElement("div");
+    info.className = "study-info";
+
+    const actions = document.createElement("div");
+    actions.className = "study-actions";
+
+    const subject = subjectsById.get(record.subjectId);
+    const source = sourcesById.get(record.sourceId);
+
+    if (record.id === activeStudyEditId) {
+      row.classList.add("is-editing");
+
+      const form = document.createElement("div");
+      form.className = "study-edit-grid";
+
+      const sourceLabel = document.createElement("label");
+      sourceLabel.textContent = "Fonte";
+      const sourceSelect = document.createElement("select");
+      sourceSelect.className = "study-edit-source";
+      sourceSelect.dataset.studyField = "sourceId";
+      sourceSelect.value = String(record.sourceId);
+      for (const optionSource of activeSources) {
+        sourceSelect.add(new Option(optionSource.name, String(optionSource.id)));
+      }
+      if (source && !activeSources.some((item) => item.id === source.id)) {
+        sourceSelect.add(new Option(`${source.name} (inativa)`, String(source.id)));
+      }
+      sourceSelect.value = String(record.sourceId);
+      sourceLabel.append(sourceSelect);
+
+      const dateLabel = document.createElement("label");
+      dateLabel.textContent = "Data";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.className = "study-edit-date";
+      dateInput.dataset.studyField = "studyDate";
+      dateInput.value = record.studyDate;
+      dateLabel.append(dateInput);
+
+      const contentLabel = document.createElement("label");
+      contentLabel.textContent = "Conteúdo";
+      const contentInput = document.createElement("textarea");
+      contentInput.className = "study-edit-content";
+      contentInput.rows = 3;
+      contentInput.maxLength = 240;
+      contentInput.dataset.studyField = "content";
+      contentInput.value = record.content;
+      contentLabel.append(contentInput);
+
+      const error = document.createElement("span");
+      error.className = "inline-edit-error";
+      error.setAttribute("aria-live", "polite");
+
+      form.append(sourceLabel, dateLabel, contentLabel, error);
+      info.append(form);
+
+      const saveButton = document.createElement("button");
+      saveButton.className = "small-button is-primary";
+      saveButton.type = "button";
+      saveButton.dataset.action = "save-study";
+      saveButton.textContent = "Salvar";
+
+      const cancelButton = document.createElement("button");
+      cancelButton.className = "small-button";
+      cancelButton.type = "button";
+      cancelButton.dataset.action = "cancel-study";
+      cancelButton.textContent = "Cancelar";
+
+      actions.append(saveButton, cancelButton);
+    } else {
+      info.append(createTextElement("p", "study-title", subject?.name ?? "Sem disciplina"));
+
+      const meta = document.createElement("div");
+      meta.className = "study-meta";
+      meta.append(
+        createTextElement("span", "study-source-tag", source?.name ?? "Fonte indisponível"),
+        createTextElement("span", "study-date-tag", formatDate(record.studyDate)),
+      );
+      info.append(meta);
+      info.append(createTextElement("p", "study-content", record.content || "Conteúdo indisponível"));
+
+      const editButton = document.createElement("button");
+      editButton.className = "small-button";
+      editButton.type = "button";
+      editButton.dataset.action = "edit-study";
+      editButton.textContent = "Editar";
+      actions.append(editButton);
+    }
+
+    row.append(info, actions);
+    studyList.append(row);
   }
 }
 
@@ -852,7 +972,7 @@ export function showScreen(screenId, { focus = false } = {}) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
   if (nextScreen === "register" && databaseAvailable) {
-    Promise.all([renderSubjects(), renderSources()]).catch((error) => {
+    Promise.all([renderSubjects(), renderSources(), renderStudies()]).catch((error) => {
       console.error("Falha ao carregar cadastro.", error);
     });
   }
@@ -1047,7 +1167,7 @@ subjectList.addEventListener("click", async (event) => {
       activeSubjectEditId = null;
       setSubjectMessage();
       setSubjectManagerMessage();
-      await Promise.all([renderSubjects(), renderToday(), renderStats()]);
+      await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
     } catch (saveError) {
       const isDuplicate = /unique|duplicate/i.test(String(saveError));
       if (errorEl) {
@@ -1079,7 +1199,7 @@ subjectList.addEventListener("click", async (event) => {
 
     setSubjectMessage();
     setSubjectManagerMessage();
-    await Promise.all([renderSubjects(), renderToday(), renderStats()]);
+    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSubjectManagerMessage(
@@ -1145,7 +1265,7 @@ sourceList.addEventListener("click", async (event) => {
       await DB.sources.update(sourceId, { name: newName });
       activeSourceEditId = null;
       setSourceManagerMessage();
-      await Promise.all([renderSources(), renderToday(), renderStats()]);
+      await Promise.all([renderSources(), renderStudies(), renderToday(), renderStats()]);
     } catch (saveError) {
       const isDuplicate = /unique|duplicate/i.test(String(saveError));
       if (errorEl) {
@@ -1181,7 +1301,7 @@ sourceList.addEventListener("click", async (event) => {
     }
 
     setSourceManagerMessage();
-    await Promise.all([renderSources(), renderToday(), renderStats()]);
+    await Promise.all([renderSources(), renderStudies(), renderToday(), renderStats()]);
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSourceManagerMessage(
@@ -1207,6 +1327,59 @@ sourceList.addEventListener("keydown", async (event) => {
     activeSourceEditId = null;
     setSourceManagerMessage();
     await renderSources();
+  }
+});
+
+studyList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  const row = event.target.closest(".study-row");
+  if (!button || !row) return;
+
+  const studyId = Number(row.dataset.studyId);
+  const action = button.dataset.action;
+
+  if (action === "edit-study") {
+    activeStudyEditId = studyId;
+    setStudyManagerMessage();
+    await renderStudies();
+    studyList.querySelector(`[data-study-id="${studyId}"] .study-edit-content`)?.focus();
+    return;
+  }
+
+  if (action === "cancel-study") {
+    activeStudyEditId = null;
+    setStudyManagerMessage();
+    await renderStudies();
+    return;
+  }
+
+  if (action === "save-study") {
+    const sourceInput = row.querySelector(".study-edit-source");
+    const dateInput = row.querySelector(".study-edit-date");
+    const contentInput = row.querySelector(".study-edit-content");
+    const errorEl = row.querySelector(".inline-edit-error");
+
+    const sourceId = Number(sourceInput?.value);
+    const studyDate = String(dateInput?.value ?? "").trim();
+    const content = String(contentInput?.value ?? "").trim();
+
+    if (!sourceId || !studyDate || !content) {
+      if (errorEl) errorEl.textContent = "Fonte, data e conteúdo são obrigatórios.";
+      if (!sourceId) sourceInput?.focus();
+      else if (!studyDate) dateInput?.focus();
+      else contentInput?.focus();
+      return;
+    }
+
+    try {
+      await DB.studyRecords.update(studyId, { sourceId, studyDate, content });
+      activeStudyEditId = null;
+      setStudyManagerMessage();
+      await Promise.all([renderStudies(), renderToday(), renderStats()]);
+    } catch (error) {
+      if (errorEl) errorEl.textContent = "Não foi possível salvar o estudo.";
+      console.error("Falha ao salvar estudo.", error);
+    }
   }
 });
 
@@ -1435,6 +1608,7 @@ studyForm.addEventListener("submit", async (event) => {
     });
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     rememberSelection(LAST_SOURCE_KEY, sourceId);
+    await renderStudies();
     studyContentInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();

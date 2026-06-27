@@ -182,6 +182,17 @@
               </div>
             </form>
 
+            <section class="study-manager" aria-labelledby="study-manager-title">
+              <div class="section-heading compact-heading">
+                <p class="eyebrow">Estudos salvos</p>
+                <h2 id="study-manager-title">Gerenciar estudos</h2>
+                <p>Fonte, data e conteúdo ficam juntos porque não existe estudo sem fonte.</p>
+              </div>
+              <div class="study-list" id="study-list" aria-live="polite"></div>
+              <p class="panel-empty" id="studies-empty">Nenhum estudo salvo.</p>
+              <p class="field-message" id="study-manager-message" role="alert" aria-live="polite"></p>
+            </section>
+
             <section class="subject-manager" aria-labelledby="subject-manager-title">
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Disciplinas cadastradas</p>
@@ -197,7 +208,7 @@
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Fontes cadastradas</p>
                 <h2 id="source-manager-title">Gerenciar fontes</h2>
-                <p>Edite, desative ou exclua fontes. A exclusão apaga estudos e revisões ligados a ela.</p>
+                <p>Cadastro auxiliar de fontes reutilizáveis. O uso principal da fonte acontece junto do estudo.</p>
               </div>
               <div class="source-list" id="source-list" aria-live="polite"></div>
               <p class="panel-empty" id="sources-empty">Nenhuma fonte cadastrada.</p>
@@ -216,7 +227,7 @@
 
           <div class="metric-grid" aria-label="Resumo de desempenho">
             <article class="metric-card metric-card--alert"><span>Vencidas</span><strong id="metric-reviews-overdue">0</strong></article>
-            <article class="metric-card"><span>Não feitas</span><strong id="metric-reviews-pending">0</strong></article>
+            <article class="metric-card"><span>Não feitas hoje</span><strong id="metric-reviews-pending">0</strong></article>
             <article class="metric-card"><span>Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
             <article class="metric-card"><span>Média geral</span><strong id="metric-average">0,0%</strong></article>
             <article class="metric-card"><span>Questões</span><strong id="metric-questions">0</strong></article>

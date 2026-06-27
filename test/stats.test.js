@@ -42,3 +42,46 @@ test("Stats.calculate usa média ponderada por disciplina", () => {
   assert.equal(stats.avgBySubject.length, 1);
   assert.equal(stats.avgBySubject[0].avgScore, 60);
 });
+
+test("Stats.calculate só cobra revisões não feitas que vencem hoje", () => {
+  const reviewTasks = [
+    {
+      id: 1,
+      studyRecordId: 10,
+      dueDate: "2026-06-27",
+      reviewDone: false,
+      questionsDone: false,
+      questionsCount: null,
+      correctCount: null,
+      scorePercent: null,
+      completedAt: null,
+    },
+    {
+      id: 2,
+      studyRecordId: 10,
+      dueDate: "2026-06-26",
+      reviewDone: false,
+      questionsDone: false,
+      questionsCount: null,
+      correctCount: null,
+      scorePercent: null,
+      completedAt: null,
+    },
+    {
+      id: 3,
+      studyRecordId: 10,
+      dueDate: "2026-06-28",
+      reviewDone: false,
+      questionsDone: false,
+      questionsCount: null,
+      correctCount: null,
+      scorePercent: null,
+      completedAt: null,
+    },
+  ];
+
+  const stats = Stats.calculate(reviewTasks, [{ id: 10, subjectId: 7 }], [{ id: 7, name: "Disciplina X" }], "2026-06-27");
+
+  assert.equal(stats.reviewsPending, 1);
+  assert.equal(stats.reviewsOverdue, 1);
+});

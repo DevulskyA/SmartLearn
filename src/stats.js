@@ -73,7 +73,9 @@ export const Stats = {
       completedExercises,
       avgBySubject,
       reviewsDone: reviewTasks.filter((task) => task.reviewDone).length,
-      reviewsPending: reviewTasks.filter((task) => !task.reviewDone).length,
+      reviewsPending: reviewTasks.filter(
+        (task) => !task.reviewDone && task.dueDate === today,
+      ).length,
       reviewsOverdue: reviewTasks.filter((task) => !task.reviewDone && task.dueDate < today).length,
     };
   },

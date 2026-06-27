@@ -649,20 +649,23 @@ h1 {
 }
 
 .subject-manager,
-.source-manager {
+.source-manager,
+.study-manager {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--color-border);
 }
 
 .subject-list,
-.source-list {
+.source-list,
+.study-list {
   display: grid;
   gap: 0.75rem;
 }
 
 .subject-row,
-.source-row {
+.source-row,
+.study-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
@@ -680,7 +683,8 @@ h1 {
 }
 
 .subject-name,
-.source-name {
+.source-name,
+.study-title {
   margin: 0;
   font-weight: 700;
 }
@@ -705,7 +709,8 @@ h1 {
 }
 
 .subject-actions,
-.source-actions {
+.source-actions,
+.study-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
@@ -714,13 +719,62 @@ h1 {
 
 /* Editor inline de nome (é ativado por .is-editing na row) */
 .subject-row.is-editing,
-.source-row.is-editing {
+.source-row.is-editing,
+.study-row.is-editing {
   align-items: start;
 }
 
 .source-info,
-.subject-info {
+.subject-info,
+.study-info {
   min-width: 0;
+}
+
+.study-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.study-content {
+  margin-top: 0.45rem;
+  color: var(--color-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.study-edit-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.study-edit-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.study-edit-grid textarea,
+.study-edit-grid select,
+.study-edit-grid input[type="date"] {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.study-edit-grid textarea {
+  min-height: 6.5rem;
+  resize: vertical;
 }
 
 .inline-edit-input {
@@ -1321,16 +1375,19 @@ h1 {
   }
 
   .subject-row,
-  .source-row {
+  .source-row,
+  .study-row {
     grid-template-columns: 1fr;
   }
 
   .subject-actions,
-  .source-actions {
+  .source-actions,
+  .study-actions {
     justify-content: stretch;
   }
 
-  .subject-actions .small-button {
+  .subject-actions .small-button,
+  .study-actions .small-button {
     flex: 1 1 6rem;
   }
 }

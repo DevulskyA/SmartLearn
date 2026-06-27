@@ -511,6 +511,25 @@ function createBrowserStore() {
           (a, b) => b.studyDate.localeCompare(a.studyDate) || b.id - a.id,
         );
       },
+      async update(id, fields) {
+        const state = readState();
+        const record = state.studyRecords.find((item) => item.id === id);
+        if (!record) return null;
+
+        if (Object.hasOwn(fields, "sourceId")) {
+          assertActive(state.sources, fields.sourceId, "Selecione uma fonte ativa.");
+          record.sourceId = fields.sourceId;
+        }
+        if (Object.hasOwn(fields, "studyDate")) {
+          record.studyDate = String(fields.studyDate ?? "").trim();
+        }
+        if (Object.hasOwn(fields, "content")) {
+          record.content = String(fields.content ?? "").trim();
+        }
+        record.updatedAt = nowIso();
+        writeState(state);
+        return record;
+      },
       async create(data) {
         const state = readState();
         assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
@@ -1023,6 +1042,38 @@ export const DB = {
         'SELECT * FROM study_records ORDER BY study_date DESC, id DESC',
       );
       return rows.map(mapStudyRecord);
+    },
+
+    async update(id, fields) {
+      if (Object.hasOwn(fields, "sourceId")) {
+        await assertActiveSource(fields.sourceId);
+      }
+
+      const columns = {
+        sourceId: ["source_id", (value) => value],
+        studyDate: ["study_date", (value) => value],
+        content: ["content", (value) => String(value ?? "").trim()],
+      };
+      const entries = Object.entries(fields).filter(([key]) => columns[key]);
+      if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
+
+      const values = entries.map(([key, value]) => columns[key][1](value));
+      values.push(nowIso(), id);
+      const assignments = entries.map(
+        ([key], index) => `${columns[key][0]} = $${index + 1}`,
+      );
+      assignments.push(`updated_at = $${entries.length + 1}`);
+
+      await requireDatabase().execute(
+        `UPDATE study_records SET ${assignments.join(", ")}
+         WHERE id = $${entries.length + 2}`,
+        values,
+      );
+      const [row] = await requireDatabase().select(
+        'SELECT * FROM study_records WHERE id = $1',
+        [id],
+      );
+      return row ? mapStudyRecord(row) : null;
     },
 
     async create(data) {
