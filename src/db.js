@@ -517,7 +517,9 @@ function createBrowserStore() {
         if (!record) return null;
 
         if (Object.hasOwn(fields, "sourceId")) {
-          assertActive(state.sources, fields.sourceId, "Selecione uma fonte ativa.");
+          if (fields.sourceId !== record.sourceId) {
+            assertActive(state.sources, fields.sourceId, "Selecione uma fonte ativa.");
+          }
           record.sourceId = fields.sourceId;
         }
         if (Object.hasOwn(fields, "studyDate")) {
@@ -1046,7 +1048,14 @@ export const DB = {
 
     async update(id, fields) {
       if (Object.hasOwn(fields, "sourceId")) {
-        await assertActiveSource(fields.sourceId);
+        const [currentRow] = await requireDatabase().select(
+          'SELECT source_id FROM study_records WHERE id = $1',
+          [id],
+        );
+        if (!currentRow) return null;
+        if (fields.sourceId !== currentRow.source_id) {
+          await assertActiveSource(fields.sourceId);
+        }
       }
 
       const columns = {
