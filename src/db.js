@@ -166,6 +166,20 @@ function assertImportData(data) {
   }
 }
 
+function buildClearStatements() {
+  return [
+    { query: 'DELETE FROM review_tasks', values: [] },
+    { query: 'DELETE FROM study_records', values: [] },
+    { query: 'DELETE FROM sources', values: [] },
+    { query: 'DELETE FROM subjects', values: [] },
+    { query: 'DELETE FROM settings', values: [] },
+    {
+      query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n        VALUES (\'main\', \'1.0.0\', $1, NULL)',
+      values: [JSON.stringify(REVIEW_SCHEDULE)],
+    },
+  ];
+}
+
 function buildImportStatements(data) {
   const statements = [
     { query: 'DELETE FROM review_tasks', values: [] },
@@ -778,6 +792,13 @@ export const DB = {
     assertImportData(data);
     await invoke("execute_sqlite_transaction", {
       statements: buildImportStatements(data),
+    });
+    return DB.exportAll();
+  },
+
+  async clearAll() {
+    await invoke("execute_sqlite_transaction", {
+      statements: buildClearStatements(),
     });
     return DB.exportAll();
   },

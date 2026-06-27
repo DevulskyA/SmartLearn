@@ -5,6 +5,24 @@ import { Stats } from "./stats.js";
 await DB.init();
 
 const DEFAULT_SCREEN = "today";
+const LAST_SUBJECT_KEY = "smartlearn:lastSubjectId";
+const LAST_SOURCE_KEY = "smartlearn:lastSourceId";
+
+function rememberSelection(key, value) {
+  try {
+    if (value) localStorage.setItem(key, String(value));
+  } catch {
+    // localStorage indisponível (modo privado): ignora silenciosamente.
+  }
+}
+
+function recallSelection(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 const navigationItems = [...document.querySelectorAll("[data-screen]")];
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
@@ -30,12 +48,13 @@ const sourceManagerMessage = document.querySelector("#source-manager-message");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
+const todaySuccessState = document.querySelector("#today-success-state");
+const todayTomorrow = document.querySelector("#today-tomorrow");
 const reviewDashboard = document.querySelector("#review-dashboard");
 const reviewGroups = {
   overdue: document.querySelector("#block-overdue"),
   today: document.querySelector("#block-today"),
   doneToday: document.querySelector("#block-done-today"),
-  tomorrow: document.querySelector("#block-tomorrow"),
 };
 const metricElements = {
   totalQuestions: document.querySelector("#metric-questions"),
@@ -56,6 +75,9 @@ const chooseBackupFileButton = document.querySelector("#choose-backup-file");
 const lastBackupLabel = document.querySelector("#last-backup-label");
 const backupMessage = document.querySelector("#backup-message");
 const importBackupInput = document.querySelector("#import-backup");
+const resetDatabaseButton = document.querySelector("#reset-database");
+const resetMessage = document.querySelector("#reset-message");
+const themeToggle = document.querySelector("#theme-toggle");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -139,47 +161,83 @@ function createExerciseRow(exercise) {
   row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
   return row;
 }
-function getReviewStatusLabel(groupName, task) {
-  const prefix = groupName === "overdue"
-    ? "Atrasada"
-    : groupName === "doneToday"
-      ? "Feita"
-      : groupName === "tomorrow"
-        ? "Amanhã"
-        : "Hoje";
-  return `${prefix} · R${task.reviewNumber}`;
+function getDaysBetween(fromDate, toDate) {
+  const from = new Date(`${fromDate}T00:00:00.000Z`);
+  const to = new Date(`${toDate}T00:00:00.000Z`);
+  return Math.round((to - from) / 86400000);
 }
 
-function createReviewRow(task, studyRecord, subject, source, groupName) {
+function getReviewStatusLabel(groupName, task, today) {
+  if (groupName === "doneToday") return "Concluída";
+  if (groupName === "today") return "Vence hoje";
+  const days = getDaysBetween(task.dueDate, today);
+  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
+}
+
+function createScoreInput(task, field, label) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "number-control review-number-control";
+  wrapper.append(createTextElement("span", "review-field-label", label));
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.step = "1";
+  input.inputMode = "numeric";
+  input.value = task[field] ?? "";
+  input.dataset.action = "score-input";
+  input.dataset.field = field;
+  input.dataset.reviewId = String(task.id);
+  input.setAttribute("aria-label", `${label} da revisão R${task.reviewNumber}`);
+  wrapper.append(input);
+  return wrapper;
+}
+
+function formatReviewScore(value) {
+  return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+}
+
+function createReviewRow(task, studyRecord, subject, source, groupName, today) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
   row.dataset.group = groupName;
 
-  const main = document.createElement("div");
-  main.className = "review-row-main";
+  // Header: review-number marker + identity + status/score tags
+  const header = document.createElement("div");
+  header.className = "review-row-header";
 
-  const subjectCell = document.createElement("div");
-  subjectCell.className = "review-cell review-subject-cell";
-  subjectCell.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
+  const marker = createTextElement("span", "review-marker", `R${task.reviewNumber}`);
+  marker.classList.add(`is-${groupName === "doneToday" ? "done" : groupName}`);
+  marker.setAttribute("aria-label", `Revisão número ${task.reviewNumber}`);
 
-  const contentCell = document.createElement("div");
-  contentCell.className = "review-cell review-content-cell";
-  contentCell.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+  const heading = document.createElement("div");
+  heading.className = "review-row-heading";
+  heading.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
+  heading.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+  heading.append(
+    createTextElement(
+      "p",
+      "review-meta",
+      `${source?.name ?? "Fonte indisponível"} · ${formatDate(studyRecord?.studyDate)}`,
+    ),
+  );
 
-  const sourceCell = document.createElement("div");
-  sourceCell.className = "review-cell review-source-cell";
-  sourceCell.append(createTextElement("p", "review-source", source?.name ?? "Fonte indisponível"));
-  sourceCell.append(createTextElement("p", "review-study-date", formatDate(studyRecord?.studyDate)));
+  const tags = document.createElement("div");
+  tags.className = "review-row-tags";
+  const statusBadge = createTextElement("span", "review-status", getReviewStatusLabel(groupName, task, today));
+  statusBadge.classList.add(`is-${groupName === "doneToday" ? "done" : groupName}`);
+  const scorePill = createTextElement("span", "review-score-pill", formatReviewScore(task.scorePercent));
+  scorePill.classList.toggle("is-empty", task.scorePercent == null);
+  scorePill.dataset.scoreFor = String(task.id);
+  scorePill.setAttribute("aria-hidden", "true");
+  tags.append(statusBadge, scorePill);
 
-  const statusCell = document.createElement("div");
-  statusCell.className = "review-cell review-status-cell";
-  const statusBadge = createTextElement("span", "review-status", getReviewStatusLabel(groupName, task));
-  statusBadge.classList.add(groupName === "doneToday" ? "is-done" : `is-${groupName}`);
-  statusCell.append(statusBadge);
+  header.append(marker, heading, tags);
 
-  const reviewDoneCell = document.createElement("div");
-  reviewDoneCell.className = "review-cell review-toggle-cell";
+  // Primary action row: mark review done + expand toggle
+  const primary = document.createElement("div");
+  primary.className = "review-row-primary";
+
   const reviewDoneLabel = document.createElement("label");
   reviewDoneLabel.className = "check-control review-toggle";
   const reviewDoneInput = document.createElement("input");
@@ -187,11 +245,28 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
   reviewDoneInput.dataset.reviewId = String(task.id);
-  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev. feita"));
-  reviewDoneCell.append(reviewDoneLabel);
+  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Revisão feita"));
 
-  const questionsDoneCell = document.createElement("div");
-  questionsDoneCell.className = "review-cell review-toggle-cell";
+  const hasScoreData =
+    task.questionsDone ||
+    task.questionsCount != null ||
+    task.correctCount != null ||
+    (task.comment ?? "") !== "";
+
+  const expandButton = document.createElement("button");
+  expandButton.type = "button";
+  expandButton.className = "review-expand";
+  expandButton.dataset.action = "expand";
+  expandButton.setAttribute("aria-expanded", String(hasScoreData));
+  expandButton.textContent = "Ver desempenho";
+
+  primary.append(reviewDoneLabel, expandButton);
+
+  // Collapsible detail: questions, score, comment
+  const detail = document.createElement("div");
+  detail.className = "review-row-detail";
+  detail.hidden = !hasScoreData;
+
   const questionsDoneLabel = document.createElement("label");
   questionsDoneLabel.className = "check-control review-toggle";
   const questionsDoneInput = document.createElement("input");
@@ -199,66 +274,21 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   questionsDoneInput.checked = task.questionsDone;
   questionsDoneInput.dataset.action = "questions-done";
   questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Q. feitas"));
-  questionsDoneCell.append(questionsDoneLabel);
+  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
 
-  const questionsCell = document.createElement("div");
-  questionsCell.className = "review-cell review-score-cell";
-  const questionsLabel = document.createElement("label");
-  questionsLabel.className = "number-control review-number-control";
-  questionsLabel.append(createTextElement("span", "review-field-label", "Questões"));
-  const questionsInput = document.createElement("input");
-  questionsInput.type = "number";
-  questionsInput.min = "0";
-  questionsInput.step = "1";
-  questionsInput.inputMode = "numeric";
-  questionsInput.value = task.questionsCount ?? "";
-  questionsInput.dataset.action = "score-input";
-  questionsInput.dataset.field = "questionsCount";
-  questionsInput.dataset.reviewId = String(task.id);
-  questionsInput.setAttribute("aria-label", `Questões da revisão R${task.reviewNumber}`);
-  questionsLabel.append(questionsInput);
-  questionsCell.append(questionsLabel);
-
-  const correctCell = document.createElement("div");
-  correctCell.className = "review-cell review-score-cell";
-  const correctLabel = document.createElement("label");
-  correctLabel.className = "number-control review-number-control";
-  correctLabel.append(createTextElement("span", "review-field-label", "Acertos"));
-  const correctInput = document.createElement("input");
-  correctInput.type = "number";
-  correctInput.min = "0";
-  correctInput.step = "1";
-  correctInput.inputMode = "numeric";
-  correctInput.value = task.correctCount ?? "";
-  correctInput.dataset.action = "score-input";
-  correctInput.dataset.field = "correctCount";
-  correctInput.dataset.reviewId = String(task.id);
-  correctInput.setAttribute("aria-label", `Acertos da revisão R${task.reviewNumber}`);
-  correctLabel.append(correctInput);
-  correctCell.append(correctLabel);
-
-  const scoreCell = document.createElement("div");
-  scoreCell.className = "review-cell review-score-cell review-score-cell-percent";
-  const score = createTextElement(
-    "span",
-    "score-value review-score-value",
-    task.scorePercent == null ? "—" : `${Number(task.scorePercent).toFixed(1)}%`,
-  );
+  const scoreInputs = document.createElement("div");
+  scoreInputs.className = "review-score-inputs";
+  const live = document.createElement("div");
+  live.className = "review-score-live";
+  live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
+  const score = createTextElement("span", "score-value review-score-value", formatReviewScore(task.scorePercent));
   score.dataset.scoreFor = String(task.id);
   score.setAttribute("aria-label", "Percentual de acertos");
-  scoreCell.append(score);
-
-  main.append(
-    subjectCell,
-    contentCell,
-    sourceCell,
-    statusCell,
-    reviewDoneCell,
-    questionsDoneCell,
-    questionsCell,
-    correctCell,
-    scoreCell,
+  live.append(score);
+  scoreInputs.append(
+    createScoreInput(task, "questionsCount", "Questões"),
+    createScoreInput(task, "correctCount", "Acertos"),
+    live,
   );
 
   const commentLabel = document.createElement("label");
@@ -274,27 +304,33 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
   commentLabel.append(commentInput);
 
-  row.append(main, commentLabel);
+  detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+
+  row.append(header, primary, detail);
   return row;
 }
 
 export async function renderToday() {
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [overdue, dueToday, doneToday, dueTomorrow, studyRecords, subjects, sources] = await Promise.all([
-    DB.reviewTasks.getOverdue(today),
-    DB.reviewTasks.getForToday(today),
-    DB.reviewTasks.getCompletedToday(today),
-    DB.reviewTasks.getTomorrow(tomorrow),
-    DB.studyRecords.getAll(),
-    DB.subjects.getAll(),
-    DB.sources.getAll(),
-  ]);
+  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, studyRecords, subjects, sources] =
+    await Promise.all([
+      DB.reviewTasks.getForToday(today),
+      DB.reviewTasks.getOverdue(today),
+      DB.reviewTasks.getCompletedToday(today),
+      DB.reviewTasks.getTomorrow(tomorrow),
+      DB.studyRecords.getAll(),
+      DB.subjects.getAll(),
+      DB.sources.getAll(),
+    ]);
   const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const sourcesById = new Map(sources.map((source) => [source.id, source]));
-  const groups = { overdue, today: dueToday, tomorrow: dueTomorrow, doneToday: doneToday };
-  let totalVisible = 0;
+  const groups = {
+    overdue: overdueReviews,
+    today: pendingToday,
+    doneToday: completedToday,
+  };
 
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
@@ -303,17 +339,29 @@ export async function renderToday() {
     list.replaceChildren();
     count.textContent = String(tasks.length);
     block.hidden = tasks.length === 0;
-    totalVisible += tasks.length;
 
     for (const task of tasks) {
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
       const source = sourcesById.get(studyRecord?.sourceId);
-      list.append(createReviewRow(task, studyRecord, subject, source, groupName));
+      list.append(createReviewRow(task, studyRecord, subject, source, groupName, today));
     }
   }
 
-  todayEmptyState.hidden = totalVisible > 0;
+  const pendingCount = overdueReviews.length + pendingToday.length;
+  const hasData = studyRecords.length > 0;
+  todayEmptyState.hidden = hasData;
+  todaySuccessState.hidden = !(hasData && pendingCount === 0);
+
+  if (tomorrowReviews.length > 0) {
+    const label = tomorrowReviews.length === 1 ? "1 revisão" : `${tomorrowReviews.length} revisões`;
+    todayTomorrow.textContent = `Amanhã: ${label}.`;
+    todayTomorrow.hidden = false;
+  } else {
+    todayTomorrow.textContent = "";
+    todayTomorrow.hidden = true;
+  }
+
   todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
     day: "2-digit",
@@ -417,6 +465,11 @@ function readFileText(file) {
   });
 }
 
+function setResetMessage(message = "", isError = false) {
+  resetMessage.classList.toggle("is-error", isError);
+  resetMessage.textContent = message;
+}
+
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
   backupMessage.textContent = "";
@@ -516,6 +569,13 @@ async function renderSources(selectedId = studySourceSelect.value) {
     studySourceSelect.value = String(selectedId);
   }
 
+  if (!studySourceSelect.value) {
+    const remembered = recallSelection(LAST_SOURCE_KEY);
+    if (remembered && activeSources.some((source) => String(source.id) === remembered)) {
+      studySourceSelect.value = remembered;
+    }
+  }
+
   if (!studySourceSelect.value && activeSources.length === 1) {
     studySourceSelect.value = String(activeSources[0].id);
   }
@@ -572,6 +632,13 @@ async function renderSubjects(selectedId = subjectSelect.value) {
 
   if (selectedId !== undefined && selectedId !== null) {
     subjectSelect.value = String(selectedId);
+  }
+
+  if (!subjectSelect.value) {
+    const remembered = recallSelection(LAST_SUBJECT_KEY);
+    if (remembered && activeSubjects.some((subject) => String(subject.id) === remembered)) {
+      subjectSelect.value = remembered;
+    }
   }
 
   renderSubjectList(allSubjects);
@@ -661,6 +728,22 @@ export function showScreen(screenId, { focus = false } = {}) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
   }
 }
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem("smartlearn:theme", theme);
+  } catch {
+    // localStorage indisponível: o tema vale só nesta sessão.
+  }
+}
+
+themeToggle.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(next);
+  // O gráfico de evolução é desenhado em canvas com cores do tema; redesenha.
+  renderStats().catch((error) => console.error("Falha ao redesenhar após troca de tema.", error));
+});
 
 for (const item of navigationItems) {
   item.addEventListener("click", () => {
@@ -815,6 +898,16 @@ sourceList.addEventListener("click", async (event) => {
   }
 });
 
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="expand"]');
+  if (!button) return;
+  const detail = button.closest(".review-row")?.querySelector(".review-row-detail");
+  if (!detail) return;
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(expanded));
+  detail.hidden = !expanded;
+});
+
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="review-done"]');
   if (!input) return;
@@ -834,6 +927,32 @@ reviewDashboard.addEventListener("change", async (event) => {
 });
 
 exportBackupButton.addEventListener("click", exportBackup);
+
+resetDatabaseButton.addEventListener("click", async () => {
+  const confirmed = window.confirm(
+    "Apagar toda a base local? Exporte um backup antes se quiser guardar os dados atuais.",
+  );
+  if (!confirmed) return;
+
+  resetDatabaseButton.disabled = true;
+  setResetMessage();
+  try {
+    await DB.clearAll();
+    await Promise.all([
+      renderSubjects(),
+      renderSources(),
+      renderToday(),
+      renderStats(),
+      renderSettings(),
+    ]);
+    setResetMessage("Base local apagada.");
+  } catch (error) {
+    setResetMessage("Não foi possível apagar a base local.", true);
+    console.error("Falha ao apagar a base local.", error);
+  } finally {
+    resetDatabaseButton.disabled = false;
+  }
+});
 
 chooseBackupFileButton.addEventListener("click", () => {
   importBackupInput.click();
@@ -868,8 +987,11 @@ function getScoreValues(card) {
 
 function updateScoreDisplay(card) {
   const values = getScoreValues(card);
-  const score = card.querySelector("[data-score-for]");
-  score.textContent = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  const text = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  for (const element of card.querySelectorAll("[data-score-for]")) {
+    element.textContent = text;
+    element.classList.toggle("is-empty", values.scorePercent == null);
+  }
   return values;
 }
 
@@ -926,6 +1048,8 @@ studyForm.addEventListener("submit", async (event) => {
       studyDate,
       content,
     });
+    rememberSelection(LAST_SUBJECT_KEY, subjectId);
+    rememberSelection(LAST_SOURCE_KEY, sourceId);
     studyContentInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();

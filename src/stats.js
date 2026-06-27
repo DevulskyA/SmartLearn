@@ -77,12 +77,8 @@ export const Stats = {
       completedExercises,
       avgBySubject,
       reviewsDone: reviewTasks.filter((task) => task.reviewDone).length,
-      reviewsPending: reviewTasks.filter(
-        (task) => !task.reviewDone && task.dueDate >= today,
-      ).length,
-      reviewsOverdue: reviewTasks.filter(
-        (task) => !task.reviewDone && task.dueDate < today,
-      ).length,
+      reviewsPending: reviewTasks.filter((task) => !task.reviewDone).length,
+      reviewsOverdue: reviewTasks.filter((task) => !task.reviewDone && task.dueDate < today).length,
     };
   },
 
@@ -96,6 +92,11 @@ export const Stats = {
     const context = canvas.getContext("2d");
     if (!context) return false;
 
+    const styles = getComputedStyle(canvas);
+    const gridColor = styles.getPropertyValue("--color-border").trim() || "#dbe3ee";
+    const labelColor = styles.getPropertyValue("--color-muted").trim() || "#64748b";
+    const lineColor = styles.getPropertyValue("--color-primary").trim() || "#0b5bd3";
+
     canvas.width = width;
     canvas.height = height;
     context.clearRect(0, 0, width, height);
@@ -106,11 +107,11 @@ export const Stats = {
     for (const score of [0, 25, 50, 75, 100]) {
       const y = margin.top + plotHeight - (score / 100) * plotHeight;
       context.beginPath();
-      context.strokeStyle = "#dbe3ee";
+      context.strokeStyle = gridColor;
       context.moveTo(margin.left, y);
       context.lineTo(width - margin.right, y);
       context.stroke();
-      context.fillStyle = "#64748b";
+      context.fillStyle = labelColor;
       context.textAlign = "right";
       context.fillText(`${score}%`, margin.left - 8, y);
     }
@@ -122,7 +123,7 @@ export const Stats = {
     }));
 
     context.beginPath();
-    context.strokeStyle = "#0b5bd3";
+    context.strokeStyle = lineColor;
     context.lineWidth = 2.5;
     points.forEach((point, index) => {
       if (index === 0) context.moveTo(point.x, point.y);
@@ -133,13 +134,13 @@ export const Stats = {
     const labelEvery = Math.max(1, Math.ceil(points.length / 6));
     points.forEach((point, index) => {
       context.beginPath();
-      context.fillStyle = "#0b5bd3";
+      context.fillStyle = lineColor;
       context.arc(point.x, point.y, 4, 0, Math.PI * 2);
       context.fill();
 
       if (index % labelEvery === 0 || index === points.length - 1) {
         const [, month, day] = point.date.split("-");
-        context.fillStyle = "#64748b";
+        context.fillStyle = labelColor;
         context.textAlign = "center";
         context.fillText(`${day}/${month}`, point.x, height - 24);
       }
