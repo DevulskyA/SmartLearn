@@ -8,6 +8,7 @@ const REVIEW_SCHEDULE = [
 
 let database;
 let initialization;
+let browserStore;
 
 const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
@@ -51,6 +52,10 @@ function mapSource(row) {
     isActive: Boolean(row.is_active),
     sortOrder: row.sort_order ?? 0,
   };
+}
+
+function mapUsageCount(row, key) {
+  return Number(row?.[key] ?? 0) || 0;
 }
 
 function mapStudyRecord(row) {
@@ -257,10 +262,444 @@ function buildImportStatements(data) {
   return statements;
 }
 
+function hasTauriRuntime() {
+  return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
+}
+
+function createBrowserStore() {
+  const STORAGE_KEY = "smartlearn:browser-db";
+  const defaultSettings = {
+    key: "main",
+    appVersion: "1.0.0",
+    reviewSchedule: REVIEW_SCHEDULE,
+    lastBackupAt: null,
+  };
+  const initialSubjects = [
+    "L\u00edngua Portuguesa",
+    "Conhecimentos sobre o DF",
+    "Legisla\u00e7\u00e3o",
+    "Administra\u00e7\u00e3o",
+    "AFO",
+    "Arquivologia",
+    "Recursos Materiais",
+  ];
+  const initialSources = ["Grancursos"];
+
+  function emptyState() {
+    return {
+      subjects: [],
+      sources: [],
+      studyRecords: [],
+      reviewTasks: [],
+      settings: defaultSettings,
+      nextIds: {
+        subjects: 1,
+        sources: 1,
+        studyRecords: 1,
+        reviewTasks: 1,
+      },
+    };
+  }
+
+  function readState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      return parsed && typeof parsed === "object" ? { ...emptyState(), ...parsed } : emptyState();
+    } catch {
+      return emptyState();
+    }
+  }
+
+  function writeState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function nextId(state, collection) {
+    const id = state.nextIds[collection] ?? 1;
+    state.nextIds[collection] = id + 1;
+    return id;
+  }
+
+  function sortByOrderAndName(a, b) {
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "pt-BR");
+  }
+
+  function normalizeUniqueName(items, name, label, currentId = null) {
+    const value = normalizeEntityName(name, label);
+    const duplicate = items.some(
+      (item) => item.id !== currentId && item.name.localeCompare(value, "pt-BR", { sensitivity: "accent" }) === 0,
+    );
+    if (duplicate) throw new Error("unique constraint");
+    return value;
+  }
+
+  function seedNamedRows(state, collection, names, label) {
+    if (state[collection].length > 0) return;
+
+    for (const name of names) {
+      const exists = state[collection].some(
+        (item) => item.name.localeCompare(name, "pt-BR", { sensitivity: "accent" }) === 0,
+      );
+      if (exists) continue;
+      const timestamp = nowIso();
+      state[collection].push({
+        id: nextId(state, collection),
+        name: normalizeEntityName(name, label),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        isActive: true,
+        sortOrder: state[collection].length,
+      });
+    }
+  }
+
+  function assertActive(items, id, message) {
+    if (!items.some((item) => item.id === id && item.isActive)) {
+      throw new Error(message);
+    }
+  }
+
+  function mapEntityForImport(row, state, collection, label) {
+    return {
+      id: row.id,
+      name: normalizeEntityName(row.name, label),
+      createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+      updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
+      isActive: row.isActive ?? row.is_active ?? true,
+      sortOrder: row.sortOrder ?? row.sort_order ?? state[collection].length,
+    };
+  }
+
+  function refreshNextIds(state) {
+    for (const collection of ["subjects", "sources", "studyRecords", "reviewTasks"]) {
+      const ids = state[collection].map((item) => Number(item.id) || 0);
+      state.nextIds[collection] = Math.max(0, ...ids) + 1;
+    }
+  }
+
+  const store = {
+    async init() {
+      const state = readState();
+      seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
+      seedNamedRows(state, "sources", initialSources, "o nome da fonte");
+      writeState(state);
+    },
+
+    subjects: {
+      async ensureColumns() {},
+      async seedInitial() {
+        const state = readState();
+        seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
+        writeState(state);
+      },
+      async getAll() {
+        return [...readState().subjects].sort(sortByOrderAndName);
+      },
+      async getActive() {
+        return (await this.getAll()).filter((subject) => subject.isActive);
+      },
+      async create(name) {
+        const state = readState();
+        const timestamp = nowIso();
+        const subject = {
+          id: nextId(state, "subjects"),
+          name: normalizeUniqueName(state.subjects, name, "o nome da disciplina"),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          isActive: true,
+          sortOrder: state.subjects.length,
+        };
+        state.subjects.push(subject);
+        writeState(state);
+        return subject;
+      },
+      async update(id, fields) {
+        const state = readState();
+        const subject = state.subjects.find((item) => item.id === id);
+        if (!subject) return null;
+        if (Object.hasOwn(fields, "name")) {
+          subject.name = normalizeUniqueName(state.subjects, fields.name, "o nome da disciplina", id);
+        }
+        if (Object.hasOwn(fields, "isActive")) subject.isActive = Boolean(fields.isActive);
+        if (Object.hasOwn(fields, "sortOrder")) subject.sortOrder = Number(fields.sortOrder) || 0;
+        subject.updatedAt = nowIso();
+        writeState(state);
+        return subject;
+      },
+      async deactivate(id) {
+        return this.update(id, { isActive: false });
+      },
+      async deleteCascade(id) {
+        const state = readState();
+        const studyIds = new Set(state.studyRecords.filter((record) => record.subjectId === id).map((record) => record.id));
+        state.reviewTasks = state.reviewTasks.filter((task) => !studyIds.has(task.studyRecordId));
+        state.studyRecords = state.studyRecords.filter((record) => record.subjectId !== id);
+        state.subjects = state.subjects.filter((subject) => subject.id !== id);
+        writeState(state);
+        return true;
+      },
+    },
+
+    sources: {
+      async ensureColumns() {},
+      async seedInitial() {
+        const state = readState();
+        seedNamedRows(state, "sources", initialSources, "o nome da fonte");
+        writeState(state);
+      },
+      async getAll() {
+        return [...readState().sources].sort(sortByOrderAndName);
+      },
+      async getActive() {
+        return (await this.getAll()).filter((source) => source.isActive);
+      },
+      async create(name) {
+        const state = readState();
+        const timestamp = nowIso();
+        const source = {
+          id: nextId(state, "sources"),
+          name: normalizeUniqueName(state.sources, name, "o nome da fonte"),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          isActive: true,
+          sortOrder: state.sources.length,
+        };
+        state.sources.push(source);
+        writeState(state);
+        return source;
+      },
+      async update(id, fields) {
+        const state = readState();
+        const source = state.sources.find((item) => item.id === id);
+        if (!source) return null;
+        if (Object.hasOwn(fields, "name")) {
+          source.name = normalizeUniqueName(state.sources, fields.name, "o nome da fonte", id);
+        }
+        if (Object.hasOwn(fields, "isActive")) source.isActive = Boolean(fields.isActive);
+        if (Object.hasOwn(fields, "sortOrder")) source.sortOrder = Number(fields.sortOrder) || 0;
+        source.updatedAt = nowIso();
+        writeState(state);
+        return source;
+      },
+      async deactivate(id) {
+        return this.update(id, { isActive: false });
+      },
+      async getUsageSummary(id) {
+        const state = readState();
+        const studyIds = new Set(state.studyRecords.filter((record) => record.sourceId === id).map((record) => record.id));
+        return {
+          studiesCount: studyIds.size,
+          reviewsCount: state.reviewTasks.filter((task) => studyIds.has(task.studyRecordId)).length,
+        };
+      },
+      async deleteCascade(id) {
+        const state = readState();
+        const studyIds = new Set(state.studyRecords.filter((record) => record.sourceId === id).map((record) => record.id));
+        state.reviewTasks = state.reviewTasks.filter((task) => !studyIds.has(task.studyRecordId));
+        state.studyRecords = state.studyRecords.filter((record) => record.sourceId !== id);
+        state.sources = state.sources.filter((source) => source.id !== id);
+        writeState(state);
+        return true;
+      },
+    },
+
+    studyRecords: {
+      async ensureColumns() {},
+      async getAll() {
+        return [...readState().studyRecords].sort(
+          (a, b) => b.studyDate.localeCompare(a.studyDate) || b.id - a.id,
+        );
+      },
+      async create(data) {
+        const state = readState();
+        assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
+        assertActive(state.sources, data.sourceId, "Selecione uma fonte ativa.");
+        const timestamp = nowIso();
+        const record = {
+          id: nextId(state, "studyRecords"),
+          subjectId: data.subjectId,
+          sourceId: data.sourceId,
+          studyDate: data.studyDate,
+          content: String(data.content ?? "").trim(),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        state.studyRecords.push(record);
+        writeState(state);
+        return record;
+      },
+      async createWithReviews(data, tasks) {
+        const state = readState();
+        assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
+        assertActive(state.sources, data.sourceId, "Selecione uma fonte ativa.");
+        const timestamp = nowIso();
+        const record = {
+          id: nextId(state, "studyRecords"),
+          subjectId: data.subjectId,
+          sourceId: data.sourceId,
+          studyDate: data.studyDate,
+          content: String(data.content ?? "").trim(),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        state.studyRecords.push(record);
+        for (const task of tasks) {
+          state.reviewTasks.push({
+            id: nextId(state, "reviewTasks"),
+            studyRecordId: record.id,
+            reviewNumber: task.reviewNumber,
+            dueDate: task.dueDate,
+            completedAt: task.completedAt ?? null,
+            reviewDone: Boolean(task.reviewDone),
+            questionsDone: Boolean(task.questionsDone),
+            questionsCount: task.questionsCount ?? null,
+            correctCount: task.correctCount ?? null,
+            scorePercent: task.scorePercent ?? null,
+            comment: task.comment ?? null,
+            createdAt: task.createdAt ?? timestamp,
+            updatedAt: task.updatedAt ?? timestamp,
+          });
+        }
+        writeState(state);
+        return record;
+      },
+    },
+
+    reviewTasks: {
+      async getAll() {
+        return [...readState().reviewTasks].sort(
+          (a, b) => a.dueDate.localeCompare(b.dueDate) || a.reviewNumber - b.reviewNumber,
+        );
+      },
+      async createBulk(tasks) {
+        const state = readState();
+        const timestamp = nowIso();
+        for (const task of tasks) {
+          state.reviewTasks.push({
+            id: nextId(state, "reviewTasks"),
+            ...task,
+            completedAt: task.completedAt ?? null,
+            reviewDone: Boolean(task.reviewDone),
+            questionsDone: Boolean(task.questionsDone),
+            questionsCount: task.questionsCount ?? null,
+            correctCount: task.correctCount ?? null,
+            scorePercent: task.scorePercent ?? null,
+            comment: task.comment ?? null,
+            createdAt: task.createdAt ?? timestamp,
+            updatedAt: task.updatedAt ?? timestamp,
+          });
+        }
+        writeState(state);
+        return this.getAll();
+      },
+      async getForToday(today) {
+        return (await this.getAll()).filter((task) => task.dueDate === today && !task.reviewDone);
+      },
+      async getOverdue(today) {
+        return (await this.getAll()).filter((task) => task.dueDate < today && !task.reviewDone);
+      },
+      async getCompletedToday(today) {
+        return (await this.getAll())
+          .filter((task) => task.completedAt?.startsWith(today) && task.reviewDone)
+          .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+      },
+      async getTomorrow(tomorrow) {
+        return (await this.getAll()).filter((task) => task.dueDate === tomorrow && !task.reviewDone);
+      },
+      async update(id, fields) {
+        const state = readState();
+        const task = state.reviewTasks.find((item) => item.id === id);
+        if (!task) return null;
+        for (const [key, value] of Object.entries(fields)) {
+          if (key in task) task[key] = value;
+        }
+        task.updatedAt = nowIso();
+        writeState(state);
+        return task;
+      },
+    },
+
+    settings: {
+      async get() {
+        return readState().settings ?? defaultSettings;
+      },
+      async update(fields) {
+        const state = readState();
+        state.settings = { ...(state.settings ?? defaultSettings), ...fields };
+        writeState(state);
+        return state.settings;
+      },
+    },
+
+    async exportAll() {
+      const state = readState();
+      return {
+        subjects: state.subjects,
+        sources: state.sources,
+        studyRecords: state.studyRecords,
+        reviewTasks: state.reviewTasks,
+        settings: state.settings,
+      };
+    },
+
+    async importAll(data) {
+      assertImportData(data);
+      const state = emptyState();
+      state.subjects = data.subjects.map((row) => mapEntityForImport(row, state, "subjects", "o nome da disciplina"));
+      state.sources = data.sources.map((row) => mapEntityForImport(row, state, "sources", "o nome da fonte"));
+      state.studyRecords = data.studyRecords.map((row) => ({
+        id: row.id,
+        subjectId: row.subjectId ?? row.subject_id,
+        sourceId: row.sourceId ?? row.source_id,
+        studyDate: row.studyDate ?? row.study_date,
+        content: row.content,
+        createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+        updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
+      }));
+      state.reviewTasks = data.reviewTasks.map((row) => ({
+        id: row.id,
+        studyRecordId: row.studyRecordId ?? row.study_record_id,
+        reviewNumber: row.reviewNumber ?? row.review_number,
+        dueDate: row.dueDate ?? row.due_date,
+        completedAt: row.completedAt ?? row.completed_at ?? null,
+        reviewDone: Boolean(row.reviewDone ?? row.review_done),
+        questionsDone: Boolean(row.questionsDone ?? row.questions_done),
+        questionsCount: row.questionsCount ?? row.questions_count ?? null,
+        correctCount: row.correctCount ?? row.correct_count ?? null,
+        scorePercent: row.scorePercent ?? row.score_percent ?? null,
+        comment: row.comment ?? null,
+        createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+        updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
+      }));
+      state.settings = Array.isArray(data.settings)
+        ? (data.settings[0] ?? defaultSettings)
+        : (data.settings ?? defaultSettings);
+      refreshNextIds(state);
+      writeState(state);
+      return this.exportAll();
+    },
+
+    async clearAll() {
+      const state = emptyState();
+      writeState(state);
+      return this.exportAll();
+    },
+  };
+
+  return store;
+}
+
 export const DB = {
   async init() {
     if (!initialization) {
       initialization = (async () => {
+        if (!hasTauriRuntime()) {
+          browserStore = createBrowserStore();
+          await browserStore.init();
+          Object.assign(DB, browserStore);
+          return DB;
+        }
+
         database = await Database.load(DATABASE_URL);
         await database.execute('PRAGMA foreign_keys = ON');
 
@@ -304,6 +743,9 @@ export const DB = {
     },
 
     async seedInitial() {
+      const rows = await requireDatabase().select('SELECT id FROM subjects LIMIT 1');
+      if (rows.length > 0) return;
+
       await ensureNamedRows(
         'subjects',
         [
@@ -420,6 +862,9 @@ export const DB = {
     },
 
     async seedInitial() {
+      const rows = await requireDatabase().select('SELECT id FROM sources LIMIT 1');
+      if (rows.length > 0) return;
+
       await ensureNamedRows(
         'sources',
         ['Grancursos'],
@@ -485,6 +930,46 @@ export const DB = {
 
     async deactivate(id) {
       return DB.sources.update(id, { isActive: false });
+    },
+
+    async getUsageSummary(id) {
+      const [row] = await requireDatabase().select(
+        `SELECT
+          COUNT(DISTINCT study_records.id) AS studiesCount,
+          COUNT(review_tasks.id) AS reviewsCount
+         FROM study_records
+         LEFT JOIN review_tasks ON review_tasks.study_record_id = study_records.id
+         WHERE study_records.source_id = $1`,
+        [id],
+      );
+
+      return {
+        studiesCount: mapUsageCount(row, "studiesCount"),
+        reviewsCount: mapUsageCount(row, "reviewsCount"),
+      };
+    },
+
+    async deleteCascade(id) {
+      await invoke("execute_sqlite_transaction", {
+        statements: [
+          {
+            query: `DELETE FROM review_tasks
+              WHERE study_record_id IN (
+                SELECT id FROM study_records WHERE source_id = $1
+              )`,
+            values: [id],
+          },
+          {
+            query: "DELETE FROM study_records WHERE source_id = $1",
+            values: [id],
+          },
+          {
+            query: "DELETE FROM sources WHERE id = $1",
+            values: [id],
+          },
+        ],
+      });
+      return true;
     },
   },
 

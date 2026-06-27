@@ -1,12 +1,32 @@
 ﻿import "./styles.css";
 import { DB } from "./db.js";
 import { Stats } from "./stats.js";
+import {
+  THEME_OPTIONS,
+  applyThemePreference,
+  getStoredThemePreference,
+  resolveThemePreference,
+} from "./theme.js";
 
-await DB.init();
+let databaseAvailable = false;
+const dbInit = DB.init()
+  .then(() => {
+    databaseAvailable = true;
+    return true;
+  })
+  .catch((error) => {
+    console.error("Falha ao inicializar o banco local.", error);
+    return false;
+  });
 
 const DEFAULT_SCREEN = "today";
 const LAST_SUBJECT_KEY = "smartlearn:lastSubjectId";
 const LAST_SOURCE_KEY = "smartlearn:lastSourceId";
+const FALLBACK_SOURCE_NAME = "Sem fonte";
+
+// Estado de edição inline — null quando nenhuma linha está em modo edição.
+let activeSourceEditId = null;
+let activeSubjectEditId = null;
 
 function rememberSelection(key, value) {
   try {
@@ -78,6 +98,8 @@ const importBackupInput = document.querySelector("#import-backup");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
 const themeToggle = document.querySelector("#theme-toggle");
+const themePicker = document.querySelector("#theme-picker");
+const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -518,6 +540,30 @@ async function generateReviewTasks(studyData) {
   return DB.studyRecords.createWithReviews(studyData, tasks);
 }
 
+async function resolveStudySourceId(selectedSourceId) {
+  if (selectedSourceId) return selectedSourceId;
+
+  const activeSources = await DB.sources.getActive();
+  if (activeSources.length > 0) return null;
+
+  const allSources = await DB.sources.getAll();
+  const fallbackSource = allSources.find(
+    (source) => source.name.localeCompare(FALLBACK_SOURCE_NAME, "pt-BR", { sensitivity: "accent" }) === 0,
+  );
+
+  if (fallbackSource) {
+    if (!fallbackSource.isActive) {
+      await DB.sources.update(fallbackSource.id, { isActive: true });
+    }
+    await renderSources(fallbackSource.id);
+    return fallbackSource.id;
+  }
+
+  const source = await DB.sources.create(FALLBACK_SOURCE_NAME);
+  await renderSources(source.id);
+  return source.id;
+}
+
 function setSubjectMessage(message = "") {
   subjectMessage.textContent = message;
 }
@@ -552,6 +598,10 @@ function setSourceFormVisible(visible) {
   if (visible) {
     newSourceInput.focus();
   }
+}
+
+function pluralize(value, singular, plural) {
+  return value === 1 ? singular : plural;
 }
 
 async function renderSources(selectedId = studySourceSelect.value) {
@@ -594,26 +644,70 @@ function renderSourceList(sources) {
     row.dataset.sourceId = String(source.id);
 
     const info = document.createElement("div");
-    info.append(createTextElement("p", "source-name", source.name));
-    info.append(createTextElement("span", "source-status", source.isActive ? "Ativa" : "Desativada"));
+    info.className = "source-info";
 
     const actions = document.createElement("div");
     actions.className = "source-actions";
 
-    const editButton = document.createElement("button");
-    editButton.className = "small-button";
-    editButton.type = "button";
-    editButton.dataset.action = "edit-source";
-    editButton.dataset.sourceName = source.name;
-    editButton.textContent = "Editar";
+    if (source.id === activeSourceEditId) {
+      // Modo edição inline
+      row.classList.add("is-editing");
 
-    const toggleButton = document.createElement("button");
-    toggleButton.className = "small-button";
-    toggleButton.type = "button";
-    toggleButton.dataset.action = source.isActive ? "deactivate-source" : "activate-source";
-    toggleButton.textContent = source.isActive ? "Desativar" : "Ativar";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "inline-edit-input";
+      input.value = source.name;
+      input.id = `source-edit-input-${source.id}`;
+      input.setAttribute("aria-label", "Novo nome da fonte");
+      input.setAttribute("autocomplete", "off");
 
-    actions.append(editButton, toggleButton);
+      const error = document.createElement("span");
+      error.className = "inline-edit-error";
+      error.setAttribute("aria-live", "polite");
+
+      info.append(input, error);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "small-button is-primary";
+      saveBtn.type = "button";
+      saveBtn.dataset.action = "save-source";
+      saveBtn.textContent = "Salvar";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "small-button";
+      cancelBtn.type = "button";
+      cancelBtn.dataset.action = "cancel-source";
+      cancelBtn.textContent = "Cancelar";
+
+      actions.append(saveBtn, cancelBtn);
+    } else {
+      // Modo visualização
+      info.append(createTextElement("p", "source-name", source.name));
+      info.append(createTextElement("span", "source-status", source.isActive ? "Ativa" : "Desativada"));
+
+      const editButton = document.createElement("button");
+      editButton.className = "small-button";
+      editButton.type = "button";
+      editButton.dataset.action = "edit-source";
+      editButton.dataset.sourceName = source.name;
+      editButton.textContent = "Editar";
+
+      const toggleButton = document.createElement("button");
+      toggleButton.className = "small-button";
+      toggleButton.type = "button";
+      toggleButton.dataset.action = source.isActive ? "deactivate-source" : "activate-source";
+      toggleButton.textContent = source.isActive ? "Desativar" : "Ativar";
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "small-button is-danger";
+      deleteButton.type = "button";
+      deleteButton.dataset.action = "delete-source";
+      deleteButton.dataset.sourceName = source.name;
+      deleteButton.textContent = "Excluir";
+
+      actions.append(editButton, toggleButton, deleteButton);
+    }
+
     row.append(info, actions);
     sourceList.append(row);
   }
@@ -655,33 +749,70 @@ function renderSubjectList(subjects) {
     row.dataset.subjectId = String(subject.id);
 
     const info = document.createElement("div");
-    info.append(createTextElement("p", "subject-name", subject.name));
-    info.append(createTextElement("span", "subject-status", subject.isActive ? "Ativa" : "Desativada"));
+    info.className = "subject-info";
 
     const actions = document.createElement("div");
     actions.className = "subject-actions";
 
-    const editButton = document.createElement("button");
-    editButton.className = "small-button";
-    editButton.type = "button";
-    editButton.dataset.action = "edit-subject";
-    editButton.dataset.subjectName = subject.name;
-    editButton.textContent = "Editar";
+    if (subject.id === activeSubjectEditId) {
+      // Modo edição inline
+      row.classList.add("is-editing");
 
-    const toggleButton = document.createElement("button");
-    toggleButton.className = "small-button";
-    toggleButton.type = "button";
-    toggleButton.dataset.action = subject.isActive ? "deactivate-subject" : "activate-subject";
-    toggleButton.textContent = subject.isActive ? "Desativar" : "Ativar";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "inline-edit-input";
+      input.value = subject.name;
+      input.id = `subject-edit-input-${subject.id}`;
+      input.setAttribute("aria-label", "Novo nome da disciplina");
+      input.setAttribute("autocomplete", "off");
 
-    const deleteButton = document.createElement("button");
-    deleteButton.className = "small-button is-danger";
-    deleteButton.type = "button";
-    deleteButton.dataset.action = "delete-subject";
-    deleteButton.dataset.subjectName = subject.name;
-    deleteButton.textContent = "Excluir";
+      const error = document.createElement("span");
+      error.className = "inline-edit-error";
+      error.setAttribute("aria-live", "polite");
 
-    actions.append(editButton, toggleButton, deleteButton);
+      info.append(input, error);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "small-button is-primary";
+      saveBtn.type = "button";
+      saveBtn.dataset.action = "save-subject";
+      saveBtn.textContent = "Salvar";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "small-button";
+      cancelBtn.type = "button";
+      cancelBtn.dataset.action = "cancel-subject";
+      cancelBtn.textContent = "Cancelar";
+
+      actions.append(saveBtn, cancelBtn);
+    } else {
+      // Modo visualização
+      info.append(createTextElement("p", "subject-name", subject.name));
+      info.append(createTextElement("span", "subject-status", subject.isActive ? "Ativa" : "Desativada"));
+
+      const editButton = document.createElement("button");
+      editButton.className = "small-button";
+      editButton.type = "button";
+      editButton.dataset.action = "edit-subject";
+      editButton.dataset.subjectName = subject.name;
+      editButton.textContent = "Editar";
+
+      const toggleButton = document.createElement("button");
+      toggleButton.className = "small-button";
+      toggleButton.type = "button";
+      toggleButton.dataset.action = subject.isActive ? "deactivate-subject" : "activate-subject";
+      toggleButton.textContent = subject.isActive ? "Desativar" : "Ativar";
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "small-button is-danger";
+      deleteButton.type = "button";
+      deleteButton.dataset.action = "delete-subject";
+      deleteButton.dataset.subjectName = subject.name;
+      deleteButton.textContent = "Excluir";
+
+      actions.append(editButton, toggleButton, deleteButton);
+    }
+
     row.append(info, actions);
     subjectList.append(row);
   }
@@ -712,38 +843,100 @@ export function showScreen(screenId, { focus = false } = {}) {
     mainContent?.focus({ preventScroll: true });
   }
 
-  if (nextScreen === "today") {
+  if (nextScreen === "today" && databaseAvailable) {
     renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
   }
 
-  if (nextScreen === "stats") {
+  if (nextScreen === "stats" && databaseAvailable) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
-  if (nextScreen === "register") {
+  if (nextScreen === "register" && databaseAvailable) {
     Promise.all([renderSubjects(), renderSources()]).catch((error) => {
       console.error("Falha ao carregar cadastro.", error);
     });
   }
-  if (nextScreen === "settings") {
+  if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
   }
 }
 
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  try {
-    localStorage.setItem("smartlearn:theme", theme);
-  } catch {
-    // localStorage indisponível: o tema vale só nesta sessão.
+let currentThemePreference = getStoredThemePreference();
+
+function renderThemePicker(preference = currentThemePreference) {
+  if (!themePicker) return;
+
+  themePicker.replaceChildren();
+
+  for (const option of THEME_OPTIONS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "theme-option";
+    button.setAttribute("role", "radio");
+    button.dataset.themeOption = option.id;
+    button.setAttribute("aria-checked", "false");
+
+    const label = document.createElement("span");
+    label.className = "theme-option-label";
+    label.textContent = option.label;
+
+    const description = document.createElement("span");
+    description.className = "theme-option-description";
+    description.textContent = option.description;
+
+    button.append(label, description);
+    themePicker.append(button);
+  }
+
+  syncThemePicker(preference);
+}
+
+// Destaca o tema ativo na tela de Configurações.
+function syncThemePicker(preference) {
+  if (!themePicker) return;
+
+  for (const button of themePicker.querySelectorAll("[data-theme-option]")) {
+    const isActive = button.dataset.themeOption === preference;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-checked", isActive ? "true" : "false");
   }
 }
 
+function setThemePreference(preference) {
+  currentThemePreference = preference;
+  applyThemePreference(preference, { persist: true });
+  syncThemePicker(preference);
+  // O gráfico de evolução usa cores do tema; redesenha após a troca.
+  if (databaseAvailable) {
+    renderStats().catch((error) => console.error("Falha ao redesenhar após troca de tema.", error));
+  }
+}
+
+renderThemePicker(currentThemePreference);
+applyThemePreference(currentThemePreference);
+
 themeToggle.addEventListener("click", () => {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  applyTheme(next);
-  // O gráfico de evolução é desenhado em canvas com cores do tema; redesenha.
-  renderStats().catch((error) => console.error("Falha ao redesenhar após troca de tema.", error));
+  const effectiveThemeId = resolveThemePreference(currentThemePreference, prefersDarkScheme.matches);
+  const next = effectiveThemeId === "night" || effectiveThemeId === "contrast" ? "paper" : "night";
+  setThemePreference(next);
 });
+
+themePicker?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-theme-option]");
+  if (!button) return;
+  setThemePreference(button.dataset.themeOption);
+});
+
+// No modo automático, acompanha mudanças de tema do sistema em tempo real.
+prefersDarkScheme.addEventListener("change", () => {
+  if (currentThemePreference === "auto") {
+    applyThemePreference("auto");
+    if (databaseAvailable) {
+      renderStats().catch((error) => console.error("Falha ao redesenhar após troca de tema.", error));
+    }
+  }
+});
+
+syncThemePicker(currentThemePreference);
 
 for (const item of navigationItems) {
   item.addEventListener("click", () => {
@@ -824,13 +1017,49 @@ subjectList.addEventListener("click", async (event) => {
   const currentName = button.dataset.subjectName;
   const action = button.dataset.action;
 
-  try {
-    if (action === "edit-subject") {
-      const nextName = window.prompt("Novo nome da disciplina:", currentName);
-      if (nextName === null) return;
-      await DB.subjects.update(subjectId, { name: nextName });
-    }
+  // Ações do editor inline — tratadas antes do bloco de try comum.
+  if (action === "edit-subject") {
+    activeSubjectEditId = subjectId;
+    await renderSubjects();
+    document.getElementById(`subject-edit-input-${subjectId}`)?.focus();
+    return;
+  }
 
+  if (action === "cancel-subject") {
+    activeSubjectEditId = null;
+    setSubjectManagerMessage();
+    await renderSubjects();
+    return;
+  }
+
+  if (action === "save-subject") {
+    const input = row.querySelector(".inline-edit-input");
+    const errorEl = row.querySelector(".inline-edit-error");
+    const newName = input?.value?.trim() ?? "";
+    if (!newName) {
+      if (errorEl) errorEl.textContent = "Informe o nome da disciplina.";
+      input?.focus();
+      return;
+    }
+    try {
+      await DB.subjects.update(subjectId, { name: newName });
+      activeSubjectEditId = null;
+      setSubjectMessage();
+      setSubjectManagerMessage();
+      await Promise.all([renderSubjects(), renderToday(), renderStats()]);
+    } catch (saveError) {
+      const isDuplicate = /unique|duplicate/i.test(String(saveError));
+      if (errorEl) {
+        errorEl.textContent = isDuplicate
+          ? "Essa disciplina já está cadastrada."
+          : "Não foi possível renomear a disciplina.";
+      }
+      input?.focus();
+    }
+    return;
+  }
+
+  try {
     if (action === "deactivate-subject") {
       await DB.subjects.deactivate(subjectId);
     }
@@ -861,6 +1090,23 @@ subjectList.addEventListener("click", async (event) => {
   }
 });
 
+subjectList.addEventListener("keydown", async (event) => {
+  if (!activeSubjectEditId) return;
+  if (!event.target.classList.contains("inline-edit-input")) return;
+  const row = event.target.closest(".subject-row");
+  if (!row) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    row.querySelector('[data-action="save-subject"]')?.click();
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    activeSubjectEditId = null;
+    setSubjectManagerMessage();
+    await renderSubjects();
+  }
+});
+
 sourceList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   const row = event.target.closest(".source-row");
@@ -870,19 +1116,67 @@ sourceList.addEventListener("click", async (event) => {
   const currentName = button.dataset.sourceName;
   const action = button.dataset.action;
 
-  try {
-    if (action === "edit-source") {
-      const nextName = window.prompt("Novo nome da fonte:", currentName);
-      if (nextName === null) return;
-      await DB.sources.update(sourceId, { name: nextName });
-    }
+  // Ações do editor inline — tratadas antes do bloco de try comum.
+  if (action === "edit-source") {
+    activeSourceEditId = sourceId;
+    await renderSources();
+    document.getElementById(`source-edit-input-${sourceId}`)?.focus();
+    return;
+  }
 
+  if (action === "cancel-source") {
+    activeSourceEditId = null;
+    setSourceManagerMessage();
+    await renderSources();
+    return;
+  }
+
+  if (action === "save-source") {
+    const input = row.querySelector(".inline-edit-input");
+    const errorEl = row.querySelector(".inline-edit-error");
+    const newName = input?.value?.trim() ?? "";
+    if (!newName) {
+      if (errorEl) errorEl.textContent = "Informe o nome da fonte.";
+      input?.focus();
+      return;
+    }
+    try {
+      await DB.sources.update(sourceId, { name: newName });
+      activeSourceEditId = null;
+      setSourceManagerMessage();
+      await Promise.all([renderSources(), renderToday(), renderStats()]);
+    } catch (saveError) {
+      const isDuplicate = /unique|duplicate/i.test(String(saveError));
+      if (errorEl) {
+        errorEl.textContent = isDuplicate
+          ? "Essa fonte já está cadastrada."
+          : "Não foi possível renomear a fonte.";
+      }
+      input?.focus();
+    }
+    return;
+  }
+
+  try {
     if (action === "deactivate-source") {
       await DB.sources.deactivate(sourceId);
     }
 
     if (action === "activate-source") {
       await DB.sources.update(sourceId, { isActive: true });
+    }
+
+    if (action === "delete-source") {
+      const { studiesCount, reviewsCount } = await DB.sources.getUsageSummary(sourceId);
+      const hasUsage = studiesCount > 0 || reviewsCount > 0;
+      const usageMessage = hasUsage
+        ? `Isso apagará ${studiesCount} ${pluralize(studiesCount, "estudo", "estudos")} e ${reviewsCount} ${pluralize(reviewsCount, "revisão", "revisões")} ligados a essa fonte.`
+        : "Essa fonte ainda não tem estudos vinculados.";
+      const confirmed = window.confirm(
+        `Excluir "${currentName}"? ${usageMessage} Continuar?`,
+      );
+      if (!confirmed) return;
+      await DB.sources.deleteCascade(sourceId);
     }
 
     setSourceManagerMessage();
@@ -895,6 +1189,23 @@ sourceList.addEventListener("click", async (event) => {
         : "Não foi possível alterar a fonte.",
     );
     console.error("Falha ao alterar fonte.", error);
+  }
+});
+
+sourceList.addEventListener("keydown", async (event) => {
+  if (!activeSourceEditId) return;
+  if (!event.target.classList.contains("inline-edit-input")) return;
+  const row = event.target.closest(".source-row");
+  if (!row) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    row.querySelector('[data-action="save-source"]')?.click();
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    activeSourceEditId = null;
+    setSourceManagerMessage();
+    await renderSources();
   }
 });
 
@@ -1027,21 +1338,34 @@ studyForm.addEventListener("submit", async (event) => {
   studyMessage.textContent = "";
 
   const subjectId = Number(subjectSelect.value);
-  const sourceId = Number(studySourceSelect.value);
+  let sourceId = Number(studySourceSelect.value);
   const studyDate = studyDateInput.value;
   const content = studyContentInput.value.trim();
 
-  if (!subjectId || !sourceId || !studyDate || !content) {
+  if (!subjectId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
-    studyMessage.textContent = "Preencha a disciplina, a fonte, a data e o conteúdo.";
-    if (!subjectId) subjectSelect.focus();
-    else if (!sourceId) studySourceSelect.focus();
-    else if (!studyDate) studyDateInput.focus();
-    else studyContentInput.focus();
+    if (!subjectId) {
+      studyMessage.textContent = "Selecione uma disciplina.";
+      subjectSelect.focus();
+    } else if (!studyDate) {
+      studyMessage.textContent = "Informe a data da aula.";
+      studyDateInput.focus();
+    } else {
+      studyMessage.textContent = "Informe o conteúdo estudado.";
+      studyContentInput.focus();
+    }
     return;
   }
 
   try {
+    sourceId = await resolveStudySourceId(sourceId);
+    if (!sourceId) {
+      studyMessage.classList.add("is-error");
+      studyMessage.textContent = "Selecione ou crie uma fonte.";
+      studySourceSelect.focus();
+      return;
+    }
+
     await generateReviewTasks({
       subjectId,
       sourceId,
@@ -1060,11 +1384,9 @@ studyForm.addEventListener("submit", async (event) => {
 });
 
 studyDateInput.value = getLocalDateValue();
-await renderSubjects();
-await renderToday();
+await dbInit;
+if (databaseAvailable) {
+  await renderSubjects();
+  await renderToday();
+}
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);
-
-
-
-
-

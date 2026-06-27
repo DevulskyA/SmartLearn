@@ -3,18 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#f8fafc" />
+    <meta name="theme-color" content="#f7f7f3" />
     <title>SmartLearn</title>
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem("smartlearn:theme");
-          var theme = stored || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-          document.documentElement.dataset.theme = theme;
-        } catch (error) {
-          document.documentElement.dataset.theme = "light";
-        }
-      })();
+    <script type="module">
+      import { applyThemePreference, getStoredThemePreference } from "/src/theme.js";
+
+      applyThemePreference(getStoredThemePreference());
     </script>
     <script type="module" src="/src/app.js"></script>
   </head>
@@ -22,7 +16,7 @@
     <div class="app-shell">
       <header class="app-header">
         <a class="brand" href="#today" aria-label="SmartLearn - ir para Hoje">SmartLearn</a>
-        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Alternar tema claro e escuro" title="Alternar tema claro e escuro">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Alternar tema rápido" title="Alternar tema rápido">
           <svg class="theme-icon-moon" aria-hidden="true" viewBox="0 0 24 24">
             <path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" />
           </svg>
@@ -203,7 +197,7 @@
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Fontes cadastradas</p>
                 <h2 id="source-manager-title">Gerenciar fontes</h2>
-                <p>Edite ou desative fontes. Fonte é selecionada no cadastro de estudo.</p>
+                <p>Edite, desative ou exclua fontes. A exclusão apaga estudos e revisões ligados a ela.</p>
               </div>
               <div class="source-list" id="source-list" aria-live="polite"></div>
               <p class="panel-empty" id="sources-empty">Nenhuma fonte cadastrada.</p>
@@ -278,6 +272,15 @@
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
           <div class="screen-heading"><div><p class="eyebrow">Dados locais</p><h1 id="title-settings">Configurações</h1></div></div>
+          <section class="settings-card" aria-labelledby="appearance-title">
+            <div class="section-heading">
+              <p class="eyebrow">Aparência</p>
+              <h2 id="appearance-title">Tema</h2>
+              <p>Escolha uma base de leitura. O ajuste fica salvo neste dispositivo.</p>
+            </div>
+            <div class="theme-picker" id="theme-picker" role="radiogroup" aria-labelledby="appearance-title">
+            </div>
+          </section>
           <section class="settings-card" aria-labelledby="backup-title">
             <div class="section-heading">
               <p class="eyebrow">Segurança dos dados</p>
