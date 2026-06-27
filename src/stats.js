@@ -1,3 +1,5 @@
+import { getReviewScoreValues } from "./review-score.js";
+
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -7,13 +9,17 @@ function getLocalDateValue(date = new Date()) {
 
 export const Stats = {
   calculate(reviewTasks, studyRecords, subjects, today = getLocalDateValue()) {
-    const completedExercises = reviewTasks.filter((task) => task.questionsDone);
+    const completedExercises = reviewTasks
+      .filter((task) => task.questionsDone)
+      .map((task) => ({ ...task, ...getReviewScoreValues(task.questionsCount, task.correctCount) }))
+      .filter((task) => !task.isOverflow && task.questionsCount != null && task.correctCount != null);
+
     const totalQuestions = completedExercises.reduce(
-      (total, task) => total + (Number(task.questionsCount) || 0),
+      (total, task) => total + task.questionsCount,
       0,
     );
     const totalCorrect = completedExercises.reduce(
-      (total, task) => total + (Number(task.correctCount) || 0),
+      (total, task) => total + task.correctCount,
       0,
     );
     const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
@@ -22,18 +28,17 @@ export const Stats = {
     const scoresBySubject = new Map();
 
     for (const task of completedExercises) {
-      if (task.scorePercent == null) continue;
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
       if (!subject) continue;
       const scores = scoresBySubject.get(subject.id) ?? {
         subjectId: subject.id,
         subjectName: subject.name,
-        total: 0,
-        count: 0,
+        totalQuestions: 0,
+        totalCorrect: 0,
       };
-      scores.total += Number(task.scorePercent);
-      scores.count += 1;
+      scores.totalQuestions += task.questionsCount;
+      scores.totalCorrect += task.correctCount;
       scoresBySubject.set(subject.id, scores);
     }
 
@@ -41,7 +46,7 @@ export const Stats = {
       .map((item) => ({
         subjectId: item.subjectId,
         subjectName: item.subjectName,
-        avgScore: item.count > 0 ? item.total / item.count : 0,
+        avgScore: item.totalQuestions > 0 ? (item.totalCorrect / item.totalQuestions) * 100 : 0,
       }))
       .sort((a, b) => a.subjectName.localeCompare(b.subjectName, "pt-BR"));
 

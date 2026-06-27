@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
+import { getReviewScoreValues } from "./review-score.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const REVIEW_SCHEDULE = [
@@ -711,7 +712,31 @@ export const DB = {
         scorePercent: ["score_percent", (value) => value],
         comment: ["comment", (value) => value],
       };
-      const entries = Object.entries(fields).filter(([key]) => columns[key]);
+      const sanitizedFields = { ...fields };
+      if (
+        Object.hasOwn(sanitizedFields, "questionsCount") ||
+        Object.hasOwn(sanitizedFields, "correctCount") ||
+        Object.hasOwn(sanitizedFields, "scorePercent")
+      ) {
+        const [currentRow] = await requireDatabase().select(
+          "SELECT questions_count, correct_count FROM review_tasks WHERE id = $1",
+          [id],
+        );
+        if (!currentRow) return null;
+
+        const nextValues = getReviewScoreValues(
+          Object.hasOwn(sanitizedFields, "questionsCount") ? sanitizedFields.questionsCount : currentRow.questions_count,
+          Object.hasOwn(sanitizedFields, "correctCount") ? sanitizedFields.correctCount : currentRow.correct_count,
+        );
+        if (nextValues.isOverflow) {
+          throw new Error("Acertos não pode ser maior que Questões.");
+        }
+        sanitizedFields.questionsCount = nextValues.questionsCount;
+        sanitizedFields.correctCount = nextValues.correctCount;
+        sanitizedFields.scorePercent = nextValues.scorePercent;
+      }
+
+      const entries = Object.entries(sanitizedFields).filter(([key]) => columns[key]);
       if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
 
       const values = entries.map(([key, value]) => columns[key][1](value));

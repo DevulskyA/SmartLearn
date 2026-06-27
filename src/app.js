@@ -1,6 +1,8 @@
-﻿import "./styles.css";
+import "./styles.css";
 import { DB } from "./db.js";
 import { Stats } from "./stats.js";
+import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
+import { generateReviewDates } from "./review-schedule.js";
 
 await DB.init();
 
@@ -54,6 +56,12 @@ const chooseBackupFileButton = document.querySelector("#choose-backup-file");
 const lastBackupLabel = document.querySelector("#last-backup-label");
 const backupMessage = document.querySelector("#backup-message");
 const importBackupInput = document.querySelector("#import-backup");
+const reviewMessage = document.createElement("p");
+reviewMessage.id = "review-dashboard-message";
+reviewMessage.className = "form-message";
+reviewMessage.setAttribute("role", "status");
+reviewMessage.setAttribute("aria-live", "polite");
+reviewDashboard?.after(reviewMessage);
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -84,6 +92,11 @@ function createTextElement(tagName, className, text) {
   element.className = className;
   element.textContent = text;
   return element;
+}
+
+function setReviewMessage(message = "", isError = false) {
+  reviewMessage.textContent = message;
+  reviewMessage.classList.toggle("is-error", isError);
 }
 
 function getReviewStatusLabel(groupName, task) {
@@ -134,6 +147,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
   reviewDoneInput.dataset.reviewId = String(task.id);
+  reviewDoneInput.dataset.committedChecked = String(task.reviewDone);
   reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Rev. feita"));
   reviewDoneCell.append(reviewDoneLabel);
 
@@ -146,6 +160,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   questionsDoneInput.checked = task.questionsDone;
   questionsDoneInput.dataset.action = "questions-done";
   questionsDoneInput.dataset.reviewId = String(task.id);
+  questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
   questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Q. feitas"));
   questionsDoneCell.append(questionsDoneLabel);
 
@@ -163,6 +178,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   questionsInput.dataset.action = "score-input";
   questionsInput.dataset.field = "questionsCount";
   questionsInput.dataset.reviewId = String(task.id);
+  questionsInput.dataset.committedValue = String(task.questionsCount ?? "");
   questionsInput.setAttribute("aria-label", `Questões da revisão R${task.reviewNumber}`);
   questionsLabel.append(questionsInput);
   questionsCell.append(questionsLabel);
@@ -181,16 +197,18 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   correctInput.dataset.action = "score-input";
   correctInput.dataset.field = "correctCount";
   correctInput.dataset.reviewId = String(task.id);
+  correctInput.dataset.committedValue = String(task.correctCount ?? "");
   correctInput.setAttribute("aria-label", `Acertos da revisão R${task.reviewNumber}`);
   correctLabel.append(correctInput);
   correctCell.append(correctLabel);
 
   const scoreCell = document.createElement("div");
   scoreCell.className = "review-cell review-score-cell review-score-cell-percent";
+  const initialScoreValues = getReviewScoreValues(task.questionsCount, task.correctCount);
   const score = createTextElement(
     "span",
     "score-value review-score-value",
-    task.scorePercent == null ? "—" : `${Number(task.scorePercent).toFixed(1)}%`,
+    initialScoreValues.scorePercent == null ? "—" : `${initialScoreValues.scorePercent.toFixed(1)}%`,
   );
   score.dataset.scoreFor = String(task.id);
   score.setAttribute("aria-label", "Percentual de acertos");
@@ -218,6 +236,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName) {
   commentInput.placeholder = "Anote uma dúvida ou ponto importante";
   commentInput.dataset.action = "comment";
   commentInput.dataset.reviewId = String(task.id);
+  commentInput.dataset.committedValue = task.comment ?? "";
   commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
   commentLabel.append(commentInput);
 
@@ -373,23 +392,6 @@ export async function importBackup(file) {
       : "O backup é inválido ou não pôde ser importado.";
     console.error("Falha ao importar backup.", error);
   }
-}
-
-const REVIEW_DAY_OFFSETS = [
-  1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
-];
-
-export function generateReviewDates(studyDate) {
-  const baseDate = new Date(`${studyDate}T00:00:00.000Z`);
-  if (Number.isNaN(baseDate.getTime())) {
-    throw new Error("A data de estudo é inválida.");
-  }
-
-  return REVIEW_DAY_OFFSETS.map((offset) => {
-    const reviewDate = new Date(baseDate);
-    reviewDate.setUTCDate(reviewDate.getUTCDate() + offset);
-    return reviewDate.toISOString().slice(0, 10);
-  });
 }
 
 async function generateReviewTasks(studyData) {
@@ -764,10 +766,12 @@ reviewDashboard.addEventListener("change", async (event) => {
       reviewDone: input.checked,
       completedAt: input.checked ? new Date().toISOString() : null,
     });
+    setReviewMessage();
     await renderToday();
   } catch (error) {
-    input.checked = !input.checked;
+    input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
+    setReviewMessage("Não foi possível salvar a revisão.", true);
     console.error("Falha ao atualizar a revisão.", error);
   }
 });
@@ -789,39 +793,88 @@ importBackupInput.addEventListener("change", async () => {
 reviewDashboard.addEventListener("focusout", async (event) => {
   const input = event.target.closest('[data-action="comment"]');
   if (!input) return;
-  await DB.reviewTasks.update(Number(input.dataset.reviewId), {
-    comment: input.value.trim() || null,
-  });
+
+  const previousValue = input.dataset.committedValue ?? "";
+  try {
+    const nextValue = input.value.trim();
+    await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+      comment: nextValue || null,
+    });
+    input.dataset.committedValue = nextValue;
+    setReviewMessage();
+  } catch (error) {
+    input.value = previousValue;
+    setReviewMessage("Não foi possível salvar o comentário.", true);
+    console.error("Falha ao salvar comentário.", error);
+  }
 });
 
-function getScoreValues(card) {
-  const questionsInput = card.querySelector('[data-field="questionsCount"]');
-  const correctInput = card.querySelector('[data-field="correctCount"]');
-  const questionsCount = questionsInput.value === "" ? null : Math.max(0, Number.parseInt(questionsInput.value, 10) || 0);
-  const correctCount = correctInput.value === "" ? null : Math.max(0, Number.parseInt(correctInput.value, 10) || 0);
-  const scorePercent = questionsCount > 0
-    ? ((correctCount ?? 0) / questionsCount) * 100
-    : null;
-  return { questionsCount, correctCount, scorePercent };
+function getScoreControls(card) {
+  return {
+    questionsInput: card.querySelector('[data-field="questionsCount"]'),
+    correctInput: card.querySelector('[data-field="correctCount"]'),
+    score: card.querySelector("[data-score-for]"),
+  };
+}
+
+function getScoreState(card) {
+  const controls = getScoreControls(card);
+  const values = getReviewScoreValues(controls.questionsInput.value, controls.correctInput.value);
+  controls.correctInput.setCustomValidity(getReviewScoreValidationMessage(values));
+  return { ...controls, values };
 }
 
 function updateScoreDisplay(card) {
-  const values = getScoreValues(card);
-  const score = card.querySelector("[data-score-for]");
+  const { score, values } = getScoreState(card);
   score.textContent = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
   return values;
 }
 
+function restoreCommittedScoreInputs(row) {
+  const { questionsInput, correctInput } = getScoreControls(row);
+  questionsInput.value = questionsInput.dataset.committedValue ?? "";
+  correctInput.value = correctInput.dataset.committedValue ?? "";
+  updateScoreDisplay(row);
+}
+
+function syncCommittedScoreInputs(row, values) {
+  const { questionsInput, correctInput } = getScoreControls(row);
+  questionsInput.dataset.committedValue = String(values.questionsCount ?? "");
+  correctInput.dataset.committedValue = String(values.correctCount ?? "");
+}
+
 reviewDashboard.addEventListener("input", (event) => {
   if (!event.target.matches('[data-action="score-input"]')) return;
-  updateScoreDisplay(event.target.closest(".review-row"));
+  const values = updateScoreDisplay(event.target.closest(".review-row"));
+  if (!values.isOverflow) {
+    setReviewMessage();
+  }
 });
 
 reviewDashboard.addEventListener("focusout", async (event) => {
   const input = event.target.closest('[data-action="score-input"]');
   if (!input) return;
+
   const row = input.closest(".review-row");
-  await DB.reviewTasks.update(Number(input.dataset.reviewId), updateScoreDisplay(row));
+  const { correctInput, values } = getScoreState(row);
+  updateScoreDisplay(row);
+
+  if (values.isOverflow) {
+    setReviewMessage("Acertos não pode ser maior que Questões.", true);
+    correctInput.reportValidity();
+    setTimeout(() => correctInput.focus(), 0);
+    return;
+  }
+
+  try {
+    await DB.reviewTasks.update(Number(input.dataset.reviewId), values);
+    syncCommittedScoreInputs(row, values);
+    setReviewMessage();
+  } catch (error) {
+    restoreCommittedScoreInputs(row);
+    setReviewMessage("Não foi possível salvar questões e acertos.", true);
+    console.error("Falha ao salvar questões e acertos.", error);
+  }
 });
 
 reviewDashboard.addEventListener("keydown", (event) => {
@@ -833,9 +886,19 @@ reviewDashboard.addEventListener("keydown", (event) => {
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="questions-done"]');
   if (!input) return;
-  await DB.reviewTasks.update(Number(input.dataset.reviewId), {
-    questionsDone: input.checked,
-  });
+
+  const previousChecked = input.dataset.committedChecked === "true";
+  try {
+    await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+      questionsDone: input.checked,
+    });
+    input.dataset.committedChecked = String(input.checked);
+    setReviewMessage();
+  } catch (error) {
+    input.checked = previousChecked;
+    setReviewMessage("Não foi possível salvar o status das questões.", true);
+    console.error("Falha ao salvar status das questões.", error);
+  }
 });
 
 studyForm.addEventListener("submit", async (event) => {
