@@ -24,7 +24,6 @@ const dbInit = DB.init()
 const DEFAULT_SCREEN = "today";
 const LAST_SUBJECT_KEY = "smartlearn:lastSubjectId";
 const LAST_SOURCE_KEY = "smartlearn:lastSourceId";
-const FALLBACK_SOURCE_NAME = "Sem fonte";
 
 // Estado de edição inline — null quando nenhuma linha está em modo edição.
 let activeSourceEditId = null;
@@ -44,6 +43,14 @@ function recallSelection(key) {
     return localStorage.getItem(key);
   } catch {
     return null;
+  }
+}
+
+function forgetSelection(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // localStorage indisponível (modo privado): ignora silenciosamente.
   }
 }
 const navigationItems = [...document.querySelectorAll("[data-screen]")];
@@ -545,27 +552,41 @@ async function generateReviewTasks(studyData) {
   return DB.studyRecords.createWithReviews(studyData, tasks);
 }
 
+function normalizeSourceName(name) {
+  return String(name ?? "").replace(/\s+/g, " ").trim();
+}
+
+async function ensureSourceFromName(sourceName) {
+  const normalizedName = normalizeSourceName(sourceName);
+  if (!normalizedName) return null;
+
+  const sources = await DB.sources.getAll();
+  const existingSource = sources.find(
+    (source) => source.name.localeCompare(normalizedName, "pt-BR", { sensitivity: "accent" }) === 0,
+  );
+
+  if (!existingSource) {
+    return DB.sources.create(normalizedName);
+  }
+
+  if (!existingSource.isActive) {
+    await DB.sources.update(existingSource.id, { isActive: true });
+    return { ...existingSource, isActive: true };
+  }
+
+  return existingSource;
+}
+
 async function resolveStudySourceId(selectedSourceId) {
   if (selectedSourceId) return selectedSourceId;
 
-  const activeSources = await DB.sources.getActive();
-  if (activeSources.length > 0) return null;
+  const pendingSourceName = newSourceForm.hidden ? "" : newSourceInput.value;
+  const source = await ensureSourceFromName(pendingSourceName);
+  if (!source) return null;
 
-  const allSources = await DB.sources.getAll();
-  const fallbackSource = allSources.find(
-    (source) => source.name.localeCompare(FALLBACK_SOURCE_NAME, "pt-BR", { sensitivity: "accent" }) === 0,
-  );
-
-  if (fallbackSource) {
-    if (!fallbackSource.isActive) {
-      await DB.sources.update(fallbackSource.id, { isActive: true });
-    }
-    await renderSources(fallbackSource.id);
-    return fallbackSource.id;
-  }
-
-  const source = await DB.sources.create(FALLBACK_SOURCE_NAME);
   await renderSources(source.id);
+  newSourceForm.reset();
+  setSourceFormVisible(false);
   return source.id;
 }
 
@@ -607,6 +628,25 @@ function setSourceFormVisible(visible) {
   if (visible) {
     newSourceInput.focus();
   }
+}
+
+function resetRegisterState() {
+  activeSourceEditId = null;
+  activeSubjectEditId = null;
+  activeStudyEditId = null;
+  forgetSelection(LAST_SUBJECT_KEY);
+  forgetSelection(LAST_SOURCE_KEY);
+  studyForm.reset();
+  studyDateInput.value = getLocalDateValue();
+  newSubjectForm.reset();
+  newSourceForm.reset();
+  setSubjectFormVisible(false);
+  setSourceFormVisible(false);
+  setSubjectManagerMessage();
+  setSourceManagerMessage();
+  setStudyManagerMessage();
+  studyMessage.classList.remove("is-error");
+  studyMessage.textContent = "";
 }
 
 function pluralize(value, singular, plural) {
@@ -1105,7 +1145,7 @@ showSourceFormButton.addEventListener("click", () => {
 
 newSourceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const name = newSourceInput.value.trim();
+  const name = normalizeSourceName(newSourceInput.value);
 
   if (!name) {
     setSourceMessage("Informe o nome da fonte.");
@@ -1114,10 +1154,11 @@ newSourceForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    const source = await DB.sources.create(name);
+    const source = await ensureSourceFromName(name);
     await renderSources(source.id);
     newSourceForm.reset();
     setSourceFormVisible(false);
+    setSourceMessage();
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSourceMessage(
@@ -1425,9 +1466,11 @@ resetDatabaseButton.addEventListener("click", async () => {
   setResetMessage();
   try {
     await DB.clearAll();
+    resetRegisterState();
     await Promise.all([
       renderSubjects(),
       renderSources(),
+      renderStudies(),
       renderToday(),
       renderStats(),
       renderSettings(),
@@ -1595,8 +1638,9 @@ studyForm.addEventListener("submit", async (event) => {
     sourceId = await resolveStudySourceId(sourceId);
     if (!sourceId) {
       studyMessage.classList.add("is-error");
-      studyMessage.textContent = "Selecione ou crie uma fonte.";
-      studySourceSelect.focus();
+      studyMessage.textContent = "Selecione uma fonte ou informe uma nova fonte.";
+      if (!newSourceForm.hidden) newSourceInput.focus();
+      else studySourceSelect.focus();
       return;
     }
 
