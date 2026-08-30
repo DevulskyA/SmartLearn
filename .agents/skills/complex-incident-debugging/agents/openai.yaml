@@ -1,0 +1,4 @@
+interface:
+  display_name: "Complex Incident Debugging"
+  short_description: "Debug reforcado para incidentes complexos"
+  default_prompt: "Use this skill for ambiguous, intermittent, environment-sensitive, timing-sensitive, stateful, or multi-layer failures, especially after failed fixes. Frame the problem, choose one investigation mode, gather cross-layer evidence, and require fresh verification before declaring success."

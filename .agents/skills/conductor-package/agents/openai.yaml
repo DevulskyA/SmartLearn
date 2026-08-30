@@ -1,0 +1,3 @@
+display_name: Conductor Package
+short_description: Single package for Conductor procedure and project-state updates
+default_prompt: Use the Conductor package skill to keep reusable procedure in the skill and project state in conductor/ without duplicating policy.

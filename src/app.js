@@ -479,21 +479,52 @@ export async function renderSettings() {
     : "Nenhum backup exportado.";
 }
 
+function hasTauriRuntime() {
+  return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
+}
+
+// Salva o JSON em disco. No runtime Tauri (desktop/Android) usa o diálogo
+// nativo + fs; o WebView do Android ignora <a download>, então o caminho
+// nativo é obrigatório lá. No navegador (modo dev) cai no <a download>.
+async function saveBackupFile(filename, contents) {
+  if (hasTauriRuntime()) {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    const path = await save({
+      defaultPath: filename,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!path) return false; // usuário cancelou
+    await writeTextFile(path, contents);
+    return true;
+  }
+
+  const blob = new Blob([contents], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
 export async function exportBackup() {
   exportBackupButton.disabled = true;
   backupMessage.classList.remove("is-error");
   backupMessage.textContent = "";
   try {
     const data = await DB.exportAll();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `smartlearn-backup-${getLocalDateValue()}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    const contents = JSON.stringify(data, null, 2);
+    const saved = await saveBackupFile(
+      `smartlearn-backup-${getLocalDateValue()}.json`,
+      contents,
+    );
+    if (!saved) {
+      return; // exportação cancelada pelo usuário
+    }
 
     await DB.settings.update({ lastBackupAt: new Date().toISOString() });
     await renderSettings();

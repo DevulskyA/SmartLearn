@@ -1,0 +1,4 @@
+interface:
+  display_name: "Root Cause Debugging"
+  short_description: "Depuracao disciplinada para bugs locais e reproduziveis"
+  default_prompt: "Use this skill for local, reproducible bugs, failing tests, or straightforward build/runtime failures. Find the root cause, test one hypothesis at a time, apply one minimal fix, and verify with fresh evidence before declaring success."

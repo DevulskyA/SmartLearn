@@ -79,7 +79,7 @@ async fn execute_sqlite_transaction(
 ) -> Result<Vec<TransactionResult>, String> {
     let database_path = app
         .path()
-        .app_config_dir()
+        .app_data_dir()
         .map_err(|error| error.to_string())?
         .join("smartlearn.db");
     execute_sqlite_transaction_at_path(&database_path, statements).await
@@ -89,6 +89,8 @@ async fn execute_sqlite_transaction(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![execute_sqlite_transaction])
         .setup(|app| {
             if cfg!(debug_assertions) {
