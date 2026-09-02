@@ -1,11 +1,9 @@
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
+import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
-const REVIEW_SCHEDULE = [
-  1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390,
-];
 
 let database;
 let initialization;
@@ -578,6 +576,7 @@ function createBrowserStore() {
             correctCount: task.correctCount ?? null,
             scorePercent: task.scorePercent ?? null,
             comment: task.comment ?? null,
+            algorithm: task.algorithm ?? "legacy",
             createdAt: task.createdAt ?? timestamp,
             updatedAt: task.updatedAt ?? timestamp,
           });
@@ -736,6 +735,7 @@ export const DB = {
         await DB.subjects.seedInitial();
         await DB.sources.seedInitial();
         await DB.studyRecords.ensureColumns();
+        await DB.reviewTasks.ensureColumns();
 
         return DB;
       })().catch((error) => {
@@ -1175,6 +1175,16 @@ export const DB = {
   },
 
   reviewTasks: {
+    async ensureColumns() {
+      const columns = await requireDatabase().select("PRAGMA table_info(review_tasks)");
+      const names = new Set(columns.map((column) => column.name));
+      if (!names.has("algorithm")) {
+        await requireDatabase().execute(
+          "ALTER TABLE review_tasks ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'legacy'",
+        );
+      }
+    },
+
     async getAll() {
       const rows = await requireDatabase().select(
         "SELECT * FROM review_tasks ORDER BY due_date, review_number",

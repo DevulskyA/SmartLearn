@@ -2,7 +2,7 @@
 import { DB } from "./db.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateReviewDates } from "./review-schedule.js";
+import { generateInitialTasks } from "./scheduler.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -573,9 +573,8 @@ export async function importBackup(file) {
 
 async function generateReviewTasks(studyData) {
   const { studyDate } = studyData;
-  const tasks = generateReviewDates(studyDate).map((dueDate, index) => ({
-    reviewNumber: index + 1,
-    dueDate,
+  const tasks = generateInitialTasks(studyDate).map((t) => ({
+    ...t,
     reviewDone: false,
     questionsDone: false,
   }));
