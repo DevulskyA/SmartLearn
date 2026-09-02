@@ -17,7 +17,7 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_study_record_id\n    ON review_tasks(study_record_id)",
   "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
-  "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '1.0.0', $1)",
+  "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '2.0.0', $1)",
 ];
 function nowIso() {
   return new Date().toISOString();
@@ -64,6 +64,7 @@ function mapStudyRecord(row) {
     sourceId: row.source_id,
     studyDate: row.study_date,
     content: row.content,
+    summaryBody: row.summary_body ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -178,7 +179,7 @@ function buildClearStatements() {
     { query: 'DELETE FROM subjects', values: [] },
     { query: 'DELETE FROM settings', values: [] },
     {
-      query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n        VALUES (\'main\', \'1.0.0\', $1, NULL)',
+      query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n        VALUES (\'main\', \'2.0.0\', $1, NULL)',
       values: [JSON.stringify(REVIEW_SCHEDULE)],
     },
   ];
@@ -223,13 +224,14 @@ function buildImportStatements(data) {
 
   for (const row of data.studyRecords) {
     statements.push({
-      query: 'INSERT INTO study_records\n        (id, subject_id, source_id, study_date, content, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      query: 'INSERT INTO study_records\n        (id, subject_id, source_id, study_date, content, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       values: [
         row.id,
         row.subjectId,
         row.sourceId,
         row.studyDate,
         row.content,
+        row.summaryBody ?? null,
         row.createdAt,
         row.updatedAt,
       ],
@@ -269,7 +271,7 @@ function createBrowserStore() {
   const STORAGE_KEY = "smartlearn:browser-db";
   const defaultSettings = {
     key: "main",
-    appVersion: "1.0.0",
+    appVersion: "2.0.0",
     reviewSchedule: REVIEW_SCHEDULE,
     lastBackupAt: null,
   };
@@ -526,6 +528,10 @@ function createBrowserStore() {
         if (Object.hasOwn(fields, "content")) {
           record.content = String(fields.content ?? "").trim();
         }
+        if (Object.hasOwn(fields, "summaryBody")) {
+          const v = fields.summaryBody;
+          record.summaryBody = v != null ? String(v).trim() || null : null;
+        }
         record.updatedAt = nowIso();
         writeState(state);
         return record;
@@ -541,6 +547,7 @@ function createBrowserStore() {
           sourceId: data.sourceId,
           studyDate: data.studyDate,
           content: String(data.content ?? "").trim(),
+          summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -559,6 +566,7 @@ function createBrowserStore() {
           sourceId: data.sourceId,
           studyDate: data.studyDate,
           content: String(data.content ?? "").trim(),
+          summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -674,6 +682,7 @@ function createBrowserStore() {
         sourceId: row.sourceId ?? row.source_id,
         studyDate: row.studyDate ?? row.study_date,
         content: row.content,
+        summaryBody: row.summaryBody ?? row.summary_body ?? null,
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
@@ -1004,6 +1013,11 @@ export const DB = {
           'ALTER TABLE study_records ADD COLUMN source_id INTEGER',
         );
       }
+      if (!names.has('summary_body')) {
+        await requireDatabase().execute(
+          'ALTER TABLE study_records ADD COLUMN summary_body TEXT',
+        );
+      }
 
       const hasSourceText = names.has('source');
       const rows = await requireDatabase().select(
@@ -1062,6 +1076,7 @@ export const DB = {
         sourceId: ["source_id", (value) => value],
         studyDate: ["study_date", (value) => value],
         content: ["content", (value) => String(value ?? "").trim()],
+        summaryBody: ["summary_body", (value) => (value != null ? String(value).trim() || null : null)],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
       if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
@@ -1091,13 +1106,14 @@ export const DB = {
       const timestamp = nowIso();
       const result = await requireDatabase().execute(
         `INSERT INTO study_records
-          (subject_id, source_id, study_date, content, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+          (subject_id, source_id, study_date, content, summary_body, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           data.subjectId,
           data.sourceId,
           data.studyDate,
           String(data.content ?? '').trim(),
+          data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           timestamp,
           timestamp,
         ],
@@ -1144,13 +1160,14 @@ export const DB = {
         statements: [
           {
             query: `INSERT INTO study_records
-              (subject_id, source_id, study_date, content, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+              (subject_id, source_id, study_date, content, summary_body, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             values: [
               data.subjectId,
               data.sourceId,
               data.studyDate,
               String(data.content ?? '').trim(),
+              data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
               timestamp,
               timestamp,
             ],

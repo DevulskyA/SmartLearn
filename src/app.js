@@ -67,6 +67,7 @@ const subjectManagerMessage = document.querySelector("#subject-manager-message")
 const studyForm = document.querySelector("#study-form");
 const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
+const studySummaryTextarea = document.querySelector("#study-summary");
 const studySourceSelect = document.querySelector("#study-source");
 const showSourceFormButton = document.querySelector("#show-source-form");
 const newSourceForm = document.querySelector("#new-source-form");
@@ -247,6 +248,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName, today) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
+  row.dataset.studyRecordId = String(studyRecord?.id ?? "");
   row.dataset.group = groupName;
 
   // Header: review-number marker + identity + status/score tags
@@ -357,7 +359,45 @@ function createReviewRow(task, studyRecord, subject, source, groupName, today) {
 
   detail.append(questionsDoneLabel, scoreInputs, commentLabel);
 
-  row.append(header, primary, detail);
+  // Resumo Mestre section
+  const summarySection = document.createElement("div");
+  summarySection.className = "review-row-summary";
+
+  const summaryDisplayText = studyRecord?.summaryBody ?? studyRecord?.content ?? "";
+  const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
+  summaryDisplay.dataset.summaryDisplay = String(task.id);
+
+  const editSummaryButton = document.createElement("button");
+  editSummaryButton.type = "button";
+  editSummaryButton.className = "text-button review-edit-summary";
+  editSummaryButton.dataset.action = "edit-summary";
+  editSummaryButton.textContent = "Editar Resumo";
+
+  const summaryEditArea = document.createElement("div");
+  summaryEditArea.className = "review-summary-edit";
+  summaryEditArea.hidden = true;
+
+  const summaryTextarea = document.createElement("textarea");
+  summaryTextarea.rows = 6;
+  summaryTextarea.value = studyRecord?.summaryBody ?? "";
+  summaryTextarea.placeholder = "Escreva o resumo do conteúdo estudado...";
+  summaryTextarea.dataset.summaryEdit = String(task.id);
+  summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
+
+  const saveSummaryButton = document.createElement("button");
+  saveSummaryButton.type = "button";
+  saveSummaryButton.className = "primary-button review-save-summary";
+  saveSummaryButton.dataset.action = "save-summary";
+  saveSummaryButton.textContent = "Salvar";
+
+  const summaryMessage = createTextElement("p", "field-message review-summary-message", "");
+  summaryMessage.setAttribute("role", "status");
+  summaryMessage.setAttribute("aria-live", "polite");
+
+  summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
+  summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
+
+  row.append(header, summarySection, primary, detail);
   return row;
 }
 
@@ -1464,6 +1504,57 @@ reviewDashboard.addEventListener("click", (event) => {
   detail.hidden = !expanded;
 });
 
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="edit-summary"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  if (!row) return;
+  const editArea = row.querySelector(".review-summary-edit");
+  if (!editArea) return;
+  editArea.hidden = !editArea.hidden;
+  if (!editArea.hidden) {
+    editArea.querySelector("textarea")?.focus();
+  }
+});
+
+reviewDashboard.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="save-summary"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  if (!row) return;
+  const studyRecordId = Number(row.dataset.studyRecordId);
+  if (!studyRecordId) return;
+
+  const textarea = row.querySelector(".review-summary-edit textarea");
+  const messageEl = row.querySelector(".review-summary-message");
+  const displayEl = row.querySelector(".review-summary-text");
+  if (!textarea) return;
+
+  const newSummaryBody = textarea.value.trim() || null;
+  button.disabled = true;
+  try {
+    const updated = await DB.studyRecords.update(studyRecordId, { summaryBody: newSummaryBody });
+    if (displayEl && updated) {
+      displayEl.textContent = updated.summaryBody ?? updated.content ?? "";
+    }
+    textarea.value = newSummaryBody ?? "";
+    if (messageEl) {
+      messageEl.classList.remove("is-error");
+      messageEl.textContent = "Resumo salvo.";
+      setTimeout(() => { messageEl.textContent = ""; }, 2000);
+    }
+    row.querySelector(".review-summary-edit").hidden = true;
+  } catch (error) {
+    if (messageEl) {
+      messageEl.classList.add("is-error");
+      messageEl.textContent = "Não foi possível salvar o resumo.";
+    }
+    console.error("Falha ao salvar resumo.", error);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="review-done"]');
   if (!input) return;
@@ -1648,6 +1739,7 @@ studyForm.addEventListener("submit", async (event) => {
   let sourceId = Number(studySourceSelect.value);
   const studyDate = studyDateInput.value;
   const content = studyContentInput.value.trim();
+  const summaryBody = studySummaryTextarea.value.trim() || null;
 
   if (!subjectId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
@@ -1679,11 +1771,13 @@ studyForm.addEventListener("submit", async (event) => {
       sourceId,
       studyDate,
       content,
+      summaryBody,
     });
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     rememberSelection(LAST_SOURCE_KEY, sourceId);
     await renderStudies();
     studyContentInput.value = "";
+    studySummaryTextarea.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
   } catch {
