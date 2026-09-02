@@ -953,8 +953,110 @@ async function renderStudies() {
       actions.append(editButton);
     }
 
-    row.append(info, actions);
+    // Exercises section (always rendered; toggle to show)
+    const exercisesSection = document.createElement("div");
+    exercisesSection.className = "study-exercises-section";
+    exercisesSection.hidden = true;
+    exercisesSection.dataset.exercisesFor = String(record.id);
+
+    const exerciseList = document.createElement("div");
+    exerciseList.className = "exercise-list";
+    exerciseList.dataset.exerciseListFor = String(record.id);
+
+    const exerciseAddForm = document.createElement("div");
+    exerciseAddForm.className = "exercise-add-form";
+
+    const qLabel = document.createElement("label");
+    qLabel.textContent = "Enunciado";
+    const qInput = document.createElement("textarea");
+    qInput.rows = 2;
+    qInput.className = "exercise-question-input";
+    qInput.placeholder = "Enunciado da questão (obrigatório)";
+    qLabel.append(qInput);
+
+    const aLabel = document.createElement("label");
+    aLabel.textContent = "Resposta";
+    const aInput = document.createElement("textarea");
+    aInput.rows = 2;
+    aInput.className = "exercise-answer-input";
+    aInput.placeholder = "Resposta esperada";
+    aLabel.append(aInput);
+
+    const hLabel = document.createElement("label");
+    hLabel.textContent = "Dica (opcional)";
+    const hInput = document.createElement("input");
+    hInput.type = "text";
+    hInput.className = "exercise-hint-input";
+    hInput.placeholder = "Dica (opcional)";
+    hLabel.append(hInput);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "small-button is-primary";
+    addBtn.dataset.action = "add-exercise";
+    addBtn.dataset.studyId = String(record.id);
+    addBtn.textContent = "Adicionar exercício";
+
+    const exerciseFormMsg = createTextElement("p", "field-message exercise-form-message", "");
+    exerciseFormMsg.setAttribute("role", "status");
+
+    exerciseAddForm.append(qLabel, aLabel, hLabel, addBtn, exerciseFormMsg);
+    exercisesSection.append(exerciseList, exerciseAddForm);
+
+    const toggleExercisesBtn = document.createElement("button");
+    toggleExercisesBtn.type = "button";
+    toggleExercisesBtn.className = "small-button";
+    toggleExercisesBtn.dataset.action = "toggle-exercises";
+    toggleExercisesBtn.dataset.studyId = String(record.id);
+    toggleExercisesBtn.textContent = "Exercícios";
+
+    actions.append(toggleExercisesBtn);
+
+    row.append(info, actions, exercisesSection);
     studyList.append(row);
+  }
+}
+
+async function renderExerciseList(studyRecordId) {
+  const section = studyList.querySelector(`[data-exercises-for="${studyRecordId}"]`);
+  if (!section) return;
+  const list = section.querySelector(`[data-exercise-list-for="${studyRecordId}"]`);
+  if (!list) return;
+
+  const exercises = await DB.exercises.getAll(studyRecordId);
+  list.replaceChildren();
+  for (const exercise of exercises) {
+    const item = document.createElement("div");
+    item.className = "exercise-item";
+    item.dataset.exerciseId = String(exercise.id);
+
+    const qEl = createTextElement("p", "exercise-question", exercise.questionText);
+    const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
+    const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", `Dica: ${exercise.hintText}`) : null;
+
+    const itemActions = document.createElement("div");
+    itemActions.className = "exercise-item-actions";
+
+    const editExBtn = document.createElement("button");
+    editExBtn.type = "button";
+    editExBtn.className = "small-button";
+    editExBtn.dataset.action = "edit-exercise";
+    editExBtn.dataset.exerciseId = String(exercise.id);
+    editExBtn.dataset.studyId = String(studyRecordId);
+    editExBtn.textContent = "Editar";
+
+    const delExBtn = document.createElement("button");
+    delExBtn.type = "button";
+    delExBtn.className = "small-button is-danger";
+    delExBtn.dataset.action = "delete-exercise";
+    delExBtn.dataset.exerciseId = String(exercise.id);
+    delExBtn.dataset.studyId = String(studyRecordId);
+    delExBtn.textContent = "Remover";
+
+    itemActions.append(editExBtn, delExBtn);
+    if (hEl) item.append(qEl, aEl, hEl, itemActions);
+    else item.append(qEl, aEl, itemActions);
+    list.append(item);
   }
 }
 
@@ -1462,6 +1564,132 @@ studyList.addEventListener("click", async (event) => {
 
   const studyId = Number(row.dataset.studyId);
   const action = button.dataset.action;
+
+  if (action === "toggle-exercises") {
+    const section = row.querySelector(`[data-exercises-for="${studyId}"]`);
+    if (!section) return;
+    section.hidden = !section.hidden;
+    if (!section.hidden) {
+      await renderExerciseList(studyId);
+    }
+    return;
+  }
+
+  if (action === "add-exercise") {
+    const section = row.querySelector(`[data-exercises-for="${studyId}"]`);
+    const qInput = section?.querySelector(".exercise-question-input");
+    const aInput = section?.querySelector(".exercise-answer-input");
+    const hInput = section?.querySelector(".exercise-hint-input");
+    const msgEl = section?.querySelector(".exercise-form-message");
+    const questionText = qInput?.value.trim() ?? "";
+    if (!questionText) {
+      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o enunciado do exercício."; }
+      qInput?.focus();
+      return;
+    }
+    button.disabled = true;
+    try {
+      await DB.exercises.create(studyId, {
+        questionText,
+        answerText: aInput?.value.trim() ?? "",
+        hintText: hInput?.value.trim() || null,
+      });
+      if (qInput) qInput.value = "";
+      if (aInput) aInput.value = "";
+      if (hInput) hInput.value = "";
+      if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = "Exercício adicionado."; }
+      await renderExerciseList(studyId);
+    } catch (error) {
+      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível salvar o exercício."; }
+      console.error("Falha ao salvar exercício.", error);
+    } finally {
+      button.disabled = false;
+    }
+    return;
+  }
+
+  if (action === "delete-exercise") {
+    const exerciseId = Number(button.dataset.exerciseId);
+    if (!exerciseId) return;
+    button.disabled = true;
+    try {
+      await DB.exercises.delete(exerciseId);
+      await renderExerciseList(studyId);
+    } catch (error) {
+      button.disabled = false;
+      console.error("Falha ao remover exercício.", error);
+    }
+    return;
+  }
+
+  if (action === "edit-exercise") {
+    const exerciseId = Number(button.dataset.exerciseId);
+    if (!exerciseId) return;
+    const item = button.closest(".exercise-item");
+    if (!item) return;
+    // Replace item with inline edit form
+    const currentQ = item.querySelector(".exercise-question")?.textContent ?? "";
+    const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
+    const hintEl = item.querySelector(".exercise-hint");
+    const currentH = hintEl ? hintEl.textContent.replace(/^Dica:\s*/, "") : "";
+
+    const editForm = document.createElement("div");
+    editForm.className = "exercise-item exercise-item-edit";
+
+    const eq = document.createElement("textarea");
+    eq.rows = 2; eq.value = currentQ; eq.className = "exercise-question-input";
+    const ea = document.createElement("textarea");
+    ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
+    const eh = document.createElement("input");
+    eh.type = "text"; eh.value = currentH; eh.placeholder = "Dica (opcional)"; eh.className = "exercise-hint-input";
+
+    const saveEx = document.createElement("button");
+    saveEx.type = "button"; saveEx.className = "small-button is-primary";
+    saveEx.dataset.action = "save-exercise-edit";
+    saveEx.dataset.exerciseId = String(exerciseId);
+    saveEx.dataset.studyId = String(studyId);
+    saveEx.textContent = "Salvar";
+
+    const cancelEx = document.createElement("button");
+    cancelEx.type = "button"; cancelEx.className = "small-button";
+    cancelEx.dataset.action = "cancel-exercise-edit";
+    cancelEx.dataset.studyId = String(studyId);
+    cancelEx.textContent = "Cancelar";
+
+    editForm.append(eq, ea, eh, saveEx, cancelEx);
+    item.replaceWith(editForm);
+    eq.focus();
+    return;
+  }
+
+  if (action === "save-exercise-edit") {
+    const exerciseId = Number(button.dataset.exerciseId);
+    if (!exerciseId) return;
+    const item = button.closest(".exercise-item-edit");
+    const eq = item?.querySelector(".exercise-question-input");
+    const ea = item?.querySelector(".exercise-answer-input");
+    const eh = item?.querySelector(".exercise-hint-input");
+    const questionText = eq?.value.trim() ?? "";
+    if (!questionText) { eq?.focus(); return; }
+    button.disabled = true;
+    try {
+      await DB.exercises.update(exerciseId, {
+        questionText,
+        answerText: ea?.value.trim() ?? "",
+        hintText: eh?.value.trim() || null,
+      });
+      await renderExerciseList(studyId);
+    } catch (error) {
+      button.disabled = false;
+      console.error("Falha ao salvar exercício.", error);
+    }
+    return;
+  }
+
+  if (action === "cancel-exercise-edit") {
+    await renderExerciseList(studyId);
+    return;
+  }
 
   if (action === "edit-study") {
     activeStudyEditId = studyId;
