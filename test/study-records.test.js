@@ -130,3 +130,40 @@ test("BrowserStore importAll com registro sem summaryBody usa null (backward com
   const found = afterImport.find((r) => r.id === record.id);
   assert.equal(found.summaryBody, null);
 });
+
+test("BrowserStore getByDate retorna estudos com a data dada", async () => {
+  await DB.init();
+
+  const [subject] = await DB.subjects.getActive();
+  const [source] = await DB.sources.getActive();
+
+  await DB.studyRecords.create({
+    subjectId: subject.id,
+    sourceId: source.id,
+    studyDate: "2026-09-02",
+    content: "Estudo A",
+  });
+  await DB.studyRecords.create({
+    subjectId: subject.id,
+    sourceId: source.id,
+    studyDate: "2026-09-02",
+    content: "Estudo B",
+  });
+  await DB.studyRecords.create({
+    subjectId: subject.id,
+    sourceId: source.id,
+    studyDate: "2026-09-03",
+    content: "Outro dia",
+  });
+
+  const results = await DB.studyRecords.getByDate("2026-09-02");
+  assert.equal(results.length, 2);
+  assert.ok(results.every((r) => r.studyDate === "2026-09-02"));
+});
+
+test("BrowserStore getByDate retorna [] para data sem estudos", async () => {
+  await DB.init();
+
+  const results = await DB.studyRecords.getByDate("2099-01-01");
+  assert.deepEqual(results, []);
+});

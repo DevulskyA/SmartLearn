@@ -85,6 +85,10 @@ const todayEmptyState = document.querySelector("#today-empty-state");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const reviewDashboard = document.querySelector("#review-dashboard");
+const dailySummaryBtn = document.querySelector("#daily-summary-btn");
+const dailySummaryPanel = document.querySelector("#daily-summary-panel");
+const dailySummaryList = document.querySelector("#daily-summary-list");
+const dailySummaryClose = document.querySelector("#daily-summary-close");
 const reviewGroups = {
   overdue: document.querySelector("#block-overdue"),
   today: document.querySelector("#block-today"),
@@ -458,6 +462,16 @@ export async function renderToday() {
     day: "2-digit",
     month: "long",
   }).format(new Date());
+
+  // Show/hide daily summary button based on studies with study_date === today
+  const todayStudies = studyRecords.filter((r) => r.studyDate === today);
+  if (dailySummaryBtn) {
+    dailySummaryBtn.hidden = todayStudies.length === 0;
+  }
+  // Close the panel whenever renderToday re-runs (e.g. after completing a review)
+  if (dailySummaryPanel) {
+    dailySummaryPanel.hidden = true;
+  }
 }
 
 export async function renderStats() {
@@ -1615,6 +1629,33 @@ importBackupInput.addEventListener("change", async () => {
   const confirmed = window.confirm("Isso substituirá todos os dados atuais. Continuar?");
   if (confirmed) await importBackup(file);
   importBackupInput.value = "";
+});
+
+dailySummaryBtn?.addEventListener("click", async () => {
+  if (!dailySummaryPanel || !dailySummaryList) return;
+  const today = getLocalDateValue();
+  const todayStudies = await DB.studyRecords.getByDate(today);
+  dailySummaryList.replaceChildren();
+  for (const record of todayStudies) {
+    const item = document.createElement("div");
+    item.className = "daily-summary-item";
+    const title = document.createElement("p");
+    title.className = "daily-summary-title";
+    title.textContent = record.content;
+    const body = document.createElement("p");
+    body.className = "daily-summary-body";
+    body.textContent = record.summaryBody ?? record.content;
+    item.append(title, body);
+    dailySummaryList.append(item);
+  }
+  dailySummaryPanel.hidden = false;
+  dailySummaryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+
+dailySummaryClose?.addEventListener("click", () => {
+  if (dailySummaryPanel) {
+    dailySummaryPanel.hidden = true;
+  }
 });
 
 reviewDashboard.addEventListener("focusout", async (event) => {

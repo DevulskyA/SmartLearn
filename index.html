@@ -63,6 +63,15 @@
               <h1 id="title-today">Hoje</h1>
             </div>
             <p id="today-date-label"></p>
+            <button class="text-button" id="daily-summary-btn" type="button" hidden>Resumo do Dia</button>
+          </div>
+
+          <div class="daily-summary-panel" id="daily-summary-panel" hidden aria-labelledby="daily-summary-heading" role="region">
+            <div class="daily-summary-header">
+              <h2 id="daily-summary-heading">Resumos de hoje</h2>
+              <button class="text-button" id="daily-summary-close" type="button" aria-label="Fechar painel de resumos">&times; Fechar</button>
+            </div>
+            <div id="daily-summary-list" class="daily-summary-list"></div>
           </div>
 
           <div class="review-dashboard" id="review-dashboard">

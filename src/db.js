@@ -511,6 +511,11 @@ function createBrowserStore() {
           (a, b) => b.studyDate.localeCompare(a.studyDate) || b.id - a.id,
         );
       },
+      async getByDate(dateStr) {
+        return readState().studyRecords
+          .filter((record) => record.studyDate === dateStr)
+          .sort((a, b) => a.id - b.id);
+      },
       async update(id, fields) {
         const state = readState();
         const record = state.studyRecords.find((item) => item.id === id);
@@ -1056,6 +1061,14 @@ export const DB = {
     async getAll() {
       const rows = await requireDatabase().select(
         'SELECT * FROM study_records ORDER BY study_date DESC, id DESC',
+      );
+      return rows.map(mapStudyRecord);
+    },
+
+    async getByDate(dateStr) {
+      const rows = await requireDatabase().select(
+        'SELECT * FROM study_records WHERE study_date = $1 ORDER BY id ASC',
+        [dateStr],
       );
       return rows.map(mapStudyRecord);
     },
