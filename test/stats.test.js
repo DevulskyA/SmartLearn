@@ -85,3 +85,53 @@ test("Stats.calculate só cobra revisões não feitas que vencem hoje", () => {
   assert.equal(stats.reviewsPending, 1);
   assert.equal(stats.reviewsOverdue, 1);
 });
+
+test("Stats.calculate com subjects vazio não lança erro e retorna estrutura válida", () => {
+  const reviewTasks = [
+    {
+      id: 1,
+      studyRecordId: 1,
+      dueDate: "2026-09-02",
+      reviewDone: false,
+      questionsDone: false,
+      questionsCount: null,
+      correctCount: null,
+      scorePercent: null,
+      completedAt: null,
+    },
+  ];
+
+  const stats = Stats.calculate(reviewTasks, [{ id: 1, subjectId: 99 }], [], "2026-09-02");
+
+  assert.equal(typeof stats.avgScore, "number");
+  assert.equal(stats.reviewsPending, 1);
+  assert.equal(stats.reviewsOverdue, 0);
+  assert.equal(stats.avgBySubject.length, 0);
+});
+
+test("Stats.calculate com todas as revisões feitas retorna pending e overdue zero", () => {
+  const reviewTasks = [
+    {
+      id: 1,
+      studyRecordId: 1,
+      dueDate: "2026-09-01",
+      reviewDone: true,
+      questionsDone: false,
+      questionsCount: null,
+      correctCount: null,
+      scorePercent: null,
+      completedAt: "2026-09-01T10:00:00.000Z",
+    },
+  ];
+
+  const stats = Stats.calculate(
+    reviewTasks,
+    [{ id: 1, subjectId: 1 }],
+    [{ id: 1, name: "Disciplina X" }],
+    "2026-09-02",
+  );
+
+  assert.equal(stats.reviewsPending, 0);
+  assert.equal(stats.reviewsOverdue, 0);
+  assert.equal(stats.reviewsDone, 1);
+});
