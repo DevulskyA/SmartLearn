@@ -6,9 +6,10 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** UX linear e fontes como entidades reutilizáveis concluídas. TASK-019 concluída.
-- **Data:** 2026-06-23
-- **Próxima ação:** Revisão humana da UX linear e validação final em Windows/Android.
+- **Fase:** MVP Fase 1 concluído (TASK-019). Deep Planning Audit vNext concluída em 2026-09-02.
+- **Data:** 2026-09-02
+- **Próxima ação:** HUMAN_GATE: VNEXT_PLAN_APPROVAL — revisar `.specs/features/smartlearn-learning-vnext/` (spec.md v2, design.md v2, tasks.md v2) e aprovar início de WP-01.
+- **Testes:** 6 testes passando, 0 falhas (baseline validado pós-auditoria)
 
 ---
 
@@ -152,6 +153,26 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 - **Status:** Implementada na TASK-019.
 - **Irreversível no MVP:** Sim.
 
+
+### DEC-016 — Arquitetura vNext: Resumo Mestre + Exercícios + Scheduler Boundary
+- **Data:** 2026-09-02 (v2 — corrigido após deep planning audit)
+- **Decisão:** SmartLearn evolui para suportar o ciclo longitudinal completo:
+  Material → Resumo Mestre → Exercícios → Revisões → Evidência → Relearning.
+  DEC-003 (16 revisões fixas) é SUPERSEDED_FOR_VNEXT: scheduler encapsulado em `scheduler.js`.
+  Algoritmo 'legacy' preserva comportamento atual como DEFAULT.
+  study_records ganha `summary_body TEXT NULL` (additive via ensureColumns).
+  Nova tabela `exercises` (ON DELETE CASCADE para study_records).
+  Backup JSON inclui exercises na versão 2.0.0.
+- **Ordem de WPs (v2):** WP-01 Tests → WP-02 Scheduler → WP-03 Resumo Mestre → WP-04 Resumo Diário → WP-05 Exercícios → WP-06 Ciclo integrado
+- **Nota crítica sobre FSRS:** `scheduler.js` encapsula legacy mas NÃO é interface FSRS.
+  FSRS requer `repeat(card_state, rating, now) → next_due` — interface completamente diferente.
+  Cold-start aceitável na migração (mesmo comportamento do Anki). FSRS = WP-07, LATER.
+- **Risco de escala:** Schedule fixo gera ~1.190 revisões/dia no ano 3 de Medicina.
+  FSRS é necessário, não opcional, para uso longitudinal. Revisar prioridade após WP-06.
+- **BUG-005:** JÁ CORRIGIDO no código atual. WP-01 é somente testes, sem implementação de fix.
+- **Pré-condições:** HUMAN_GATE: VNEXT_PLAN_APPROVAL antes de qualquer implementação.
+- **Irreversível no MVP:** Não — cada WP é independente e revertível.
+- **Referência:** `.specs/features/smartlearn-learning-vnext/` (spec.md v2, design.md v2, tasks.md v2)
 
 ### DEC-015 — Limpeza total da base local via Configurações
 - **Data:** 2026-06-23
