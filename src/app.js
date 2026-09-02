@@ -248,7 +248,7 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, studyRecord, subject, source, groupName, today) {
+function createReviewRow(task, studyRecord, subject, source, groupName, today, exercises = []) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -401,7 +401,41 @@ function createReviewRow(task, studyRecord, subject, source, groupName, today) {
   summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
   summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
 
-  row.append(header, summarySection, primary, detail);
+  // Exercises section (read-only Q→reveal-A in the review context)
+  if (exercises.length > 0) {
+    const exercisesReviewSection = document.createElement("div");
+    exercisesReviewSection.className = "review-row-exercises";
+
+    const exercisesTitle = createTextElement("p", "review-exercises-title", `Exercícios (${exercises.length})`);
+    exercisesReviewSection.append(exercisesTitle);
+
+    for (const exercise of exercises) {
+      const exItem = document.createElement("div");
+      exItem.className = "review-exercise-item";
+
+      const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
+
+      const revealBtn = document.createElement("button");
+      revealBtn.type = "button";
+      revealBtn.className = "text-button review-exercise-reveal";
+      revealBtn.dataset.action = "reveal-answer";
+      revealBtn.textContent = "Ver resposta";
+
+      const answerEl = createTextElement("p", "review-exercise-answer", exercise.answerText);
+      answerEl.hidden = true;
+      if (exercise.hintText) {
+        const hintEl = createTextElement("p", "review-exercise-hint", `Dica: ${exercise.hintText}`);
+        exItem.append(qEl, hintEl, revealBtn, answerEl);
+      } else {
+        exItem.append(qEl, revealBtn, answerEl);
+      }
+      exercisesReviewSection.append(exItem);
+    }
+
+    row.append(header, summarySection, exercisesReviewSection, primary, detail);
+  } else {
+    row.append(header, summarySection, primary, detail);
+  }
   return row;
 }
 
@@ -427,6 +461,23 @@ export async function renderToday() {
     doneToday: completedToday,
   };
 
+  // Load exercises for all study records visible in the review groups
+  const visibleStudyIds = new Set([
+    ...overdueReviews.map((t) => t.studyRecordId),
+    ...pendingToday.map((t) => t.studyRecordId),
+    ...completedToday.map((t) => t.studyRecordId),
+  ]);
+  const exercisesByStudyId = new Map();
+  await Promise.all(
+    [...visibleStudyIds].map(async (id) => {
+      try {
+        exercisesByStudyId.set(id, await DB.exercises.getAll(id));
+      } catch {
+        exercisesByStudyId.set(id, []);
+      }
+    }),
+  );
+
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
@@ -439,7 +490,8 @@ export async function renderToday() {
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
       const source = sourcesById.get(studyRecord?.sourceId);
-      list.append(createReviewRow(task, studyRecord, subject, source, groupName, today));
+      const exercises = exercisesByStudyId.get(task.studyRecordId) ?? [];
+      list.append(createReviewRow(task, studyRecord, subject, source, groupName, today, exercises));
     }
   }
 
@@ -1744,6 +1796,15 @@ reviewDashboard.addEventListener("click", (event) => {
   const expanded = button.getAttribute("aria-expanded") !== "true";
   button.setAttribute("aria-expanded", String(expanded));
   detail.hidden = !expanded;
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="reveal-answer"]');
+  if (!button) return;
+  const answerEl = button.nextElementSibling;
+  if (!answerEl) return;
+  answerEl.hidden = !answerEl.hidden;
+  button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
 });
 
 reviewDashboard.addEventListener("click", (event) => {
