@@ -1,10 +1,10 @@
-# SmartLearn — Domain Redesign: Tasks (v2)
+# SmartLearn — Domain Redesign: Tasks (v3)
 
 **Feature:** `smartlearn-domain-redesign`
 **Status:** PROPOSTO — AGUARDANDO HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL
 **Data:** 2026-09-03
 
-**Pré-requisito absoluto:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL antes de qualquer WP.
+**Pré-requisito:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL antes de qualquer WP.
 
 ---
 
@@ -12,208 +12,202 @@
 
 | WP | Objetivo | Dificuldade | Depende de |
 |----|---------|-------------|-----------|
-| WP-DRD-01 | Schema rename + semantic fix | 3/5 | Aprovação |
-| WP-DRD-02 | Remover sources, seeds vazios | 2/5 | WP-DRD-01 |
-| WP-DRD-03 | schemaVersion em backup | 2/5 | WP-DRD-01 |
-| WP-DRD-04 | BrowserStore — paridade de contrato | 2/5 | WP-DRD-01..02 |
-| WP-DRD-05 | UX cadastro — fluxo correto + empty state | 2/5 | WP-DRD-01..02 |
-| WP-DRD-06 | Discriminação LEGACY_TEMPORARY em scheduler | 1/5 | WP-DRD-01 |
-| WP-DRD-07 | Fronteira DEFINITION × ATTEMPT (auditoria) | 1/5 | WP-DRD-01 |
-| WP-DRD-08 | UAT final — fluxo Fisiologia/Guyton | 1/5 | WP-DRD-01..07 |
+| WP-DRD-01 | Schema rename + title + provenance | 3/5 | Aprovação |
+| WP-DRD-02 | Remover sources, seeds vazios, deactivate | 2/5 | WP-DRD-01 |
+| WP-DRD-03 | schemaVersion backup fail-closed | 2/5 | WP-DRD-01 |
+| WP-DRD-04 | BrowserStore paridade de contrato | 2/5 | WP-DRD-01..02 |
+| WP-DRD-05 | UX cadastro + empty state | 2/5 | WP-DRD-01..02 |
+| WP-DRD-06 | LEGACY_TEMPORARY boundary auditoria | 1/5 | WP-DRD-01 |
+| WP-DRD-07 | DEFINITION+PROVENANCE boundary auditoria | 1/5 | WP-DRD-01 |
+| WP-DRD-08 | UAT final — Fisiologia/Guyton | 1/5 | WP-DRD-01..07 |
 
 ---
 
-## WP-DRD-01 — Schema rename + semantic fix
+## WP-DRD-01 — Schema rename + title + provenance
 
-**Objetivo:** Renomear entidades para refletir domínio correto; corrigir semântica de `study_date → first_studied_at`.
+**Objetivo:** Renomear `study_records → learning_units`, `content → title`; adicionar `exercises.provenance`; atualizar FKs.
 
-**Dificuldade:** 3/5 (muitos pontos de renomear, migration incluída)
+**Dificuldade:** 3/5
 
-**ACs cobertos:** DRD-06, DRD-11
+**ACs:** DRD-06, DRD-11, DRD-12, DRD-13
 
 ### Tasks
 
-**T01.1 — SQLiteStore: criar schema `learning_units`**
-- `learning_units` CREATE TABLE com colunas: `id, subject_id, title TEXT NOT NULL, source_text, summary_body, first_studied_at TEXT NOT NULL, created_at, updated_at`
-- FK `unit_id` em `exercises` e `review_tasks` (DROP + CREATE ou `ensureColumns`)
-- Índices: `idx_review_tasks_unit_id`, `idx_exercises_unit_id`
-- Remover esquema de `study_records` (ou manter como alias temporário se dados reais existirem — SCHEMA_MIGRATION_APPROVAL)
-- `mapLearningUnit(row)` retorna `{id, subjectId, title, sourceText, summaryBody, firstStudiedAt, createdAt, updatedAt}`
-- `mapReviewTask(row)` usa `unitId` (era `studyRecordId`)
-- `mapExercise(row)` usa `unitId` (era `studyRecordId`)
+**T01.1 — SQLiteStore: schema learning_units**
+- Criar `learning_units` com colunas: `id, subject_id, title TEXT NOT NULL, source_text TEXT NOT NULL DEFAULT '', summary_body TEXT, study_date TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL`
+- `mapLearningUnit(row)` → `{id, subjectId, title, sourceText, summaryBody, studyDate, createdAt, updatedAt}`
+- `DROP TABLE IF EXISTS sources` em `DB.init()` (cleanup de regression)
+- `RENAME COLUMN content TO title` se tabela existir com nome antigo (migration via `ensureColumns`)
 
-**T01.2 — SQLiteStore: métodos `DB.learningUnits.*`**
-- `create({subjectId, title, sourceText, summaryBody, firstStudiedAt})` → `LearningUnit`
-- `getAll()` → `LearningUnit[]`
-- `getByDate(date)` → `LearningUnit[]` (filtra `first_studied_at`)
-- `update(id, {summaryBody?, title?, sourceText?})` → `LearningUnit`
-- Remover `DB.studyRecords.*` do SQLiteStore (ou mantê-lo como alias deprecated durante migration)
+**T01.2 — SQLiteStore: FK unit_id**
+- `exercises`: `unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE`
+- `review_tasks`: `unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE`
+- Recriar índices: `idx_exercises_unit_id`, `idx_review_tasks_unit_id`
+- `mapExercise(row)` → `{id, unitId, questionText, answerText, hintText, position, provenance, createdAt, updatedAt}`
+- `mapReviewTask(row)` → `unitId` (era `studyRecordId`)
 
-**T01.3 — BrowserStore: renomear coleção**
-- `emptyState()` retorna `{subjects: [], learningUnits: [], reviewTasks: [], exercises: []}`
-- `nextIds`: `{subjects: 1, learningUnits: 1, reviewTasks: 1, exercises: 1}`
-- Métodos `store.learningUnits.*` com mesma interface que SQLiteStore
-- `store.exercises` e `store.reviewTasks` usam `unitId` internamente
+**T01.3 — SQLiteStore: exercises.provenance**
+- Schema: `provenance TEXT NOT NULL DEFAULT 'MANUAL'`
+- `ensureColumns()` adiciona `provenance` a tabelas existentes com DEFAULT 'MANUAL'
+- `DB.exercises.create({..., provenance})` aceita valor; usa 'MANUAL' se ausente
+- Validar: apenas 'MANUAL' | 'SOURCE' | 'AI_GENERATED' aceitos (throw em outro valor)
 
-**T01.4 — `assertImportData` atualizado**
-- Verificar `['subjects', 'learningUnits', 'reviewTasks']` (não `studyRecords`)
-- Backward compat: se `data.studyRecords` existe e `data.learningUnits` não, usar `studyRecords` com mapeamento
+**T01.4 — SQLiteStore: DB.learningUnits.***
+- `create({subjectId, title, sourceText, summaryBody, studyDate})` → LearningUnit
+- `getAll()` → LearningUnit[]
+- `getByDate(date)` → LearningUnit[] filtrado por study_date
+- `update(id, {summaryBody?, title?, sourceText?})` → LearningUnit
+- Remover ou deprecar `DB.studyRecords.*` (manter como alias temporário durante migration se necessário)
 
-**T01.5 — `buildImportStatements` atualizado**
-- INSERT em `learning_units` com `first_studied_at` (mapeado de `studyDate ?? study_date ?? firstStudiedAt`)
-- INSERT em `exercises` com `unit_id`
+**T01.5 — BrowserStore: renomear coleção e mappers**
+- `emptyState()` → `{subjects: [], learningUnits: [], reviewTasks: [], exercises: [], nextIds: {subjects:1, learningUnits:1, reviewTasks:1, exercises:1}}`
+- `store.learningUnits.*` com mesma interface que SQLiteStore
+- `store.exercises.*` usa `unitId` internamente
+- `store.reviewTasks.*` usa `unitId` internamente
+- Exercises: incluir `provenance` no shape; DEFAULT 'MANUAL'
+
+**T01.6 — assertImportData + buildImportStatements**
+- `assertImportData`: verificar `['subjects', 'learningUnits', 'reviewTasks']`
+- `buildImportStatements`: INSERT em `learning_units` com `title` (mapeado de `row.title ?? row.content`)
+- INSERT em `learning_units` com `study_date` (mapeado de `row.studyDate ?? row.study_date`)
+- INSERT em `exercises` com `unit_id` e `provenance` (DEFAULT 'MANUAL' se ausente)
 - INSERT em `review_tasks` com `unit_id`
 
-**T01.6 — `buildClearStatements` atualizado**
-- DELETE em ordem: exercises, review_tasks, learning_units, subjects
-
-**T01.7 — Testes: renomear helpers e referências**
+**T01.7 — Testes: atualizar helpers e referências**
 - `makeStudyRecord()` → `makeLearningUnit()`
-- `DB.studyRecords.*` → `DB.learningUnits.*` em todos os testes
-- Verificar `firstStudiedAt` retornado nos objetos
-- Garantir `createdAt` é timestamp técnico distinto de `firstStudiedAt` nos testes
+- `DB.studyRecords.*` → `DB.learningUnits.*` em todos os test files
+- Verificar `studyDate` → `studyDate` (nome do campo camelCase: `studyDate`, não `firstStudiedAt`)
+- Verificar `createdAt` é timestamp diferente de `studyDate` nos testes
+- Testar `provenance`: default 'MANUAL'; 'SOURCE' persiste; valor inválido lança erro
 
 **Gate T01:** `node --test test/` — todos os testes passam (meta: ≥ 37)
 
-**Commit:** `refactor(db): rename study_records→learning_units, study_date→first_studied_at, unit_id FK`
-
-**Rollback:** se migration com dados reais falhar, branch isolada + SCHEMA_MIGRATION_APPROVAL
+**Commit:** `refactor(db): study_records→learning_units, content→title, exercises.provenance, unit_id FK`
 
 ---
 
 ## WP-DRD-02 — Remover sources, seeds vazios, deactivate seguro
 
-**Objetivo:** Eliminar regression da tabela `sources`; garantir estado inicial VAZIO; safe deactivate de subjects.
+**Objetivo:** Limpar sources do schema; estado inicial VAZIO; safe deactivate de subjects.
 
 **Dificuldade:** 2/5
 
-**ACs cobertos:** DRD-06, DRD-07, DRD-08, DRD-14
+**ACs:** DRD-06, DRD-07, DRD-08, DRD-17
 
 ### Tasks
 
-**T02.1 — Remover `sources` do schema**
+**T02.1 — Remover sources do schemaStatements**
 - Remover CREATE TABLE de `sources` em `schemaStatements`
-- Garantir `DROP TABLE IF EXISTS sources` em `DB.init()` (cleanup de bancos existentes)
-- Remover `ensureNamedRows` chamadas para sources (se existirem)
+- Adicionar `DROP TABLE IF EXISTS sources` em `DB.init()` para limpar bancos existentes
 
 **T02.2 — BrowserStore: remover seeds de medicina**
-- Remover constante `initialSubjects` de BrowserStore
-- `store.init()` NÃO chama `seedNamedRows`
-- `store.subjects.seedInitial()` removido ou vira no-op (NÃO injeta medicina)
-- `emptyState().seeded` pode ser removido (sem seed)
+- Remover constante `initialSubjects` e `seedNamedRows` do `store.init()`
+- `store.init()` = apenas lê/inicializa estado; sem INSERT de dados
+- `emptyState().seeded` removido ou irrelevante
 
-**T02.3 — SQLiteStore: verificar seeds**
-- Confirmar que `DB.init()` no SQLite também não injeta seeds de subjects
-- `ensureNamedRows` só é chamado explicitamente, nunca em init automático
+**T02.3 — SQLiteStore: verificar que não injeta seeds**
+- Confirmar que `DB.init()` não chama `ensureNamedRows` para subjects automaticamente
+- `subjects.seedInitial()` vira no-op ou é removido
 
-**T02.4 — `subjects.deactivate(id)`**
-- SQLiteStore: `UPDATE subjects SET is_active = 0, updated_at = $1 WHERE id = $2`
-- BrowserStore: `subject.isActive = false`
+**T02.4 — subjects.deactivate(id)**
+- SQLiteStore: `UPDATE subjects SET is_active = 0, updated_at = $now WHERE id = $id`
+- BrowserStore: `subject.isActive = false; subject.updatedAt = now`
 - Retorna subject atualizado
 
-**T02.5 — `subjects.deleteCascade(id)` seguro**
-- Verificar se subject tem learning_units: `SELECT COUNT(*) FROM learning_units WHERE subject_id = $1`
-- Se count > 0: throw `new Error("Disciplina possui estudos vinculados. Use desativar para preservar o histórico.")`
-- Se count = 0: DELETE (cascade para review_tasks e exercises via FK)
-- BrowserStore: mesma lógica com filtro em `state.learningUnits`
+**T02.5 — subjects.deleteCascade(id) seguro**
+- SQLiteStore: verificar `SELECT COUNT(*) FROM learning_units WHERE subject_id = $id`
+- Se count > 0: `throw new Error("Disciplina possui estudos vinculados. Use desativar para preservar o histórico.")`
+- Se count = 0: DELETE com cascade (learning_units → exercises + review_tasks via FK)
+- BrowserStore: mesma lógica com `state.learningUnits.filter(u => u.subjectId === id).length`
 
-**T02.6 — Testes**
-- `DB.init()` → `DB.subjects.getActive()` retorna `[]` (sem seeds)
-- `DB.subjects.deactivate(id)` → `isActive` falso
-- `DB.subjects.deleteCascade(id)` com learning_units → erro esperado
-- `DB.subjects.deleteCascade(id)` sem learning_units → sucesso
-
-**T02.7 — `reset()` sem seeds**
+**T02.6 — reset() sem seeds**
 - DELETE em ordem: exercises, review_tasks, learning_units, subjects
 - NÃO inserir nada após DELETE
-- `DB.subjects.getActive()` após reset retorna `[]`
+- Verificar: `DB.subjects.getActive()` após reset retorna `[]`
 
-**Gate T02:** `node --test test/` — todos passam; `DB.init()` + `getActive()` = `[]`
+**T02.7 — Testes**
+- `DB.init()` → `DB.subjects.getActive()` = [] (sem seeds)
+- `DB.subjects.deactivate(id)` → subject.isActive falso, permanece em getAll()
+- `DB.subjects.deleteCascade(id)` com learning_units → erro com mensagem PT-BR
+- `DB.subjects.deleteCascade(id)` sem learning_units → sucesso
+- `DB.reset()` → todos os arrays vazios
 
-**Commit:** `feat(db): remove sources table, empty initial state, safe deactivate/delete for subjects`
+**Gate T02:** `node --test test/` — todos passam; init sem seeds verificado
+
+**Commit:** `feat(db): remove sources table, empty state, safe deactivate/delete for subjects`
 
 ---
 
 ## WP-DRD-03 — schemaVersion em backup
 
-**Objetivo:** Backup com versão; importação fail-closed em versão incompatível.
+**Objetivo:** Backup versionado; importação fail-closed em formato incompatível.
 
 **Dificuldade:** 2/5
 
-**ACs cobertos:** DRD-09
+**ACs:** DRD-09
 
 ### Tasks
 
 **T03.1 — Constante e exportAll**
 ```js
 const SCHEMA_VERSION = 2;
-// exportAll() inclui:
-{ schemaVersion: SCHEMA_VERSION, subjects: [...], learningUnits: [...], exercises: [...], reviewTasks: [...] }
+// exportAll() retorna:
+{ schemaVersion: SCHEMA_VERSION, subjects, learningUnits, exercises, reviewTasks }
 ```
 
-**T03.2 — importAll com validação**
-```js
-// Lógica completa:
-if (!data.schemaVersion && data.studyRecords) {
-  // backup legado v1 — mapear studyRecords → learningUnits com aviso
-} else if (!data.schemaVersion) {
-  throw new Error("Backup inválido: sem versão de schema.");
-} else if (data.schemaVersion > SCHEMA_VERSION) {
-  throw new Error("Backup criado em versão mais recente. Atualize o aplicativo.");
-} else if (data.schemaVersion < SCHEMA_VERSION) {
-  throw new Error("Backup incompatível: versão " + data.schemaVersion + ", esperada " + SCHEMA_VERSION + ".");
-}
-// versão exata: import normal
-```
+**T03.2 — importAll com validação de versão**
+- Sem schemaVersion: `throw new Error("Backup sem versão. Formato não suportado.")`
+- schemaVersion > SCHEMA_VERSION: `throw new Error("Backup criado em versão mais recente. Atualize o aplicativo.")`
+- schemaVersion < SCHEMA_VERSION: `throw new Error("Backup incompatível: versão X, esperada Y.")`
+- schemaVersion === SCHEMA_VERSION: import normal
 
-**T03.3 — Backward compat legado (v1)**
-- Se `backup.studyRecords` existe: mapear como `learningUnits` com `firstStudiedAt = studyDate`
-- Adicionar `sourceText = ''` se ausente
-- Logar aviso visível ao usuário: "Backup legado importado com conversão automática"
+**T03.3 — assertImportData atualizado**
+- Verificar `learningUnits` (não `studyRecords`)
+- Sem backward compat complexo para dados de concurso (descartáveis)
 
 **T03.4 — Testes**
-- `exportAll()` → `backup.schemaVersion === 2`
+- `exportAll()` inclui `schemaVersion === 2`
+- `exportAll()` inclui `learningUnits` (não `studyRecords`)
 - `importAll` com `schemaVersion: 99` → erro "versão mais recente"
-- `importAll` com `schemaVersion: 1` → erro "incompatível"
-- `importAll` com `studyRecords` sem schemaVersion → import com conversão
-- `importAll` válido → todos os dados preservados
+- `importAll` sem `schemaVersion` → erro "sem versão"
+- `importAll` com `schemaVersion: 2` e dados válidos → todos os dados restaurados
 
 **Gate T03:** `node --test test/` — todos passam
 
-**Commit:** `feat(db): schemaVersion 2 in backup, fail-closed validation, v1 legacy compat`
+**Commit:** `feat(db): schemaVersion 2, fail-closed backup validation`
 
 ---
 
-## WP-DRD-04 — BrowserStore: paridade de contrato
+## WP-DRD-04 — BrowserStore paridade de contrato
 
-**Objetivo:** BrowserStore implementa exatamente o mesmo contrato que SQLiteStore; nenhuma divergência.
+**Objetivo:** BrowserStore implementa exatamente o mesmo contrato que SQLiteStore.
 
 **Dificuldade:** 2/5
 
-**ACs cobertos:** DRD-10
+**ACs:** DRD-10
 
 ### Tasks
 
 **T04.1 — Auditoria de métodos**
-- Listar todos os métodos públicos em SQLiteStore (DB.* interface)
-- Listar todos os métodos em BrowserStore
-- Produzir tabela de paridade (ver design.md §6.2)
-- Identificar divergências
+- Listar métodos em SQLiteStore (DB.* facade)
+- Listar métodos em BrowserStore
+- Produzir tabela de paridade (ver design.md §4.2)
 
 **T04.2 — Eliminar divergências**
-- Métodos em BrowserStore sem equivalente SQLite: remover ou adicionar ao SQLite
-- Métodos em SQLite sem equivalente BrowserStore: implementar no BrowserStore
-- Shapes de retorno: field names, tipos e nullable idênticos
+- Método em um sem equivalente no outro: implementar ou remover
+- Shape de retorno: field names, tipos, nullable idênticos
 
 **T04.3 — JSDoc nos mappers**
-- `mapLearningUnit`, `mapExercise`, `mapReviewTask`, `mapSubject`
-- Cada mapper documenta o shape de retorno com `@typedef`
+```js
+/** @typedef {{id: number, subjectId: number, title: string, sourceText: string, summaryBody: string|null, studyDate: string, createdAt: string, updatedAt: string}} LearningUnit */
+/** @typedef {{id: number, unitId: number, questionText: string, answerText: string, hintText: string|null, position: number, provenance: string, createdAt: string, updatedAt: string}} Exercise */
+```
 
 **T04.4 — Testes de paridade**
-- Para cada método listado em T04.1: confirmar que teste via BrowserStore valida o mesmo shape que SQLiteStore retornaria
-- Nenhum teste acessa campos ausentes de SQLiteStore
+- Para cada método: shape de retorno verificado em teste via BrowserStore
+- Nenhum campo inexistente no SQLiteStore acessado nos testes
 
-**Gate T04:** zero divergências na tabela de paridade; `node --test test/` — todos passam
+**Gate T04:** zero divergências; `node --test test/` passam todos
 
 **Commit:** `refactor(db): BrowserStore full contract parity with SQLiteStore`
 
@@ -221,155 +215,160 @@ if (!data.schemaVersion && data.studyRecords) {
 
 ## WP-DRD-05 — UX cadastro: fluxo correto e empty state
 
-**Objetivo:** Verificar e corrigir fluxo de cadastro na UI; garantir empty state amigável.
+**Objetivo:** Verificar e corrigir fluxo de cadastro pós-rename; empty state amigável.
 
 **Dificuldade:** 2/5
 
-**ACs cobertos:** UX-01..05, DRD-04, DRD-05
+**ACs:** UX-01..05, DRD-04, DRD-05
 
 ### Tasks
 
-**T05.1 — Verificar UI de cadastro pós-rename**
-- `app.js`: todas referências a `studyRecords` → `learningUnits`
-- `app.js`: `studyDate` → `firstStudiedAt` no objeto enviado para `DB.learningUnits.create`
-- `app.js`: `content` → `title` (ou manter `content` se custo de rename supera benefício — decidir em implementação)
-- Renderização da lista de estudos usa `unit.firstStudiedAt` (não `studyDate`)
+**T05.1 — app.js: atualizar referências**
+- `DB.studyRecords.*` → `DB.learningUnits.*`
+- Objeto de cadastro: `{title, sourceText, summaryBody, studyDate, subjectId}` (não `content`, não `sourceId`)
+- Render functions usam `unit.title`, `unit.studyDate`, `unit.sourceText`
+- `createReviewRow()` recebe `learningUnit`
 
 **T05.2 — Empty state amigável**
-- `renderSubjects()` com lista vazia: mostrar `<p class="empty-state">Nenhuma disciplina ainda. Comece adicionando uma.</p>`
-- `renderStudies()` com lista vazia: mostrar `<p class="empty-state">Nenhum estudo registrado. Adicione seu primeiro.</p>`
-- `renderToday()` sem revisões: mensagem amigável preservada
+- `renderSubjects()` com lista vazia → `<p class="empty-state">Nenhuma disciplina ainda. Comece adicionando a primeira.</p>`
+- `renderStudies()` com lista vazia → mensagem amigável
+- `renderToday()` sem revisões → mensagem preservada
 
-**T05.3 — Verificar draft preservation (já em 09ea0d8)**
-- Clicar "+ Nova disciplina" durante cadastro: título, fonte, data, resumo preservados
-- Teste manual: preencher todos os campos → adicionar disciplina → verificar preservação
+**T05.3 — Verificar draft preservation (09ea0d8)**
+- Clicar "+ Nova disciplina" durante cadastro: title, source, date, summary preservados
+- Teste manual: preencher campos → adicionar disciplina → verificar preservação
 
 **T05.4 — Fonte como campo simples**
-- Input `#study-source-text` é texto livre — verificar no HTML e app.js
-- Sem select, sem autocomplete, sem CRUD de fontes na tela de cadastro
-- Validação: fonte vazia é permitida (campo opcional ou obrigatório — decidir com spec §3.1)
+- Input `#study-source-text` é texto livre
+- Sem select, sem autocomplete, sem CRUD de fontes
+- Nenhuma referência a `renderSources`, `sourceList`, `showSourceFormButton`, `sourceId`
 
 **T05.5 — Build limpo**
-- `npm run build` (ou Vite) sem warnings de variáveis não utilizadas, imports mortos
-- Especialmente: nenhuma referência a `sourceId`, `sources`, `renderSources`, `sourceList`
+- `npm run build` sem warnings de variáveis não utilizadas ou imports mortos
+- Verificar: nenhuma referência morta a `sourceId`, `sources`, `renderSources`, `sourceList`
 
-**T05.6 — UI de gerenciamento de subjects**
-- Botão "Desativar" chama `DB.subjects.deactivate(id)` (não hard delete)
-- Botão "Excluir" só aparece se subject sem learning_units; chama `DB.subjects.deleteCascade(id)`
-- Erro de deleteCascade com units → mensagem visível ao usuário, não crash
+**T05.6 — UI subjects: deactivate + delete seguro**
+- Botão "Desativar" → `DB.subjects.deactivate(id)` → subject some de getActive()
+- Botão "Excluir" → `DB.subjects.deleteCascade(id)` → erro UI amigável se tem units
+- Subject desativado não aparece no select de cadastro
 
-**Gate T05:** build limpo + manual UX-01..05 verificados no browser (Vite dev server)
+**Gate T05:** build limpo + UX-01..05 verificados manualmente no browser
 
-**Commit:** `feat(ui): cadastro com learning_units, empty state, fonte texto livre, deactivate UI`
+**Commit:** `feat(ui): learning_units, title field, empty state, deactivate UI, fonte texto livre`
 
 ---
 
-## WP-DRD-06 — LEGACY_TEMPORARY boundary em scheduler
+## WP-DRD-06 — LEGACY_TEMPORARY boundary auditoria
 
-**Objetivo:** Formalizar que 16 review_tasks é modelo legacy; boundary em scheduler.js.
+**Objetivo:** Confirmar boundary de scheduler; documentar formalmente.
 
 **Dificuldade:** 1/5
 
-**ACs cobertos:** DRD-13
+**ACs:** DRD-16
 
 ### Tasks
 
-**T06.1 — Auditoria de constante "16"**
-- `grep -rn "16" src/` — identificar todas as ocorrências
-- Ocorrências legítimas: APENAS em `scheduler.js` (SCHEDULE_OFFSETS com 16 entradas)
-- Ocorrências em `db.js`, `app.js`, `index.html`: nenhuma (se houver, refatorar para importar de scheduler)
+**T06.1 — Auditoria de constante**
+- `grep -rn "16\b" src/*.js` → ocorrências legítimas APENAS em scheduler.js (SCHEDULE_OFFSETS)
+- Ocorrências em db.js, app.js, index.html: zero (se houver, refatorar para importar de scheduler.js)
 
 **T06.2 — Comentário de boundary em scheduler.js**
-- Adicionar comentário antes de SCHEDULE_OFFSETS:
-  `// LEGACY_TEMPORARY: 16 fixed review intervals. See domain-redesign/design.md §3.`
-- Não é refatoração de algoritmo — apenas documentação de fronteira
+```js
+// LEGACY_TEMPORARY: fixed 16-review schedule. Boundary: scheduling logic stays here.
+// A future adaptive scheduler (SM-2, FSRS) replaces this file; may require schema evolution.
+// See .specs/features/smartlearn-domain-redesign/design.md §3.
+```
 
-**T06.3 — Verificação**
-- `grep -rn "16\b" src/ --include="*.js"` — confirmar apenas em scheduler.js
-- `grep -rn "SCHEDULE_OFFSETS\|REVIEW_SCHEDULE" src/` — todas as referências apontam para scheduler.js import
+**T06.3 — Verificar imports**
+- `grep -rn "SCHEDULE_OFFSETS\|REVIEW_SCHEDULE" src/` → todas as referências via import de scheduler.js
 
-**Gate T06:** auditoria limpa; comentário adicionado
+**Gate T06:** auditoria limpa; comentário presente
 
-**Commit:** `docs(scheduler): mark 16-task model as LEGACY_TEMPORARY, formalize boundary`
+**Commit:** `docs(scheduler): LEGACY_TEMPORARY boundary, substitutability note`
 
 ---
 
-## WP-DRD-07 — Fronteira DEFINITION × ATTEMPT (auditoria)
+## WP-DRD-07 — DEFINITION+PROVENANCE boundary auditoria
 
-**Objetivo:** Confirmar que exercises não tem campos de tentativa; documentar fronteira formal.
+**Objetivo:** Confirmar que exercises é definition+provenance only; sem campos de tentativa.
 
 **Dificuldade:** 1/5
 
-**ACs cobertos:** DRD-12
+**ACs:** DRD-13, DRD-15
 
 ### Tasks
 
 **T07.1 — Auditoria de schema exercises**
-- Confirmar colunas de `exercises`: `id, unit_id, question_text, answer_text, hint_text, position, created_at, updated_at`
+- Colunas: `id, unit_id, question_text, answer_text, hint_text, position, provenance, created_at, updated_at`
 - SEM: `score`, `attempt_count`, `last_attempted_at`, `correct`, etc.
 
 **T07.2 — Auditoria de mapExercise**
-- Confirmar que `mapExercise()` não mapeia campos de tentativa
-- `mapExercise` retorna: `{id, unitId, questionText, answerText, hintText, position, createdAt, updatedAt}`
+- `mapExercise()` não mapeia campos de tentativa
+- Retorna: `{id, unitId, questionText, answerText, hintText, position, provenance, createdAt, updatedAt}`
 
-**T07.3 — Comentário de fronteira em db.js**
-- Acima da definição da tabela `exercises` no schema:
-  `// DEFINITION-only: question/answer/hint. Attempt history = LATER (exercise_attempts table).`
+**T07.3 — Comentário de boundary em db.js**
+```js
+// exercises = DEFINITION + PROVENANCE only.
+// Attempt history (per-exercise score, confidence, error type) = LATER (exercise_attempts table).
+// Aggregate evidence per review session: review_tasks.correct_count / score_percent.
+```
 
 **T07.4 — Auditoria de app.js**
-- Verificar que app.js não passa campos de score por exercício (score agrega em review_tasks)
-- `review_tasks.correct_count` é único ponto de score agregado — confirmar
+- Score por revisão em `review_tasks.correct_count` — confirmar único ponto de score agregado
+- Nenhum campo de score por exercício individual em app.js
 
-**Gate T07:** auditoria limpa; fronteira documentada no código
+**Gate T07:** auditoria limpa; boundaries documentadas
 
-**Commit:** `docs(db): formalize DEFINITION-only boundary for exercises, LATER note for attempts`
+**Commit:** `docs(db): exercises DEFINITION+PROVENANCE boundary, evidence NOW/LATER comment`
 
 ---
 
 ## WP-DRD-08 — UAT final
 
-**Objetivo:** Verificar fluxo completo Fisiologia/Guyton no runtime Tauri + browser.
+**Objetivo:** Verificar fluxo completo Fisiologia/Guyton após todos os WPs.
 
-**Dificuldade:** 1/5 (execução) — requer Tauri dev ativo
+**Dificuldade:** 1/5
 
-**ACs cobertos:** UX-01..05, DRD-07, DRD-14
+**ACs:** UX-01..05, DRD-07, DRD-17
 
 ### Tasks
 
-**T08.1 — Teste browser (Vite dev server)**
-- Estado inicial: banco VAZIO (DB.reset() ou first run)
+**T08.1 — Estado inicial vazio**
+- Banco recriado (DB.reset() ou init do zero)
+- `subjects.getActive()` = []; zero revisões; empty state visível
+
+**T08.2 — Cadastro completo**
 - Adicionar disciplina "Fisiologia"
-- Preencher cadastro: Fonte "Guyton & Hall, cap. 1", Data 2026-03-10, Aula "Organização funcional", Resumo "LEC..."
-- Salvar → aparecer na lista com fonte correta
-- Tela Hoje → revisão R1 com fonte e resumo
+- Fonte: "Guyton & Hall, Tratado de Fisiologia Médica, 11ª ed., cap. 1"
+- Data: 2026-03-10 (retroativo)
+- Título: "Organização funcional do corpo humano e homeostase"
+- Resumo: "O LEC é o ambiente interno..."
+- Salvar → aparece na lista com título e fonte corretos
 
-**T08.2 — Teste de preservação de draft**
-- Preencher fonte + aula
-- Clicar "+ Nova disciplina" → digitar "Histologia" → salvar
-- Verificar: fonte e aula preservados
+**T08.3 — Revisão com evidência**
+- Tela Hoje → revisão R1 aparece
+- ReviewRow mostra: Disciplina, Título, Fonte, Resumo Mestre
+- Registrar exercícios → correct_count e score_percent salvos
 
-**T08.3 — Teste de reset**
-- Configurações → Resetar banco → confirmar
-- Verificar: `subjects.getActive()` = []; zero revisões hoje; empty state visível
+**T08.4 — Draft preservation**
+- Preencher título + fonte → clicar "+ Nova disciplina" → digitar "Histologia" → salvar
+- Verificar: título e fonte preservados
 
-**T08.4 — Teste de schemaVersion inválido**
-- Criar arquivo JSON sem schemaVersion ou com `schemaVersion: 99`
-- Importar → mensagem de erro clara; banco inalterado
+**T08.5 — Reset limpo**
+- Configurações → Resetar → confirmar
+- `subjects.getActive()` = []; zero revisões; empty state visível
 
-**T08.5 — Backup roundtrip**
-- Exportar backup
-- Reset banco
-- Importar backup
-- Verificar: todas as disciplinas, estudos e revisões restaurados; fonte presente
+**T08.6 — Backup roundtrip**
+- Exportar backup → verificar `schemaVersion: 2` no JSON
+- Reset banco → importar backup → todos os dados restaurados
 
-**T08.6 — Tauri runtime (se disponível)**
-- `npm run tauri dev`
-- Repetir T08.1 no app desktop
-- Verificar `first_studied_at` na DB SQLite real (sqlite3 CLI ou app)
+**T08.7 — Import inválido**
+- JSON sem schemaVersion → mensagem de erro; banco inalterado
+- JSON com schemaVersion: 99 → mensagem "versão mais recente"
 
 **Gate T08:** todos os cenários manuais passam
 
-**Commit:** `chore: UAT DRD-01..DRD-14, UX-01..UX-05 verified`
+**Commit:** `chore: UAT DRD-01..17, UX-01..05 verified — domain redesign complete`
 
 ---
 
@@ -378,11 +377,11 @@ if (!data.schemaVersion && data.studyRecords) {
 ```
 HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL
     ↓
-WP-DRD-01 (dif 3) — rename + semantic fix
+WP-DRD-01 (dif 3) — schema rename, title, provenance
     ↓
-WP-DRD-02 (dif 2)   WP-DRD-03 (dif 2)   WP-DRD-06 (dif 1)   WP-DRD-07 (dif 1)
-sources/seeds        schemaVersion        scheduler boundary    exercises audit
-(paralelo possível após WP-01)
+WP-DRD-02 (dif 2)     WP-DRD-03 (dif 2)     WP-DRD-06 (dif 1)     WP-DRD-07 (dif 1)
+sources/seeds/deact    schemaVersion           scheduler boundary     exercises boundary
+(paralelo após WP-01)
     ↓
 WP-DRD-04 (dif 2) — BrowserStore parity
     ↓
@@ -390,30 +389,41 @@ WP-DRD-05 (dif 2) — UX cadastro
     ↓
 WP-DRD-08 (dif 1) — UAT final
     ↓
-PR — branch claude/com-tlc-replanning-77f844 → main
+PR → main
 ```
 
-**Esforço total estimado:** 2-3 sessões de desenvolvimento
+**Esforço estimado:** 2-3 sessões
 
 ---
 
-## Checagem estrutural de tasks.md
+## Structural Gate
+
+**STRUCTURAL_GATE = UNVERIFIED_BY_RUNTIME**
+
+`validate_spec.py` e `validate_tasks.py` não existem nos scripts bundled do skill TLC.
+Apenas `scripts/lessons.py` está presente.
+Os validators automáticos não puderam ser executados.
+Esta limitação é reportada sem substituição por checagem manual declarada como PASS.
+
+---
+
+## Checagem manual de tasks.md (melhor esforço)
 
 | Critério | Resultado |
 |---------|-----------|
 | Cada WP tem objetivo observável | PASS |
 | Cada WP tem gate de teste | PASS |
-| Cada WP tem ACs referenciados | PASS |
-| Nenhum WP sem discriminação de dificuldade | PASS |
-| Rollback/migration explícito (WP-01) | PASS |
-| WPs cobrem todos os problemas do diagnóstico | PASS — 8 problemas × WPs cobertos |
-| Nenhum WP é LATER disfarçado de NOW | PASS — ATTEMPT/EVIDENCE, FSRS explicitamente LATER |
+| Cada WP referencia ACs de spec.md | PASS |
+| Cada WP tem dificuldade declarada | PASS |
+| WPs cobrem todos os 8 problemas do diagnóstico | PASS |
+| Nenhum WP é LATER disfarçado de NOW | PASS |
+| Migration explícita (WP-01 T01.1) | PASS |
+| Rollback: banco pode ser recriado | PASS |
 
 ---
 
 ## HUMAN_GATES
 
-| Gate | Condição | O que bloqueia |
-|------|---------|----------------|
-| DOMAIN_REDESIGN_APPROVAL | Aprovação de spec.md v2 + design.md v2 + tasks.md v2 | WP-DRD-01..08 |
-| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco tem dados reais | Apenas a migration; não bloqueia outros WPs |
+| Gate | Condição |
+|------|---------|
+| DOMAIN_REDESIGN_APPROVAL | Aprovação de spec.md v3 + design.md v3 + tasks.md v3 |

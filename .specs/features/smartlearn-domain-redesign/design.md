@@ -1,4 +1,4 @@
-# SmartLearn — Domain Redesign: Design (v2)
+# SmartLearn — Domain Redesign: Design (v3)
 
 **Feature:** `smartlearn-domain-redesign`
 **Status:** PROPOSTO — AGUARDANDO HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL
@@ -6,32 +6,32 @@
 
 ---
 
-## 1. Schema Mínimo NOW (B-MVP)
+## 1. Schema NOW (B-MVP final)
 
 ```sql
--- Existente, preservado
+-- Existente, preservado sem renomear colunas
 subjects (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  is_active   INTEGER NOT NULL DEFAULT 1,   -- PRESERVADO: não renomear para 'active'
+  is_active   INTEGER NOT NULL DEFAULT 1,   -- preservado; não renomear para 'active'
   sort_order  INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 )
 
--- RENOMEADA de study_records; source_text JÁ existe (commit 09ea0d8)
+-- RENOMEADA de study_records; shape final
 learning_units (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  subject_id       INTEGER NOT NULL REFERENCES subjects(id),
-  title            TEXT NOT NULL,                       -- era: content
-  source_text      TEXT NOT NULL DEFAULT '',            -- JÁ EXISTE em 09ea0d8
-  summary_body     TEXT,                               -- JÁ EXISTE (vNext WP-03)
-  first_studied_at TEXT NOT NULL,                      -- era: study_date (semântica preservada)
-  created_at       TEXT NOT NULL,                      -- timestamp técnico distinto
-  updated_at       TEXT NOT NULL
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_id   INTEGER NOT NULL REFERENCES subjects(id),
+  title        TEXT NOT NULL,               -- era: content; semântica: nome da aula/unidade
+  source_text  TEXT NOT NULL DEFAULT '',    -- texto livre; JÁ EXISTE em 09ea0d8
+  summary_body TEXT,                        -- Resumo Mestre; JÁ EXISTE (vNext WP-03)
+  study_date   TEXT NOT NULL,              -- quando o aluno estudou; preservado como está
+  created_at   TEXT NOT NULL,              -- timestamp técnico distinto; imutável
+  updated_at   TEXT NOT NULL               -- automático em UPDATE
 )
 
--- FK atualizada de study_record_id para unit_id
+-- FK atualizada; campo provenance adicionado
 exercises (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   unit_id       INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,
@@ -39,13 +39,14 @@ exercises (
   answer_text   TEXT NOT NULL,
   hint_text     TEXT,
   position      INTEGER NOT NULL DEFAULT 0,
+  provenance    TEXT NOT NULL DEFAULT 'MANUAL',  -- 'MANUAL' | 'SOURCE' | 'AI_GENERATED'
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
   -- SEM: score, attempt_count, last_attempted_at
-  -- ATTEMPT/EVIDENCE = LATER (tabela exercise_attempts separada)
+  -- ATTEMPT/EVIDENCE granular = LATER (exercise_attempts)
 )
 
--- FK atualizada de study_record_id para unit_id
+-- FK atualizada; evidência agregada preservada
 review_tasks (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   unit_id         INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,
@@ -54,13 +55,14 @@ review_tasks (
   completed_at    TEXT,
   review_done     INTEGER NOT NULL DEFAULT 0,
   questions_done  INTEGER NOT NULL DEFAULT 0,
-  questions_count INTEGER,
-  correct_count   INTEGER,
-  score_percent   REAL,
+  questions_count INTEGER,          -- total exercícios apresentados na sessão
+  correct_count   INTEGER,          -- total acertados na sessão
+  score_percent   REAL,             -- correct_count / questions_count
   comment         TEXT,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
   -- LEGACY_TEMPORARY: 16 tarefas pré-geradas por scheduler.js
+  -- evidência: agregada por revisão (NOW); por exercício individual = LATER
 )
 
 settings (
@@ -70,49 +72,68 @@ settings (
   last_backup_at  TEXT
 )
 
--- REMOVIDA: sources (não existe mais; regression de 09ea0d8)
--- REMOVIDA: índices em study_record_id → recriados em unit_id
+-- REMOVIDA: sources (regression de 09ea0d8)
 ```
 
-### 1.1 Por que `title` em vez de `content`
+### 1.1 Decisão title × content
 
-O campo `content` (string curta, 240 chars) sempre foi o tema/assunto da aula. `title` é o nome semântico correto para o que está vinculado a um Resumo Mestre. Se a renomagem criar migration desnecessária (e o campo já funciona), manter `content` é aceitável. **Decisão:** preservar `content` se o custo de migration superar o benefício semântico — reportar na implementação.
+**Adotar `title`.**
 
-### 1.2 Distinção de datas — regra formal
+`content` sempre representou o assunto/nome da aula, não o "conteúdo completo" do estudo. O Resumo Mestre (`summary_body`) é o conteúdo. `title` é semanticamente correto: nome curto e humano da unidade de aprendizagem.
 
-| Campo | Quem define | Quando define | Quem pode editar |
-|-------|-------------|---------------|-----------------|
-| `first_studied_at` | Aluno | No momento do cadastro; default = hoje | Aluno (pode ser retroativo) |
-| `created_at` | Sistema | Timestamp de INSERT | Nunca (imutável) |
-| `updated_at` | Sistema | Timestamp de UPDATE | Nunca (automático) |
+Migration: `RENAME COLUMN content TO title` (SQLite 3.25.0+, disponível na versão usada pelo Tauri). Migration em `ensureColumns()`, idempotente.
 
-Exemplo: aluno estudou em 10/03, cadastrou em 12/03.
-- `first_studied_at` = 2026-03-10 (editado pelo aluno)
-- `created_at` = 2026-03-12T14:30:00Z (sistema)
+### 1.2 study_date — por que preservar o nome
+
+`study_date` descreve precisamente "a data em que esse conteúdo foi estudado". Renomear para `first_studied_at` só seria necessário se existir uma segunda data de estudo por unidade — o que exigiria `study_sessions`. Como `study_sessions` é LATER, o rename é schema churn sem benefício NOW.
+
+Quando `study_sessions` for introduzido: a data em `learning_units` vira `first_studied_at` por refactor. Esse será o momento correto.
+
+### 1.3 Exercise provenance — por que mínima
+
+Questão extraída de livro ≠ questão gerada por IA ≠ questão elaborada manualmente.
+Sem `provenance`, essa distinção se perde no banco.
+
+`provenance TEXT NOT NULL DEFAULT 'MANUAL'` com valores enumerados `'MANUAL' | 'SOURCE' | 'AI_GENERATED'` é o mínimo que previne a confusão sem criar sistema de citações completo.
+
+**Não adicionado:** página, número de questão, citação formal — esses detalhes entram em `hint_text` ou em sistema de citações futuro.
 
 ---
 
-## 2. Comparação de Alternativas (atualizada)
+## 2. Evidência de revisão — NOW × LATER
 
-### Alternativa A — study_records ampliado (commit 09ea0d8 base)
+### 2.1 NOW — agregada por sessão de revisão
 
-Schema: `study_records` central, `source_text` já existe, `study_date` preservado.
+`review_tasks` já contém evidência de revisão em nível de sessão:
 
-**Problema crítico identificado:** `study_date` não distingue semanticamente de `created_at` no nome — ambíguo para quem lê o código. Além disso, `sources` table permanece no schema sem uso (regression).
+| Campo | Semântica |
+|-------|-----------|
+| `questions_count` | Total de exercícios apresentados nesta revisão |
+| `correct_count` | Total de exercícios acertados |
+| `score_percent` | correct_count / questions_count × 100 |
+| `questions_done` | Flag: exercícios foram realizados nesta revisão |
 
-**Não adotado:** semântica incompleta; regression não corrigida.
+Granularidade: por sessão de revisão, não por exercício individual.
 
-### Alternativa B-MVP (RECOMENDADA)
+### 2.2 LATER — por exercício individual
 
-Rename `study_records → learning_units`, `study_date → first_studied_at`. Remover `sources`. Sem `study_sessions`. `is_active` preservado.
+Quando o produto precisar de rastreabilidade granular:
 
-**Adotado:** separa semântica de evento (quando o aluno estudou) de timestamp técnico (quando criou o registro), sem overhead de tabela adicional.
+```sql
+-- LATER — não criar agora
+exercise_attempts (
+  id                 INTEGER PRIMARY KEY,
+  exercise_id        INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+  review_task_id     INTEGER REFERENCES review_tasks(id),
+  answered_correctly INTEGER,        -- 1 = acerto, 0 = erro
+  assistance_used    TEXT,           -- cues, hints usados
+  confidence_level   INTEGER,        -- declarado pelo aluno (1-5)
+  error_classification TEXT,         -- tipo de erro (concept, recall, application)
+  attempted_at       TEXT NOT NULL
+)
+```
 
-### Alternativa C — learning_units + study_sessions
-
-`study_sessions` como tabela obrigatória para cada evento de contato com o conteúdo.
-
-**Adiado para LATER:** over-engineering para o estado atual. A separação formal de `first_studied_at` × `created_at` resolve o problema imediato sem nova tabela.
+Fronteira formal: `exercises` NÃO recebe campos de tentativa. `exercise_attempts` = LATER.
 
 ---
 
@@ -120,57 +141,49 @@ Rename `study_records → learning_units`, `study_date → first_studied_at`. Re
 
 ### 3.1 Status formal
 
-O modelo atual de 16 revisões pré-geradas é classificado como **LEGACY_TEMPORARY**:
-- Originou-se da planilha de concurso (DEC-003)
-- Scheduler encapsulado em `scheduler.js` (DEC-016 vNext)
-- PRESERVE por enquanto: boundary existe, algoritmo é substituível sem schema change
-- NÃO é modelo definitivo; escala para ~1.190 revisões/dia no ano 3 de medicina (risco identificado em DEC-016)
+16 review_tasks pré-geradas = **LEGACY_TEMPORARY**:
+- Originou de DEC-003 (planilha de concurso)
+- Encapsulado em `scheduler.js` (DEC-016 vNext)
+- Boundary: nenhum código fora de `scheduler.js` hardcoda "16"
 
 ### 3.2 Boundary formal
 
-**Regra:** nenhum código fora de `scheduler.js` deve codificar o número 16 ou assumir que `review_tasks` terá exatamente 16 registros por unidade.
+**Regra:** `SCHEDULE_OFFSETS` em `scheduler.js` é o único lugar que define o número e timing das revisões.
 
-**Verificação:** `grep -r "16" src/` — ocorrência legítima APENAS em `scheduler.js`. Qualquer outra ocorrência é violação de boundary.
+**Verificação em WP-DRD-06:** `grep -rn "16\b" src/*.js` retorna ocorrências APENAS em `scheduler.js`. Qualquer outra ocorrência é violação.
 
-### 3.3 Caminho para NEXT
+### 3.3 Caminho LATER
 
-```
-LEGACY_TEMPORARY (now)
-    ↓ LATER — quando produto precisar
-FSRS / scheduler adaptativo
-    learning_units → scheduler_state (ease_factor, interval, reps)
-    scheduler.js swaps algorithm without schema change in review_tasks
-```
+`scheduler.js` é **boundary substituível**, não interface FSRS.
+
+Uma integração futura com FSRS ou SM-2 adaptativo **pode** exigir:
+- Campos adicionais em `learning_units` (`ease_factor`, `stability`, `retrievability`)
+- Ou tabela separada de estado do scheduler
+- Ou evolução do shape de `review_tasks`
+
+Esses campos NÃO são desenhados agora. A boundary garante que a substituição seja localizada em `scheduler.js`; não garante zero schema change.
 
 ---
 
-## 4. Exercícios — Fronteira DEFINITION × ATTEMPT
+## 4. BrowserStore — Contrato de Paridade
 
-### 4.1 Estado atual (correto acidentalmente)
+### 4.1 Regras formais
 
-Schema `exercises` JÁ é definition-only:
-- `question_text`, `answer_text`, `hint_text`, `position`
-- SEM: score, tentativa, data de acerto, histórico
+1. BrowserStore implementa exatamente os mesmos métodos que SQLiteStore
+2. Nenhum método em BrowserStore sem equivalente no SQLite (e vice-versa)
+3. Shape de retorno idêntico: field names, tipos, nullable
+4. `init()` NÃO chama seedNamedRows — `emptyState()` retorna arrays vazios
+5. Nenhuma lógica de domínio em BrowserStore ausente no SQLite
 
-Score atual existe em `review_tasks.correct_count` como **agregado por sessão de revisão**, não por exercício individual.
+### 4.2 Tabela de paridade (resultado da auditoria em WP-DRD-04)
 
-### 4.2 Fronteira formal (NOW)
-
-**Regra:** `exercises` NÃO recebe campos de tentativa, score por exercício, ou histórico de acertos individuais.
-
-**Se precisar rastrear:** criar tabela `exercise_attempts (id, exercise_id, review_task_id, answered_correctly, attempted_at)` — LATER.
-
-**Violação de fronteira** = qualquer ALTER TABLE exercises ADD score* ou ADD attempt*.
-
-### 4.3 Como o score agrega TODAY
-
-```
-review_task.correct_count  = total de exercícios acertados na sessão
-review_task.questions_count = total de exercícios apresentados na sessão
-review_task.score_percent  = correct_count / questions_count
-```
-
-Granularidade por exercício = LATER.
+| Namespace | Métodos esperados |
+|-----------|------------------|
+| `subjects` | getActive, getAll, create, update, deactivate, deleteCascade |
+| `learningUnits` | create, getAll, getByDate, update |
+| `exercises` | create, getAll, update, delete |
+| `reviewTasks` | generate, getByDate, complete, getAll |
+| `DB` | init, reset, exportAll, importAll |
 
 ---
 
@@ -183,133 +196,74 @@ const SCHEMA_VERSION = 2;
 {
   schemaVersion: SCHEMA_VERSION,
   subjects: [...],
-  learningUnits: [...],       // era studyRecords
+  learningUnits: [...],
   exercises: [...],
   reviewTasks: [...]
 }
 
-// importAll() — lógica de versão:
-if (!backup.schemaVersion) {
-  // Backup legado (v1, schemaVersion ausente)
-  // Tentar compatibilidade: se backup.studyRecords existe, mapear → learningUnits
-  // Se mapeamento possível: import com aviso "Backup legado importado com conversão automática"
-  // Se não possível (forma incompatível): lançar Error("Backup antigo incompatível...")
-} else if (backup.schemaVersion === SCHEMA_VERSION) {
-  // Normal import
-} else if (backup.schemaVersion > SCHEMA_VERSION) {
-  // Backup de versão futura — FAIL CLOSED
-  throw new Error("Backup criado em versão mais recente do app. Atualize o aplicativo antes de importar.");
+// importAll() — decisão de versão:
+if (!data.schemaVersion) {
+  // Sem schemaVersion: rejeitar
+  // Dados legados de concurso são descartáveis; não construir migração complexa
+  // Tentar mapeamento simples somente se shape for idêntico (studyRecords → learningUnits, renomear campos):
+  //   - se data.studyRecords existe com colunas compatíveis: importar com aviso
+  //   - caso contrário: rejeitar com mensagem clara
+  throw new Error("Backup sem versão de schema. Formato não suportado.");
+} else if (data.schemaVersion === SCHEMA_VERSION) {
+  // Import normal
+} else if (data.schemaVersion > SCHEMA_VERSION) {
+  throw new Error("Backup criado em versão mais recente do app. Atualize o aplicativo.");
 } else {
-  // schemaVersion < SCHEMA_VERSION e não-ausente (v0?)
-  // Tentar conversão ou fail closed com mensagem
-  throw new Error("Backup incompatível: versão " + backup.schemaVersion + ", esperada " + SCHEMA_VERSION);
+  // schemaVersion presente mas < SCHEMA_VERSION
+  throw new Error(`Backup incompatível: versão ${data.schemaVersion}, esperada ${SCHEMA_VERSION}.`);
 }
 ```
 
-**Princípio:** fail closed sempre que importação não for segura. Mensagem de erro clara para cada caso.
+**Princípio:** fail closed. Dados legados de concurso foram declarados descartáveis. Não construir migração complexa para preservar conteúdo sem valor. Mapeamento simples aceitável se seguro; caso contrário, rejeitar.
 
 ---
 
-## 6. BrowserStore — Contrato de Paridade
+## 6. Migration Strategy
 
-### 6.1 Regras
+### 6.1 Banco de desenvolvimento (estado atual)
 
-1. BrowserStore implementa exatamente os mesmos métodos que SQLiteStore
-2. Nenhum método em BrowserStore sem equivalente no SQLite (e vice-versa)
-3. Shape de retorno idêntico: mesmo field names, tipos, nullable
-4. BrowserStore NÃO injeta seeds em `init()` — `emptyState()` retorna arrays vazios
-5. BrowserStore NÃO tem lógica de negócio ausente no SQLite
+Banco pode ser recriado. Sem dados reais a proteger.
 
-### 6.2 Checagem de paridade (WP-DRD-04)
+`DB.init()` detecta ausência de `learning_units` e cria do zero.
+`DROP TABLE IF EXISTS sources` remove a tabela legacy.
+`RENAME COLUMN content TO title` em `learning_units` após criação (ou na criação direta com nome correto).
 
-| Método | BrowserStore | SQLiteStore |
-|--------|-------------|------------|
-| `subjects.getActive()` | ✓ | ✓ |
-| `subjects.create(name)` | ✓ | ✓ |
-| `subjects.update(id, fields)` | ✓ | ✓ |
-| `subjects.deactivate(id)` | ✓ (via update) | ✓ |
-| `subjects.deleteCascade(id)` | ✓ | ✓ |
-| `learningUnits.create({...})` | a implementar | a implementar |
-| `learningUnits.getAll()` | a implementar | a implementar |
-| `learningUnits.update(id, fields)` | a implementar | a implementar |
-| `exercises.*` | ✓ (com rename unit_id) | ✓ (com rename unit_id) |
-| `reviewTasks.*` | ✓ (com rename unit_id) | ✓ (com rename unit_id) |
-| `exportAll()` | ✓ (com schemaVersion + learningUnits) | ✓ |
-| `importAll(backup)` | ✓ (com validação schemaVersion) | ✓ |
-| `reset()` | ✓ (sem seeds) | ✓ (sem seeds) |
-
-### 6.3 Contrato de tipos (JSDoc nas funções mapXxx)
-
-```js
-/** @typedef {{id: number, subjectId: number, title: string, sourceText: string, summaryBody: string|null, firstStudiedAt: string, createdAt: string, updatedAt: string}} LearningUnit */
-/** @typedef {{id: number, unitId: number, questionText: string, answerText: string, hintText: string|null, position: number, createdAt: string, updatedAt: string}} Exercise */
-```
-
----
-
-## 7. Commit 09ea0d8 — Análise Técnica (não gate humano)
-
-Após DOMAIN_REDESIGN_APPROVAL, o agente compara 09ea0d8 com o design aprovado:
-
-| Item em 09ea0d8 | Decisão técnica |
-|-----------------|-----------------|
-| `source_text` em study_records | PRESERVAR — correto |
-| UI de fonte como input livre | PRESERVAR — correto |
-| Draft preservation | PRESERVAR — correto |
-| Seeds de medicina em BrowserStore.init() | CORRIGIR — remover seeds |
-| `sources` table em schemaStatements | CORRIGIR — remover CREATE TABLE |
-| `study_date` como nome da coluna | CORRIGIR → `first_studied_at` |
-| `study_record_id` como FK em exercises/review_tasks | CORRIGIR → `unit_id` |
-| Tabela nomeada `study_records` | CORRIGIR → `learning_units` |
-
-Nenhum item da lista acima é decisão de produto — todos são decisões técnicas deriváveis do design.
-
----
-
-## 8. Migration Strategy
-
-### 8.1 Se o banco local NÃO tem dados reais (hipótese, estado atual)
-
-Caminho simples: DROP + CREATE com novo schema. `DB.init()` detecta tabela ausente e cria do zero.
-
-### 8.2 Se o banco local TEM dados reais
-
-Migration aditiva via `ensureColumns()`:
-```sql
--- Adicionar first_studied_at se não existe (DEFAULT = valor de study_date)
-ALTER TABLE study_records ADD COLUMN first_studied_at TEXT;
-UPDATE study_records SET first_studied_at = study_date WHERE first_studied_at IS NULL;
--- Criar learning_units como alias via VIEW temporariamente?
--- Ou: INSERT INTO learning_units SELECT id, subject_id, content, source_text, summary_body, study_date, created_at, updated_at FROM study_records;
-```
-
-SCHEMA_MIGRATION_APPROVAL required antes de migration com dados reais.
-
-### 8.3 Estado VAZIO após reset
+### 6.2 Reset
 
 ```js
 async reset() {
-  // DELETE em ordem de FK: exercises antes de learning_units antes de subjects
   await execute("DELETE FROM exercises");
   await execute("DELETE FROM review_tasks");
   await execute("DELETE FROM learning_units");
   await execute("DELETE FROM subjects");
-  // sem INSERT de seeds
+  // NÃO inserir seeds
 }
 ```
 
+### 6.3 SCHEMA_MIGRATION_APPROVAL removido
+
+Banco atual não tem dados reais. Se dados reais aparecerem no futuro, criar gate naquele momento. Não criar gate preventivo para cenário hipotético.
+
 ---
 
-## 9. Decisões Formais (PROPOSED — aguardando DOMAIN_REDESIGN_APPROVAL)
+## 7. Decisões Formais (PROPOSED — aguardam DOMAIN_REDESIGN_APPROVAL)
 
-| Decisão | Conteúdo | Status |
-|---------|---------|--------|
-| PROP-01 | Fonte é texto livre em `learning_units.source_text`; sem tabela `sources` | PROPOSED |
-| PROP-02 | `study_date` → `first_studied_at`; `created_at` técnico preservado separado | PROPOSED |
-| PROP-03 | Estado inicial VAZIO; nenhum seed acadêmico | PROPOSED |
-| PROP-04 | `is_active` em subjects (nome preservado, não renomear) | PROPOSED |
-| PROP-05 | `exercises` = DEFINITION-only; fronteira formal DEFINITION × ATTEMPT | PROPOSED |
-| PROP-06 | 16 review_tasks = LEGACY_TEMPORARY; boundary em scheduler.js | PROPOSED |
-| PROP-07 | `schemaVersion: 2` em backup; fail-closed em versão incompatível | PROPOSED |
+| ID | Proposta |
+|----|---------|
+| PROP-01 | Fonte = texto livre em `learning_units.source_text`; sem tabela `sources` |
+| PROP-02 | `study_date` preservado; `created_at` técnico separado; `first_studied_at` = LATER |
+| PROP-03 | Estado inicial VAZIO; nenhum seed acadêmico em init ou reset |
+| PROP-04 | `is_active` em subjects preservado (não renomear) |
+| PROP-05 | `title` em learning_units (era `content`) |
+| PROP-06 | `exercises.provenance` TEXT: 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; DEFAULT 'MANUAL' |
+| PROP-07 | Evidência NOW = agregada em review_tasks; per-exercise = LATER |
+| PROP-08 | 16 review_tasks = LEGACY_TEMPORARY; boundary em scheduler.js; FSRS pode exigir schema change |
+| PROP-09 | `schemaVersion: 2` em backup; fail-closed em qualquer versão incompatível |
+| PROP-10 | Banco de dev pode ser recriado; sem SCHEMA_MIGRATION_APPROVAL neste ciclo |
 
-**Nenhuma dessas decisões está registrada como aprovada em STATE.md até aprovação do HUMAN_GATE.**
+**Nenhuma dessas propostas é decisão aprovada até HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL.**
