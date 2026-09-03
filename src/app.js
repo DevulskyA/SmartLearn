@@ -9,6 +9,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
+import { colorVarForKey } from "./performance-thresholds.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -107,6 +108,7 @@ const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
+const todayLoadSummary = document.querySelector("#today-load-summary");
 const reviewDashboard = document.querySelector("#review-dashboard");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
@@ -288,7 +290,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
   const heading = document.createElement("div");
   heading.className = "review-row-heading";
-  heading.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
+  const subjectChip = document.createElement("span");
+  subjectChip.className = "subject-chip";
+  subjectChip.textContent = subject?.name ?? "Sem disciplina";
+  subjectChip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
+  heading.append(subjectChip);
   heading.append(createTextElement("h3", "review-content", unit?.title ?? "Conteúdo indisponível"));
   heading.append(
     createTextElement(
@@ -513,6 +519,17 @@ export async function renderToday() {
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
       list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
     }
+  }
+
+  // Load summary above fold
+  if (todayLoadSummary) {
+    const parts = [];
+    if (overdueReviews.length > 0) parts.push(`${overdueReviews.length} vencida${overdueReviews.length !== 1 ? "s" : ""}`);
+    if (pendingToday.length > 0) parts.push(`${pendingToday.length} hoje`);
+    if (tomorrowReviews.length > 0) parts.push(`${tomorrowReviews.length} amanhã`);
+    if (completedToday.length > 0) parts.push(`${completedToday.length} feita${completedToday.length !== 1 ? "s" : ""}`);
+    todayLoadSummary.hidden = parts.length === 0;
+    todayLoadSummary.textContent = parts.join(" · ");
   }
 
   const pendingCount = overdueReviews.length + pendingToday.length;

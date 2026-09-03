@@ -27,6 +27,22 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Discipline palette — light */
+:root {
+  --disc-color-disc-blue: #2563eb;
+  --disc-color-disc-green: #16a34a;
+  --disc-color-disc-purple: #7c3aed;
+  --disc-color-disc-orange: #ea580c;
+  --disc-color-disc-red: #dc2626;
+  --disc-color-disc-teal: #0d9488;
+  --disc-color-disc-pink: #db2777;
+  --disc-color-disc-indigo: #4338ca;
+  --disc-color-disc-lime: #65a30d;
+  --disc-color-disc-amber: #d97706;
+  --disc-color-disc-cyan: #0891b2;
+  --disc-color-disc-rose: #e11d48;
+}
+
 :root[data-theme-mode="dark"] {
   color-scheme: dark;
   --color-bg: oklch(0.21 0.012 80);
@@ -43,6 +59,19 @@
   --status-done-text: oklch(0.82 0.12 156);
   --status-done-fill: oklch(0.32 0.05 156);
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4), 0 10px 28px oklch(0 0 0 / 0.45);
+  /* Discipline palette — dark */
+  --disc-color-disc-blue: #60a5fa;
+  --disc-color-disc-green: #4ade80;
+  --disc-color-disc-purple: #c084fc;
+  --disc-color-disc-orange: #fb923c;
+  --disc-color-disc-red: #f87171;
+  --disc-color-disc-teal: #2dd4bf;
+  --disc-color-disc-pink: #f472b6;
+  --disc-color-disc-indigo: #818cf8;
+  --disc-color-disc-lime: #a3e635;
+  --disc-color-disc-amber: #fbbf24;
+  --disc-color-disc-cyan: #22d3ee;
+  --disc-color-disc-rose: #fb7185;
 }
 
 /* Status colors that live outside the core tokens need a dark pass too. */
@@ -1518,6 +1547,32 @@ h1 {
   text-transform: uppercase;
 }
 
+.subject-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 14%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 30%, var(--color-border));
+  color: color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 80%, var(--color-text));
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.subject-chip::before {
+  content: "";
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--subject-color, var(--disc-color-disc-blue));
+  flex-shrink: 0;
+}
+
 .review-content {
   margin: 0;
   font-size: 1.02rem;
@@ -1732,6 +1787,22 @@ h1 {
   color: var(--color-muted);
   font-size: 1rem;
   line-height: 1.5;
+}
+
+.today-load-summary {
+  margin: 0 0 1rem;
+  padding: 0.7rem 1.1rem;
+  border-radius: 0.75rem;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.today-load-summary[hidden] {
+  display: none;
 }
 
 .today-tomorrow {
