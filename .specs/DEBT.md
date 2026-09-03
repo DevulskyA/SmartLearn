@@ -1,0 +1,91 @@
+# Technical Debt Ledger — SmartLearn
+
+Only known, material, intentionally deferred imperfections. Not a wish list.
+
+---
+
+## Open
+
+### DEBT-001 — SQLite/Tauri real persistence not validated for analytics-vnext
+
+- **Status**: open
+- **Problem**: All analytics-vnext acceptance criteria were verified against BrowserStore (localStorage-backed test double). SQLite transaction atomicity, schema migrations (`ensureColumns`, `ON DELETE CASCADE`), and `PRAGMA foreign_keys = ON` were NOT tested in a real Tauri + SQLite runtime.
+- **Origin**: analytics-vnext closure audit 2026-09-03; LESSON-001
+- **Risk**: Silent data loss or partial state on mobile/desktop if SQLite behavior differs from BrowserStore — particularly for `completeReviewWithEvidence` atomicity and `runMigrationFromReviewTasks`.
+- **Impact**: All NF-01 claims for analytics-vnext are browser-only. PR merge to production without this smoke is high-risk.
+- **Affected components**: `src/db.js` (BrowserStore + SQLite paths), Tauri plugin-sql 2.4.0, `completeReviewWithEvidence`, `runMigrationFromReviewTasks`, `ensureColumns`
+- **Dependencies**: Tauri dev environment with `npm run tauri dev`; a device or emulator for Android smoke
+- **Resolution criterion**: Run `npm run tauri dev`, execute `completeReviewWithEvidence` end-to-end in the app, verify learning_evidence row in the SQLite file, run migration twice and confirm idempotency. Document with screenshot or log.
+- **Priority**: P1
+- **Owner**: unassigned
+- **Evidence**: `.specs/features/smartlearn-ui-analytics-vnext/validation.md` — BROWSER_PASS verdict, gap documented
+
+---
+
+### DEBT-002 — app.js: state derivation and UI utilities not extracted
+
+- **Status**: open
+- **Problem**: `app.js` is 3219 lines and contains state derivation logic (`getTrackingState`, `getPlanUnitState`) mixed with DOM render functions and UI utilities (`buildSparkline`, `createTrendBadge`, `createStateBadge`, `buildColorPicker`). State derivation belongs in `scheduler.js` or a domain module; UI utilities belong in a `ui-utils.js`.
+- **Origin**: analytics-vnext code quality review (Task 14) 2026-09-03
+- **Risk**: Low immediate risk. Growing file will increase merge conflict surface and reduce testability of state derivation.
+- **Impact**: Harder to unit-test `getTrackingState` / `getPlanUnitState` without DOM; growing file size.
+- **Affected components**: `src/app.js`, potentially new `src/ui-utils.js` or `src/domain.js`
+- **Dependencies**: None blocking
+- **Resolution criterion**: `getTrackingState` and `getPlanUnitState` moved to a non-DOM module and covered by node:test; `buildSparkline` and badge builders moved to `ui-utils.js`.
+- **Priority**: P3
+- **Owner**: unassigned
+- **Evidence**: analytics-vnext WP-F3 code quality review; `.specs/features/smartlearn-ui-analytics-vnext/validation.md` §Code quality assessment
+
+---
+
+### DEBT-003 — Fixed schedule generates ~1190 review tasks/day by year 3
+
+- **Status**: open
+- **Problem**: DEC-016 explicitly defers FSRS (WP-07) as "LATER". With 16 fixed review tasks per unit and a Medicina student registering ~5 units/day, year 3 generates ~1190 review tasks/day. The fixed schedule (legacy algorithm) is not sustainable for longitudinal use.
+- **Origin**: DEC-016 note "Risco de escala", 2026-09-02
+- **Risk**: Student abandons the app when daily review volume becomes unmanageable. No spaced-repetition optimization means inefficient study time.
+- **Impact**: Core learning loop becomes unusable at scale. FSRS is "necessary, not optional" per DEC-016.
+- **Affected components**: `src/scheduler.js` (generateInitialTasks, REVIEW_DAY_OFFSETS), `src/db.js` (review_tasks table), all review UI
+- **Dependencies**: FSRS requires `repeat(card_state, rating, now) → next_due` interface; cold-start migration needed for existing tasks
+- **Resolution criterion**: `scheduler.js` exports FSRS-based algorithm alongside legacy; user can opt-in per unit or globally; existing tasks migrate gracefully on first FSRS review.
+- **Priority**: P1
+- **Owner**: unassigned
+- **Evidence**: `.specs/project/STATE.md` DEC-016 — "Risco de escala" section
+
+---
+
+### DEBT-004 — DEC-013-V2 (fonte = texto livre) still PROPOSED
+
+- **Status**: open
+- **Problem**: `PROP-DEC-013-V2` was proposed in STATE (fonte como texto livre, empty initial state) and partially implemented in commit `09ea0d8`, but remains formally PROPOSED pending `HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL`.
+- **Origin**: `.specs/project/STATE.md` PROP-DEC-013-V2, 2026-09-03
+- **Risk**: Partial implementation + unapproved decision creates inconsistency in specs and code.
+- **Impact**: Specs may claim `sources` entity exists while code removed it. Any new feature touching registration must know which decision is active.
+- **Affected components**: `src/db.js` (sources table removal), `src/app.js` (registration form), `.specs/project/STATE.md`
+- **Dependencies**: HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL must fire first
+- **Resolution criterion**: User approves DEC-013-V2; STATE updated; PROP prefix removed; INV-05B marked SUPERSEDED.
+- **Priority**: P2
+- **Owner**: unassigned
+- **Evidence**: `.specs/project/STATE.md` PROP-DEC-013-V2; commit `09ea0d8`
+
+---
+
+### DEBT-005 — TLC_INSTALLATION_MISMATCH: plugin-sql version vs Tauri 2 feature flags
+
+- **Status**: open
+- **Problem**: `@tauri-apps/plugin-sql` version compatibility with Tauri 2.4.x feature flags (`sqlite`) and `PRAGMA foreign_keys = ON` enforcement has not been verified on the current installation.
+- **Origin**: `.specs/project/STATE.md` TLC_INSTALLATION_MISMATCH, 2026-09-03
+- **Risk**: Migrations or CASCADE deletes may silently fail without foreign key enforcement.
+- **Impact**: Data integrity guarantees for `ON DELETE CASCADE` in `review_tasks` and `learning_evidence` are unverified.
+- **Affected components**: `src-tauri/Cargo.toml`, `src/db.js` DB.init(), schema constraints
+- **Dependencies**: Requires Tauri dev environment (DEBT-001 resolution environment)
+- **Resolution criterion**: `npm run tauri dev`; execute `PRAGMA foreign_keys;` via console; confirm returns 1; run a cascade delete test.
+- **Priority**: P1 (resolved together with DEBT-001)
+- **Owner**: unassigned
+- **Evidence**: `.specs/project/STATE.md` TLC_INSTALLATION_MISMATCH
+
+---
+
+## Resolved
+
+none
