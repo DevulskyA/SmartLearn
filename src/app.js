@@ -430,10 +430,13 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
   summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
 
-  // Exercises section (read-only Q→reveal-A in the review context)
+  // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
   if (exercises.length > 0) {
     const exercisesReviewSection = document.createElement("div");
     exercisesReviewSection.className = "review-row-exercises";
+    exercisesReviewSection.dataset.exercisesTotal = String(exercises.length);
+    exercisesReviewSection.dataset.exercisesAnswered = "0";
+    exercisesReviewSection.dataset.exercisesCorrect = "0";
 
     const exercisesTitle = createTextElement("p", "review-exercises-title", `Exercícios (${exercises.length})`);
     exercisesReviewSection.append(exercisesTitle);
@@ -441,6 +444,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     for (const exercise of exercises) {
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
+      exItem.dataset.exerciseAnswered = "false";
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -452,11 +456,32 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
       const answerEl = createTextElement("p", "review-exercise-answer", exercise.answerText);
       answerEl.hidden = true;
+
+      const judgmentRow = document.createElement("div");
+      judgmentRow.className = "exercise-judgment";
+      judgmentRow.hidden = true;
+
+      const acerteiBtn = document.createElement("button");
+      acerteiBtn.type = "button";
+      acerteiBtn.className = "small-button exercise-correct-btn";
+      acerteiBtn.dataset.action = "exercise-acertei";
+      acerteiBtn.dataset.reviewId = String(task.id);
+      acerteiBtn.textContent = "Acertei";
+
+      const erreiBtn = document.createElement("button");
+      erreiBtn.type = "button";
+      erreiBtn.className = "small-button exercise-wrong-btn";
+      erreiBtn.dataset.action = "exercise-errei";
+      erreiBtn.dataset.reviewId = String(task.id);
+      erreiBtn.textContent = "Errei";
+
+      judgmentRow.append(acerteiBtn, erreiBtn);
+
       if (exercise.hintText) {
         const hintEl = createTextElement("p", "review-exercise-hint", `Dica: ${exercise.hintText}`);
-        exItem.append(qEl, hintEl, revealBtn, answerEl);
+        exItem.append(qEl, hintEl, revealBtn, answerEl, judgmentRow);
       } else {
-        exItem.append(qEl, revealBtn, answerEl);
+        exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
       exercisesReviewSection.append(exItem);
     }
@@ -1550,10 +1575,49 @@ reviewDashboard.addEventListener("click", (event) => {
 reviewDashboard.addEventListener("click", (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
+  const exItem = button.closest(".review-exercise-item");
   const answerEl = button.nextElementSibling;
   if (!answerEl) return;
   answerEl.hidden = !answerEl.hidden;
   button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
+  if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
+    const judgment = exItem.querySelector(".exercise-judgment");
+    if (judgment) judgment.hidden = false;
+  }
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
+  if (!button) return;
+  const exItem = button.closest(".review-exercise-item");
+  if (!exItem || exItem.dataset.exerciseAnswered === "true") return;
+
+  const isCorrect = button.dataset.action === "exercise-acertei";
+  exItem.dataset.exerciseAnswered = "true";
+  exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
+  for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
+    btn.disabled = true;
+  }
+  button.classList.add("is-selected");
+
+  const section = exItem.closest("[data-exercises-total]");
+  if (!section) return;
+  const answered = Number(section.dataset.exercisesAnswered) + 1;
+  const correct = Number(section.dataset.exercisesCorrect) + (isCorrect ? 1 : 0);
+  section.dataset.exercisesAnswered = String(answered);
+  section.dataset.exercisesCorrect = String(correct);
+
+  // Show running score in review-score-pill when all answered
+  const total = Number(section.dataset.exercisesTotal);
+  const row = section.closest(".review-row");
+  if (answered === total && row) {
+    const scorePercent = total > 0 ? (correct / total) * 100 : 0;
+    for (const el of row.querySelectorAll("[data-score-for]")) {
+      el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+      el.classList.remove("is-empty");
+    }
+    section.dataset.allAnswered = "true";
+  }
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -1612,8 +1676,24 @@ reviewDashboard.addEventListener("change", async (event) => {
   if (!input) return;
 
   input.disabled = true;
+  const taskId = Number(input.dataset.reviewId);
   try {
-    await DB.reviewTasks.update(Number(input.dataset.reviewId), {
+    const row = input.closest(".review-row");
+    const exercisesSection = row?.querySelector("[data-exercises-total]");
+
+    if (input.checked && exercisesSection) {
+      const total = Number(exercisesSection.dataset.exercisesTotal);
+      const answered = Number(exercisesSection.dataset.exercisesAnswered);
+      const correct = Number(exercisesSection.dataset.exercisesCorrect);
+      if (total > 0 && answered > 0) {
+        await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
+        setReviewMessage();
+        await renderToday();
+        return;
+      }
+    }
+
+    await DB.reviewTasks.update(taskId, {
       reviewDone: input.checked,
       completedAt: input.checked ? new Date().toISOString() : null,
     });
