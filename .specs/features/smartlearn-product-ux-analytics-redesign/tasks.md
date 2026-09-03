@@ -2,17 +2,17 @@
 
 **Feature:** smartlearn-product-ux-analytics-redesign
 **Data:** 2026-09-03
-**Gate:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL — nenhuma implementação antes deste gate
+**Gate:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL — nenhuma implementação antes deste gate
 
 ---
 
 ## Bloqueio
 
 ```
-HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL
+HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL
 
 Parar aqui. Estas tasks só podem ser executadas após aprovação explícita
-de spec.md + design.md pelo usuário/produto.
+de spec.md + design.md + CURRENT_UI_AUDIT.md pelo usuário/produto.
 ```
 
 ---
@@ -31,6 +31,25 @@ Fase F — Visual polish + UATs finais
 ---
 
 ## Fase A — Fundação de domínio
+
+### WP-A0 — Auditoria do produto atual (CURRENT_UI_AUDIT.md)
+
+**Dependências:** nenhuma
+**Estimativa:** ~1h (manual + observação de telas)
+**Status:** CONCLUÍDA — ver `CURRENT_UI_AUDIT.md`
+
+**Tarefas:**
+1. Abrir todas as telas atuais do SmartLearn no browser/Tauri
+2. Capturar screenshots reais de cada tab
+3. Comparar lado a lado com os módulos de referência do brief
+4. Listar problemas de hierarquia, densidade, navegação, cor, formulário e analytics
+5. Mapear o que já existe no domínio e o que falta
+6. Entregar `CURRENT_UI_AUDIT.md`
+
+**Gate:** `CURRENT_UI_AUDIT.md` presente com matriz de gaps completa
+**Commit:** incluído no commit de specs
+
+---
 
 ### WP-A1 — `learning_evidence` schema + migration + DB API
 

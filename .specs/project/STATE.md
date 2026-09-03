@@ -8,11 +8,11 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 - **Fase:** Product/UX/Analytics Redesign — Specify em andamento (WP-01..05). Domain redesign v3 LOCAL_BROWSER_BASELINE = PASS, preservado.
 - **Data:** 2026-09-03
-- **Próxima ação:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL — revisar `.specs/features/smartlearn-product-ux-analytics-redesign/` (spec.md, design.md, tasks.md) antes de qualquer implementação.
+- **Próxima ação:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL — revisar `.specs/features/smartlearn-product-ux-analytics-redesign/` (spec.md, design.md, tasks.md, CURRENT_UI_AUDIT.md) antes de qualquer implementação.
 - **Testes:** 44 testes passando, 0 falhas (commit 77911b3)
 - **Branch de trabalho:** `claude/com-tlc-replanning-77f844` (worktree isolado)
 - **Commits do domain redesign:** `5a43fd4`, `9ee5793`, `998b3b2`, `77911b3` — PRESERVADOS, NÃO DESCARTAR
-- **Bloqueio ativo:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL. NÃO implementar código novo antes da aprovação. NÃO push/PR.
+- **Bloqueio ativo:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL. NÃO implementar código novo antes da aprovação. NÃO push/PR.
 
 ---
 
@@ -202,11 +202,11 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 | Gate | Bloqueio | Referência |
 |------|---------|-----------|
-| PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL | NÃO implementar código; NÃO push/PR/merge | `.specs/features/smartlearn-product-ux-analytics-redesign/` |
+| UI_ANALYTICS_DESIGN_APPROVAL | NÃO implementar código; NÃO push/PR/merge | `.specs/features/smartlearn-product-ux-analytics-redesign/` |
 | SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco real tem dados do usuário | `.specs/features/smartlearn-domain-redesign/design.md §8` |
 
 **Resolvido:** DOMAIN_REDESIGN_APPROVAL — implementado (WP-DRD-01..08, commits 5a43fd4..77911b3).
-**Superseded:** PUSH_AND_PR_APPROVAL — aguarda PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL + implementação completa + Tauri/SQLite real + UATs.
+**Superseded:** PUSH_AND_PR_APPROVAL — aguarda UI_ANALYTICS_DESIGN_APPROVAL + implementação completa + Tauri/SQLite real + UATs.
 
 ## TLC_INSTALLATION_MISMATCH
 

@@ -2,7 +2,7 @@
 
 **Feature:** smartlearn-product-ux-analytics-redesign
 **Data:** 2026-09-03
-**Gate:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL — nenhuma implementação antes
+**Gate:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL — nenhuma implementação antes
 
 ---
 
@@ -68,10 +68,11 @@ CREATE TABLE IF NOT EXISTS learning_evidence (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   unit_id INTEGER NOT NULL REFERENCES learning_units(id),
   evidence_date TEXT NOT NULL,
-  context TEXT NOT NULL CHECK(context IN ('INITIAL_STUDY','REVIEW','EXTERNAL')),
+  context TEXT NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW_INTERNAL','EXTERNAL_EXERCISES')),
   questions_count INTEGER,
   correct_count INTEGER,
   score_percent REAL,
+  adjusted_score_percent REAL,
   review_task_id INTEGER REFERENCES review_tasks(id),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
@@ -85,7 +86,7 @@ INSERT INTO learning_evidence (unit_id, evidence_date, context, questions_count,
 SELECT
   rt.unit_id,
   COALESCE(rt.completed_at, rt.due_date),
-  'REVIEW',
+  'REVIEW_INTERNAL',
   rt.questions_count,
   rt.correct_count,
   rt.score_percent,

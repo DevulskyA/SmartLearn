@@ -3,7 +3,7 @@
 **Feature:** smartlearn-product-ux-analytics-redesign
 **Classificação:** Complex / high-risk
 **Data:** 2026-09-03
-**Gate:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL — parar antes de qualquer implementação
+**Gate:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL — parar antes de qualquer implementação
 
 ---
 
@@ -659,7 +659,7 @@ A interface está pronta quando um usuário sem treinamento responde visualmente
 ## HUMAN_GATE
 
 ```
-HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL
+HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL
 ```
 
 **Parar aqui. Nenhuma implementação antes da aprovação desta spec.**
