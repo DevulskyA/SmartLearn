@@ -188,11 +188,14 @@ Sem seeds pré-injetados. O aluno cadastra "Fisiologia" como primeiro ato.
 | DRD-10 | BrowserStore e SQLite implementam mesmo contrato; nenhuma divergência de métodos ou shapes |
 | DRD-11 | `learning_units.study_date` registra data que o aluno estudou; `created_at` é timestamp técnico; campos distintos |
 | DRD-12 | `learning_units.title` é o nome da aula/unidade (era `content`) |
-| DRD-13 | `exercises.provenance` = 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; padrão 'MANUAL' |
-| DRD-14 | Evidência agregada de revisão em `review_tasks` (correct_count, score_percent) preservada |
-| DRD-15 | Sem campos de tentativa por exercício no schema NOW (fronteira DEFINITION×ATTEMPT mantida) |
-| DRD-16 | Boundary LEGACY_TEMPORARY: nenhum arquivo fora de scheduler.js hardcoda "16" ou assume count de review_tasks |
-| DRD-17 | Reset apaga TODOS os dados sem re-injetar seeds |
+| DRD-13 | `exercises.provenance` TEXT NOT NULL; valores: 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; sem SQL DEFAULT; cada caminho de criação informa explicitamente |
+| DRD-14 | `hint_text` em exercises é pista pedagógica ao aluno; NUNCA usado para citation ou localização de fonte |
+| DRD-15 | Evidência agregada de revisão em `review_tasks` (questions_count, correct_count, score_percent) calculada pelo sistema |
+| DRD-16 | Sem campos de tentativa por exercício no schema NOW (fronteira DEFINITION×ATTEMPT mantida) |
+| DRD-17 | Quando unidade tem exercícios internos: UI guia item a item (Acertei/Errei); sistema calcula agregado; aluno NÃO digita quantidade manualmente |
+| DRD-18 | Fluxo legado/externo preservado: entrada manual de questões e acertos para exercícios realizados fora do SmartLearn |
+| DRD-19 | Boundary LEGACY_TEMPORARY: nenhum arquivo fora de scheduler.js hardcoda "16" ou assume count de review_tasks |
+| DRD-20 | Reset apaga TODOS os dados sem re-injetar seeds |
 
 ### UX — User Experience
 
@@ -251,11 +254,22 @@ Sem seeds pré-injetados. O aluno cadastra "Fisiologia" como primeiro ato.
 
 ## 7. Structural Gate
 
-**STRUCTURAL_GATE = UNVERIFIED_BY_RUNTIME**
+**STRUCTURAL_GATE = TLC_INSTALLATION_MISMATCH**
 
-`validate_spec.py` e `validate_tasks.py` não existem no skill TLC bundled.
-O único script Python disponível é `scripts/lessons.py`.
-Esses validators não puderam ser executados. Checagem estrutural manual realizada como melhor esforço disponível — não equivale ao gate automatizado.
+Busca exaustiva em `C:\Users\Ariel\.claude\skills\tlc-spec-driven\`:
+
+Encontrados:
+- `SKILL.md`
+- `references/*.md` (12 arquivos)
+- `scripts/lessons.py`
+
+Ausentes (mencionados pelo SKILL.md como bundled):
+- `scripts/validate_spec.py`
+- `scripts/validate_tasks.py`
+- `scripts/check_commit.py`
+- `scripts/validate_completion.py`
+
+A instalação da skill está incompleta. Os validators automáticos não existem neste runtime. Não é possível executar o gate formal. Isso não bloqueia o redesign conceitual, mas a inconsistência de instalação deve ser investigada separadamente.
 
 ---
 

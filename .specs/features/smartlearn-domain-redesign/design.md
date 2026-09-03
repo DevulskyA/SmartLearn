@@ -37,9 +37,10 @@ exercises (
   unit_id       INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,
   question_text TEXT NOT NULL,
   answer_text   TEXT NOT NULL,
-  hint_text     TEXT,
+  hint_text     TEXT,                    -- SOMENTE: pista pedagógica ao aluno; NUNCA citation/provenance
   position      INTEGER NOT NULL DEFAULT 0,
-  provenance    TEXT NOT NULL DEFAULT 'MANUAL',  -- 'MANUAL' | 'SOURCE' | 'AI_GENERATED'
+  provenance    TEXT NOT NULL,           -- 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; SEM SQL DEFAULT
+                                         -- cada fluxo de criação informa explicitamente
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
   -- SEM: score, attempt_count, last_attempted_at
@@ -89,14 +90,23 @@ Migration: `RENAME COLUMN content TO title` (SQLite 3.25.0+, disponível na vers
 
 Quando `study_sessions` for introduzido: a data em `learning_units` vira `first_studied_at` por refactor. Esse será o momento correto.
 
-### 1.3 Exercise provenance — por que mínima
+### 1.3 Exercise provenance — por que mínima e fail-closed
 
 Questão extraída de livro ≠ questão gerada por IA ≠ questão elaborada manualmente.
 Sem `provenance`, essa distinção se perde no banco.
 
-`provenance TEXT NOT NULL DEFAULT 'MANUAL'` com valores enumerados `'MANUAL' | 'SOURCE' | 'AI_GENERATED'` é o mínimo que previne a confusão sem criar sistema de citações completo.
+**Valores:** `'MANUAL' | 'SOURCE' | 'AI_GENERATED'`
 
-**Não adicionado:** página, número de questão, citação formal — esses detalhes entram em `hint_text` ou em sistema de citações futuro.
+**Sem SQL DEFAULT:** nenhum valor silencioso. Cada fluxo de criação informa `provenance` explicitamente:
+- Usuário cria questão manualmente → `'MANUAL'`
+- Questão extraída diretamente da fonte → `'SOURCE'`
+- Questão gerada por IA (mesmo baseada na fonte) → `'AI_GENERATED'`
+
+Fail-closed: se um caminho de IA esquecer de setar `provenance`, o banco recusa o INSERT com NOT NULL violation — nunca clasifica silenciosamente como 'MANUAL'.
+
+**hint_text NÃO é citation:** `hint_text` tem uma única semântica — pista pedagógica apresentada ao aluno durante a revisão. Localização de página/parágrafo de fonte → campo futuro `source_locator` (LATER), nunca `hint_text`.
+
+**Para SOURCE:** a referência geral é herdada de `learning_units.source_text`. Sem necessidade de `source_locator` NOW.
 
 ---
 
@@ -104,7 +114,7 @@ Sem `provenance`, essa distinção se perde no banco.
 
 ### 2.1 NOW — agregada por sessão de revisão
 
-`review_tasks` já contém evidência de revisão em nível de sessão:
+`review_tasks` contém evidência em nível de sessão:
 
 | Campo | Semântica |
 |-------|-----------|
@@ -113,27 +123,51 @@ Sem `provenance`, essa distinção se perde no banco.
 | `score_percent` | correct_count / questions_count × 100 |
 | `questions_done` | Flag: exercícios foram realizados nesta revisão |
 
-Granularidade: por sessão de revisão, não por exercício individual.
+Granularidade: por sessão de revisão. Por exercício individual = LATER.
 
-### 2.2 LATER — por exercício individual
+### 2.2 Fluxo de revisão com exercícios internos (UX NOW)
 
-Quando o produto precisar de rastreabilidade granular:
+Quando a unidade tem exercícios cadastrados no SmartLearn, o aluno NÃO digita quantidade/acertos manualmente. O sistema guia:
+
+```
+Tela Revisão R1 — "Organização funcional..."
+  → Resumo Mestre (leitura)
+  → Exercício 1: [enunciado]
+       [Revelar resposta] → [Acertei] / [Errei]
+  → Exercício 2: [enunciado]
+       [Revelar resposta] → [Acertei] / [Errei]
+  → ...
+  → [Finalizar revisão]
+       Sistema calcula: questions_count = N, correct_count = K, score_percent = K/N×100
+       Persiste APENAS o agregado em review_tasks
+```
+
+Estado individual (acertei/errei por exercício) existe **apenas durante a sessão** na memória da UI. Não persiste no banco NOW.
+
+**Fluxo legado/externo:** se o aluno realizou exercícios fora do SmartLearn (livro, apostila), a UI oferece entrada manual de quantidade e acertos — preservar esse fluxo como fallback.
+
+**Discriminação:**
+- Unidade com exercícios internos → UI guia item a item → agregado calculado
+- Sem exercícios internos → entrada manual opcional
+
+### 2.3 LATER — por exercício individual persistente
 
 ```sql
 -- LATER — não criar agora
 exercise_attempts (
-  id                 INTEGER PRIMARY KEY,
-  exercise_id        INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
-  review_task_id     INTEGER REFERENCES review_tasks(id),
-  answered_correctly INTEGER,        -- 1 = acerto, 0 = erro
-  assistance_used    TEXT,           -- cues, hints usados
-  confidence_level   INTEGER,        -- declarado pelo aluno (1-5)
-  error_classification TEXT,         -- tipo de erro (concept, recall, application)
-  attempted_at       TEXT NOT NULL
+  id                   INTEGER PRIMARY KEY,
+  exercise_id          INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+  review_task_id       INTEGER REFERENCES review_tasks(id),
+  answered_correctly   INTEGER,        -- 1 = acerto, 0 = erro
+  assistance_used      TEXT,           -- cues/hints utilizados
+  confidence_level     INTEGER,        -- declarado pelo aluno (1-5)
+  error_classification TEXT,           -- tipo de erro (concept, recall, application)
+  transfer_context     TEXT,           -- acerto em contexto diferente
+  attempted_at         TEXT NOT NULL
 )
 ```
 
-Fronteira formal: `exercises` NÃO recebe campos de tentativa. `exercise_attempts` = LATER.
+Fronteira formal NOW: `exercises` NÃO recebe campos de tentativa. `exercise_attempts` = LATER.
 
 ---
 
@@ -260,7 +294,7 @@ Banco atual não tem dados reais. Se dados reais aparecerem no futuro, criar gat
 | PROP-03 | Estado inicial VAZIO; nenhum seed acadêmico em init ou reset |
 | PROP-04 | `is_active` em subjects preservado (não renomear) |
 | PROP-05 | `title` em learning_units (era `content`) |
-| PROP-06 | `exercises.provenance` TEXT: 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; DEFAULT 'MANUAL' |
+| PROP-06 | `exercises.provenance` TEXT NOT NULL; 'MANUAL' | 'SOURCE' | 'AI_GENERATED'; sem SQL DEFAULT; fail-closed |
 | PROP-07 | Evidência NOW = agregada em review_tasks; per-exercise = LATER |
 | PROP-08 | 16 review_tasks = LEGACY_TEMPORARY; boundary em scheduler.js; FSRS pode exigir schema change |
 | PROP-09 | `schemaVersion: 2` em backup; fail-closed em qualquer versão incompatível |

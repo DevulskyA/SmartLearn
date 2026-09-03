@@ -46,11 +46,14 @@
 - `mapExercise(row)` → `{id, unitId, questionText, answerText, hintText, position, provenance, createdAt, updatedAt}`
 - `mapReviewTask(row)` → `unitId` (era `studyRecordId`)
 
-**T01.3 — SQLiteStore: exercises.provenance**
-- Schema: `provenance TEXT NOT NULL DEFAULT 'MANUAL'`
-- `ensureColumns()` adiciona `provenance` a tabelas existentes com DEFAULT 'MANUAL'
-- `DB.exercises.create({..., provenance})` aceita valor; usa 'MANUAL' se ausente
-- Validar: apenas 'MANUAL' | 'SOURCE' | 'AI_GENERATED' aceitos (throw em outro valor)
+**T01.3 — SQLiteStore: exercises.provenance (fail-closed)**
+- Schema: `provenance TEXT NOT NULL` — SEM SQL DEFAULT
+- `ensureColumns()` adiciona `provenance` com `UPDATE exercises SET provenance = 'MANUAL' WHERE provenance IS NULL`
+- `DB.exercises.create({..., provenance})`:
+  - `provenance` é campo obrigatório — throw se ausente ou null
+  - Validar: apenas `'MANUAL' | 'SOURCE' | 'AI_GENERATED'` aceitos; throw em outro valor
+  - Cada caminho de criação informa explicitamente; nunca inferir 'MANUAL' silenciosamente
+- `hint_text` NÃO recebe dados de citation/provenance: validation no create não proíbe mas a documentação deixa claro que hint_text = pista pedagógica ao aluno
 
 **T01.4 — SQLiteStore: DB.learningUnits.***
 - `create({subjectId, title, sourceText, summaryBody, studyDate})` → LearningUnit
@@ -76,9 +79,14 @@
 **T01.7 — Testes: atualizar helpers e referências**
 - `makeStudyRecord()` → `makeLearningUnit()`
 - `DB.studyRecords.*` → `DB.learningUnits.*` em todos os test files
-- Verificar `studyDate` → `studyDate` (nome do campo camelCase: `studyDate`, não `firstStudiedAt`)
-- Verificar `createdAt` é timestamp diferente de `studyDate` nos testes
-- Testar `provenance`: default 'MANUAL'; 'SOURCE' persiste; valor inválido lança erro
+- Verificar `studyDate` persistido corretamente; `createdAt` é timestamp distinto de `studyDate`
+- Testar `provenance` fail-closed:
+  - `'SOURCE'` persiste corretamente
+  - `'AI_GENERATED'` persiste corretamente
+  - `'MANUAL'` persiste corretamente
+  - Ausente/null → throw (campo obrigatório)
+  - Valor inválido (`'UNKNOWN'`) → throw
+- Testar hint_text: persiste texto qualquer sem validação de conteúdo (semântica é responsabilidade da UI, não do banco)
 
 **Gate T01:** `node --test test/` — todos os testes passam (meta: ≥ 37)
 
@@ -252,9 +260,24 @@ const SCHEMA_VERSION = 2;
 - Botão "Excluir" → `DB.subjects.deleteCascade(id)` → erro UI amigável se tem units
 - Subject desativado não aparece no select de cadastro
 
-**Gate T05:** build limpo + UX-01..05 verificados manualmente no browser
+**T05.7 — Fluxo de revisão com exercícios internos**
+- Quando `unit.exercises.length > 0`: UI guia item a item
+  ```
+  Exercício N de M
+  [enunciado]
+  [Revelar resposta] → [Acertei] [Errei]
+  → próximo exercício
+  → [Finalizar revisão]
+  → sistema calcula questions_count, correct_count, score_percent
+  → persiste APENAS o agregado em review_tasks
+  ```
+- Estado individual (acertei/errei por exercício) existe apenas em memória durante a sessão; NÃO persiste
+- Quando `unit.exercises.length === 0`: entrada manual de questões/acertos (fluxo legado/externo)
+- `hint_text` do exercício pode ser revelado como pista pedagógica antes de revelar resposta
 
-**Commit:** `feat(ui): learning_units, title field, empty state, deactivate UI, fonte texto livre`
+**Gate T05:** build limpo + UX-01..05 + DRD-17..18 verificados manualmente no browser
+
+**Commit:** `feat(ui): learning_units, title, empty state, deactivate UI, revisão com exercícios internos`
 
 ---
 
@@ -306,20 +329,25 @@ const SCHEMA_VERSION = 2;
 - `mapExercise()` não mapeia campos de tentativa
 - Retorna: `{id, unitId, questionText, answerText, hintText, position, provenance, createdAt, updatedAt}`
 
-**T07.3 — Comentário de boundary em db.js**
+**T07.3 — Comentários de boundary em db.js**
 ```js
 // exercises = DEFINITION + PROVENANCE only.
-// Attempt history (per-exercise score, confidence, error type) = LATER (exercise_attempts table).
-// Aggregate evidence per review session: review_tasks.correct_count / score_percent.
+// hint_text = pedagogical hint for the student. NEVER citation, source locator, or provenance data.
+// provenance = 'MANUAL' | 'SOURCE' | 'AI_GENERATED' — required, no DB default, fail-closed.
+// For SOURCE: source reference inherited from learning_units.source_text.
+// Aggregate evidence per review session in review_tasks (questions_count, correct_count, score_percent).
+// Per-exercise attempt history = LATER (exercise_attempts table).
 ```
 
 **T07.4 — Auditoria de app.js**
-- Score por revisão em `review_tasks.correct_count` — confirmar único ponto de score agregado
-- Nenhum campo de score por exercício individual em app.js
+- Score agregado calculado pela UI de exercícios internos e salvo em `review_tasks`
+- Nenhum campo de score individual por exercício em app.js ou em chamada a DB
+- `provenance` passado explicitamente em todo `DB.exercises.create()` call — sem omissão silenciosa
+- Fluxo externo (sem exercícios internos): entrada manual de questions_count e correct_count preservada
 
-**Gate T07:** auditoria limpa; boundaries documentadas
+**Gate T07:** auditoria limpa; boundaries documentadas; provenance explícito em todos os create calls
 
-**Commit:** `docs(db): exercises DEFINITION+PROVENANCE boundary, evidence NOW/LATER comment`
+**Commit:** `docs(db): exercises boundary, hint_text semantics, provenance fail-closed, review aggregate flow`
 
 ---
 
