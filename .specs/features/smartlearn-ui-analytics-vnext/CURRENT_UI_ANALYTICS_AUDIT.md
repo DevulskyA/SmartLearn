@@ -1,4 +1,4 @@
-# CURRENT_UI_AUDIT.md — SmartLearn UI Audit
+# CURRENT_UI_ANALYTICS_AUDIT.md — SmartLearn UI Audit
 
 **Data:** 2026-09-03
 **Ambiente:** BrowserStore / Vite dev (http://localhost:5173)
@@ -165,6 +165,8 @@ São relacionados, mas a mesma entidade causa conflito real: um exercício exter
 
 ## Auditoria de SPEC_DEVIATION do domínio v3
 
+**CURRENT_DOMAIN_V3_SPEC_DEVIATION = NONE**
+
 Verificação de divergências entre o domínio v3 aprovado e o que foi implementado:
 
 | Item do domínio v3 | Implementado? | Observação |
@@ -177,10 +179,11 @@ Verificação de divergências entre o domínio v3 aprovado e o que foi implemen
 | `scheduler.js` como boundary LEGACY_TEMPORARY | ✅ | Encapsulado; FSRS não implementado |
 | `schemaVersion: 2` no backup | ✅ | Confirmado no roundtrip BrowserStore |
 | Estado inicial sem seeds acadêmicos | ✅ | Banco vazio na primeira inicialização |
-| `subjects.color` para identidade cromática | ❌ SPEC_DEVIATION | Campo não existe ainda — definido na nova spec como parte do redesign |
+| `subjects.color` para identidade cromática | VNEXT_DOMAIN_EXTENSION | Campo não existe no domínio v3 aprovado — adição planejada para schemaVersion 3. NÃO é SPEC_DEVIATION. |
+| `learning_evidence` (ledger longitudinal) | VNEXT_DOMAIN_EXTENSION | Tabela não existe no domínio v3 aprovado — criação nova no redesign. NÃO é SPEC_DEVIATION. |
 | `review_tasks` como agenda LEGACY_TEMPORARY | ✅ | Não foi alterado; preservado intacto |
 
-**SPEC_DEVIATION único:** `subjects.color` — não está no domínio v3 (foi definido no v3 sem este campo), mas é requisito do redesign UI/analytics. Não é regressão: é adição planejada para `schemaVersion 3`. Não requer correção imediata — será implementado na Fase C pós-gate.
+**Conclusão:** Nenhum item do domínio v3 aprovado foi removido, alterado ou quebrado. `subjects.color` e `learning_evidence` são VNEXT_DOMAIN_EXTENSION — adições novas que não conflitam com o domínio v3.
 
 ---
 
