@@ -137,6 +137,53 @@ A confusão entre **agenda (review_tasks)** e **evidência de desempenho** está
 
 ---
 
+## Auditoria arquitetural: `review_tasks` consegue representar evidência longitudinal?
+
+**Pergunta formal (handoff §7):** Uma execução de exercícios é a mesma coisa que uma tarefa de revisão?
+
+### Casos que precisam ser representados
+
+| Caso | `review_tasks` consegue? | Observação |
+|------|--------------------------|-----------|
+| Exercício inicial logo após a aula | ❌ | `review_tasks` exige `due_date` derivada do scheduler; não há tarefa "dia 0" |
+| Revisão programada | ✅ | Esse é o caso principal da entidade |
+| Exercícios externos (simulado, banco de questões) | ❌ | Não há campo de origem; ficaria misturado com revisões internas |
+| Múltiplas sessões no mesmo conteúdo fora do scheduler | ❌ | Cada entrada em `review_tasks` é gerada pelo scheduler, não pela iniciativa do aluno |
+| Evolução temporal independente do scheduler | ❌ | O índice temporal de `review_tasks` é `due_date`; `completed_at` pode ser nulo |
+| Simulados futuros abrangendo múltiplas unidades | ❌ | Sem campo de contexto/origem para distinguir do ciclo normal |
+
+**Conclusão:** `review_tasks` NÃO consegue representar o contrato de evidência longitudinal sem semântica conflitante.
+
+- `review_task` responde **quando revisar** (agenda, scheduler)
+- `performance evidence` responde **como o aluno foi** (ledger, analytics)
+
+São relacionados, mas a mesma entidade causa conflito real: um exercício externo feito fora do schedule não tem `review_task_id`; uma revisão agendada mas não realizada não tem evidência. Misturar os dois gera "Média geral 0%" quando não há questões — já visível na tela Estatísticas atual.
+
+**Decisão de design:** criar tabela separada `learning_evidence` (ledger mínimo) como Opção B. `review_tasks` continua intacta como agenda. `learning_evidence` registra execuções de qualquer origin. Migration idempotente popula `learning_evidence` a partir de `review_tasks` com dados existentes.
+
+---
+
+## Auditoria de SPEC_DEVIATION do domínio v3
+
+Verificação de divergências entre o domínio v3 aprovado e o que foi implementado:
+
+| Item do domínio v3 | Implementado? | Observação |
+|--------------------|--------------|-----------|
+| `learning_units` (substituiu `study_records`) | ✅ | Commit 5a43fd4 |
+| `exercises.provenance` obrigatório (MANUAL/SOURCE/AI_GENERATED) | ✅ | Commit 9ee5793; `provenance: 'MANUAL'` no create |
+| `hint_text` exclusivamente pedagógico (não provenance) | ✅ | Sem SPEC_DEVIATION observada |
+| `source_text` como texto livre (sem entidade `sources`) | ✅ | Commit 09ea0d8 |
+| `summary_body` pertence à unidade | ✅ | Campo presente em `learning_units` |
+| `scheduler.js` como boundary LEGACY_TEMPORARY | ✅ | Encapsulado; FSRS não implementado |
+| `schemaVersion: 2` no backup | ✅ | Confirmado no roundtrip BrowserStore |
+| Estado inicial sem seeds acadêmicos | ✅ | Banco vazio na primeira inicialização |
+| `subjects.color` para identidade cromática | ❌ SPEC_DEVIATION | Campo não existe ainda — definido na nova spec como parte do redesign |
+| `review_tasks` como agenda LEGACY_TEMPORARY | ✅ | Não foi alterado; preservado intacto |
+
+**SPEC_DEVIATION único:** `subjects.color` — não está no domínio v3 (foi definido no v3 sem este campo), mas é requisito do redesign UI/analytics. Não é regressão: é adição planejada para `schemaVersion 3`. Não requer correção imediata — será implementado na Fase C pós-gate.
+
+---
+
 ## Matriz de gaps vs requisitos do brief
 
 | Requisito (SMARTLEARN_BRIEF) | Atendido? | Observação |
