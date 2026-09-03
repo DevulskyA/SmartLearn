@@ -111,7 +111,7 @@ test("exportAll inclui schemaVersion 2 e learningUnits", async () => {
     summaryBody: "Resumo para backup",
   });
   const backup = await DB.exportAll();
-  assert.equal(backup.schemaVersion, 2);
+  assert.equal(backup.schemaVersion, 3);
   assert.ok(Array.isArray(backup.learningUnits));
   assert.ok(backup.learningUnits.some((u) => u.title === "Backup test"));
   assert.ok(backup.learningUnits.some((u) => u.summaryBody === "Resumo para backup"));

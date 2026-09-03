@@ -4,7 +4,7 @@ import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 let database;
 let initialization;
@@ -23,6 +23,9 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_exercises_unit_id\n    ON exercises(unit_id)",
   "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
   "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '2.0.0', $1)",
+  // VNEXT_DOMAIN_EXTENSION: learning_evidence ledger (longitudinal performance, separate from review_tasks agenda)
+  "CREATE TABLE IF NOT EXISTS learning_evidence (\n    id             INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id        INTEGER NOT NULL REFERENCES learning_units(id),\n    evidence_date  TEXT    NOT NULL,\n    context        TEXT    NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW','EXTERNAL')),\n    questions_count INTEGER NOT NULL CHECK(questions_count > 0),\n    correct_count   INTEGER NOT NULL CHECK(correct_count >= 0),\n    score_percent   REAL,\n    review_task_id  INTEGER REFERENCES review_tasks(id),\n    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))\n  )",
+  "CREATE UNIQUE INDEX IF NOT EXISTS ux_le_review_task\n    ON learning_evidence(review_task_id)\n    WHERE review_task_id IS NOT NULL",
 ];
 
 function nowIso() {
@@ -50,6 +53,7 @@ function mapSubject(row) {
   return {
     id: row.id,
     name: row.name,
+    color: row.color ?? 'DISC-BLUE',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isActive: Boolean(row.is_active),
@@ -120,6 +124,34 @@ function mapExercise(row) {
   };
 }
 
+function mapLearningEvidence(row) {
+  return {
+    id: row.id,
+    unitId: row.unit_id,
+    evidenceDate: row.evidence_date,
+    context: row.context,
+    questionsCount: row.questions_count,
+    correctCount: row.correct_count,
+    scorePercent: row.score_percent,
+    reviewTaskId: row.review_task_id ?? null,
+    createdAt: row.created_at,
+  };
+}
+
+function validateEvidenceContext(context) {
+  if (!['INITIAL_PRACTICE', 'REVIEW', 'EXTERNAL'].includes(context)) {
+    throw new Error('context deve ser INITIAL_PRACTICE, REVIEW ou EXTERNAL. Recebido: ' + JSON.stringify(context));
+  }
+}
+
+function calcScorePercent(questionsCount, correctCount) {
+  if (questionsCount == null || correctCount == null) return null;
+  const q = Number(questionsCount);
+  const c = Number(correctCount);
+  if (!Number.isFinite(q) || !Number.isFinite(c) || q <= 0) return null;
+  return (c / q) * 100;
+}
+
 function normalizeEntityName(name, label) {
   const normalized = String(name ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized) throw new Error('Informe ' + label + '.');
@@ -164,10 +196,12 @@ function assertImportData(data) {
   if (!data || typeof data !== 'object') {
     throw new Error('O backup precisa ser um objeto JSON válido.');
   }
-  if (data.schemaVersion !== SCHEMA_VERSION) {
+  const version = data.schemaVersion;
+  const MIN_VERSION = 2;
+  if (version == null || version < MIN_VERSION || version > SCHEMA_VERSION) {
     throw new Error(
-      'Este backup requer schemaVersion ' + SCHEMA_VERSION +
-      '. Exporte novamente a partir do app atual.',
+      'Backup incompatível. schemaVersion não suportado: ' + version +
+      '. Versão esperada entre ' + MIN_VERSION + ' e ' + SCHEMA_VERSION + '.',
     );
   }
   for (const key of ['subjects', 'learningUnits', 'reviewTasks']) {
@@ -195,6 +229,7 @@ function buildClearStatements() {
 
 function buildImportStatements(data) {
   const statements = [
+    { query: 'DELETE FROM learning_evidence', values: [] },
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
     { query: 'DELETE FROM learning_units', values: [] },
@@ -204,7 +239,7 @@ function buildImportStatements(data) {
 
   for (const row of data.subjects) {
     statements.push({
-      query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)',
+      query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order, color)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
       values: [
         row.id,
         normalizeEntityName(row.name, 'o nome da disciplina'),
@@ -212,6 +247,7 @@ function buildImportStatements(data) {
         row.updatedAt,
         (row.isActive ?? row.is_active ?? true) ? 1 : 0,
         row.sortOrder ?? row.sort_order ?? 0,
+        row.color ?? 'DISC-BLUE',
       ],
     });
   }
@@ -262,6 +298,57 @@ function buildImportStatements(data) {
     });
   }
 
+  // Import explicit learning_evidence rows (v3 backups only)
+  for (const row of (Array.isArray(data.learningEvidence) ? data.learningEvidence : [])) {
+    if (!row.questionsCount || Number(row.questionsCount) <= 0) continue;
+    statements.push({
+      query: 'INSERT INTO learning_evidence\n        (id, unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      values: [
+        row.id,
+        row.unitId ?? row.unit_id,
+        row.evidenceDate ?? row.evidence_date,
+        row.context,
+        row.questionsCount ?? row.questions_count,
+        row.correctCount ?? row.correct_count,
+        row.scorePercent ?? row.score_percent ?? null,
+        row.reviewTaskId ?? row.review_task_id ?? null,
+        row.createdAt ?? row.created_at ?? new Date().toISOString(),
+      ],
+    });
+  }
+
+  // For v2 backups: migrate completed review_tasks with questions into learning_evidence
+  if ((data.schemaVersion ?? 0) < 3) {
+    const unitsMap = new Map((data.learningUnits ?? []).map((u) => [u.id, u]));
+    for (const task of (data.reviewTasks ?? [])) {
+      const q = task.questionsCount ?? task.questions_count;
+      const c = task.correctCount ?? task.correct_count;
+      if (!task.review_done && !task.reviewDone) continue;
+      if (!task.questions_done && !task.questionsDone) continue;
+      if (q == null || Number(q) <= 0) continue;
+      const taskId = task.id;
+      const unitId = task.unitId ?? task.unit_id;
+      const unit = unitsMap.get(unitId);
+      if (!unit) continue;
+      const evidenceDate = (task.completedAt ?? task.completed_at ?? task.dueDate ?? task.due_date ?? '').slice(0, 10);
+      if (!evidenceDate) continue;
+      const scorePercent = c != null ? (Number(c) / Number(q)) * 100 : null;
+      statements.push({
+        query: 'INSERT OR IGNORE INTO learning_evidence\n          (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        values: [
+          unitId,
+          evidenceDate,
+          'REVIEW',
+          Number(q),
+          c != null ? Number(c) : 0,
+          scorePercent,
+          taskId,
+          task.completedAt ?? task.completed_at ?? new Date().toISOString(),
+        ],
+      });
+    }
+  }
+
   const settings = (Array.isArray(data.settings) ? data.settings[0] : data.settings) ?? {};
   statements.push({
     query: "INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES ('main', $1, $2, $3)",
@@ -294,12 +381,14 @@ function createBrowserStore() {
       learningUnits: [],
       reviewTasks: [],
       exercises: [],
+      learningEvidence: [],
       settings: defaultSettings,
       nextIds: {
         subjects: 1,
         learningUnits: 1,
         reviewTasks: 1,
         exercises: 1,
+        learningEvidence: 1,
       },
     };
   }
@@ -354,7 +443,7 @@ function createBrowserStore() {
   }
 
   function refreshNextIds(state) {
-    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises"]) {
+    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises", "learningEvidence"]) {
       const ids = (state[collection] ?? []).map((item) => Number(item.id) || 0);
       state.nextIds[collection] = Math.max(0, ...ids) + 1;
     }
@@ -374,12 +463,13 @@ function createBrowserStore() {
       async getActive() {
         return (await this.getAll()).filter((subject) => subject.isActive);
       },
-      async create(name) {
+      async create(name, color = 'DISC-BLUE') {
         const state = readState();
         const timestamp = nowIso();
         const subject = {
           id: nextId(state, "subjects"),
           name: normalizeUniqueName(state.subjects, name, "o nome da disciplina"),
+          color: color ?? 'DISC-BLUE',
           createdAt: timestamp,
           updatedAt: timestamp,
           isActive: true,
@@ -398,6 +488,7 @@ function createBrowserStore() {
         }
         if (Object.hasOwn(fields, "isActive")) subject.isActive = Boolean(fields.isActive);
         if (Object.hasOwn(fields, "sortOrder")) subject.sortOrder = Number(fields.sortOrder) || 0;
+        if (Object.hasOwn(fields, "color")) subject.color = String(fields.color ?? 'DISC-BLUE');
         subject.updatedAt = nowIso();
         writeState(state);
         return subject;
@@ -630,6 +721,132 @@ function createBrowserStore() {
       },
     },
 
+    learningEvidence: {
+      async ensureColumns() {},
+      async runMigrationFromReviewTasks() {
+        const state = readState();
+        const existing = new Set(
+          state.learningEvidence.filter((e) => e.reviewTaskId != null).map((e) => e.reviewTaskId),
+        );
+        const timestamp = nowIso();
+        for (const task of state.reviewTasks) {
+          if (!task.reviewDone || !task.questionsDone) continue;
+          if (task.questionsCount == null || Number(task.questionsCount) <= 0) continue;
+          if (existing.has(task.id)) continue;
+          const evidenceDate = (task.completedAt ?? task.dueDate ?? '').slice(0, 10);
+          if (!evidenceDate) continue;
+          const q = Number(task.questionsCount);
+          const c = Number(task.correctCount ?? 0);
+          state.learningEvidence.push({
+            id: nextId(state, "learningEvidence"),
+            unitId: task.unitId,
+            evidenceDate,
+            context: 'REVIEW',
+            questionsCount: q,
+            correctCount: c,
+            scorePercent: q > 0 ? (c / q) * 100 : null,
+            reviewTaskId: task.id,
+            createdAt: task.completedAt ?? timestamp,
+          });
+          existing.add(task.id);
+        }
+        writeState(state);
+      },
+      async create({ unitId, evidenceDate, context, questionsCount, correctCount, reviewTaskId = null }) {
+        validateEvidenceContext(context);
+        const q = Number(questionsCount);
+        const c = Number(correctCount);
+        if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
+        if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
+        if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+        if (reviewTaskId != null) {
+          const state = readState();
+          const dup = state.learningEvidence.find((e) => e.reviewTaskId === reviewTaskId);
+          if (dup) throw new Error('Já existe evidência para esta revisão.');
+        }
+        const state = readState();
+        const scorePercent = q > 0 ? (c / q) * 100 : null;
+        const evidence = {
+          id: nextId(state, "learningEvidence"),
+          unitId,
+          evidenceDate,
+          context,
+          questionsCount: q,
+          correctCount: c,
+          scorePercent,
+          reviewTaskId: reviewTaskId ?? null,
+          createdAt: nowIso(),
+        };
+        state.learningEvidence.push(evidence);
+        writeState(state);
+        return evidence;
+      },
+      async getAll() {
+        return [...readState().learningEvidence].sort(
+          (a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id,
+        );
+      },
+      async getByUnit(unitId) {
+        return readState().learningEvidence
+          .filter((e) => e.unitId === unitId)
+          .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id);
+      },
+      async getBySubject(subjectId) {
+        const state = readState();
+        const unitIds = new Set(
+          state.learningUnits.filter((u) => u.subjectId === subjectId).map((u) => u.id),
+        );
+        return state.learningEvidence
+          .filter((e) => unitIds.has(e.unitId))
+          .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id);
+      },
+      async getByDateRange(fromDate, toDate) {
+        return readState().learningEvidence
+          .filter((e) => e.evidenceDate >= fromDate && e.evidenceDate <= toDate)
+          .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id);
+      },
+    },
+
+    async completeReviewWithEvidence({ taskId, questionsCount, correctCount }) {
+      const q = Number(questionsCount);
+      const c = Number(correctCount);
+      if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
+      if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
+      if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+      const state = readState();
+      const task = state.reviewTasks.find((t) => t.id === taskId);
+      if (!task) throw new Error('Revisão não encontrada: ' + taskId);
+      const dup = state.learningEvidence.find((e) => e.reviewTaskId === taskId);
+      if (dup) throw new Error('Já existe evidência para esta revisão.');
+      const scorePercent = q > 0 ? (c / q) * 100 : null;
+      const completedAt = nowIso();
+      const evidenceDate = completedAt.slice(0, 10);
+      task.reviewDone = true;
+      task.questionsDone = true;
+      task.questionsCount = q;
+      task.correctCount = c;
+      task.scorePercent = scorePercent;
+      task.completedAt = completedAt;
+      task.updatedAt = completedAt;
+      state.learningEvidence.push({
+        id: nextId(state, "learningEvidence"),
+        unitId: task.unitId,
+        evidenceDate,
+        context: 'REVIEW',
+        questionsCount: q,
+        correctCount: c,
+        scorePercent,
+        reviewTaskId: taskId,
+        createdAt: completedAt,
+      });
+      writeState(state);
+      return { ...task };
+    },
+
+    async ensureLearningEvidenceMigration() {
+      await this.learningEvidence.runMigrationFromReviewTasks();
+    },
+
     settings: {
       async get() {
         return readState().settings ?? defaultSettings;
@@ -650,6 +867,7 @@ function createBrowserStore() {
         learningUnits: state.learningUnits,
         reviewTasks: state.reviewTasks,
         exercises: state.exercises ?? [],
+        learningEvidence: state.learningEvidence ?? [],
         settings: state.settings,
       };
     },
@@ -657,9 +875,10 @@ function createBrowserStore() {
     async importAll(data) {
       assertImportData(data);
       const state = emptyState();
-      state.subjects = data.subjects.map((row) =>
-        mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
-      );
+      state.subjects = data.subjects.map((row) => ({
+        ...mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
+        color: row.color ?? 'DISC-BLUE',
+      }));
       state.learningUnits = data.learningUnits.map((row) => ({
         id: row.id,
         subjectId: row.subjectId ?? row.subject_id,
@@ -696,11 +915,29 @@ function createBrowserStore() {
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
+      // Restore explicit learningEvidence from v3 backups
+      state.learningEvidence = (Array.isArray(data.learningEvidence) ? data.learningEvidence : [])
+        .filter((row) => row.questionsCount && Number(row.questionsCount) > 0)
+        .map((row) => ({
+          id: row.id,
+          unitId: row.unitId ?? row.unit_id,
+          evidenceDate: row.evidenceDate ?? row.evidence_date,
+          context: row.context,
+          questionsCount: Number(row.questionsCount ?? row.questions_count),
+          correctCount: Number(row.correctCount ?? row.correct_count ?? 0),
+          scorePercent: row.scorePercent ?? row.score_percent ?? null,
+          reviewTaskId: row.reviewTaskId ?? row.review_task_id ?? null,
+          createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+        }));
       state.settings = Array.isArray(data.settings)
         ? (data.settings[0] ?? defaultSettings)
         : (data.settings ?? defaultSettings);
       refreshNextIds(state);
       writeState(state);
+      // For v2 backups: migrate completed review_tasks to learningEvidence
+      if ((data.schemaVersion ?? 0) < 3) {
+        await this.ensureLearningEvidenceMigration();
+      }
       return this.exportAll();
     },
 
@@ -738,6 +975,8 @@ export const DB = {
         await DB.learningUnits.ensureColumns();
         await DB.reviewTasks.ensureColumns();
         await DB.exercises.ensureColumns();
+        await DB.learningEvidence.ensureColumns();
+        await DB.ensureLearningEvidenceMigration();
 
         return DB;
       })().catch((error) => {
@@ -764,6 +1003,11 @@ export const DB = {
           'ALTER TABLE subjects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
         );
       }
+      if (!names.has('color')) {
+        await requireDatabase().execute(
+          "ALTER TABLE subjects ADD COLUMN color TEXT NOT NULL DEFAULT 'DISC-BLUE'",
+        );
+      }
     },
 
     async getAll() {
@@ -780,13 +1024,13 @@ export const DB = {
       return rows.map(mapSubject);
     },
 
-    async create(name) {
+    async create(name, color = 'DISC-BLUE') {
       const value = normalizeEntityName(name, 'o nome da disciplina');
       const timestamp = nowIso();
       const nextOrder = await getNextSortOrder('subjects');
       const result = await requireDatabase().execute(
-        'INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
-        [value, timestamp, timestamp, nextOrder],
+        'INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order, color) VALUES ($1, $2, $3, 1, $4, $5)',
+        [value, timestamp, timestamp, nextOrder, color],
       );
       const [row] = await requireDatabase().select(
         'SELECT * FROM subjects WHERE id = $1',
@@ -800,6 +1044,7 @@ export const DB = {
         name: ['name', (value) => normalizeEntityName(value, 'o nome da disciplina')],
         isActive: ['is_active', (value) => (value ? 1 : 0)],
         sortOrder: ['sort_order', (value) => Number(value) || 0],
+        color: ['color', (value) => String(value ?? 'DISC-BLUE')],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
       if (entries.length === 0) throw new Error('Nenhum campo válido para atualizar.');
@@ -1269,6 +1514,131 @@ export const DB = {
     },
   },
 
+  // VNEXT_DOMAIN_EXTENSION: performance ledger separate from review_tasks agenda
+  learningEvidence: {
+    async ensureColumns() {
+      // Table created via schemaStatements; this is a no-op for compatibility.
+    },
+
+    async create({ unitId, evidenceDate, context, questionsCount, correctCount, reviewTaskId = null }) {
+      validateEvidenceContext(context);
+      const q = Number(questionsCount);
+      const c = Number(correctCount);
+      if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
+      if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
+      if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+      const scorePercent = calcScorePercent(q, c);
+      const result = await requireDatabase().execute(
+        `INSERT INTO learning_evidence
+          (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [unitId, evidenceDate, context, q, c, scorePercent, reviewTaskId],
+      );
+      const [row] = await requireDatabase().select(
+        'SELECT * FROM learning_evidence WHERE id = $1',
+        [result.lastInsertId],
+      );
+      return mapLearningEvidence(row);
+    },
+
+    async getAll() {
+      const rows = await requireDatabase().select(
+        'SELECT * FROM learning_evidence ORDER BY evidence_date ASC, id ASC',
+      );
+      return rows.map(mapLearningEvidence);
+    },
+
+    async getByUnit(unitId) {
+      const rows = await requireDatabase().select(
+        'SELECT * FROM learning_evidence WHERE unit_id = $1 ORDER BY evidence_date ASC, id ASC',
+        [unitId],
+      );
+      return rows.map(mapLearningEvidence);
+    },
+
+    async getBySubject(subjectId) {
+      const rows = await requireDatabase().select(
+        `SELECT le.* FROM learning_evidence le
+         JOIN learning_units lu ON le.unit_id = lu.id
+         WHERE lu.subject_id = $1
+         ORDER BY le.evidence_date ASC, le.id ASC`,
+        [subjectId],
+      );
+      return rows.map(mapLearningEvidence);
+    },
+
+    async getByDateRange(fromDate, toDate) {
+      const rows = await requireDatabase().select(
+        'SELECT * FROM learning_evidence WHERE evidence_date >= $1 AND evidence_date <= $2 ORDER BY evidence_date ASC, id ASC',
+        [fromDate, toDate],
+      );
+      return rows.map(mapLearningEvidence);
+    },
+
+    async runMigrationFromReviewTasks() {
+      await requireDatabase().execute(
+        `INSERT OR IGNORE INTO learning_evidence
+          (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)
+         SELECT
+           rt.unit_id,
+           COALESCE(substr(rt.completed_at, 1, 10), rt.due_date),
+           'REVIEW',
+           rt.questions_count,
+           rt.correct_count,
+           rt.score_percent,
+           rt.id,
+           COALESCE(rt.completed_at, rt.updated_at)
+         FROM review_tasks rt
+         WHERE rt.review_done = 1
+           AND rt.questions_done = 1
+           AND rt.questions_count IS NOT NULL
+           AND rt.questions_count > 0`,
+      );
+    },
+  },
+
+  async completeReviewWithEvidence({ taskId, questionsCount, correctCount }) {
+    const q = Number(questionsCount);
+    const c = Number(correctCount);
+    if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
+    if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
+    if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+
+    const [task] = await requireDatabase().select(
+      'SELECT * FROM review_tasks WHERE id = $1',
+      [taskId],
+    );
+    if (!task) throw new Error('Revisão não encontrada: ' + taskId);
+
+    const scorePercent = calcScorePercent(q, c);
+    const completedAt = nowIso();
+    const evidenceDate = completedAt.slice(0, 10);
+
+    await invoke('execute_sqlite_transaction', {
+      statements: [
+        {
+          query: `UPDATE review_tasks
+            SET review_done=1, questions_done=1, questions_count=$1, correct_count=$2,
+                score_percent=$3, completed_at=$4, updated_at=$4
+            WHERE id=$5`,
+          values: [q, c, scorePercent, completedAt, taskId],
+        },
+        {
+          query: `INSERT OR IGNORE INTO learning_evidence
+            (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)
+            VALUES ($1, $2, 'REVIEW', $3, $4, $5, $6, $7)`,
+          values: [task.unit_id, evidenceDate, q, c, scorePercent, taskId, completedAt],
+        },
+      ],
+    });
+
+    const [updatedTask] = await requireDatabase().select(
+      'SELECT * FROM review_tasks WHERE id = $1',
+      [taskId],
+    );
+    return mapReviewTask(updatedTask);
+  },
+
   settings: {
     async get() {
       const [row] = await requireDatabase().select(
@@ -1299,7 +1669,7 @@ export const DB = {
   },
 
   async exportAll() {
-    const [subjects, learningUnits, reviewTasks, exercises, settings] = await Promise.all([
+    const [subjects, learningUnits, reviewTasks, exercises, learningEvidence, settings] = await Promise.all([
       DB.subjects.getAll(),
       DB.learningUnits.getAll(),
       DB.reviewTasks.getAll(),
@@ -1307,9 +1677,13 @@ export const DB = {
         .select("SELECT * FROM exercises ORDER BY unit_id, position ASC, id ASC")
         .then((rows) => rows.map(mapExercise))
         .catch(() => []),
+      requireDatabase()
+        .select("SELECT * FROM learning_evidence ORDER BY evidence_date ASC, id ASC")
+        .then((rows) => rows.map(mapLearningEvidence))
+        .catch(() => []),
       DB.settings.get(),
     ]);
-    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, settings };
+    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, learningEvidence, settings };
   },
 
   async importAll(data) {
@@ -1318,6 +1692,10 @@ export const DB = {
       statements: buildImportStatements(data),
     });
     return DB.exportAll();
+  },
+
+  async ensureLearningEvidenceMigration() {
+    await DB.learningEvidence.runMigrationFromReviewTasks();
   },
 
   async clearAll() {
