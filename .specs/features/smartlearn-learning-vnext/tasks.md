@@ -317,17 +317,29 @@ Phase 6: WP-06 Ciclo Integrado (sequential, highest risk)
 
 ### T10: UI — Exibição e edição inline de summary_body na revisão
 
-**What**: Na ReviewRow (tela Hoje), exibir `summary_body` (ou fallback para `content`) como seção visual acima dos controles existentes; botão "Editar Resumo" → textarea inline → salva via `DB.studyRecords.update`
+**What**: Na ReviewRow (tela Hoje), exibir `summary_body` (ou fallback para `content`) como seção visual acima dos controles existentes; botão "Editar Resumo" → textarea inline DENTRO da própria ReviewRow → salva via `DB.studyRecords.update` sem navegação
 **Where**: `src/app.js` (modify — `createReviewRow`), `index.html` (modify)
 **Depends on**: T7
 **Reuses**: `createReviewRow()` existente; padrão de autosave handler
 **Requirement**: LVN-03, LVN-04
 
+**DOM structure obrigatória (executability)**:
+```
+.review-row
+  section.summary-section          ← sempre presente (fallback para content)
+    p.summary-text                 ← texto visível
+    button[data-action="edit-summary"]
+    div.summary-edit [hidden]      ← textarea + botão Salvar (toggle hidden)
+  section.exercises-section        ← ausente se exercises vazio
+  ...
+```
+O botão "Editar Resumo" alterna `hidden` no `div.summary-edit` — não navega para outra tela.
+
 **Done when**:
 - [ ] `createReviewRow()` renderiza seção "Resumo Mestre" com `summary_body ?? content`
 - [ ] Seção exibe texto completo sem truncagem
-- [ ] Botão "Editar Resumo" → textarea editable, botão Salvar
-- [ ] Save chama `DB.studyRecords.update(id, { summaryBody })` e atualiza a exibição
+- [ ] Botão "Editar Resumo" → textarea editable dentro da mesma linha de revisão, botão Salvar
+- [ ] Save chama `DB.studyRecords.update(id, { summaryBody })` e atualiza a exibição sem reload
 - [ ] `summary_body = null` → exibe `content` sem erro, sem seção vazia
 - [ ] Revisão legada (sem summary_body) funciona exatamente como antes (discrimination sensor)
 
@@ -339,14 +351,15 @@ Phase 6: WP-06 Ciclo Integrado (sequential, highest risk)
 
 ### T11: Testes de summary_body + gate WP-03
 
-**What**: Testes para summary_body: DB roundtrip via browserStore, backup roundtrip, null-safety
+**What**: Testes para summary_body: DB roundtrip via browserStore, backup roundtrip, null-safety, empty string
 **Where**: `test/study-records.test.js` (novo)
 **Depends on**: T7, T8, T9, T10
-**Requirement**: LVN-01, LVN-02, LVN-03
+**Requirement**: LVN-01, LVN-02, LVN-03, LVN-15
 
 **Done when**:
 - [ ] BrowserStore: `studyRecords.update(id, { summaryBody: 'texto' })` persiste e é retornado
 - [ ] BrowserStore: `studyRecords.update(id, { summaryBody: null })` persiste null
+- [ ] BrowserStore: `studyRecords.create({ summaryBody: '' })` → `summaryBody` armazenado como null (AC5 LVN-01)
 - [ ] exportAll → importAll roundtrip com summaryBody preserva valor
 - [ ] importAll com backup sem `summaryBody` → item tem `summaryBody = null`
 - [ ] Gate: `npm test` → 0 fail
@@ -457,13 +470,13 @@ Phase 6: WP-06 Ciclo Integrado (sequential, highest risk)
 
 ### T16: UI — Gerenciamento de exercícios por Resumo Mestre
 
-**What**: Seção "Exercícios" no painel de study_record (lista, formulário de criação, botões editar/remover)
-**Where**: `src/app.js` (modify), `index.html` (modify)
+**What**: Seção "Exercícios" na linha de estudo da tela Estudos (renderStudies), NÃO na ReviewRow. O gerenciamento (criar/editar/remover) é feito fora do fluxo de revisão. A ReviewRow exibe exercícios em modo read-only (T18).
+**Where**: `src/app.js` (modify — `renderStudies`), `index.html` (modify)
 **Depends on**: T14
 **Requirement**: LVN-05, LVN-07 (AC9 — sem exercícios não quebra revisão)
 
 **Done when**:
-- [ ] Seção "Exercícios" visível ao abrir/editar um study_record existente
+- [ ] Seção "Exercícios" visível ao expandir/abrir um study_record na tela Estudos (não na Tela Hoje)
 - [ ] Formulário: `question_text` (required), `answer_text` (required), `hint_text` (optional)
 - [ ] `question_text` vazio → mensagem de validação inline, sem submissão
 - [ ] Salvar exercício → aparece na lista imediatamente
@@ -509,10 +522,10 @@ Phase 6: WP-06 Ciclo Integrado (sequential, highest risk)
 
 ### T18: Atualizar createReviewRow() para o fluxo integrado
 
-**What**: Reescrever `createReviewRow()` em app.js para renderizar seções ordenadas: summary → exercises → score → mark-done. Exercícios carregados via `DB.exercises.getAll()`. Score validation e mark-done handlers preservados.
-**Where**: `src/app.js` (modify — função `createReviewRow` + handlers de autosave)
+**What**: Atualizar (não reescrever do zero) `createReviewRow()` em app.js para renderizar seções na ordem: [1] summary_body → [2] exercises (read-only Q→revelar-A, apenas se exercises.length > 0) → [3] score → [4] marcar-feita. Exercícios carregados via `DB.exercises.getAll()` ANTES de chamar createReviewRow. Score validation e mark-done handlers PRESERVADOS sem alteração.
+**Where**: `src/app.js` (modify — função `createReviewRow` + assinatura para aceitar `exercises = []` como 7º param)
 **Depends on**: T11 (WP-03) + T17 (WP-05) completos
-**Reuses**: `createReviewRow()` existente; handlers de autosave existentes (BUG-005 já corrigido)
+**Reuses**: `createReviewRow()` existente — adicionar seções novas, não substituir as existentes
 **Requirement**: LVN-08, LVN-09
 
 **Done when**:
@@ -546,6 +559,29 @@ Phase 6: WP-06 Ciclo Integrado (sequential, highest risk)
 **Gate**: manual — App
 **Commit**: `feat(revisao): ciclo integrado Resumo Mestre + exercícios`
 *(commit único cobre T18 + T19)*
+
+---
+
+### T20: Correções pós-auditoria + testes em gap (audit findings)
+
+**What**: (a) Corrigir guard `?? []` para `Array.isArray` em importAll (Tauri e BrowserStore); (b) adicionar feedback visual no catch de save-exercise-edit; (c) adicionar teste para exercises.update(); (d) adicionar teste para summary_body empty string; (e) adicionar teste para exercises posição com values distintos.
+**Where**: `src/db.js` (a), `src/app.js` (b), `test/exercises.test.js` (c, e), `test/study-records.test.js` (d)
+**Depends on**: T17 (WP-05 completo)
+**Requirement**: LVN-15
+
+**Done when**:
+- [ ] `buildImportStatements`: `Array.isArray(data.exercises) ? data.exercises : []` (não `?? []`)
+- [ ] BrowserStore importAll: mesma guarda
+- [ ] `save-exercise-edit` catch: exibe mensagem visível ao usuário (não só console.error)
+- [ ] Teste: `DB.exercises.update(id, { answerText: 'novo' })` atualiza só answerText, questionText intacto
+- [ ] Teste: `studyRecords.create({ summaryBody: '' })` → summaryBody null (normalização de empty string)
+- [ ] Teste: exercises criados com position 1 e 2 → getAll retorna na ordem position correta
+- [ ] Gate: `npm test` → 0 fail
+
+**Tests**: unit
+**Gate**: quick
+**Commit**: `fix(audit): guard Array.isArray, feedback visual, testes em gap pós-auditoria`
+**Nota**: T20 foi identificado na Deep Planning Audit de 2026-09-02. Items (a) e (b) já aplicados no código.
 
 ---
 

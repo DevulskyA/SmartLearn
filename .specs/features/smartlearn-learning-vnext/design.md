@@ -155,7 +155,12 @@ Intervalo médio dos 16 offsets: (1+7+15+30+60+90+120+150+180+210+240+270+300+33
 matura cards para intervalos longos (meses/anos), reduzindo carga diária dramaticamente.
 
 **Para este plano:** WP-02 cria a boundary. FSRS real é LATER, mas é urgente — não pode ser adiado
-indefinidamente. Recomenda-se revisar a prioridade de FSRS após WP-06 ser validado em uso real.
+indefinidamente.
+
+**Trigger condition para priorizar FSRS:** Quando o aluno reportar consistentemente >300 revisões/dia
+pendentes (indicativo de ano 1+ com uso intenso) ou quando o cronômetro diário de revisões ultrapassar
+2 horas, FSRS deixa de ser LATER e deve ser priorizado. Implementar WP-07 sem esses dados resulta
+em otimização prematura sem evidência de necessidade.
 
 ---
 
@@ -257,9 +262,14 @@ Para:
 ```
 
 **Compatibilidade retroativa:**
-- Import sem `exercises` → `exercises = []` por padrão.
+- Import sem `exercises` → `exercises = []` por padrão. Guard: `Array.isArray(data.exercises) ? data.exercises : []` (não `?? []` — falha para valores truthy não-array como `{}`).
 - Import sem `summary_body` em studyRecords → `summaryBody = null`.
 - `settings.app_version` evolui para `'2.0.0'` no WP-03 (primeira mudança de schema visível).
+
+**Remapeamento de IDs no import (implementação):**
+O import executa `DELETE + re-INSERT` via `buildImportStatements`. IDs de exercises no backup referenciam `study_record_id` do backup. Como o DELETE/INSERT de study_records preserva os IDs originais (INSERT usa o id da exportação), o `study_record_id` em exercises também permanece válido. Não é necessário remapeamento dinâmico — mas depende da invariante de que study_record ids são INSERTed com o id original, não gerados novos.
+
+**PRAGMA foreign_keys:** `PRAGMA foreign_keys = ON` é executado em `DB.init()` logo após abrir o banco (db.js linha 845). ON DELETE CASCADE em exercises é efetivo. Sem este PRAGMA, o CASCADE seria ignorado silenciosamente pelo SQLite.
 
 ---
 

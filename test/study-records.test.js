@@ -131,6 +131,23 @@ test("BrowserStore importAll com registro sem summaryBody usa null (backward com
   assert.equal(found.summaryBody, null);
 });
 
+test("BrowserStore studyRecords.create com summaryBody '' armazena null (AC5 LVN-01)", async () => {
+  await DB.init();
+
+  const [subject] = await DB.subjects.getActive();
+  const [source] = await DB.sources.getActive();
+
+  const record = await DB.studyRecords.create({
+    subjectId: subject.id,
+    sourceId: source.id,
+    studyDate: "2026-09-02",
+    content: "Conteúdo",
+    summaryBody: "",
+  });
+
+  assert.equal(record.summaryBody, null);
+});
+
 test("BrowserStore getByDate retorna estudos com a data dada", async () => {
   await DB.init();
 

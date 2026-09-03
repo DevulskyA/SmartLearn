@@ -124,6 +124,49 @@ test("exportAll inclui exercises; importAll roundtrip preserva exercises", async
   assert.ok(imported.some((e) => e.questionText === "Q exportada"));
 });
 
+test("DB.exercises.update atualiza apenas os campos passados, preserva os demais", async () => {
+  const record = await makeStudyRecord();
+  const exercise = await DB.exercises.create(record.id, {
+    questionText: "Qual é a Lei de Frank-Starling?",
+    answerText: "Mais pré-carga → mais força",
+    hintText: "Pré-carga",
+  });
+
+  const updated = await DB.exercises.update(exercise.id, { answerText: "Estiramento → força" });
+
+  assert.equal(updated.answerText, "Estiramento → força");
+  assert.equal(updated.questionText, "Qual é a Lei de Frank-Starling?");
+  assert.equal(updated.hintText, "Pré-carga");
+});
+
+test("DB.exercises.getAll retorna exercises em ordem de position ASC, id ASC", async () => {
+  const record = await makeStudyRecord();
+
+  const ex1 = await DB.exercises.create(record.id, { questionText: "Q pos 2", answerText: "R", position: 2 });
+  const ex2 = await DB.exercises.create(record.id, { questionText: "Q pos 1", answerText: "R", position: 1 });
+  const ex3 = await DB.exercises.create(record.id, { questionText: "Q pos 0", answerText: "R", position: 0 });
+
+  const all = await DB.exercises.getAll(record.id);
+  assert.equal(all.length, 3);
+  assert.equal(all[0].id, ex3.id);
+  assert.equal(all[1].id, ex2.id);
+  assert.equal(all[2].id, ex1.id);
+});
+
+test("importAll com exercises como não-array (e.g. {}) trata como [] sem crash", async () => {
+  await DB.init();
+  const backup = await DB.exportAll();
+  const corruptBackup = { ...backup, exercises: {} };
+
+  await assert.doesNotReject(() => DB.importAll(corruptBackup));
+
+  const allRecords = await DB.studyRecords.getAll();
+  for (const r of allRecords) {
+    const exs = await DB.exercises.getAll(r.id);
+    assert.equal(exs.length, 0);
+  }
+});
+
 test("importAll sem exercises importa com 0 exercises, sem erro", async () => {
   const record = await makeStudyRecord();
   await DB.exercises.create(record.id, { questionText: "Q a ser descartada", answerText: "R" });

@@ -267,7 +267,7 @@ function buildImportStatements(data) {
     });
   }
 
-  for (const row of (data.exercises ?? [])) {
+  for (const row of (Array.isArray(data.exercises) ? data.exercises : [])) {
     statements.push({
       query: 'INSERT INTO exercises\n        (id, study_record_id, question_text, answer_text, hint_text, position, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       values: [
@@ -802,7 +802,7 @@ function createBrowserStore() {
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
-      state.exercises = (data.exercises ?? []).map((row) => ({
+      state.exercises = (Array.isArray(data.exercises) ? data.exercises : []).map((row) => ({
         id: row.id,
         studyRecordId: row.studyRecordId ?? row.study_record_id,
         questionText: row.questionText ?? row.question_text ?? "",

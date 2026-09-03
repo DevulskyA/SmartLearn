@@ -1734,6 +1734,14 @@ studyList.addEventListener("click", async (event) => {
     } catch (error) {
       button.disabled = false;
       console.error("Falha ao salvar exercício.", error);
+      const item = button.closest(".exercise-item-edit");
+      let errMsg = item?.querySelector(".exercise-edit-error");
+      if (!errMsg && item) {
+        errMsg = document.createElement("span");
+        errMsg.className = "exercise-edit-error form-error";
+        item.appendChild(errMsg);
+      }
+      if (errMsg) errMsg.textContent = "Erro ao salvar. Tente novamente.";
     }
     return;
   }

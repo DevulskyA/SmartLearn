@@ -193,9 +193,17 @@ Toda ambiguidade foi resolvida ou registrada — nada deixado silenciosamente se
 
 - WHEN `generateInitialTasks` receives a date string that is not ISO-8601, the system SHALL throw — not silently use epoch or today.
 - WHEN a backup import contains `exercises` with `question_text = null`, the system SHALL skip those entries with a warning — not crash.
+- WHEN a backup import contains `exercises` as a non-array value (e.g. `{}` or `0`), the system SHALL treat it as `[]` and import without crash. (Guard: `Array.isArray(data.exercises) ? data.exercises : []` — not `?? []` which fails for truthy non-arrays.)
 - WHEN a study record's `summary_body` is updated to null explicitly, the system SHALL persist null (not empty string).
+- WHEN `summary_body` is set to `''` (empty string), the system SHALL treat it identically to null: no display, fallback to `content`.
 - WHEN the Today screen loads with >500 study records due today, the system SHALL still render without timeout or memory crash (SQLite query, not in-memory sort).
 - WHEN exercises are ordered by `position`, ties SHALL be broken deterministically (by `id` ascending).
+- WHEN a DB write fails during inline exercise edit, the system SHALL display an error message to the user in the edit form — not silently swallow the error.
+
+## Known Limitations (pedagogical)
+
+- Exercises always appear in the same order (`position ASC, id ASC`) in each review. There is no automatic randomization or interleaving. This reduces retrieval challenge compared to interleaved practice. UI reordering is LATER (column `position` is already stored).
+- There is no path to add or edit exercises directly from within a review session. The student must exit to the study list, manage exercises there, and return to the review. This is intentional for scope control — metatask overhead is low given exercises are created once.
 
 ---
 
@@ -218,7 +226,9 @@ Toda ambiguidade foi resolvida ou registrada — nada deixado silenciosamente se
 | LVN-13 | P3 Scheduler: AC4–AC5 (campo algorithm em review_tasks) | P3 | Pending |
 | LVN-14 | P3 Scheduler: AC6–AC7 (erro em algoritmo desconhecido, fonte única) | P3 | Pending |
 
-**Coverage:** 14 requirements, 0 mapeados a tasks (pending HUMAN_GATE approval), 0 verificados.
+| LVN-15 | Edge cases de import: exercises não-array → `[]`, empty string → null, DB write error com feedback | P2 | Pending |
+
+**Coverage:** 15 requirements, T1-T19 implementados (WP-01..06), LVN-15 pendente (correção).
 
 ---
 
@@ -242,4 +252,5 @@ Toda ambiguidade foi resolvida ou registrada — nada deixado silenciosamente se
 | WP-06 regride revisões legadas (maior mudança em app.js) | ALTO | MÉDIA | Discrimination sensor obrigatório; WP-06 é o último WP |
 | BrowserStore diverge do SQLite após cada WP | MÉDIO | ALTA sem disciplina | Checklist: todo WP que muda schema DEVE atualizar browserStore |
 | Interface scheduler incompatível com FSRS | MÉDIO | CERTA | Documentada (ver nota arquitetural em P3); FSRS requer trabalho separado |
-| Backup import quebra com exercícios inesperados | BAIXO | BAIXA | `data.exercises ?? []` default; testes de roundtrip no WP-05 |
+| Backup import quebra com exercises como não-array | BAIXO | BAIXA | Guard corrigido: `Array.isArray(data.exercises) ? data.exercises : []`; testes de roundtrip no WP-05 |
+| Scale: sem feedback quando DB write falha em save-exercise-edit | MÉDIO | MÉDIA | Corrigido: catch block exibe mensagem inline ao usuário |
