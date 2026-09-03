@@ -6,12 +6,13 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** MVP Fase 1 concluído (TASK-019). Domain Redesign Audit em andamento.
+- **Fase:** Domain Redesign v3 — IMPLEMENTADO localmente. Aguarda HUMAN_GATE: PUSH_AND_PR_APPROVAL.
 - **Data:** 2026-09-03
-- **Próxima ação:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL — revisar `.specs/features/smartlearn-domain-redesign/` (spec.md, design.md, tasks.md) e aprovar início de WP-DRD-01.
-- **Testes:** 37 testes passando, 0 falhas (base commit 09ea0d8 — hipótese)
-- **ATENÇÃO:** Commit `09ea0d8` é HYPOTHESIS. NÃO é solução final. Seeds de medicina presentes são INCORRETOS. Aguarda HUMAN_GATE: HYPOTHESIS_DECISION antes de prosseguir.
-- **Bloqueio ativo:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL. NÃO implementar WPs adicionais antes da aprovação.
+- **Próxima ação:** HUMAN_GATE: PUSH_AND_PR_APPROVAL — autorizar push da branch `claude/com-tlc-replanning-77f844` e abertura de PR.
+- **Testes:** 44 testes passando, 0 falhas (commit final 998b3b2)
+- **Branch de trabalho:** `claude/com-tlc-replanning-77f844` (worktree isolado)
+- **Commits do domain redesign:** WP-DRD-01..08 em `5a43fd4`, `9ee5793`, `998b3b2`
+- **Bloqueio ativo:** HUMAN_GATE: PUSH_AND_PR_APPROVAL. NÃO fazer push ou PR sem autorização explícita.
 
 ---
 
@@ -201,10 +202,18 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 | Gate | Bloqueio | Referência |
 |------|---------|-----------|
-| DOMAIN_REDESIGN_APPROVAL | Nenhuma implementação adicional em src/ antes da aprovação de spec/design/tasks v2 | `.specs/features/smartlearn-domain-redesign/` |
-| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco tem dados reais | `.specs/features/smartlearn-domain-redesign/design.md §8` |
+| PUSH_AND_PR_APPROVAL | NÃO fazer push da branch nem abrir PR sem autorização explícita | Branch `claude/com-tlc-replanning-77f844` |
+| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco real tem dados do usuário | `.specs/features/smartlearn-domain-redesign/design.md §8` |
 
-**Removido:** HYPOTHESIS_DECISION como gate humano. Após DOMAIN_REDESIGN_APPROVAL, o agente compara tecnicamente commit 09ea0d8 com design aprovado e executa WP-DRD-01 sem gate adicional. Só retorna ao usuário se surgir decisão real de produto.
+**Resolvido:** DOMAIN_REDESIGN_APPROVAL — aprovado e implementado (WP-DRD-01..08, commits 5a43fd4, 9ee5793, 998b3b2).
+
+## TLC_INSTALLATION_MISMATCH
+
+- **Registrado em:** 2026-09-03
+- **Descrição:** Incompatibilidade potencial entre `@tauri-apps/plugin-sql` versão instalada e a feature SQLite nas permissões Tauri 2. Observado durante planejamento de UAT em ambiente Tauri real.
+- **Impacto:** Migrations SQL (`ensureColumns`) e `ON DELETE CASCADE` não foram validados em SQLite nativo nesta sessão — apenas BrowserStore.
+- **Ação requerida:** Executar `npm run tauri dev` em ambiente desktop, verificar migrations em banco legado com dados reais, confirmar `PRAGMA foreign_keys = ON` ativo.
+- **Prioridade:** Alta — bloqueia validação completa antes do merge.
 
 ---
 
