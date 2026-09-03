@@ -149,6 +149,18 @@ const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
+const planNewUnitForm = document.querySelector("#plan-new-unit-form");
+const planSubjectSelect = document.querySelector("#plan-subject-select");
+const planShowSubjectForm = document.querySelector("#plan-show-subject-form");
+const planNewSubjectForm = document.querySelector("#plan-new-subject-form");
+const planNewSubjectInput = document.querySelector("#plan-new-subject-input");
+const planStudySource = document.querySelector("#plan-study-source");
+const planStudyDate = document.querySelector("#plan-study-date");
+const planStudyTitle = document.querySelector("#plan-study-title");
+const planStudySummary = document.querySelector("#plan-study-summary");
+const planUnitSaveBtn = document.querySelector("#plan-unit-save-btn");
+const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
+const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
 const themeToggle = document.querySelector("#theme-toggle");
@@ -774,15 +786,22 @@ export async function renderPlan() {
     }),
   );
 
-  // Populate subject filter once
-  if (planFilterSubject && planFilterSubject.options.length <= 1) {
-    for (const subj of subjects.filter((s) => s.isActive)) {
+  // Populate subject dropdowns (filter + new-unit form)
+  const activeSubjects = subjects.filter((s) => s.isActive);
+  function syncPlanSubjectOptions(select, currentValue = "") {
+    if (!select) return;
+    const first = select.options[0];
+    select.replaceChildren(first);
+    for (const subj of activeSubjects) {
       const opt = document.createElement("option");
       opt.value = String(subj.id);
       opt.textContent = subj.name;
-      planFilterSubject.append(opt);
+      select.append(opt);
     }
+    if (currentValue) select.value = currentValue;
   }
+  syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
+  syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
 
   // Sort: study_date desc
   const sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
@@ -2296,8 +2315,92 @@ planFilterSubject?.addEventListener("change", () => {
 planFilterState?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
 });
+function setPlanFormVisible(visible) {
+  if (!planNewUnitForm) return;
+  planNewUnitForm.hidden = !visible;
+  planNewUnitBtn.setAttribute("aria-expanded", String(visible));
+  if (visible) {
+    if (!planStudyDate.value) planStudyDate.value = getLocalDateValue();
+    planStudyTitle.focus();
+  }
+}
+
+function setPlanSubjectSubformVisible(visible) {
+  if (!planNewSubjectForm) return;
+  planNewSubjectForm.hidden = !visible;
+  planShowSubjectForm.setAttribute("aria-expanded", String(visible));
+  if (visible) planNewSubjectInput.focus();
+}
+
+function setPlanFormMessage(msg = "", isError = false) {
+  if (!planUnitFormMessage) return;
+  planUnitFormMessage.textContent = msg;
+  planUnitFormMessage.classList.toggle("is-error", isError);
+}
+
 planNewUnitBtn?.addEventListener("click", () => {
-  showScreen("register");
+  setPlanFormVisible(planNewUnitForm.hidden);
+});
+
+planUnitCancelBtn?.addEventListener("click", () => {
+  setPlanFormVisible(false);
+  setPlanSubjectSubformVisible(false);
+  setPlanFormMessage();
+});
+
+planShowSubjectForm?.addEventListener("click", () => {
+  setPlanSubjectSubformVisible(planNewSubjectForm.hidden);
+});
+
+planNewSubjectForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = planNewSubjectInput.value.trim();
+  if (!name) {
+    planNewSubjectInput.focus();
+    return;
+  }
+  try {
+    const newSubject = await DB.subjects.create(name, "DISC-BLUE");
+    await renderPlan();
+    // Select the newly created subject in the form
+    if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
+    setPlanSubjectSubformVisible(false);
+    planNewSubjectInput.value = "";
+    planStudyTitle.focus();
+  } catch (error) {
+    setPlanFormMessage("Não foi possível criar a disciplina.", true);
+    console.error("Falha ao criar disciplina no plano.", error);
+  }
+});
+
+planUnitSaveBtn?.addEventListener("click", async () => {
+  setPlanFormMessage();
+  const subjectId = Number(planSubjectSelect?.value);
+  const sourceText = planStudySource?.value.trim() ?? "";
+  const studyDate = planStudyDate?.value ?? "";
+  const title = planStudyTitle?.value.trim() ?? "";
+  const summaryBody = planStudySummary?.value.trim() || null;
+
+  if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
+  if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
+  if (!title) { setPlanFormMessage("Informe o conteúdo estudado.", true); planStudyTitle?.focus(); return; }
+
+  planUnitSaveBtn.disabled = true;
+  try {
+    await generateReviewTasks({ subjectId, sourceText, studyDate, title, summaryBody });
+    planStudyTitle.value = "";
+    planStudySource.value = "";
+    planStudySummary.value = "";
+    setPlanFormMessage("Aula salva. 16 revisões criadas.");
+    await renderPlan();
+    setPlanFormVisible(false);
+    setPlanFormMessage();
+    await renderToday();
+  } catch {
+    setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
+  } finally {
+    planUnitSaveBtn.disabled = false;
+  }
 });
 
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

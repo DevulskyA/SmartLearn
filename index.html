@@ -133,6 +133,56 @@
             </div>
             <button class="primary-button" id="plan-new-unit-btn" type="button">+ Nova aula</button>
           </div>
+          <div class="plan-new-unit-form form-card" id="plan-new-unit-form" hidden>
+            <div class="section-heading compact-heading">
+              <p class="eyebrow">Plano</p>
+              <h2>Nova aula</h2>
+            </div>
+            <div class="form-grid">
+              <div class="field-group form-grid-wide">
+                <label for="plan-subject-select">Disciplina</label>
+                <div class="inline-form-row inline-select-row">
+                  <select id="plan-subject-select" name="planSubject">
+                    <option value="">Selecione...</option>
+                  </select>
+                  <button class="text-button" id="plan-show-subject-form" type="button" aria-expanded="false" aria-controls="plan-new-subject-form">
+                    <span aria-hidden="true">+</span> Nova disciplina
+                  </button>
+                </div>
+                <form class="inline-form" id="plan-new-subject-form" hidden novalidate>
+                  <div class="field-group inline-form-field">
+                    <label for="plan-new-subject-input">Nome da nova disciplina</label>
+                    <div class="inline-form-row">
+                      <input id="plan-new-subject-input" name="planSubjectName" type="text" maxlength="100" autocomplete="off" />
+                      <button class="primary-button" type="submit">Adicionar</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-source">Fonte</label>
+                <input id="plan-study-source" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" />
+              </div>
+              <div class="field-group">
+                <label for="plan-study-date">Data da aula</label>
+                <input id="plan-study-date" type="date" required />
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-title">Conteúdo estudado</label>
+                <input id="plan-study-title" type="text" maxlength="240" placeholder="Ex.: Lei de Frank-Starling" required />
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
+                <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado..."></textarea>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="primary-button" id="plan-unit-save-btn" type="button">Salvar aula</button>
+              <button class="small-button" id="plan-unit-cancel-btn" type="button">Cancelar</button>
+              <p class="form-message" id="plan-unit-form-message" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+
           <div class="plan-filters" id="plan-filters">
             <select id="plan-filter-subject" aria-label="Filtrar por disciplina">
               <option value="">Todas as disciplinas</option>
