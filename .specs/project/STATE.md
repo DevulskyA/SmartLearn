@@ -6,10 +6,12 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** MVP Fase 1 concluído (TASK-019). Deep Planning Audit vNext concluída em 2026-09-02.
-- **Data:** 2026-09-02
-- **Próxima ação:** HUMAN_GATE: VNEXT_PLAN_APPROVAL — revisar `.specs/features/smartlearn-learning-vnext/` (spec.md v2, design.md v2, tasks.md v2) e aprovar início de WP-01.
-- **Testes:** 6 testes passando, 0 falhas (baseline validado pós-auditoria)
+- **Fase:** MVP Fase 1 concluído (TASK-019). Domain Redesign Audit em andamento.
+- **Data:** 2026-09-03
+- **Próxima ação:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL — revisar `.specs/features/smartlearn-domain-redesign/` (spec.md, design.md, tasks.md) e aprovar início de WP-DRD-01.
+- **Testes:** 37 testes passando, 0 falhas (base commit 09ea0d8 — hipótese)
+- **ATENÇÃO:** Commit `09ea0d8` é HYPOTHESIS. NÃO é solução final. Seeds de medicina presentes são INCORRETOS. Aguarda HUMAN_GATE: HYPOTHESIS_DECISION antes de prosseguir.
+- **Bloqueio ativo:** HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL. NÃO implementar WPs adicionais antes da aprovação.
 
 ---
 
@@ -124,24 +126,18 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ### DEC-013 — Disciplinas e fontes como entidades reutilizáveis com seed inicial
 - **Data:** 2026-06-23
-- **Decisão:** Disciplina e fonte não serão digitadas repetidamente no fluxo normal de RP. Ambas
-  são entidades próprias: `subjects` e `sources`. O cadastro RP usa `subject_id` e `source_id`.
-  O banco recebe seed inicial com as disciplinas da planilha original e a fonte `Grancursos`.
-- **Seed inicial de disciplinas:** `Língua Portuguesa`, `Conhecimentos sobre o DF`, `Legislação`,
-  `Administração`, `AFO`, `Arquivologia`, `Recursos Materiais`.
-- **Seed inicial de fontes:** `Grancursos`.
-- **Normalização obrigatória:** antes de salvar disciplina ou fonte, aplicar `trim()`, colapsar
-  espaços múltiplos e comparar case-insensitive para impedir duplicatas por caixa ou espaço.
-- **Consequências:**
-  - `sources` deve ter `id`, `name`, `created_at`, `updated_at`, `is_active` e `sort_order`.
-  - `study_records.source TEXT` deixa de ser o contrato normal; o vínculo correto é
-    `study_records.source_id INTEGER NOT NULL REFERENCES sources(id)`.
-  - `DB.studyRecords.create()` recebe `{ subjectId, sourceId, studyDate, content }`.
-  - RP/Cadastro deve selecionar fonte por lista/autocomplete e oferecer quick add `+ Nova fonte`.
-  - `Grancursos` deve existir automaticamente e ficar pré-selecionado quando for a única fonte ativa.
-  - Importação de estudos históricos/aulas fica fora desta correção e deve ser task separada.
-- **Status:** Implementada na TASK-018.
-- **Irreversível no MVP:** Sim.
+- **Status:** ⚠️ SUPERSEDED_FOR_VNEXT — ver DEC-013-V2
+- **Decisão original (histórica):** Disciplina e fonte são entidades próprias (`subjects`, `sources`). Seed inicial com disciplinas de concurso + fonte `Grancursos`.
+- **Por que superseded:** Teste real com fluxo Fisiologia/Guyton revelou que fonte é texto livre (varia por capítulo/apostila); entidade `sources` cria fricção sem benefício. Usuário é estudante de Medicina, não de concurso.
+
+### DEC-013-V2 — Fonte como texto livre, estado inicial VAZIO
+- **Data:** 2026-09-03
+- **Decisão:** Fonte é campo texto livre em `study_records.source_text`. Tabela `sources` não existe.
+  Estado inicial do banco é VAZIO — sem seeds de disciplinas ou fontes.
+- **Invariante substituída:** INV-05B (fonte como entidade reutilizável) → SUPERSEDED. Nova regra: "Fonte é texto livre que descreve a origem do conteúdo estudado; pertence ao estudo, não é entidade separada."
+- **Commit hipótese:** `09ea0d8` — implementa parcialmente esta decisão. Aguarda HUMAN_GATE: HYPOTHESIS_DECISION para confirmação.
+- **Referência:** `.specs/features/smartlearn-domain-redesign/design.md`
+- **Irreversível:** Após HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL.
 
 ### DEC-014 — Tela Hoje linear com ReviewRow e cadastro minimalista
 - **Data:** 2026-06-23
@@ -176,12 +172,10 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ### DEC-015 — Limpeza total da base local via Configurações
 - **Data:** 2026-06-23
-- **Decisão:** A tela de Configurações deve oferecer uma ação destrutiva para apagar toda a base local, permitindo reiniciar um novo ciclo de estudo a partir de um banco limpo.
-- **Consequências:**
-  - O aluno deve ser orientado a exportar o backup antes da limpeza.
-  - A ação exige confirmação explícita por risco de perda total dos dados locais.
-  - Após a limpeza, o aplicativo volta ao estado inicial com os seeds padrão reaplicados na próxima inicialização.
-- **Irreversível no MVP:** Sim.
+- **Status:** REINTERPRETED — ver nota abaixo
+- **Decisão original:** Após limpeza, seeds padrão são reaplicados na próxima inicialização.
+- **Reinterpretação (2026-09-03):** Seeds NÃO são reaplicados. Estado após reset é VAZIO. O aluno cadastra suas próprias disciplinas. Não há conteúdo acadêmico pré-injetado.
+- **Irreversível no MVP:** Sim (reset é destrutivo; a mudança é que não há seeds após reset).
 
 ---
 
@@ -202,9 +196,19 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ---
 
+## HUMAN_GATES ativos
+
+| Gate | Bloqueio | Referência |
+|------|---------|-----------|
+| DOMAIN_REDESIGN_APPROVAL | Nenhuma implementação adicional em src/ antes da aprovação de spec/design/tasks | `.specs/features/smartlearn-domain-redesign/` |
+| HYPOTHESIS_DECISION | Commit 09ea0d8 — preservar como base ou reverter? | `.specs/features/smartlearn-domain-redesign/tasks.md` |
+| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva em produção | `.specs/features/smartlearn-domain-redesign/design.md §5` |
+
+---
+
 ## Bloqueadores ativos
 
-Nenhum.
+Nenhum técnico. HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL bloqueia implementação (não é bloqueador técnico — é gate de aprovação intencional).
 
 ---
 
