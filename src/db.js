@@ -396,7 +396,9 @@ function createBrowserStore() {
   function readState() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      return parsed && typeof parsed === "object" ? { ...emptyState(), ...parsed } : emptyState();
+      const state = parsed && typeof parsed === "object" ? { ...emptyState(), ...parsed } : emptyState();
+      refreshNextIds(state);
+      return state;
     } catch {
       return emptyState();
     }

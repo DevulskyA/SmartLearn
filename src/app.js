@@ -1186,7 +1186,71 @@ export async function renderTracking() {
     if (nextPending) parts.push(`Próx. ${formatDate(nextPending.dueDate)}`);
 
     meta.textContent = parts.join(" · ");
-    card.append(header, meta);
+
+    // AC-ACOMP-05: quick actions — open unit (Plano), add Resumo, go to pending review
+    const actions = document.createElement("div");
+    actions.className = "tracking-card-actions";
+
+    const goToPlanBtn = document.createElement("button");
+    goToPlanBtn.className = "small-button";
+    goToPlanBtn.type = "button";
+    goToPlanBtn.textContent = "Ver no Plano";
+    goToPlanBtn.addEventListener("click", () => {
+      showScreen("plan");
+      // after render, expand this unit
+      renderPlan().then(() => {
+        const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+          const expandBtn = row.querySelector(".plan-expand-btn");
+          if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
+        }
+      }).catch(console.error);
+    });
+
+    actions.append(goToPlanBtn);
+
+    if (!unit.summaryBody) {
+      const addSummaryBtn = document.createElement("button");
+      addSummaryBtn.className = "small-button";
+      addSummaryBtn.type = "button";
+      addSummaryBtn.textContent = "+ Resumo Mestre";
+      addSummaryBtn.addEventListener("click", () => {
+        showScreen("plan");
+        renderPlan().then(() => {
+          const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
+          if (row) {
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            const expandBtn = row.querySelector(".plan-expand-btn");
+            if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
+            // focus summary textarea after expansion
+            setTimeout(() => {
+              const summaryEl = row.querySelector(".plan-summary-edit");
+              if (summaryEl) summaryEl.focus();
+            }, 350);
+          }
+        }).catch(console.error);
+      });
+      actions.append(addSummaryBtn);
+    }
+
+    if (nextPending) {
+      const goToReviewBtn = document.createElement("button");
+      goToReviewBtn.className = "small-button";
+      goToReviewBtn.type = "button";
+      goToReviewBtn.textContent = `Ir para revisão`;
+      goToReviewBtn.addEventListener("click", () => {
+        showScreen("today");
+        // scroll to the review row for this unit if visible
+        setTimeout(() => {
+          const reviewRow = document.querySelector(`[data-task-id="${nextPending.id}"]`);
+          if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+      });
+      actions.append(goToReviewBtn);
+    }
+
+    card.append(header, meta, actions);
     trackingList.append(card);
   }
 }

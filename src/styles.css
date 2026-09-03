@@ -2409,6 +2409,12 @@ h1 {
   border-radius: 99px;
   white-space: nowrap;
 }
+.tracking-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
 .tracking-state-badge[data-state="SEM_EVIDENCIA"] { background: var(--color-surface-alt); color: var(--color-text-secondary); }
 .tracking-state-badge[data-state="EM_ESTUDO"] { background: #dbeafe; color: #1e40af; }
 .tracking-state-badge[data-state="EM_REVISAO"] { background: #fef9c3; color: #92400e; }
