@@ -218,7 +218,7 @@ function createExerciseRow(exercise) {
 
   const contentCell = document.createElement("td");
   contentCell.dataset.cell = "content";
-  contentCell.textContent = exercise.content;
+  contentCell.textContent = exercise.title;
 
   const questionsCell = document.createElement("td");
   questionsCell.dataset.cell = "q";
@@ -271,11 +271,11 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, studyRecord, subject, groupName, today, exercises = []) {
+function createReviewRow(task, unit, subject, groupName, today, exercises = []) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
-  row.dataset.studyRecordId = String(studyRecord?.id ?? "");
+  row.dataset.unitId = String(unit?.id ?? "");
   row.dataset.group = groupName;
 
   // Header: review-number marker + identity + status/score tags
@@ -289,12 +289,12 @@ function createReviewRow(task, studyRecord, subject, groupName, today, exercises
   const heading = document.createElement("div");
   heading.className = "review-row-heading";
   heading.append(createTextElement("p", "review-subject", subject?.name ?? "Sem disciplina"));
-  heading.append(createTextElement("h3", "review-content", studyRecord?.content ?? "Conteúdo indisponível"));
+  heading.append(createTextElement("h3", "review-content", unit?.title ?? "Conteúdo indisponível"));
   heading.append(
     createTextElement(
       "p",
       "review-meta",
-      `${studyRecord?.sourceText ?? ""} · ${formatDate(studyRecord?.studyDate)}`.replace(/^\s*·\s*/, ""),
+      `${unit?.sourceText ?? ""} · ${formatDate(unit?.studyDate)}`.replace(/^\s*·\s*/, ""),
     ),
   );
 
@@ -390,7 +390,7 @@ function createReviewRow(task, studyRecord, subject, groupName, today, exercises
   const summarySection = document.createElement("div");
   summarySection.className = "review-row-summary";
 
-  const summaryDisplayText = studyRecord?.summaryBody ?? studyRecord?.content ?? "";
+  const summaryDisplayText = unit?.summaryBody ?? unit?.title ?? "";
   const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
   summaryDisplay.dataset.summaryDisplay = String(task.id);
 
@@ -406,7 +406,7 @@ function createReviewRow(task, studyRecord, subject, groupName, today, exercises
 
   const summaryTextarea = document.createElement("textarea");
   summaryTextarea.rows = 6;
-  summaryTextarea.value = studyRecord?.summaryBody ?? "";
+  summaryTextarea.value = unit?.summaryBody ?? "";
   summaryTextarea.placeholder = "Escreva o resumo do conteúdo estudado...";
   summaryTextarea.dataset.summaryEdit = String(task.id);
   summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
@@ -465,16 +465,16 @@ function createReviewRow(task, studyRecord, subject, groupName, today, exercises
 export async function renderToday() {
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, studyRecords, subjects] =
+  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
     await Promise.all([
       DB.reviewTasks.getForToday(today),
       DB.reviewTasks.getOverdue(today),
       DB.reviewTasks.getCompletedToday(today),
       DB.reviewTasks.getTomorrow(tomorrow),
-      DB.studyRecords.getAll(),
+      DB.learningUnits.getAll(),
       DB.subjects.getAll(),
     ]);
-  const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
+  const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
     overdue: overdueReviews,
@@ -482,19 +482,19 @@ export async function renderToday() {
     doneToday: completedToday,
   };
 
-  // Load exercises for all study records visible in the review groups
-  const visibleStudyIds = new Set([
-    ...overdueReviews.map((t) => t.studyRecordId),
-    ...pendingToday.map((t) => t.studyRecordId),
-    ...completedToday.map((t) => t.studyRecordId),
+  // Load exercises for all learning units visible in the review groups
+  const visibleUnitIds = new Set([
+    ...overdueReviews.map((t) => t.unitId),
+    ...pendingToday.map((t) => t.unitId),
+    ...completedToday.map((t) => t.unitId),
   ]);
-  const exercisesByStudyId = new Map();
+  const exercisesByUnitId = new Map();
   await Promise.all(
-    [...visibleStudyIds].map(async (id) => {
+    [...visibleUnitIds].map(async (id) => {
       try {
-        exercisesByStudyId.set(id, await DB.exercises.getAll(id));
+        exercisesByUnitId.set(id, await DB.exercises.getAll(id));
       } catch {
-        exercisesByStudyId.set(id, []);
+        exercisesByUnitId.set(id, []);
       }
     }),
   );
@@ -508,15 +508,15 @@ export async function renderToday() {
     block.hidden = tasks.length === 0;
 
     for (const task of tasks) {
-      const studyRecord = studiesById.get(task.studyRecordId);
-      const subject = subjectsById.get(studyRecord?.subjectId);
-      const exercises = exercisesByStudyId.get(task.studyRecordId) ?? [];
-      list.append(createReviewRow(task, studyRecord, subject, groupName, today, exercises));
+      const unit = unitsById.get(task.unitId);
+      const subject = subjectsById.get(unit?.subjectId);
+      const exercises = exercisesByUnitId.get(task.unitId) ?? [];
+      list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
     }
   }
 
   const pendingCount = overdueReviews.length + pendingToday.length;
-  const hasData = studyRecords.length > 0;
+  const hasData = learningUnits.length > 0;
   todayEmptyState.hidden = hasData;
   todaySuccessState.hidden = !(hasData && pendingCount === 0);
 
@@ -536,7 +536,7 @@ export async function renderToday() {
   }).format(new Date());
 
   // Show/hide daily summary button based on studies with study_date === today
-  const todayStudies = studyRecords.filter((r) => r.studyDate === today);
+  const todayStudies = learningUnits.filter((u) => u.studyDate === today);
   if (dailySummaryBtn) {
     dailySummaryBtn.hidden = todayStudies.length === 0;
   }
@@ -547,12 +547,12 @@ export async function renderToday() {
 }
 
 export async function renderStats() {
-  const [reviewTasks, studyRecords, subjects] = await Promise.all([
+  const [reviewTasks, learningUnits, subjects] = await Promise.all([
     DB.reviewTasks.getAll(),
-    DB.studyRecords.getAll(),
+    DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  const stats = Stats.calculate(reviewTasks, studyRecords, subjects);
+  const stats = Stats.calculate(reviewTasks, learningUnits, subjects);
   metricElements.totalQuestions.textContent = String(stats.totalQuestions);
   metricElements.totalCorrect.textContent = String(stats.totalCorrect);
   metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
@@ -705,7 +705,7 @@ async function generateReviewTasks(studyData) {
     questionsDone: false,
   }));
 
-  return DB.studyRecords.createWithReviews(studyData, tasks);
+  return DB.learningUnits.createWithReviews(studyData, tasks);
 }
 
 
@@ -751,16 +751,16 @@ function pluralize(value, singular, plural) {
 }
 
 async function renderStudies() {
-  const [studyRecords, subjects] = await Promise.all([
-    DB.studyRecords.getAll(),
+  const [learningUnits, subjects] = await Promise.all([
+    DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
 
   studyList.replaceChildren();
-  studiesEmpty.hidden = studyRecords.length > 0;
+  studiesEmpty.hidden = learningUnits.length > 0;
 
-  for (const record of studyRecords) {
+  for (const record of learningUnits) {
     const row = document.createElement("article");
     row.className = "study-row";
     row.dataset.studyId = String(record.id);
@@ -804,8 +804,8 @@ async function renderStudies() {
       contentInput.className = "study-edit-content";
       contentInput.rows = 3;
       contentInput.maxLength = 240;
-      contentInput.dataset.studyField = "content";
-      contentInput.value = record.content;
+      contentInput.dataset.studyField = "title";
+      contentInput.value = record.title;
       contentLabel.append(contentInput);
 
       const error = document.createElement("span");
@@ -838,7 +838,7 @@ async function renderStudies() {
         createTextElement("span", "study-date-tag", formatDate(record.studyDate)),
       );
       info.append(meta);
-      info.append(createTextElement("p", "study-content", record.content || "Conteúdo indisponível"));
+      info.append(createTextElement("p", "study-content", record.title || "Conteúdo indisponível"));
 
       const editButton = document.createElement("button");
       editButton.className = "small-button";
@@ -912,13 +912,13 @@ async function renderStudies() {
   }
 }
 
-async function renderExerciseList(studyRecordId) {
-  const section = studyList.querySelector(`[data-exercises-for="${studyRecordId}"]`);
+async function renderExerciseList(unitId) {
+  const section = studyList.querySelector(`[data-exercises-for="${unitId}"]`);
   if (!section) return;
-  const list = section.querySelector(`[data-exercise-list-for="${studyRecordId}"]`);
+  const list = section.querySelector(`[data-exercise-list-for="${unitId}"]`);
   if (!list) return;
 
-  const exercises = await DB.exercises.getAll(studyRecordId);
+  const exercises = await DB.exercises.getAll(unitId);
   list.replaceChildren();
   for (const exercise of exercises) {
     const item = document.createElement("div");
@@ -937,7 +937,7 @@ async function renderExerciseList(studyRecordId) {
     editExBtn.className = "small-button";
     editExBtn.dataset.action = "edit-exercise";
     editExBtn.dataset.exerciseId = String(exercise.id);
-    editExBtn.dataset.studyId = String(studyRecordId);
+    editExBtn.dataset.studyId = String(unitId);
     editExBtn.textContent = "Editar";
 
     const delExBtn = document.createElement("button");
@@ -945,7 +945,7 @@ async function renderExerciseList(studyRecordId) {
     delExBtn.className = "small-button is-danger";
     delExBtn.dataset.action = "delete-exercise";
     delExBtn.dataset.exerciseId = String(exercise.id);
-    delExBtn.dataset.studyId = String(studyRecordId);
+    delExBtn.dataset.studyId = String(unitId);
     delExBtn.textContent = "Remover";
 
     itemActions.append(editExBtn, delExBtn);
@@ -1369,6 +1369,7 @@ studyList.addEventListener("click", async (event) => {
         questionText,
         answerText: aInput?.value.trim() ?? "",
         hintText: hInput?.value.trim() || null,
+        provenance: 'MANUAL',
       });
       if (qInput) qInput.value = "";
       if (aInput) aInput.value = "";
@@ -1508,7 +1509,7 @@ studyList.addEventListener("click", async (event) => {
     }
 
     try {
-      await DB.studyRecords.update(studyId, { sourceText, studyDate, content });
+      await DB.learningUnits.update(studyId, { sourceText, studyDate, title: content });
       activeStudyEditId = null;
       setStudyManagerMessage();
       await Promise.all([renderStudies(), renderToday(), renderStats()]);
@@ -1556,8 +1557,8 @@ reviewDashboard.addEventListener("click", async (event) => {
   if (!button) return;
   const row = button.closest(".review-row");
   if (!row) return;
-  const studyRecordId = Number(row.dataset.studyRecordId);
-  if (!studyRecordId) return;
+  const unitId = Number(row.dataset.unitId);
+  if (!unitId) return;
 
   const textarea = row.querySelector(".review-summary-edit textarea");
   const messageEl = row.querySelector(".review-summary-message");
@@ -1567,9 +1568,9 @@ reviewDashboard.addEventListener("click", async (event) => {
   const newSummaryBody = textarea.value.trim() || null;
   button.disabled = true;
   try {
-    const updated = await DB.studyRecords.update(studyRecordId, { summaryBody: newSummaryBody });
+    const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? updated.content ?? "";
+      displayEl.textContent = updated.summaryBody ?? updated.title ?? "";
     }
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
@@ -1653,17 +1654,17 @@ importBackupInput.addEventListener("change", async () => {
 dailySummaryBtn?.addEventListener("click", async () => {
   if (!dailySummaryPanel || !dailySummaryList) return;
   const today = getLocalDateValue();
-  const todayStudies = await DB.studyRecords.getByDate(today);
+  const todayStudies = await DB.learningUnits.getByDate(today);
   dailySummaryList.replaceChildren();
   for (const record of todayStudies) {
     const item = document.createElement("div");
     item.className = "daily-summary-item";
     const title = document.createElement("p");
     title.className = "daily-summary-title";
-    title.textContent = record.content;
+    title.textContent = record.title;
     const body = document.createElement("p");
     body.className = "daily-summary-body";
-    body.textContent = record.summaryBody ?? record.content;
+    body.textContent = record.summaryBody ?? record.title;
     item.append(title, body);
     dailySummaryList.append(item);
   }
@@ -1821,7 +1822,7 @@ studyForm.addEventListener("submit", async (event) => {
       subjectId,
       sourceText,
       studyDate,
-      content,
+      title: content,
       summaryBody,
     });
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
