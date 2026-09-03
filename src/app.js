@@ -10,6 +10,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey } from "./performance-thresholds.js";
+import { Analytics } from "./analytics.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -127,6 +128,9 @@ const metricElements = {
   reviewsPending: document.querySelector("#metric-reviews-pending"),
   reviewsOverdue: document.querySelector("#metric-reviews-overdue"),
 };
+const subjectKpiList = document.querySelector("#subject-kpi-list");
+const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
+const statsSubjectSort = document.querySelector("#stats-subject-sort");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
 const subjectAveragesBody = document.querySelector("#subject-averages-body");
@@ -713,6 +717,7 @@ export async function renderStats() {
   if (!chartRendered) {
     chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
   }
+  await renderStatsBySubject();
 }
 function getPlanUnitState(unitId, allTasks, today) {
   const tasks = allTasks.filter((t) => t.unitId === unitId);
@@ -943,6 +948,101 @@ export async function renderPlan() {
 
     row.append(compact, detail);
     planList.append(row);
+  }
+}
+
+function createTrendBadge(direction) {
+  const span = document.createElement("span");
+  span.className = "trend-badge";
+  span.dataset.direction = direction;
+  const labels = { IMPROVING: "↑ Melhorando", DECLINING: "↓ Caindo", STABLE: "→ Estável", INSUFFICIENT: "— Insuficiente" };
+  span.textContent = labels[direction] ?? direction;
+  return span;
+}
+
+function createStateBadge(state) {
+  const span = document.createElement("span");
+  span.className = "performance-state-badge";
+  span.dataset.state = state;
+  const labels = { NO_EVIDENCE: "Sem evidência", CRITICAL: "Crítico", ATTENTION: "Atenção", ADEQUATE: "Adequado", STRONG: "Forte" };
+  span.textContent = labels[state] ?? state;
+  return span;
+}
+
+export async function renderStatsBySubject() {
+  if (!subjectKpiList) return;
+  const today = getLocalDateValue();
+  const [evidence, units, subjects] = await Promise.all([
+    DB.learningEvidence.getAll(),
+    DB.learningUnits.getAll(),
+    DB.subjects.getAll(),
+  ]);
+  let results = Analytics.bySubject(evidence, units, subjects, today);
+
+  const sortValue = statsSubjectSort?.value ?? "worst-first";
+  if (sortValue === "best-first") {
+    results = [...results].sort((a, b) => {
+      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
+      if (a.weightedAccuracy == null) return 1;
+      if (b.weightedAccuracy == null) return -1;
+      return b.weightedAccuracy - a.weightedAccuracy;
+    });
+  } else if (sortValue === "volume") {
+    results = [...results].sort((a, b) => b.totalQuestions - a.totalQuestions);
+  } else if (sortValue === "trend") {
+    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
+    results = [...results].sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
+  }
+  // "worst-first" is default from Analytics.bySubject sort
+
+  const hasAny = results.some((r) => r.totalQuestions > 0);
+  subjectKpiEmpty.hidden = hasAny || results.length > 0;
+  subjectKpiList.replaceChildren();
+
+  for (const r of results) {
+    const card = document.createElement("article");
+    card.className = "subject-kpi";
+    card.dataset.state = r.state;
+
+    const header = document.createElement("div");
+    header.className = "subject-kpi-header";
+
+    const chip = document.createElement("span");
+    chip.className = "subject-chip";
+    chip.textContent = r.subjectName;
+    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+
+    const badges = document.createElement("div");
+    badges.className = "subject-kpi-badges";
+    badges.append(createStateBadge(r.state), createTrendBadge(r.trend.direction));
+
+    header.append(chip, badges);
+
+    const metrics = document.createElement("div");
+    metrics.className = "subject-kpi-metrics";
+
+    const accEl = document.createElement("div");
+    accEl.className = "subject-kpi-acc";
+    // AC-EST1-05: sem evidência ≠ 0% — show neutral, never red
+    // AC-EST1-07: always show % + n questões
+    if (r.weightedAccuracy == null) {
+      accEl.textContent = "Sem evidência";
+      accEl.classList.add("is-no-evidence");
+    } else {
+      accEl.textContent = `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%`;
+    }
+
+    const qEl = document.createElement("div");
+    qEl.className = "subject-kpi-questions";
+    qEl.textContent = `${r.totalQuestions} questões · ${r.totalCorrect} acertos`;
+
+    const recentEl = document.createElement("div");
+    recentEl.className = "subject-kpi-recent";
+    recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
+
+    metrics.append(accEl, qEl, recentEl);
+    card.append(header, metrics);
+    subjectKpiList.append(card);
   }
 }
 
@@ -2308,6 +2408,10 @@ if (databaseAvailable) {
   await renderSubjects();
   await renderToday();
 }
+
+statsSubjectSort?.addEventListener("change", () => {
+  if (databaseAvailable) renderStatsBySubject().catch(console.error);
+});
 
 planFilterSubject?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);

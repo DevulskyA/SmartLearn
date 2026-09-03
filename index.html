@@ -302,6 +302,23 @@
             <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
 
+          <section class="stats-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
+            <div class="stats-panel-heading">
+              <div>
+                <p class="eyebrow">Por disciplina</p>
+                <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
+              </div>
+              <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
+                <option value="worst-first">Pior → melhor</option>
+                <option value="best-first">Melhor → pior</option>
+                <option value="volume">Volume de questões</option>
+                <option value="trend">Tendência</option>
+              </select>
+            </div>
+            <div class="subject-kpi-list" id="subject-kpi-list" aria-live="polite"></div>
+            <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
+          </section>
+
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
               <div>
