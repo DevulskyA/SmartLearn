@@ -10,6 +10,37 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 
+async function withScrollPreserved(fn) {
+  const top = mainContent?.scrollTop ?? 0;
+  await fn();
+  requestAnimationFrame(() => {
+    if (mainContent) mainContent.scrollTop = top;
+  });
+}
+
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("confirm-dialog");
+    const msgEl = document.getElementById("confirm-dialog-message");
+    const okBtn = document.getElementById("confirm-dialog-ok");
+    const cancelBtn = document.getElementById("confirm-dialog-cancel");
+    msgEl.textContent = message;
+    const finish = (result) => {
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("cancel", onCancel);
+      dialog.close();
+      resolve(result);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("cancel", onCancel);
+    dialog.showModal();
+  });
+}
+
 let databaseAvailable = false;
 const dbInit = DB.init()
   .then(() => {
@@ -23,10 +54,8 @@ const dbInit = DB.init()
 
 const DEFAULT_SCREEN = "today";
 const LAST_SUBJECT_KEY = "smartlearn:lastSubjectId";
-const LAST_SOURCE_KEY = "smartlearn:lastSourceId";
 
 // Estado de edição inline — null quando nenhuma linha está em modo edição.
-let activeSourceEditId = null;
 let activeSubjectEditId = null;
 let activeStudyEditId = null;
 
@@ -68,14 +97,8 @@ const studyForm = document.querySelector("#study-form");
 const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
 const studySummaryTextarea = document.querySelector("#study-summary");
-const studySourceSelect = document.querySelector("#study-source");
-const showSourceFormButton = document.querySelector("#show-source-form");
-const newSourceForm = document.querySelector("#new-source-form");
-const newSourceInput = document.querySelector("#new-source-input");
+const studySourceTextInput = document.querySelector("#study-source-text");
 const sourceMessage = document.querySelector("#source-message");
-const sourceList = document.querySelector("#source-list");
-const sourcesEmpty = document.querySelector("#sources-empty");
-const sourceManagerMessage = document.querySelector("#source-manager-message");
 const studyList = document.querySelector("#study-list");
 const studiesEmpty = document.querySelector("#studies-empty");
 const studyManagerMessage = document.querySelector("#study-manager-message");
@@ -248,7 +271,7 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, studyRecord, subject, source, groupName, today, exercises = []) {
+function createReviewRow(task, studyRecord, subject, groupName, today, exercises = []) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -271,7 +294,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName, today, e
     createTextElement(
       "p",
       "review-meta",
-      `${source?.name ?? "Fonte indisponível"} · ${formatDate(studyRecord?.studyDate)}`,
+      `${studyRecord?.sourceText ?? ""} · ${formatDate(studyRecord?.studyDate)}`.replace(/^\s*·\s*/, ""),
     ),
   );
 
@@ -442,7 +465,7 @@ function createReviewRow(task, studyRecord, subject, source, groupName, today, e
 export async function renderToday() {
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, studyRecords, subjects, sources] =
+  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, studyRecords, subjects] =
     await Promise.all([
       DB.reviewTasks.getForToday(today),
       DB.reviewTasks.getOverdue(today),
@@ -450,11 +473,9 @@ export async function renderToday() {
       DB.reviewTasks.getTomorrow(tomorrow),
       DB.studyRecords.getAll(),
       DB.subjects.getAll(),
-      DB.sources.getAll(),
     ]);
   const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
-  const sourcesById = new Map(sources.map((source) => [source.id, source]));
   const groups = {
     overdue: overdueReviews,
     today: pendingToday,
@@ -489,9 +510,8 @@ export async function renderToday() {
     for (const task of tasks) {
       const studyRecord = studiesById.get(task.studyRecordId);
       const subject = subjectsById.get(studyRecord?.subjectId);
-      const source = sourcesById.get(studyRecord?.sourceId);
       const exercises = exercisesByStudyId.get(task.studyRecordId) ?? [];
-      list.append(createReviewRow(task, studyRecord, subject, source, groupName, today, exercises));
+      list.append(createReviewRow(task, studyRecord, subject, groupName, today, exercises));
     }
   }
 
@@ -688,43 +708,6 @@ async function generateReviewTasks(studyData) {
   return DB.studyRecords.createWithReviews(studyData, tasks);
 }
 
-function normalizeSourceName(name) {
-  return String(name ?? "").replace(/\s+/g, " ").trim();
-}
-
-async function ensureSourceFromName(sourceName) {
-  const normalizedName = normalizeSourceName(sourceName);
-  if (!normalizedName) return null;
-
-  const sources = await DB.sources.getAll();
-  const existingSource = sources.find(
-    (source) => source.name.localeCompare(normalizedName, "pt-BR", { sensitivity: "accent" }) === 0,
-  );
-
-  if (!existingSource) {
-    return DB.sources.create(normalizedName);
-  }
-
-  if (!existingSource.isActive) {
-    await DB.sources.update(existingSource.id, { isActive: true });
-    return { ...existingSource, isActive: true };
-  }
-
-  return existingSource;
-}
-
-async function resolveStudySourceId(selectedSourceId) {
-  if (selectedSourceId) return selectedSourceId;
-
-  const pendingSourceName = newSourceForm.hidden ? "" : newSourceInput.value;
-  const source = await ensureSourceFromName(pendingSourceName);
-  if (!source) return null;
-
-  await renderSources(source.id);
-  newSourceForm.reset();
-  setSourceFormVisible(false);
-  return source.id;
-}
 
 function setSubjectMessage(message = "") {
   subjectMessage.textContent = message;
@@ -744,42 +727,20 @@ function setSubjectFormVisible(visible) {
   }
 }
 
-function setSourceMessage(message = "") {
-  sourceMessage.textContent = message;
-}
-
-function setSourceManagerMessage(message = "") {
-  sourceManagerMessage.textContent = message;
-}
-
 function setStudyManagerMessage(message = "") {
   studyManagerMessage.textContent = message;
 }
 
-function setSourceFormVisible(visible) {
-  newSourceForm.hidden = !visible;
-  showSourceFormButton.setAttribute("aria-expanded", String(visible));
-  setSourceMessage();
-
-  if (visible) {
-    newSourceInput.focus();
-  }
-}
-
 function resetRegisterState() {
-  activeSourceEditId = null;
   activeSubjectEditId = null;
   activeStudyEditId = null;
   forgetSelection(LAST_SUBJECT_KEY);
-  forgetSelection(LAST_SOURCE_KEY);
   studyForm.reset();
   studyDateInput.value = getLocalDateValue();
+  if (studySourceTextInput) studySourceTextInput.value = "";
   newSubjectForm.reset();
-  newSourceForm.reset();
   setSubjectFormVisible(false);
-  setSourceFormVisible(false);
   setSubjectManagerMessage();
-  setSourceManagerMessage();
   setStudyManagerMessage();
   studyMessage.classList.remove("is-error");
   studyMessage.textContent = "";
@@ -789,124 +750,12 @@ function pluralize(value, singular, plural) {
   return value === 1 ? singular : plural;
 }
 
-async function renderSources(selectedId = studySourceSelect.value) {
-  const [activeSources, allSources] = await Promise.all([
-    DB.sources.getActive(),
-    DB.sources.getAll(),
-  ]);
-  studySourceSelect.replaceChildren(new Option("Selecione...", ""));
-
-  for (const source of activeSources) {
-    studySourceSelect.add(new Option(source.name, String(source.id)));
-  }
-
-  if (selectedId !== undefined && selectedId !== null) {
-    studySourceSelect.value = String(selectedId);
-  }
-
-  if (!studySourceSelect.value) {
-    const remembered = recallSelection(LAST_SOURCE_KEY);
-    if (remembered && activeSources.some((source) => String(source.id) === remembered)) {
-      studySourceSelect.value = remembered;
-    }
-  }
-
-  if (!studySourceSelect.value && activeSources.length === 1) {
-    studySourceSelect.value = String(activeSources[0].id);
-  }
-
-  renderSourceList(allSources);
-}
-
-function renderSourceList(sources) {
-  sourceList.replaceChildren();
-  sourcesEmpty.hidden = sources.length > 0;
-
-  for (const source of sources) {
-    const row = document.createElement("article");
-    row.className = "source-row";
-    row.classList.toggle("is-inactive", !source.isActive);
-    row.dataset.sourceId = String(source.id);
-
-    const info = document.createElement("div");
-    info.className = "source-info";
-
-    const actions = document.createElement("div");
-    actions.className = "source-actions";
-
-    if (source.id === activeSourceEditId) {
-      // Modo edição inline
-      row.classList.add("is-editing");
-
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "inline-edit-input";
-      input.value = source.name;
-      input.id = `source-edit-input-${source.id}`;
-      input.setAttribute("aria-label", "Novo nome da fonte");
-      input.setAttribute("autocomplete", "off");
-
-      const error = document.createElement("span");
-      error.className = "inline-edit-error";
-      error.setAttribute("aria-live", "polite");
-
-      info.append(input, error);
-
-      const saveBtn = document.createElement("button");
-      saveBtn.className = "small-button is-primary";
-      saveBtn.type = "button";
-      saveBtn.dataset.action = "save-source";
-      saveBtn.textContent = "Salvar";
-
-      const cancelBtn = document.createElement("button");
-      cancelBtn.className = "small-button";
-      cancelBtn.type = "button";
-      cancelBtn.dataset.action = "cancel-source";
-      cancelBtn.textContent = "Cancelar";
-
-      actions.append(saveBtn, cancelBtn);
-    } else {
-      // Modo visualização
-      info.append(createTextElement("p", "source-name", source.name));
-      info.append(createTextElement("span", "source-status", source.isActive ? "Ativa" : "Desativada"));
-
-      const editButton = document.createElement("button");
-      editButton.className = "small-button";
-      editButton.type = "button";
-      editButton.dataset.action = "edit-source";
-      editButton.dataset.sourceName = source.name;
-      editButton.textContent = "Editar";
-
-      const toggleButton = document.createElement("button");
-      toggleButton.className = "small-button";
-      toggleButton.type = "button";
-      toggleButton.dataset.action = source.isActive ? "deactivate-source" : "activate-source";
-      toggleButton.textContent = source.isActive ? "Desativar" : "Ativar";
-
-      const deleteButton = document.createElement("button");
-      deleteButton.className = "small-button is-danger";
-      deleteButton.type = "button";
-      deleteButton.dataset.action = "delete-source";
-      deleteButton.dataset.sourceName = source.name;
-      deleteButton.textContent = "Excluir";
-
-      actions.append(editButton, toggleButton, deleteButton);
-    }
-
-    row.append(info, actions);
-    sourceList.append(row);
-  }
-}
-
 async function renderStudies() {
-  const [studyRecords, subjects, sources, activeSources] = await Promise.all([
+  const [studyRecords, subjects] = await Promise.all([
     DB.studyRecords.getAll(),
     DB.subjects.getAll(),
-    DB.sources.getAll(),
-    DB.sources.getActive(),
   ]);
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
-  const sourcesById = new Map(sources.map((source) => [source.id, source]));
 
   studyList.replaceChildren();
   studiesEmpty.hidden = studyRecords.length > 0;
@@ -923,7 +772,6 @@ async function renderStudies() {
     actions.className = "study-actions";
 
     const subject = subjectsById.get(record.subjectId);
-    const source = sourcesById.get(record.sourceId);
 
     if (record.id === activeStudyEditId) {
       row.classList.add("is-editing");
@@ -933,18 +781,13 @@ async function renderStudies() {
 
       const sourceLabel = document.createElement("label");
       sourceLabel.textContent = "Fonte";
-      const sourceSelect = document.createElement("select");
-      sourceSelect.className = "study-edit-source";
-      sourceSelect.dataset.studyField = "sourceId";
-      sourceSelect.value = String(record.sourceId);
-      for (const optionSource of activeSources) {
-        sourceSelect.add(new Option(optionSource.name, String(optionSource.id)));
-      }
-      if (source && !activeSources.some((item) => item.id === source.id)) {
-        sourceSelect.add(new Option(`${source.name} (inativa)`, String(source.id)));
-      }
-      sourceSelect.value = String(record.sourceId);
-      sourceLabel.append(sourceSelect);
+      const sourceInput = document.createElement("input");
+      sourceInput.type = "text";
+      sourceInput.className = "study-edit-source";
+      sourceInput.dataset.studyField = "sourceText";
+      sourceInput.value = record.sourceText ?? "";
+      sourceInput.maxLength = 200;
+      sourceLabel.append(sourceInput);
 
       const dateLabel = document.createElement("label");
       dateLabel.textContent = "Data";
@@ -991,7 +834,7 @@ async function renderStudies() {
       const meta = document.createElement("div");
       meta.className = "study-meta";
       meta.append(
-        createTextElement("span", "study-source-tag", source?.name ?? "Fonte indisponível"),
+        createTextElement("span", "study-source-tag", record.sourceText || ""),
         createTextElement("span", "study-date-tag", formatDate(record.studyDate)),
       );
       info.append(meta);
@@ -1250,7 +1093,7 @@ export function showScreen(screenId, { focus = false } = {}) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
   if (nextScreen === "register" && databaseAvailable) {
-    Promise.all([renderSubjects(), renderSources(), renderStudies()]).catch((error) => {
+    Promise.all([renderSubjects(), renderStudies()]).catch((error) => {
       console.error("Falha ao carregar cadastro.", error);
     });
   }
@@ -1361,11 +1204,23 @@ newSubjectForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  // AC-05: preserve draft values before re-render
+  const draftDate = studyDateInput.value;
+  const draftContent = studyContentInput.value;
+  const draftSummary = studySummaryTextarea.value;
+  const draftSource = studySourceTextInput ? studySourceTextInput.value : "";
+
   try {
     const subject = await DB.subjects.create(name);
     await renderSubjects(subject.id);
     newSubjectForm.reset();
     setSubjectFormVisible(false);
+
+    // AC-05: restore draft values after re-render
+    studyDateInput.value = draftDate;
+    studyContentInput.value = draftContent;
+    studySummaryTextarea.value = draftSummary;
+    if (studySourceTextInput) studySourceTextInput.value = draftSource;
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSubjectMessage(
@@ -1374,37 +1229,6 @@ newSubjectForm.addEventListener("submit", async (event) => {
         : "Não foi possível adicionar a disciplina. Tente novamente.",
     );
     newSubjectInput.focus();
-  }
-});
-
-showSourceFormButton.addEventListener("click", () => {
-  setSourceFormVisible(newSourceForm.hidden);
-});
-
-newSourceForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = normalizeSourceName(newSourceInput.value);
-
-  if (!name) {
-    setSourceMessage("Informe o nome da fonte.");
-    newSourceInput.focus();
-    return;
-  }
-
-  try {
-    const source = await ensureSourceFromName(name);
-    await renderSources(source.id);
-    newSourceForm.reset();
-    setSourceFormVisible(false);
-    setSourceMessage();
-  } catch (error) {
-    const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSourceMessage(
-      isDuplicate
-        ? "Essa fonte já está cadastrada."
-        : "Não foi possível adicionar a fonte. Tente novamente.",
-    );
-    newSourceInput.focus();
   }
 });
 
@@ -1469,7 +1293,7 @@ subjectList.addEventListener("click", async (event) => {
     }
 
     if (action === "delete-subject") {
-      const confirmed = window.confirm(
+      const confirmed = await showConfirm(
         `Excluir "${currentName}" apagará todos os estudos e revisões ligados a essa disciplina. Continuar?`,
       );
       if (!confirmed) return;
@@ -1478,7 +1302,9 @@ subjectList.addEventListener("click", async (event) => {
 
     setSubjectMessage();
     setSubjectManagerMessage();
-    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
+    await withScrollPreserved(() =>
+      Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()])
+    );
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSubjectManagerMessage(
@@ -1504,108 +1330,6 @@ subjectList.addEventListener("keydown", async (event) => {
     activeSubjectEditId = null;
     setSubjectManagerMessage();
     await renderSubjects();
-  }
-});
-
-sourceList.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-action]");
-  const row = event.target.closest(".source-row");
-  if (!button || !row) return;
-
-  const sourceId = Number(row.dataset.sourceId);
-  const currentName = button.dataset.sourceName;
-  const action = button.dataset.action;
-
-  // Ações do editor inline — tratadas antes do bloco de try comum.
-  if (action === "edit-source") {
-    activeSourceEditId = sourceId;
-    await renderSources();
-    document.getElementById(`source-edit-input-${sourceId}`)?.focus();
-    return;
-  }
-
-  if (action === "cancel-source") {
-    activeSourceEditId = null;
-    setSourceManagerMessage();
-    await renderSources();
-    return;
-  }
-
-  if (action === "save-source") {
-    const input = row.querySelector(".inline-edit-input");
-    const errorEl = row.querySelector(".inline-edit-error");
-    const newName = input?.value?.trim() ?? "";
-    if (!newName) {
-      if (errorEl) errorEl.textContent = "Informe o nome da fonte.";
-      input?.focus();
-      return;
-    }
-    try {
-      await DB.sources.update(sourceId, { name: newName });
-      activeSourceEditId = null;
-      setSourceManagerMessage();
-      await Promise.all([renderSources(), renderStudies(), renderToday(), renderStats()]);
-    } catch (saveError) {
-      const isDuplicate = /unique|duplicate/i.test(String(saveError));
-      if (errorEl) {
-        errorEl.textContent = isDuplicate
-          ? "Essa fonte já está cadastrada."
-          : "Não foi possível renomear a fonte.";
-      }
-      input?.focus();
-    }
-    return;
-  }
-
-  try {
-    if (action === "deactivate-source") {
-      await DB.sources.deactivate(sourceId);
-    }
-
-    if (action === "activate-source") {
-      await DB.sources.update(sourceId, { isActive: true });
-    }
-
-    if (action === "delete-source") {
-      const { studiesCount, reviewsCount } = await DB.sources.getUsageSummary(sourceId);
-      const hasUsage = studiesCount > 0 || reviewsCount > 0;
-      const usageMessage = hasUsage
-        ? `Isso apagará ${studiesCount} ${pluralize(studiesCount, "estudo", "estudos")} e ${reviewsCount} ${pluralize(reviewsCount, "revisão", "revisões")} ligados a essa fonte.`
-        : "Essa fonte ainda não tem estudos vinculados.";
-      const confirmed = window.confirm(
-        `Excluir "${currentName}"? ${usageMessage} Continuar?`,
-      );
-      if (!confirmed) return;
-      await DB.sources.deleteCascade(sourceId);
-    }
-
-    setSourceManagerMessage();
-    await Promise.all([renderSources(), renderStudies(), renderToday(), renderStats()]);
-  } catch (error) {
-    const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSourceManagerMessage(
-      isDuplicate
-        ? "Essa fonte já está cadastrada."
-        : "Não foi possível alterar a fonte.",
-    );
-    console.error("Falha ao alterar fonte.", error);
-  }
-});
-
-sourceList.addEventListener("keydown", async (event) => {
-  if (!activeSourceEditId) return;
-  if (!event.target.classList.contains("inline-edit-input")) return;
-  const row = event.target.closest(".source-row");
-  if (!row) return;
-  if (event.key === "Enter") {
-    event.preventDefault();
-    row.querySelector('[data-action="save-source"]')?.click();
-  }
-  if (event.key === "Escape") {
-    event.preventDefault();
-    activeSourceEditId = null;
-    setSourceManagerMessage();
-    await renderSources();
   }
 });
 
@@ -1772,20 +1496,19 @@ studyList.addEventListener("click", async (event) => {
     const contentInput = row.querySelector(".study-edit-content");
     const errorEl = row.querySelector(".inline-edit-error");
 
-    const sourceId = Number(sourceInput?.value);
+    const sourceText = String(sourceInput?.value ?? "").trim();
     const studyDate = String(dateInput?.value ?? "").trim();
     const content = String(contentInput?.value ?? "").trim();
 
-    if (!sourceId || !studyDate || !content) {
-      if (errorEl) errorEl.textContent = "Fonte, data e conteúdo são obrigatórios.";
-      if (!sourceId) sourceInput?.focus();
-      else if (!studyDate) dateInput?.focus();
+    if (!studyDate || !content) {
+      if (errorEl) errorEl.textContent = "Data e conteúdo são obrigatórios.";
+      if (!studyDate) dateInput?.focus();
       else contentInput?.focus();
       return;
     }
 
     try {
-      await DB.studyRecords.update(studyId, { sourceId, studyDate, content });
+      await DB.studyRecords.update(studyId, { sourceText, studyDate, content });
       activeStudyEditId = null;
       setStudyManagerMessage();
       await Promise.all([renderStudies(), renderToday(), renderStats()]);
@@ -1889,7 +1612,7 @@ reviewDashboard.addEventListener("change", async (event) => {
 exportBackupButton.addEventListener("click", exportBackup);
 
 resetDatabaseButton.addEventListener("click", async () => {
-  const confirmed = window.confirm(
+  const confirmed = await showConfirm(
     "Apagar toda a base local? Exporte um backup antes se quiser guardar os dados atuais.",
   );
   if (!confirmed) return;
@@ -1901,7 +1624,6 @@ resetDatabaseButton.addEventListener("click", async () => {
     resetRegisterState();
     await Promise.all([
       renderSubjects(),
-      renderSources(),
       renderStudies(),
       renderToday(),
       renderStats(),
@@ -1923,7 +1645,7 @@ chooseBackupFileButton.addEventListener("click", () => {
 importBackupInput.addEventListener("change", async () => {
   const [file] = importBackupInput.files;
   if (!file) return;
-  const confirmed = window.confirm("Isso substituirá todos os dados atuais. Continuar?");
+  const confirmed = await showConfirm("Isso substituirá todos os dados atuais. Continuar?");
   if (confirmed) await importBackup(file);
   importBackupInput.value = "";
 });
@@ -2074,7 +1796,7 @@ studyForm.addEventListener("submit", async (event) => {
   studyMessage.textContent = "";
 
   const subjectId = Number(subjectSelect.value);
-  let sourceId = Number(studySourceSelect.value);
+  const sourceText = studySourceTextInput ? studySourceTextInput.value.trim() : "";
   const studyDate = studyDateInput.value;
   const content = studyContentInput.value.trim();
   const summaryBody = studySummaryTextarea.value.trim() || null;
@@ -2095,27 +1817,18 @@ studyForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    sourceId = await resolveStudySourceId(sourceId);
-    if (!sourceId) {
-      studyMessage.classList.add("is-error");
-      studyMessage.textContent = "Selecione uma fonte ou informe uma nova fonte.";
-      if (!newSourceForm.hidden) newSourceInput.focus();
-      else studySourceSelect.focus();
-      return;
-    }
-
     await generateReviewTasks({
       subjectId,
-      sourceId,
+      sourceText,
       studyDate,
       content,
       summaryBody,
     });
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
-    rememberSelection(LAST_SOURCE_KEY, sourceId);
     await renderStudies();
     studyContentInput.value = "";
     studySummaryTextarea.value = "";
+    if (studySourceTextInput) studySourceTextInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
   } catch {

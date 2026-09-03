@@ -12,7 +12,7 @@ let browserStore;
 const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
   "CREATE TABLE IF NOT EXISTS sources (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
-  "CREATE TABLE IF NOT EXISTS study_records (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_id INTEGER NOT NULL REFERENCES sources(id),\n    study_date TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
+  "CREATE TABLE IF NOT EXISTS study_records (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_text TEXT NOT NULL DEFAULT '',\n    study_date TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_study_record_id\n    ON review_tasks(study_record_id)",
@@ -44,17 +44,6 @@ function mapSubject(row) {
   };
 }
 
-function mapSource(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    isActive: Boolean(row.is_active),
-    sortOrder: row.sort_order ?? 0,
-  };
-}
-
 function mapUsageCount(row, key) {
   return Number(row?.[key] ?? 0) || 0;
 }
@@ -63,7 +52,7 @@ function mapStudyRecord(row) {
   return {
     id: row.id,
     subjectId: row.subject_id,
-    sourceId: row.source_id,
+    sourceText: row.source_text ?? '',
     studyDate: row.study_date,
     content: row.content,
     summaryBody: row.summary_body ?? null,
@@ -130,16 +119,6 @@ async function assertActiveSubject(subjectId) {
   }
 }
 
-async function assertActiveSource(sourceId) {
-  const [source] = await requireDatabase().select(
-    'SELECT id FROM sources WHERE id = $1 AND is_active = 1',
-    [sourceId],
-  );
-  if (!source) {
-    throw new Error('Selecione uma fonte ativa.');
-  }
-}
-
 async function getNextSortOrder(tableName) {
   const query = 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM ' + tableName;
   const [{ next_order: nextOrder = 0 } = {}] = await requireDatabase().select(query);
@@ -164,20 +143,12 @@ async function ensureNamedRows(tableName, names, label) {
   }
 }
 
-async function getSourceIdByName(name) {
-  const normalized = normalizeEntityName(name, 'o nome da fonte');
-  const [row] = await requireDatabase().select(
-    'SELECT id FROM sources WHERE name = $1 COLLATE NOCASE',
-    [normalized],
-  );
-  return row?.id ?? null;
-}
 function assertImportData(data) {
   if (!data || typeof data !== 'object') {
     throw new Error('O backup precisa ser um objeto JSON válido.');
   }
 
-  for (const key of ['subjects', 'sources', 'studyRecords', 'reviewTasks']) {
+  for (const key of ['subjects', 'studyRecords', 'reviewTasks']) {
     if (!Array.isArray(data[key])) {
       throw new Error(
         'O backup não contém a lista obrigatória "' + key + '".',
@@ -191,7 +162,6 @@ function buildClearStatements() {
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
     { query: 'DELETE FROM study_records', values: [] },
-    { query: 'DELETE FROM sources', values: [] },
     { query: 'DELETE FROM subjects', values: [] },
     { query: 'DELETE FROM settings', values: [] },
     {
@@ -206,7 +176,6 @@ function buildImportStatements(data) {
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
     { query: 'DELETE FROM study_records', values: [] },
-    { query: 'DELETE FROM sources', values: [] },
     { query: 'DELETE FROM subjects', values: [] },
     { query: 'DELETE FROM settings', values: [] },
   ];
@@ -225,32 +194,18 @@ function buildImportStatements(data) {
     });
   }
 
-  for (const row of data.sources) {
-    statements.push({
-      query: 'INSERT INTO sources (id, name, created_at, updated_at, is_active, sort_order)\n        VALUES ($1, $2, $3, $4, $5, $6)',
-      values: [
-        row.id,
-        normalizeEntityName(row.name, 'o nome da fonte'),
-        row.createdAt,
-        row.updatedAt,
-        (row.isActive ?? row.is_active ?? true) ? 1 : 0,
-        row.sortOrder ?? row.sort_order ?? 0,
-      ],
-    });
-  }
-
   for (const row of data.studyRecords) {
     statements.push({
-      query: 'INSERT INTO study_records\n        (id, subject_id, source_id, study_date, content, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      query: 'INSERT INTO study_records\n        (id, subject_id, source_text, study_date, content, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       values: [
         row.id,
-        row.subjectId,
-        row.sourceId,
-        row.studyDate,
+        row.subjectId ?? row.subject_id,
+        row.sourceText ?? row.source_text ?? '',
+        row.studyDate ?? row.study_date,
         row.content,
-        row.summaryBody ?? null,
-        row.createdAt,
-        row.updatedAt,
+        row.summaryBody ?? row.summary_body ?? null,
+        row.createdAt ?? row.created_at,
+        row.updatedAt ?? row.updated_at,
       ],
     });
   }
@@ -309,27 +264,25 @@ function createBrowserStore() {
     lastBackupAt: null,
   };
   const initialSubjects = [
-    "L\u00edngua Portuguesa",
-    "Conhecimentos sobre o DF",
-    "Legisla\u00e7\u00e3o",
-    "Administra\u00e7\u00e3o",
-    "AFO",
-    "Arquivologia",
-    "Recursos Materiais",
+    "Anatomia",
+    "Fisiologia",
+    "Bioqu\u00edmica",
+    "Farmacologia",
+    "Patologia",
+    "Cl\u00ednica M\u00e9dica",
+    "Cirurgia",
+    "Pediatria",
   ];
-  const initialSources = ["Grancursos"];
-
   function emptyState() {
     return {
+      seeded: false,
       subjects: [],
-      sources: [],
       studyRecords: [],
       reviewTasks: [],
       exercises: [],
       settings: defaultSettings,
       nextIds: {
         subjects: 1,
-        sources: 1,
         studyRecords: 1,
         reviewTasks: 1,
         exercises: 1,
@@ -407,7 +360,7 @@ function createBrowserStore() {
   }
 
   function refreshNextIds(state) {
-    for (const collection of ["subjects", "sources", "studyRecords", "reviewTasks", "exercises"]) {
+    for (const collection of ["subjects", "studyRecords", "reviewTasks", "exercises"]) {
       const ids = (state[collection] ?? []).map((item) => Number(item.id) || 0);
       state.nextIds[collection] = Math.max(0, ...ids) + 1;
     }
@@ -416,8 +369,10 @@ function createBrowserStore() {
   const store = {
     async init() {
       const state = readState();
-      seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
-      seedNamedRows(state, "sources", initialSources, "o nome da fonte");
+      if (!state.seeded) {
+        seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
+        state.seeded = true;
+      }
       writeState(state);
     },
 
@@ -477,70 +432,6 @@ function createBrowserStore() {
       },
     },
 
-    sources: {
-      async ensureColumns() {},
-      async seedInitial() {
-        const state = readState();
-        seedNamedRows(state, "sources", initialSources, "o nome da fonte");
-        writeState(state);
-      },
-      async getAll() {
-        return [...readState().sources].sort(sortByOrderAndName);
-      },
-      async getActive() {
-        return (await this.getAll()).filter((source) => source.isActive);
-      },
-      async create(name) {
-        const state = readState();
-        const timestamp = nowIso();
-        const source = {
-          id: nextId(state, "sources"),
-          name: normalizeUniqueName(state.sources, name, "o nome da fonte"),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          isActive: true,
-          sortOrder: state.sources.length,
-        };
-        state.sources.push(source);
-        writeState(state);
-        return source;
-      },
-      async update(id, fields) {
-        const state = readState();
-        const source = state.sources.find((item) => item.id === id);
-        if (!source) return null;
-        if (Object.hasOwn(fields, "name")) {
-          source.name = normalizeUniqueName(state.sources, fields.name, "o nome da fonte", id);
-        }
-        if (Object.hasOwn(fields, "isActive")) source.isActive = Boolean(fields.isActive);
-        if (Object.hasOwn(fields, "sortOrder")) source.sortOrder = Number(fields.sortOrder) || 0;
-        source.updatedAt = nowIso();
-        writeState(state);
-        return source;
-      },
-      async deactivate(id) {
-        return this.update(id, { isActive: false });
-      },
-      async getUsageSummary(id) {
-        const state = readState();
-        const studyIds = new Set(state.studyRecords.filter((record) => record.sourceId === id).map((record) => record.id));
-        return {
-          studiesCount: studyIds.size,
-          reviewsCount: state.reviewTasks.filter((task) => studyIds.has(task.studyRecordId)).length,
-        };
-      },
-      async deleteCascade(id) {
-        const state = readState();
-        const studyIds = new Set(state.studyRecords.filter((record) => record.sourceId === id).map((record) => record.id));
-        state.exercises = (state.exercises ?? []).filter((e) => !studyIds.has(e.studyRecordId));
-        state.reviewTasks = state.reviewTasks.filter((task) => !studyIds.has(task.studyRecordId));
-        state.studyRecords = state.studyRecords.filter((record) => record.sourceId !== id);
-        state.sources = state.sources.filter((source) => source.id !== id);
-        writeState(state);
-        return true;
-      },
-    },
-
     studyRecords: {
       async ensureColumns() {},
       async getAll() {
@@ -558,11 +449,8 @@ function createBrowserStore() {
         const record = state.studyRecords.find((item) => item.id === id);
         if (!record) return null;
 
-        if (Object.hasOwn(fields, "sourceId")) {
-          if (fields.sourceId !== record.sourceId) {
-            assertActive(state.sources, fields.sourceId, "Selecione uma fonte ativa.");
-          }
-          record.sourceId = fields.sourceId;
+        if (Object.hasOwn(fields, "sourceText")) {
+          record.sourceText = String(fields.sourceText ?? "").trim();
         }
         if (Object.hasOwn(fields, "studyDate")) {
           record.studyDate = String(fields.studyDate ?? "").trim();
@@ -581,12 +469,11 @@ function createBrowserStore() {
       async create(data) {
         const state = readState();
         assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
-        assertActive(state.sources, data.sourceId, "Selecione uma fonte ativa.");
         const timestamp = nowIso();
         const record = {
           id: nextId(state, "studyRecords"),
           subjectId: data.subjectId,
-          sourceId: data.sourceId,
+          sourceText: String(data.sourceText ?? "").trim(),
           studyDate: data.studyDate,
           content: String(data.content ?? "").trim(),
           summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
@@ -600,12 +487,11 @@ function createBrowserStore() {
       async createWithReviews(data, tasks) {
         const state = readState();
         assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
-        assertActive(state.sources, data.sourceId, "Selecione uma fonte ativa.");
         const timestamp = nowIso();
         const record = {
           id: nextId(state, "studyRecords"),
           subjectId: data.subjectId,
-          sourceId: data.sourceId,
+          sourceText: String(data.sourceText ?? "").trim(),
           studyDate: data.studyDate,
           content: String(data.content ?? "").trim(),
           summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
@@ -764,7 +650,6 @@ function createBrowserStore() {
       const state = readState();
       return {
         subjects: state.subjects,
-        sources: state.sources,
         studyRecords: state.studyRecords,
         reviewTasks: state.reviewTasks,
         exercises: state.exercises ?? [],
@@ -776,11 +661,10 @@ function createBrowserStore() {
       assertImportData(data);
       const state = emptyState();
       state.subjects = data.subjects.map((row) => mapEntityForImport(row, state, "subjects", "o nome da disciplina"));
-      state.sources = data.sources.map((row) => mapEntityForImport(row, state, "sources", "o nome da fonte"));
       state.studyRecords = data.studyRecords.map((row) => ({
         id: row.id,
         subjectId: row.subjectId ?? row.subject_id,
-        sourceId: row.sourceId ?? row.source_id,
+        sourceText: row.sourceText ?? row.source_text ?? '',
         studyDate: row.studyDate ?? row.study_date,
         content: row.content,
         summaryBody: row.summaryBody ?? row.summary_body ?? null,
@@ -851,9 +735,7 @@ export const DB = {
           await database.execute(statement, params);
         }
         await DB.subjects.ensureColumns();
-        await DB.sources.ensureColumns();
         await DB.subjects.seedInitial();
-        await DB.sources.seedInitial();
         await DB.studyRecords.ensureColumns();
         await DB.reviewTasks.ensureColumns();
 
@@ -891,13 +773,8 @@ export const DB = {
       await ensureNamedRows(
         'subjects',
         [
-          'Língua Portuguesa',
-          'Conhecimentos sobre o DF',
-          'Legislação',
-          'Administração',
-          'AFO',
-          'Arquivologia',
-          'Recursos Materiais',
+          'Anatomia', 'Fisiologia', 'Bioquímica', 'Farmacologia',
+          'Patologia', 'Clínica Médica', 'Cirurgia', 'Pediatria',
         ],
         'o nome da disciplina',
       );
@@ -987,180 +864,28 @@ export const DB = {
     },
   },
 
-  sources: {
-    async ensureColumns() {
-      const columns = await requireDatabase().select('PRAGMA table_info(sources)');
-      const names = new Set(columns.map((column) => column.name));
-      if (!names.has('is_active')) {
-        await requireDatabase().execute(
-          'ALTER TABLE sources ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
-        );
-      }
-      if (!names.has('sort_order')) {
-        await requireDatabase().execute(
-          'ALTER TABLE sources ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
-        );
-      }
-    },
-
-    async seedInitial() {
-      const rows = await requireDatabase().select('SELECT id FROM sources LIMIT 1');
-      if (rows.length > 0) return;
-
-      await ensureNamedRows(
-        'sources',
-        ['Grancursos'],
-        'o nome da fonte',
-      );
-    },
-
-    async getAll() {
-      const rows = await requireDatabase().select(
-        'SELECT * FROM sources ORDER BY sort_order, name COLLATE NOCASE',
-      );
-      return rows.map(mapSource);
-    },
-
-    async getActive() {
-      const rows = await requireDatabase().select(
-        'SELECT * FROM sources WHERE is_active = 1 ORDER BY sort_order, name COLLATE NOCASE',
-      );
-      return rows.map(mapSource);
-    },
-
-    async create(name) {
-      const value = normalizeEntityName(name, 'o nome da fonte');
-      const timestamp = nowIso();
-      const nextOrder = await getNextSortOrder('sources');
-      const result = await requireDatabase().execute(
-        'INSERT INTO sources (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
-        [value, timestamp, timestamp, nextOrder],
-      );
-      const [row] = await requireDatabase().select(
-        'SELECT * FROM sources WHERE id = $1',
-        [result.lastInsertId],
-      );
-      return mapSource(row);
-    },
-
-    async update(id, fields) {
-      const columns = {
-        name: ['name', (value) => normalizeEntityName(value, 'o nome da fonte')],
-        isActive: ['is_active', (value) => (value ? 1 : 0)],
-        sortOrder: ['sort_order', (value) => Number(value) || 0],
-      };
-      const entries = Object.entries(fields).filter(([key]) => columns[key]);
-      if (entries.length === 0) throw new Error('Nenhum campo válido para atualizar.');
-
-      const values = entries.map(([key, value]) => columns[key][1](value));
-      values.push(nowIso(), id);
-      const assignments = entries.map(
-        ([key], index) => `${columns[key][0]} = $${index + 1}`,
-      );
-      assignments.push(`updated_at = $${entries.length + 1}`);
-
-      await requireDatabase().execute(
-        'UPDATE sources SET ' + assignments.join(', ') + '\n         WHERE id = $' + (entries.length + 2),
-        values,
-      );
-      const [row] = await requireDatabase().select(
-        'SELECT * FROM sources WHERE id = $1',
-        [id],
-      );
-      return row ? mapSource(row) : null;
-    },
-
-    async deactivate(id) {
-      return DB.sources.update(id, { isActive: false });
-    },
-
-    async getUsageSummary(id) {
-      const [row] = await requireDatabase().select(
-        `SELECT
-          COUNT(DISTINCT study_records.id) AS studiesCount,
-          COUNT(review_tasks.id) AS reviewsCount
-         FROM study_records
-         LEFT JOIN review_tasks ON review_tasks.study_record_id = study_records.id
-         WHERE study_records.source_id = $1`,
-        [id],
-      );
-
-      return {
-        studiesCount: mapUsageCount(row, "studiesCount"),
-        reviewsCount: mapUsageCount(row, "reviewsCount"),
-      };
-    },
-
-    async deleteCascade(id) {
-      await invoke("execute_sqlite_transaction", {
-        statements: [
-          {
-            query: `DELETE FROM review_tasks
-              WHERE study_record_id IN (
-                SELECT id FROM study_records WHERE source_id = $1
-              )`,
-            values: [id],
-          },
-          {
-            query: "DELETE FROM study_records WHERE source_id = $1",
-            values: [id],
-          },
-          {
-            query: "DELETE FROM sources WHERE id = $1",
-            values: [id],
-          },
-        ],
-      });
-      return true;
-    },
-  },
-
   studyRecords: {
     async ensureColumns() {
       const columns = await requireDatabase().select('PRAGMA table_info(study_records)');
       const names = new Set(columns.map((column) => column.name));
-      if (!names.has('source_id')) {
-        await requireDatabase().execute(
-          'ALTER TABLE study_records ADD COLUMN source_id INTEGER',
-        );
-      }
       if (!names.has('summary_body')) {
         await requireDatabase().execute(
           'ALTER TABLE study_records ADD COLUMN summary_body TEXT',
         );
       }
-
-      const hasSourceText = names.has('source');
-      const rows = await requireDatabase().select(
-        hasSourceText
-          ? 'SELECT id, source FROM study_records WHERE source_id IS NULL'
-          : 'SELECT id FROM study_records WHERE source_id IS NULL',
-      );
-      if (rows.length === 0) {
-        return;
-      }
-
-      let fallbackSourceId = await getSourceIdByName('Grancursos');
-      if (!fallbackSourceId) {
-        fallbackSourceId = (await DB.sources.create('Grancursos')).id;
-      }
-
-      for (const row of rows) {
-        const legacySource = hasSourceText
-          ? String(row.source ?? '').replace(/\s+/g, ' ').trim()
-          : '';
-        let sourceId = fallbackSourceId;
-        if (legacySource) {
-          sourceId = await getSourceIdByName(legacySource);
-          if (!sourceId) {
-            sourceId = (await DB.sources.create(legacySource)).id;
-          }
-        }
-
+      if (!names.has('source_text')) {
         await requireDatabase().execute(
-          'UPDATE study_records SET source_id = $1 WHERE id = $2',
-          [sourceId, row.id],
+          "ALTER TABLE study_records ADD COLUMN source_text TEXT NOT NULL DEFAULT ''",
         );
+        if (names.has('source_id')) {
+          await requireDatabase().execute(
+            `UPDATE study_records
+             SET source_text = COALESCE(
+               (SELECT name FROM sources WHERE id = study_records.source_id), ''
+             )
+             WHERE source_text = ''`,
+          );
+        }
       }
     },
 
@@ -1180,19 +905,8 @@ export const DB = {
     },
 
     async update(id, fields) {
-      if (Object.hasOwn(fields, "sourceId")) {
-        const [currentRow] = await requireDatabase().select(
-          'SELECT source_id FROM study_records WHERE id = $1',
-          [id],
-        );
-        if (!currentRow) return null;
-        if (fields.sourceId !== currentRow.source_id) {
-          await assertActiveSource(fields.sourceId);
-        }
-      }
-
       const columns = {
-        sourceId: ["source_id", (value) => value],
+        sourceText: ["source_text", (value) => String(value ?? "").trim()],
         studyDate: ["study_date", (value) => value],
         content: ["content", (value) => String(value ?? "").trim()],
         summaryBody: ["summary_body", (value) => (value != null ? String(value).trim() || null : null)],
@@ -1221,15 +935,14 @@ export const DB = {
 
     async create(data) {
       await assertActiveSubject(data.subjectId);
-      await assertActiveSource(data.sourceId);
       const timestamp = nowIso();
       const result = await requireDatabase().execute(
         `INSERT INTO study_records
-          (subject_id, source_id, study_date, content, summary_body, created_at, updated_at)
+          (subject_id, source_text, study_date, content, summary_body, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           data.subjectId,
-          data.sourceId,
+          String(data.sourceText ?? '').trim(),
           data.studyDate,
           String(data.content ?? '').trim(),
           data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
@@ -1250,7 +963,6 @@ export const DB = {
       }
 
       await assertActiveSubject(data.subjectId);
-      await assertActiveSource(data.sourceId);
       const timestamp = nowIso();
       const reviewValues = [];
       const reviewPlaceholders = tasks.map((task, taskIndex) => {
@@ -1279,11 +991,11 @@ export const DB = {
         statements: [
           {
             query: `INSERT INTO study_records
-              (subject_id, source_id, study_date, content, summary_body, created_at, updated_at)
+              (subject_id, source_text, study_date, content, summary_body, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             values: [
               data.subjectId,
-              data.sourceId,
+              String(data.sourceText ?? '').trim(),
               data.studyDate,
               String(data.content ?? '').trim(),
               data.summaryBody != null ? String(data.summaryBody).trim() || null : null,

@@ -17,10 +17,9 @@ const { DB } = await import("../src/db.js");
 async function makeStudyRecord() {
   await DB.init();
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
   return DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Base de testes",
   });
@@ -47,10 +46,9 @@ test("DB.exercises.create persiste e getAll retorna o item", async () => {
 test("DB.exercises.getAll retorna apenas exercises do estudo especificado", async () => {
   const record1 = await makeStudyRecord();
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
   const record2 = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 2",
     studyDate: "2026-09-03",
     content: "Outro estudo",
   });

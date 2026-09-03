@@ -27,11 +27,10 @@ test("BrowserStore studyRecords.create persiste summaryBody não-nulo", async ()
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   const record = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Cardiology basics",
     summaryBody: "Frank-Starling law: more stretch → more force",
@@ -48,11 +47,10 @@ test("BrowserStore studyRecords.create persiste summaryBody nulo quando ausente"
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   const record = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Sem resumo",
   });
@@ -64,11 +62,10 @@ test("BrowserStore studyRecords.update atualiza summaryBody", async () => {
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   const record = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Conteúdo",
     summaryBody: null,
@@ -85,11 +82,10 @@ test("BrowserStore exportAll/importAll preserva summaryBody", async () => {
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Backup test",
     summaryBody: "Resumo para backup",
@@ -108,11 +104,10 @@ test("BrowserStore importAll com registro sem summaryBody usa null (backward com
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   const record = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Antigo",
   });
@@ -135,11 +130,10 @@ test("BrowserStore studyRecords.create com summaryBody '' armazena null (AC5 LVN
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   const record = await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Conteúdo",
     summaryBody: "",
@@ -152,23 +146,22 @@ test("BrowserStore getByDate retorna estudos com a data dada", async () => {
   await DB.init();
 
   const [subject] = await DB.subjects.getActive();
-  const [source] = await DB.sources.getActive();
 
   await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Estudo A",
   });
   await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-02",
     content: "Estudo B",
   });
   await DB.studyRecords.create({
     subjectId: subject.id,
-    sourceId: source.id,
+    sourceText: "Guyton & Hall, cap. 1",
     studyDate: "2026-09-03",
     content: "Outro dia",
   });
