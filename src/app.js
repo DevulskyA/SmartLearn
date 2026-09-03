@@ -9,7 +9,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey } from "./performance-thresholds.js";
+import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS } from "./performance-thresholds.js";
 import { Analytics } from "./analytics.js";
 
 async function withScrollPreserved(fn) {
@@ -155,6 +155,19 @@ reviewMessage.className = "form-message";
 reviewMessage.setAttribute("role", "status");
 reviewMessage.setAttribute("aria-live", "polite");
 reviewDashboard?.after(reviewMessage);
+const trackingList = document.querySelector("#tracking-list");
+const trackingEmpty = document.querySelector("#tracking-empty");
+const trackingFilterSubject = document.querySelector("#tracking-filter-subject");
+const trackingFilterState = document.querySelector("#tracking-filter-state");
+const subjectsCatalog = document.querySelector("#subjects-catalog");
+const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
+const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
+const subjectsCreateForm = document.querySelector("#subjects-create-form");
+const subjectsNewName = document.querySelector("#subjects-new-name");
+const subjectsNewColorPicker = document.querySelector("#subjects-new-color-picker");
+const subjectsCreateSaveBtn = document.querySelector("#subjects-create-save-btn");
+const subjectsCreateCancelBtn = document.querySelector("#subjects-create-cancel-btn");
+const subjectsCreateMessage = document.querySelector("#subjects-create-message");
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
@@ -1071,6 +1084,290 @@ export async function renderStatsBySubject() {
   }
 }
 
+function getTrackingState(unitId, allTasks, today) {
+  const tasks = allTasks.filter((t) => t.unitId === unitId);
+  if (tasks.length === 0) return "SEM_EVIDENCIA";
+  const overdue = tasks.filter((t) => !t.reviewDone && t.dueDate < today);
+  if (overdue.length > 0) return "ATRASADO";
+  const pending = tasks.filter((t) => !t.reviewDone).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  if (pending.length > 0) {
+    const days = getDaysBetween(today, pending[0].dueDate);
+    return days <= 7 ? "EM_REVISAO" : "EM_ESTUDO";
+  }
+  return "EM_DIA";
+}
+
+function createTrackingStateBadge(state) {
+  const span = document.createElement("span");
+  span.className = "tracking-state-badge";
+  span.dataset.state = state;
+  const labels = { SEM_EVIDENCIA: "Sem evidência", EM_ESTUDO: "Em estudo", EM_REVISAO: "Em revisão", ATRASADO: "Atrasado", EM_DIA: "Em dia" };
+  span.textContent = labels[state] ?? state;
+  return span;
+}
+
+export async function renderTracking() {
+  if (!trackingList) return;
+  const today = getLocalDateValue();
+  const [units, subjects, allTasks, allEvidence] = await Promise.all([
+    DB.learningUnits.getAll(),
+    DB.subjects.getAll(),
+    DB.reviewTasks.getAll(),
+    DB.learningEvidence.getAll(),
+  ]);
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
+  const evidenceByUnitId = new Map();
+  for (const ev of allEvidence) {
+    if (!evidenceByUnitId.has(ev.unitId)) evidenceByUnitId.set(ev.unitId, []);
+    evidenceByUnitId.get(ev.unitId).push(ev);
+  }
+
+  // Populate subject filter
+  if (trackingFilterSubject && trackingFilterSubject.options.length <= 1) {
+    for (const s of subjects.filter((s) => s.isActive)) {
+      const opt = document.createElement("option");
+      opt.value = String(s.id);
+      opt.textContent = s.name;
+      trackingFilterSubject.append(opt);
+    }
+  }
+
+  const subjFilter = trackingFilterSubject?.value ?? "";
+  const stateFilter = trackingFilterState?.value ?? "";
+
+  let filtered = units.filter((u) => {
+    if (subjFilter && String(u.subjectId) !== subjFilter) return false;
+    if (stateFilter && getTrackingState(u.id, allTasks, today) !== stateFilter) return false;
+    return true;
+  });
+  filtered.sort((a, b) => b.studyDate.localeCompare(a.studyDate));
+
+  trackingEmpty.hidden = filtered.length > 0;
+  trackingList.replaceChildren();
+
+  for (const unit of filtered) {
+    const subject = subjectsById.get(unit.subjectId);
+    const state = getTrackingState(unit.id, allTasks, today);
+    const evidence = evidenceByUnitId.get(unit.id) ?? [];
+    const tasks = allTasks.filter((t) => t.unitId === unit.id);
+    const doneTasks = tasks.filter((t) => t.reviewDone);
+    const pendingTasks = tasks.filter((t) => !t.reviewDone);
+
+    const totalQ = evidence.reduce((s, e) => s + e.questionsCount, 0);
+    const totalC = evidence.reduce((s, e) => s + e.correctCount, 0);
+    const accText = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
+
+    const card = document.createElement("article");
+    card.className = "tracking-card";
+
+    const header = document.createElement("div");
+    header.className = "tracking-card-header";
+
+    const chip = document.createElement("span");
+    chip.className = "subject-chip";
+    chip.textContent = subject?.name ?? "Sem disciplina";
+    chip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
+
+    const title = document.createElement("span");
+    title.className = "tracking-unit-title";
+    title.textContent = unit.title;
+
+    header.append(chip, title, createTrackingStateBadge(state));
+
+    const meta = document.createElement("div");
+    meta.className = "tracking-card-meta";
+    const parts = [formatDate(unit.studyDate)];
+    if (unit.sourceText) parts.push(unit.sourceText);
+    parts.push(unit.summaryBody ? "Resumo ✓" : "Resumo —");
+    if (accText) parts.push(`${accText} · ${totalQ} q`);
+    parts.push(`${doneTasks.length}/${tasks.length} revisões`);
+
+    const nextPending = pendingTasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+    if (nextPending) parts.push(`Próx. ${formatDate(nextPending.dueDate)}`);
+
+    meta.textContent = parts.join(" · ");
+    card.append(header, meta);
+    trackingList.append(card);
+  }
+}
+
+function buildColorPicker(container, selectedKey, onSelect) {
+  if (!container) return;
+  container.replaceChildren();
+  for (const key of SUBJECT_COLOR_KEYS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "color-swatch";
+    btn.dataset.colorKey = key;
+    btn.style.setProperty("--swatch-color", `var(${colorVarForKey(key)})`);
+    btn.setAttribute("aria-label", key.replace("DISC-", "").toLowerCase());
+    if (key === selectedKey) btn.classList.add("is-selected");
+    btn.addEventListener("click", () => {
+      for (const b of container.querySelectorAll(".color-swatch")) b.classList.remove("is-selected");
+      btn.classList.add("is-selected");
+      onSelect(key);
+    });
+    container.append(btn);
+  }
+}
+
+export async function renderDisciplinas() {
+  if (!subjectsCatalog) return;
+  const [subjects, allUnits, allEvidence] = await Promise.all([
+    DB.subjects.getAll(),
+    DB.learningUnits.getAll(),
+    DB.learningEvidence.getAll(),
+  ]);
+  const unitsBySubject = new Map();
+  for (const u of allUnits) {
+    if (!unitsBySubject.has(u.subjectId)) unitsBySubject.set(u.subjectId, []);
+    unitsBySubject.get(u.subjectId).push(u);
+  }
+  const evidenceByUnit = new Map();
+  for (const ev of allEvidence) {
+    if (!evidenceByUnit.has(ev.unitId)) evidenceByUnit.set(ev.unitId, []);
+    evidenceByUnit.get(ev.unitId).push(ev);
+  }
+
+  subjectsCatalogEmpty.hidden = subjects.length > 0;
+  subjectsCatalog.replaceChildren();
+
+  for (const subj of subjects) {
+    const units = unitsBySubject.get(subj.id) ?? [];
+    const subjectEvidence = units.flatMap((u) => evidenceByUnit.get(u.id) ?? []);
+    const totalQ = subjectEvidence.reduce((s, e) => s + e.questionsCount, 0);
+    const totalC = subjectEvidence.reduce((s, e) => s + e.correctCount, 0);
+    const acc = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
+
+    const card = document.createElement("article");
+    card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;
+    card.dataset.subjectId = String(subj.id);
+
+    const chipRow = document.createElement("div");
+    chipRow.className = "subject-catalog-chip-row";
+
+    const chip = document.createElement("span");
+    chip.className = "subject-chip";
+    chip.textContent = subj.name;
+    chip.style.setProperty("--subject-color", `var(${colorVarForKey(subj.color ?? "DISC-BLUE")})`);
+
+    const archiveLabel = document.createElement("span");
+    archiveLabel.className = "subject-archive-label";
+    archiveLabel.textContent = subj.isActive ? "" : "Arquivada";
+    archiveLabel.hidden = subj.isActive;
+
+    chipRow.append(chip, archiveLabel);
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "subject-catalog-meta";
+    const metaParts = [`${units.length} aula${units.length !== 1 ? "s" : ""}`];
+    if (acc) metaParts.push(`${acc} média`);
+    metaEl.textContent = metaParts.join(" · ");
+
+    // Edit form (inline, initially hidden)
+    const editForm = document.createElement("div");
+    editForm.className = "subject-catalog-edit";
+    editForm.hidden = true;
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "subject-edit-name";
+    nameInput.value = subj.name;
+    nameInput.maxLength = 100;
+
+    let editColor = subj.color ?? "DISC-BLUE";
+    const colorPickerEl = document.createElement("div");
+    colorPickerEl.className = "color-picker";
+    colorPickerEl.setAttribute("role", "radiogroup");
+    buildColorPicker(colorPickerEl, editColor, (k) => { editColor = k; });
+
+    const editMessage = document.createElement("p");
+    editMessage.className = "form-message";
+    editMessage.setAttribute("role", "status");
+
+    const saveEditBtn = document.createElement("button");
+    saveEditBtn.className = "small-button is-primary";
+    saveEditBtn.type = "button";
+    saveEditBtn.textContent = "Salvar";
+
+    const cancelEditBtn = document.createElement("button");
+    cancelEditBtn.className = "small-button";
+    cancelEditBtn.type = "button";
+    cancelEditBtn.textContent = "Cancelar";
+
+    const editActions = document.createElement("div");
+    editActions.className = "form-actions";
+    editActions.append(saveEditBtn, cancelEditBtn, editMessage);
+    editForm.append(nameInput, colorPickerEl, editActions);
+
+    saveEditBtn.addEventListener("click", async () => {
+      const newName = nameInput.value.trim();
+      if (!newName) { editMessage.textContent = "Nome obrigatório."; return; }
+      try {
+        await DB.subjects.update(subj.id, { name: newName, color: editColor });
+        await renderDisciplinas();
+        // refresh other screens that show chips
+        if (document.querySelector('#screen-today:not([hidden])') || document.querySelector('#review-dashboard')) {
+          renderToday().catch(console.error);
+        }
+        renderPlan().catch(console.error);
+      } catch { editMessage.textContent = "Erro ao salvar."; }
+    });
+    cancelEditBtn.addEventListener("click", () => { editForm.hidden = true; });
+
+    // Action buttons
+    const actions = document.createElement("div");
+    actions.className = "subject-catalog-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "small-button";
+    editBtn.type = "button";
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", () => {
+      editForm.hidden = false;
+      nameInput.focus();
+    });
+
+    const archiveBtn = document.createElement("button");
+    archiveBtn.className = "small-button";
+    archiveBtn.type = "button";
+    archiveBtn.textContent = subj.isActive ? "Arquivar" : "Reativar";
+    archiveBtn.addEventListener("click", async () => {
+      try {
+        await DB.subjects.update(subj.id, { isActive: !subj.isActive });
+        await renderDisciplinas();
+      } catch { }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "small-button is-danger";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Excluir";
+    deleteBtn.addEventListener("click", async () => {
+      // AC-DISC-04: hard delete only when no learning_units
+      if (units.length > 0) {
+        const msg = card.querySelector(".subject-catalog-delete-msg");
+        if (msg) msg.textContent = "Não é possível excluir: há aulas nesta disciplina. Arquive-a primeiro.";
+        return;
+      }
+      const confirmed = await showConfirm(`Excluir disciplina "${subj.name}"? Essa ação não pode ser desfeita.`);
+      if (!confirmed) return;
+      try {
+        await DB.subjects.delete(subj.id);
+        await renderDisciplinas();
+      } catch { }
+    });
+
+    const deleteMsg = document.createElement("p");
+    deleteMsg.className = "subject-catalog-delete-msg field-message";
+    deleteMsg.setAttribute("role", "alert");
+
+    actions.append(editBtn, archiveBtn, deleteBtn);
+    card.append(chipRow, metaEl, editForm, actions, deleteMsg);
+    subjectsCatalog.append(card);
+  }
+}
+
 function buildSparkline(scores, width = 60, height = 24) {
   const pts = scores.slice(-5);
   if (pts.length < 2) return null;
@@ -1837,6 +2134,12 @@ export function showScreen(screenId, { focus = false } = {}) {
     Promise.all([renderSubjects(), renderStudies()]).catch((error) => {
       console.error("Falha ao carregar cadastro.", error);
     });
+  }
+  if (nextScreen === "tracking" && databaseAvailable) {
+    renderTracking().catch((error) => console.error("Falha ao carregar acompanhamento.", error));
+  }
+  if (nextScreen === "subjects" && databaseAvailable) {
+    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
   }
   if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
@@ -2726,6 +3029,40 @@ planFilterSubject?.addEventListener("change", () => {
 });
 planFilterState?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
+});
+
+trackingFilterSubject?.addEventListener("change", () => {
+  if (databaseAvailable) renderTracking().catch(console.error);
+});
+trackingFilterState?.addEventListener("change", () => {
+  if (databaseAvailable) renderTracking().catch(console.error);
+});
+
+let newSubjectColor = "DISC-BLUE";
+
+subjectsShowCreateBtn?.addEventListener("click", () => {
+  subjectsCreateForm.hidden = false;
+  subjectsNewName.value = "";
+  subjectsCreateMessage.textContent = "";
+  newSubjectColor = "DISC-BLUE";
+  buildColorPicker(subjectsNewColorPicker, newSubjectColor, (k) => { newSubjectColor = k; });
+  subjectsNewName.focus();
+});
+subjectsCreateCancelBtn?.addEventListener("click", () => {
+  subjectsCreateForm.hidden = true;
+  subjectsCreateMessage.textContent = "";
+});
+subjectsCreateSaveBtn?.addEventListener("click", async () => {
+  const name = subjectsNewName?.value.trim() ?? "";
+  if (!name) { subjectsCreateMessage.textContent = "Nome obrigatório."; return; }
+  try {
+    await DB.subjects.create(name, newSubjectColor);
+    subjectsCreateForm.hidden = true;
+    subjectsCreateMessage.textContent = "";
+    await renderDisciplinas();
+  } catch {
+    subjectsCreateMessage.textContent = "Erro ao criar disciplina.";
+  }
 });
 function setPlanFormVisible(visible) {
   if (!planNewUnitForm) return;

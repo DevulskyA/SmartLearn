@@ -40,24 +40,29 @@
           </svg>
           <span>Plano</span>
         </button>
-        <button class="nav-item" type="button" data-screen="register" aria-controls="screen-register">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M5 3.5h14v17H5zM8 7h8M8 11h8M8 15h5" />
-          </svg>
-          <span>Cadastro</span>
-        </button>
         <button class="nav-item" type="button" data-screen="stats" aria-controls="screen-stats">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 20v-7h4v7M10 20V8h4v12M15 20V4h4v16M3 20.5h18" />
           </svg>
           <span>Estatísticas</span>
         </button>
-        <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
+        <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
           <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
-            <path d="m19.4 15 .1.1 1.2 2-2.6 2.6-2-1.2-.1-.1a8 8 0 0 1-2 .8V21h-4v-2.8a8 8 0 0 1-2-.8l-.1.1-2 1.2-2.6-2.6 1.2-2 .1-.1a8 8 0 0 1-.8-2H3V8h2.8a8 8 0 0 1 .8-2l-.1-.1-1.2-2 2.6-2.6 2 1.2.1.1a8 8 0 0 1 2-.8V1h4v.8a8 8 0 0 1 2 .8l.1-.1 2-1.2 2.6 2.6-1.2 2-.1.1a8 8 0 0 1 .8 2H21v4h-1.8a8 8 0 0 1-.8 2Z" />
+            <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span>Configurações</span>
+          <span>Acompanhar</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          <span>Disciplinas</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="register" aria-controls="screen-register">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M5 3.5h14v17H5zM8 7h8M8 11h8M8 15h5" />
+          </svg>
+          <span>Cadastro</span>
         </button>
       </nav>
 
@@ -196,6 +201,59 @@
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden>Nenhuma aula cadastrada.</p>
+        </section>
+
+        <section class="screen" id="screen-tracking" data-screen-panel="tracking" aria-labelledby="title-tracking" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Processo</p>
+              <h1 id="title-tracking">Acompanhamento</h1>
+            </div>
+          </div>
+          <div class="tracking-filters" id="tracking-filters">
+            <select id="tracking-filter-subject" aria-label="Filtrar por disciplina">
+              <option value="">Todas as disciplinas</option>
+            </select>
+            <select id="tracking-filter-state" aria-label="Filtrar por estado">
+              <option value="">Todos os estados</option>
+              <option value="SEM_EVIDENCIA">Sem evidência</option>
+              <option value="EM_ESTUDO">Em estudo</option>
+              <option value="EM_REVISAO">Em revisão</option>
+              <option value="ATRASADO">Atrasado</option>
+              <option value="EM_DIA">Em dia</option>
+            </select>
+          </div>
+          <div class="tracking-list" id="tracking-list" aria-live="polite"></div>
+          <p class="panel-empty" id="tracking-empty" hidden>Nenhuma aula encontrada.</p>
+        </section>
+
+        <section class="screen" id="screen-subjects" data-screen-panel="subjects" aria-labelledby="title-subjects" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Organização</p>
+              <h1 id="title-subjects">Disciplinas</h1>
+            </div>
+            <button class="primary-button" id="subjects-show-create-btn" type="button">+ Nova disciplina</button>
+          </div>
+          <div class="subjects-create-form form-card" id="subjects-create-form" hidden>
+            <div class="form-grid">
+              <div class="field-group form-grid-wide">
+                <label for="subjects-new-name">Nome da disciplina</label>
+                <input id="subjects-new-name" type="text" maxlength="100" autocomplete="off" />
+              </div>
+              <div class="field-group form-grid-wide">
+                <span class="field-label">Cor</span>
+                <div class="color-picker" id="subjects-new-color-picker" role="radiogroup" aria-label="Cor da disciplina"></div>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="primary-button" id="subjects-create-save-btn" type="button">Salvar</button>
+              <button class="small-button" id="subjects-create-cancel-btn" type="button">Cancelar</button>
+              <p class="form-message" id="subjects-create-message" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+          <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
+          <p class="panel-empty" id="subjects-catalog-empty" hidden>Nenhuma disciplina cadastrada.</p>
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
