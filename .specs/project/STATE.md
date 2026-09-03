@@ -6,13 +6,13 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** Domain Redesign v3 — IMPLEMENTADO localmente. Aguarda HUMAN_GATE: PUSH_AND_PR_APPROVAL.
+- **Fase:** Product/UX/Analytics Redesign — Specify em andamento (WP-01..05). Domain redesign v3 LOCAL_BROWSER_BASELINE = PASS, preservado.
 - **Data:** 2026-09-03
-- **Próxima ação:** HUMAN_GATE: PUSH_AND_PR_APPROVAL — autorizar push da branch `claude/com-tlc-replanning-77f844` e abertura de PR.
-- **Testes:** 44 testes passando, 0 falhas (commit final 998b3b2)
+- **Próxima ação:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL — revisar `.specs/features/smartlearn-product-ux-analytics-redesign/` (spec.md, design.md, tasks.md) antes de qualquer implementação.
+- **Testes:** 44 testes passando, 0 falhas (commit 77911b3)
 - **Branch de trabalho:** `claude/com-tlc-replanning-77f844` (worktree isolado)
-- **Commits do domain redesign:** WP-DRD-01..08 em `5a43fd4`, `9ee5793`, `998b3b2`
-- **Bloqueio ativo:** HUMAN_GATE: PUSH_AND_PR_APPROVAL. NÃO fazer push ou PR sem autorização explícita.
+- **Commits do domain redesign:** `5a43fd4`, `9ee5793`, `998b3b2`, `77911b3` — PRESERVADOS, NÃO DESCARTAR
+- **Bloqueio ativo:** HUMAN_GATE: PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL. NÃO implementar código novo antes da aprovação. NÃO push/PR.
 
 ---
 
@@ -202,10 +202,11 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 | Gate | Bloqueio | Referência |
 |------|---------|-----------|
-| PUSH_AND_PR_APPROVAL | NÃO fazer push da branch nem abrir PR sem autorização explícita | Branch `claude/com-tlc-replanning-77f844` |
+| PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL | NÃO implementar código; NÃO push/PR/merge | `.specs/features/smartlearn-product-ux-analytics-redesign/` |
 | SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco real tem dados do usuário | `.specs/features/smartlearn-domain-redesign/design.md §8` |
 
-**Resolvido:** DOMAIN_REDESIGN_APPROVAL — aprovado e implementado (WP-DRD-01..08, commits 5a43fd4, 9ee5793, 998b3b2).
+**Resolvido:** DOMAIN_REDESIGN_APPROVAL — implementado (WP-DRD-01..08, commits 5a43fd4..77911b3).
+**Superseded:** PUSH_AND_PR_APPROVAL — aguarda PRODUCT_UX_ANALYTICS_REDESIGN_APPROVAL + implementação completa + Tauri/SQLite real + UATs.
 
 ## TLC_INSTALLATION_MISMATCH
 
