@@ -344,7 +344,14 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   expandButton.setAttribute("aria-expanded", String(hasScoreData));
   expandButton.textContent = "Ver desempenho";
 
-  primary.append(reviewDoneLabel, expandButton);
+  const externalBtn = document.createElement("button");
+  externalBtn.type = "button";
+  externalBtn.className = "review-expand";
+  externalBtn.dataset.action = "toggle-external";
+  externalBtn.setAttribute("aria-expanded", "false");
+  externalBtn.textContent = "Exercícios externos";
+
+  primary.append(reviewDoneLabel, expandButton, externalBtn);
 
   // Collapsible detail: questions, score, comment
   const detail = document.createElement("div");
@@ -391,6 +398,56 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   commentLabel.append(commentInput);
 
   detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+
+  // External exercises section
+  const externalSection = document.createElement("div");
+  externalSection.className = "review-external-section";
+  externalSection.hidden = true;
+
+  const extForm = document.createElement("div");
+  extForm.className = "external-exercise-form";
+
+  const extQLabel = document.createElement("label");
+  extQLabel.className = "number-control review-number-control";
+  extQLabel.append(createTextElement("span", "review-field-label", "Questões feitas"));
+  const extQInput = document.createElement("input");
+  extQInput.type = "number";
+  extQInput.min = "1";
+  extQInput.step = "1";
+  extQInput.inputMode = "numeric";
+  extQInput.className = "external-questions-input";
+  extQInput.placeholder = "0";
+  extQLabel.append(extQInput);
+
+  const extALabel = document.createElement("label");
+  extALabel.className = "number-control review-number-control";
+  extALabel.append(createTextElement("span", "review-field-label", "Acertos"));
+  const extAInput = document.createElement("input");
+  extAInput.type = "number";
+  extAInput.min = "0";
+  extAInput.step = "1";
+  extAInput.inputMode = "numeric";
+  extAInput.className = "external-correct-input";
+  extAInput.placeholder = "0";
+  extALabel.append(extAInput);
+
+  const extSubmitBtn = document.createElement("button");
+  extSubmitBtn.type = "button";
+  extSubmitBtn.className = "small-button is-primary";
+  extSubmitBtn.dataset.action = "submit-external";
+  extSubmitBtn.dataset.reviewId = String(task.id);
+  extSubmitBtn.dataset.unitId = String(unit?.id ?? "");
+  extSubmitBtn.textContent = "Registrar";
+
+  const extMsg = createTextElement("p", "field-message external-form-message", "");
+  extMsg.setAttribute("role", "status");
+  extMsg.setAttribute("aria-live", "polite");
+
+  extForm.append(extQLabel, extALabel, extSubmitBtn, extMsg);
+  externalSection.append(
+    createTextElement("p", "review-field-label", "Registrar exercícios externos"),
+    extForm,
+  );
 
   // Resumo Mestre section
   const summarySection = document.createElement("div");
@@ -486,9 +543,9 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       exercisesReviewSection.append(exItem);
     }
 
-    row.append(header, summarySection, exercisesReviewSection, primary, detail);
+    row.append(header, summarySection, exercisesReviewSection, primary, detail, externalSection);
   } else {
-    row.append(header, summarySection, primary, detail);
+    row.append(header, summarySection, primary, detail, externalSection);
   }
   return row;
 }
@@ -1559,6 +1616,64 @@ studyList.addEventListener("click", async (event) => {
       if (errorEl) errorEl.textContent = "Não foi possível salvar o estudo.";
       console.error("Falha ao salvar estudo.", error);
     }
+  }
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="toggle-external"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const section = row?.querySelector(".review-external-section");
+  if (!section) return;
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(expanded));
+  section.hidden = !expanded;
+  if (expanded) section.querySelector(".external-questions-input")?.focus();
+});
+
+reviewDashboard.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="submit-external"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const unitId = Number(button.dataset.unitId);
+  if (!unitId) return;
+  const qInput = row?.querySelector(".external-questions-input");
+  const aInput = row?.querySelector(".external-correct-input");
+  const msgEl = row?.querySelector(".external-form-message");
+  const questionsCount = Number(qInput?.value);
+  const correctCount = Number(aInput?.value ?? 0);
+  if (!questionsCount || questionsCount < 1) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o número de questões (mínimo 1)."; }
+    qInput?.focus();
+    return;
+  }
+  if (correctCount > questionsCount) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Acertos não pode ser maior que questões."; }
+    aInput?.focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    const today = getLocalDateValue();
+    await DB.learningEvidence.create({
+      unitId,
+      evidenceDate: today,
+      context: "EXTERNAL",
+      questionsCount,
+      correctCount,
+    });
+    if (qInput) qInput.value = "";
+    if (aInput) aInput.value = "";
+    if (msgEl) {
+      msgEl.classList.remove("is-error");
+      const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
+      msgEl.textContent = `Registrado: ${questionsCount} questões, ${correctCount} acertos (${pct}%).`;
+    }
+  } catch (error) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível registrar os exercícios."; }
+    console.error("Falha ao registrar exercícios externos.", error);
+  } finally {
+    button.disabled = false;
   }
 });
 
