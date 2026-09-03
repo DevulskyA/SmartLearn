@@ -359,8 +359,45 @@
             <p class="panel-empty" id="subject-averages-empty">Registre questões concluídas para ver as médias.</p>
           </section>
 
+          <section class="stats-panel" aria-labelledby="unit-stats-title">
+            <div class="stats-panel-heading">
+              <div>
+                <p class="eyebrow">Por conteúdo</p>
+                <h2 id="unit-stats-title">Desempenho por aula</h2>
+              </div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
+                  <option value="">Todas as tendências</option>
+                  <option value="IMPROVING">Melhorando</option>
+                  <option value="DECLINING">Caindo</option>
+                  <option value="STABLE">Estável</option>
+                  <option value="INSUFFICIENT">Insuficiente</option>
+                </select>
+              </div>
+            </div>
+            <div class="unit-stats-list" id="unit-stats-list" aria-live="polite"></div>
+            <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
+          </section>
+
           <section class="stats-panel chart-panel" aria-labelledby="evolution-title">
-            <div class="stats-panel-heading"><div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução das notas</h2></div></div>
+            <div class="stats-panel-heading">
+              <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="evolution-filter-period" aria-label="Período do gráfico">
+                  <option value="3">3 meses</option>
+                  <option value="6">6 meses</option>
+                  <option value="12">12 meses</option>
+                  <option value="0">Tudo</option>
+                </select>
+              </div>
+            </div>
+            <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
             <canvas id="evolution-chart" hidden></canvas>
             <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
           </section>

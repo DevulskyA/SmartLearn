@@ -131,6 +131,13 @@ const metricElements = {
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
 const statsSubjectSort = document.querySelector("#stats-subject-sort");
+const unitStatsList = document.querySelector("#unit-stats-list");
+const unitStatsEmpty = document.querySelector("#unit-stats-empty");
+const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
+const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
+const evolutionSvg = document.querySelector("#evolution-svg");
+const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
+const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
 const subjectAveragesBody = document.querySelector("#subject-averages-body");
@@ -718,6 +725,24 @@ export async function renderStats() {
     chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
   }
   await renderStatsBySubject();
+  await renderStatsByUnit();
+  // WP-D3: SVG evolution chart
+  const [allEvidence, allUnits, allSubjects] = await Promise.all([
+    DB.learningEvidence.getAll(),
+    DB.learningUnits.getAll(),
+    DB.subjects.getAll(),
+  ]);
+  // Populate evolution subject filter
+  if (evolutionFilterSubject && evolutionFilterSubject.options.length <= 1) {
+    for (const s of allSubjects.filter((s) => s.isActive)) {
+      const opt = document.createElement("option");
+      opt.value = String(s.id);
+      opt.textContent = s.name;
+      evolutionFilterSubject.append(opt);
+    }
+  }
+  const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
+  chartEmpty.hidden = svgRendered;
 }
 function getPlanUnitState(unitId, allTasks, today) {
   const tasks = allTasks.filter((t) => t.unitId === unitId);
@@ -1044,6 +1069,271 @@ export async function renderStatsBySubject() {
     card.append(header, metrics);
     subjectKpiList.append(card);
   }
+}
+
+function buildSparkline(scores, width = 60, height = 24) {
+  const pts = scores.slice(-5);
+  if (pts.length < 2) return null;
+  const minY = Math.min(...pts);
+  const maxY = Math.max(...pts);
+  const rangeY = maxY - minY || 1;
+  const pad = 2;
+  const xStep = (width - pad * 2) / (pts.length - 1);
+  const points = pts
+    .map((v, i) => {
+      const x = pad + i * xStep;
+      const y = pad + (1 - (v - minY) / rangeY) * (height - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("aria-hidden", "true");
+  svg.className.baseVal = "sparkline";
+  const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  polyline.setAttribute("points", points);
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "currentColor");
+  polyline.setAttribute("stroke-width", "1.5");
+  polyline.setAttribute("stroke-linejoin", "round");
+  svg.append(polyline);
+  return svg;
+}
+
+export async function renderStatsByUnit() {
+  if (!unitStatsList) return;
+  const [evidence, units, subjects] = await Promise.all([
+    DB.learningEvidence.getAll(),
+    DB.learningUnits.getAll(),
+    DB.subjects.getAll(),
+  ]);
+  let results = Analytics.byUnit(evidence, units, subjects);
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
+
+  // Populate subject filter
+  if (statsUnitFilterSubject && statsUnitFilterSubject.options.length <= 1) {
+    for (const s of subjects.filter((s) => s.isActive)) {
+      const opt = document.createElement("option");
+      opt.value = String(s.id);
+      opt.textContent = s.name;
+      statsUnitFilterSubject.append(opt);
+    }
+  }
+
+  // Apply filters
+  const subjFilter = statsUnitFilterSubject?.value ?? "";
+  const trendFilter = statsUnitFilterTrend?.value ?? "";
+  if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
+  if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
+
+  // Sort: worst recent score first (default)
+  results = results.sort((a, b) => {
+    if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
+    if (a.weightedAccuracy == null) return 1;
+    if (b.weightedAccuracy == null) return -1;
+    return a.weightedAccuracy - b.weightedAccuracy;
+  });
+
+  const hasData = results.some((r) => r.evidenceCount > 0);
+  unitStatsEmpty.hidden = results.length > 0;
+  unitStatsList.replaceChildren();
+
+  for (const r of results) {
+    const subject = subjectsById.get(r.subjectId);
+    const row = document.createElement("article");
+    row.className = "unit-stats-row";
+
+    const header = document.createElement("div");
+    header.className = "unit-stats-header";
+
+    const chip = document.createElement("span");
+    chip.className = "subject-chip";
+    chip.textContent = r.subjectName;
+    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+
+    const title = document.createElement("span");
+    title.className = "unit-stats-title";
+    title.textContent = r.unitTitle;
+
+    header.append(chip, title);
+
+    const body = document.createElement("div");
+    body.className = "unit-stats-body";
+
+    const sparkEl = buildSparkline(r.scoresSequence);
+    if (sparkEl) body.append(sparkEl);
+
+    const meta = document.createElement("div");
+    meta.className = "unit-stats-meta";
+
+    const accText = r.weightedAccuracy != null
+      ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} q`
+      : "Sem evidência";
+    meta.textContent = accText;
+    if (r.lastEvidence) {
+      const lastDate = document.createElement("span");
+      lastDate.className = "unit-stats-last";
+      lastDate.textContent = ` · ${formatDate(r.lastEvidence.evidenceDate)}`;
+      meta.append(lastDate);
+    }
+
+    const trendBadge = createTrendBadge(r.trend.direction);
+
+    body.append(meta, trendBadge);
+    row.append(header, body);
+    unitStatsList.append(row);
+  }
+}
+
+function renderEvolutionSvg(evidence, units, subjects) {
+  if (!evolutionSvg) return false;
+  const subjectFilter = evolutionFilterSubject?.value ?? "";
+  const periodMonths = Number(evolutionFilterPeriod?.value ?? "6");
+  const today = getLocalDateValue();
+  const cutoff = periodMonths > 0
+    ? (() => { const d = new Date(`${today}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - periodMonths); return d.toISOString().slice(0, 7); })()
+    : "0000-01";
+
+  // Map unitId → subjectId
+  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
+
+  // Group evidence by month + subject, compute weighted_accuracy per month per subject
+  const dataBySubject = new Map();
+  for (const ev of evidence) {
+    const month = ev.evidenceDate.slice(0, 7);
+    if (month < cutoff) continue;
+    const subjectId = unitToSubject.get(ev.unitId);
+    if (!subjectId) continue;
+    if (subjectFilter && String(subjectId) !== subjectFilter) continue;
+    if (!dataBySubject.has(subjectId)) dataBySubject.set(subjectId, new Map());
+    const monthMap = dataBySubject.get(subjectId);
+    if (!monthMap.has(month)) monthMap.set(month, { q: 0, c: 0 });
+    const m = monthMap.get(month);
+    m.q += ev.questionsCount;
+    m.c += ev.correctCount;
+  }
+
+  if (dataBySubject.size === 0) { evolutionSvg.hidden = true; return false; }
+
+  // Collect all months and sort
+  const allMonths = [...new Set(
+    [...dataBySubject.values()].flatMap((mm) => [...mm.keys()])
+  )].sort();
+
+  if (allMonths.length < 1) { evolutionSvg.hidden = true; return false; }
+
+  // Build series per subject
+  const series = [];
+  for (const [subjectId, monthMap] of dataBySubject) {
+    const subject = subjectsById.get(subjectId);
+    const points = allMonths.map((m) => {
+      const d = monthMap.get(m);
+      return d && d.q > 0 ? (d.c / d.q) * 100 : null;
+    });
+    series.push({ subject, points, subjectId });
+  }
+
+  // SVG layout
+  const W = 320, H = 160, padL = 36, padR = 12, padT = 10, padB = 28;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  evolutionSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  evolutionSvg.setAttribute("width", "100%");
+  evolutionSvg.setAttribute("height", H);
+  evolutionSvg.replaceChildren();
+
+  const ns = "http://www.w3.org/2000/svg";
+
+  // Y axis labels 0 / 50 / 100
+  for (const pct of [0, 50, 100]) {
+    const y = padT + chartH * (1 - pct / 100);
+    const text = document.createElementNS(ns, "text");
+    text.setAttribute("x", padL - 4);
+    text.setAttribute("y", y + 4);
+    text.setAttribute("text-anchor", "end");
+    text.setAttribute("font-size", "9");
+    text.setAttribute("fill", "currentColor");
+    text.setAttribute("opacity", "0.5");
+    text.textContent = `${pct}%`;
+    evolutionSvg.append(text);
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("x1", padL);
+    line.setAttribute("x2", W - padR);
+    line.setAttribute("y1", y);
+    line.setAttribute("y2", y);
+    line.setAttribute("stroke", "currentColor");
+    line.setAttribute("stroke-width", "0.5");
+    line.setAttribute("opacity", "0.2");
+    evolutionSvg.append(line);
+  }
+
+  // X axis labels (month abbreviations)
+  const xStep = allMonths.length > 1 ? chartW / (allMonths.length - 1) : chartW;
+  for (let i = 0; i < allMonths.length; i++) {
+    const x = padL + i * xStep;
+    const [year, month] = allMonths[i].split("-");
+    const label = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(`${allMonths[i]}-15T12:00:00`));
+    const text = document.createElementNS(ns, "text");
+    text.setAttribute("x", x);
+    text.setAttribute("y", H - padB + 14);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "9");
+    text.setAttribute("fill", "currentColor");
+    text.setAttribute("opacity", "0.6");
+    text.textContent = label;
+    evolutionSvg.append(text);
+  }
+
+  // Lines per subject
+  const palette = ["#3b82f6", "#16a34a", "#7c3aed", "#ea580c", "#dc2626", "#0d9488", "#db2777", "#4338ca"];
+  series.forEach(({ points, subject }, idx) => {
+    const color = palette[idx % palette.length];
+    const pts = [];
+    for (let i = 0; i < points.length; i++) {
+      if (points[i] == null) continue;
+      const x = padL + i * xStep;
+      const y = padT + chartH * (1 - points[i] / 100);
+      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+    if (pts.length < 1) return;
+    if (pts.length === 1) {
+      const [x, y] = pts[0].split(",");
+      const circle = document.createElementNS(ns, "circle");
+      circle.setAttribute("cx", x);
+      circle.setAttribute("cy", y);
+      circle.setAttribute("r", "3");
+      circle.setAttribute("fill", color);
+      evolutionSvg.append(circle);
+    } else {
+      const polyline = document.createElementNS(ns, "polyline");
+      polyline.setAttribute("points", pts.join(" "));
+      polyline.setAttribute("fill", "none");
+      polyline.setAttribute("stroke", color);
+      polyline.setAttribute("stroke-width", "2");
+      polyline.setAttribute("stroke-linejoin", "round");
+      polyline.setAttribute("stroke-linecap", "round");
+      evolutionSvg.append(polyline);
+    }
+    // Legend label
+    if (subject) {
+      const lastPt = pts[pts.length - 1];
+      const [lx, ly] = lastPt.split(",");
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("x", Number(lx) + 3);
+      text.setAttribute("y", Number(ly) + 4);
+      text.setAttribute("font-size", "8");
+      text.setAttribute("fill", color);
+      text.textContent = subject.name;
+      evolutionSvg.append(text);
+    }
+  });
+
+  evolutionSvg.hidden = false;
+  return true;
 }
 
 export async function renderSettings() {
@@ -2411,6 +2701,24 @@ if (databaseAvailable) {
 
 statsSubjectSort?.addEventListener("change", () => {
   if (databaseAvailable) renderStatsBySubject().catch(console.error);
+});
+statsUnitFilterSubject?.addEventListener("change", () => {
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+});
+statsUnitFilterTrend?.addEventListener("change", () => {
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+});
+evolutionFilterSubject?.addEventListener("change", async () => {
+  if (!databaseAvailable) return;
+  const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
+  const ok = renderEvolutionSvg(ev, units, subjs);
+  chartEmpty.hidden = ok;
+});
+evolutionFilterPeriod?.addEventListener("change", async () => {
+  if (!databaseAvailable) return;
+  const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
+  const ok = renderEvolutionSvg(ev, units, subjs);
+  chartEmpty.hidden = ok;
 });
 
 planFilterSubject?.addEventListener("change", () => {
