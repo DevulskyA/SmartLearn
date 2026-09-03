@@ -34,6 +34,12 @@
           </svg>
           <span>Hoje</span>
         </button>
+        <button class="nav-item" type="button" data-screen="plan" aria-controls="screen-plan">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
+          </svg>
+          <span>Plano</span>
+        </button>
         <button class="nav-item" type="button" data-screen="register" aria-controls="screen-register">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 3.5h14v17H5zM8 7h8M8 11h8M8 15h5" />
@@ -117,6 +123,29 @@
             <h2>Nenhuma revisão cadastrada.</h2>
             <p>Cadastre ou importe estudos para ver revisões.</p>
           </div>
+        </section>
+
+        <section class="screen" id="screen-plan" data-screen-panel="plan" aria-labelledby="title-plan" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Conteúdo</p>
+              <h1 id="title-plan">Plano</h1>
+            </div>
+            <button class="primary-button" id="plan-new-unit-btn" type="button">+ Nova aula</button>
+          </div>
+          <div class="plan-filters" id="plan-filters">
+            <select id="plan-filter-subject" aria-label="Filtrar por disciplina">
+              <option value="">Todas as disciplinas</option>
+            </select>
+            <select id="plan-filter-state" aria-label="Filtrar por estado">
+              <option value="">Todos os estados</option>
+              <option value="no-review">Sem revisão</option>
+              <option value="pending">Pendente</option>
+              <option value="up-to-date">Em dia</option>
+            </select>
+          </div>
+          <div class="plan-list" id="plan-list" aria-live="polite"></div>
+          <p class="panel-empty" id="plan-empty" hidden>Nenhuma aula cadastrada.</p>
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>

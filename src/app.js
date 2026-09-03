@@ -144,6 +144,11 @@ reviewMessage.className = "form-message";
 reviewMessage.setAttribute("role", "status");
 reviewMessage.setAttribute("aria-live", "polite");
 reviewDashboard?.after(reviewMessage);
+const planList = document.querySelector("#plan-list");
+const planEmpty = document.querySelector("#plan-empty");
+const planFilterSubject = document.querySelector("#plan-filter-subject");
+const planFilterState = document.querySelector("#plan-filter-state");
+const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
 const themeToggle = document.querySelector("#theme-toggle");
@@ -697,6 +702,231 @@ export async function renderStats() {
     chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
   }
 }
+function getPlanUnitState(unitId, allTasks, today) {
+  const tasks = allTasks.filter((t) => t.unitId === unitId);
+  if (tasks.length === 0) return "no-review";
+  const incomplete = tasks.filter((t) => !t.reviewDone);
+  if (incomplete.some((t) => t.dueDate <= today)) return "pending";
+  if (incomplete.length > 0) return "pending";
+  return "up-to-date";
+}
+
+function getPlanStateBadge(state) {
+  const labels = { "no-review": "Sem revisão", pending: "Pendente", "up-to-date": "Em dia" };
+  const span = document.createElement("span");
+  span.className = "plan-state-badge";
+  span.dataset.state = state;
+  span.textContent = labels[state] ?? state;
+  return span;
+}
+
+function getNextReview(unitId, allTasks) {
+  const pending = allTasks
+    .filter((t) => t.unitId === unitId && !t.reviewDone)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return pending.length > 0 ? pending[0].dueDate : null;
+}
+
+function getPlanPerfBadge(evidence) {
+  const total = evidence.reduce((s, e) => s + e.questionsCount, 0);
+  if (total === 0) return null;
+  const correct = evidence.reduce((s, e) => s + e.correctCount, 0);
+  const pct = (correct / total) * 100;
+  const span = document.createElement("span");
+  span.className = "performance-badge";
+  if (pct >= 80) span.dataset.perf = "strong";
+  else if (pct >= 65) span.dataset.perf = "adequate";
+  else if (pct >= 50) span.dataset.perf = "attention";
+  else span.dataset.perf = "critical";
+  span.textContent = `${pct.toFixed(0)}%`;
+  return span;
+}
+
+let planCurrentSubjectFilter = "";
+let planCurrentStateFilter = "";
+
+export async function renderPlan() {
+  if (!planList) return;
+  const today = getLocalDateValue();
+  const [learningUnits, subjects, allTasks, allEvidence] = await Promise.all([
+    DB.learningUnits.getAll(),
+    DB.subjects.getAll(),
+    DB.reviewTasks.getAll(),
+    DB.learningEvidence.getAll(),
+  ]);
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
+  const evidenceByUnitId = new Map();
+  for (const ev of allEvidence) {
+    if (!evidenceByUnitId.has(ev.unitId)) evidenceByUnitId.set(ev.unitId, []);
+    evidenceByUnitId.get(ev.unitId).push(ev);
+  }
+
+  // Load exercise counts in parallel
+  const exerciseCountByUnitId = new Map();
+  await Promise.all(
+    learningUnits.map(async (unit) => {
+      try {
+        const exs = await DB.exercises.getAll(unit.id);
+        exerciseCountByUnitId.set(unit.id, exs.length);
+      } catch {
+        exerciseCountByUnitId.set(unit.id, 0);
+      }
+    }),
+  );
+
+  // Populate subject filter once
+  if (planFilterSubject && planFilterSubject.options.length <= 1) {
+    for (const subj of subjects.filter((s) => s.isActive)) {
+      const opt = document.createElement("option");
+      opt.value = String(subj.id);
+      opt.textContent = subj.name;
+      planFilterSubject.append(opt);
+    }
+  }
+
+  // Sort: study_date desc
+  const sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
+
+  // Apply filters
+  const subjectFilter = planFilterSubject?.value ?? "";
+  const stateFilter = planFilterState?.value ?? "";
+  const filtered = sorted.filter((unit) => {
+    if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
+    if (stateFilter && getPlanUnitState(unit.id, allTasks, today) !== stateFilter) return false;
+    return true;
+  });
+
+  planEmpty.hidden = filtered.length > 0;
+  planList.replaceChildren();
+
+  for (const unit of filtered) {
+    const subject = subjectsById.get(unit.subjectId);
+    const evidence = evidenceByUnitId.get(unit.id) ?? [];
+    const state = getPlanUnitState(unit.id, allTasks, today);
+    const nextReview = getNextReview(unit.id, allTasks);
+    const exerciseCount = exerciseCountByUnitId.get(unit.id) ?? 0;
+
+    const row = document.createElement("article");
+    row.className = "plan-row";
+    row.dataset.unitId = String(unit.id);
+
+    // Compact summary line
+    const compact = document.createElement("div");
+    compact.className = "plan-row-compact";
+
+    const subjectChip = document.createElement("span");
+    subjectChip.className = "subject-chip";
+    subjectChip.textContent = subject?.name ?? "Sem disciplina";
+    subjectChip.style.setProperty(
+      "--subject-color",
+      `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`,
+    );
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "plan-unit-title";
+    titleSpan.textContent = unit.title;
+
+    const meta = document.createElement("span");
+    meta.className = "plan-unit-meta";
+    const parts = [formatDate(unit.studyDate)];
+    if (unit.sourceText) parts.push(unit.sourceText);
+    if (exerciseCount > 0) parts.push(`${exerciseCount} ex.`);
+    parts.push(unit.summaryBody ? "Resumo ✓" : "Resumo —");
+    if (nextReview) parts.push(`Próx. ${formatDate(nextReview)}`);
+    meta.textContent = parts.join(" · ");
+
+    const badges = document.createElement("span");
+    badges.className = "plan-row-badges";
+    badges.append(getPlanStateBadge(state));
+    const perfBadge = getPlanPerfBadge(evidence);
+    if (perfBadge) badges.append(perfBadge);
+
+    const expandBtn = document.createElement("button");
+    expandBtn.className = "plan-expand-btn";
+    expandBtn.type = "button";
+    expandBtn.setAttribute("aria-expanded", "false");
+    expandBtn.setAttribute("aria-label", "Expandir detalhes");
+    expandBtn.textContent = "▸";
+
+    compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
+
+    // Expansion panel (lazy rendered)
+    const detail = document.createElement("div");
+    detail.className = "plan-row-detail";
+    detail.hidden = true;
+
+    expandBtn.addEventListener("click", async () => {
+      const isExpanded = expandBtn.getAttribute("aria-expanded") === "true";
+      expandBtn.setAttribute("aria-expanded", String(!isExpanded));
+      expandBtn.textContent = isExpanded ? "▸" : "▾";
+      detail.hidden = isExpanded;
+
+      if (!isExpanded && !detail.dataset.loaded) {
+        detail.dataset.loaded = "1";
+        detail.replaceChildren();
+
+        if (unit.summaryBody) {
+          const summarySection = document.createElement("div");
+          summarySection.className = "plan-detail-section";
+          const summaryHeading = document.createElement("h3");
+          summaryHeading.textContent = "Resumo Mestre";
+          const summaryText = document.createElement("p");
+          summaryText.className = "plan-summary-body";
+          summaryText.textContent = unit.summaryBody;
+          summarySection.append(summaryHeading, summaryText);
+          detail.append(summarySection);
+        }
+
+        // Exercises
+        const exs = await DB.exercises.getAll(unit.id);
+        if (exs.length > 0) {
+          const exSection = document.createElement("div");
+          exSection.className = "plan-detail-section";
+          const exHeading = document.createElement("h3");
+          exHeading.textContent = `Exercícios (${exs.length})`;
+          exSection.append(exHeading);
+          for (const ex of exs) {
+            const item = document.createElement("div");
+            item.className = "plan-exercise-item";
+            item.textContent = ex.questionText;
+            exSection.append(item);
+          }
+          detail.append(exSection);
+        }
+
+        // Evidence history
+        if (evidence.length > 0) {
+          const evSection = document.createElement("div");
+          evSection.className = "plan-detail-section";
+          const evHeading = document.createElement("h3");
+          evHeading.textContent = "Histórico de desempenho";
+          evSection.append(evHeading);
+          const evList = document.createElement("ul");
+          evList.className = "plan-evidence-list";
+          for (const ev of [...evidence].sort((a, b) => b.evidenceDate.localeCompare(a.evidenceDate))) {
+            const li = document.createElement("li");
+            const ctx = { INITIAL_PRACTICE: "Prática inicial", REVIEW: "Revisão", EXTERNAL: "Externo" };
+            li.textContent = `${formatDate(ev.evidenceDate)} — ${ctx[ev.context] ?? ev.context}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
+            evList.append(li);
+          }
+          evSection.append(evList);
+          detail.append(evSection);
+        }
+
+        if (!detail.children.length) {
+          const empty = document.createElement("p");
+          empty.className = "plan-detail-empty";
+          empty.textContent = "Nenhum detalhe disponível.";
+          detail.append(empty);
+        }
+      }
+    });
+
+    row.append(compact, detail);
+    planList.append(row);
+  }
+}
+
 export async function renderSettings() {
   const settings = await DB.settings.get();
   lastBackupLabel.textContent = settings?.lastBackupAt
@@ -1190,6 +1420,9 @@ export function showScreen(screenId, { focus = false } = {}) {
 
   if (nextScreen === "stats" && databaseAvailable) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
+  }
+  if (nextScreen === "plan" && databaseAvailable) {
+    renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
   }
   if (nextScreen === "register" && databaseAvailable) {
     Promise.all([renderSubjects(), renderStudies()]).catch((error) => {
@@ -2056,4 +2289,15 @@ if (databaseAvailable) {
   await renderSubjects();
   await renderToday();
 }
+
+planFilterSubject?.addEventListener("change", () => {
+  if (databaseAvailable) renderPlan().catch(console.error);
+});
+planFilterState?.addEventListener("change", () => {
+  if (databaseAvailable) renderPlan().catch(console.error);
+});
+planNewUnitBtn?.addEventListener("click", () => {
+  showScreen("register");
+});
+
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);
