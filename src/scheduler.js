@@ -1,5 +1,7 @@
 import { REVIEW_DAY_OFFSETS, generateReviewDates } from "./review-schedule.js";
 
+// LEGACY_TEMPORARY: fixed 16-review schedule. Boundary: scheduling logic stays here.
+// A future adaptive scheduler (SM-2, FSRS) replaces this file; may require schema evolution.
 export const ALGORITHMS = Object.freeze({ LEGACY: "legacy" });
 
 // Canonical single source for the 16-interval schedule.

@@ -4,6 +4,7 @@ import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
+const SCHEMA_VERSION = 2;
 
 let database;
 let initialization;
@@ -11,16 +12,19 @@ let browserStore;
 
 const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
-  "CREATE TABLE IF NOT EXISTS sources (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
-  "CREATE TABLE IF NOT EXISTS study_records (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_text TEXT NOT NULL DEFAULT '',\n    study_date TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
-  "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
+  "CREATE TABLE IF NOT EXISTS learning_units (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_text TEXT NOT NULL DEFAULT '',\n    study_date TEXT NOT NULL,\n    title TEXT NOT NULL,\n    summary_body TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
+  "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
-  "CREATE INDEX IF NOT EXISTS idx_review_tasks_study_record_id\n    ON review_tasks(study_record_id)",
-  "CREATE TABLE IF NOT EXISTS exercises (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE,\n    question_text TEXT NOT NULL,\n    answer_text TEXT NOT NULL,\n    hint_text TEXT,\n    position INTEGER NOT NULL DEFAULT 0,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
-  "CREATE INDEX IF NOT EXISTS idx_exercises_study_record_id\n    ON exercises(study_record_id)",
+  "CREATE INDEX IF NOT EXISTS idx_review_tasks_unit_id\n    ON review_tasks(unit_id)",
+  // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
+  // Evidence of study and review outcomes belong in learning_units and review_tasks.
+  // hint_text is pedagogical context only — never citation or provenance data.
+  "CREATE TABLE IF NOT EXISTS exercises (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,\n    question_text TEXT NOT NULL,\n    answer_text TEXT NOT NULL,\n    hint_text TEXT,\n    position INTEGER NOT NULL DEFAULT 0,\n    provenance TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
+  "CREATE INDEX IF NOT EXISTS idx_exercises_unit_id\n    ON exercises(unit_id)",
   "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
   "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '2.0.0', $1)",
 ];
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -31,6 +35,15 @@ function requireDatabase() {
   }
 
   return database;
+}
+
+function validateProvenance(provenance) {
+  if (!provenance || !['MANUAL', 'SOURCE', 'AI_GENERATED'].includes(provenance)) {
+    throw new Error(
+      'provenance é obrigatório e deve ser MANUAL, SOURCE ou AI_GENERATED. Recebido: ' +
+      JSON.stringify(provenance),
+    );
+  }
 }
 
 function mapSubject(row) {
@@ -48,13 +61,13 @@ function mapUsageCount(row, key) {
   return Number(row?.[key] ?? 0) || 0;
 }
 
-function mapStudyRecord(row) {
+function mapLearningUnit(row) {
   return {
     id: row.id,
     subjectId: row.subject_id,
     sourceText: row.source_text ?? '',
     studyDate: row.study_date,
-    content: row.content,
+    title: row.title,
     summaryBody: row.summary_body ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -64,7 +77,7 @@ function mapStudyRecord(row) {
 function mapReviewTask(row) {
   return {
     id: row.id,
-    studyRecordId: row.study_record_id,
+    unitId: row.unit_id,
     reviewNumber: row.review_number,
     dueDate: row.due_date,
     completedAt: row.completed_at,
@@ -90,14 +103,18 @@ function mapSettings(row) {
   };
 }
 
+// BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
+// Evidence of study and review outcomes belong in learning_units and review_tasks.
+// hint_text is pedagogical context only — never citation or provenance data.
 function mapExercise(row) {
   return {
     id: row.id,
-    studyRecordId: row.study_record_id,
+    unitId: row.unit_id,
     questionText: row.question_text,
     answerText: row.answer_text,
     hintText: row.hint_text ?? null,
     position: row.position ?? 0,
+    provenance: row.provenance,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -147,8 +164,13 @@ function assertImportData(data) {
   if (!data || typeof data !== 'object') {
     throw new Error('O backup precisa ser um objeto JSON válido.');
   }
-
-  for (const key of ['subjects', 'studyRecords', 'reviewTasks']) {
+  if (data.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(
+      'Este backup requer schemaVersion ' + SCHEMA_VERSION +
+      '. Exporte novamente a partir do app atual.',
+    );
+  }
+  for (const key of ['subjects', 'learningUnits', 'reviewTasks']) {
     if (!Array.isArray(data[key])) {
       throw new Error(
         'O backup não contém a lista obrigatória "' + key + '".',
@@ -161,11 +183,11 @@ function buildClearStatements() {
   return [
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
-    { query: 'DELETE FROM study_records', values: [] },
+    { query: 'DELETE FROM learning_units', values: [] },
     { query: 'DELETE FROM subjects', values: [] },
     { query: 'DELETE FROM settings', values: [] },
     {
-      query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n        VALUES (\'main\', \'2.0.0\', $1, NULL)',
+      query: "INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n        VALUES ('main', '2.0.0', $1, NULL)",
       values: [JSON.stringify(REVIEW_SCHEDULE)],
     },
   ];
@@ -175,7 +197,7 @@ function buildImportStatements(data) {
   const statements = [
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
-    { query: 'DELETE FROM study_records', values: [] },
+    { query: 'DELETE FROM learning_units', values: [] },
     { query: 'DELETE FROM subjects', values: [] },
     { query: 'DELETE FROM settings', values: [] },
   ];
@@ -194,15 +216,15 @@ function buildImportStatements(data) {
     });
   }
 
-  for (const row of data.studyRecords) {
+  for (const row of data.learningUnits) {
     statements.push({
-      query: 'INSERT INTO study_records\n        (id, subject_id, source_text, study_date, content, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      query: 'INSERT INTO learning_units\n        (id, subject_id, source_text, study_date, title, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       values: [
         row.id,
         row.subjectId ?? row.subject_id,
         row.sourceText ?? row.source_text ?? '',
         row.studyDate ?? row.study_date,
-        row.content,
+        row.title,
         row.summaryBody ?? row.summary_body ?? null,
         row.createdAt ?? row.created_at,
         row.updatedAt ?? row.updated_at,
@@ -212,10 +234,11 @@ function buildImportStatements(data) {
 
   for (const row of data.reviewTasks) {
     statements.push({
-      query: 'INSERT INTO review_tasks\n        (id, study_record_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      query: 'INSERT INTO review_tasks\n        (id, unit_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
       values: [
-        row.id, row.studyRecordId, row.reviewNumber, row.dueDate,
-        row.completedAt ?? null, row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
+        row.id, row.unitId ?? row.unit_id, row.reviewNumber ?? row.review_number,
+        row.dueDate ?? row.due_date, row.completedAt ?? null,
+        row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
         row.questionsCount ?? null, row.correctCount ?? null, row.scorePercent ?? null,
         row.comment ?? null, row.createdAt, row.updatedAt,
       ],
@@ -224,14 +247,15 @@ function buildImportStatements(data) {
 
   for (const row of (Array.isArray(data.exercises) ? data.exercises : [])) {
     statements.push({
-      query: 'INSERT INTO exercises\n        (id, study_record_id, question_text, answer_text, hint_text, position, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      query: 'INSERT INTO exercises\n        (id, unit_id, question_text, answer_text, hint_text, position, provenance, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       values: [
         row.id,
-        row.studyRecordId ?? row.study_record_id,
+        row.unitId ?? row.unit_id,
         row.questionText ?? row.question_text ?? "",
         row.answerText ?? row.answer_text ?? "",
         row.hintText ?? row.hint_text ?? null,
         row.position ?? 0,
+        row.provenance,
         row.createdAt ?? row.created_at ?? new Date().toISOString(),
         row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
       ],
@@ -240,9 +264,9 @@ function buildImportStatements(data) {
 
   const settings = (Array.isArray(data.settings) ? data.settings[0] : data.settings) ?? {};
   statements.push({
-    query: 'INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES (\'main\', $1, $2, $3)',
+    query: "INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES ('main', $1, $2, $3)",
     values: [
-      settings.appVersion ?? '1.0.0',
+      settings.appVersion ?? '2.0.0',
       JSON.stringify(settings.reviewSchedule ?? REVIEW_SCHEDULE),
       settings.lastBackupAt ?? null,
     ],
@@ -263,27 +287,17 @@ function createBrowserStore() {
     reviewSchedule: REVIEW_SCHEDULE,
     lastBackupAt: null,
   };
-  const initialSubjects = [
-    "Anatomia",
-    "Fisiologia",
-    "Bioqu\u00edmica",
-    "Farmacologia",
-    "Patologia",
-    "Cl\u00ednica M\u00e9dica",
-    "Cirurgia",
-    "Pediatria",
-  ];
+
   function emptyState() {
     return {
-      seeded: false,
       subjects: [],
-      studyRecords: [],
+      learningUnits: [],
       reviewTasks: [],
       exercises: [],
       settings: defaultSettings,
       nextIds: {
         subjects: 1,
-        studyRecords: 1,
+        learningUnits: 1,
         reviewTasks: 1,
         exercises: 1,
       },
@@ -322,26 +336,6 @@ function createBrowserStore() {
     return value;
   }
 
-  function seedNamedRows(state, collection, names, label) {
-    if (state[collection].length > 0) return;
-
-    for (const name of names) {
-      const exists = state[collection].some(
-        (item) => item.name.localeCompare(name, "pt-BR", { sensitivity: "accent" }) === 0,
-      );
-      if (exists) continue;
-      const timestamp = nowIso();
-      state[collection].push({
-        id: nextId(state, collection),
-        name: normalizeEntityName(name, label),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        isActive: true,
-        sortOrder: state[collection].length,
-      });
-    }
-  }
-
   function assertActive(items, id, message) {
     if (!items.some((item) => item.id === id && item.isActive)) {
       throw new Error(message);
@@ -360,7 +354,7 @@ function createBrowserStore() {
   }
 
   function refreshNextIds(state) {
-    for (const collection of ["subjects", "studyRecords", "reviewTasks", "exercises"]) {
+    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises"]) {
       const ids = (state[collection] ?? []).map((item) => Number(item.id) || 0);
       state.nextIds[collection] = Math.max(0, ...ids) + 1;
     }
@@ -369,20 +363,11 @@ function createBrowserStore() {
   const store = {
     async init() {
       const state = readState();
-      if (!state.seeded) {
-        seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
-        state.seeded = true;
-      }
       writeState(state);
     },
 
     subjects: {
       async ensureColumns() {},
-      async seedInitial() {
-        const state = readState();
-        seedNamedRows(state, "subjects", initialSubjects, "o nome da disciplina");
-        writeState(state);
-      },
       async getAll() {
         return [...readState().subjects].sort(sortByOrderAndName);
       },
@@ -422,31 +407,33 @@ function createBrowserStore() {
       },
       async deleteCascade(id) {
         const state = readState();
-        const studyIds = new Set(state.studyRecords.filter((record) => record.subjectId === id).map((record) => record.id));
-        state.exercises = (state.exercises ?? []).filter((e) => !studyIds.has(e.studyRecordId));
-        state.reviewTasks = state.reviewTasks.filter((task) => !studyIds.has(task.studyRecordId));
-        state.studyRecords = state.studyRecords.filter((record) => record.subjectId !== id);
+        const unitIds = new Set(
+          state.learningUnits.filter((u) => u.subjectId === id).map((u) => u.id),
+        );
+        state.exercises = (state.exercises ?? []).filter((e) => !unitIds.has(e.unitId));
+        state.reviewTasks = state.reviewTasks.filter((task) => !unitIds.has(task.unitId));
+        state.learningUnits = state.learningUnits.filter((u) => u.subjectId !== id);
         state.subjects = state.subjects.filter((subject) => subject.id !== id);
         writeState(state);
         return true;
       },
     },
 
-    studyRecords: {
+    learningUnits: {
       async ensureColumns() {},
       async getAll() {
-        return [...readState().studyRecords].sort(
+        return [...readState().learningUnits].sort(
           (a, b) => b.studyDate.localeCompare(a.studyDate) || b.id - a.id,
         );
       },
       async getByDate(dateStr) {
-        return readState().studyRecords
+        return readState().learningUnits
           .filter((record) => record.studyDate === dateStr)
           .sort((a, b) => a.id - b.id);
       },
       async update(id, fields) {
         const state = readState();
-        const record = state.studyRecords.find((item) => item.id === id);
+        const record = state.learningUnits.find((item) => item.id === id);
         if (!record) return null;
 
         if (Object.hasOwn(fields, "sourceText")) {
@@ -455,8 +442,8 @@ function createBrowserStore() {
         if (Object.hasOwn(fields, "studyDate")) {
           record.studyDate = String(fields.studyDate ?? "").trim();
         }
-        if (Object.hasOwn(fields, "content")) {
-          record.content = String(fields.content ?? "").trim();
+        if (Object.hasOwn(fields, "title")) {
+          record.title = String(fields.title ?? "").trim();
         }
         if (Object.hasOwn(fields, "summaryBody")) {
           const v = fields.summaryBody;
@@ -471,16 +458,16 @@ function createBrowserStore() {
         assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
         const timestamp = nowIso();
         const record = {
-          id: nextId(state, "studyRecords"),
+          id: nextId(state, "learningUnits"),
           subjectId: data.subjectId,
           sourceText: String(data.sourceText ?? "").trim(),
           studyDate: data.studyDate,
-          content: String(data.content ?? "").trim(),
+          title: String(data.title ?? "").trim(),
           summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
-        state.studyRecords.push(record);
+        state.learningUnits.push(record);
         writeState(state);
         return record;
       },
@@ -489,20 +476,20 @@ function createBrowserStore() {
         assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
         const timestamp = nowIso();
         const record = {
-          id: nextId(state, "studyRecords"),
+          id: nextId(state, "learningUnits"),
           subjectId: data.subjectId,
           sourceText: String(data.sourceText ?? "").trim(),
           studyDate: data.studyDate,
-          content: String(data.content ?? "").trim(),
+          title: String(data.title ?? "").trim(),
           summaryBody: data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
-        state.studyRecords.push(record);
+        state.learningUnits.push(record);
         for (const task of tasks) {
           state.reviewTasks.push({
             id: nextId(state, "reviewTasks"),
-            studyRecordId: record.id,
+            unitId: record.id,
             reviewNumber: task.reviewNumber,
             dueDate: task.dueDate,
             completedAt: task.completedAt ?? null,
@@ -576,19 +563,24 @@ function createBrowserStore() {
       },
     },
 
+    // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
+    // Evidence of study and review outcomes belong in learning_units and review_tasks.
+    // hint_text is pedagogical context only — never citation or provenance data.
     exercises: {
-      async create(studyRecordId, { questionText, answerText, hintText, position } = {}) {
+      async create(unitId, { questionText, answerText, hintText, position, provenance } = {}) {
         const q = String(questionText ?? "").trim();
         if (!q) throw new Error("Informe o enunciado do exercício.");
+        validateProvenance(provenance);
         const state = readState();
         const timestamp = nowIso();
         const exercise = {
           id: nextId(state, "exercises"),
-          studyRecordId,
+          unitId,
           questionText: q,
           answerText: String(answerText ?? "").trim(),
           hintText: hintText != null ? String(hintText).trim() || null : null,
           position: Number(position) || 0,
+          provenance,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -596,9 +588,9 @@ function createBrowserStore() {
         writeState(state);
         return exercise;
       },
-      async getAll(studyRecordId) {
+      async getAll(unitId) {
         return readState().exercises
-          .filter((e) => e.studyRecordId === studyRecordId)
+          .filter((e) => e.unitId === unitId)
           .sort((a, b) => (a.position - b.position) || (a.id - b.id));
       },
       async update(id, fields) {
@@ -619,6 +611,10 @@ function createBrowserStore() {
         }
         if (Object.hasOwn(fields, "position")) {
           exercise.position = Number(fields.position) || 0;
+        }
+        if (Object.hasOwn(fields, "provenance")) {
+          validateProvenance(fields.provenance);
+          exercise.provenance = fields.provenance;
         }
         exercise.updatedAt = nowIso();
         writeState(state);
@@ -649,8 +645,9 @@ function createBrowserStore() {
     async exportAll() {
       const state = readState();
       return {
+        schemaVersion: SCHEMA_VERSION,
         subjects: state.subjects,
-        studyRecords: state.studyRecords,
+        learningUnits: state.learningUnits,
         reviewTasks: state.reviewTasks,
         exercises: state.exercises ?? [],
         settings: state.settings,
@@ -660,20 +657,22 @@ function createBrowserStore() {
     async importAll(data) {
       assertImportData(data);
       const state = emptyState();
-      state.subjects = data.subjects.map((row) => mapEntityForImport(row, state, "subjects", "o nome da disciplina"));
-      state.studyRecords = data.studyRecords.map((row) => ({
+      state.subjects = data.subjects.map((row) =>
+        mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
+      );
+      state.learningUnits = data.learningUnits.map((row) => ({
         id: row.id,
         subjectId: row.subjectId ?? row.subject_id,
         sourceText: row.sourceText ?? row.source_text ?? '',
         studyDate: row.studyDate ?? row.study_date,
-        content: row.content,
+        title: row.title,
         summaryBody: row.summaryBody ?? row.summary_body ?? null,
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
       state.reviewTasks = data.reviewTasks.map((row) => ({
         id: row.id,
-        studyRecordId: row.studyRecordId ?? row.study_record_id,
+        unitId: row.unitId ?? row.unit_id,
         reviewNumber: row.reviewNumber ?? row.review_number,
         dueDate: row.dueDate ?? row.due_date,
         completedAt: row.completedAt ?? row.completed_at ?? null,
@@ -688,11 +687,12 @@ function createBrowserStore() {
       }));
       state.exercises = (Array.isArray(data.exercises) ? data.exercises : []).map((row) => ({
         id: row.id,
-        studyRecordId: row.studyRecordId ?? row.study_record_id,
+        unitId: row.unitId ?? row.unit_id,
         questionText: row.questionText ?? row.question_text ?? "",
         answerText: row.answerText ?? row.answer_text ?? "",
         hintText: row.hintText ?? row.hint_text ?? null,
         position: row.position ?? 0,
+        provenance: row.provenance,
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
@@ -735,9 +735,9 @@ export const DB = {
           await database.execute(statement, params);
         }
         await DB.subjects.ensureColumns();
-        await DB.subjects.seedInitial();
-        await DB.studyRecords.ensureColumns();
+        await DB.learningUnits.ensureColumns();
         await DB.reviewTasks.ensureColumns();
+        await DB.exercises.ensureColumns();
 
         return DB;
       })().catch((error) => {
@@ -764,20 +764,6 @@ export const DB = {
           'ALTER TABLE subjects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
         );
       }
-    },
-
-    async seedInitial() {
-      const rows = await requireDatabase().select('SELECT id FROM subjects LIMIT 1');
-      if (rows.length > 0) return;
-
-      await ensureNamedRows(
-        'subjects',
-        [
-          'Anatomia', 'Fisiologia', 'Bioquímica', 'Farmacologia',
-          'Patologia', 'Clínica Médica', 'Cirurgia', 'Pediatria',
-        ],
-        'o nome da disciplina',
-      );
     },
 
     async getAll() {
@@ -844,14 +830,21 @@ export const DB = {
       await invoke('execute_sqlite_transaction', {
         statements: [
           {
-            query: `DELETE FROM review_tasks
-              WHERE study_record_id IN (
-                SELECT id FROM study_records WHERE subject_id = $1
+            query: `DELETE FROM exercises
+              WHERE unit_id IN (
+                SELECT id FROM learning_units WHERE subject_id = $1
               )`,
             values: [id],
           },
           {
-            query: 'DELETE FROM study_records WHERE subject_id = $1',
+            query: `DELETE FROM review_tasks
+              WHERE unit_id IN (
+                SELECT id FROM learning_units WHERE subject_id = $1
+              )`,
+            values: [id],
+          },
+          {
+            query: 'DELETE FROM learning_units WHERE subject_id = $1',
             values: [id],
           },
           {
@@ -864,51 +857,53 @@ export const DB = {
     },
   },
 
-  studyRecords: {
+  learningUnits: {
     async ensureColumns() {
-      const columns = await requireDatabase().select('PRAGMA table_info(study_records)');
-      const names = new Set(columns.map((column) => column.name));
+      const tables = await requireDatabase().select(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
+      const tableNames = new Set(tables.map((t) => t.name));
+
+      if (!tableNames.has('learning_units') && tableNames.has('study_records')) {
+        await requireDatabase().execute('ALTER TABLE study_records RENAME TO learning_units');
+      }
+
+      const columns = await requireDatabase().select('PRAGMA table_info(learning_units)');
+      const names = new Set(columns.map((c) => c.name));
+
+      if (names.has('content') && !names.has('title')) {
+        await requireDatabase().execute('ALTER TABLE learning_units RENAME COLUMN content TO title');
+      }
       if (!names.has('summary_body')) {
-        await requireDatabase().execute(
-          'ALTER TABLE study_records ADD COLUMN summary_body TEXT',
-        );
+        await requireDatabase().execute('ALTER TABLE learning_units ADD COLUMN summary_body TEXT');
       }
       if (!names.has('source_text')) {
         await requireDatabase().execute(
-          "ALTER TABLE study_records ADD COLUMN source_text TEXT NOT NULL DEFAULT ''",
+          "ALTER TABLE learning_units ADD COLUMN source_text TEXT NOT NULL DEFAULT ''",
         );
-        if (names.has('source_id')) {
-          await requireDatabase().execute(
-            `UPDATE study_records
-             SET source_text = COALESCE(
-               (SELECT name FROM sources WHERE id = study_records.source_id), ''
-             )
-             WHERE source_text = ''`,
-          );
-        }
       }
     },
 
     async getAll() {
       const rows = await requireDatabase().select(
-        'SELECT * FROM study_records ORDER BY study_date DESC, id DESC',
+        'SELECT * FROM learning_units ORDER BY study_date DESC, id DESC',
       );
-      return rows.map(mapStudyRecord);
+      return rows.map(mapLearningUnit);
     },
 
     async getByDate(dateStr) {
       const rows = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE study_date = $1 ORDER BY id ASC',
+        'SELECT * FROM learning_units WHERE study_date = $1 ORDER BY id ASC',
         [dateStr],
       );
-      return rows.map(mapStudyRecord);
+      return rows.map(mapLearningUnit);
     },
 
     async update(id, fields) {
       const columns = {
         sourceText: ["source_text", (value) => String(value ?? "").trim()],
         studyDate: ["study_date", (value) => value],
-        content: ["content", (value) => String(value ?? "").trim()],
+        title: ["title", (value) => String(value ?? "").trim()],
         summaryBody: ["summary_body", (value) => (value != null ? String(value).trim() || null : null)],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
@@ -922,39 +917,39 @@ export const DB = {
       assignments.push(`updated_at = $${entries.length + 1}`);
 
       await requireDatabase().execute(
-        `UPDATE study_records SET ${assignments.join(", ")}
+        `UPDATE learning_units SET ${assignments.join(", ")}
          WHERE id = $${entries.length + 2}`,
         values,
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE id = $1',
+        'SELECT * FROM learning_units WHERE id = $1',
         [id],
       );
-      return row ? mapStudyRecord(row) : null;
+      return row ? mapLearningUnit(row) : null;
     },
 
     async create(data) {
       await assertActiveSubject(data.subjectId);
       const timestamp = nowIso();
       const result = await requireDatabase().execute(
-        `INSERT INTO study_records
-          (subject_id, source_text, study_date, content, summary_body, created_at, updated_at)
+        `INSERT INTO learning_units
+          (subject_id, source_text, study_date, title, summary_body, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           data.subjectId,
           String(data.sourceText ?? '').trim(),
           data.studyDate,
-          String(data.content ?? '').trim(),
+          String(data.title ?? '').trim(),
           data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
           timestamp,
           timestamp,
         ],
       );
       const [row] = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE id = $1',
+        'SELECT * FROM learning_units WHERE id = $1',
         [result.lastInsertId],
       );
-      return mapStudyRecord(row);
+      return mapLearningUnit(row);
     },
 
     async createWithReviews(data, tasks) {
@@ -984,20 +979,20 @@ export const DB = {
           { length: 11 },
           (_, fieldIndex) => `$${offset + fieldIndex + 1}`,
         );
-        return `((SELECT MAX(id) FROM study_records), ${fields.join(', ')})`;
+        return `((SELECT MAX(id) FROM learning_units), ${fields.join(', ')})`;
       });
 
       const results = await invoke('execute_sqlite_transaction', {
         statements: [
           {
-            query: `INSERT INTO study_records
-              (subject_id, source_text, study_date, content, summary_body, created_at, updated_at)
+            query: `INSERT INTO learning_units
+              (subject_id, source_text, study_date, title, summary_body, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             values: [
               data.subjectId,
               String(data.sourceText ?? '').trim(),
               data.studyDate,
-              String(data.content ?? '').trim(),
+              String(data.title ?? '').trim(),
               data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
               timestamp,
               timestamp,
@@ -1005,7 +1000,7 @@ export const DB = {
           },
           {
             query: `INSERT INTO review_tasks
-              (study_record_id, review_number, due_date, completed_at,
+              (unit_id, review_number, due_date, completed_at,
                review_done, questions_done, questions_count, correct_count,
                score_percent, comment, created_at, updated_at)
              VALUES ${reviewPlaceholders.join(', ')}`,
@@ -1014,18 +1009,22 @@ export const DB = {
         ],
       });
       const [row] = await requireDatabase().select(
-        'SELECT * FROM study_records WHERE id = $1',
+        'SELECT * FROM learning_units WHERE id = $1',
         [results[0].lastInsertId],
       );
-      return mapStudyRecord(row);
+      return mapLearningUnit(row);
     },
-
   },
 
   reviewTasks: {
     async ensureColumns() {
       const columns = await requireDatabase().select("PRAGMA table_info(review_tasks)");
       const names = new Set(columns.map((column) => column.name));
+      if (names.has('study_record_id') && !names.has('unit_id')) {
+        await requireDatabase().execute(
+          'ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id',
+        );
+      }
       if (!names.has("algorithm")) {
         await requireDatabase().execute(
           "ALTER TABLE review_tasks ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'legacy'",
@@ -1048,7 +1047,7 @@ export const DB = {
       const placeholders = tasks.map((task, taskIndex) => {
         const offset = taskIndex * 12;
         values.push(
-          task.studyRecordId,
+          task.unitId,
           task.reviewNumber,
           task.dueDate,
           task.completedAt ?? null,
@@ -1066,7 +1065,7 @@ export const DB = {
 
       await requireDatabase().execute(
         `INSERT INTO review_tasks
-          (study_record_id, review_number, due_date, completed_at,
+          (unit_id, review_number, due_date, completed_at,
            review_done, questions_done, questions_count, correct_count,
            score_percent, comment, created_at, updated_at)
          VALUES ${placeholders.join(", ")}`,
@@ -1118,7 +1117,7 @@ export const DB = {
 
     async update(id, fields) {
       const columns = {
-        studyRecordId: ["study_record_id", (value) => value],
+        unitId: ["unit_id", (value) => value],
         reviewNumber: ["review_number", (value) => value],
         dueDate: ["due_date", (value) => value],
         completedAt: ["completed_at", (value) => value],
@@ -1176,16 +1175,45 @@ export const DB = {
     },
   },
 
+  // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
+  // Evidence of study and review outcomes belong in learning_units and review_tasks.
+  // hint_text is pedagogical context only — never citation or provenance data.
   exercises: {
-    async create(studyRecordId, { questionText, answerText, hintText, position } = {}) {
+    async ensureColumns() {
+      const columns = await requireDatabase().select('PRAGMA table_info(exercises)');
+      const names = new Set(columns.map((c) => c.name));
+      if (names.has('study_record_id') && !names.has('unit_id')) {
+        await requireDatabase().execute(
+          'ALTER TABLE exercises RENAME COLUMN study_record_id TO unit_id',
+        );
+      }
+      if (!names.has('provenance')) {
+        // Migration default: exercises created before this migration are treated as MANUAL.
+        await requireDatabase().execute(
+          "ALTER TABLE exercises ADD COLUMN provenance TEXT NOT NULL DEFAULT 'MANUAL'",
+        );
+      }
+    },
+
+    async create(unitId, { questionText, answerText, hintText, position, provenance } = {}) {
       const q = String(questionText ?? "").trim();
       if (!q) throw new Error("Informe o enunciado do exercício.");
+      validateProvenance(provenance);
       const timestamp = nowIso();
       const result = await requireDatabase().execute(
         `INSERT INTO exercises
-          (study_record_id, question_text, answer_text, hint_text, position, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [studyRecordId, q, String(answerText ?? "").trim(), hintText != null ? String(hintText).trim() || null : null, Number(position) || 0, timestamp, timestamp],
+          (unit_id, question_text, answer_text, hint_text, position, provenance, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          unitId,
+          q,
+          String(answerText ?? "").trim(),
+          hintText != null ? String(hintText).trim() || null : null,
+          Number(position) || 0,
+          provenance,
+          timestamp,
+          timestamp,
+        ],
       );
       const [row] = await requireDatabase().select(
         "SELECT * FROM exercises WHERE id = $1",
@@ -1194,20 +1222,25 @@ export const DB = {
       return mapExercise(row);
     },
 
-    async getAll(studyRecordId) {
+    async getAll(unitId) {
       const rows = await requireDatabase().select(
-        "SELECT * FROM exercises WHERE study_record_id = $1 ORDER BY position ASC, id ASC",
-        [studyRecordId],
+        "SELECT * FROM exercises WHERE unit_id = $1 ORDER BY position ASC, id ASC",
+        [unitId],
       );
       return rows.map(mapExercise);
     },
 
     async update(id, fields) {
       const columns = {
-        questionText: ["question_text", (value) => { const q = String(value ?? "").trim(); if (!q) throw new Error("Informe o enunciado do exercício."); return q; }],
+        questionText: ["question_text", (value) => {
+          const q = String(value ?? "").trim();
+          if (!q) throw new Error("Informe o enunciado do exercício.");
+          return q;
+        }],
         answerText: ["answer_text", (value) => String(value ?? "").trim()],
         hintText: ["hint_text", (value) => (value != null ? String(value).trim() || null : null)],
         position: ["position", (value) => Number(value) || 0],
+        provenance: ["provenance", (value) => { validateProvenance(value); return value; }],
       };
       const entries = Object.entries(fields).filter(([key]) => columns[key]);
       if (entries.length === 0) throw new Error("Nenhum campo válido para atualizar.");
@@ -1266,15 +1299,17 @@ export const DB = {
   },
 
   async exportAll() {
-    const [subjects, sources, studyRecords, reviewTasks, exercises, settings] = await Promise.all([
+    const [subjects, learningUnits, reviewTasks, exercises, settings] = await Promise.all([
       DB.subjects.getAll(),
-      DB.sources.getAll(),
-      DB.studyRecords.getAll(),
+      DB.learningUnits.getAll(),
       DB.reviewTasks.getAll(),
-      requireDatabase().select("SELECT * FROM exercises ORDER BY study_record_id, position ASC, id ASC").then((rows) => rows.map(mapExercise)).catch(() => []),
+      requireDatabase()
+        .select("SELECT * FROM exercises ORDER BY unit_id, position ASC, id ASC")
+        .then((rows) => rows.map(mapExercise))
+        .catch(() => []),
       DB.settings.get(),
     ]);
-    return { subjects, sources, studyRecords, reviewTasks, exercises, settings };
+    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, settings };
   },
 
   async importAll(data) {

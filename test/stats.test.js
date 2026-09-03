@@ -7,7 +7,7 @@ test("Stats.calculate usa média ponderada por disciplina", () => {
   const reviewTasks = [
     {
       id: 1,
-      studyRecordId: 10,
+      unitId: 10,
       dueDate: "2026-06-27",
       reviewDone: true,
       questionsDone: true,
@@ -18,7 +18,7 @@ test("Stats.calculate usa média ponderada por disciplina", () => {
     },
     {
       id: 2,
-      studyRecordId: 11,
+      unitId: 11,
       dueDate: "2026-06-27",
       reviewDone: true,
       questionsDone: true,
@@ -28,13 +28,13 @@ test("Stats.calculate usa média ponderada por disciplina", () => {
       completedAt: "2026-06-27T11:00:00.000Z",
     },
   ];
-  const studyRecords = [
+  const learningUnits = [
     { id: 10, subjectId: 7 },
     { id: 11, subjectId: 7 },
   ];
   const subjects = [{ id: 7, name: "Disciplina X" }];
 
-  const stats = Stats.calculate(reviewTasks, studyRecords, subjects, "2026-06-27");
+  const stats = Stats.calculate(reviewTasks, learningUnits, subjects, "2026-06-27");
 
   assert.equal(stats.totalQuestions, 100);
   assert.equal(stats.totalCorrect, 60);
@@ -47,7 +47,7 @@ test("Stats.calculate só cobra revisões não feitas que vencem hoje", () => {
   const reviewTasks = [
     {
       id: 1,
-      studyRecordId: 10,
+      unitId: 10,
       dueDate: "2026-06-27",
       reviewDone: false,
       questionsDone: false,
@@ -58,7 +58,7 @@ test("Stats.calculate só cobra revisões não feitas que vencem hoje", () => {
     },
     {
       id: 2,
-      studyRecordId: 10,
+      unitId: 10,
       dueDate: "2026-06-26",
       reviewDone: false,
       questionsDone: false,
@@ -69,7 +69,7 @@ test("Stats.calculate só cobra revisões não feitas que vencem hoje", () => {
     },
     {
       id: 3,
-      studyRecordId: 10,
+      unitId: 10,
       dueDate: "2026-06-28",
       reviewDone: false,
       questionsDone: false,
@@ -90,7 +90,7 @@ test("Stats.calculate com subjects vazio não lança erro e retorna estrutura v�
   const reviewTasks = [
     {
       id: 1,
-      studyRecordId: 1,
+      unitId: 1,
       dueDate: "2026-09-02",
       reviewDone: false,
       questionsDone: false,
@@ -113,7 +113,7 @@ test("Stats.calculate com todas as revisões feitas retorna pending e overdue ze
   const reviewTasks = [
     {
       id: 1,
-      studyRecordId: 1,
+      unitId: 1,
       dueDate: "2026-09-01",
       reviewDone: true,
       questionsDone: false,
