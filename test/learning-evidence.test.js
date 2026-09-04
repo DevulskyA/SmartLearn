@@ -330,6 +330,92 @@ test("importAll schemaVersion 0 (não suportado) lança erro fail-closed", async
   );
 });
 
+// --- P0-3: import content validation (INVALID V3 → FAIL, existing data preserved) ---
+
+test("P0-3: importAll rejeita unit com subject inexistente (referência quebrada)", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 1, name: "Fisiologia", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [{ id: 1, subjectId: 999 /* não existe */, studyDate: "2026-01-01", title: "Homeostase", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    reviewTasks: [],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /subject inexistente/i);
+});
+
+test("P0-3: importAll rejeita reviewTask com unit inexistente", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [{ id: 1, subjectId: 1, studyDate: "2026-01-01", title: "Homeostase", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    reviewTasks: [{ id: 1, unitId: 999 /* não existe */, reviewNumber: 1, dueDate: "2026-01-08", reviewDone: false, questionsDone: false, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /unit inexistente/i);
+});
+
+test("P0-3: importAll rejeita learningEvidence REVIEW sem reviewTaskId", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [{ id: 1, subjectId: 1, studyDate: "2026-01-01", title: "Homeostase", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    reviewTasks: [],
+    learningEvidence: [{ unitId: 1, evidenceDate: "2026-01-01", context: "REVIEW", questionsCount: 10, correctCount: 8, reviewTaskId: null }],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /REVIEW requer reviewTaskId/i);
+});
+
+test("P0-3: importAll rejeita learningEvidence REVIEW com task de unidade diferente", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [
+      { id: 1, subjectId: 1, studyDate: "2026-01-01", title: "Cap 1", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+      { id: 2, subjectId: 1, studyDate: "2026-01-02", title: "Cap 2", sourceText: "", createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" },
+    ],
+    reviewTasks: [{ id: 1, unitId: 1, reviewNumber: 1, dueDate: "2026-01-08", reviewDone: false, questionsDone: false, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    learningEvidence: [{ unitId: 2, evidenceDate: "2026-01-08", context: "REVIEW", questionsCount: 10, correctCount: 8, reviewTaskId: 1 /* task pertence à unit 1, não unit 2 */ }],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /unidade diferente/i);
+});
+
+test("P0-3: importAll rejeita IDs de subject duplicados", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [
+      { id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 },
+      { id: 1, name: "Farmaco", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 1 },
+    ],
+    learningUnits: [],
+    reviewTasks: [],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /duplicado/i);
+});
+
+test("P0-3: importAll inválido não altera dados existentes (fail-closed preserves state)", async () => {
+  const subject = await makeSubject("Existente");
+  const unit = await makeUnit(subject.id);
+  const before = await DB.learningUnits.getAll();
+  assert.equal(before.length, 1);
+
+  // Try to import a backup with a broken reference
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 99, name: "Novo", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [{ id: 99, subjectId: 888 /* não existe */, studyDate: "2026-01-01", title: "X", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    reviewTasks: [],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /subject inexistente/i);
+
+  // Existing data must be intact
+  const after = await DB.learningUnits.getAll();
+  assert.equal(after.length, 1, "existing unit must survive after failed import");
+  assert.equal(after[0].id, unit.id, "existing unit id must be preserved");
+});
+
 // --- exportAll schemaVersion 3 com learningEvidence ---
 
 test("exportAll inclui schemaVersion 3 e learningEvidence", async () => {
