@@ -1,5 +1,13 @@
 import { getState, TREND_DELTA_MIN } from './performance-thresholds.js';
 
+function getLocalDateValue() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function sumField(arr, field) {
   return arr.reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
 }
@@ -51,7 +59,7 @@ export function unitTrend(scoresSequence, minN = 3, threshold = 0.05) {
 
 export const Analytics = {
   // Returns performance summary per subject
-  bySubject(evidence, units, subjects, today = new Date().toISOString().slice(0, 10)) {
+  bySubject(evidence, units, subjects, today = getLocalDateValue()) {
     const unitsById = new Map(units.map((u) => [u.id, u]));
     const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
