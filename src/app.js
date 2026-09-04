@@ -1083,16 +1083,27 @@ export async function renderStatsBySubject() {
   }
 }
 
-function getTrackingState(unitId, allTasks, today) {
+function getTrackingState(unitId, allTasks, allEvidence, today) {
   const tasks = allTasks.filter((t) => t.unitId === unitId);
-  if (tasks.length === 0) return "SEM_EVIDENCIA";
-  const overdue = tasks.filter((t) => !t.reviewDone && t.dueDate < today);
-  if (overdue.length > 0) return "ATRASADO";
-  const pending = tasks.filter((t) => !t.reviewDone).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  if (pending.length > 0) {
-    const days = getDaysBetween(today, pending[0].dueDate);
-    return days <= 7 ? "EM_REVISAO" : "EM_ESTUDO";
-  }
+  const evidence = allEvidence.filter((e) => e.unitId === unitId);
+
+  // 1. ATRASADO wins over everything, including SEM_EVIDENCIA.
+  if (tasks.some((t) => !t.reviewDone && t.dueDate < today)) return "ATRASADO";
+
+  // 2. No evidence at all → student has not yet demonstrated any knowledge.
+  if (evidence.length === 0) return "SEM_EVIDENCIA";
+
+  // 3. Task due exactly today: action required now.
+  if (tasks.some((t) => !t.reviewDone && t.dueDate === today)) return "EM_REVISAO";
+
+  // Beyond: has evidence, no overdue, no task due today.
+  const hasReviewEvidence = evidence.some((e) => e.context === "REVIEW");
+  const hasFuturePending = tasks.some((t) => !t.reviewDone && t.dueDate > today);
+
+  // 4. Has evidence but no review evidence yet and has an upcoming task.
+  if (!hasReviewEvidence && hasFuturePending) return "EM_ESTUDO";
+
+  // 5. Has evidence, no overdue/today, has review evidence or no pending tasks.
   return "EM_DIA";
 }
 
@@ -1136,7 +1147,7 @@ export async function renderTracking() {
 
   let filtered = units.filter((u) => {
     if (subjFilter && String(u.subjectId) !== subjFilter) return false;
-    if (stateFilter && getTrackingState(u.id, allTasks, today) !== stateFilter) return false;
+    if (stateFilter && getTrackingState(u.id, allTasks, allEvidence, today) !== stateFilter) return false;
     return true;
   });
   filtered.sort((a, b) => b.studyDate.localeCompare(a.studyDate));
@@ -1146,7 +1157,7 @@ export async function renderTracking() {
 
   for (const unit of filtered) {
     const subject = subjectsById.get(unit.subjectId);
-    const state = getTrackingState(unit.id, allTasks, today);
+    const state = getTrackingState(unit.id, allTasks, allEvidence, today);
     const evidence = evidenceByUnitId.get(unit.id) ?? [];
     const tasks = allTasks.filter((t) => t.unitId === unit.id);
     const doneTasks = tasks.filter((t) => t.reviewDone);

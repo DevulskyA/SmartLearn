@@ -197,20 +197,23 @@ O redesign visual adapta novos tokens a todos os 5 temas — não reduz para ape
 | AC-ACOMP-04 | Filtros: disciplina, estado, período |
 | AC-ACOMP-05 | Ação rápida: abrir unidade, adicionar Resumo Mestre, ir para revisão pendente |
 
-**Definição dos estados derivados (derivados de `getTrackingState` em `app.js`, autoridade de código):**
+**Definição dos estados derivados — contrato canônico (HUMAN_GATE: TRACKING_SEMANTICS_DECISION aprovado 2026-09-04):**
 
-Estados avaliados em ordem de prioridade — o primeiro critério satisfeito determina o estado.
+Estados avaliados em ordem de prioridade — o primeiro critério satisfeito determina o estado. Spec é a autoridade; código implementa a spec.
 
-| # | Estado | Condição | Implementação |
-|---|--------|----------|---------------|
-| 1 | `SEM_EVIDENCIA` | Nenhuma `review_task` associada à unidade (`tasks.length === 0`) | Cobre unidades sem revisões geradas; nome histórico — não verifica `learning_evidence` diretamente |
-| 2 | `ATRASADO` | ≥1 `review_task` pendente (`reviewDone = false`) com `dueDate < hoje` | Qualquer revisão vencida e não concluída |
-| 3 | `EM_REVISAO` | Nenhuma atrasada; próxima revisão pendente com `dueDate` a ≤7 dias de hoje (inclusive hoje = 0 dias) | `getDaysBetween(hoje, proxima.dueDate) <= 7` |
-| 4 | `EM_ESTUDO` | Nenhuma atrasada; próxima revisão pendente com `dueDate` a ≥8 dias de hoje | `getDaysBetween(hoje, proxima.dueDate) >= 8` |
-| 5 | `EM_DIA` | Todas as revisões concluídas (`reviewDone = true` para todas) — nenhuma pendente | Estado residual após todas as 16 revisões do schedule |
+| # | Estado | Condição |
+|---|--------|----------|
+| 1 | `ATRASADO` | ≥1 `review_task` pendente (`reviewDone = false`) com `dueDate < hoje`. Vence `SEM_EVIDENCIA`: atraso exige ação imediata mesmo sem `learning_evidence`. |
+| 2 | `SEM_EVIDENCIA` | Nenhuma `learning_evidence` para a unidade. A unidade ainda não demonstrou conhecimento. |
+| 3 | `EM_REVISAO` | Não está atrasado; existe ≥1 `review_task` pendente com `dueDate == hoje`. |
+| 4 | `EM_ESTUDO` | Existe `learning_evidence`; não existe evidência com `context = REVIEW`; não existe revisão atrasada ou para hoje; existe ≥1 `review_task` futura pendente (`dueDate > hoje`). |
+| 5 | `EM_DIA` | Existe `learning_evidence`; não existe revisão atrasada ou para hoje; e: (a) existe ≥1 `learning_evidence` com `context = REVIEW`, ou (b) não existe `review_task` pendente. |
 
-**Nota de implementação:** `getDaysBetween(a, b)` = `Math.round((toUTC(b) - toUTC(a)) / 86400000)` — calendário UTC.
-**Nota de nomenclatura:** `SEM_EVIDENCIA` verifica review_tasks, não `learning_evidence`. O nome reflete intenção histórica; o comportamento real é "sem revisões registradas".
+**Invariantes:**
+- A regra de ≤7 / ≥8 dias de proximidade **não existe** neste contrato. Proximidade de data não altera estado.
+- `review_tasks` indicam **quando** agir; `learning_evidence` indica **o que** o aluno já demonstrou.
+- O contrato permanece válido quando o scheduler legado for substituído por FSRS ou qualquer scheduler adaptativo.
+- `EM_REVISAO` só ocorre quando a task vence **exatamente hoje** (não amanhã, não em 7 dias).
 
 ---
 

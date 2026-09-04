@@ -79,17 +79,9 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ### DEBT-008 — SPEC_PRECISION_GAP: tracking state table in spec vs AC mismatch (AC-ACOMP-03)
 
-- **Status**: resolved (2026-09-04)
-- **Problem**: The spec table in `smartlearn-ui-analytics-vnext/spec.md` defines 4 tracking states (`NOVO`, `EM_DIA`, `EM_ESTUDO`, `ATRASADO`). AC-ACOMP-03 refers to "5 tracking states" and mentions `EM_REVISAO`, which is implemented in code (`app.js` `getTrackingState`) as the state for units with a pending review task within 7 days, but is not defined in the spec table. Additionally, the code's `EM_DIA` and `EM_ESTUDO` semantics differ from what the spec implies — `EM_DIA` requires no pending review ≤7 days, `EM_ESTUDO` applies to units with registration in last 30 days. The spec does not document these thresholds.
-- **Origin**: SPEC_PRECISION_GAP identified during pre-PR hardening pass, 2026-09-04
-- **Risk**: Any contributor reading the spec builds a different mental model than the code enforces. Future changes to tracking state logic will lack a spec contract to validate against.
-- **Impact**: Spec accuracy; does not block runtime behavior (code is source of truth).
-- **Affected components**: `.specs/features/smartlearn-ui-analytics-vnext/spec.md`, `src/app.js` (`getTrackingState`), `src/scheduler.js`
-- **Dependencies**: HUMAN_GATE: Requires product decision on whether `EM_REVISAO` is a distinct state, and what the threshold semantics for `EM_DIA`/`EM_ESTUDO` should officially be.
-- **Resolution criterion**: Spec table updated with all 5 states and their explicit threshold conditions (30-day window, 7-day window). AC-ACOMP-03 references the 5-state table unambiguously.
-- **Priority**: P2 (bloqueia precisão do spec; não bloqueia runtime)
-- **Owner**: unassigned
-- **Evidence**: Pre-PR hardening audit 2026-09-04; `src/app.js` `getTrackingState` function
+- **Status**: CLOSED — RESOLVED (2026-09-04, Round 2 Audit correction)
+- **Resolution**: HUMAN_GATE: TRACKING_SEMANTICS_DECISION aprovado pelo produto (2026-09-04). Spec canônica atualizada com 5 estados e contrato determinístico sem regras arbitrárias de janela de dias. Implementação em `src/app.js` `getTrackingState` corrigida para seguir a spec. Spec é a autoridade; "autoridade de código" removida.
+- **Evidence**: `.specs/features/smartlearn-ui-analytics-vnext/spec.md` seção AC-ACOMP-03 (contrato canônico 2026-09-04)
 
 ---
 
@@ -106,6 +98,19 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Priority**: P3 (does not block shipping; blocks formal TLC certification only)
 - **Owner**: unassigned
 - **Evidence**: PRE-UAT sanity pass 2026-09-04; `7f4d211` (commit noting UNVERIFIED)
+
+---
+
+### DEBT-010 — Rust test gap: P0-3 context↔reviewTaskId contract not covered at SQLite level
+
+- **Status**: open
+- **Problem**: The P0-3 validation (`context REVIEW requires reviewTaskId`, `context != REVIEW must not have reviewTaskId`) exists in both BrowserStore and SQLite adapters in `db.js`. Node:test covers the BrowserStore path. No Rust test exercises the error branches of the SQLite `learningEvidence.create` path for P0-3.
+- **Origin**: INV-26 adversarial re-audit 2026-09-04. Code is identical in both adapters; risk is only accidental divergence on future edits.
+- **Risk**: If SQLite adapter loses lines 1596-1597 of `db.js`, no Rust test fails. Detection requires manual review or BrowserStore JS test (different code path).
+- **Impact**: Low — code is identical in both adapters; JS test does cover contract. Not blocking.
+- **Resolution criterion**: Add Rust test `learning_evidence_review_requires_task_id` that calls `completeReviewWithEvidence` without reviewTaskId and asserts error; add test `learning_evidence_non_review_must_not_have_task_id` for the inverse.
+- **Priority**: P3 (non-blocking)
+- **Owner**: unassigned
 
 ---
 
