@@ -263,6 +263,7 @@ function validateImportContent(normalized) {
     const q = t.questionsCount ?? t.questions_count;
     const c = t.correctCount ?? t.correct_count;
     if (q != null && Number(q) < 0) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem questionsCount negativo.');
+    if (c != null && q == null) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount sem questionsCount.');
     if (q != null && c != null && Number(c) > Number(q)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount > questionsCount.');
   }
 
