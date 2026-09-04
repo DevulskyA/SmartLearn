@@ -10,7 +10,7 @@
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
 HEAD_BEFORE: 753424c (fix(p0-3): validateImportContent — correctCount without questionsCount)
-HEAD_AFTER: (post P0-3 kill test commit)
+HEAD_AFTER: 8d63cc6 (fix(p1-6): all migration SQL from canonical JSON, ensureColumns fixed)
 REMOTE_PR: #3
 REMOTE_HEAD_KNOWN: 585d766d56ea576c362b6c4029adfdb559cf95cc
 PR_STATE: DRAFT / open / not merged
@@ -55,7 +55,7 @@ P1_CLOSED (all evidence executed):
 - P1-3: Resumo Mestre real edit + Ir para revisão routing (3d358e5) — DONE
 - P1-4: analytics 30-day exact windows (eb35fd2; 8 boundary tests) — DONE
 - P1-5: threshold authority (eb35fd2) — DONE
-- P1-6: canonical JSON source (8f3c849); schema-statements.json consumed by db.js + Rust sensor; kill test proven (2/11 Rust tests fail when JSON broken) — DONE
+- P1-6: CANONICAL_PRODUCTION_MIGRATION=PASS (104e158+8d63cc6); migration-main-to-vnext.json consumed by db.js (all migration SQL including ensureColumns) + Rust tests (load_migration_plan); kill test proven (2/11 Rust tests FAIL when JSON broken, restore→PASS); schema-statements.json also shared — DONE
 - P1-7: DEBT.md corrected (647503c); TLC_RUNTIME=UNAVAILABLE documented; $CLAUDE_SKILL_DIR="" verified — DONE
 - P1-8: WEB_REAL PASS; WINDOWS_BUILD+INSTALLER PASS; ANDROID_BUILD+ANDROID_REAL PASS; WINDOWS_REAL = HUMAN_GATE only
 
@@ -65,11 +65,15 @@ P0_CLOSED:
 - P0-3: validateImportContent (647503c + P0-3 kill test added 2026-09-04) — DONE
 - P0-4: BrowserStore seed guard (committed) — DONE
 
-FRESH_VERIFIER: EXECUTED on HEAD 753424c (2026-09-04)
-FRESH_VERIFIER_VERDICT: CONDITIONAL — CONFIRMED_BUGS=0; two coverage gaps identified
-FRESH_VERIFIER_GAPS_ADDRESSED:
-- Gap 1 (P0-3 kill test): test added → 139/139 PASS — CLOSED
-- Gap 2 (P1-6 kill test scope): 2/11 Rust tests use canonical JSON — accepted; sensor is real; narrower than implied but not invalid
+FRESH_VERIFIER: EXECUTED on HEAD 8d63cc6 (2026-09-04) — FINAL
+FRESH_VERIFIER_VERDICT: CONFIRMED_CLEAN — all 6 gates PASS; CONFIRMED_BUGS=0; no gaps
+FRESH_VERIFIER_GATES:
+- CANONICAL_PRODUCTION_MIGRATION: PASS (JSON+db.js+lib.rs all verified; zero hardcoded migration SQL)
+- JS_139: PASS (139/139)
+- Rust_11: PASS (11/11)
+- WEB_BUILD: PASS
+- P0-3_KILL_TEST: PASS
+- P0-1_ORDER: PASS
 
 TRACKING_CANONICAL:
 ATRASADO > SEM_EVIDENCIA > EM_REVISAO > EM_ESTUDO > EM_DIA
@@ -77,7 +81,7 @@ sem regra arbitrária de 7 dias
 
 EXTERNAL_ACTIONS_NOT_AUTHORIZED: push / PR update / merge / deploy
 
-MIGRATION_MAIN_TO_VNEXT: PASS (Rust test: main_to_vnext_migration_preserves_study_records; Android runtime confirmed migration ran)
+MIGRATION_MAIN_TO_VNEXT: PASS (canonical JSON authority: migration-main-to-vnext.json shared by db.js production + Rust tests; kill test: break JSON → 2 Rust tests FAIL; restore → 11/11 PASS; Android runtime confirmed migration ran)
 IMPORT_ROLLBACK: PASS (P0-3: importAll fail-closed test)
 DISCRIMINATION: 10 mutants killed (prior session) + P0-3 kill test (correctCount field mutation)
 BrowserStore_PARITY: PASS (WEB_REAL confirmed)
@@ -88,7 +92,7 @@ KNOWN_GAPS:
 
 REMOTE_ACTIONS_AUTHORIZED: NONE
 
-STOP_CONDITION: HUMAN_GATE: CORRECTION_ROUND_2_READY_FOR_EXTERNAL_AUDIT
+STOP_CONDITION: HUMAN_GATE: READY_FOR_DRAFT_PR_AUDIT_PUSH
 
 COMMITS:
 - 585d766 (remote base)
@@ -103,4 +107,5 @@ COMMITS:
 - e944c04 fix(p1-2)
 - 8f3c849 fix(p1-6,p1-2)
 - 753424c fix(p0-3)
-- HEAD fix(p0-3 kill test): P0-3 correctCount field mutation kill test (139/139)
+- 104e158 fix(p1-6): canonical migration JSON + db.js + Rust load_migration_plan
+- 8d63cc6 fix(p1-6): ensureColumns hardcoded SQL replaced with migrationPlan indices
