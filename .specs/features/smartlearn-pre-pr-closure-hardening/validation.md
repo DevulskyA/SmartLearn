@@ -230,11 +230,26 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 
 ---
 
+## Fresh Verifier — Independent Pass (2026-09-04)
+
+Second session, fresh context. Re-ran all gates without prior session state.
+
+| Gate | Result |
+|------|--------|
+| `node --test test/*.test.js` | PASS — 97/97 |
+| `cargo test` (src-tauri/) | PASS — 8/8 |
+| `npm run build` | PASS — 21 modules, 269ms, exit 0 |
+
+Confirmed: no test regressions from prior session. Build artifact clean.
+
+---
+
 ## Closure Declaration
 
 **Automated gate**: PASS (97 node:test, 8 cargo test, 2026-09-04)  
 **Build gate**: PASS (vite build — 21 modules, exit 0, 2026-09-04)  
 **Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
+**Fresh verifier**: PASS — independent re-run 2026-09-04: 97/97 JS, 8/8 Rust, build clean  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
 **Structural validation (Python scripts)**: UNVERIFIED — TLC_INSTALLATION_MISMATCH = TRUE. `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` absent from runtime (DEBT-009). Manual structural validation equivalent performed (see §Manual Structural Validation above): SPEC/TASKS/VALIDATION checks all PASS. Status remains UNVERIFIED per TCL fail-closed: manual does not substitute for script. Does NOT block UAT or PR.  
@@ -244,9 +259,10 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 `AUTOMATED_TESTS: PASS`  
 `DISCRIMINATION: PASS`  
 `BUILD: PASS`  
+`FRESH_VERIFIER: PASS`  
 `STRUCTURAL_VALIDATION: UNVERIFIED`  
 `UAT: PENDING`  
 `PRE_PR_TECHNICAL_CLOSURE: PENDING`  
 
 _STRUCTURAL_VALIDATION blocked on: create or locate `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` scripts, then execute against this feature._  
-_Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after STRUCTURAL_VALIDATION resolved, UAT-1..UAT-6 executed, and DEC-013-V2 approved._
+_Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after UAT-1..UAT-6 executed and DEC-013-V2 approved._
