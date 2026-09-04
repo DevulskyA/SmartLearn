@@ -952,17 +952,94 @@ export async function renderPlan() {
         detail.dataset.loaded = "1";
         detail.replaceChildren();
 
-        if (unit.summaryBody) {
-          const summarySection = document.createElement("div");
-          summarySection.className = "plan-detail-section";
-          const summaryHeading = document.createElement("h3");
-          summaryHeading.textContent = "Resumo Mestre";
-          const summaryText = document.createElement("p");
-          summaryText.className = "plan-summary-body";
-          summaryText.textContent = unit.summaryBody;
-          summarySection.append(summaryHeading, summaryText);
-          detail.append(summarySection);
-        }
+        // Summary Mestre — always editable in Plan detail
+        const summarySection = document.createElement("div");
+        summarySection.className = "plan-detail-section plan-summary-section";
+        summarySection.dataset.unitId = unit.id;
+        const summaryHeading = document.createElement("h3");
+        summaryHeading.textContent = "Resumo Mestre";
+        summarySection.append(summaryHeading);
+
+        let currentSummary = unit.summaryBody ?? "";
+
+        const summaryDisplayWrap = document.createElement("div");
+        summaryDisplayWrap.className = "plan-summary-display-wrap";
+
+        const summaryText = document.createElement("p");
+        summaryText.className = "plan-summary-body";
+        summaryText.textContent = currentSummary;
+        summaryText.hidden = !currentSummary;
+
+        const summaryPlaceholder = document.createElement("p");
+        summaryPlaceholder.className = "plan-summary-placeholder";
+        summaryPlaceholder.textContent = "Nenhum resumo. Clique em Editar para adicionar.";
+        summaryPlaceholder.hidden = !!currentSummary;
+
+        const editSummaryBtn = document.createElement("button");
+        editSummaryBtn.type = "button";
+        editSummaryBtn.className = "text-button plan-edit-summary-btn";
+        editSummaryBtn.textContent = currentSummary ? "Editar resumo" : "Adicionar Resumo Mestre";
+
+        const summaryEditArea = document.createElement("div");
+        summaryEditArea.className = "plan-summary-edit-area";
+        summaryEditArea.hidden = true;
+        const summaryTextarea = document.createElement("textarea");
+        summaryTextarea.className = "plan-summary-textarea";
+        summaryTextarea.rows = 6;
+        summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
+        summaryTextarea.value = currentSummary;
+        const summaryActions = document.createElement("div");
+        summaryActions.className = "plan-summary-edit-actions";
+        const saveSummaryBtn = document.createElement("button");
+        saveSummaryBtn.type = "button";
+        saveSummaryBtn.className = "primary-button";
+        saveSummaryBtn.textContent = "Salvar";
+        const cancelSummaryBtn = document.createElement("button");
+        cancelSummaryBtn.type = "button";
+        cancelSummaryBtn.className = "text-button";
+        cancelSummaryBtn.textContent = "Cancelar";
+        const summaryMsg = document.createElement("p");
+        summaryMsg.className = "form-message";
+        summaryMsg.setAttribute("role", "status");
+        summaryMsg.setAttribute("aria-live", "polite");
+        summaryActions.append(saveSummaryBtn, cancelSummaryBtn, summaryMsg);
+        summaryEditArea.append(summaryTextarea, summaryActions);
+
+        editSummaryBtn.addEventListener("click", () => {
+          summaryTextarea.value = currentSummary;
+          summaryDisplayWrap.hidden = true;
+          editSummaryBtn.hidden = true;
+          summaryEditArea.hidden = false;
+          summaryTextarea.focus();
+        });
+        cancelSummaryBtn.addEventListener("click", () => {
+          summaryDisplayWrap.hidden = false;
+          editSummaryBtn.hidden = false;
+          summaryEditArea.hidden = true;
+        });
+        saveSummaryBtn.addEventListener("click", async () => {
+          const newBody = summaryTextarea.value.trim() || null;
+          summaryMsg.textContent = "Salvando…";
+          try {
+            await DB.learningUnits.update(unit.id, { summaryBody: newBody });
+            currentSummary = newBody ?? "";
+            summaryText.textContent = currentSummary;
+            summaryText.hidden = !currentSummary;
+            summaryPlaceholder.hidden = !!currentSummary;
+            editSummaryBtn.textContent = currentSummary ? "Editar resumo" : "Adicionar Resumo Mestre";
+            summaryDisplayWrap.hidden = false;
+            editSummaryBtn.hidden = false;
+            summaryEditArea.hidden = true;
+            summaryMsg.textContent = "";
+            unit.summaryBody = newBody;
+          } catch (err) {
+            summaryMsg.textContent = "Erro ao salvar: " + err.message;
+          }
+        });
+
+        summaryDisplayWrap.append(summaryText, summaryPlaceholder);
+        summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
+        detail.append(summarySection);
 
         // Exercises
         const exs = await DB.exercises.getAll(unit.id);
@@ -1258,16 +1335,17 @@ export async function renderTracking() {
         showScreen("plan");
         renderPlan().then(() => {
           const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-          if (row) {
-            row.scrollIntoView({ behavior: "smooth", block: "center" });
-            const expandBtn = row.querySelector(".plan-expand-btn");
-            if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
-            // focus summary body after expansion (no edit textarea in plan view)
-            setTimeout(() => {
-              const summaryEl = row.querySelector(".plan-summary-body");
-              if (summaryEl) summaryEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }, 350);
-          }
+          if (!row) return;
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+          const expandBtn = row.querySelector(".plan-expand-btn");
+          if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
+          setTimeout(() => {
+            const editBtn = row.querySelector(".plan-edit-summary-btn");
+            if (editBtn) {
+              editBtn.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              editBtn.click();
+            }
+          }, 350);
         }).catch(console.error);
       });
       actions.append(addSummaryBtn);
@@ -1279,12 +1357,26 @@ export async function renderTracking() {
       goToReviewBtn.type = "button";
       goToReviewBtn.textContent = `Ir para revisão`;
       goToReviewBtn.addEventListener("click", () => {
-        showScreen("today");
-        // scroll to the review row for this unit if visible
-        setTimeout(() => {
-          const reviewRow = document.querySelector(`[data-review-id="${nextPending.id}"]`);
-          if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 300);
+        if (nextPending.dueDate <= today) {
+          // Overdue or due today: visible on Hoje screen.
+          showScreen("today");
+          renderToday().then(() => {
+            setTimeout(() => {
+              const reviewRow = document.querySelector(`[data-review-id="${nextPending.id}"]`);
+              if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+          }).catch(console.error);
+        } else {
+          // Due tomorrow or future: not on Hoje. Navigate to Plano and expand the unit.
+          showScreen("plan");
+          renderPlan().then(() => {
+            const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
+            if (!row) return;
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            const expandBtn = row.querySelector(".plan-expand-btn");
+            if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
+          }).catch(console.error);
+        }
       });
       actions.append(goToReviewBtn);
     }
