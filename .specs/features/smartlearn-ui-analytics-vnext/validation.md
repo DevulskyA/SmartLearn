@@ -3,11 +3,12 @@
 **Verifier:** Claude Sonnet 4.6 (independent closure pass — author ≠ verifier)
 **Date:** 2026-09-03
 **Branch:** claude/com-tlc-replanning-77f844
-**Verdict:** BROWSER_PASS — SQLite/Tauri runtime unverifiable in this environment
+**Verdict:** SQLITE_PASS_PARTIAL — SQLite smoke complete via CLI + Rust tests; manual E2E pending
 
-> Todos os 15 closure tasks do audit independente foram executados.
-> SQLite/Tauri real (Task 4) NÃO pode ser verificado no worktree browser-only.
-> Todos os demais sensores PASS. PR permitido somente após smoke manual em build Tauri real.
+> Todos os 15 closure tasks executados. SQLite smoke via sqlite3 CLI e Rust unit tests (2/2).
+> CHECK constraints, UNIQUE, FK (.foreign_keys(true) Rust), ON DELETE CASCADE, completeReviewWithEvidence SQL: todos verificados.
+> Bootstrap seed implementado (src/fixtures/dev-dataset.js). 88/88 node:tests passando.
+> PENDENTE: usuário executa E2E manual — deletar SQLite, reiniciar Tauri DEV, verificar subjects seeded.
 
 ---
 
@@ -34,8 +35,8 @@ cd0c327  WP-F1 consolidar seletores de tema e tokens
 | 1 | validation.md → CLOSURE_REQUIRED | DONE |
 | 2 | AC-ACOMP-05 quick actions | DONE — "Ver no Plano", "+ Resumo Mestre", "Ir para revisão" implementados |
 | 3 | WP-B2 UAT real (exercícios → revisão → evidência) | PASS — ver detalhe abaixo |
-| 4 | SQLite/Tauri real | UNVERIFIABLE — browser worktree; requer build Tauri real |
-| 5 | Transaction sensor | BROWSER_PASS — BrowserStore escreve atomicamente (1 setItem); SQLite unverificável |
+| 4 | SQLite/Tauri real | PASS CLI+RUST — CHECK, UNIQUE, FK, CASCADE verificados; completeReviewWithEvidence SQL ✅; Rust 2/2 ✅; bootstrap seed ✅; E2E manual pendente |
+| 5 | Transaction sensor | PASS — BrowserStore atômico (1 setItem); SQLite usa execute_sqlite_transaction (begin/commit, rollback em erro: Rust test ✅) |
 | 6 | Duplication sensor | PASS — throw "Já existe evidência para esta revisão." |
 | 7 | Constraint sensors | PASS — q=0, c<0, c>q, taskId inválido: todos lançam antes de mutação de estado |
 | 8 | Migration sensor | PASS — runMigrationFromReviewTasks idempotente (2× sem duplicar) |
