@@ -811,6 +811,140 @@ mod tests {
         });
     }
 
+    // P1-6 drift detection: after pre-migration renames, setup_review_schema() (the canonical
+    // vNext schema used by all fresh installs) must complete without error and produce a fully
+    // usable database. If setup_review_schema() drifts from the expected schema (e.g., a column
+    // removed or renamed), this test breaks — proving the shared contract is enforced.
+    #[test]
+    fn migration_then_canonical_schema_produces_usable_db() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            // 1. Create main-era schema with real data
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![
+                    TransactionStatement {
+                        query: "CREATE TABLE subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "CREATE TABLE sources (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "CREATE TABLE study_records (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL REFERENCES subjects(id), source_id INTEGER NOT NULL REFERENCES sources(id), study_date TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "CREATE TABLE review_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE, review_number INTEGER NOT NULL, due_date TEXT NOT NULL, completed_at TEXT, review_done INTEGER NOT NULL DEFAULT 0, questions_done INTEGER NOT NULL DEFAULT 0, questions_count INTEGER, correct_count INTEGER, score_percent REAL, comment TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO subjects (name) VALUES ($1)".into(),
+                        values: vec![json!("Farmacologia")],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO sources (name) VALUES ($1)".into(),
+                        values: vec![json!("Katzung")],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO study_records (subject_id, source_id, study_date, content, created_at, updated_at) VALUES (1, 1, '2026-03-01', 'Farmacocinética básica', '2026-03-01T08:00:00Z', '2026-03-01T08:00:00Z')".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO review_tasks (study_record_id, review_number, due_date, created_at, updated_at) VALUES (1, 1, '2026-03-02', '2026-03-01T08:00:00Z', '2026-03-01T08:00:00Z')".into(),
+                        values: vec![],
+                    },
+                ],
+            )
+            .await
+            .expect("main-era seed should succeed");
+
+            // 2. Run pre-migration renames (same sequence as DB.init() JS code)
+            let options = sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(db.path())
+                .foreign_keys(false); // off during rename
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            sqlx::query("ALTER TABLE study_records RENAME TO learning_units")
+                .execute(&mut conn)
+                .await
+                .expect("rename study_records");
+            sqlx::query("ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id")
+                .execute(&mut conn)
+                .await
+                .expect("rename study_record_id");
+            sqlx::query("ALTER TABLE learning_units RENAME COLUMN content TO title")
+                .execute(&mut conn)
+                .await
+                .ok();
+            sqlx::query("ALTER TABLE learning_units ADD COLUMN source_text TEXT NOT NULL DEFAULT ''")
+                .execute(&mut conn)
+                .await
+                .ok();
+            sqlx::query("ALTER TABLE learning_units ADD COLUMN summary_body TEXT")
+                .execute(&mut conn)
+                .await
+                .ok();
+            sqlx::query("UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''")
+                .execute(&mut conn)
+                .await
+                .expect("source_text resolution");
+            drop(conn);
+
+            // 3. Run setup_review_schema() — the CANONICAL schema function used by fresh installs.
+            //    After renames, all CREATE TABLE IF NOT EXISTS are no-ops for existing tables.
+            //    This is the shared contract: setup_review_schema must succeed and produce the same
+            //    schema shape whether called on a fresh DB or post-migration. If it drifts, the
+            //    insert below will fail.
+            setup_review_schema(db.path()).await;
+
+            // 4. Verify: canonical schema inserted a new row successfully (learning_evidence table now exists)
+            let result = execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement {
+                    query: "INSERT INTO learning_evidence (unit_id, evidence_date, context, questions_count, correct_count, score_percent, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)".into(),
+                    values: vec![json!(1), json!("2026-03-01"), json!("INITIAL_PRACTICE"), json!(10), json!(7), json!(70.0), json!("2026-03-01T10:00:00Z")],
+                }],
+            )
+            .await;
+            assert!(result.is_ok(), "insert into learning_evidence must succeed: {:?}", result.err());
+
+            // 5. Verify migrated data is visible through the canonical schema
+            let options2 = sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(db.path())
+                .foreign_keys(true);
+            let mut conn2 = SqliteConnection::connect_with(&options2).await.expect("connect2");
+
+            let unit_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM learning_units")
+                .fetch_one(&mut conn2)
+                .await
+                .expect("count units");
+            assert_eq!(unit_count, 1, "migrated unit must be visible through canonical schema");
+
+            let title: String = sqlx::query_scalar("SELECT title FROM learning_units WHERE id=1")
+                .fetch_one(&mut conn2)
+                .await
+                .expect("title");
+            assert_eq!(title, "Farmacocinética básica");
+
+            let source: String = sqlx::query_scalar("SELECT source_text FROM learning_units WHERE id=1")
+                .fetch_one(&mut conn2)
+                .await
+                .expect("source_text");
+            assert_eq!(source, "Katzung");
+
+            let fk_violations: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM review_tasks rt LEFT JOIN learning_units lu ON lu.id = rt.unit_id WHERE lu.id IS NULL",
+            )
+            .fetch_one(&mut conn2)
+            .await
+            .expect("fk check");
+            assert_eq!(fk_violations, 0, "no FK violations after migration + canonical schema");
+        });
+    }
+
     #[test]
     fn execute_sqlite_transaction_rolls_back_on_error() {
         let db = TestDatabase::create();
