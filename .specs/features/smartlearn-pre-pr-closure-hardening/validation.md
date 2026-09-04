@@ -83,17 +83,17 @@ Perform on a real Tauri Desktop build (`cargo tauri build` or `cargo tauri dev`)
 
 ---
 
-## Discrimination Matrix — Mutant Kill Evidence
+## Discrimination Matrix — Mutant Kill Evidence (REAL EXECUTION)
 
-Verified by code analysis (tests exist, assertions directly catch the mutated behavior).
+All mutants injected, tests run, failure recorded, code restored, green confirmed.
 
-| ID | Mutant | Killed by | Kill mechanism |
-|----|--------|-----------|---------------|
-| M1 | BrowserStore: remove `if (dup) throw` in `learningEvidence.create` (L785-789) | `learning-evidence.test.js:183` "segunda chamada deve falhar" | `assert.rejects` — without guard, second call succeeds, no rejection |
-| M2 | `evidenceDate = now.toISOString().slice(0,10)` instead of `localDateIso(now)` | `learning-evidence.test.js` "encontra revisão mesmo quando completedAt UTC está no dia seguinte" | `today=D, completedAt=D+1T00:30Z` → UTC slice returns `D+1`, test asserts 1 result found |
-| M3 | `getCompletedToday` filters by `completedAt.startsWith(today)` not `evidenceDate === today` | Same boundary test | `completedAt` = UTC next-day prefix, `evidenceDate` = local today — UTC filter returns 0, test asserts 1 |
-| M4 | `deleteIfEmpty` removes `if (hasUnits) throw` guard | `subjects.test.js` "B: rejeita exclusão quando há learning_unit" | `assert.rejects` — without guard, delete succeeds, test fails |
-| M5 | Settings INSERT: `values: []` (unbound $1) | `lib.rs::fresh_install_review_schedule_is_canonical` | `assert!(schedule.is_some())` — unbound $1 yields NULL, assertion fails |
+| ID | Mutant | Kill test | Result |
+|----|--------|-----------|--------|
+| M1 | BrowserStore: remove `if (dup) throw` in `learningEvidence.create` | `learning-evidence.test.js` "segunda evidência para mesma reviewTask deve falhar" | FAIL with mutant (1/23 fail), PASS restored |
+| M2 | `evidenceDate = now.toISOString().slice(0,10)` instead of `localDateIso(now)` | New M2 kill test: injects `new Date('2026-09-04T01:30:00.000Z')` (UTC-3 env) — `localDateIso` returns "2026-09-03", UTC returns "2026-09-04" | FAIL with mutant (1/23 fail), PASS restored. Note: `_now` injection added to BrowserStore path |
+| M3 | `getCompletedToday` filters by `task.reviewDone && completedAt.startsWith(today)` | `learning-evidence.test.js` "encontra revisão mesmo quando completedAt UTC está no dia seguinte" | FAIL with mutant (1/1 target fail), PASS restored |
+| M4 | `deleteIfEmpty` removes `if (hasUnits) throw` guard | `subjects.test.js` B+C | FAIL with mutant (2/4 fail), PASS restored |
+| M5 | Rust: Settings INSERT `values: vec![]` (unbound $1) | `lib.rs::fresh_install_review_schedule_is_canonical` | FAILED with mutant (cargo test FAILED), PASS restored |
 
 ---
 
@@ -101,15 +101,29 @@ Verified by code analysis (tests exist, assertions directly catch the mutated be
 
 | Gap | Severity | Blocking PR? |
 |-----|----------|-------------|
-| DEBT-008: SPEC_PRECISION_GAP AC-ACOMP-03 — tracking state spec table has 4 states, code has 5 (`EM_REVISAO` undefined in spec) | P2 | No — spec accuracy only |
+| ~~DEBT-008: SPEC_PRECISION_GAP AC-ACOMP-03~~ — RESOLVED: 5-state spec table corrected in analytics-vnext spec.md to match `getTrackingState` in app.js | resolved | No — closed in `af000b2` |
 | DEC-013-V2 PROPOSED (fonte = texto livre) — HUMAN_GATE pending | P2 | No — existing behavior unchanged |
 | UAT-1 through UAT-6 not yet executed on real Tauri build | P1 | HUMAN_GATE: requires manual execution |
 
 ---
 
+## Governance Deviation Record
+
+| Deviation | Rule violated | Action |
+|-----------|---------------|--------|
+| T2+T3 in single commit (`82caf1f`) | TCL: one atomic commit per task | History not rewritten (safe). Rule applies to future tasks. |
+| T7+T8+T9 in single commit (`55286ad`) | TCL: one atomic commit per task | History not rewritten (safe). Rule applies to future tasks. |
+
 ## Closure Declaration
 
-**Automated gate**: PASS (96 node:test, 8 cargo test, 2026-09-04)  
+**Automated gate**: PASS (97 node:test, 8 cargo test, 2026-09-04)  
+**Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
+**AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
+**DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 
-`PRE_PR_CLOSURE_HARDENING: AUTOMATED_GATE_PASS | HUMAN_UAT_PENDING`
+`AUTOMATED_TESTS: PASS`  
+`DISCRIMINATION: PASS`  
+`PRE_PR_CLOSURE: CLOSURE_REQUIRED`  
+
+_Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after UAT-1..UAT-6 executed on real Tauri build and DEC-013-V2 approved._
