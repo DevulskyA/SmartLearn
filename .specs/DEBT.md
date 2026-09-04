@@ -32,7 +32,7 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Affected components**: `src/app.js`, potentially new `src/ui-utils.js` or `src/domain.js`
 - **Dependencies**: None blocking
 - **Resolution criterion**: `getTrackingState` and `getPlanUnitState` moved to a non-DOM module and covered by node:test; `buildSparkline` and badge builders moved to `ui-utils.js`.
-- **Priority**: P3
+- **Priority**: P3 (não bloqueia closure; somente relevante se uma alteração exigir sensor que dependa de extração)
 - **Owner**: unassigned
 - **Evidence**: analytics-vnext WP-F3 code quality review; `.specs/features/smartlearn-ui-analytics-vnext/validation.md` §Code quality assessment
 
@@ -48,7 +48,7 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Affected components**: `src/scheduler.js` (generateInitialTasks, REVIEW_DAY_OFFSETS), `src/db.js` (review_tasks table), all review UI
 - **Dependencies**: FSRS requires `repeat(card_state, rating, now) → next_due` interface; cold-start migration needed for existing tasks
 - **Resolution criterion**: `scheduler.js` exports FSRS-based algorithm alongside legacy; user can opt-in per unit or globally; existing tasks migrate gracefully on first FSRS review.
-- **Priority**: P1
+- **Priority**: P2 (não bloqueia esta feature; bloqueará ciclo longitudinal de Medicina)
 - **Owner**: unassigned
 - **Evidence**: `.specs/project/STATE.md` DEC-016 — "Risco de escala" section
 
@@ -86,6 +86,30 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ---
 
+---
+
+### DEBT-006 — Repository contract + IndexedDB + Sync strategy not formalized
+
+- **Status**: open
+- **Problem**: SmartLearn has three persistence adapters (BrowserStore/localStorage, SQLite via Tauri, SQLite via Android plugin-sql) with no formal shared contract. Minimal fix implemented 2026-09-03: `import.meta.env?.DEV` guard seeds empty SQLite or BrowserStore with canonical dev fixture. Remaining gaps: (1) no contract tests that run the same suite against both adapters; (2) BrowserStore uses localStorage which is inappropriate for app-scale data — IndexedDB is the correct Web adapter; (3) no sync strategy defined for multi-device (Web + Mobile + Windows); (4) fixture seeding is DEV-only — production needs an explicit onboarding or import path.
+- **Origin**: User architectural review 2026-09-03; LESSON-006
+- **Risk**: Adapters can silently diverge over time. Tests passing against BrowserStore do not constitute evidence for SQLite behavior. A user studying on mobile and opening on Windows finds empty state.
+- **Impact**: Medium immediate (dev seeding works), high long-term (no multi-device continuity).
+- **Affected components**: `src/db.js` (both adapter paths), `src/fixtures/dev-dataset.js` (new), future `src/repositories/`
+- **Dependencies**: DEBT-001 resolved (SQLite verified); DEBT-002 (extraction) is prerequisite for clean repository interface
+- **Resolution criterion**: (1) Persistence contract test suite runs against both BrowserStore and SQLite adapters; (2) BrowserStore upgraded to IndexedDB; (3) Sync strategy ADR written if multi-device is in scope; (4) Production onboarding flow defined.
+- **Priority**: P2 (dev seeding P0 implemented; contract tests and IndexedDB are next cycle)
+- **Owner**: unassigned
+- **Evidence**: User message 2026-09-03 20:53; `.specs/LESSONS.md` LESSON-006
+
+---
+
 ## Resolved
 
-none
+### DEBT-001 — SQLite/Tauri real persistence not validated for analytics-vnext
+- **Resolved**: 2026-09-03
+- **Resolution**: Full SQLite smoke completed: CHECK constraints, UNIQUE constraint, FK enforcement (`.foreign_keys(true)` in Rust `SqliteConnectOptions`), ON DELETE CASCADE, `completeReviewWithEvidence` SQL atomicity, Rust transaction tests (2/2 pass), 88 node:tests pass.
+
+### DEBT-005 — TLC_INSTALLATION_MISMATCH: plugin-sql version vs Tauri 2 feature flags
+- **Resolved**: 2026-09-03 (together with DEBT-001)
+- **Resolution**: `SqliteConnectOptions.foreign_keys(true)` in `lib.rs:28` — FK enforcement is compiler-level, not PRAGMA-dependent. Rust tests confirm atomicity and rollback. `plugin-sql` 2.4.0 + sqlite feature verified via `cargo test`.

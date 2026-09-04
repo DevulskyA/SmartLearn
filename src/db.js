@@ -455,6 +455,10 @@ function createBrowserStore() {
     async init() {
       const state = readState();
       writeState(state);
+      if (import.meta.env?.DEV && state.subjects.length === 0) {
+        const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+        await this.importAll(getDevDataset());
+      }
     },
 
     subjects: {
@@ -979,6 +983,14 @@ export const DB = {
         await DB.exercises.ensureColumns();
         await DB.learningEvidence.ensureColumns();
         await DB.ensureLearningEvidenceMigration();
+
+        if (import.meta.env?.DEV) {
+          const [{ n }] = await database.select('SELECT COUNT(*) as n FROM subjects');
+          if (n === 0) {
+            const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+            await DB.importAll(getDevDataset());
+          }
+        }
 
         return DB;
       })().catch((error) => {

@@ -12,18 +12,17 @@
 | Field | Value |
 |-------|-------|
 | Active branch | `claude/com-tlc-replanning-77f844` |
-| Active feature | `smartlearn-ui-analytics-vnext` |
-| Feature status | BROWSER_PASS — awaiting SQLite/Tauri smoke before merge |
-| Tests | 81 node:test passing, 0 failures |
+| Active feature | `smartlearn-ui-analytics-vnext` + `bootstrap-seed` |
+| Feature status | SQLITE_PASS_PARTIAL — SQLite smoke complete, bootstrap seed implemented; manual E2E pending |
+| Tests | 88 node:test passing (81 existing + 7 fixture), 2 Rust tests passing |
 | HUMAN_GATE | PUSH_AND_PR_APPROVAL (analytics-vnext) |
-| Next action | Governance adoption; then user decides push/PR |
+| Next action | User manually verifies fresh install (delete SQLite, restart app), then approves push/PR |
 
 ## Active human gates
 
 | Gate | Blocks | Reference |
 |------|--------|-----------|
-| PUSH_AND_PR_APPROVAL | push / PR / merge of analytics-vnext | validation.md BROWSER_PASS verdict |
-| GOVERNANCE_ADOPTION_APPROVAL | further feature work | this STATE |
+| PUSH_AND_PR_APPROVAL | push / PR / merge of analytics-vnext | validation.md; SQLite smoke complete |
 
 ## Active decisions (abbreviated — full text in `.specs/project/STATE.md`)
 

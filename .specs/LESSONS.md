@@ -33,3 +33,9 @@ Grounded lessons from failures and verified behavior gaps. Each entry has an ori
 - **Origin:** analytics-vnext db.js audit — `readState` deserialized state but skipped `refreshNextIds`; if `state.nextIds[collection]` was stale, new items could get ids already in use
 - **Lesson:** Any store that maintains an id counter must recalculate the counter from actual data on every load, not trust the persisted counter value.
 - **Apply:** Always call `refreshNextIds(state)` immediately after deserializing persisted state in BrowserStore.
+
+### LESSON-006 — Um domínio, um contrato, vários adapters de persistência
+
+- **Origin:** User architectural review 2026-09-03 — app opened empty in Tauri because SQLite starts fresh; BrowserStore had dev test data creating a false impression of application state
+- **Lesson:** SmartLearn has one logical domain and one data contract. SQLite (Tauri/Android) and BrowserStore (Web) are adapters of the same contract, not sources of truth in isolation. The fact that BrowserStore has data does not mean the app has data — it means that browser instance has data. Tests exclusively on BrowserStore are insufficient evidence of SQLite behavior.
+- **Apply:** (1) Any persistence feature must be tested against BOTH adapters. (2) DEV bootstrap seeds empty adapters from `src/fixtures/dev-dataset.js` so both start from the same canonical state. (3) When adding a new persistence method, implement and test it in both BrowserStore and SQLite paths. (4) Future architectural principle: UM DOMÍNIO · UM CONTRATO · VÁRIOS ADAPTERS · MESMOS TESTES DE CONTRATO · SINCRONIZAÇÃO QUANDO NECESSÁRIA. See DEBT-006.
