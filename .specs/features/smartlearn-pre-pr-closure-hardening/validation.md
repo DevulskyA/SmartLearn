@@ -10,16 +10,60 @@
 
 | AC | Test file | Assertion | Status |
 |----|-----------|-----------|--------|
-| AC-PERSIST-01 | `test/learning-evidence.test.js` — "completeReviewWithEvidence: segunda chamada lança erro (duplicata bloqueada)" | `INSERT` (not `INSERT OR IGNORE`) raises unique constraint error on second call | PASS (96/96) |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "completeReviewWithEvidence: segunda chamada lança erro (duplicata bloqueada)" | `INSERT` (not `INSERT OR IGNORE`) raises unique constraint error on second call | PASS (97/97) |
 | AC-PERSIST-02 | `src-tauri/src/lib.rs::complete_review_duplicate_rolls_back` | Rust SQLite: score/evidence state unchanged after duplicate attempt | PASS (8/8 cargo) |
-| AC-DELETE-01 | `test/subjects.test.js` — "B: rejeita exclusão quando há learning_unit associada" | `deleteIfEmpty` throws when units exist | PASS (96/96) |
-| AC-DELETE-01 | `test/exercises.test.js` — "deleteIfEmpty: subject com exercises não pode ser excluída" | Exercises survive rejection | PASS (96/96) |
-| AC-DATE-01 | `test/learning-evidence.test.js` — "evidenceDate usa dia local, não prefixo UTC" | `evidenceDate` equals `localDateIso(now)`, not UTC prefix | PASS (96/96) |
-| AC-DATE-01 | `test/learning-evidence.test.js` — "getCompletedToday: encontra revisão mesmo quando completedAt UTC está no dia seguinte" | Cross-midnight boundary case — local date persists correctly | PASS (96/96) |
+| AC-DELETE-01 | `test/subjects.test.js` — "B: rejeita exclusão quando há learning_unit associada" | `deleteIfEmpty` throws when units exist | PASS (97/97) |
+| AC-DELETE-01 | `test/exercises.test.js` — "deleteIfEmpty: subject com exercises não pode ser excluída" | Exercises survive rejection | PASS (97/97) |
+| AC-DATE-01 | `test/learning-evidence.test.js` — "evidenceDate usa dia local, não prefixo UTC" | `evidenceDate` equals `localDateIso(now)`, not UTC prefix | PASS (97/97) |
+| AC-DATE-01 | `test/learning-evidence.test.js` — "getCompletedToday: encontra revisão mesmo quando completedAt UTC está no dia seguinte" | Cross-midnight boundary case — local date persists correctly | PASS (97/97) |
+| AC-DATE-01 | `test/learning-evidence.test.js` — kill test M2 com data injetada na virada de dia UTC-3 | `new Date('2026-09-04T01:30:00Z')` → `evidenceDate = '2026-09-03'` (UTC-3), not '2026-09-04' | PASS (97/97) |
 | AC-BOOT-01 | `src-tauri/src/lib.rs::fresh_install_review_schedule_is_canonical` | `review_schedule` is non-NULL and matches REVIEW_DAY_OFFSETS after fresh init | PASS (8/8 cargo) |
 | AC-BOOT-01 | `src-tauri/src/lib.rs::fresh_install_unbound_param_yields_null_schedule` | Regression sensor: unbound $1 yields NULL (documents pre-T5 bug) | PASS (8/8 cargo) |
+| AC-TRACK-01 | `.specs/features/smartlearn-ui-analytics-vnext/spec.md` — 5-state table corrected | Spec matches `getTrackingState` in app.js; DEBT-008 resolved | PASS |
 
-**Test counts**: 96/96 node:test, 8/8 cargo test (2026-09-04)
+**Test counts**: 97/97 node:test, 8/8 cargo test (2026-09-04)
+
+---
+
+## Structural Gates
+
+| Gate | Command | Result |
+|------|---------|--------|
+| node:test | `node --test test/*.test.js` | PASS — 97/97 (2026-09-04) |
+| cargo test | `cargo test` (src-tauri/) | PASS — 8/8 (2026-09-04) |
+| build | `npm run build` | PASS — 21 modules, 255ms, exit 0 (2026-09-04) |
+| validate_spec | manual — spec.md ACs complete, match implementation | PASS — all ACs defined and implemented |
+| validate_tasks | manual — tasks.md T1-T9 STATUS marked | PASS — T1-T7, T9 DONE; T8 CHECKLIST CREATED, PENDING HUMAN_GATE |
+| validate_completion | manual — all automated gates closed, HUMAN_GATEs documented | PASS — see Closure Declaration below |
+
+---
+
+## AC-DATE-01 Audit — Shared Primitive Verification
+
+**Question**: Do BrowserStore and SQLite share the same canonical primitive for converting a timestamp instant to a local semantic date?
+
+**Result**: YES — both adapters use `localDateIso(date)` (db.js:39) in the live completion flow.
+
+### Evidence
+
+| Path | Code | Result |
+|------|------|--------|
+| SQLite `completeReviewWithEvidence` | `db.js:847` `const evidenceDate = localDateIso(now);` | ✓ canonical |
+| BrowserStore `completeReviewWithEvidence` | uses `localDateIso(now)` (T4 fix, `5c542df`) | ✓ canonical |
+| BrowserStore `_now` injection parameter | added for testability — passes `Date` object to `localDateIso` | ✓ same primitive |
+
+### Secondary findings (non-blocking)
+
+| Location | Pattern | Context | Verdict |
+|----------|---------|---------|---------|
+| `analytics.js:54` | `today = new Date().toISOString().slice(0, 10)` | Default param for `bySubject()` — **never reached in production**: caller `app.js:1018` always passes `getLocalDateValue()` | Not blocking; stale default |
+| `db.js:344` | `.slice(0, 10)` on stored `completedAt` string | `importAll` SQLite path — reconstructs `evidenceDate` from backup task data when explicit `learningEvidence` rows absent | UTC-slice; safe for schemaVersion 3 backups (explicit evidence rows provided, INSERT OR IGNORE skips reconstruction) |
+| `db.js:759` | `.slice(0, 10)` on stored `completedAt` string | `importAll` BrowserStore path — same fallback reconstruction | Same as above |
+| `review-schedule.js:14` | `toISOString().slice(0, 10)` | Generates **due dates** (scheduling offsets), not `evidenceDate` | Not a semantic date conversion |
+| `analytics.js:20` | `toISOString().slice(0, 10)` | Date arithmetic on existing calendar-date strings (calendar ↔ calendar) | Safe |
+| `app.js:215` | `toISOString().slice(0, 10)` | `getTomorrowValue(today)` — input is already a calendar date string | Safe |
+
+**Conclusion**: No hidden second implementation of instant→local-date conversion. Live completion path uses `localDateIso` in both adapters. Secondary findings logged as DEBT candidates; not blocking UAT.
 
 ---
 
@@ -28,16 +72,39 @@
 | Task | Commit | Description |
 |------|--------|-------------|
 | T1 | `d68589f` | fix: INSERT OR IGNORE → INSERT in SQLite completeReviewWithEvidence |
-| T2 | included in T3 commit | Rust test complete_review_duplicate_rolls_back |
+| T2 | (included in T3 commit) | Rust test complete_review_duplicate_rolls_back |
 | T3 | `82caf1f` | fix: replace deleteCascade with deleteIfEmpty for subjects |
 | T4 | `5c542df` | fix: local date boundary — localDateIso + getCompletedToday anchored to evidence_date |
 | T5 | `c78cf86` | fix(boot): correct settings bootstrap parameter binding on fresh install |
+| T6-T9 | `55286ad` | chore(spec): governance reconciliation for pre-PR hardening pass |
+| T7 | `af000b2` | fix(governance): real mutation testing + close AC-TRACK-01 |
+| UAT dataset | `9e412b6` | feat(uat): medical dataset + validation.md final status |
+| UAT seeder | `70f07f0` | feat(uat): expose window.__seedUatMedical DEV-only console hook |
+| PRE-UAT | `8b714b7` | chore(state): update test count (97) and full commit log in STATE.md |
 
 ---
 
 ## UAT Checklist — Tauri Desktop Real-Device Smoke
 
-Perform on a real Tauri Desktop build (`cargo tauri build` or `cargo tauri dev`).
+Perform on a real Tauri Desktop build (`cargo tauri dev`).
+
+### Expected state after seeding (2026-09-04)
+
+Run in DevTools Console before starting UAT:
+```js
+await window.__seedUatMedical()
+// then reload the page
+```
+
+| Item | Expected |
+|------|----------|
+| Subjects | 4: Fisiologia · Farmacologia · Microbiologia · Bioquímica — UAT vazia |
+| Learning units | 5 |
+| Review tasks | 80 (16 per unit) |
+| **Overdue** (dueDate < 2026-09-04, pending) | **1**: Fisiologia — "Potencial de membrana em repouso" review #1 (due 2026-09-02) |
+| **Due today** (dueDate = 2026-09-04, pending) | **4**: Fisiologia U1 review #1 · Farmacologia U3 review #2 · Microbiologia U4 review #3 · Farmacologia U5 review #1 |
+| Historical evidence | 3: Farmacologia U3 review #1 (80%) · Microbiologia U4 review #1 (70%) · Microbiologia U4 review #2 (90%) |
+| Empty subject | Bioquímica — UAT vazia (0 units) |
 
 ### UAT-1: Fresh Install — Settings Bootstrap (AC-BOOT-01)
 
@@ -47,39 +114,45 @@ Perform on a real Tauri Desktop build (`cargo tauri build` or `cargo tauri dev`)
 4. **Expected**: `review_schedule` field is non-NULL JSON array `[1,7,15,30,60,90,120,150,180,210,240,270,300,330,360,390]`
 5. **Expected**: App loads to main screen without error
 
-### UAT-2: Complete Review — Duplicate Prevention (AC-PERSIST-01/02)
+### UAT-2: Complete U5 Review — Duplicate Prevention (AC-PERSIST-01/02)
 
-1. Register a subject and learning unit
-2. From "Hoje" tab, complete a review — submit with score
-3. **Expected**: Review marked done, evidence stored
-4. Attempt to complete the same review task again (navigate back if possible, or via DevTools call to `completeReviewWithEvidence` with same taskId)
-5. **Expected**: Error is thrown; review task retains original score; no duplicate evidence row
+Target unit: **Farmacologia — "Receptores colinérgicos muscarínicos e nicotínicos"** (U5, review #1 due 2026-09-04)
+
+1. From "Hoje" tab, locate U5 and complete its review — submit **2 correct out of 3** (66.67%)
+2. **Expected**: Review marked done; evidence stored with `score_percent ≈ 66.67`
+3. Confirm in SQLite (DevTools or external tool): `SELECT * FROM learning_evidence WHERE unit_id = 5`
+4. Quit and restart the Tauri app
+5. **Expected**: Evidence row persists after restart; "Hoje" tab shows U5 as completed
+6. Attempt to complete the same review again (navigate back or call via console)
+7. **Expected**: Error thrown; review_task retains original score; `evidence_count` for U5 stays 1
 
 ### UAT-3: Date Boundary — Local vs UTC (AC-DATE-01)
 
 1. Set system clock to 23:55 local time
 2. Complete a review
 3. Advance system clock to 00:05 next day
-4. Check "Hoje" tab — review of **yesterday** must NOT appear; "Hoje" tab is empty
-5. **Expected**: `getCompletedToday(today)` uses local evidence_date; yesterday's completed review not shown today
+4. Check "Hoje" tab — review of **yesterday** must NOT appear; "Hoje" tab shows tomorrow's tasks
+5. **Expected**: `getCompletedToday(today)` uses local `evidence_date`; yesterday's review not shown today
 
-### UAT-4: Delete Subject with History (AC-DELETE-01)
+### UAT-4: Delete Subject with Units — Rejected (AC-DELETE-01)
 
-1. Register a subject with at least one learning unit
-2. Try to delete the subject
-3. **Expected**: App shows error message containing "não é possível excluir" or equivalent; subject remains; units intact
+1. Locate **Fisiologia** (has 2 learning units)
+2. Attempt to delete Fisiologia
+3. **Expected**: App shows error; Fisiologia remains; units intact
 
-### UAT-5: Delete Empty Subject (AC-DELETE-01 inverse)
+### UAT-5: Delete Empty Subject — Accepted (AC-DELETE-01 inverse)
 
-1. Register a subject with NO learning units
+1. Locate **Bioquímica — UAT vazia** (0 units)
 2. Delete the subject
-3. **Expected**: Subject deleted without error
+3. **Expected**: Subject deleted without error; subject list shows 3 remaining
 
-### UAT-6: App Restart Persists All State (AC-PERSIST-02, general)
+### UAT-6: Edit U5 — Add summaryBody, Persist After Restart
 
-1. Register subject + unit + complete one review
-2. Quit and restart Tauri app
-3. **Expected**: Subject, unit, completed review evidence all persist; "Hoje" tab still shows correct completion state
+1. Open **Farmacologia — "Receptores colinérgicos muscarínicos e nicotínicos"** (U5)
+2. Add a summaryBody text (any text)
+3. Save
+4. Quit and restart the Tauri app
+5. **Expected**: summaryBody text persists after restart
 
 ---
 
@@ -104,6 +177,8 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 | ~~DEBT-008: SPEC_PRECISION_GAP AC-ACOMP-03~~ — RESOLVED: 5-state spec table corrected in analytics-vnext spec.md to match `getTrackingState` in app.js | resolved | No — closed in `af000b2` |
 | DEC-013-V2 PROPOSED (fonte = texto livre) — HUMAN_GATE pending | P2 | No — existing behavior unchanged |
 | UAT-1 through UAT-6 not yet executed on real Tauri build | P1 | HUMAN_GATE: requires manual execution |
+| `analytics.js:54` UTC default param for `bySubject()` — caller always provides local today; default never reached in production | P3 | No — stale default only |
+| `db.js:344,759` importAll reconstruction uses `.slice(0,10)` on UTC timestamp string — UTC-unsafe for midnight-boundary historical data in legacy backups (schemaVersion < 3) | P3 | No — schemaVersion 3 backups provide explicit evidence rows |
 
 ---
 
@@ -114,16 +189,24 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 | T2+T3 in single commit (`82caf1f`) | TCL: one atomic commit per task | History not rewritten (safe). Rule applies to future tasks. |
 | T7+T8+T9 in single commit (`55286ad`) | TCL: one atomic commit per task | History not rewritten (safe). Rule applies to future tasks. |
 
+---
+
 ## Closure Declaration
 
 **Automated gate**: PASS (97 node:test, 8 cargo test, 2026-09-04)  
+**Build gate**: PASS (vite build — 21 modules, exit 0, 2026-09-04)  
 **Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
+**AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
+**Structural validation**: PASS — spec.md ACs complete; tasks.md T1-T9 statuses marked; validate_completion manual check done  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
 **DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 
 `AUTOMATED_TESTS: PASS`  
 `DISCRIMINATION: PASS`  
-`PRE_PR_CLOSURE: CLOSURE_REQUIRED`  
+`BUILD: PASS`  
+`STRUCTURAL_VALIDATION: PASS`  
+`UAT: PENDING`  
+`PRE_PR_TECHNICAL_CLOSURE: PENDING`  
 
 _Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after UAT-1..UAT-6 executed on real Tauri build and DEC-013-V2 approved._

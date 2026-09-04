@@ -66,6 +66,8 @@ Nota: prova apenas BrowserStore. T2 prova SQLite.
 
 ## T2 — SQLite duplicate rollback sensor (Rust)
 
+**STATUS: DONE** — incluído no commit `82caf1f` (junto com T3; ver governance deviation em validation.md)
+
 **Deliverable:** novo teste `#[test] fn complete_review_duplicate_rolls_back` em `src-tauri/src/lib.rs`
 
 **Mudança:** somente `lib.rs` (adição de test, sem mudança de prod code)
@@ -88,6 +90,8 @@ Nota: prova apenas BrowserStore. T2 prova SQLite.
 ---
 
 ## T3 — Subject deleteIfEmpty
+
+**STATUS: DONE** — commit `82caf1f`
 
 **Deliverable:** 
 - `src/db.js`: BrowserStore `deleteCascade` → `deleteIfEmpty` (fail-closed se tem units)
@@ -114,6 +118,8 @@ Nota: prova apenas BrowserStore. T2 prova SQLite.
 ---
 
 ## T4 — Local date boundary
+
+**STATUS: DONE** — commit `5c542df`
 
 **Deliverable:**
 - `src/db.js`: nova function `localDateIso(date)`
@@ -143,6 +149,8 @@ Nota: node:test roda no mesmo timezone da máquina. Para testar boundary UTC→l
 
 ## T5 — Settings bootstrap binding
 
+**STATUS: DONE** — commit `c78cf86`
+
 **Deliverable:** `src/db.js` — `DB.init()` executa settings INSERT com params explícitos (não posicional)
 
 **AC:** AC-BOOT-01
@@ -164,6 +172,8 @@ Nota: node:test roda no mesmo timezone da máquina. Para testar boundary UTC→l
 
 ## T6 — Persistence contract closure
 
+**STATUS: DONE** — commit `55286ad` (junto com T7, T8 parcial, T9; ver governance deviation)
+
 **Deliverable:** auditoria + documentação de gaps; fix somente se GAP material encontrado
 
 **AC:** AC-PERSIST-02
@@ -177,6 +187,8 @@ Nota: node:test roda no mesmo timezone da máquina. Para testar boundary UTC→l
 
 ## T7 — AC-ACOMP-03 tracking semantics
 
+**STATUS: DONE** — commit `af000b2` (DEBT-008 resolvido; spec corrigida)
+
 **Deliverable:** `SPEC_PRECISION_GAP: AC-ACOMP-03` registrado; DEBT-008 criado; T8 e T9 não bloqueados
 
 **AC:** AC-TRACK-01
@@ -185,6 +197,8 @@ Nota: node:test roda no mesmo timezone da máquina. Para testar boundary UTC→l
 
 ## T8 — Tauri UAT real
 
+**STATUS: CHECKLIST CRIADO — PENDING HUMAN_GATE** — checklist em validation.md, UAT-1..UAT-6 pendente execução manual
+
 **Deliverable:** checklist manual para execução no app real
 
 Ver `validation.md` (criado na closure).
@@ -192,6 +206,8 @@ Ver `validation.md` (criado na closure).
 ---
 
 ## T9 — Governance reconciliation
+
+**STATUS: DONE** — commit `55286ad` (junto com T6-T8 parcial; ver governance deviation)
 
 **Deliverable:** DEBT.md + STATE.md + LESSONS.md reconciliados
 

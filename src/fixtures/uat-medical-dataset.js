@@ -184,7 +184,19 @@ export function getUatMedicalDataset() {
 // subjects:            4 (Fisiologia, Farmacologia, Microbiologia, Bioquímica—UAT vazia)
 // learning_units:      5
 // review_tasks:        80 (16 per unit × 5 units)
-// overdue (pending):   1  (U2 #1 — due 2026-09-02)
-// due today (pending): 4  (U1#1, U3#2, U4#3, U5#1 — all due 2026-09-04)
-// evidence_count:      3  (U3#1, U4#1, U4#2)
+//
+// overdue (pending):   1
+//   U2  Fisiologia — "Potencial de membrana em repouso"   review #1  due 2026-09-02
+//
+// due today (pending): 4
+//   U1  Fisiologia   — "Homeostase e controle por feedback negativo"  review #1  due 2026-09-04
+//   U3  Farmacologia — "Receptores adrenérgicos e seus principais efeitos"  review #2  due 2026-09-04
+//   U4  Microbiologia — "Helicobacter pylori: colonização e doença gastroduodenal"  review #3  due 2026-09-04
+//   U5  Farmacologia — "Receptores colinérgicos muscarínicos e nicotínicos"  review #1  due 2026-09-04
+//
+// evidence (historical completions): 3
+//   U3 review #1 — 2026-08-29 — 12/15 = 80%
+//   U4 review #1 — 2026-08-21 — 7/10  = 70%
+//   U4 review #2 — 2026-08-27 — 9/10  = 90%
+//
 // empty subject:       Bioquímica — UAT vazia (0 units)
