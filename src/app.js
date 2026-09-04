@@ -788,9 +788,9 @@ function getPlanPerfBadge(evidence) {
   const pct = (correct / total) * 100;
   const span = document.createElement("span");
   span.className = "performance-badge";
-  if (pct >= 80) span.dataset.perf = "strong";
-  else if (pct >= 65) span.dataset.perf = "adequate";
-  else if (pct >= 50) span.dataset.perf = "attention";
+  if (pct >= THRESHOLDS.STRONG) span.dataset.perf = "strong";
+  else if (pct >= THRESHOLDS.ADEQUATE) span.dataset.perf = "adequate";
+  else if (pct >= THRESHOLDS.ATTENTION) span.dataset.perf = "attention";
   else span.dataset.perf = "critical";
   span.textContent = `${pct.toFixed(0)}%`;
   return span;
@@ -3217,7 +3217,11 @@ planUnitSaveBtn?.addEventListener("click", async () => {
 
 if (import.meta.env?.DEV) {
   const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
-  window.__seedUatMedical = async () => {
+  window.__seedUatMedical = async (confirm) => {
+    if (confirm !== 'DESTROY_EXISTING_DATA') {
+      console.warn('[UAT] Destructive: call __seedUatMedical("DESTROY_EXISTING_DATA") to confirm.');
+      return;
+    }
     await DB.importAll(getUatMedicalDataset());
     console.log('[UAT] Medical dataset seeded. Reload to refresh UI.');
   };

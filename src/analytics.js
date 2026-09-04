@@ -79,9 +79,9 @@ export const Analytics = {
       const totalC = sumField(subjectEvidence, 'correctCount');
       const acc = totalQ > 0 ? (totalC / totalQ) * 100 : null;
 
-      const recentFrom = subtractDays(today, 30);
-      const prevFrom = subtractDays(today, 60);
-      const prevTo = subtractDays(today, 31);
+      const recentFrom = subtractDays(today, 29);
+      const prevFrom = subtractDays(today, 59);
+      const prevTo = subtractDays(today, 30);
       const recentEv = windowEvidence(subjectEvidence, recentFrom, today);
       const prevEv = windowEvidence(subjectEvidence, prevFrom, prevTo);
       const trend = subjectTrend(recentEv, prevEv);

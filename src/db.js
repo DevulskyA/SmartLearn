@@ -501,9 +501,12 @@ function createBrowserStore() {
       writeState(state);
       // DEV-only seed: uses a separate key so importAll/clearAll never resets it.
       // Production build: import.meta.env.DEV = false → this block never runs.
+      // Guard: only seed when BrowserStore has no subjects — never overwrite existing user data.
       if (import.meta.env?.DEV && !localStorage.getItem('smartlearn:dev-seeded')) {
-        const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-        await this.importAll(getDevDataset());
+        if (state.subjects.length === 0) {
+          const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+          await this.importAll(getDevDataset());
+        }
         localStorage.setItem('smartlearn:dev-seeded', '1');
       }
     },
@@ -817,12 +820,19 @@ function createBrowserStore() {
         if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
         if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
         if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
+        const state = readState();
+        // unit_id must exist (no FK enforcement in BrowserStore)
+        if (!state.learningUnits.some((u) => u.id === unitId)) {
+          throw new Error('unit_id não encontrado.');
+        }
         if (reviewTaskId != null) {
-          const state = readState();
           const dup = state.learningEvidence.find((e) => e.reviewTaskId === reviewTaskId);
           if (dup) throw new Error('Já existe evidência para esta revisão.');
+          // review_task_id must exist and must belong to the same unit_id
+          const task = state.reviewTasks.find((t) => t.id === reviewTaskId);
+          if (!task) throw new Error('review_task_id não encontrado.');
+          if (task.unitId !== unitId) throw new Error('review_task_id deve pertencer à mesma unidade (unit_id).');
         }
-        const state = readState();
         const scorePercent = q > 0 ? (c / q) * 100 : null;
         const evidence = {
           id: nextId(state, "learningEvidence"),
@@ -1024,6 +1034,34 @@ export const DB = {
         database = await Database.load(DATABASE_URL);
         await database.execute('PRAGMA foreign_keys = ON');
 
+        // PRE-MIGRATION: rename old-schema tables BEFORE schemaStatements runs.
+        // Without this, CREATE TABLE IF NOT EXISTS learning_units creates an empty table
+        // alongside the real study_records data, making the rename check permanently false
+        // and leaving all existing user studies invisible after upgrade.
+        const preMigTables = await database.select(
+          "SELECT name FROM sqlite_master WHERE type='table'",
+        );
+        const preMigNames = new Set(preMigTables.map((t) => t.name));
+
+        if (!preMigNames.has('learning_units') && preMigNames.has('study_records')) {
+          await database.execute('ALTER TABLE study_records RENAME TO learning_units');
+          preMigNames.add('learning_units');
+        }
+        if (preMigNames.has('review_tasks')) {
+          const cols = await database.select('PRAGMA table_info(review_tasks)');
+          const colNames = new Set(cols.map((c) => c.name));
+          if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
+            await database.execute('ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id');
+          }
+        }
+        if (preMigNames.has('exercises')) {
+          const cols = await database.select('PRAGMA table_info(exercises)');
+          const colNames = new Set(cols.map((c) => c.name));
+          if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
+            await database.execute('ALTER TABLE exercises RENAME COLUMN study_record_id TO unit_id');
+          }
+        }
+
         for (const statement of schemaStatements) {
           if (statement.trimStart().toUpperCase().startsWith('INSERT')) continue;
           await database.execute(statement, []);
@@ -1034,6 +1072,17 @@ export const DB = {
         );
         await DB.subjects.ensureColumns();
         await DB.learningUnits.ensureColumns();
+        // Resolve source_id → source_text for rows migrated from main-era DB.
+        // The sources table and source_id column exist only in main-era (pre-vNext) databases.
+        if (preMigNames.has('sources')) {
+          const luCols = await database.select('PRAGMA table_info(learning_units)');
+          const luColNames = new Set(luCols.map((c) => c.name));
+          if (luColNames.has('source_id')) {
+            await database.execute(
+              "UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''",
+            );
+          }
+        }
         await DB.reviewTasks.ensureColumns();
         await DB.exercises.ensureColumns();
         await DB.learningEvidence.ensureColumns();
@@ -1595,6 +1644,15 @@ export const DB = {
       if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
       if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
       if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
+      // REVIEW review_task must belong to the same unit_id (cross-row constraint; FK cannot express this)
+      if (context === 'REVIEW' && reviewTaskId != null) {
+        const [task] = await requireDatabase().select(
+          'SELECT unit_id FROM review_tasks WHERE id = $1', [reviewTaskId],
+        );
+        if (!task || task.unit_id !== unitId) {
+          throw new Error('review_task_id deve pertencer à mesma unidade (unit_id).');
+        }
+      }
       const scorePercent = calcScorePercent(q, c);
       const result = await requireDatabase().execute(
         `INSERT INTO learning_evidence
