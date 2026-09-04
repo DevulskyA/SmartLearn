@@ -3,12 +3,22 @@
 **Verifier:** Claude Sonnet 4.6 (independent closure pass — author ≠ verifier)
 **Date:** 2026-09-03
 **Branch:** claude/com-tlc-replanning-77f844
-**Verdict:** SQLITE_PASS_PARTIAL — SQLite smoke complete via CLI + Rust tests; manual E2E pending
+**Verdict:** SQLITE_PASS_PARTIAL — SQLite/bootstrap provados em testes; WebView→UI chain pendente
 
-> Todos os 15 closure tasks executados. SQLite smoke via sqlite3 CLI e Rust unit tests (2/2).
-> CHECK constraints, UNIQUE, FK (.foreign_keys(true) Rust), ON DELETE CASCADE, completeReviewWithEvidence SQL: todos verificados.
-> Bootstrap seed implementado (src/fixtures/dev-dataset.js). 88/88 node:tests passando.
-> PENDENTE: usuário executa E2E manual — deletar SQLite, reiniciar Tauri DEV, verificar subjects seeded.
+> Classificação de status (separada por componente):
+>
+> | Componente | Status |
+> |-----------|--------|
+> | Persistência SQLite (constraints, FK, CASCADE) | PASS — CLI + Rust |
+> | Marcador _bootstrap (singleton, anti-reseed) | PASS — Rust 3 testes |
+> | Restart com dados preservados | PASS — Rust test |
+> | Fixtures DEV (dev-dataset.js, 88 node:tests) | PASS |
+> | WebView → db.js → Tauri SQL → SQLite → repository → UI | UNVERIFIED — requer Tauri runtime manual |
+> | Empty state/onboarding (produção, primeiro uso) | PENDENTE — DEBT-007 |
+>
+> **Banco vazio em produção = estado válido.
+> Interface vazia em produção = comportamento incompleto (DEBT-007, feature separada).
+> Bootstrap DEV fecha quando smoke Tauri confirmar subjects na UI.**
 
 ---
 

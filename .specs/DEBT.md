@@ -104,6 +104,22 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ---
 
+### DEBT-007 — Empty state / onboarding ausentes na primeira abertura em produção
+
+- **Status**: open
+- **Problem**: Banco vazio em produção é estado válido (usuário ainda não cadastrou nada). Mas a interface que responde a esse estado ainda não existe. Primeiro acesso mostra telas vazias sem orientação. Estado correto: "Nenhuma disciplina cadastrada — [Criar primeira disciplina] [Importar conteúdo]".
+- **Origin**: Revisão arquitetural 2026-09-03 — distinção explícita entre "banco vazio correto" e "interface vazia incorreta"
+- **Risk**: Usuário interpreta tela vazia como bug ou app quebrado. Taxa de abandono em primeiro acesso.
+- **Impact**: UX de primeiro uso; não afeta dados nem persistência.
+- **Affected components**: `src/app.js` (renderSubjects, renderPlan, renderToday — estados vazios), `src/styles.css` (empty-state styles)
+- **Dependencies**: Nenhuma. Independente do bootstrap/seed.
+- **Resolution criterion**: Cada tela principal (Hoje, Plano, Disciplinas) exibe empty state com ação primária quando não há dados. Primeiro uso em produção guia o usuário sem confusão.
+- **Priority**: P2
+- **Owner**: unassigned
+- **Evidence**: User message 2026-09-03 21:25; distinção banco-vazio vs interface-vazia
+
+---
+
 ## Resolved
 
 ### DEBT-001 — SQLite/Tauri real persistence not validated for analytics-vnext
