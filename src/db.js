@@ -4,6 +4,8 @@ import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
 import schemaDdl from "./schema-statements.json" with { type: "json" };
+// Canonical migration plan — shared with Rust integration test; neither may duplicate these SQL strings.
+import migrationPlan from "./migration-main-to-vnext.json" with { type: "json" };
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const SCHEMA_VERSION = 3;
@@ -1112,22 +1114,26 @@ export const DB = {
         );
         const preMigNames = new Set(preMigTables.map((t) => t.name));
 
+        // PRE-MIGRATION: SQL from canonical shared authority (migration-main-to-vnext.json).
+        // Same strings consumed by the Rust integration test — neither duplicates them.
+        const [sqlRenameStudyRecords, sqlRenameReviewTaskCol, sqlRenameExercisesCol] =
+          migrationPlan.preMigration;
         if (!preMigNames.has('learning_units') && preMigNames.has('study_records')) {
-          await database.execute('ALTER TABLE study_records RENAME TO learning_units');
+          await database.execute(sqlRenameStudyRecords);
           preMigNames.add('learning_units');
         }
         if (preMigNames.has('review_tasks')) {
           const cols = await database.select('PRAGMA table_info(review_tasks)');
           const colNames = new Set(cols.map((c) => c.name));
           if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
-            await database.execute('ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id');
+            await database.execute(sqlRenameReviewTaskCol);
           }
         }
         if (preMigNames.has('exercises')) {
           const cols = await database.select('PRAGMA table_info(exercises)');
           const colNames = new Set(cols.map((c) => c.name));
           if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
-            await database.execute('ALTER TABLE exercises RENAME COLUMN study_record_id TO unit_id');
+            await database.execute(sqlRenameExercisesCol);
           }
         }
 
@@ -1147,9 +1153,8 @@ export const DB = {
           const luCols = await database.select('PRAGMA table_info(learning_units)');
           const luColNames = new Set(luCols.map((c) => c.name));
           if (luColNames.has('source_id')) {
-            await database.execute(
-              "UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''",
-            );
+            // SQL from canonical migration authority (migration-main-to-vnext.json)
+            await database.execute(migrationPlan.sourceResolution);
           }
         }
         await DB.reviewTasks.ensureColumns();

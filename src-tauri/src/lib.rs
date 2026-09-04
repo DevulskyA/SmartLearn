@@ -492,6 +492,28 @@ mod tests {
         execute_sqlite_transaction_at_path(db, stmts).await.expect("canonical schema setup must succeed");
     }
 
+    // Canonical migration authority: reads src/migration-main-to-vnext.json — same file consumed
+    // by db.js in production. Returns (preMigration SQL vec, sourceResolution SQL).
+    fn load_migration_plan() -> (Vec<String>, String) {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest_dir).join("../src/migration-main-to-vnext.json");
+        let json = std::fs::read_to_string(&path)
+            .expect("src/migration-main-to-vnext.json must exist — canonical migration authority shared with db.js");
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .expect("migration-main-to-vnext.json must be valid JSON");
+        let pre_migration: Vec<String> = value["preMigration"]
+            .as_array()
+            .expect("preMigration must be a JSON array")
+            .iter()
+            .map(|v| v.as_str().expect("each preMigration entry must be a string").to_string())
+            .collect();
+        let source_resolution = value["sourceResolution"]
+            .as_str()
+            .expect("sourceResolution must be a string")
+            .to_string();
+        (pre_migration, source_resolution)
+    }
+
     async fn seed_review_data(db: &Path) -> (i64, i64, i64) {
         execute_sqlite_transaction_at_path(
             db,
@@ -646,19 +668,20 @@ mod tests {
             .expect("main-era schema and seed should succeed");
 
             // 2. Run correct pre-migration sequence (rename BEFORE CREATE TABLE IF NOT EXISTS)
+            let (pre_migration, source_resolution) = load_migration_plan();
             let options = sqlx::sqlite::SqliteConnectOptions::new()
                 .filename(db.path())
                 .foreign_keys(true);
             let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
 
-            // Step A: rename study_records → learning_units (must happen first)
-            sqlx::query("ALTER TABLE study_records RENAME TO learning_units")
+            // Steps A+B: rename study_records→learning_units and study_record_id→unit_id
+            // SQL from canonical migration authority (migration-main-to-vnext.json, same as db.js)
+            sqlx::query(&pre_migration[0])
                 .execute(&mut conn)
                 .await
                 .expect("rename study_records to learning_units should succeed");
 
-            // Step B: rename study_record_id → unit_id
-            sqlx::query("ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id")
+            sqlx::query(&pre_migration[1])
                 .execute(&mut conn)
                 .await
                 .expect("rename study_record_id to unit_id should succeed");
@@ -687,8 +710,8 @@ mod tests {
                 .await
                 .ok(); // may already exist
 
-            // Step E: resolve source_id → source_text
-            sqlx::query("UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''")
+            // Step E: resolve source_id → source_text (SQL from canonical migration authority)
+            sqlx::query(&source_resolution)
                 .execute(&mut conn)
                 .await
                 .expect("source_text resolution should succeed");
@@ -870,17 +893,18 @@ mod tests {
             .await
             .expect("main-era seed should succeed");
 
-            // 2. Run pre-migration renames (same sequence as DB.init() JS code)
+            // 2. Run pre-migration renames using canonical authority (same JSON as db.js production)
+            let (pre_migration, source_resolution) = load_migration_plan();
             let options = sqlx::sqlite::SqliteConnectOptions::new()
                 .filename(db.path())
                 .foreign_keys(false); // off during rename
             let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
 
-            sqlx::query("ALTER TABLE study_records RENAME TO learning_units")
+            sqlx::query(&pre_migration[0])
                 .execute(&mut conn)
                 .await
                 .expect("rename study_records");
-            sqlx::query("ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id")
+            sqlx::query(&pre_migration[1])
                 .execute(&mut conn)
                 .await
                 .expect("rename study_record_id");
@@ -896,7 +920,7 @@ mod tests {
                 .execute(&mut conn)
                 .await
                 .ok();
-            sqlx::query("UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''")
+            sqlx::query(&source_resolution)
                 .execute(&mut conn)
                 .await
                 .expect("source_text resolution");
