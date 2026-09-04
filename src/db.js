@@ -1653,7 +1653,7 @@ export const DB = {
           values: [q, c, scorePercent, completedAt, taskId],
         },
         {
-          query: `INSERT OR IGNORE INTO learning_evidence
+          query: `INSERT INTO learning_evidence
             (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)
             VALUES ($1, $2, 'REVIEW', $3, $4, $5, $6, $7)`,
           values: [task.unit_id, evidenceDate, q, c, scorePercent, taskId, completedAt],

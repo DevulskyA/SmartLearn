@@ -180,6 +180,33 @@ test("completeReviewWithEvidence rejeita correctCount > questionsCount", async (
   );
 });
 
+test("completeReviewWithEvidence segunda chamada para mesmo taskId deve falhar e não alterar o estado", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  const tasks = await DB.reviewTasks.createBulk([{
+    unitId: unit.id,
+    reviewNumber: 1,
+    dueDate: "2026-09-01",
+    reviewDone: false,
+    questionsDone: false,
+  }]);
+  const task = tasks[0];
+
+  await DB.completeReviewWithEvidence({ taskId: task.id, questionsCount: 10, correctCount: 8 });
+
+  await assert.rejects(
+    () => DB.completeReviewWithEvidence({ taskId: task.id, questionsCount: 10, correctCount: 5 }),
+    /evidência/i,
+  );
+
+  const evidence = await DB.learningEvidence.getByUnit(unit.id);
+  assert.equal(evidence.length, 1, "nenhuma evidência extra criada");
+  assert.ok(Math.abs(evidence[0].scorePercent - 80) < 0.01, "scorePercent da 1ª chamada preservado");
+
+  const [finalTask] = await DB.reviewTasks.getAll().then(ts => ts.filter(t => t.id === task.id));
+  assert.ok(Math.abs(finalTask.scorePercent - 80) < 0.01, "review_task não sobrescrito pela 2ª chamada");
+});
+
 // --- consultas ---
 
 test("learningEvidence.getByUnit retorna só evidências da unidade", async () => {
