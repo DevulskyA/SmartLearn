@@ -10,7 +10,7 @@
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
 HEAD_BEFORE: 753424c (fix(p0-3): validateImportContent — correctCount without questionsCount)
-HEAD_AFTER: 8d63cc6 (fix(p1-6): all migration SQL from canonical JSON, ensureColumns fixed)
+HEAD_AFTER: b80fc35 (fix(audit): P1-A+P2-A+P2-B closed; tracking real module, canonical schema, exercises migration)
 REMOTE_PR: #3
 REMOTE_HEAD_KNOWN: 585d766d56ea576c362b6c4029adfdb559cf95cc
 PR_STATE: DRAFT / open / not merged
@@ -65,15 +65,15 @@ P0_CLOSED:
 - P0-3: validateImportContent (647503c + P0-3 kill test added 2026-09-04) — DONE
 - P0-4: BrowserStore seed guard (committed) — DONE
 
-FRESH_VERIFIER: EXECUTED on HEAD 8d63cc6 (2026-09-04) — FINAL
+FRESH_VERIFIER: EXECUTED on HEAD b80fc35 (2026-09-04) — FINAL DELTA AUDIT
 FRESH_VERIFIER_VERDICT: CONFIRMED_CLEAN — all 6 gates PASS; CONFIRMED_BUGS=0; no gaps
 FRESH_VERIFIER_GATES:
-- CANONICAL_PRODUCTION_MIGRATION: PASS (JSON+db.js+lib.rs all verified; zero hardcoded migration SQL)
+- P1-A (tracking real module): PASS (import from src/tracking-state.js; no local copy; mutation killed)
+- P2-A (canonical schema complete): PASS (color/is_active/sort_order subjects; algorithm review_tasks; Rust sensor PASS)
+- P2-B (exercises preMigration[2] sensor): PASS (Rust test uses load_migration_plan()[2]; kill test confirmed)
 - JS_139: PASS (139/139)
-- Rust_11: PASS (11/11)
+- Rust_13: PASS (13/13)
 - WEB_BUILD: PASS
-- P0-3_KILL_TEST: PASS
-- P0-1_ORDER: PASS
 
 TRACKING_CANONICAL:
 ATRASADO > SEM_EVIDENCIA > EM_REVISAO > EM_ESTUDO > EM_DIA
@@ -92,7 +92,7 @@ KNOWN_GAPS:
 
 REMOTE_ACTIONS_AUTHORIZED: NONE
 
-STOP_CONDITION: HUMAN_GATE: READY_FOR_DRAFT_PR_AUDIT_PUSH
+STOP_CONDITION: HUMAN_GATE: READY_FOR_DELTA_AUDIT_PUSH
 
 COMMITS:
 - 585d766 (remote base)
@@ -109,3 +109,5 @@ COMMITS:
 - 753424c fix(p0-3)
 - 104e158 fix(p1-6): canonical migration JSON + db.js + Rust load_migration_plan
 - 8d63cc6 fix(p1-6): ensureColumns hardcoded SQL replaced with migrationPlan indices
+- 4f50d5f fix(audit): P1-A+P2-A+P2-B — tracking real module, canonical schema, exercises migration
+- b80fc35 fix(test): rename buggy discrimination fixture (no local getTrackingState* name)
