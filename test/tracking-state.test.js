@@ -1,22 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
-// Pure function extracted for testing — mirrors getTrackingState in app.js
-// (getTrackingState is DOM-bound; we test the logic via a local copy)
-function getTrackingState(unitId, allTasks, allEvidence, today) {
-  const tasks = allTasks.filter((t) => t.unitId === unitId);
-  const evidence = allEvidence.filter((e) => e.unitId === unitId);
-
-  if (tasks.some((t) => !t.reviewDone && t.dueDate < today)) return "ATRASADO";
-  if (evidence.length === 0) return "SEM_EVIDENCIA";
-  if (tasks.some((t) => !t.reviewDone && t.dueDate === today)) return "EM_REVISAO";
-
-  const hasReviewEvidence = evidence.some((e) => e.context === "REVIEW");
-  const hasFuturePending = tasks.some((t) => !t.reviewDone && t.dueDate > today);
-
-  if (!hasReviewEvidence && hasFuturePending) return "EM_ESTUDO";
-  return "EM_DIA";
-}
+import { getTrackingState } from "../src/tracking-state.js";
 
 const TODAY = "2026-09-04";
 const YESTERDAY = "2026-09-03";

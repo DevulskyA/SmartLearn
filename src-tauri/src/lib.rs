@@ -978,6 +978,133 @@ mod tests {
         });
     }
 
+    // P2-A sensor: setup_review_schema() (canonical DDL) must produce all runtime columns —
+    // including those that were historically added by ensureColumns (color, is_active, sort_order
+    // for subjects; algorithm for review_tasks). Fresh DB via schema-statements.json must be
+    // column-complete without needing any ensureColumns pass.
+    #[test]
+    fn canonical_schema_includes_all_runtime_columns() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            setup_review_schema(db.path()).await;
+
+            let options = sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(db.path())
+                .foreign_keys(true);
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            // Verify subjects has color, is_active, sort_order
+            let subject_cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('subjects')")
+                .fetch_all(&mut conn)
+                .await
+                .expect("subjects pragma");
+            let subject_col_set: std::collections::HashSet<String> = subject_cols.into_iter().collect();
+            assert!(subject_col_set.contains("color"), "subjects must have color column");
+            assert!(subject_col_set.contains("is_active"), "subjects must have is_active column");
+            assert!(subject_col_set.contains("sort_order"), "subjects must have sort_order column");
+
+            // Verify review_tasks has algorithm
+            let task_cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('review_tasks')")
+                .fetch_all(&mut conn)
+                .await
+                .expect("review_tasks pragma");
+            let task_col_set: std::collections::HashSet<String> = task_cols.into_iter().collect();
+            assert!(task_col_set.contains("algorithm"), "review_tasks must have algorithm column");
+
+            // Prove the kill test: INSERT with explicit color/algorithm values must succeed
+            let insert_result = execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![
+                    TransactionStatement {
+                        query: "INSERT INTO subjects (name, color, is_active, sort_order, created_at, updated_at) VALUES ('Anatomia', 'DISC-GREEN', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')".into(),
+                        values: vec![],
+                    },
+                ],
+            )
+            .await;
+            assert!(insert_result.is_ok(), "INSERT with color column must succeed on fresh schema: {:?}", insert_result.err());
+        });
+    }
+
+    // P2-B sensor: exercises.study_record_id → unit_id rename via preMigration[2].
+    // Tests the exercises rename step which is NOT exercised by other migration tests.
+    // Kill test: break preMigration[2] → this test FAILS; restore → PASS.
+    #[test]
+    fn exercises_premigration_step2_renames_study_record_id() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            let (pre_migration, _source_resolution) = load_migration_plan();
+
+            // 1. Set up main-era schema with exercises using old FK column name
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![
+                    TransactionStatement {
+                        query: "CREATE TABLE subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "CREATE TABLE study_records (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL, study_date TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "CREATE TABLE exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, study_record_id INTEGER NOT NULL REFERENCES study_records(id) ON DELETE CASCADE, question_text TEXT NOT NULL, answer_text TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO subjects (name) VALUES ('Histologia')".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO study_records (subject_id, study_date, content, created_at, updated_at) VALUES (1, '2026-01-05', 'Tecido epitelial', '2026-01-05T08:00:00Z', '2026-01-05T08:00:00Z')".into(),
+                        values: vec![],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO exercises (study_record_id, question_text, answer_text, created_at, updated_at) VALUES (1, 'Quais são os tipos?', 'Simples e estratificado', '2026-01-05T08:00:00Z', '2026-01-05T08:00:00Z')".into(),
+                        values: vec![],
+                    },
+                ],
+            )
+            .await
+            .expect("main-era exercises seed should succeed");
+
+            // 2. Run preMigration[2]: rename exercises.study_record_id → unit_id
+            // This is the canonical step from migration-main-to-vnext.json (same as db.js production)
+            let options = sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(db.path())
+                .foreign_keys(false);
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            sqlx::query(&pre_migration[2])
+                .execute(&mut conn)
+                .await
+                .expect("preMigration[2]: rename study_record_id to unit_id in exercises should succeed");
+
+            // 3. Verify: column renamed, data preserved
+            let cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('exercises')")
+                .fetch_all(&mut conn)
+                .await
+                .expect("exercises pragma");
+            let col_set: std::collections::HashSet<String> = cols.into_iter().collect();
+            assert!(col_set.contains("unit_id"), "exercises must have unit_id after preMigration[2]");
+            assert!(!col_set.contains("study_record_id"), "exercises must NOT have study_record_id after rename");
+
+            let ex_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM exercises WHERE unit_id = 1")
+                .fetch_one(&mut conn)
+                .await
+                .expect("count exercises by unit_id");
+            assert_eq!(ex_count, 1, "exercise data must be preserved after column rename");
+
+            let question: String = sqlx::query_scalar("SELECT question_text FROM exercises WHERE unit_id = 1")
+                .fetch_one(&mut conn)
+                .await
+                .expect("exercise question_text");
+            assert_eq!(question, "Quais são os tipos?", "exercise question_text must survive rename");
+        });
+    }
+
     #[test]
     fn execute_sqlite_transaction_rolls_back_on_error() {
         let db = TestDatabase::create();
