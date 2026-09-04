@@ -3216,4 +3216,12 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   }
 });
 
+if (import.meta.env?.DEV) {
+  const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+  window.__seedUatMedical = async () => {
+    await DB.importAll(getUatMedicalDataset());
+    console.log('[UAT] Medical dataset seeded. Reload to refresh UI.');
+  };
+}
+
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);
