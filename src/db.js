@@ -830,7 +830,7 @@ function createBrowserStore() {
       },
     },
 
-    async completeReviewWithEvidence({ taskId, questionsCount, correctCount }) {
+    async completeReviewWithEvidence({ taskId, questionsCount, correctCount }, _now) {
       const q = Number(questionsCount);
       const c = Number(correctCount);
       if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
@@ -842,7 +842,7 @@ function createBrowserStore() {
       const dup = state.learningEvidence.find((e) => e.reviewTaskId === taskId);
       if (dup) throw new Error('Já existe evidência para esta revisão.');
       const scorePercent = q > 0 ? (c / q) * 100 : null;
-      const now = new Date();
+      const now = _now ?? new Date();
       const completedAt = now.toISOString();
       const evidenceDate = localDateIso(now);
       task.reviewDone = true;

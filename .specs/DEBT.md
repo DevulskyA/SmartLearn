@@ -88,7 +88,7 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ### DEBT-008 — SPEC_PRECISION_GAP: tracking state table in spec vs AC mismatch (AC-ACOMP-03)
 
-- **Status**: open
+- **Status**: resolved (2026-09-04)
 - **Problem**: The spec table in `smartlearn-ui-analytics-vnext/spec.md` defines 4 tracking states (`NOVO`, `EM_DIA`, `EM_ESTUDO`, `ATRASADO`). AC-ACOMP-03 refers to "5 tracking states" and mentions `EM_REVISAO`, which is implemented in code (`app.js` `getTrackingState`) as the state for units with a pending review task within 7 days, but is not defined in the spec table. Additionally, the code's `EM_DIA` and `EM_ESTUDO` semantics differ from what the spec implies — `EM_DIA` requires no pending review ≤7 days, `EM_ESTUDO` applies to units with registration in last 30 days. The spec does not document these thresholds.
 - **Origin**: SPEC_PRECISION_GAP identified during pre-PR hardening pass, 2026-09-04
 - **Risk**: Any contributor reading the spec builds a different mental model than the code enforces. Future changes to tracking state logic will lack a spec contract to validate against.

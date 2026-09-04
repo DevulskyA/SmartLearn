@@ -197,15 +197,20 @@ O redesign visual adapta novos tokens a todos os 5 temas — não reduz para ape
 | AC-ACOMP-04 | Filtros: disciplina, estado, período |
 | AC-ACOMP-05 | Ação rápida: abrir unidade, adicionar Resumo Mestre, ir para revisão pendente |
 
-**Definição dos estados derivados:**
+**Definição dos estados derivados (derivados de `getTrackingState` em `app.js`, autoridade de código):**
 
-| Estado | Condição |
-|--------|----------|
-| SEM_EVIDENCIA | Nenhuma learning_evidence registrada para a unidade |
-| EM_ESTUDO | Tem evidência mas nenhuma review_task pendente (ex.: evidência só de INITIAL_PRACTICE) |
-| EM_DIA | Tem review_task(s) pendente(s) com due_date >= hoje |
-| ATRASADO | Tem review_task(s) com due_date < hoje e review_done = false |
-| EM_REVISAO | Tem review_tasks pendentes, todas dentro do prazo (subconjunto de EM_DIA com múltiplas revisões ativas) |
+Estados avaliados em ordem de prioridade — o primeiro critério satisfeito determina o estado.
+
+| # | Estado | Condição | Implementação |
+|---|--------|----------|---------------|
+| 1 | `SEM_EVIDENCIA` | Nenhuma `review_task` associada à unidade (`tasks.length === 0`) | Cobre unidades sem revisões geradas; nome histórico — não verifica `learning_evidence` diretamente |
+| 2 | `ATRASADO` | ≥1 `review_task` pendente (`reviewDone = false`) com `dueDate < hoje` | Qualquer revisão vencida e não concluída |
+| 3 | `EM_REVISAO` | Nenhuma atrasada; próxima revisão pendente com `dueDate` a ≤7 dias de hoje (inclusive hoje = 0 dias) | `getDaysBetween(hoje, proxima.dueDate) <= 7` |
+| 4 | `EM_ESTUDO` | Nenhuma atrasada; próxima revisão pendente com `dueDate` a ≥8 dias de hoje | `getDaysBetween(hoje, proxima.dueDate) >= 8` |
+| 5 | `EM_DIA` | Todas as revisões concluídas (`reviewDone = true` para todas) — nenhuma pendente | Estado residual após todas as 16 revisões do schedule |
+
+**Nota de implementação:** `getDaysBetween(a, b)` = `Math.round((toUTC(b) - toUTC(a)) / 86400000)` — calendário UTC.
+**Nota de nomenclatura:** `SEM_EVIDENCIA` verifica review_tasks, não `learning_evidence`. O nome reflete intenção histórica; o comportamento real é "sem revisões registradas".
 
 ---
 

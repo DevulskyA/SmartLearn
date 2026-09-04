@@ -373,6 +373,24 @@ test("completeReviewWithEvidence: evidenceDate usa dia local, não prefixo UTC",
   assert.equal(evidence[0].evidenceDate, today, "evidenceDate deve ser o dia local, não o prefixo UTC de completedAt");
 });
 
+test("completeReviewWithEvidence: evidenceDate localDateIso — kill test M2 com data injetada na virada de dia UTC-3", async () => {
+  // Data injetada: 2026-09-04T01:30:00.000Z = UTC Sep 4, local Sep 3 em UTC-3 (Brasília)
+  // toISOString().slice(0,10) retornaria "2026-09-04" (UTC)
+  // localDateIso() retorna "2026-09-03" (local em UTC-3)
+  // Este teste falha se o mutante M2 for aplicado em ambiente UTC-3.
+  const injectedNow = new Date('2026-09-04T01:30:00.000Z');
+  const expectedLocalDate = localDate(injectedNow); // "2026-09-03" em UTC-3, "2026-09-04" em UTC puro
+  const subject = await makeSubject("M2-kill");
+  const unit = await makeUnit(subject.id);
+  const tasks = await DB.reviewTasks.createBulk([{
+    unitId: unit.id, reviewNumber: 1, dueDate: "2026-09-01", reviewDone: false, questionsDone: false,
+  }]);
+  await DB.completeReviewWithEvidence({ taskId: tasks[0].id, questionsCount: 5, correctCount: 5 }, injectedNow);
+  const evidence = await DB.learningEvidence.getByUnit(unit.id);
+  assert.equal(evidence.length, 1);
+  assert.equal(evidence[0].evidenceDate, expectedLocalDate, "evidenceDate deve usar dia local do dispositivo, não UTC de completedAt");
+});
+
 test("getCompletedToday: usa evidence_date para encontrar revisões do dia local", async () => {
   const subject = await makeSubject();
   const unit = await makeUnit(subject.id);
