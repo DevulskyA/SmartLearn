@@ -102,6 +102,22 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ---
 
+### DEBT-009 — TLC_INSTALLATION_MISMATCH: canonical validator scripts absent from agent runtime
+
+- **Status**: open
+- **Problem**: `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` — the canonical TLC structural validators — are not present in this project nor in the installed `tcl-governance-pack` skill. The skill ships prose checklists only, not executable scripts. Per TCL Strict, structural gate is UNVERIFIED (not PASS and not FAIL) when the validator cannot be executed.
+- **Origin**: PRE-UAT sanity pass 2026-09-04 — searched project root, `src-tauri/`, `.specs/`, `.claude/skills/tcl-governance-pack/`, `.agents/`; `Glob validate*.py` returned zero matches against all paths.
+- **Risk**: If a validator script introduces a gate check not covered by manual inspection, a real structural gap could go undetected. Manual inspection is not fail-closed.
+- **Impact**: STRUCTURAL_VALIDATION gate permanently UNVERIFIED for all features in this project until scripts are available. Does not block UAT, Tauri smoke, or PR — only the formal structural gate report is affected.
+- **Affected components**: `.specs/features/*/validation.md` (all features), CI if added later.
+- **Dependencies**: TLC skill maintainer must add `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` to the canonical skill package. This project should not create ad-hoc validators.
+- **Resolution criterion**: Canonical scripts available in `tcl-governance-pack` or equivalent project-level location; `validate_spec.py .specs/features/smartlearn-pre-pr-closure-hardening/` exits 0; STRUCTURAL_VALIDATION promoted to PASS.
+- **Priority**: P3 (does not block shipping; blocks formal TLC certification only)
+- **Owner**: unassigned
+- **Evidence**: PRE-UAT sanity pass 2026-09-04; `7f4d211` (commit noting UNVERIFIED)
+
+---
+
 ## Resolved
 
 ### DEBT-001 — SQLite/Tauri real persistence not validated for analytics-vnext

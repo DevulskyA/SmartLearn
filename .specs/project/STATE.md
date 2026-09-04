@@ -13,6 +13,7 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 - **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
 - **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
 - **Bloqueio ativo:** HUMAN_GATE: UAT manual em Tauri Desktop + HUMAN_GATE: PROP-DEC-013-V2 DOMAIN_REDESIGN_APPROVAL. NÃO fazer push/PR antes da execução UAT e aprovação DEC-013-V2.
+- **TLC_INSTALLATION_MISMATCH = TRUE**: `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` ausentes do runtime atual. STRUCTURAL_VALIDATION = UNVERIFIED para todas as features. Não bloqueia UAT nem PR — bloqueia apenas certificação TLC formal. Ver DEBT-009.
 
 ---
 

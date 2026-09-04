@@ -38,6 +38,45 @@
 
 ---
 
+## Manual Structural Validation (TLC_INSTALLATION_MISMATCH = TRUE)
+
+_Canonical Python validators absent from runtime. Manual equivalent performed per TCL protocol. Result remains UNVERIFIED — manual inspection is not fail-closed._
+
+### SPEC check
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Todos os requisitos possuem IDs | PASS | AC-PERSIST-01/02, AC-DELETE-01, AC-DATE-01, AC-BOOT-01, AC-TRACK-01, AC-UAT-01, AC-GOV-01 — todos com IDs únicos |
+| ACs são observáveis (condição WHEN/THEN verificável) | PASS | Cada AC define estado preciso verificável: score_percent=80, evidence_count=1, erro thrown, evidenceDate=localDateIso(now), review_schedule=JSON canônico |
+| ACs contraditórios | PASS — nenhum | AC-PERSIST-01 (duplicate fail-closed) e AC-DELETE-01 (guard) são independentes; AC-DATE-01 e AC-BOOT-01 em domínios disjuntos |
+| Non-goals coerentes com corpo do spec | PASS | Out of scope: DEC-013-V2, FSRS, IndexedDB, onboarding — todos referenciados em DEBT (004, 003, 006, 007) como dívida aberta; nenhum auto-aprovado |
+| Decisões coerentes | PASS | Nenhuma decisão PROPOSED tratada como ACCEPTED no spec |
+| Stale status encontrado e corrigido | FIXED | AC-PERSIST-01 dizia "SQLite BLOCKER: Rust sensor ainda não existe" — stale após T2 (`82caf1f`). Corrigido nesta sessão. |
+
+### TASKS check
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Toda task referencia AC/requisito | PASS | T1→AC-PERSIST-01; T2→AC-PERSIST-01,02; T3→AC-DELETE-01; T4→AC-DATE-01; T5→AC-BOOT-01; T6→AC-PERSIST-02; T7→AC-TRACK-01; T8→AC-UAT-01; T9→AC-GOV-01 |
+| Dependências apontam para tasks anteriores | PASS | Execution plan: T2→T3→T4→T5 (sensor-before-implementation); T6 após T3/T4/T5; T7/T8/T9 após T6 |
+| Cada mudança possui sensor/gate | PASS | T1: node:test duplicate; T2: Rust test; T3: node:test deleteIfEmpty; T4: node:test date boundary; T5: Rust test bootstrap; T6: audit com tabela; T7: spec correction; T8: checklist; T9: reconciliation |
+| Cada task é atomicamente executável | PASS — com desvio registrado | T1,T4,T5 atômicas. T2+T3 agrupadas (desvio governance registrado). T7+T8+T9 agrupadas (desvio registrado). Desvios documentados e não repetidos. |
+| Tasks marcadas DONE sem evidência | PASS — nenhuma | T1-T7, T9: commit SHA explícito como evidência. T8: marcada "CHECKLIST CRIADO — PENDING HUMAN_GATE", não DONE. |
+
+### VALIDATION check
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Cada AC possui evidência ou GAP documentado | PASS | AC-PERSIST-01/02/DELETE-01/DATE-01/BOOT-01: file:line + assertion. AC-TRACK-01: spec corrected. AC-UAT-01: GAP = PENDING HUMAN_GATE (correto). AC-GOV-01: governance deviation recorded. |
+| SPEC_DEVIATION aberto | PASS — nenhum | DEBT-008 (SPEC_PRECISION_GAP AC-ACOMP-03) resolvido em `af000b2`. Nenhum SPEC_DEVIATION aberto. |
+| AC conhecido falho aparece como PASS | PASS — nenhum | AC-UAT-01 explicitamente marcado PENDING/HUMAN_GATE, não PASS. |
+| Closure gates com evidência real | PASS | 97/97 node:test, 8/8 cargo test, build 21 módulos — todos com exit codes reais documentados. |
+| Discrimination sensors com evidência real | PASS | 5 mutantes: inject→run→FAIL recorded→restore→green confirmed. Não foi "code analysis". |
+
+**Resultado manual**: sem gaps bloqueadores. STRUCTURAL_VALIDATION permanece UNVERIFIED por ausência dos scripts canônicos (DEBT-009).
+
+---
+
 ## AC-DATE-01 Audit — Shared Primitive Verification
 
 **Question**: Do BrowserStore and SQLite share the same canonical primitive for converting a timestamp instant to a local semantic date?
@@ -198,7 +237,7 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 **Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
-**Structural validation (Python scripts)**: UNVERIFIED — `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` not found in project or tcl-governance-pack. Governance framework uses prose checklists, not executable Python validators. Manual inspection done but does not substitute for script execution per TCL Strict fail-closed policy.  
+**Structural validation (Python scripts)**: UNVERIFIED — TLC_INSTALLATION_MISMATCH = TRUE. `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` absent from runtime (DEBT-009). Manual structural validation equivalent performed (see §Manual Structural Validation above): SPEC/TASKS/VALIDATION checks all PASS. Status remains UNVERIFIED per TCL fail-closed: manual does not substitute for script. Does NOT block UAT or PR.  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
 **DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 

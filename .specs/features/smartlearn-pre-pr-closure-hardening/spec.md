@@ -31,7 +31,7 @@ Segunda tentativa da MESMA review com 5/10:
 
 Comportamento equivalente em BrowserStore e SQLite.
 
-**Status:** PASS (BrowserStore via node:test — `d68589f`). SQLite BLOCKER: Rust transaction sensor ainda não existe.
+**Status:** PASS — BrowserStore via node:test (`d68589f`); SQLite via Rust test `complete_review_duplicate_rolls_back` (`82caf1f`, T2).
 
 ---
 
