@@ -20,8 +20,14 @@
 | AC-BOOT-01 | `src-tauri/src/lib.rs::fresh_install_review_schedule_is_canonical` | `review_schedule` is non-NULL and matches REVIEW_DAY_OFFSETS after fresh init | PASS (8/8 cargo) |
 | AC-BOOT-01 | `src-tauri/src/lib.rs::fresh_install_unbound_param_yields_null_schedule` | Regression sensor: unbound $1 yields NULL (documents pre-T5 bug) | PASS (8/8 cargo) |
 | AC-TRACK-01 | `.specs/features/smartlearn-ui-analytics-vnext/spec.md` — 5-state table corrected | Spec matches `getTrackingState` in app.js; DEBT-008 resolved | PASS |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "P0-3: context REVIEW sem reviewTaskId lança erro" | `learningEvidence.create` throws when `context='REVIEW'` and `reviewTaskId` is null | PASS (103/103) |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "P0-3: context INITIAL_PRACTICE com reviewTaskId lança erro" | Throws when non-REVIEW context receives reviewTaskId | PASS (103/103) |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "P0-3: context EXTERNAL com reviewTaskId lança erro" | Throws when non-REVIEW context receives reviewTaskId | PASS (103/103) |
+| AC-PERSIST-02 | `test/learning-evidence.test.js` — "P0-2: clearAll apaga learning_evidence antes de review_tasks" | FK integrity: evidence deleted before review_tasks; clearAll completes without FK violation | PASS (103/103) |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "P0-4: backup v1 (studyRecords, sem schemaVersion) é aceito e migrado" | `importAll` migrates main-era v1 backup with studyRecords → learningUnits; no rejection | PASS (103/103) |
+| AC-PERSIST-01 | `test/learning-evidence.test.js` — "P0-4: backup schemaVersion 1 com learningUnits é aceito" | `importAll` accepts schemaVersion=1 backups (MIN_VERSION lowered from 2→1) | PASS (103/103) |
 
-**Test counts**: 97/97 node:test, 8/8 cargo test (2026-09-04)
+**Test counts**: 103/103 node:test, 8/8 cargo test (2026-09-04)
 
 ---
 
@@ -29,7 +35,7 @@
 
 | Gate | Command | Result |
 |------|---------|--------|
-| node:test | `node --test test/*.test.js` | PASS — 97/97 (2026-09-04) |
+| node:test | `node --test test/*.test.js` | PASS — 103/103 (2026-09-04) |
 | cargo test | `cargo test` (src-tauri/) | PASS — 8/8 (2026-09-04) |
 | build | `npm run build` | PASS — 21 modules, 255ms, exit 0 (2026-09-04) |
 | validate_spec.py | searched project root, src-tauri/, .specs/, .claude/skills/tcl-governance-pack/, .agents/ | **UNVERIFIED — script not found**. Searched: `Glob validate*.py` across full project and tcl-governance-pack skill directory. No `validate_spec.py` exists. Governance framework (tcl-governance-pack) uses prose checklists, not Python scripts. |
@@ -120,6 +126,7 @@ _Canonical Python validators absent from runtime. Manual equivalent performed pe
 | UAT dataset | `9e412b6` | feat(uat): medical dataset + validation.md final status |
 | UAT seeder | `70f07f0` | feat(uat): expose window.__seedUatMedical DEV-only console hook |
 | PRE-UAT | `8b714b7` | chore(state): update test count (97) and full commit log in STATE.md |
+| P0-2/P0-3/P0-4/P0-5/P1-2/P1-5 | `a76c1d3` | fix(db): P0-5 fixes from external adversarial audit (clearAll FK, context contract, v1 backup migration, DEV seed guard, DOM selectors, canonical thresholds) |
 
 ---
 
@@ -206,6 +213,11 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 | M3 | `getCompletedToday` filters by `task.reviewDone && completedAt.startsWith(today)` | `learning-evidence.test.js` "encontra revisão mesmo quando completedAt UTC está no dia seguinte" | FAIL with mutant (1/1 target fail), PASS restored |
 | M4 | `deleteIfEmpty` removes `if (hasUnits) throw` guard | `subjects.test.js` B+C | FAIL with mutant (2/4 fail), PASS restored |
 | M5 | Rust: Settings INSERT `values: vec![]` (unbound $1) | `lib.rs::fresh_install_review_schedule_is_canonical` | FAILED with mutant (cargo test FAILED), PASS restored |
+| M6 | Remove P0-3 first check: `if (context === 'REVIEW' && reviewTaskId == null) throw` (BrowserStore) | `learning-evidence.test.js` "P0-3: context REVIEW sem reviewTaskId lança erro" | FAIL with mutant, PASS restored |
+| M7 | Remove P0-3 second check: `if (context !== 'REVIEW' && reviewTaskId != null) throw` (BrowserStore) | `learning-evidence.test.js` "P0-3: context INITIAL_PRACTICE com reviewTaskId lança erro" | FAIL with mutant, PASS restored |
+| M8 | Remove `DELETE FROM learning_evidence` from `buildClearStatements()` | `learning-evidence.test.js` "P0-2: clearAll apaga learning_evidence antes de review_tasks" | FAIL with mutant (FK violation), PASS restored |
+| M9 | `migrateV1ImportData`: return `data` unmodified (skip migration) | `learning-evidence.test.js` "P0-4: backup v1 (studyRecords, sem schemaVersion) é aceito e migrado" | FAIL with mutant (schemaVersion null → rejection), PASS restored |
+| M10 | `MIN_VERSION = 2` (revert to pre-fix) | `learning-evidence.test.js` "P0-4: backup schemaVersion 1 com learningUnits é aceito" | FAIL with mutant (schemaVersion 1 rejected), PASS restored |
 
 ---
 
@@ -236,28 +248,28 @@ Second session, fresh context. Re-ran all gates without prior session state.
 
 | Gate | Result |
 |------|--------|
-| `node --test test/*.test.js` | PASS — 97/97 |
+| `node --test test/*.test.js` | PASS — 103/103 |
 | `cargo test` (src-tauri/) | PASS — 8/8 |
-| `npm run build` | PASS — 21 modules, 269ms, exit 0 |
+| `npm run build` | PASS — 21 modules, exit 0 |
 
-Confirmed: no test regressions from prior session. Build artifact clean.
+Confirmed: no test regressions from adversarial audit session. 6 new discrimination tests added (P0-2/P0-3/P0-4). Build artifact clean.
 
 ---
 
 ## Closure Declaration
 
-**Automated gate**: PASS (97 node:test, 8 cargo test, 2026-09-04)  
+**Automated gate**: PASS (103 node:test, 8 cargo test, 2026-09-04)  
 **Build gate**: PASS (vite build — 21 modules, exit 0, 2026-09-04)  
-**Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
-**Fresh verifier**: PASS — independent re-run 2026-09-04: 97/97 JS, 8/8 Rust, build clean  
+**Discrimination gate**: PASS — all 10 mutants killed by real execution (inject → fail → restore → green); M6-M10 added for P0-2/P0-3/P0-4 fixes from adversarial audit  
+**Fresh verifier**: PASS — re-run post adversarial-audit fixes 2026-09-04: 103/103 JS, 8/8 Rust, build clean  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
 **Structural validation (Python scripts)**: UNVERIFIED — TLC_INSTALLATION_MISMATCH = TRUE. `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` absent from runtime (DEBT-009). Manual structural validation equivalent performed (see §Manual Structural Validation above): SPEC/TASKS/VALIDATION checks all PASS. Status remains UNVERIFIED per TCL fail-closed: manual does not substitute for script. Does NOT block UAT or PR.  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
 **DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 
-`AUTOMATED_TESTS: PASS`  
-`DISCRIMINATION: PASS`  
+`AUTOMATED_TESTS: PASS — 103/103 JS, 8/8 Rust`  
+`DISCRIMINATION: PASS — 10 mutants killed`  
 `BUILD: PASS`  
 `FRESH_VERIFIER: PASS`  
 `STRUCTURAL_VALIDATION: UNVERIFIED`  
