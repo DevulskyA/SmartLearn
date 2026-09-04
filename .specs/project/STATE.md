@@ -6,14 +6,32 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** Pre-PR Hardening — analytics-vnext feature complete, closure blockers resolved.
-- **Data:** 2026-09-04
-- **Próxima ação:** HUMAN_GATE: PRE_PR_CLOSURE_HARDENING — executar UAT-1..UAT-6 em build Tauri real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`), depois aprovar PROP-DEC-013-V2 ou rejeitar, então criar PR para `main`.
+- **Fase:** Pre-PR Hardening — closure técnica em andamento; UAT Tauri pendente execução humana.
+- **Data:** 2026-09-05
+- **Próxima ação:** Executar UAT-1..UAT-6 no Tauri Desktop real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`). Após UAT Tauri PASS: gate Web + gate Android per INV-26 (ou SPEC_DEVIATION explícito). Depois: DRAFT PR → auditoria adversarial → merge.
 - **Testes:** 97 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
 - **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
-- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
-- **Bloqueio ativo:** HUMAN_GATE: UAT manual em Tauri Desktop + HUMAN_GATE: PROP-DEC-013-V2 DOMAIN_REDESIGN_APPROVAL. NÃO fazer push/PR antes da execução UAT e aprovação DEC-013-V2.
+- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook), `35b2328` (fresh verifier), `7256ca3` (DEC-013-V2) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
+- **DEC-013-V2:** ACCEPTED (2026-09-05) — `source_text` canônico, `sources` removido, INV-05B SUPERSEDED, DEBT-004 RESOLVED.
+- **INV-26:** Novo invariante global de compatibilidade multiplataforma (Web/Tauri/Android). Todo gate de closure futuro deve incluir gate por plataforma ou SPEC_DEVIATION aprovado.
 - **TLC_INSTALLATION_MISMATCH = TRUE**: `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` ausentes do runtime atual. STRUCTURAL_VALIDATION = UNVERIFIED para todas as features. Não bloqueia UAT nem PR — bloqueia apenas certificação TLC formal. Ver DEBT-009.
+
+### Multiplatform closure policy (INV-26)
+
+Vigora a partir de 2026-09-05. Features futuras: gates Web + Tauri + Android obrigatórios ou SPEC_DEVIATION explícito.
+
+**Análise de impacto — feature atual (`smartlearn-pre-pr-closure-hardening`):**
+
+| Aspecto | Resultado |
+|---------|-----------|
+| Dispatch pattern | COMPLIANT — `hasTauriRuntime()` em db.js; BrowserStore = Web; SQLite = Tauri+Android |
+| APIs Tauri em caminho compartilhado | NONE — `invoke()` confinado a db.js e saveBackupFile (guarda correta) |
+| BrowserStore (Web) coberto | PASS — 97/97 node:test |
+| SQLite/Tauri coberto | PASS — 8/8 cargo test + UAT pendente |
+| Android gate | **MISSING** — não há gate Android para esta feature. Android usa o mesmo adapter SQLite do Tauri desktop (mesmo código db.js), mas não há build/install/flow evidence para esta feature. |
+| Web browser funcional | **MISSING** — node:test cobre BrowserStore mas não renderização real em navegador. |
+
+**Decisão requerida antes do merge:** SPEC_DEVIATION (aceitar risco Android+Web-browser sem gate) ou adicionar gates. A auditoria externa decidirá.
 
 ---
 
