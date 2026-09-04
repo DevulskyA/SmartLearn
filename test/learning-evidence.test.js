@@ -353,3 +353,71 @@ test("exportAll/importAll roundtrip v3 preserva learningEvidence", async () => {
   assert.equal(evidence[0].context, "EXTERNAL");
   assert.equal(evidence[0].questionsCount, 40);
 });
+
+// --- T4: local date boundary ---
+
+function localDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+test("completeReviewWithEvidence: evidenceDate usa dia local, não prefixo UTC", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  const tasks = await DB.reviewTasks.createBulk([{
+    unitId: unit.id, reviewNumber: 1, dueDate: "2026-09-01", reviewDone: false, questionsDone: false,
+  }]);
+  const today = localDate();
+  await DB.completeReviewWithEvidence({ taskId: tasks[0].id, questionsCount: 10, correctCount: 7 });
+  const evidence = await DB.learningEvidence.getByUnit(unit.id);
+  assert.equal(evidence.length, 1);
+  assert.equal(evidence[0].evidenceDate, today, "evidenceDate deve ser o dia local, não o prefixo UTC de completedAt");
+});
+
+test("getCompletedToday: usa evidence_date para encontrar revisões do dia local", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  const tasks = await DB.reviewTasks.createBulk([{
+    unitId: unit.id, reviewNumber: 1, dueDate: "2026-09-01", reviewDone: false, questionsDone: false,
+  }]);
+  const today = localDate();
+  await DB.completeReviewWithEvidence({ taskId: tasks[0].id, questionsCount: 10, correctCount: 7 });
+
+  const found = await DB.reviewTasks.getCompletedToday(today);
+  assert.equal(found.length, 1, "deve encontrar a revisão concluída hoje por evidenceDate");
+
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localDate(d); })();
+  const notFound = await DB.reviewTasks.getCompletedToday(yesterday);
+  assert.equal(notFound.length, 0, "ontem não deve encontrar revisão de hoje");
+});
+
+test("getCompletedToday: encontra revisão mesmo quando completedAt UTC está no dia seguinte", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  const tasks = await DB.reviewTasks.createBulk([{
+    unitId: unit.id, reviewNumber: 1, dueDate: "2026-09-01", reviewDone: false, questionsDone: false,
+  }]);
+  const task = tasks[0];
+
+  // Simula revisão concluída às 22:30 local que gera completedAt UTC no dia seguinte
+  // Fazemos isso criando evidência com evidenceDate=hoje e task com completedAt=amanhã UTC
+  const localToday = "2026-09-03";
+  const utcNextDay = "2026-09-04T01:30:00.000Z"; // UTC "next day" para BRT (UTC-3)
+
+  // Forçar estado via update + create manual para simular boundary
+  await DB.reviewTasks.update(task.id, { reviewDone: true, completedAt: utcNextDay });
+  await DB.learningEvidence.create({
+    unitId: unit.id,
+    evidenceDate: localToday,  // dia local correto
+    context: "REVIEW",
+    questionsCount: 10,
+    correctCount: 8,
+    reviewTaskId: task.id,
+  });
+
+  // getCompletedToday deve encontrar via evidenceDate, não por completedAt.startsWith(today)
+  const found = await DB.reviewTasks.getCompletedToday(localToday);
+  assert.equal(found.length, 1, "deve encontrar via evidenceDate mesmo com completedAt UTC no dia seguinte");
+
+  const notOnNextDay = await DB.reviewTasks.getCompletedToday("2026-09-04");
+  assert.equal(notOnNextDay.length, 0, "não deve aparecer em 2026-09-04 — evidenceDate é 2026-09-03");
+});

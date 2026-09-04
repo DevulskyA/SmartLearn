@@ -36,6 +36,13 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function localDateIso(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function requireDatabase() {
   if (!database) {
     throw new Error("O banco ainda não foi inicializado. Execute DB.init() primeiro.");
@@ -644,9 +651,15 @@ function createBrowserStore() {
         return (await this.getAll()).filter((task) => task.dueDate < today && !task.reviewDone);
       },
       async getCompletedToday(today) {
-        return (await this.getAll())
-          .filter((task) => task.completedAt?.startsWith(today) && task.reviewDone)
-          .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+        const state = readState();
+        const taskIds = new Set(
+          state.learningEvidence
+            .filter((e) => e.evidenceDate === today && e.context === 'REVIEW' && e.reviewTaskId != null)
+            .map((e) => e.reviewTaskId),
+        );
+        return state.reviewTasks
+          .filter((t) => taskIds.has(t.id))
+          .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
       },
       async getTomorrow(tomorrow) {
         return (await this.getAll()).filter((task) => task.dueDate === tomorrow && !task.reviewDone);
@@ -829,8 +842,9 @@ function createBrowserStore() {
       const dup = state.learningEvidence.find((e) => e.reviewTaskId === taskId);
       if (dup) throw new Error('Já existe evidência para esta revisão.');
       const scorePercent = q > 0 ? (c / q) * 100 : null;
-      const completedAt = nowIso();
-      const evidenceDate = completedAt.slice(0, 10);
+      const now = new Date();
+      const completedAt = now.toISOString();
+      const evidenceDate = localDateIso(now);
       task.reviewDone = true;
       task.questionsDone = true;
       task.questionsCount = q;
@@ -1349,10 +1363,11 @@ export const DB = {
 
     async getCompletedToday(today) {
       const rows = await requireDatabase().select(
-        `SELECT * FROM review_tasks
-         WHERE completed_at LIKE $1 AND review_done = 1
-         ORDER BY completed_at DESC`,
-        [`${today}%`],
+        `SELECT rt.* FROM review_tasks rt
+         INNER JOIN learning_evidence le ON le.review_task_id = rt.id
+         WHERE le.evidence_date = $1 AND le.context = 'REVIEW'
+         ORDER BY rt.completed_at DESC`,
+        [today],
       );
       return rows.map(mapReviewTask);
     },
@@ -1618,8 +1633,9 @@ export const DB = {
     if (!task) throw new Error('Revisão não encontrada: ' + taskId);
 
     const scorePercent = calcScorePercent(q, c);
-    const completedAt = nowIso();
-    const evidenceDate = completedAt.slice(0, 10);
+    const now = new Date();
+    const completedAt = now.toISOString();
+    const evidenceDate = localDateIso(now);
 
     await invoke('execute_sqlite_transaction', {
       statements: [
