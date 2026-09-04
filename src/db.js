@@ -2,6 +2,8 @@ import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
+// Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
+import schemaDdl from "./schema-statements.json" with { type: "json" };
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const SCHEMA_VERSION = 3;
@@ -10,25 +12,17 @@ let database;
 let initialization;
 let browserStore;
 
+// DDL from schema-statements.json + the parameterized INSERT (handled separately in init())
+// BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
+// Evidence of study and review outcomes belong in learning_units and review_tasks.
+// hint_text is pedagogical context only — never citation or provenance data.
+// VNEXT_DOMAIN_EXTENSION: learning_evidence ledger (longitudinal performance, separate from review_tasks agenda)
+// Bootstrap tracking — NOT cleared by importAll or clearAll.
+// id=1 singleton; dev_seed_version present = DEV seed already ran.
+// Separates "fresh DB" from "user deleted all their subjects".
 const schemaStatements = [
-  "CREATE TABLE IF NOT EXISTS subjects (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE COLLATE NOCASE,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    sort_order INTEGER NOT NULL DEFAULT 0\n  )",
-  "CREATE TABLE IF NOT EXISTS learning_units (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_text TEXT NOT NULL DEFAULT '',\n    study_date TEXT NOT NULL,\n    title TEXT NOT NULL,\n    summary_body TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
-  "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
-  "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
-  // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
-  // Evidence of study and review outcomes belong in learning_units and review_tasks.
-  // hint_text is pedagogical context only — never citation or provenance data.
-  "CREATE TABLE IF NOT EXISTS exercises (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,\n    question_text TEXT NOT NULL,\n    answer_text TEXT NOT NULL,\n    hint_text TEXT,\n    position INTEGER NOT NULL DEFAULT 0,\n    provenance TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
-  "CREATE INDEX IF NOT EXISTS idx_exercises_unit_id\n    ON exercises(unit_id)",
-  "CREATE TABLE IF NOT EXISTS settings (\n    key TEXT PRIMARY KEY,\n    app_version TEXT,\n    review_schedule TEXT,\n    last_backup_at TEXT\n  )",
+  ...schemaDdl,
   "INSERT OR IGNORE INTO settings (key, app_version, review_schedule)\n    VALUES ('main', '2.0.0', $1)",
-  // VNEXT_DOMAIN_EXTENSION: learning_evidence ledger (longitudinal performance, separate from review_tasks agenda)
-  "CREATE TABLE IF NOT EXISTS learning_evidence (\n    id             INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id        INTEGER NOT NULL REFERENCES learning_units(id),\n    evidence_date  TEXT    NOT NULL,\n    context        TEXT    NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW','EXTERNAL')),\n    questions_count INTEGER NOT NULL CHECK(questions_count > 0),\n    correct_count   INTEGER NOT NULL CHECK(correct_count >= 0),\n    score_percent   REAL,\n    review_task_id  INTEGER REFERENCES review_tasks(id),\n    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))\n  )",
-  "CREATE UNIQUE INDEX IF NOT EXISTS ux_le_review_task\n    ON learning_evidence(review_task_id)\n    WHERE review_task_id IS NOT NULL",
-  // Bootstrap tracking — NOT cleared by importAll or clearAll.
-  // id=1 singleton; dev_seed_version present = DEV seed already ran.
-  // Separates "fresh DB" from "user deleted all their subjects".
-  "CREATE TABLE IF NOT EXISTS _bootstrap (\n    id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id = 1),\n    dev_seed_version TEXT,\n    seeded_at TEXT\n  )",
 ];
 
 function nowIso() {

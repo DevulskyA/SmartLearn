@@ -2351,11 +2351,6 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (nextScreen === "plan" && databaseAvailable) {
     renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
   }
-  if (nextScreen === "register" && databaseAvailable) {
-    Promise.all([renderSubjects(), renderStudies()]).catch((error) => {
-      console.error("Falha ao carregar cadastro.", error);
-    });
-  }
   if (nextScreen === "tracking" && databaseAvailable) {
     renderTracking().catch((error) => console.error("Falha ao carregar acompanhamento.", error));
   }

@@ -471,16 +471,25 @@ mod tests {
         });
     }
 
-    // Full schema for completeReviewWithEvidence tests — matches db.js schemaStatements.
+    // Canonical schema: reads src/schema-statements.json — same file imported by db.js in production.
+    // Single source of truth: if the JSON drifts from the running schema, tests that use this break.
     async fn setup_review_schema(db: &Path) {
-        let stmts: Vec<TransactionStatement> = vec![
-            "CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",
-            "CREATE TABLE IF NOT EXISTS learning_units (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL REFERENCES subjects(id), source_text TEXT NOT NULL DEFAULT '', study_date TEXT NOT NULL, title TEXT NOT NULL, summary_body TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS review_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE, review_number INTEGER NOT NULL, due_date TEXT NOT NULL, completed_at TEXT, review_done INTEGER NOT NULL DEFAULT 0, questions_done INTEGER NOT NULL DEFAULT 0, questions_count INTEGER, correct_count INTEGER, score_percent REAL, comment TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS learning_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL REFERENCES learning_units(id), evidence_date TEXT NOT NULL, context TEXT NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW','EXTERNAL')), questions_count INTEGER NOT NULL CHECK(questions_count > 0), correct_count INTEGER NOT NULL CHECK(correct_count >= 0), score_percent REAL, review_task_id INTEGER REFERENCES review_tasks(id), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')))",
-            "CREATE UNIQUE INDEX IF NOT EXISTS ux_le_review_task ON learning_evidence(review_task_id) WHERE review_task_id IS NOT NULL",
-        ].iter().map(|sql| TransactionStatement { query: sql.to_string(), values: vec![] }).collect();
-        execute_sqlite_transaction_at_path(db, stmts).await.expect("review schema should succeed");
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let schema_path = std::path::Path::new(manifest_dir).join("../src/schema-statements.json");
+        let schema_json = std::fs::read_to_string(&schema_path)
+            .expect("src/schema-statements.json must exist — it is the canonical DDL shared with db.js");
+        let ddl_statements: Vec<String> = serde_json::from_str(&schema_json)
+            .expect("schema-statements.json must be a JSON array of strings");
+        let mut stmts: Vec<TransactionStatement> = ddl_statements
+            .into_iter()
+            .map(|sql| TransactionStatement { query: sql, values: vec![] })
+            .collect();
+        // INSERT settings with empty review_schedule (db.js does this separately with $1=REVIEW_SCHEDULE)
+        stmts.push(TransactionStatement {
+            query: "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', '[]')".into(),
+            values: vec![],
+        });
+        execute_sqlite_transaction_at_path(db, stmts).await.expect("canonical schema setup must succeed");
     }
 
     async fn seed_review_data(db: &Path) -> (i64, i64, i64) {
@@ -488,7 +497,7 @@ mod tests {
             db,
             vec![
                 TransactionStatement {
-                    query: "INSERT INTO subjects (name) VALUES ($1)".into(),
+                    query: "INSERT INTO subjects (name, created_at, updated_at) VALUES ($1, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')".into(),
                     values: vec![json!("Fisiologia")],
                 },
                 TransactionStatement {
