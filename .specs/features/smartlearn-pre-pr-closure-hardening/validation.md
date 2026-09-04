@@ -83,6 +83,20 @@ Perform on a real Tauri Desktop build (`cargo tauri build` or `cargo tauri dev`)
 
 ---
 
+## Discrimination Matrix — Mutant Kill Evidence
+
+Verified by code analysis (tests exist, assertions directly catch the mutated behavior).
+
+| ID | Mutant | Killed by | Kill mechanism |
+|----|--------|-----------|---------------|
+| M1 | BrowserStore: remove `if (dup) throw` in `learningEvidence.create` (L785-789) | `learning-evidence.test.js:183` "segunda chamada deve falhar" | `assert.rejects` — without guard, second call succeeds, no rejection |
+| M2 | `evidenceDate = now.toISOString().slice(0,10)` instead of `localDateIso(now)` | `learning-evidence.test.js` "encontra revisão mesmo quando completedAt UTC está no dia seguinte" | `today=D, completedAt=D+1T00:30Z` → UTC slice returns `D+1`, test asserts 1 result found |
+| M3 | `getCompletedToday` filters by `completedAt.startsWith(today)` not `evidenceDate === today` | Same boundary test | `completedAt` = UTC next-day prefix, `evidenceDate` = local today — UTC filter returns 0, test asserts 1 |
+| M4 | `deleteIfEmpty` removes `if (hasUnits) throw` guard | `subjects.test.js` "B: rejeita exclusão quando há learning_unit" | `assert.rejects` — without guard, delete succeeds, test fails |
+| M5 | Settings INSERT: `values: []` (unbound $1) | `lib.rs::fresh_install_review_schedule_is_canonical` | `assert!(schedule.is_some())` — unbound $1 yields NULL, assertion fails |
+
+---
+
 ## Open Gaps
 
 | Gap | Severity | Blocking PR? |
