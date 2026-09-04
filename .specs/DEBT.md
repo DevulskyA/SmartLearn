@@ -6,22 +6,6 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ## Open
 
-### DEBT-001 — SQLite/Tauri real persistence not validated for analytics-vnext
-
-- **Status**: open
-- **Problem**: All analytics-vnext acceptance criteria were verified against BrowserStore (localStorage-backed test double). SQLite transaction atomicity, schema migrations (`ensureColumns`, `ON DELETE CASCADE`), and `PRAGMA foreign_keys = ON` were NOT tested in a real Tauri + SQLite runtime.
-- **Origin**: analytics-vnext closure audit 2026-09-03; LESSON-001
-- **Risk**: Silent data loss or partial state on mobile/desktop if SQLite behavior differs from BrowserStore — particularly for `completeReviewWithEvidence` atomicity and `runMigrationFromReviewTasks`.
-- **Impact**: All NF-01 claims for analytics-vnext are browser-only. PR merge to production without this smoke is high-risk.
-- **Affected components**: `src/db.js` (BrowserStore + SQLite paths), Tauri plugin-sql 2.4.0, `completeReviewWithEvidence`, `runMigrationFromReviewTasks`, `ensureColumns`
-- **Dependencies**: Tauri dev environment with `npm run tauri dev`; a device or emulator for Android smoke
-- **Resolution criterion**: Run `npm run tauri dev`, execute `completeReviewWithEvidence` end-to-end in the app, verify learning_evidence row in the SQLite file, run migration twice and confirm idempotency. Document with screenshot or log.
-- **Priority**: P1
-- **Owner**: unassigned
-- **Evidence**: `.specs/features/smartlearn-ui-analytics-vnext/validation.md` — BROWSER_PASS verdict, gap documented
-
----
-
 ### DEBT-002 — app.js: state derivation and UI utilities not extracted
 
 - **Status**: open
@@ -67,24 +51,6 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Priority**: P2
 - **Owner**: unassigned
 - **Evidence**: `.specs/project/STATE.md` PROP-DEC-013-V2; commit `09ea0d8`
-
----
-
-### DEBT-005 — TLC_INSTALLATION_MISMATCH: plugin-sql version vs Tauri 2 feature flags
-
-- **Status**: open
-- **Problem**: `@tauri-apps/plugin-sql` version compatibility with Tauri 2.4.x feature flags (`sqlite`) and `PRAGMA foreign_keys = ON` enforcement has not been verified on the current installation.
-- **Origin**: `.specs/project/STATE.md` TLC_INSTALLATION_MISMATCH, 2026-09-03
-- **Risk**: Migrations or CASCADE deletes may silently fail without foreign key enforcement.
-- **Impact**: Data integrity guarantees for `ON DELETE CASCADE` in `review_tasks` and `learning_evidence` are unverified.
-- **Affected components**: `src-tauri/Cargo.toml`, `src/db.js` DB.init(), schema constraints
-- **Dependencies**: Requires Tauri dev environment (DEBT-001 resolution environment)
-- **Resolution criterion**: `npm run tauri dev`; execute `PRAGMA foreign_keys;` via console; confirm returns 1; run a cascade delete test.
-- **Priority**: P1 (resolved together with DEBT-001)
-- **Owner**: unassigned
-- **Evidence**: `.specs/project/STATE.md` TLC_INSTALLATION_MISMATCH
-
----
 
 ---
 

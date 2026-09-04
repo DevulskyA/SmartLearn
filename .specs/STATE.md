@@ -15,14 +15,14 @@
 | Active feature | `smartlearn-ui-analytics-vnext` + `bootstrap-seed` |
 | Feature status | PASS — smoke manual 2026-09-03 ✅; see validation.md |
 | Tests | 88 node:test (81 + 7 fixture), 5 Rust (2 original + 3 bootstrap lifecycle) |
-| HUMAN_GATE | PUSH_AND_PR_APPROVAL (analytics-vnext) |
+| HUMAN_GATE | PR_AND_MERGE_APPROVAL (analytics-vnext) — push concluído 2026-09-03 |
 | Pending — open | DEBT-007: empty state/onboarding (produção primeiro uso) — feature separada P2 |
 
 ## Active human gates
 
 | Gate | Blocks | Reference |
 |------|--------|-----------|
-| PUSH_AND_PR_APPROVAL | push / PR / merge of analytics-vnext | validation.md; SQLite smoke complete |
+| PR_AND_MERGE_APPROVAL | PR creation + merge of analytics-vnext | validation.md PASS; push done 2026-09-03 |
 
 ## Active decisions (abbreviated — full text in `.specs/project/STATE.md`)
 
