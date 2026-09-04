@@ -383,6 +383,94 @@ mod tests {
         });
     }
 
+    // Canonical schedule as JSON — must match REVIEW_DAY_OFFSETS in review-schedule.js.
+    const CANONICAL_SCHEDULE: &str = "[1,7,15,30,60,90,120,150,180,210,240,270,300,330,360,390]";
+
+    #[test]
+    fn fresh_install_review_schedule_is_canonical() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            // Setup minimal settings table (mirrors db.js schemaStatements DDL)
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement {
+                    query: "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, app_version TEXT, review_schedule TEXT)".into(),
+                    values: vec![],
+                }],
+            )
+            .await
+            .expect("settings DDL should succeed");
+
+            // Execute settings INSERT with explicit param binding (correct T5 behavior)
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement {
+                    query: "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', $1)".into(),
+                    values: vec![json!(CANONICAL_SCHEDULE)],
+                }],
+            )
+            .await
+            .expect("settings INSERT with params should succeed");
+
+            let options = sqlx::sqlite::SqliteConnectOptions::new().filename(db.path()).foreign_keys(true);
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            let row = sqlx::query("SELECT review_schedule FROM settings WHERE key = 'main'")
+                .fetch_one(&mut conn)
+                .await
+                .expect("settings row must exist");
+
+            let schedule: Option<String> = row.get("review_schedule");
+            assert!(schedule.is_some(), "review_schedule must not be NULL on fresh install");
+            assert_eq!(
+                schedule.unwrap(),
+                CANONICAL_SCHEDULE,
+                "review_schedule must equal the canonical schedule from review-schedule.js"
+            );
+        });
+    }
+
+    #[test]
+    fn fresh_install_unbound_param_yields_null_schedule() {
+        // Regression sensor: proves the bug that existed before T5.
+        // Executing the INSERT without binding $1 results in NULL schedule.
+        let db = TestDatabase::create();
+
+        run_async(async {
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement {
+                    query: "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, app_version TEXT, review_schedule TEXT)".into(),
+                    values: vec![],
+                }],
+            )
+            .await
+            .expect("settings DDL should succeed");
+
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement {
+                    query: "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', $1)".into(),
+                    values: vec![],  // no binding for $1 → NULL
+                }],
+            )
+            .await
+            .expect("INSERT runs without error even with unbound param");
+
+            let options = sqlx::sqlite::SqliteConnectOptions::new().filename(db.path()).foreign_keys(true);
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            let row = sqlx::query("SELECT review_schedule FROM settings WHERE key = 'main'")
+                .fetch_one(&mut conn)
+                .await
+                .expect("settings row must exist");
+
+            let schedule: Option<String> = row.get("review_schedule");
+            assert!(schedule.is_none(), "unbound $1 yields NULL — this is the bug T5 fixes");
+        });
+    }
+
     // Full schema for completeReviewWithEvidence tests — matches db.js schemaStatements.
     async fn setup_review_schema(db: &Path) {
         let stmts: Vec<TransactionStatement> = vec![

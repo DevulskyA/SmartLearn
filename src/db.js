@@ -989,12 +989,14 @@ export const DB = {
         database = await Database.load(DATABASE_URL);
         await database.execute('PRAGMA foreign_keys = ON');
 
-        for (const [index, statement] of schemaStatements.entries()) {
-          const params = index === schemaStatements.length - 1
-            ? [JSON.stringify(REVIEW_SCHEDULE)]
-            : [];
-          await database.execute(statement, params);
+        for (const statement of schemaStatements) {
+          if (statement.trimStart().toUpperCase().startsWith('INSERT')) continue;
+          await database.execute(statement, []);
         }
+        await database.execute(
+          "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', $1)",
+          [JSON.stringify(REVIEW_SCHEDULE)],
+        );
         await DB.subjects.ensureColumns();
         await DB.learningUnits.ensureColumns();
         await DB.reviewTasks.ensureColumns();
