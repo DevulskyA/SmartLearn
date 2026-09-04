@@ -3,7 +3,7 @@
 **Verifier:** Claude Sonnet 4.6 (independent closure pass — author ≠ verifier)
 **Date:** 2026-09-03
 **Branch:** claude/com-tlc-replanning-77f844
-**Verdict:** SQLITE_PASS_PARTIAL — SQLite/bootstrap provados em testes; WebView→UI chain pendente
+**Verdict:** PASS — todos os componentes de persistência/bootstrap verificados; empty state/onboarding separado (DEBT-007)
 
 > Classificação de status (separada por componente):
 >
@@ -11,14 +11,14 @@
 > |-----------|--------|
 > | Persistência SQLite (constraints, FK, CASCADE) | PASS — CLI + Rust |
 > | Marcador _bootstrap (singleton, anti-reseed) | PASS — Rust 3 testes |
-> | Restart com dados preservados | PASS — Rust test |
+> | Restart com dados preservados | PASS — Rust test + smoke manual |
 > | Fixtures DEV (dev-dataset.js, 88 node:tests) | PASS |
-> | WebView → db.js → Tauri SQL → SQLite → repository → UI | UNVERIFIED — requer Tauri runtime manual |
-> | Empty state/onboarding (produção, primeiro uso) | PENDENTE — DEBT-007 |
+> | WebView → db.js → Tauri SQL → SQLite → repository → UI | PASS — smoke manual 2026-09-03: subjects=2, review_tasks=32, "Não feitas hoje: 2" visível na UI |
+> | Empty state/onboarding (produção, primeiro uso) | PENDENTE — DEBT-007 (feature separada, não bloqueia este PR) |
 >
-> **Banco vazio em produção = estado válido.
-> Interface vazia em produção = comportamento incompleto (DEBT-007, feature separada).
-> Bootstrap DEV fecha quando smoke Tauri confirmar subjects na UI.**
+> **Banco vazio em produção = estado válido (correto para app de estudo).**
+> **Interface vazia em produção = comportamento incompleto (DEBT-007, feature separada).**
+> **Bootstrap DEV: FECHADO. Smoke manual confirma cadeia WebView→SQLite→UI.**
 
 ---
 
@@ -45,7 +45,7 @@ cd0c327  WP-F1 consolidar seletores de tema e tokens
 | 1 | validation.md → CLOSURE_REQUIRED | DONE |
 | 2 | AC-ACOMP-05 quick actions | DONE — "Ver no Plano", "+ Resumo Mestre", "Ir para revisão" implementados |
 | 3 | WP-B2 UAT real (exercícios → revisão → evidência) | PASS — ver detalhe abaixo |
-| 4 | SQLite/Tauri real | PASS CLI+RUST — CHECK, UNIQUE, FK, CASCADE verificados; completeReviewWithEvidence SQL ✅; Rust 2/2 ✅; bootstrap seed ✅; E2E manual pendente |
+| 4 | SQLite/Tauri real | PASS COMPLETO — CHECK, UNIQUE, FK, CASCADE verificados; completeReviewWithEvidence SQL ✅; Rust 5/5 ✅; bootstrap seed ✅; smoke manual 2026-09-03 ✅ |
 | 5 | Transaction sensor | PASS — BrowserStore atômico (1 setItem); SQLite usa execute_sqlite_transaction (begin/commit, rollback em erro: Rust test ✅) |
 | 6 | Duplication sensor | PASS — throw "Já existe evidência para esta revisão." |
 | 7 | Constraint sensors | PASS — q=0, c<0, c>q, taskId inválido: todos lançam antes de mutação de estado |
@@ -168,7 +168,7 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 
 | NF | Requisito | Resultado |
 |----|-----------|-----------|
-| NF-01 | Tauri 2 + SQLite; BrowserStore só para tests | BROWSER_PASS — BrowserStore testado; SQLite/Tauri requer smoke manual |
+| NF-01 | Tauri 2 + SQLite; BrowserStore só para tests | PASS — BrowserStore testado + smoke Tauri manual 2026-09-03: subjects=2, UI "Não feitas hoje: 2" ✅ |
 | NF-02 | schemaVersion: 3 no backup | PASS |
 | NF-03 | Migrations idempotentes via ensureColumns | PASS — dupla execução sem duplicar |
 | NF-04 | node:test sem framework | PASS — 81 testes, 0 falhas |
@@ -208,16 +208,27 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 
 ## Gaps e desvios
 
-| Gap | Severidade | Descrição |
-|-----|-----------|-----------|
-| NF-01 SQLite/Tauri unverificável | MEDIUM | BrowserStore não é SQLite real. Transaction atomicity e schema migrations não foram testados no runtime Tauri. Requer smoke manual com `tauri dev` ou `tauri build` antes do merge em produção. |
+Nenhum gap de persistência/bootstrap aberto. DEBT-007 (empty state/onboarding) é feature separada, não bloqueia este PR.
+
+---
+
+## Smoke manual — evidência
+
+**Data:** 2026-09-03
+**Sequência:**
+1. SQLite deletado → app iniciado → `_bootstrap` ausente → seed executado
+2. `subjects=2`, `review_tasks=32`, `_bootstrap.dev_seed_version='1'`, `seeded_at='2026-09-04T00:29:32.807Z'` ✅
+3. App reiniciado → dados preservados, sem re-seed ✅
+4. WebView exibiu "Não feitas hoje: 2" (screenshot confirmado) ✅
+
+**Cadeia verificada:** WebView → `db.js` → `invoke('execute_sqlite_transaction')` → Tauri SQL → SQLite → `DB.getDailyPlan()` → UI render
 
 ---
 
 ## Conclusão
 
-**BROWSER_PASS com 1 gap de severidade MEDIUM (SQLite/Tauri).**
+**PASS — todos os componentes verificados.**
 
-Todos os ACs funcionais verificados. 81 testes node:test passam. Discrimination sensor expandido para 7 mutantes. AC-ACOMP-05 implementado. BrowserStore é correto e robusto. PR pode ser criado com a condição de smoke manual com Tauri real antes do merge.
+Todos os ACs funcionais verificados. 88 node:tests passam (81 + 7 fixture). 5 Rust tests (2 original + 3 bootstrap lifecycle). Discrimination sensor expandido para 7 mutantes. AC-ACOMP-05 implementado. Cadeia WebView→SQLite→UI verificada por smoke manual. Nenhum gap MEDIUM aberto.
 
 **HUMAN_GATE: PUSH_AND_PR_APPROVAL — aguardando autorização do usuário.**

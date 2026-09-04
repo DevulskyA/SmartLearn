@@ -13,11 +13,10 @@
 |-------|-------|
 | Active branch | `claude/com-tlc-replanning-77f844` |
 | Active feature | `smartlearn-ui-analytics-vnext` + `bootstrap-seed` |
-| Feature status | SQLITE_PASS_PARTIAL — see component breakdown in validation.md |
+| Feature status | PASS — smoke manual 2026-09-03 ✅; see validation.md |
 | Tests | 88 node:test (81 + 7 fixture), 5 Rust (2 original + 3 bootstrap lifecycle) |
 | HUMAN_GATE | PUSH_AND_PR_APPROVAL (analytics-vnext) |
-| Pending — bootstrap | Smoke Tauri DEV: delete SQLite, restart, confirm subjects visible in UI |
-| Pending — open | DEBT-007: empty state/onboarding (produção primeiro uso) — feature separada |
+| Pending — open | DEBT-007: empty state/onboarding (produção primeiro uso) — feature separada P2 |
 
 ## Active human gates
 
