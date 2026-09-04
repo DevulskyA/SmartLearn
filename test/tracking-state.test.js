@@ -83,7 +83,7 @@ test("REVIEW evidence + future pending => EM_DIA (não EM_ESTUDO)", () => {
 // DISCRIMINATION: reintroducing the old <=7 day rule must FAIL the sensors above
 // =============================================================================
 
-function getTrackingState_BUGGY_7DAY(unitId, allTasks, allEvidence, today) {
+function buggyWith7DayRule(unitId, allTasks, allEvidence, today) {
   const tasks = allTasks.filter((t) => t.unitId === unitId);
   if (tasks.length === 0) return "SEM_EVIDENCIA";
   if (tasks.some((t) => !t.reviewDone && t.dueDate < today)) return "ATRASADO";
@@ -100,13 +100,13 @@ test("DISCRIMINATION: buggy <=7-day rule makes sensor A fail (tasks.length=0 che
   // Sensor A: sem evidence + review futura => SEM_EVIDENCIA.
   // Buggy version checks tasks.length === 0, not evidence length.
   // With 1 task + 0 evidence, buggy returns EM_REVISAO (if <= 7) not SEM_EVIDENCIA.
-  const result = getTrackingState_BUGGY_7DAY(1, [task({ due: TOMORROW })], [], TODAY);
+  const result = buggyWith7DayRule(1, [task({ due: TOMORROW })], [], TODAY);
   // Buggy: dueDate tomorrow = 1 day, <= 7 → EM_REVISAO. Should be SEM_EVIDENCIA.
   assert.notEqual(result, "SEM_EVIDENCIA", "buggy function gives wrong result for sensor A");
 });
 
 test("DISCRIMINATION: buggy <=7-day rule makes sensor G fail (NEXT_7 becomes EM_REVISAO not EM_ESTUDO)", () => {
-  const result = getTrackingState_BUGGY_7DAY(1, [task({ due: NEXT_7 })], [ev("INITIAL_PRACTICE")], TODAY);
+  const result = buggyWith7DayRule(1, [task({ due: NEXT_7 })], [ev("INITIAL_PRACTICE")], TODAY);
   // Buggy: 7 days <= 7 → EM_REVISAO. Correct: EM_ESTUDO (only today counts as EM_REVISAO).
   assert.equal(result, "EM_REVISAO", "buggy function incorrectly returns EM_REVISAO for 7-day-out task");
   // The correct function returns EM_ESTUDO — discrimination confirmed.
@@ -116,7 +116,7 @@ test("DISCRIMINATION: buggy <=7-day rule makes sensor G fail (NEXT_7 becomes EM_
 test("DISCRIMINATION: buggy function: task due today treated same as <=7 day (EM_REVISAO) but semantics wrong", () => {
   // Both give EM_REVISAO for today — agrees here but for wrong reason (days=0 <= 7).
   // The critical difference is tomorrow: correct = EM_ESTUDO, buggy = EM_REVISAO.
-  const buggy = getTrackingState_BUGGY_7DAY(1, [task({ due: TOMORROW })], [ev("INITIAL_PRACTICE")], TODAY);
+  const buggy = buggyWith7DayRule(1, [task({ due: TOMORROW })], [ev("INITIAL_PRACTICE")], TODAY);
   assert.equal(buggy, "EM_REVISAO", "buggy: tomorrow wrongly EM_REVISAO");
   const correct = getTrackingState(1, [task({ due: TOMORROW })], [ev("INITIAL_PRACTICE")], TODAY);
   assert.equal(correct, "EM_ESTUDO", "correct: tomorrow is EM_ESTUDO");
