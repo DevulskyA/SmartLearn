@@ -9,9 +9,9 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 - **Fase:** Pre-PR Hardening — analytics-vnext feature complete, closure blockers resolved.
 - **Data:** 2026-09-04
 - **Próxima ação:** HUMAN_GATE: PRE_PR_CLOSURE_HARDENING — executar UAT-1..UAT-6 em build Tauri real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`), depois aprovar PROP-DEC-013-V2 ou rejeitar, então criar PR para `main`.
-- **Testes:** 96 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
+- **Testes:** 97 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
 - **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
-- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
+- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
 - **Bloqueio ativo:** HUMAN_GATE: UAT manual em Tauri Desktop + HUMAN_GATE: PROP-DEC-013-V2 DOMAIN_REDESIGN_APPROVAL. NÃO fazer push/PR antes da execução UAT e aprovação DEC-013-V2.
 
 ---
