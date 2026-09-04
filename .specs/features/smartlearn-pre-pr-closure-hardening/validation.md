@@ -127,6 +127,10 @@ _Canonical Python validators absent from runtime. Manual equivalent performed pe
 | UAT seeder | `70f07f0` | feat(uat): expose window.__seedUatMedical DEV-only console hook |
 | PRE-UAT | `8b714b7` | chore(state): update test count (97) and full commit log in STATE.md |
 | P0-2/P0-3/P0-4/P0-5/P1-2/P1-5 | `a76c1d3` | fix(db): P0-5 fixes from external adversarial audit (clearAll FK, context contract, v1 backup migration, DEV seed guard, DOM selectors, canonical thresholds) |
+| P1-3 | `9da7eba` | chore(validation): update P1-3 — test count 97→103, 6 new discrimination mutants (M6-M10), P0-2/3/4/5/P1-2/5 evidence |
+| P1-4 | `8549539` | fix(stats): P1-4 — Stats.calculate uses learning_evidence as single performance source |
+| P1-6 | `bb4bf4c` | fix(analytics): P1-6 — bySubject default today uses local date, not UTC slice |
+| P1-7 | `f51b70d` | fix(rust-tests): P1-7 — sync setup_review_schema with real db.js schema |
 
 ---
 
@@ -226,9 +230,11 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 | Gap | Severity | Blocking PR? |
 |-----|----------|-------------|
 | ~~DEBT-008: SPEC_PRECISION_GAP AC-ACOMP-03~~ — RESOLVED: 5-state spec table corrected in analytics-vnext spec.md to match `getTrackingState` in app.js | resolved | No — closed in `af000b2` |
-| DEC-013-V2 PROPOSED (fonte = texto livre) — HUMAN_GATE pending | P2 | No — existing behavior unchanged |
+| DEC-013-V2 ACCEPTED — `src_tauri/decisions/DEC-013-V2.md` (`7256ca3`) | resolved | No — accepted |
 | UAT-1 through UAT-6 not yet executed on real Tauri build | P1 | HUMAN_GATE: requires manual execution |
-| `analytics.js:54` UTC default param for `bySubject()` — caller always provides local today; default never reached in production | P3 | No — stale default only |
+| ~~`analytics.js:54` UTC default param~~ — RESOLVED: `getLocalDateValue()` now used (`bb4bf4c`) | resolved | No — fixed |
+| ~~`Stats.calculate` uses reviewTasks for performance~~ — RESOLVED: uses learning_evidence (`8549539`) | resolved | No — fixed |
+| ~~Rust setup_review_schema missing summary_body/comment~~ — RESOLVED: schema synced with db.js (`f51b70d`) | resolved | No — fixed |
 | `db.js:344,759` importAll reconstruction uses `.slice(0,10)` on UTC timestamp string — UTC-unsafe for midnight-boundary historical data in legacy backups (schemaVersion < 3) | P3 | No — schemaVersion 3 backups provide explicit evidence rows |
 
 ---
@@ -248,27 +254,27 @@ Second session, fresh context. Re-ran all gates without prior session state.
 
 | Gate | Result |
 |------|--------|
-| `node --test test/*.test.js` | PASS — 103/103 |
+| `node --test test/*.test.js` | PASS — 104/104 |
 | `cargo test` (src-tauri/) | PASS — 8/8 |
 | `npm run build` | PASS — 21 modules, exit 0 |
 
-Confirmed: no test regressions from adversarial audit session. 6 new discrimination tests added (P0-2/P0-3/P0-4). Build artifact clean.
+Confirmed: all P0/P1 adversarial audit fixes applied. 7 new tests (P0-2/P0-3/P0-4 discrimination + P1-4 golden fixture). Build artifact clean.
 
 ---
 
 ## Closure Declaration
 
-**Automated gate**: PASS (103 node:test, 8 cargo test, 2026-09-04)  
+**Automated gate**: PASS (104 node:test, 8 cargo test, 2026-09-04)  
 **Build gate**: PASS (vite build — 21 modules, exit 0, 2026-09-04)  
 **Discrimination gate**: PASS — all 10 mutants killed by real execution (inject → fail → restore → green); M6-M10 added for P0-2/P0-3/P0-4 fixes from adversarial audit  
-**Fresh verifier**: PASS — re-run post adversarial-audit fixes 2026-09-04: 103/103 JS, 8/8 Rust, build clean  
+**Fresh verifier**: PASS — re-run post adversarial-audit fixes 2026-09-04: 104/104 JS, 8/8 Rust, build clean  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
 **Structural validation (Python scripts)**: UNVERIFIED — TLC_INSTALLATION_MISMATCH = TRUE. `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` absent from runtime (DEBT-009). Manual structural validation equivalent performed (see §Manual Structural Validation above): SPEC/TASKS/VALIDATION checks all PASS. Status remains UNVERIFIED per TCL fail-closed: manual does not substitute for script. Does NOT block UAT or PR.  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
 **DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 
-`AUTOMATED_TESTS: PASS — 103/103 JS, 8/8 Rust`  
+`AUTOMATED_TESTS: PASS — 104/104 JS, 8/8 Rust`  
 `DISCRIMINATION: PASS — 10 mutants killed`  
 `BUILD: PASS`  
 `FRESH_VERIFIER: PASS`  
