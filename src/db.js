@@ -1294,7 +1294,7 @@ export const DB = {
       const tableNames = new Set(tables.map((t) => t.name));
 
       if (!tableNames.has('learning_units') && tableNames.has('study_records')) {
-        await requireDatabase().execute('ALTER TABLE study_records RENAME TO learning_units');
+        await requireDatabase().execute(migrationPlan.preMigration[0]);
       }
 
       const columns = await requireDatabase().select('PRAGMA table_info(learning_units)');
@@ -1450,9 +1450,7 @@ export const DB = {
       const columns = await requireDatabase().select("PRAGMA table_info(review_tasks)");
       const names = new Set(columns.map((column) => column.name));
       if (names.has('study_record_id') && !names.has('unit_id')) {
-        await requireDatabase().execute(
-          'ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id',
-        );
+        await requireDatabase().execute(migrationPlan.preMigration[1]);
       }
       if (!names.has("algorithm")) {
         await requireDatabase().execute(
@@ -1617,9 +1615,7 @@ export const DB = {
       const columns = await requireDatabase().select('PRAGMA table_info(exercises)');
       const names = new Set(columns.map((c) => c.name));
       if (names.has('study_record_id') && !names.has('unit_id')) {
-        await requireDatabase().execute(
-          'ALTER TABLE exercises RENAME COLUMN study_record_id TO unit_id',
-        );
+        await requireDatabase().execute(migrationPlan.preMigration[2]);
       }
       if (!names.has('provenance')) {
         // Migration default: exercises created before this migration are treated as MANUAL.
