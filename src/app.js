@@ -687,12 +687,13 @@ export async function renderToday() {
 }
 
 export async function renderStats() {
-  const [reviewTasks, learningUnits, subjects] = await Promise.all([
+  const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
     DB.reviewTasks.getAll(),
+    DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  const stats = Stats.calculate(reviewTasks, learningUnits, subjects);
+  const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
   metricElements.totalQuestions.textContent = String(stats.totalQuestions);
   metricElements.totalCorrect.textContent = String(stats.totalCorrect);
   metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
@@ -722,14 +723,12 @@ export async function renderStats() {
     subjectAveragesBody.append(row);
   }
 
-  const dataPoints = reviewTasks
-    .filter(
-      (task) => task.questionsDone && task.scorePercent != null && task.completedAt != null,
-    )
-    .sort((a, b) => a.completedAt.localeCompare(b.completedAt))
-    .map((task) => ({
-      date: task.completedAt.slice(0, 10),
-      scorePercent: Number(task.scorePercent),
+  const dataPoints = evidence
+    .filter((ev) => ev.scorePercent != null && ev.evidenceDate != null)
+    .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate))
+    .map((ev) => ({
+      date: ev.evidenceDate,
+      scorePercent: Number(ev.scorePercent),
     }));
   const chartRendered = Stats.renderChart(evolutionChart, dataPoints);
   evolutionChart.hidden = !chartRendered;

@@ -8,26 +8,26 @@ function getLocalDateValue(date = new Date()) {
 }
 
 export const Stats = {
-  calculate(reviewTasks, learningUnits, subjects, today = getLocalDateValue()) {
+  calculate(reviewTasks, evidence, learningUnits, subjects, today = getLocalDateValue()) {
     const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
     const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
 
-    const completedExercises = reviewTasks
-      .filter((task) => task.questionsDone)
-      .map((task) => {
-        const unit = unitsById.get(task.unitId);
+    const completedExercises = evidence
+      .filter((ev) => ev.questionsCount != null && ev.correctCount != null)
+      .map((ev) => {
+        const unit = unitsById.get(ev.unitId);
         const subject = subjectsById.get(unit?.subjectId);
-        const values = getReviewScoreValues(task.questionsCount, task.correctCount);
+        const values = getReviewScoreValues(ev.questionsCount, ev.correctCount);
 
         return {
-          ...task,
+          ...ev,
           ...values,
           subjectName: subject?.name ?? "Sem disciplina",
           title: unit?.title ?? "Conteúdo indisponível",
-          completedAt: task.completedAt ?? "",
+          completedAt: ev.completedAt ?? "",
         };
       })
-      .filter((task) => !task.isOverflow && task.questionsCount != null && task.correctCount != null)
+      .filter((ev) => !ev.isOverflow)
       .sort((a, b) => {
         const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
         if (subjectComparison !== 0) return subjectComparison;
