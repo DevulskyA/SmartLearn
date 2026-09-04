@@ -32,9 +32,9 @@
 | node:test | `node --test test/*.test.js` | PASS — 97/97 (2026-09-04) |
 | cargo test | `cargo test` (src-tauri/) | PASS — 8/8 (2026-09-04) |
 | build | `npm run build` | PASS — 21 modules, 255ms, exit 0 (2026-09-04) |
-| validate_spec | manual — spec.md ACs complete, match implementation | PASS — all ACs defined and implemented |
-| validate_tasks | manual — tasks.md T1-T9 STATUS marked | PASS — T1-T7, T9 DONE; T8 CHECKLIST CREATED, PENDING HUMAN_GATE |
-| validate_completion | manual — all automated gates closed, HUMAN_GATEs documented | PASS — see Closure Declaration below |
+| validate_spec.py | searched project root, src-tauri/, .specs/, .claude/skills/tcl-governance-pack/, .agents/ | **UNVERIFIED — script not found**. Searched: `Glob validate*.py` across full project and tcl-governance-pack skill directory. No `validate_spec.py` exists. Governance framework (tcl-governance-pack) uses prose checklists, not Python scripts. |
+| validate_tasks.py | same search | **UNVERIFIED — script not found** |
+| validate_completion.py | same search | **UNVERIFIED — script not found** |
 
 ---
 
@@ -198,15 +198,16 @@ All mutants injected, tests run, failure recorded, code restored, green confirme
 **Discrimination gate**: PASS — all 5 mutants killed by real execution (inject → fail → restore → green)  
 **AC-TRACK-01**: PASS — spec corrected, DEBT-008 resolved  
 **AC-DATE-01 audit**: PASS — both adapters use `localDateIso`; no hidden UTC-slice in live completion path  
-**Structural validation**: PASS — spec.md ACs complete; tasks.md T1-T9 statuses marked; validate_completion manual check done  
+**Structural validation (Python scripts)**: UNVERIFIED — `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` not found in project or tcl-governance-pack. Governance framework uses prose checklists, not executable Python validators. Manual inspection done but does not substitute for script execution per TCL Strict fail-closed policy.  
 **Manual UAT gate**: PENDING — requires human execution of UAT-1 through UAT-6 on Tauri desktop build  
 **DEC-013-V2**: PENDING — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL  
 
 `AUTOMATED_TESTS: PASS`  
 `DISCRIMINATION: PASS`  
 `BUILD: PASS`  
-`STRUCTURAL_VALIDATION: PASS`  
+`STRUCTURAL_VALIDATION: UNVERIFIED`  
 `UAT: PENDING`  
 `PRE_PR_TECHNICAL_CLOSURE: PENDING`  
 
-_Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after UAT-1..UAT-6 executed on real Tauri build and DEC-013-V2 approved._
+_STRUCTURAL_VALIDATION blocked on: create or locate `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` scripts, then execute against this feature._  
+_Status will be promoted to `PRE_PR_TECHNICAL_CLOSURE: PASS` only after STRUCTURAL_VALIDATION resolved, UAT-1..UAT-6 executed, and DEC-013-V2 approved._
