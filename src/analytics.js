@@ -22,7 +22,7 @@ function windowEvidence(evidence, fromDate, toDate) {
   return evidence.filter((e) => e.evidenceDate >= fromDate && e.evidenceDate <= toDate);
 }
 
-function subtractDays(isoDate, days) {
+export function subtractDays(isoDate, days) {
   const d = new Date(isoDate + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);

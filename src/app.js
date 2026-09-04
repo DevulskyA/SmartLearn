@@ -10,7 +10,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
-import { Analytics } from "./analytics.js";
+import { Analytics, subtractDays } from "./analytics.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -135,6 +135,8 @@ const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
 const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
 const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
+const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
+const statsUnitSort = document.querySelector("#stats-unit-sort");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
 const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
@@ -159,6 +161,7 @@ const trackingList = document.querySelector("#tracking-list");
 const trackingEmpty = document.querySelector("#tracking-empty");
 const trackingFilterSubject = document.querySelector("#tracking-filter-subject");
 const trackingFilterState = document.querySelector("#tracking-filter-state");
+const trackingFilterPeriod = document.querySelector("#tracking-filter-period");
 const subjectsCatalog = document.querySelector("#subjects-catalog");
 const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
 const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
@@ -172,6 +175,7 @@ const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
+const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
 const planSubjectSelect = document.querySelector("#plan-subject-select");
@@ -845,8 +849,30 @@ export async function renderPlan() {
   syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
   syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
 
-  // Sort: study_date desc
-  const sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
+  // Sort (AC-RP-06)
+  const planSortValue = planSort?.value ?? "study-date-desc";
+  let sorted;
+  if (planSortValue === "subject") {
+    sorted = [...learningUnits].sort((a, b) => {
+      const sa = subjectsById.get(a.subjectId)?.name ?? "";
+      const sb = subjectsById.get(b.subjectId)?.name ?? "";
+      return sa.localeCompare(sb) || b.studyDate.localeCompare(a.studyDate);
+    });
+  } else if (planSortValue === "next-review") {
+    const nextByUnit = new Map();
+    for (const t of allTasks) {
+      if (t.reviewDone) continue;
+      const prev = nextByUnit.get(t.unitId);
+      if (!prev || t.dueDate < prev) nextByUnit.set(t.unitId, t.dueDate);
+    }
+    sorted = [...learningUnits].sort((a, b) => {
+      const da = nextByUnit.get(a.id) ?? "9999-99-99";
+      const db = nextByUnit.get(b.id) ?? "9999-99-99";
+      return da.localeCompare(db) || b.studyDate.localeCompare(a.studyDate);
+    });
+  } else {
+    sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
+  }
 
   // Apply filters
   const subjectFilter = planFilterSubject?.value ?? "";
@@ -1144,10 +1170,13 @@ export async function renderTracking() {
 
   const subjFilter = trackingFilterSubject?.value ?? "";
   const stateFilter = trackingFilterState?.value ?? "";
+  const periodFilter = trackingFilterPeriod?.value ?? "";
+  const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
 
   let filtered = units.filter((u) => {
     if (subjFilter && String(u.subjectId) !== subjFilter) return false;
     if (stateFilter && getTrackingState(u.id, allTasks, allEvidence, today) !== stateFilter) return false;
+    if (periodCutoff && u.studyDate < periodCutoff) return false;
     return true;
   });
   filtered.sort((a, b) => b.studyDate.localeCompare(a.studyDate));
@@ -1493,19 +1522,45 @@ export async function renderStatsByUnit() {
     }
   }
 
-  // Apply filters
+  // Apply filters (AC-EST2-04)
   const subjFilter = statsUnitFilterSubject?.value ?? "";
   const trendFilter = statsUnitFilterTrend?.value ?? "";
+  const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
   if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
   if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
+  if (unitPeriodFilter) {
+    const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
+    const cutoff = subtractDays(today, days);
+    results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
+  }
 
-  // Sort: worst recent score first (default)
-  results = results.sort((a, b) => {
-    if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-    if (a.weightedAccuracy == null) return 1;
-    if (b.weightedAccuracy == null) return -1;
-    return a.weightedAccuracy - b.weightedAccuracy;
-  });
+  // Sort (AC-EST2-05)
+  const unitSortValue = statsUnitSort?.value ?? "worst-first";
+  if (unitSortValue === "trend") {
+    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
+    results = results.sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
+  } else if (unitSortValue === "volume") {
+    results = results.sort((a, b) => b.evidenceCount - a.evidenceCount);
+  } else if (unitSortValue === "subject") {
+    results = results.sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? "") || (a.unitTitle ?? "").localeCompare(b.unitTitle ?? ""));
+  } else if (unitSortValue === "last-activity") {
+    results = results.sort((a, b) => {
+      const da = a.lastEvidence?.evidenceDate;
+      const db = b.lastEvidence?.evidenceDate;
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return db.localeCompare(da);
+    });
+  } else {
+    // worst-first (default): worst recent score → best
+    results = results.sort((a, b) => {
+      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
+      if (a.weightedAccuracy == null) return 1;
+      if (b.weightedAccuracy == null) return -1;
+      return a.weightedAccuracy - b.weightedAccuracy;
+    });
+  }
 
   const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
@@ -3104,12 +3159,25 @@ planFilterSubject?.addEventListener("change", () => {
 planFilterState?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
 });
+planSort?.addEventListener("change", () => {
+  if (databaseAvailable) renderPlan().catch(console.error);
+});
 
 trackingFilterSubject?.addEventListener("change", () => {
   if (databaseAvailable) renderTracking().catch(console.error);
 });
 trackingFilterState?.addEventListener("change", () => {
   if (databaseAvailable) renderTracking().catch(console.error);
+});
+trackingFilterPeriod?.addEventListener("change", () => {
+  if (databaseAvailable) renderTracking().catch(console.error);
+});
+
+statsUnitFilterPeriod?.addEventListener("change", () => {
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+});
+statsUnitSort?.addEventListener("change", () => {
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
 });
 
 let newSubjectColor = "DISC-BLUE";

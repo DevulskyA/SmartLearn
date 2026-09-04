@@ -108,7 +108,7 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 | AC-RP-03 | Expansão por demanda | PASS |
 | AC-RP-04 | 16 tarefas internas não aparecem como 16 linhas | PASS |
 | AC-RP-05 | Filtros disciplina e estado | PASS |
-| AC-RP-06 | Ordenação padrão study_date desc | PASS |
+| AC-RP-06 | Ordenação padrão study_date desc; alternativas: disciplina, próxima revisão | PASS — sort select implementado (study-date-desc/subject/next-review) |
 
 ### Módulo 3 — Evidência (AC-DET)
 
@@ -139,8 +139,8 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 | AC-EST2-01 | Por unit: sequência scores, weighted_accuracy, n questões, tendência | PASS |
 | AC-EST2-02 | Tendência derivada de últimos N scores (N≥3) — last-N | PASS |
 | AC-EST2-03 | Sparkline suficiente | PASS |
-| AC-EST2-04 | Filtros disciplina + tendência + período | PASS |
-| AC-EST2-05 | Ordenação padrão pior recente → melhor | PASS |
+| AC-EST2-04 | Filtros disciplina + tendência + período | PASS — todos os três filtros implementados (discipline/trend/period select) |
+| AC-EST2-05 | Ordenação padrão pior recente → melhor; alternativas: tendência, volume, disciplina, última atividade | PASS — sort select implementado (worst-first/trend/volume/subject/last-activity) |
 
 ### Módulo 6 — Acompanhamento (AC-ACOMP)
 
@@ -149,7 +149,7 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 | AC-ACOMP-01 | Por unidade: disciplina, título, study_date, fonte, resumo, n exercícios, revisões, última atividade, estado | PASS |
 | AC-ACOMP-02 | "Resumo Mestre presente" derivado de summary_body | PASS |
 | AC-ACOMP-03 | Estado derivado deterministicamente: 5 estados | PASS — getTrackingState() UAT confirmado |
-| AC-ACOMP-04 | Filtros disciplina + estado | PASS |
+| AC-ACOMP-04 | Filtros disciplina + estado + período | PASS — todos os três filtros implementados (discipline/state/period select) |
 | AC-ACOMP-05 | Ação rápida: abertura unidade | PASS — "Ver no Plano" + "+ Resumo Mestre" + "Ir para revisão" implementados e visíveis em screenshot |
 
 ### Módulo 7 — Disciplinas (AC-DISC)
@@ -208,7 +208,12 @@ await DB.completeReviewWithEvidence({ taskId: 69, questionsCount: 3, correctCoun
 
 ## Gaps e desvios
 
-Nenhum gap de persistência/bootstrap aberto. DEBT-007 (empty state/onboarding) é feature separada, não bloqueia este PR.
+| Gap | AC afetado | Descrição | Bloqueante? |
+|-----|-----------|-----------|-------------|
+| GAP-NAV-01 | — (C-01 do audit) | "Cadastro" permanece como item de navegação principal. Design canônico (analytics-vnext/design.md §5.1) define 5 abas (Hoje/Plano/Estatísticas/Acompanhamento/Disciplinas) sem "Cadastro". Cadastro rápido está disponível via formulário inline no Plano; o screen-register contém funcionalidades sobrepostas. Remoção requer merge/rebalanceamento de conteúdo — escopo da próxima sprint. | NÃO — Plano já tem criação inline |
+| GAP-AC-ACOMP-03-tracking | AC-ACOMP-03 | Contrato de tracking state atualizado (Option C, HUMAN_GATE 2026-09-04). Estado UAT anterior (browser) confirmou 5 estados; novo contrato requer re-UAT com nova lógica. | NÃO — lógica corrigida, node:test cobrindo 16 casos |
+
+DEBT-007 (empty state/onboarding) é feature separada, não bloqueia este PR.
 
 ---
 

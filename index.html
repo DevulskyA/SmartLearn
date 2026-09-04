@@ -198,6 +198,11 @@
               <option value="pending">Pendente</option>
               <option value="up-to-date">Em dia</option>
             </select>
+            <select id="plan-sort" aria-label="Ordenar por">
+              <option value="study-date-desc">Data (mais recente)</option>
+              <option value="subject">Disciplina</option>
+              <option value="next-review">Próxima revisão</option>
+            </select>
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden>Nenhuma aula cadastrada.</p>
@@ -221,6 +226,12 @@
               <option value="EM_REVISAO">Em revisão</option>
               <option value="ATRASADO">Atrasado</option>
               <option value="EM_DIA">Em dia</option>
+            </select>
+            <select id="tracking-filter-period" aria-label="Filtrar por período">
+              <option value="">Qualquer período</option>
+              <option value="last-30">Últimos 30 dias</option>
+              <option value="last-90">Últimos 90 dias</option>
+              <option value="last-365">Último ano</option>
             </select>
           </div>
           <div class="tracking-list" id="tracking-list" aria-live="polite"></div>
@@ -333,7 +344,7 @@
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Disciplinas cadastradas</p>
                 <h2 id="subject-manager-title">Gerenciar disciplinas</h2>
-                <p>Edite, desative ou exclua disciplinas. Excluir apaga estudos e revisões relacionados.</p>
+                <p>Edite ou desative disciplinas. Disciplinas com estudos não podem ser excluídas.</p>
               </div>
               <div class="subject-list" id="subject-list" aria-live="polite"></div>
               <p class="panel-empty" id="subjects-empty">Nenhuma disciplina cadastrada.</p>
@@ -433,6 +444,19 @@
                   <option value="DECLINING">Caindo</option>
                   <option value="STABLE">Estável</option>
                   <option value="INSUFFICIENT">Insuficiente</option>
+                </select>
+                <select id="stats-unit-filter-period" aria-label="Filtrar por período">
+                  <option value="">Qualquer período</option>
+                  <option value="last-30">Últimos 30 dias</option>
+                  <option value="last-90">Últimos 90 dias</option>
+                  <option value="last-365">Último ano</option>
+                </select>
+                <select id="stats-unit-sort" aria-label="Ordenar por">
+                  <option value="worst-first">Pior score (padrão)</option>
+                  <option value="trend">Tendência</option>
+                  <option value="volume">Volume</option>
+                  <option value="subject">Disciplina</option>
+                  <option value="last-activity">Última atividade</option>
                 </select>
               </div>
             </div>
