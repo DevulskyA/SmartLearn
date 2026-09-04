@@ -14,6 +14,7 @@ The governing principle is evidence reconstruction:
 - DEBT stores known imperfections as trackable objects.
 - Impact analysis predicts blast radius before legacy code is changed.
 - Verification attempts to disprove completion before declaring PASS.
+- For learning-affecting work, the Pedagogical Kernel stores the permanent educational contract and its promotion gates.
 
 ## Mandatory change lifecycle
 
@@ -28,6 +29,8 @@ CHANGE IMPACT ANALYSIS
    callers • dependencies • requirements • tests • contracts • data • regression surface
    ↓
 REGRESSION SENSOR identified or created
+   ↓
+PEDAGOGICAL GATE when learning outcomes can change
    ↓
 ATOMIC TASK
    ↓
@@ -46,6 +49,24 @@ STATE + DEBT + ADR updates if materially changed
 
 A structural change to existing code MUST NOT begin until at least one sensor exists that would detect the intended behavior breaking. The sensor may be unit, integration, E2E, contract, snapshot, schema/invariant, or another executable observable check.
 
+## Pedagogical kernel gate
+
+SmartLearn is a learning system. Any change that can alter study, review, exercises, scoring, summaries, learner state, scheduling, feedback, tutoring, analytics, or medical content MUST read and comply with `04_PEDAGOGICAL_KERNEL.md` before design or implementation.
+
+For such work, the feature artifacts MUST identify:
+
+1. which Pedagogical Kernel clauses are affected;
+2. the learner outcome expected to improve;
+3. the current champion behavior that must be preserved;
+4. the observable evidence that can distinguish real improvement from activity or engagement alone;
+5. the learning-regression sensor required before structural changes;
+6. the evidence that would falsify the proposed benefit;
+7. the rollback path if learning quality degrades.
+
+The accepted current behavior remains the champion until a challenger demonstrates superior learning evidence or equivalent learning with materially lower learner burden while preserving critical correctness and medical fidelity.
+
+A feature cannot be marked PASS merely because software tests are green when its approved pedagogical outcome remains unproven.
+
 ## Before touching existing code
 
 The agent must answer, with repository evidence:
@@ -57,6 +78,7 @@ The agent must answer, with repository evidence:
 5. Which public/internal contracts, APIs, files, schemas or persisted data does it affect?
 6. Which neighboring behaviors can regress?
 7. What sensor will fail if the targeted behavior or a critical neighbor breaks?
+8. If learning behavior can change: what pedagogical capability or evidence could regress?
 
 Unknown answers are not silently treated as safe. Record them as gaps and reduce scope, add a sensor, or escalate if material.
 
@@ -71,7 +93,7 @@ A concise `## Change Impact` section is mandatory in spec/design/tasks.
 ### Large/Complex/high-risk change
 Create `.specs/features/<feature>/impact.md` before implementation.
 
-High-risk includes persistence, migration, auth, destructive actions, permissions, concurrency, shared contracts, public APIs, scheduler/state transitions, broad UI routing, or core domain entities.
+High-risk includes persistence, migration, auth, destructive actions, permissions, concurrency, shared contracts, public APIs, scheduler/state transitions, broad UI routing, core domain entities, learner-model changes, mastery estimation, or changes that can materially alter educational outcomes.
 
 ## Canonical project memory
 
@@ -158,6 +180,9 @@ Concrete neighboring behaviors that could break.
 ### Sensor plan
 Existing or new sensors required BEFORE implementation.
 
+### Pedagogical impact
+When learning behavior can change: affected kernel clauses, champion behavior, learner outcome, discrimination evidence, regression sensor, falsification criterion, and rollback.
+
 ### Rollback / recovery
 How to reverse or recover if the change fails, when relevant.
 
@@ -175,6 +200,7 @@ A formal task must include:
 - sensor/test that protects it;
 - narrow gate;
 - regression gate if blast radius requires it;
+- pedagogical gate when learning behavior can change;
 - done criteria;
 - difficulty 1–5 when agents are weak or task is non-trivial.
 
@@ -187,11 +213,13 @@ Tests are not merely confirmation after code. For existing behavior, protection 
 Order:
 
 1. Characterize/protect observable behavior when protection is missing.
-2. Make the smallest change.
-3. Run focused gate.
-4. Run regression/integration gates proportional to impact.
-5. At feature closure, run full/build/e2e/UAT required by the spec.
-6. Verifier injects plausible faults in isolated scratch state. A surviving fault becomes a fix task.
+2. For learning-affecting changes, characterize the relevant champion learning behavior or evidence contract.
+3. Make the smallest change.
+4. Run focused gate.
+5. Run regression/integration gates proportional to impact.
+6. At feature closure, run full/build/e2e/UAT required by the spec.
+7. For learning-affecting changes, evaluate the approved learner-outcome metric or discriminating proxy and preserve the champion when evidence is inconclusive.
+8. Verifier injects plausible faults in isolated scratch state. A surviving fault becomes a fix task.
 
 Never weaken/delete/skip tests to obtain green.
 
@@ -206,7 +234,9 @@ A feature cannot be PASS when any of these are true:
 - a surviving discrimination mutation exists;
 - a SPEC_DEVIATION is unresolved;
 - validation evidence is “worked visually” without the required environment;
-- STATE claims a result contradicted by Git/worktree/tests.
+- STATE claims a result contradicted by Git/worktree/tests;
+- a learning-affecting feature claims improvement without the evidence required by its Pedagogical Kernel gate;
+- a challenger materially regresses a protected learning outcome or medical/content-fidelity gate.
 
 ## State update
 
@@ -234,8 +264,8 @@ A TLC-managed active project is governance-compliant only if:
 4. Active Large/Complex feature has spec + impact + design + tasks.
 5. Every active formal task identifies protection/gates.
 6. Structural legacy changes have a regression sensor before editing.
-7. Feature closure produces validation.md with evidence-or-zero.
-8. Git commits are atomic per formal task.
-9. STATE is reconciled against Git before resuming.
-10. Known debt is trackable, not buried in chat.
-
+7. Learning-affecting features reference and satisfy `04_PEDAGOGICAL_KERNEL.md`.
+8. Feature closure produces validation.md with evidence-or-zero.
+9. Git commits are atomic per formal task.
+10. STATE is reconciled against Git before resuming.
+11. Known debt is trackable, not buried in chat.
