@@ -132,15 +132,17 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 - **Decisão original (histórica):** Disciplina e fonte são entidades próprias (`subjects`, `sources`). Seed inicial com disciplinas de concurso + fonte `Grancursos`.
 - **Por que superseded:** Teste real com fluxo Fisiologia/Guyton revelou que fonte é texto livre (varia por capítulo/apostila); entidade `sources` cria fricção sem benefício. Usuário é estudante de Medicina, não de concurso.
 
-### PROP-DEC-013-V2 — [PROPOSED] Fonte como texto livre, estado inicial VAZIO
+### DEC-013-V2 — Fonte como texto livre, estado inicial VAZIO
 - **Data:** 2026-09-03
-- **Status:** ⚠️ PROPOSED — aguarda HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL. NÃO é decisão aprovada ainda.
-- **Proposta:** Fonte é campo texto livre em `learning_units.source_text`. Tabela `sources` não existe.
-  Estado inicial do banco é VAZIO — sem seeds de disciplinas ou fontes, nenhum seed de medicina.
-- **Invariante proposta para substituição:** INV-05B (fonte como entidade reutilizável) → SUPERSEDED após aprovação. Nova regra proposta: "Fonte é texto livre descritivo do conteúdo estudado; pertence à unidade de aprendizagem."
-- **Commit hipótese:** `09ea0d8` — implementa parcialmente esta proposta. Não é solução final.
-- **Referência:** `.specs/features/smartlearn-domain-redesign/design.md PROP-01..07`
-- **Tornar irreversível:** apenas após HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL.
+- **Aprovada:** 2026-09-05 — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL executado.
+- **Status:** ✅ ACCEPTED
+- **Decisão:** Fonte é campo texto livre em `learning_units.source_text`. Tabela `sources` não existe e não deve ser recriada.
+  Estado inicial do banco é VAZIO — sem seeds de disciplinas, fontes ou conteúdo acadêmico.
+  DEV fixtures permanecem estritamente DEV-only via `import.meta.env?.DEV` + `fixtures/dev-dataset.js`.
+- **Invariante substituída:** INV-05B → SUPERSEDED. Nova regra canônica: "Fonte é texto livre descritivo do conteúdo estudado; pertence à unidade de aprendizagem (`source_text`)."
+- **DEC-015 reinterpretado:** Reset via Configurações retorna banco a estado VAZIO — seeds padrão NÃO são reaplicados.
+- **Referência de implementação:** commits `09ea0d8` (hipótese inicial), domain-redesign WP-DRD-01..08.
+- **DEBT-004:** RESOLVED.
 
 ### DEC-014 — Tela Hoje linear com ReviewRow e cadastro minimalista
 - **Data:** 2026-06-23

@@ -40,17 +40,8 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 
 ### DEBT-004 — DEC-013-V2 (fonte = texto livre) still PROPOSED
 
-- **Status**: open
-- **Problem**: `PROP-DEC-013-V2` was proposed in STATE (fonte como texto livre, empty initial state) and partially implemented in commit `09ea0d8`, but remains formally PROPOSED pending `HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL`.
-- **Origin**: `.specs/project/STATE.md` PROP-DEC-013-V2, 2026-09-03
-- **Risk**: Partial implementation + unapproved decision creates inconsistency in specs and code.
-- **Impact**: Specs may claim `sources` entity exists while code removed it. Any new feature touching registration must know which decision is active.
-- **Affected components**: `src/db.js` (sources table removal), `src/app.js` (registration form), `.specs/project/STATE.md`
-- **Dependencies**: HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL must fire first
-- **Resolution criterion**: User approves DEC-013-V2; STATE updated; PROP prefix removed; INV-05B marked SUPERSEDED.
-- **Priority**: P2
-- **Owner**: unassigned
-- **Evidence**: `.specs/project/STATE.md` PROP-DEC-013-V2; commit `09ea0d8`
+- **Status**: resolved (2026-09-05)
+- **Resolution**: HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL fired. DEC-013-V2 ACCEPTED. INV-05B SUPERSEDED. STATE.md updated. Spec/code now consistent: `source_text` is canonical, `sources` table does not exist.
 
 ---
 
