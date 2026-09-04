@@ -383,6 +383,114 @@ mod tests {
         });
     }
 
+    // Full schema for completeReviewWithEvidence tests — matches db.js schemaStatements.
+    async fn setup_review_schema(db: &Path) {
+        let stmts: Vec<TransactionStatement> = vec![
+            "CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",
+            "CREATE TABLE IF NOT EXISTS learning_units (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL REFERENCES subjects(id), source_text TEXT NOT NULL DEFAULT '', study_date TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS review_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE, review_number INTEGER NOT NULL, due_date TEXT NOT NULL, completed_at TEXT, review_done INTEGER NOT NULL DEFAULT 0, questions_done INTEGER NOT NULL DEFAULT 0, questions_count INTEGER, correct_count INTEGER, score_percent REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS learning_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL REFERENCES learning_units(id), evidence_date TEXT NOT NULL, context TEXT NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW','EXTERNAL')), questions_count INTEGER NOT NULL CHECK(questions_count > 0), correct_count INTEGER NOT NULL CHECK(correct_count >= 0), score_percent REAL, review_task_id INTEGER REFERENCES review_tasks(id), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')))",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_le_review_task ON learning_evidence(review_task_id) WHERE review_task_id IS NOT NULL",
+        ].iter().map(|sql| TransactionStatement { query: sql.to_string(), values: vec![] }).collect();
+        execute_sqlite_transaction_at_path(db, stmts).await.expect("review schema should succeed");
+    }
+
+    async fn seed_review_data(db: &Path) -> (i64, i64, i64) {
+        execute_sqlite_transaction_at_path(
+            db,
+            vec![
+                TransactionStatement {
+                    query: "INSERT INTO subjects (name) VALUES ($1)".into(),
+                    values: vec![json!("Fisiologia")],
+                },
+                TransactionStatement {
+                    query: "INSERT INTO learning_units (subject_id, source_text, study_date, title, created_at, updated_at) VALUES (1, '', '2026-09-01', 'Cap 1', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')".into(),
+                    values: vec![],
+                },
+                TransactionStatement {
+                    query: "INSERT INTO review_tasks (unit_id, review_number, due_date, created_at, updated_at) VALUES (1, 1, '2026-09-04', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')".into(),
+                    values: vec![],
+                },
+            ],
+        )
+        .await
+        .expect("seed review data should succeed");
+        (1i64, 1i64, 1i64) // (subject_id, unit_id, task_id)
+    }
+
+    #[test]
+    fn complete_review_duplicate_rolls_back() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            setup_review_schema(db.path()).await;
+            let (_sid, unit_id, task_id) = seed_review_data(db.path()).await;
+
+            // First completion: 8/10 — should succeed
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![
+                    TransactionStatement {
+                        query: "UPDATE review_tasks SET review_done=1, questions_done=1, questions_count=$1, correct_count=$2, score_percent=$3, completed_at=$4, updated_at=$4 WHERE id=$5".into(),
+                        values: vec![json!(10), json!(8), json!(80.0), json!("2026-09-04T10:00:00Z"), json!(task_id)],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO learning_evidence (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at) VALUES ($1, $2, 'REVIEW', $3, $4, $5, $6, $7)".into(),
+                        values: vec![json!(unit_id), json!("2026-09-04"), json!(10), json!(8), json!(80.0), json!(task_id), json!("2026-09-04T10:00:00Z")],
+                    },
+                ],
+            )
+            .await
+            .expect("first completion should succeed");
+
+            // Second completion attempt: 5/10 — UNIQUE violation on review_task_id
+            let error = execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![
+                    TransactionStatement {
+                        query: "UPDATE review_tasks SET review_done=1, questions_done=1, questions_count=$1, correct_count=$2, score_percent=$3, completed_at=$4, updated_at=$4 WHERE id=$5".into(),
+                        values: vec![json!(10), json!(5), json!(50.0), json!("2026-09-04T11:00:00Z"), json!(task_id)],
+                    },
+                    TransactionStatement {
+                        query: "INSERT INTO learning_evidence (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at) VALUES ($1, $2, 'REVIEW', $3, $4, $5, $6, $7)".into(),
+                        values: vec![json!(unit_id), json!("2026-09-04"), json!(10), json!(5), json!(50.0), json!(task_id), json!("2026-09-04T11:00:00Z")],
+                    },
+                ],
+            )
+            .await
+            .expect_err("duplicate review_task_id should fail with UNIQUE constraint");
+
+            assert!(
+                error.to_lowercase().contains("unique"),
+                "expected unique constraint error, got: {error}"
+            );
+
+            // Verify state after rollback: review_task still 8/10, evidence count = 1
+            let options = sqlx::sqlite::SqliteConnectOptions::new().filename(db.path()).foreign_keys(true);
+            let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+
+            let task_row = sqlx::query("SELECT score_percent, correct_count FROM review_tasks WHERE id = $1")
+                .bind(task_id)
+                .fetch_one(&mut conn)
+                .await
+                .expect("task should exist");
+            let score: f64 = task_row.get("score_percent");
+            let correct: i64 = task_row.get("correct_count");
+            assert!((score - 80.0).abs() < 0.01, "review_task score_percent must remain 80.0 after rollback, got {score}");
+            assert_eq!(correct, 8, "review_task correct_count must remain 8 after rollback");
+
+            let ev_row = sqlx::query("SELECT COUNT(*) as n, score_percent FROM learning_evidence WHERE review_task_id = $1")
+                .bind(task_id)
+                .fetch_one(&mut conn)
+                .await
+                .expect("evidence query should succeed");
+            let ev_count: i64 = ev_row.get("n");
+            let ev_score: f64 = ev_row.get("score_percent");
+            assert_eq!(ev_count, 1, "evidence count must remain 1 after rollback");
+            assert!((ev_score - 80.0).abs() < 0.01, "evidence score_percent must remain 80.0 after rollback, got {ev_score}");
+        });
+    }
+
     #[test]
     fn execute_sqlite_transaction_rolls_back_on_error() {
         let db = TestDatabase::create();

@@ -116,14 +116,17 @@ test("DB.exercises.delete remove apenas o exercise; learning_unit e outros exerc
   assert.ok(all.some((u) => u.id === unit.id));
 });
 
-test("DELETE CASCADE: subjects.deleteCascade remove exercises da unidade", async () => {
+test("deleteIfEmpty: subject com exercises não pode ser excluída (histórico protegido)", async () => {
   const unit = await makeLearningUnit();
   await DB.exercises.create(unit.id, { questionText: "Q cascade", answerText: "R", provenance: "MANUAL" });
 
-  await DB.subjects.deleteCascade(unit.subjectId);
+  await assert.rejects(
+    () => DB.subjects.deleteIfEmpty(unit.subjectId),
+    /excluir|histórico|unidade|unit/i,
+  );
 
   const remaining = await DB.exercises.getAll(unit.id);
-  assert.equal(remaining.length, 0);
+  assert.equal(remaining.length, 1, "exercise deve ser preservado");
 });
 
 test("exportAll inclui exercises; importAll roundtrip preserva exercises e provenance", async () => {

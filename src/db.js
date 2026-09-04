@@ -509,17 +509,14 @@ function createBrowserStore() {
       async deactivate(id) {
         return this.update(id, { isActive: false });
       },
-      async deleteCascade(id) {
+      async deleteIfEmpty(id) {
         const state = readState();
-        const unitIds = new Set(
-          state.learningUnits.filter((u) => u.subjectId === id).map((u) => u.id),
-        );
-        state.exercises = (state.exercises ?? []).filter((e) => !unitIds.has(e.unitId));
-        state.reviewTasks = state.reviewTasks.filter((task) => !unitIds.has(task.unitId));
-        state.learningUnits = state.learningUnits.filter((u) => u.subjectId !== id);
+        const hasUnits = state.learningUnits.some((u) => u.subjectId === id);
+        if (hasUnits) {
+          throw new Error('Não é possível excluir uma disciplina com unidades de estudo. Remova primeiro o histórico associado.');
+        }
         state.subjects = state.subjects.filter((subject) => subject.id !== id);
         writeState(state);
-        return true;
       },
     },
 
@@ -1100,34 +1097,15 @@ export const DB = {
       return DB.subjects.update(id, { isActive: false });
     },
 
-    async deleteCascade(id) {
-      await invoke('execute_sqlite_transaction', {
-        statements: [
-          {
-            query: `DELETE FROM exercises
-              WHERE unit_id IN (
-                SELECT id FROM learning_units WHERE subject_id = $1
-              )`,
-            values: [id],
-          },
-          {
-            query: `DELETE FROM review_tasks
-              WHERE unit_id IN (
-                SELECT id FROM learning_units WHERE subject_id = $1
-              )`,
-            values: [id],
-          },
-          {
-            query: 'DELETE FROM learning_units WHERE subject_id = $1',
-            values: [id],
-          },
-          {
-            query: 'DELETE FROM subjects WHERE id = $1',
-            values: [id],
-          },
-        ],
-      });
-      return true;
+    async deleteIfEmpty(id) {
+      const [row] = await requireDatabase().select(
+        'SELECT COUNT(*) as n FROM learning_units WHERE subject_id = $1',
+        [id],
+      );
+      if (Number(row.n) > 0) {
+        throw new Error('Não é possível excluir uma disciplina com unidades de estudo. Remova primeiro o histórico associado.');
+      }
+      await requireDatabase().execute('DELETE FROM subjects WHERE id = $1', [id]);
     },
   },
 

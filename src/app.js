@@ -2402,10 +2402,10 @@ subjectList.addEventListener("click", async (event) => {
 
     if (action === "delete-subject") {
       const confirmed = await showConfirm(
-        `Excluir "${currentName}" apagará todos os estudos e revisões ligados a essa disciplina. Continuar?`,
+        `Confirma a exclusão de "${currentName}"? Esta ação não pode ser desfeita.`,
       );
       if (!confirmed) return;
-      await DB.subjects.deleteCascade(subjectId);
+      await DB.subjects.deleteIfEmpty(subjectId);
     }
 
     setSubjectMessage();
