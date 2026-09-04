@@ -268,6 +268,121 @@ mod tests {
         });
     }
 
+    // Minimal schema matching db.js schemaStatements (subjects + settings + _bootstrap).
+    // Used to test bootstrap lifecycle without depending on JS code.
+    const BOOTSTRAP_SCHEMA: &[&str] = &[
+        "CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",
+        "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, app_version TEXT)",
+        "INSERT OR IGNORE INTO settings (key, app_version) VALUES ('main', '2.0.0')",
+        "CREATE TABLE IF NOT EXISTS _bootstrap (id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id = 1), dev_seed_version TEXT, seeded_at TEXT)",
+    ];
+
+    async fn run_schema(db: &Path) {
+        let stmts: Vec<TransactionStatement> = BOOTSTRAP_SCHEMA
+            .iter()
+            .map(|sql| TransactionStatement { query: sql.to_string(), values: vec![] })
+            .collect();
+        execute_sqlite_transaction_at_path(db, stmts).await.expect("schema should succeed");
+    }
+
+    async fn seed_subjects(db: &Path) {
+        execute_sqlite_transaction_at_path(
+            db,
+            vec![
+                TransactionStatement {
+                    query: "INSERT OR IGNORE INTO subjects (name) VALUES ($1), ($2)".into(),
+                    values: vec![json!("Biologia Celular"), json!("Farmacologia")],
+                },
+                TransactionStatement {
+                    query: "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', '2026-09-03T00:00:00Z')".into(),
+                    values: vec![],
+                },
+            ],
+        )
+        .await
+        .expect("seed should succeed");
+    }
+
+    async fn bootstrap_needed(db: &Path) -> bool {
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(db)
+            .foreign_keys(true);
+        let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+        let row = sqlx::query("SELECT dev_seed_version FROM _bootstrap WHERE id = 1")
+            .fetch_optional(&mut conn)
+            .await
+            .expect("query _bootstrap");
+        match row {
+            None => true,
+            Some(r) => r.get::<Option<String>, _>("dev_seed_version").is_none(),
+        }
+    }
+
+    async fn subject_count(db: &Path) -> i64 {
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(db)
+            .foreign_keys(true);
+        let mut conn = SqliteConnection::connect_with(&options).await.expect("connect");
+        sqlx::query("SELECT COUNT(*) as n FROM subjects")
+            .fetch_one(&mut conn)
+            .await
+            .map(|r| r.get::<i64, _>("n"))
+            .expect("count")
+    }
+
+    #[test]
+    fn fresh_install_seeds_once_and_restart_preserves_data() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            // Simula: DB criado → schema → seed (bootstrap == DEV first run)
+            run_schema(db.path()).await;
+            assert!(bootstrap_needed(db.path()).await, "fresh DB should need bootstrap");
+
+            seed_subjects(db.path()).await;
+            assert!(!bootstrap_needed(db.path()).await, "after seed _bootstrap should be set");
+            assert_eq!(subject_count(db.path()).await, 2, "seed should insert 2 subjects");
+
+            // Simula: restart — bootstrap check deve ser false, dados preservados
+            assert!(!bootstrap_needed(db.path()).await, "restart: _bootstrap still set, no re-seed");
+            assert_eq!(subject_count(db.path()).await, 2, "restart: subjects must be preserved");
+        });
+    }
+
+    #[test]
+    fn user_deletes_all_subjects_does_not_trigger_reseed() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            run_schema(db.path()).await;
+            seed_subjects(db.path()).await;
+
+            // Usuário apaga todos os subjects
+            execute_sqlite_transaction_at_path(
+                db.path(),
+                vec![TransactionStatement { query: "DELETE FROM subjects".into(), values: vec![] }],
+            )
+            .await
+            .expect("delete subjects");
+
+            assert_eq!(subject_count(db.path()).await, 0, "subjects deleted");
+            // _bootstrap permanece intacto — próximo restart não re-semeia
+            assert!(!bootstrap_needed(db.path()).await, "bootstrap marker must survive subject delete");
+        });
+    }
+
+    #[test]
+    fn schema_is_idempotent() {
+        let db = TestDatabase::create();
+
+        run_async(async {
+            run_schema(db.path()).await;
+            // Roda schema de novo — deve ser no-op (CREATE TABLE IF NOT EXISTS)
+            run_schema(db.path()).await;
+            assert_eq!(subject_count(db.path()).await, 0, "double schema run: no phantom data");
+        });
+    }
+
     #[test]
     fn execute_sqlite_transaction_rolls_back_on_error() {
         let db = TestDatabase::create();

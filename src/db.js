@@ -26,6 +26,10 @@ const schemaStatements = [
   // VNEXT_DOMAIN_EXTENSION: learning_evidence ledger (longitudinal performance, separate from review_tasks agenda)
   "CREATE TABLE IF NOT EXISTS learning_evidence (\n    id             INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id        INTEGER NOT NULL REFERENCES learning_units(id),\n    evidence_date  TEXT    NOT NULL,\n    context        TEXT    NOT NULL CHECK(context IN ('INITIAL_PRACTICE','REVIEW','EXTERNAL')),\n    questions_count INTEGER NOT NULL CHECK(questions_count > 0),\n    correct_count   INTEGER NOT NULL CHECK(correct_count >= 0),\n    score_percent   REAL,\n    review_task_id  INTEGER REFERENCES review_tasks(id),\n    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))\n  )",
   "CREATE UNIQUE INDEX IF NOT EXISTS ux_le_review_task\n    ON learning_evidence(review_task_id)\n    WHERE review_task_id IS NOT NULL",
+  // Bootstrap tracking — NOT cleared by importAll or clearAll.
+  // id=1 singleton; dev_seed_version present = DEV seed already ran.
+  // Separates "fresh DB" from "user deleted all their subjects".
+  "CREATE TABLE IF NOT EXISTS _bootstrap (\n    id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id = 1),\n    dev_seed_version TEXT,\n    seeded_at TEXT\n  )",
 ];
 
 function nowIso() {
@@ -455,9 +459,12 @@ function createBrowserStore() {
     async init() {
       const state = readState();
       writeState(state);
-      if (import.meta.env?.DEV && state.subjects.length === 0) {
+      // DEV-only seed: uses a separate key so importAll/clearAll never resets it.
+      // Production build: import.meta.env.DEV = false → this block never runs.
+      if (import.meta.env?.DEV && !localStorage.getItem('smartlearn:dev-seeded')) {
         const { getDevDataset } = await import('./fixtures/dev-dataset.js');
         await this.importAll(getDevDataset());
+        localStorage.setItem('smartlearn:dev-seeded', '1');
       }
     },
 
@@ -984,11 +991,19 @@ export const DB = {
         await DB.learningEvidence.ensureColumns();
         await DB.ensureLearningEvidenceMigration();
 
+        // DEV-only seed: _bootstrap table survives importAll/clearAll/subject deletes.
+        // Production build: import.meta.env.DEV = false → never runs; app opens empty (correct).
         if (import.meta.env?.DEV) {
-          const [{ n }] = await database.select('SELECT COUNT(*) as n FROM subjects');
-          if (n === 0) {
+          const rows = await database.select(
+            "SELECT dev_seed_version FROM _bootstrap WHERE id = 1",
+          );
+          if (rows.length === 0 || !rows[0].dev_seed_version) {
             const { getDevDataset } = await import('./fixtures/dev-dataset.js');
             await DB.importAll(getDevDataset());
+            await database.execute(
+              "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",
+              [nowIso()],
+            );
           }
         }
 
