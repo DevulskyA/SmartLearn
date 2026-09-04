@@ -395,6 +395,22 @@ test("P0-3: importAll rejeita IDs de subject duplicados", async () => {
   await assert.rejects(() => DB.importAll(badBackup), /duplicado/i);
 });
 
+// P0-3 kill test: rejects learningEvidence where correctCount > questionsCount.
+// This specific mutation (reading questionsCount twice instead of correctCount) was the P0-3 bug.
+// With the buggy code: q=c=10, check "c>q" passes → backup accepted (WRONG).
+// With correct code: q=10, c=15, check "15>10" fires → backup rejected (CORRECT).
+test("P0-3 KILL: importAll rejeita learningEvidence com correctCount > questionsCount (campo correto verificado)", async () => {
+  await DB.init();
+  const badBackup = {
+    schemaVersion: 3,
+    subjects: [{ id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 }],
+    learningUnits: [{ id: 1, subjectId: 1, studyDate: "2026-01-01", title: "Cap 1", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+    reviewTasks: [],
+    learningEvidence: [{ unitId: 1, evidenceDate: "2026-01-01", context: "INITIAL_PRACTICE", questionsCount: 10, correctCount: 15 /* > questionsCount → invalid */ }],
+  };
+  await assert.rejects(() => DB.importAll(badBackup), /correctCount/i);
+});
+
 test("P0-3: importAll inválido não altera dados existentes (fail-closed preserves state)", async () => {
   const subject = await makeSubject("Existente");
   const unit = await makeUnit(subject.id);
