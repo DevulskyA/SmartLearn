@@ -25,7 +25,7 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 ### DEBT-003 — Fixed schedule generates ~1190 review tasks/day by year 3
 
 - **Status**: open
-- **Problem**: DEC-016 explicitly defers FSRS (WP-07) as "LATER". With 16 fixed review tasks per unit and a Medicina student registering ~5 units/day, year 3 generates ~1190 review tasks/day. The fixed schedule (legacy algorithm) is not sustainable for longitudinal use.
+- **Problem**: DEC-016 explicitly defers FSRS (WP-07) as "LATER". With 16 fixed review tasks per unit and a Medicina student registering ~5 units/day, steady state (after day 390 of consistent registration) generates ~80 review tasks/day (16 cohorts × 5 units each). The fixed schedule is not sustainable at scale — daily volume grows linearly with registration rate until the schedule horizon is reached. The fixed schedule (legacy algorithm) is not sustainable for longitudinal use.
 - **Origin**: DEC-016 note "Risco de escala", 2026-09-02
 - **Risk**: Student abandons the app when daily review volume becomes unmanageable. No spaced-repetition optimization means inefficient study time.
 - **Impact**: Core learning loop becomes unusable at scale. FSRS is "necessary, not optional" per DEC-016.
@@ -83,6 +83,22 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Priority**: P2
 - **Owner**: unassigned
 - **Evidence**: User message 2026-09-03 21:25; distinção banco-vazio vs interface-vazia
+
+---
+
+### DEBT-008 — SPEC_PRECISION_GAP: tracking state table in spec vs AC mismatch (AC-ACOMP-03)
+
+- **Status**: open
+- **Problem**: The spec table in `smartlearn-ui-analytics-vnext/spec.md` defines 4 tracking states (`NOVO`, `EM_DIA`, `EM_ESTUDO`, `ATRASADO`). AC-ACOMP-03 refers to "5 tracking states" and mentions `EM_REVISAO`, which is implemented in code (`app.js` `getTrackingState`) as the state for units with a pending review task within 7 days, but is not defined in the spec table. Additionally, the code's `EM_DIA` and `EM_ESTUDO` semantics differ from what the spec implies — `EM_DIA` requires no pending review ≤7 days, `EM_ESTUDO` applies to units with registration in last 30 days. The spec does not document these thresholds.
+- **Origin**: SPEC_PRECISION_GAP identified during pre-PR hardening pass, 2026-09-04
+- **Risk**: Any contributor reading the spec builds a different mental model than the code enforces. Future changes to tracking state logic will lack a spec contract to validate against.
+- **Impact**: Spec accuracy; does not block runtime behavior (code is source of truth).
+- **Affected components**: `.specs/features/smartlearn-ui-analytics-vnext/spec.md`, `src/app.js` (`getTrackingState`), `src/scheduler.js`
+- **Dependencies**: HUMAN_GATE: Requires product decision on whether `EM_REVISAO` is a distinct state, and what the threshold semantics for `EM_DIA`/`EM_ESTUDO` should officially be.
+- **Resolution criterion**: Spec table updated with all 5 states and their explicit threshold conditions (30-day window, 7-day window). AC-ACOMP-03 references the 5-state table unambiguously.
+- **Priority**: P2 (bloqueia precisão do spec; não bloqueia runtime)
+- **Owner**: unassigned
+- **Evidence**: Pre-PR hardening audit 2026-09-04; `src/app.js` `getTrackingState` function
 
 ---
 

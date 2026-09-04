@@ -6,13 +6,13 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** Product/UX/Analytics Redesign — Specify em andamento (WP-01..05). Domain redesign v3 LOCAL_BROWSER_BASELINE = PASS, preservado.
-- **Data:** 2026-09-03
-- **Próxima ação:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL — revisar `.specs/features/smartlearn-ui-analytics-vnext/` (spec.md, design.md, tasks.md, CURRENT_UI_AUDIT.md) antes de qualquer implementação.
-- **Testes:** 44 testes passando, 0 falhas (commit 77911b3)
-- **Branch de trabalho:** `claude/com-tlc-replanning-77f844` (worktree isolado)
-- **Commits do domain redesign:** `5a43fd4`, `9ee5793`, `998b3b2`, `77911b3` — PRESERVADOS, NÃO DESCARTAR
-- **Bloqueio ativo:** HUMAN_GATE: UI_ANALYTICS_DESIGN_APPROVAL. NÃO implementar código novo antes da aprovação. NÃO push/PR.
+- **Fase:** Pre-PR Hardening — analytics-vnext feature complete, closure blockers resolved.
+- **Data:** 2026-09-04
+- **Próxima ação:** HUMAN_GATE: PRE_PR_CLOSURE_HARDENING — executar UAT-1..UAT-6 em build Tauri real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`), depois aprovar PROP-DEC-013-V2 ou rejeitar, então criar PR para `main`.
+- **Testes:** 96 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
+- **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
+- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
+- **Bloqueio ativo:** HUMAN_GATE: UAT manual em Tauri Desktop + HUMAN_GATE: PROP-DEC-013-V2 DOMAIN_REDESIGN_APPROVAL. NÃO fazer push/PR antes da execução UAT e aprovação DEC-013-V2.
 
 ---
 
