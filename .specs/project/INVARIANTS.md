@@ -118,10 +118,15 @@ React Native, Kotlin ou Swift na camada de interface do MVP.
 
 ## INV-26 — Compatibilidade multiplataforma obrigatória
 
-Toda feature do SmartLearn deve funcionar corretamente em:
-- **Web** (navegador comum — BrowserStore/localStorage como adapter de persistência)
-- **WebView/Tauri** (desktop — SQLite nativo via plugin-sql)
-- **Android** (Tauri mobile — SQLite nativo via plugin-sql)
+PLATFORMS = WEB + ANDROID + WINDOWS (canônico, fixo — não alterar)
+
+Toda feature do SmartLearn deve funcionar corretamente nas três plataformas:
+- **WEB** — navegador comum; persistência via BrowserStore/localStorage
+- **ANDROID** — aplicativo Android real; distribuível Google Play; SQLite via Tauri Android
+- **WINDOWS** — aplicativo desktop Windows; runtime Tauri + WebView; SQLite via plugin-sql
+
+> WebView é o runtime interno do aplicativo Windows/Tauri, não uma quarta plataforma.
+> PASS em uma plataforma não prova as outras. Gates separados são obrigatórios.
 
 Nenhuma feature pode ser considerada DONE se funcionar em apenas uma plataforma,
 salvo exceção explícita aprovada pelo usuário com SPEC_DEVIATION registrado.
@@ -135,21 +140,22 @@ salvo exceção explícita aprovada pelo usuário com SPEC_DEVIATION registrado.
   OU `SPEC_DEVIATION` explícito aguardando decisão humana.
 - Persistência pode ter implementação diferente por plataforma, mas comportamento
   observável deve ser equivalente entre adapters.
-- BrowserStore/web não prova SQLite/Tauri. SQLite/Tauri não prova Android.
+- BrowserStore/web não prova SQLite/Windows. SQLite/Windows não prova Android.
   Cada plataforma exige seu próprio gate de closure.
 
 ### Gates mínimos de closure por plataforma
 
-**Web:**
+**WEB:**
 - build web PASS
 - testes funcionais no navegador PASS
 - persistência + reload PASS
 
-**WebView/Tauri:**
+**WINDOWS (Tauri + WebView):**
 - build Tauri PASS
-- WebView → persistence → UI → restart PASS
+- cold start → persistence → UI → restart PASS
+- main→vNext migration PASS
 
-**Android:**
+**ANDROID:**
 - build Android PASS
 - instalação + abertura PASS
 - fluxo crítico da feature PASS

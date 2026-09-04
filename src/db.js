@@ -233,6 +233,79 @@ function migrateV1ImportData(data) {
   };
 }
 
+function isValidIsoDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value);
+}
+
+function validateImportContent(normalized) {
+  const subjectIds = new Set();
+  for (const s of normalized.subjects) {
+    if (s.id == null) throw new Error('Backup inválido: subject sem id.');
+    if (!s.name || typeof s.name !== 'string' || !s.name.trim()) throw new Error('Backup inválido: subject sem name.');
+    if (subjectIds.has(s.id)) throw new Error('Backup inválido: subject id duplicado: ' + s.id);
+    subjectIds.add(s.id);
+  }
+
+  const unitIds = new Set();
+  for (const u of normalized.learningUnits) {
+    if (u.id == null) throw new Error('Backup inválido: learningUnit sem id.');
+    if (!subjectIds.has(u.subjectId ?? u.subject_id)) throw new Error('Backup inválido: learningUnit ' + u.id + ' referencia subject inexistente: ' + (u.subjectId ?? u.subject_id));
+    if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
+    if (!(u.title ?? u.content ?? '').trim()) throw new Error('Backup inválido: learningUnit ' + u.id + ' sem title.');
+    if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
+    unitIds.add(u.id);
+  }
+
+  const taskIds = new Set();
+  const taskUnitMap = new Map();
+  for (const t of normalized.reviewTasks) {
+    if (t.id == null) throw new Error('Backup inválido: reviewTask sem id.');
+    const unitId = t.unitId ?? t.unit_id;
+    if (!unitIds.has(unitId)) throw new Error('Backup inválido: reviewTask ' + t.id + ' referencia unit inexistente: ' + unitId);
+    if (!isValidIsoDate(t.dueDate ?? t.due_date)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem dueDate inválida.');
+    if (taskIds.has(t.id)) throw new Error('Backup inválido: reviewTask id duplicado: ' + t.id);
+    taskIds.add(t.id);
+    taskUnitMap.set(t.id, unitId);
+    const q = t.questionsCount ?? t.questions_count;
+    const c = t.correctCount ?? t.correct_count;
+    if (q != null && Number(q) < 0) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem questionsCount negativo.');
+    if (q != null && c != null && Number(c) > Number(q)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount > questionsCount.');
+  }
+
+  for (const e of (Array.isArray(normalized.exercises) ? normalized.exercises : [])) {
+    if (e.id == null) throw new Error('Backup inválido: exercise sem id.');
+    const unitId = e.unitId ?? e.unit_id;
+    if (!unitIds.has(unitId)) throw new Error('Backup inválido: exercise ' + e.id + ' referencia unit inexistente: ' + unitId);
+    if (e.provenance && !['MANUAL', 'SOURCE', 'AI_GENERATED'].includes(e.provenance)) {
+      throw new Error('Backup inválido: exercise ' + e.id + ' tem provenance inválida: ' + e.provenance);
+    }
+  }
+
+  const evidenceTaskIds = new Set();
+  for (const ev of (Array.isArray(normalized.learningEvidence) ? normalized.learningEvidence : [])) {
+    const unitId = ev.unitId ?? ev.unit_id;
+    if (!unitIds.has(unitId)) throw new Error('Backup inválido: learningEvidence referencia unit inexistente: ' + unitId);
+    const context = ev.context;
+    if (!['INITIAL_PRACTICE', 'REVIEW', 'EXTERNAL'].includes(context)) {
+      throw new Error('Backup inválido: learningEvidence tem context inválido: ' + context);
+    }
+    const q = Number(ev.questionsCount ?? ev.questions_count);
+    const c = Number(ev.correctCount ?? ev.correct_count);
+    if (!Number.isFinite(q) || q <= 0) throw new Error('Backup inválido: learningEvidence questionsCount deve ser positivo.');
+    if (!Number.isFinite(c) || c < 0 || c > q) throw new Error('Backup inválido: learningEvidence correctCount fora do intervalo [0, questionsCount].');
+    const reviewTaskId = ev.reviewTaskId ?? ev.review_task_id ?? null;
+    if (context === 'REVIEW' && reviewTaskId == null) throw new Error('Backup inválido: learningEvidence REVIEW requer reviewTaskId.');
+    if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('Backup inválido: learningEvidence ' + context + ' não pode ter reviewTaskId.');
+    if (reviewTaskId != null) {
+      if (!taskIds.has(reviewTaskId)) throw new Error('Backup inválido: learningEvidence referencia reviewTask inexistente: ' + reviewTaskId);
+      if (taskUnitMap.get(reviewTaskId) !== unitId) throw new Error('Backup inválido: learningEvidence REVIEW tem reviewTask de unidade diferente.');
+      if (evidenceTaskIds.has(reviewTaskId)) throw new Error('Backup inválido: reviewTask ' + reviewTaskId + ' tem mais de uma learningEvidence (conflito).');
+      evidenceTaskIds.add(reviewTaskId);
+    }
+    if (!isValidIsoDate(ev.evidenceDate ?? ev.evidence_date)) throw new Error('Backup inválido: learningEvidence tem evidenceDate inválida.');
+  }
+}
+
 function assertImportData(data) {
   if (!data || typeof data !== 'object') {
     throw new Error('O backup precisa ser um objeto JSON válido.');
@@ -253,6 +326,7 @@ function assertImportData(data) {
       );
     }
   }
+  validateImportContent(normalized);
   return normalized;
 }
 
