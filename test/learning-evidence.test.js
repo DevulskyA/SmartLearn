@@ -218,8 +218,8 @@ test("learningEvidence.getByUnit retorna só evidências da unidade", async () =
     studyDate: "2026-09-01",
     title: "Outro",
   });
-  await DB.learningEvidence.create({ unitId: unit1.id, evidenceDate: "2026-09-01", context: "REVIEW", questionsCount: 10, correctCount: 8 });
-  await DB.learningEvidence.create({ unitId: unit2.id, evidenceDate: "2026-09-01", context: "REVIEW", questionsCount: 5, correctCount: 3 });
+  await DB.learningEvidence.create({ unitId: unit1.id, evidenceDate: "2026-09-01", context: "INITIAL_PRACTICE", questionsCount: 10, correctCount: 8 });
+  await DB.learningEvidence.create({ unitId: unit2.id, evidenceDate: "2026-09-01", context: "EXTERNAL", questionsCount: 5, correctCount: 3 });
   const ev1 = await DB.learningEvidence.getByUnit(unit1.id);
   assert.equal(ev1.length, 1);
   assert.equal(ev1[0].unitId, unit1.id);
@@ -229,7 +229,7 @@ test("learningEvidence.getBySubject retorna evidências de todas as unidades da 
   const subject = await makeSubject();
   const unit1 = await makeUnit(subject.id);
   const unit2 = await DB.learningUnits.create({ subjectId: subject.id, sourceText: "", studyDate: "2026-09-01", title: "Outro" });
-  await DB.learningEvidence.create({ unitId: unit1.id, evidenceDate: "2026-09-01", context: "REVIEW", questionsCount: 10, correctCount: 8 });
+  await DB.learningEvidence.create({ unitId: unit1.id, evidenceDate: "2026-09-01", context: "INITIAL_PRACTICE", questionsCount: 10, correctCount: 8 });
   await DB.learningEvidence.create({ unitId: unit2.id, evidenceDate: "2026-09-01", context: "EXTERNAL", questionsCount: 5, correctCount: 3 });
   const ev = await DB.learningEvidence.getBySubject(subject.id);
   assert.equal(ev.length, 2);
@@ -320,10 +320,10 @@ test("importAll schemaVersion desconhecido (futuro) lança erro fail-closed", as
   );
 });
 
-test("importAll schemaVersion 1 (muito antigo) lança erro fail-closed", async () => {
+test("importAll schemaVersion 0 (não suportado) lança erro fail-closed", async () => {
   await DB.init();
   await assert.rejects(
-    () => DB.importAll({ schemaVersion: 1, subjects: [], learningUnits: [], reviewTasks: [] }),
+    () => DB.importAll({ schemaVersion: 0, subjects: [], learningUnits: [], reviewTasks: [] }),
     /schemaVersion/i,
   );
 });
@@ -333,7 +333,7 @@ test("importAll schemaVersion 1 (muito antigo) lança erro fail-closed", async (
 test("exportAll inclui schemaVersion 3 e learningEvidence", async () => {
   const subject = await makeSubject();
   const unit = await makeUnit(subject.id);
-  await DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "REVIEW", questionsCount: 10, correctCount: 8 });
+  await DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "INITIAL_PRACTICE", questionsCount: 10, correctCount: 8 });
   const backup = await DB.exportAll();
   assert.equal(backup.schemaVersion, 3);
   assert.ok(Array.isArray(backup.learningEvidence));
@@ -438,4 +438,72 @@ test("getCompletedToday: encontra revisão mesmo quando completedAt UTC está no
 
   const notOnNextDay = await DB.reviewTasks.getCompletedToday("2026-09-04");
   assert.equal(notOnNextDay.length, 0, "não deve aparecer em 2026-09-04 — evidenceDate é 2026-09-03");
+});
+
+// --- P0-3 discrimination: context↔reviewTaskId contract ---
+
+test("P0-3: create com context REVIEW sem reviewTaskId lança erro", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  await assert.rejects(
+    () => DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "REVIEW", questionsCount: 10, correctCount: 8 }),
+    /reviewTaskId/i,
+  );
+});
+
+test("P0-3: create com context INITIAL_PRACTICE com reviewTaskId lança erro", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  await assert.rejects(
+    () => DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "INITIAL_PRACTICE", questionsCount: 10, correctCount: 8, reviewTaskId: 99 }),
+    /reviewTaskId/i,
+  );
+});
+
+test("P0-3: create com context EXTERNAL com reviewTaskId lança erro", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  await assert.rejects(
+    () => DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "EXTERNAL", questionsCount: 10, correctCount: 8, reviewTaskId: 99 }),
+    /reviewTaskId/i,
+  );
+});
+
+// --- P0-4 discrimination: v1 legacy backup import ---
+
+test("P0-4: importAll aceita backup v1 (studyRecords sem schemaVersion) e migra", async () => {
+  await DB.init();
+  const v1Backup = {
+    subjects: [{ id: 1, name: "Fisiologia", created_at: "2025-01-01T00:00:00.000Z", updated_at: "2025-01-01T00:00:00.000Z", is_active: 1, sort_order: 0 }],
+    sources: [{ id: 1, name: "Guyton cap. 1" }],
+    studyRecords: [{ id: 1, subject_id: 1, source_id: 1, study_date: "2025-01-01", content: "Homeostase", created_at: "2025-01-01T00:00:00.000Z", updated_at: "2025-01-01T00:00:00.000Z" }],
+    reviewTasks: [{ id: 1, study_record_id: 1, review_number: 1, due_date: "2025-01-08", review_done: 0, questions_done: 0, created_at: "2025-01-01T00:00:00.000Z", updated_at: "2025-01-01T00:00:00.000Z" }],
+    settings: [{ key: "main", app_version: "1.0.0", review_schedule: null }],
+  };
+  const result = await DB.importAll(v1Backup);
+  assert.equal(result.schemaVersion, 3);
+  assert.equal(result.learningUnits.length, 1);
+  assert.equal(result.learningUnits[0].title, "Homeostase");
+  assert.equal(result.learningUnits[0].sourceText, "Guyton cap. 1");
+  assert.equal(result.reviewTasks[0].unitId, 1);
+});
+
+test("P0-4: schemaVersion 1 com learningUnits (não v1) é aceito", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 1, subjects: [], learningUnits: [], reviewTasks: [] };
+  const result = await DB.importAll(backup);
+  assert.equal(result.schemaVersion, 3);
+});
+
+// --- P0-2 discrimination: clearAll não falha com learning_evidence presente ---
+
+test("P0-2: clearAll apaga learning_evidence sem crash (BrowserStore)", async () => {
+  const subject = await makeSubject();
+  const unit = await makeUnit(subject.id);
+  await DB.learningEvidence.create({ unitId: unit.id, evidenceDate: "2026-09-01", context: "EXTERNAL", questionsCount: 5, correctCount: 4 });
+  let before = await DB.learningEvidence.getAll();
+  assert.equal(before.length, 1);
+  await DB.clearAll();
+  const after = await DB.learningEvidence.getAll();
+  assert.equal(after.length, 0, "learningEvidence deve ser apagada por clearAll");
 });

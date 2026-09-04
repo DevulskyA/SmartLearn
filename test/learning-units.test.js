@@ -120,7 +120,7 @@ test("exportAll inclui schemaVersion 2 e learningUnits", async () => {
 test("importAll com schemaVersion incorreto lança erro fail-closed", async () => {
   await DB.init();
   const backup = await DB.exportAll();
-  const corruptBackup = { ...backup, schemaVersion: 1 };
+  const corruptBackup = { ...backup, schemaVersion: 0 };
   await assert.rejects(() => DB.importAll(corruptBackup), /schemaVersion/i);
 });
 

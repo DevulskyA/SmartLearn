@@ -15,7 +15,6 @@ const schemaStatements = [
   "CREATE TABLE IF NOT EXISTS learning_units (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    subject_id INTEGER NOT NULL REFERENCES subjects(id),\n    source_text TEXT NOT NULL DEFAULT '',\n    study_date TEXT NOT NULL,\n    title TEXT NOT NULL,\n    summary_body TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE TABLE IF NOT EXISTS review_tasks (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    unit_id INTEGER NOT NULL REFERENCES learning_units(id) ON DELETE CASCADE,\n    review_number INTEGER NOT NULL,\n    due_date TEXT NOT NULL,\n    completed_at TEXT,\n    review_done INTEGER NOT NULL DEFAULT 0,\n    questions_done INTEGER NOT NULL DEFAULT 0,\n    questions_count INTEGER,\n    correct_count INTEGER,\n    score_percent REAL,\n    comment TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n  )",
   "CREATE INDEX IF NOT EXISTS idx_review_tasks_due_date\n    ON review_tasks(due_date)",
-  "CREATE INDEX IF NOT EXISTS idx_review_tasks_unit_id\n    ON review_tasks(unit_id)",
   // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
   // Evidence of study and review outcomes belong in learning_units and review_tasks.
   // hint_text is pedagogical context only — never citation or provenance data.
@@ -203,12 +202,44 @@ async function ensureNamedRows(tableName, names, label) {
   }
 }
 
+function migrateV1ImportData(data) {
+  if (data.schemaVersion != null || !Array.isArray(data.studyRecords)) {
+    return data;
+  }
+  const sources = Array.isArray(data.sources) ? data.sources : [];
+  const sourceMap = new Map(sources.map((s) => [s.id, s.name ?? '']));
+  const learningUnits = data.studyRecords.map((sr) => ({
+    id: sr.id,
+    subjectId: sr.subject_id ?? sr.subjectId,
+    sourceText: sourceMap.get(sr.source_id ?? sr.sourceId) ?? sr.source_text ?? sr.sourceText ?? '',
+    studyDate: sr.study_date ?? sr.studyDate,
+    title: sr.content ?? sr.title ?? '',
+    summaryBody: sr.summary_body ?? sr.summaryBody ?? null,
+    createdAt: sr.created_at ?? sr.createdAt,
+    updatedAt: sr.updated_at ?? sr.updatedAt,
+  }));
+  const reviewTasks = (Array.isArray(data.reviewTasks) ? data.reviewTasks : []).map((rt) => ({
+    ...rt,
+    unitId: rt.study_record_id ?? rt.studyRecordId ?? rt.unit_id ?? rt.unitId,
+  }));
+  return {
+    schemaVersion: 1,
+    subjects: Array.isArray(data.subjects) ? data.subjects : [],
+    learningUnits,
+    reviewTasks,
+    exercises: [],
+    learningEvidence: [],
+    settings: data.settings ?? [],
+  };
+}
+
 function assertImportData(data) {
   if (!data || typeof data !== 'object') {
     throw new Error('O backup precisa ser um objeto JSON válido.');
   }
-  const version = data.schemaVersion;
-  const MIN_VERSION = 2;
+  const normalized = migrateV1ImportData(data);
+  const version = normalized.schemaVersion;
+  const MIN_VERSION = 1;
   if (version == null || version < MIN_VERSION || version > SCHEMA_VERSION) {
     throw new Error(
       'Backup incompatível. schemaVersion não suportado: ' + version +
@@ -216,16 +247,18 @@ function assertImportData(data) {
     );
   }
   for (const key of ['subjects', 'learningUnits', 'reviewTasks']) {
-    if (!Array.isArray(data[key])) {
+    if (!Array.isArray(normalized[key])) {
       throw new Error(
         'O backup não contém a lista obrigatória "' + key + '".',
       );
     }
   }
+  return normalized;
 }
 
 function buildClearStatements() {
   return [
+    { query: 'DELETE FROM learning_evidence', values: [] },
     { query: 'DELETE FROM exercises', values: [] },
     { query: 'DELETE FROM review_tasks', values: [] },
     { query: 'DELETE FROM learning_units', values: [] },
@@ -782,6 +815,8 @@ function createBrowserStore() {
         if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
         if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
         if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+        if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
+        if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
         if (reviewTaskId != null) {
           const state = readState();
           const dup = state.learningEvidence.find((e) => e.reviewTaskId === reviewTaskId);
@@ -897,13 +932,13 @@ function createBrowserStore() {
     },
 
     async importAll(data) {
-      assertImportData(data);
+      const normalized = assertImportData(data);
       const state = emptyState();
-      state.subjects = data.subjects.map((row) => ({
+      state.subjects = normalized.subjects.map((row) => ({
         ...mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
         color: row.color ?? 'DISC-BLUE',
       }));
-      state.learningUnits = data.learningUnits.map((row) => ({
+      state.learningUnits = normalized.learningUnits.map((row) => ({
         id: row.id,
         subjectId: row.subjectId ?? row.subject_id,
         sourceText: row.sourceText ?? row.source_text ?? '',
@@ -913,7 +948,7 @@ function createBrowserStore() {
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
-      state.reviewTasks = data.reviewTasks.map((row) => ({
+      state.reviewTasks = normalized.reviewTasks.map((row) => ({
         id: row.id,
         unitId: row.unitId ?? row.unit_id,
         reviewNumber: row.reviewNumber ?? row.review_number,
@@ -928,7 +963,7 @@ function createBrowserStore() {
         createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
-      state.exercises = (Array.isArray(data.exercises) ? data.exercises : []).map((row) => ({
+      state.exercises = (Array.isArray(normalized.exercises) ? normalized.exercises : []).map((row) => ({
         id: row.id,
         unitId: row.unitId ?? row.unit_id,
         questionText: row.questionText ?? row.question_text ?? "",
@@ -940,7 +975,7 @@ function createBrowserStore() {
         updatedAt: row.updatedAt ?? row.updated_at ?? nowIso(),
       }));
       // Restore explicit learningEvidence from v3 backups
-      state.learningEvidence = (Array.isArray(data.learningEvidence) ? data.learningEvidence : [])
+      state.learningEvidence = (Array.isArray(normalized.learningEvidence) ? normalized.learningEvidence : [])
         .filter((row) => row.questionsCount && Number(row.questionsCount) > 0)
         .map((row) => ({
           id: row.id,
@@ -953,13 +988,13 @@ function createBrowserStore() {
           reviewTaskId: row.reviewTaskId ?? row.review_task_id ?? null,
           createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         }));
-      state.settings = Array.isArray(data.settings)
-        ? (data.settings[0] ?? defaultSettings)
-        : (data.settings ?? defaultSettings);
+      state.settings = Array.isArray(normalized.settings)
+        ? (normalized.settings[0] ?? defaultSettings)
+        : (normalized.settings ?? defaultSettings);
       refreshNextIds(state);
       writeState(state);
-      // For v2 backups: migrate completed review_tasks to learningEvidence
-      if ((data.schemaVersion ?? 0) < 3) {
+      // For v1/v2 backups: migrate completed review_tasks to learningEvidence
+      if ((normalized.schemaVersion ?? 0) < 3) {
         await this.ensureLearningEvidenceMigration();
       }
       return this.exportAll();
@@ -1011,8 +1046,11 @@ export const DB = {
             "SELECT dev_seed_version FROM _bootstrap WHERE id = 1",
           );
           if (rows.length === 0 || !rows[0].dev_seed_version) {
-            const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-            await DB.importAll(getDevDataset());
+            const [{ count }] = await database.select("SELECT COUNT(*) AS count FROM subjects");
+            if (Number(count) === 0) {
+              const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+              await DB.importAll(getDevDataset());
+            }
             await database.execute(
               "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",
               [nowIso()],
@@ -1298,6 +1336,10 @@ export const DB = {
           "ALTER TABLE review_tasks ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'legacy'",
         );
       }
+      // Index on unit_id created here (after any rename) so it works for main-era DBs.
+      await requireDatabase().execute(
+        "CREATE INDEX IF NOT EXISTS idx_review_tasks_unit_id ON review_tasks(unit_id)",
+      );
     },
 
     async getAll() {
@@ -1551,6 +1593,8 @@ export const DB = {
       if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
       if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
       if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+      if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
+      if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
       const scorePercent = calcScorePercent(q, c);
       const result = await requireDatabase().execute(
         `INSERT INTO learning_evidence
@@ -1712,9 +1756,9 @@ export const DB = {
   },
 
   async importAll(data) {
-    assertImportData(data);
+    const normalized = assertImportData(data);
     await invoke("execute_sqlite_transaction", {
-      statements: buildImportStatements(data),
+      statements: buildImportStatements(normalized),
     });
     return DB.exportAll();
   },

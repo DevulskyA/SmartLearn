@@ -9,7 +9,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS } from "./performance-thresholds.js";
+import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics } from "./analytics.js";
 
 async function withScrollPreserved(fn) {
@@ -237,9 +237,9 @@ function formatPerformanceScore(value) {
 function getPerformanceBandClass(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  if (number < 50) return "performance-badge--critical";
-  if (number < 70) return "performance-badge--attention";
-  if (number < 85) return "performance-badge--good";
+  if (number < THRESHOLDS.ATTENTION) return "performance-badge--critical";
+  if (number < THRESHOLDS.ADEQUATE) return "performance-badge--attention";
+  if (number < THRESHOLDS.STRONG) return "performance-badge--good";
   return "performance-badge--strong";
 }
 
@@ -1223,10 +1223,10 @@ export async function renderTracking() {
             row.scrollIntoView({ behavior: "smooth", block: "center" });
             const expandBtn = row.querySelector(".plan-expand-btn");
             if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
-            // focus summary textarea after expansion
+            // focus summary body after expansion (no edit textarea in plan view)
             setTimeout(() => {
-              const summaryEl = row.querySelector(".plan-summary-edit");
-              if (summaryEl) summaryEl.focus();
+              const summaryEl = row.querySelector(".plan-summary-body");
+              if (summaryEl) summaryEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
             }, 350);
           }
         }).catch(console.error);
@@ -1243,7 +1243,7 @@ export async function renderTracking() {
         showScreen("today");
         // scroll to the review row for this unit if visible
         setTimeout(() => {
-          const reviewRow = document.querySelector(`[data-task-id="${nextPending.id}"]`);
+          const reviewRow = document.querySelector(`[data-review-id="${nextPending.id}"]`);
           if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 300);
       });
