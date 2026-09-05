@@ -3378,17 +3378,22 @@ planUnitSaveBtn?.addEventListener("click", async () => {
       ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
       : { subjectId, sourceText, studyDate, title, summaryBody };
     const saved = await generateReviewTasks(studyData);
+    // Save succeeded — clear draft immediately; render failures below must NOT re-submit
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
     if (planNewSubjectInput) planNewSubjectInput.value = "";
     setPlanSubjectSubformVisible(false);
     setPlanFormMessage("Aula salva. 16 revisões criadas.");
-    await renderPlan();
-    if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
-    setPlanFormVisible(false);
-    setPlanFormMessage();
-    await renderToday();
+    try {
+      await renderPlan();
+      if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      setPlanFormVisible(false);
+      setPlanFormMessage();
+      await renderToday();
+    } catch {
+      setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
+    }
   } catch {
     setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
   } finally {
