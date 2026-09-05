@@ -6,9 +6,11 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** UX linear e fontes como entidades reutilizáveis concluídas. TASK-019 concluída.
-- **Data:** 2026-06-23
-- **Próxima ação:** Revisão humana da UX linear e validação final em Windows/Android.
+- **Fase:** server-first-v1 PASS — broker SQLite + WAL + BrokerStore JS + Service Worker offline implementados.
+- **Branch:** `claude/server-first-v1` (32 commits à frente de main)
+- **Data:** 2026-09-05
+- **Gates:** cargo test 16/16 PASS | npm test 34/34 PASS
+- **Próxima ação:** T6.3 HUMAN_GATE — revisão humana dos 32 commits antes de merge/PR.
 
 ---
 
