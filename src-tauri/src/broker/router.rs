@@ -187,6 +187,57 @@ async fn schema_handler(State(state): State<BrokerState>) -> (StatusCode, Json<V
     }
 }
 
+async fn migrate_import_handler(
+    State(state): State<BrokerState>,
+    Json(req): Json<TransactionRequest>,
+) -> (StatusCode, Json<Value>) {
+    let mut tx = match state.pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        }
+    };
+    // Validate: all statements must be INSERT/CREATE/PRAGMA (no DROP/DELETE/UPDATE/TRUNCATE).
+    for stmt in &req.statements {
+        let upper = stmt.sql.trim_start().to_uppercase();
+        let allowed = upper.starts_with("INSERT")
+            || upper.starts_with("CREATE")
+            || upper.starts_with("PRAGMA");
+        if !allowed {
+            let _ = tx.rollback().await;
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("migrate/import only allows INSERT/CREATE/PRAGMA; rejected: {}", stmt.sql.chars().take(60).collect::<String>())})),
+            );
+        }
+    }
+    let mut count: u64 = 0;
+    for stmt in req.statements {
+        let StatementRequest { sql, params } = stmt;
+        let q = bind_params!(sqlx::query(&sql), params);
+        match q.execute(&mut *tx).await {
+            Ok(r) => count += r.rows_affected(),
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                );
+            }
+        }
+    }
+    match tx.commit().await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"rows_affected": count}))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        ),
+    }
+}
+
 pub fn build_router(pool: SqlitePool) -> Router {
     let state = BrokerState { pool };
     let cors = CorsLayer::new()
@@ -208,7 +259,8 @@ pub fn build_router(pool: SqlitePool) -> Router {
         .route("/api/execute", post(execute_handler))
         .route("/api/transaction", post(transaction_handler))
         .route("/api/schema", get(schema_handler))
-        .layer(axum::extract::DefaultBodyLimit::max(1_048_576))
+        .route("/api/migrate/import", post(migrate_import_handler))
+        .layer(axum::extract::DefaultBodyLimit::max(16_777_216)) // 16 MB for import payloads
         .layer(cors)
         .with_state(state)
 }
@@ -415,6 +467,51 @@ mod tests {
                 assert!(h.await.expect("reader task"), "concurrent read must succeed");
             }
             assert!(write_ok.await.expect("writer task"), "concurrent write must succeed");
+        });
+    }
+
+    #[test]
+    fn migrate_import_inserts_rows_atomically() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, pool) = setup(&db).await;
+            let req = post_json(
+                "/api/migrate/import",
+                serde_json::json!({
+                    "statements": [
+                        {"sql": "CREATE TABLE m (v TEXT)", "params": []},
+                        {"sql": "INSERT INTO m VALUES (?)", "params": ["a"]},
+                        {"sql": "INSERT INTO m VALUES (?)", "params": ["b"]}
+                    ]
+                }),
+            );
+            let resp = router.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = response_json(resp).await;
+            assert_eq!(body["rows_affected"], Value::Number(2.into()));
+
+            let router2 = build_router(pool);
+            let resp = router2.oneshot(post_json("/api/query", serde_json::json!({"sql": "SELECT COUNT(*) AS n FROM m", "params": []}))).await.unwrap();
+            let body = response_json(resp).await;
+            assert_eq!(body["rows"][0]["n"], Value::Number(2.into()));
+        });
+    }
+
+    #[test]
+    fn migrate_import_rejects_delete_statement() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, _) = setup(&db).await;
+            let req = post_json(
+                "/api/migrate/import",
+                serde_json::json!({
+                    "statements": [{"sql": "DELETE FROM anything", "params": []}]
+                }),
+            );
+            let resp = router.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let body = response_json(resp).await;
+            assert!(body["error"].as_str().unwrap_or("").contains("INSERT/CREATE/PRAGMA"));
         });
     }
 }
