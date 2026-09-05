@@ -45,6 +45,14 @@ Quando falha por conexão recusada (ECONNREFUSED), lança `TypeError`. Ambos res
 `createBrokerStore.transaction()`, o queue de offline usa `instanceof TypeError` — um timeout
 NÃO seria enfileirado. Isso é correto: um timeout do servidor é diferente de ausência de rede.
 
+## L-008 — Módulos adicionados depois do SW precisam ser incluídos em SHELL_ASSETS
+
+O SW caches SHELL_ASSETS no evento `install`. Módulos JS adicionados após o SW ser escrito
+ficam fora da lista e não são pré-cacheados. O resultado: primeiro page load (sem SW controlando)
+funciona; segundo page load offline falha porque o arquivo não está no cache.
+**Regra:** sempre que um novo módulo JS for adicionado, verificar se está em `SHELL_ASSETS` em `sw.js`.
+**Caso real:** `migration.js` foi criado em T4 mas omitido de SHELL_ASSETS; descoberto em reconciliação final.
+
 ## L-007 — Dependency injection torna IDB/localStorage testáveis em Node
 
 Funções que dependem de `indexedDB` ou `localStorage` não são testáveis diretamente em Node.js.

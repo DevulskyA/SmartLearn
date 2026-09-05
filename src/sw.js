@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smartlearn-shell-v1';
+const CACHE_NAME = 'smartlearn-shell-v2';
 const QUERY_CACHE_NAME = 'smartlearn-query-v1';
 
 const SHELL_ASSETS = [
@@ -7,6 +7,7 @@ const SHELL_ASSETS = [
   '/src/app.js',
   '/src/db.js',
   '/src/broker-transport.js',
+  '/src/migration.js',
   '/src/theme.js',
   '/src/review-score.js',
   '/src/review-schedule.js',
@@ -74,7 +75,7 @@ self.addEventListener('fetch', (event) => {
       );
       return;
     }
-    // All other broker paths (/api/execute, /api/transaction, /api/schema): pass through.
+    // All other broker paths (/api/execute, /api/transaction, /api/schema, /api/migrate/import): pass through.
     return;
   }
 
