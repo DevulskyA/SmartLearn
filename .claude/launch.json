@@ -6,9 +6,28 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "dev"
+        "dev",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort",
+        "false"
       ],
-      "port": 5173
+      "port": 5174
+    },
+    {
+      "name": "dev-isolated",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5175",
+        "--strictPort",
+        "false"
+      ],
+      "port": 5175
     }
   ]
 }
