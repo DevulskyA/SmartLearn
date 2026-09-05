@@ -7,14 +7,13 @@
 
 ---
 
-## HANDOFF — 2026-09-05 T7-COMPLETO + AC-026/AC-029 IMPORT FIX (input-integrity-hardening-v2)
+## HANDOFF — 2026-09-05 SEMANTIC STATES + input-integrity-hardening-v2 FECHADO
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: b8ca836 (fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link)
+HEAD: 285516e (feat(ux): semantic tracking states — eliminate Pendente, unify state machine)
 REMOTE_PR: #3 (DRAFT / open / not merged)
 WORKTREE_DIRTY:
-- .claude/launch.json  M  (port 5173→5174 + --strictPort flag; local change preserved)
 - src-tauri/Cargo.toml M  (CRLF line-ending only; no content change)
 - .claude/loop.md      ??  (untracked; prior loop config; preserved)
 PLAN_PATH: .specs/features/input-integrity-hardening-v2/tasks.md
@@ -23,19 +22,34 @@ PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
 PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
 BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985 | npm test 218/218 PASS @ b8ca836
-STATUS: CHECKPOINT_PARCIAL — T1-T7 comprovados; AC-026 import path fechado; nav Configurações adicionado; T8-formal (Verifier independente) pendente
-PENDING: T8-formal (Verifier output não lido); AC-029 Android runtime
+GATES: npm test 218/218 PASS @ 285516e | cargo test 13/13 PASS @ 285516e | npm run build CLEAN @ 285516e | J1-J6 PASS @ b8ca836 (unchanged — 285516e only changes labels/colors, not state logic)
+STATUS: CHECKPOINT_PARCIAL — input-integrity-hardening-v2 T1-T7 comprovados; semantic states unificados (Pendente eliminado); T8-formal (Verifier independente) pendente; server-first spec criado
+PENDING: T8-formal Verifier independente; AC-029 Android runtime; server-first v1 implementação
 OPEN_GAPS: COLLATE NOCASE vs localeCompare PT-BR (documentado), AC-029 Android runtime
-CLOSED_THIS_SESSION (vs 5041b77): AC-026 import path (validateImportContent NUL bytes), AC-029 J5 PASS (import via Configurações nav), nav Configurações visível no mobile
+CLOSED_THIS_SESSION (vs 5041b77): AC-026 import path (validateImportContent NUL bytes), AC-029 J5 PASS, nav Configurações, Pendente eliminado (semantic states unificados), server-first v1 spec criado
 
-COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b8ca836):
+SERVER_FIRST_CANONICAL_DECISIONS:
+- STORAGE: SQLite com WAL mode, server-side (processo local Rust ou HTTP broker)
+- WEB_PLATFORM: thin shell (PWA ou Tauri WebView) — não usa localStorage para dados de produção
+- BROKER: HTTP broker local (localhost only) compartilha SQLite entre Web, Windows e futuramente Android
+- IDENTITY: multiusuário local com perfis; sem auth cloud na v1
+- MIGRATION: backward-compatible; migração segura de BrowserStore → SQLite ao adotar broker
+- PWA_OFFLINE: leitura offline via cache de service worker; escrita buffered com sync ao reconectar
+- SPEC_PATH: .specs/features/smartlearn-server-first-v1/ (spec.md, design.md, tasks.md)
+
+COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → 285516e):
 - 71421b3 fix(integrity): AC-003 + AC-026 — corrupted storage preserved, NUL bytes rejected
 - 65d58cc fix(integrity): AC-008/AC-009 SQLite dedup + archived discipline guard
 - 29d50d2 fix(integrity): AC-017 SQLite subjects.create dedup
 - ed84c76 fix(integrity): AC-016 two-stage render-after-commit + NUL literal source fix
 - ac8e985 fix(integrity): normalizeEntityName — line terminator rejection at DB layer (AC-028)
 - 283a8d3 docs(spec): extract input-integrity-hardening-v2 planning documents
+- 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visível em init failure
+- b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
+- 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
+- b8ca836 fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link
+- d1f174b docs(state): update checkpoint — T7 PASS, AC-026/AC-029 closed @ b8ca836
+- 285516e feat(ux): semantic tracking states — eliminate Pendente, unify state machine
 - 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visivel em init failure
 - b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
 - 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
