@@ -4,7 +4,7 @@
 
 | Gate | Comando | Resultado esperado |
 |------|---------|-------------------|
-| Cargo tests | `cargo test` | 12/12 PASS |
+| Cargo tests | `cargo test` | 13/13 PASS |
 | npm tests | `npm test` | 33/33 PASS |
 
 ## Critérios de aceitação verificados (T6.2 Fresh Verifier)

@@ -187,4 +187,21 @@ mod tests {
             assert_eq!(v, "hello");
         });
     }
+
+    #[test]
+    fn backup_rejects_path_with_single_quote() {
+        let db = TempDb::new();
+        run_async(async {
+            let pool = open_pool(&db.path).await.expect("pool should open");
+            enable_wal(&pool).await.expect("WAL should enable");
+            let bad_path = std::path::PathBuf::from("/tmp/bad'path.db");
+            let err = backup(&pool, &bad_path).await;
+            assert!(err.is_err(), "backup with single-quote path must return Err");
+            let msg = err.unwrap_err().to_string();
+            assert!(
+                msg.contains("single quote"),
+                "error message must mention single quote, got: {msg}"
+            );
+        });
+    }
 }
