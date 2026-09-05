@@ -7,11 +7,11 @@
 
 ---
 
-## HANDOFF — 2026-09-05 T3 CLOSURE (input-integrity-hardening-v2)
+## HANDOFF — 2026-09-05 T8 ADVERSARIAL CLOSURE (input-integrity-hardening-v2)
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: 190bb93 (fix(integrity): T3 atomic discipline+unit save — AC-008/AC-010/AC-012)
+HEAD: ac8e985 (fix(integrity): normalizeEntityName — reject line terminators at DB layer)
 REMOTE_PR: #3 (DRAFT / open / not merged)
 WORKTREE_DIRTY:
 - .claude/launch.json  M  (port 5173→5174 + --strictPort flag; local change preserved)
@@ -23,10 +23,18 @@ PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
 PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
 BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 209/209 PASS | cargo test 13/13 PASS | npm run build CLEAN
-STATUS: CHECKPOINT_PARCIAL — T2/T3/T5 comprovados; T7 browser journey + T8 Verifier pendentes
-PENDING: T7 (J1-J6 browser journey com runtime isolado) → T8 (Verifier + closure)
-OPEN_GAPS: AC-009 archived reactivation (P2), AC-026 NUL em texto livre (P2), COLLATE NOCASE vs localeCompare (documentado), AC-029 Android runtime
+GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985
+STATUS: CHECKPOINT_PARCIAL — T1-T6 + T8-partial (adversarial self-review) comprovados; T7 browser journey pendente (runtime isolado); formal Verifier pendente
+PENDING: T7 (J1-J6 browser journey com runtime isolado); T8-formal (Verifier independente)
+OPEN_GAPS: COLLATE NOCASE vs localeCompare PT-BR (documentado; não causa erro mas parity gap), AC-029 Android runtime
+CLOSED_THIS_SESSION (vs 190bb93): AC-003, AC-009, AC-016, AC-017, AC-026, AC-028 + NUL literal removido do source
+
+COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → ac8e985):
+- 71421b3 fix(integrity): AC-003 + AC-026 — corrupted storage preserved, NUL bytes rejected
+- 65d58cc fix(integrity): AC-008/AC-009 SQLite dedup + archived discipline guard
+- 29d50d2 fix(integrity): AC-017 SQLite subjects.create dedup
+- ed84c76 fix(integrity): AC-016 two-stage render-after-commit + NUL literal source fix
+- ac8e985 fix(integrity): normalizeEntityName — line terminator rejection at DB layer (AC-028)
 
 ---
 
