@@ -173,6 +173,26 @@ test("AC-003 discrimination: null key retorna vazio, key inválida lança erro",
   await assert.rejects(() => DB.subjects.getActive(), /corrompidos|falha/i);
 });
 
+// AC-009: archived equivalent discipline must prompt for reactivation — no silent merge or new creation
+test("AC-009: createWithReviews com disciplina arquivada lança erro orientado", async () => {
+  await DB.init();
+  // Create then archive a subject
+  const subject = await DB.subjects.create("Anatomia");
+  await DB.subjects.deactivate(subject.id);
+  const task = { reviewNumber: 1, dueDate: "2026-09-06", reviewDone: false, questionsDone: false };
+  await assert.rejects(
+    () => DB.learningUnits.createWithReviews(
+      { newSubjectName: "Anatomia", newSubjectColor: "DISC-BLUE",
+        sourceText: "", studyDate: "2026-09-05", title: "Aula" },
+      [task],
+    ),
+    /arquivada/i,
+  );
+  // Confirm no new subject was created
+  const subjects = await DB.subjects.getAll();
+  assert.equal(subjects.length, 1, "apenas a original arquivada existe");
+});
+
 // AC-026: NUL bytes in free text must be rejected
 test("AC-026: NUL em sourceText rejeitado com erro", async () => {
   const subject = await makeSubject();
