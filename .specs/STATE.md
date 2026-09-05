@@ -11,7 +11,7 @@
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: b25f0c9 (chore(dev): add dev-isolated launch config)
+HEAD: 5041b77 (fix(integrity): AC-014 clear conflicting plan filter after save)
 REMOTE_PR: #3 (DRAFT / open / not merged)
 WORKTREE_DIRTY:
 - .claude/launch.json  M  (port 5173→5174 + --strictPort flag; local change preserved)
@@ -23,11 +23,11 @@ PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
 PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
 BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985 | npm test 218/218 PASS @ b25f0c9
-STATUS: CHECKPOINT_PARCIAL — T1-T6 + T7-partial (J1/J2/J6 executados) + T8-partial comprovados; J3/J4/J5 e Verifier formal pendentes
-PENDING: J3/J4/J5 (browser journey); T8-formal (Verifier output não lido); AC-029 Android runtime
+GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985 | npm test 218/218 PASS @ 5041b77
+STATUS: CHECKPOINT_PARCIAL — T1-T6 + T7-partial (J1-J4+J6 PASS) + T8-partial comprovados; J5 e Verifier formal pendentes
+PENDING: J5 (import inválido browser journey); T8-formal (Verifier output não lido); AC-029 Android runtime
 OPEN_GAPS: COLLATE NOCASE vs localeCompare PT-BR (documentado), AC-029 Android runtime
-CLOSED_THIS_SESSION (vs 190bb93): AC-003 (banner visível), J1 PASS, J2 PASS, J6 PASS; lançamento anterior: AC-009, AC-016, AC-017, AC-026, AC-028
+CLOSED_THIS_SESSION (vs 190bb93): AC-003 (banner visível), AC-014 (filtro conflitante reset), J1-J4+J6 PASS; lançamento anterior: AC-009, AC-016, AC-017, AC-026, AC-028
 
 COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b25f0c9):
 - 71421b3 fix(integrity): AC-003 + AC-026 — corrupted storage preserved, NUL bytes rejected
@@ -38,6 +38,7 @@ COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b25f0c9):
 - 283a8d3 docs(spec): extract input-integrity-hardening-v2 planning documents
 - 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visivel em init failure
 - b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
+- 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
 
 ---
 

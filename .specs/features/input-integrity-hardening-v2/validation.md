@@ -16,7 +16,7 @@
 | T4 | PASS | Cancel limpa input; draft preservado em catch; renderPlan+select após save; AC-016 render-after-commit isolado |
 | T5 | PASS | isValidIsoDate calendário real; NaN/Infinity rejeitados em contagens |
 | T6 | PASS (estrutural) | assertImportData lança antes de qualquer mutação; execute_sqlite_transaction atômico |
-| T7 | PARTIAL | J1 PASS (Semiologia Médica, data ISO, form fecha, 16 revisões); J2 PASS (variant espaço/caixa reutiliza id=3); J3 PASS (double-click blocked by disabled flag; 1 unit criada); J6 PASS (JSON corrompido preservado, banner visível); J4/J5 pendentes |
+| T7 | PARTIAL | J1 PASS; J2 PASS (dedup variant); J3 PASS (double-click blocked); J4 PASS (filtro conflitante resetado, unit visível); J6 PASS (JSON corrompido preservado + banner); J5 pendente (import inválido browser journey) |
 | T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; Verifier formal iniciado (output não lido) |
 
 ## Spec-Anchored Acceptance Criteria
@@ -34,7 +34,7 @@
 | AC-011 | Título/data inválido falha antes de gravar | Validação antes de createWithReviews; app.js linhas 3346-3348 | PASS |
 | AC-012 | Falha de storage → rollback sem registro parcial | test/learning-units.test.js AC-012 mock test @ 190bb93 | PASS |
 | AC-013 | Dupla ativação bloqueada | planUnitSaveBtn.disabled = true antes de await; finally restaura | PASS |
-| AC-014 | Resultado visível após save | renderPlan()+planSubjectSelect.value=saved.subjectId | PASS |
+| AC-014 | Resultado visível após save; filtro conflitante resetado | renderPlan()+select; planFilterSubject.value="" quando conflita @ 5041b77; J4 PASS | PASS |
 | AC-015 | Cancel limpa nome pendente | planUnitCancelBtn limpa planNewSubjectInput @ app.js | PASS |
 | AC-016 | Erro de save mantém rascunho; render-fail pós-commit não reenviar | Two-stage try/catch @ ed84c76; catch interno mostra 'Aula salva. Recarregue.' | PASS |
 | AC-017 | Criar disciplina separada informa existente | subjects.create SELECT antes de INSERT; catch COLLATE NOCASE @ 29d50d2 | PASS |
@@ -45,7 +45,7 @@
 | AC-025 | HTML/SQL-like em texto livre tratado como dados | Nenhum innerHTML/outerHTML/insertAdjacentHTML no código; SQL parametrizado | PASS |
 | AC-026 | NUL rejeitado em texto livre (sourceText, summaryBody) | rejectNulBytes+validateUnitData @ db.js; testes AC-026 @ 71421b3 | PASS |
 | AC-028 | Mesma validade por adapter; invariante não bypassável por omitir UI | normalizeEntityName rejeita \r\n\v\f @ DB layer; test/subjects.test.js DISCRIMINATION @ ac8e985 | PASS |
-| AC-029 | Fluxo completo em navegador isolado | J1 PASS: Semiologia Médica salva; J2 PASS: dedup variant; J3 PASS: double-click bloqueado; J6 PASS: corrupt preservado + banner; J4/J5 pendentes | PARTIAL |
+| AC-029 | Fluxo completo em navegador isolado | J1-J4 + J6 PASS: save, dedup, double-click, filtro conflitante, corrupt; J5 pendente | PARTIAL |
 | AC-030 | Mutações semânticas mortas | Ver tabela Discrimination Sensors | PARTIAL |
 | AC-031 | Verifier independente | Self-review adversarial (esta sessão); formal Verifier pendente | PARTIAL |
 | AC-032 | Estado honesto no prazo | CHECKPOINT_PARCIAL com pendências verdadeiras documentadas | PASS |
@@ -58,6 +58,7 @@
 | npm test (T3) | npm test | 0 | 209/209 | 190bb93 |
 | npm test (T8-partial) | npm test | 0 | 218/218 | ac8e985 |
 | npm test (AC-003 fix) | npm test | 0 | 218/218 | b25f0c9 |
+| npm test (AC-014 fix) | npm test | 0 | 218/218 | 5041b77 |
 | cargo test | cargo test --manifest-path src-tauri/Cargo.toml | 0 | 13/13 | ac8e985 |
 | npm run build | npm run build | 0 | clean 133kB | ac8e985 |
 
@@ -83,6 +84,7 @@
 | J2: Nome equivalente cria disciplina duplicada | Browser J2 @ b25f0c9: subjectCount=3 antes e depois | KILLED |
 | J6: JSON corrompido sobrescrito em init | Browser J6 @ b25f0c9: rawBytes CORRUPT_GARBAGE preservados; banner visível | KILLED |
 | J3: Double-click cria duas aulas | Browser J3: btn.disabled=true antes de await; segundo click bloqueado; 1 unit criada | KILLED |
+| J4: Nova aula invisível por filtro conflitante | Browser J4 @ 5041b77: planFilterSubject reset para ""; 5 units visíveis | KILLED |
 | render-after-commit erro mostrado como save-fail | app.js two-stage catch @ ed84c76 | KILLED (code) |
 
 ## Ranked Gaps (Remaining)
