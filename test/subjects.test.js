@@ -113,3 +113,29 @@ test("deleteIfEmpty: remoção de subject vazia não cria estado inconsistente",
   assert.equal(units.length, 1, "unit de subj2 preservada");
   assert.equal(evidence.length, 1, "evidência de subj2 preservada");
 });
+
+// DISCRIMINATION: AC-028 — line control chars rejected at DB layer (bypass UI validation)
+test("subjects.create: nome com \n rejeitado diretamente no adapter sem UI", async () => {
+  await setup();
+  await assert.rejects(
+    () => DB.subjects.create("Semiologia\nMédica", "DISC-BLUE"),
+    /quebras de linha/i,
+    "DB layer must reject LF even when UI validation is bypassed"
+  );
+  const all = await DB.subjects.getAll();
+  assert.equal(all.length, 0, "no subject created on rejection");
+});
+
+test("subjects.create: nome com \r rejeitado diretamente no adapter sem UI", async () => {
+  await setup();
+  await assert.rejects(
+    () => DB.subjects.create("Semiologia\rMédica", "DISC-BLUE"),
+    /quebras de linha/i
+  );
+});
+
+test("DISCRIMINATION: subjects.create: normalização colapsa espaços horizontais mas não rejeita", async () => {
+  await setup();
+  const subj = await DB.subjects.create("  Semiologia  Médica  ", "DISC-BLUE");
+  assert.equal(subj.name, "Semiologia Médica", "borders trimmed and internal spaces collapsed");
+});

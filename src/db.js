@@ -159,7 +159,10 @@ function calcScorePercent(questionsCount, correctCount) {
 }
 
 function normalizeEntityName(name, label) {
-  const normalized = String(name ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  const str = String(name ?? '');
+  if (/[\r\n\v\f]/.test(str))
+    throw new Error(label + ' cont\u00e9m quebras de linha n\u00e3o permitidas.');
+  const normalized = str.normalize('NFC').replace(/[ \t]+/g, ' ').trim();
   if (!normalized) throw new Error('Informe ' + label + '.');
   return normalized;
 }
