@@ -153,3 +153,64 @@ test("BrowserStore não tem seeds acadêmicos — subjects começa vazio", async
   const subjects = await DB.subjects.getAll();
   assert.equal(subjects.length, 0);
 });
+
+// AC-010: single action creates discipline + unit + reviews atomically
+test("createWithReviews newSubjectName cria disciplina + aula em uma chamada", async () => {
+  await DB.init();
+  const task = { reviewNumber: 1, dueDate: "2026-09-06", reviewDone: false, questionsDone: false };
+  const unit = await DB.learningUnits.createWithReviews(
+    { newSubjectName: "Semiologia Médica", newSubjectColor: "DISC-BLUE",
+      sourceText: "", studyDate: "2026-09-05",
+      title: "Ausculta Cardíaca — Bulhas e Sopros" },
+    [task],
+  );
+  assert.equal(unit.title, "Ausculta Cardíaca — Bulhas e Sopros");
+  const subjects = await DB.subjects.getActive();
+  assert.equal(subjects.length, 1);
+  assert.equal(subjects[0].name, "Semiologia Médica");
+  assert.equal(unit.subjectId, subjects[0].id);
+});
+
+// AC-008: equivalent name reuses existing subject ID — no duplicate created
+test("createWithReviews newSubjectName equivalente reutiliza subject existente", async () => {
+  const existing = await makeSubject(); // "Fisiologia"
+  const task = { reviewNumber: 1, dueDate: "2026-09-06", reviewDone: false, questionsDone: false };
+  const unit = await DB.learningUnits.createWithReviews(
+    { newSubjectName: "Fisiologia", newSubjectColor: "DISC-BLUE",
+      sourceText: "", studyDate: "2026-09-05", title: "Aula duplicada" },
+    [task],
+  );
+  const subjects = await DB.subjects.getActive();
+  assert.equal(subjects.length, 1, "nenhuma disciplina duplicada criada");
+  assert.equal(unit.subjectId, existing.id);
+});
+
+// AC-012 discrimination: storage failure before writeState leaves zero records
+test("createWithReviews newSubjectName — falha de storage não cria registro parcial", async () => {
+  await DB.init();
+  const origSetItem = localStorage.setItem.bind(localStorage);
+  let callCount = 0;
+  localStorage.setItem = (key, value) => {
+    callCount++;
+    // fail on any write — simulates quota/storage error
+    throw new Error("QuotaExceededError simulado");
+  };
+  const task = { reviewNumber: 1, dueDate: "2026-09-06", reviewDone: false, questionsDone: false };
+  try {
+    await assert.rejects(
+      () => DB.learningUnits.createWithReviews(
+        { newSubjectName: "Disciplina Órfã", newSubjectColor: "DISC-BLUE",
+          sourceText: "", studyDate: "2026-09-05", title: "Deve rolar" },
+        [task],
+      ),
+      /QuotaExceededError/,
+    );
+  } finally {
+    localStorage.setItem = origSetItem;
+  }
+  // Restore readable state and verify no records were persisted
+  const subjects = await DB.subjects.getAll();
+  const units = await DB.learningUnits.getAll();
+  assert.equal(subjects.length, 0, "nenhuma disciplina persistida após falha");
+  assert.equal(units.length, 0, "nenhuma aula persistida após falha");
+});

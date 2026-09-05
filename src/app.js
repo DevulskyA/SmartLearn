@@ -3347,39 +3347,40 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   const titleError = validateTitleField(title, "o conteúdo estudado");
   if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
 
-  // Auto-create discipline only after unit fields are valid
+  // Resolve discipline: capture new name to include in atomic save, or use selected existing ID
+  let newSubjectName = null;
   if (planNewSubjectForm && !planNewSubjectForm.hidden) {
     const pendingName = planNewSubjectInput?.value.trim();
     if (pendingName) {
       const nameError = validateNamingField(pendingName, "o nome da disciplina");
       if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
-      try {
-        const newSubject = await DB.subjects.create(pendingName, "DISC-BLUE");
-        await renderPlan();
-        if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
-        setPlanSubjectSubformVisible(false);
-        planNewSubjectInput.value = "";
-      } catch {
-        setPlanFormMessage("Não foi possível criar a disciplina.", true);
-        return;
-      }
+      newSubjectName = pendingName;
     }
   }
 
-  const subjectId = Number(planSubjectSelect?.value);
   const sourceText = planStudySource?.value.trim() ?? "";
   const summaryBody = planStudySummary?.value.trim() || null;
 
-  if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
+  let subjectId;
+  if (!newSubjectName) {
+    subjectId = Number(planSubjectSelect?.value);
+    if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
+  }
 
   planUnitSaveBtn.disabled = true;
   try {
-    await generateReviewTasks({ subjectId, sourceText, studyDate, title, summaryBody });
+    const studyData = newSubjectName
+      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
+      : { subjectId, sourceText, studyDate, title, summaryBody };
+    const saved = await generateReviewTasks(studyData);
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
+    if (planNewSubjectInput) planNewSubjectInput.value = "";
+    setPlanSubjectSubformVisible(false);
     setPlanFormMessage("Aula salva. 16 revisões criadas.");
     await renderPlan();
+    if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
     setPlanFormVisible(false);
     setPlanFormMessage();
     await renderToday();

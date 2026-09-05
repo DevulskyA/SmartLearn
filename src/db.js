@@ -692,11 +692,36 @@ function createBrowserStore() {
       },
       async createWithReviews(data, tasks) {
         const state = readState();
-        assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
+        let subjectId = data.subjectId;
+
+        if (data.newSubjectName) {
+          const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+          const existing = state.subjects.find(
+            s => s.isActive && s.name.localeCompare(name, 'pt-BR', { sensitivity: 'accent' }) === 0,
+          );
+          if (existing) {
+            subjectId = existing.id;
+          } else {
+            const newSubject = {
+              id: nextId(state, 'subjects'),
+              name,
+              color: data.newSubjectColor ?? 'DISC-BLUE',
+              isActive: true,
+              sortOrder: state.subjects.length,
+              createdAt: nowIso(),
+              updatedAt: nowIso(),
+            };
+            state.subjects.push(newSubject);
+            subjectId = newSubject.id;
+          }
+        } else {
+          assertActive(state.subjects, subjectId, "Selecione uma disciplina ativa.");
+        }
+
         const timestamp = nowIso();
         const record = {
           id: nextId(state, "learningUnits"),
-          subjectId: data.subjectId,
+          subjectId,
           sourceText: String(data.sourceText ?? "").trim(),
           studyDate: data.studyDate,
           title: String(data.title ?? "").trim(),
@@ -1390,8 +1415,49 @@ export const DB = {
         throw new Error('Informe ao menos uma revisão para o estudo.');
       }
 
-      await assertActiveSubject(data.subjectId);
       const timestamp = nowIso();
+      const statements = [];
+
+      if (data.newSubjectName) {
+        const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+        const nextOrder = await getNextSortOrder('subjects');
+        statements.push({
+          query: `INSERT INTO subjects (name, created_at, updated_at, is_active, sort_order, color)
+                  VALUES ($1, $2, $3, 1, $4, $5)`,
+          values: [name, timestamp, timestamp, nextOrder, data.newSubjectColor ?? 'DISC-BLUE'],
+        });
+      } else {
+        await assertActiveSubject(data.subjectId);
+      }
+
+      const subjectIdExpr = data.newSubjectName ? '(SELECT MAX(id) FROM subjects)' : '$1';
+      const unitParamOffset = data.newSubjectName ? 0 : 1;
+      const unitValues = data.newSubjectName
+        ? [
+            String(data.sourceText ?? '').trim(),
+            data.studyDate,
+            String(data.title ?? '').trim(),
+            data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
+            timestamp,
+            timestamp,
+          ]
+        : [
+            data.subjectId,
+            String(data.sourceText ?? '').trim(),
+            data.studyDate,
+            String(data.title ?? '').trim(),
+            data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
+            timestamp,
+            timestamp,
+          ];
+
+      statements.push({
+        query: `INSERT INTO learning_units
+              (subject_id, source_text, study_date, title, summary_body, created_at, updated_at)
+             VALUES (${subjectIdExpr}, $${unitParamOffset + 1}, $${unitParamOffset + 2}, $${unitParamOffset + 3}, $${unitParamOffset + 4}, $${unitParamOffset + 5}, $${unitParamOffset + 6})`,
+        values: unitValues,
+      });
+
       const reviewValues = [];
       const reviewPlaceholders = tasks.map((task, taskIndex) => {
         const offset = taskIndex * 11;
@@ -1415,35 +1481,20 @@ export const DB = {
         return `((SELECT MAX(id) FROM learning_units), ${fields.join(', ')})`;
       });
 
-      const results = await invoke('execute_sqlite_transaction', {
-        statements: [
-          {
-            query: `INSERT INTO learning_units
-              (subject_id, source_text, study_date, title, summary_body, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            values: [
-              data.subjectId,
-              String(data.sourceText ?? '').trim(),
-              data.studyDate,
-              String(data.title ?? '').trim(),
-              data.summaryBody != null ? String(data.summaryBody).trim() || null : null,
-              timestamp,
-              timestamp,
-            ],
-          },
-          {
-            query: `INSERT INTO review_tasks
+      statements.push({
+        query: `INSERT INTO review_tasks
               (unit_id, review_number, due_date, completed_at,
                review_done, questions_done, questions_count, correct_count,
                score_percent, comment, created_at, updated_at)
              VALUES ${reviewPlaceholders.join(', ')}`,
-            values: reviewValues,
-          },
-        ],
+        values: reviewValues,
       });
+
+      const results = await invoke('execute_sqlite_transaction', { statements });
+      const unitResultIndex = data.newSubjectName ? 1 : 0;
       const [row] = await requireDatabase().select(
         'SELECT * FROM learning_units WHERE id = $1',
-        [results[0].lastInsertId],
+        [results[unitResultIndex].lastInsertId],
       );
       return mapLearningUnit(row);
     },
