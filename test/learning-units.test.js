@@ -236,6 +236,61 @@ test("AC-026 discrimination: NUL no createWithReviews também rejeitado", async 
   assert.equal(subjects.length, 0, "nenhuma disciplina criada quando dados inválidos");
 });
 
+// AC-028: line separator discrimination — U+0085/U+2028/U+2029 must be rejected at DB layer
+// These bypass \r\n\v\f checks so need explicit coverage
+test("AC-028 disc: U+0085 (NEL) no title rejeitado pela DB layer", async () => {
+  const subject = await makeSubject();
+  await assert.rejects(
+    () => DB.learningUnits.create({
+      subjectId: subject.id, sourceText: "", studyDate: "2026-09-05",
+      title: "Cardiologia",
+    }),
+    /separadores de linha/i,
+  );
+});
+
+test("AC-028 disc: U+2028 (LS) no title rejeitado pela DB layer", async () => {
+  const subject = await makeSubject();
+  await assert.rejects(
+    () => DB.learningUnits.create({
+      subjectId: subject.id, sourceText: "", studyDate: "2026-09-05",
+      title: "Cardio logia",
+    }),
+    /separadores de linha/i,
+  );
+});
+
+test("AC-028 disc: U+2029 (PS) no sourceText rejeitado pela DB layer", async () => {
+  const subject = await makeSubject();
+  await assert.rejects(
+    () => DB.learningUnits.create({
+      subjectId: subject.id, sourceText: "fonte texto", studyDate: "2026-09-05",
+      title: "Título",
+    }),
+    /separadores de linha/i,
+  );
+});
+
+test("AC-028 disc: U+2028 em title no importAll rejeitado fail-closed", async () => {
+  await DB.init();
+  const backup = await DB.exportAll();
+  const subject = { id: "s1", name: "Disciplina", isActive: true, color: "DISC-BLUE",
+    createdAt: "2026-09-05", updatedAt: "2026-09-05" };
+  const unit = { id: "u1", subjectId: "s1", title: "Cardio logia",
+    studyDate: "2026-09-05", sourceText: "", createdAt: "2026-09-05", updatedAt: "2026-09-05" };
+  const malicious = { ...backup, subjects: [subject], learningUnits: [unit], reviewTasks: [], exercises: [], evidence: [] };
+  await assert.rejects(() => DB.importAll(malicious), /separadores de linha/i);
+  const units = await DB.learningUnits.getAll();
+  assert.equal(units.length, 0, "nenhuma aula importada quando título inválido");
+});
+
+test("AC-028 disc: U+0085 em subject name rejeitado via normalizeEntityName", async () => {
+  await assert.rejects(
+    () => DB.subjects.create("Cardiologia"),
+    /quebras de linha/i,
+  );
+});
+
 // AC-010: single action creates discipline + unit + reviews atomically
 test("createWithReviews newSubjectName cria disciplina + aula em uma chamada", async () => {
   await DB.init();

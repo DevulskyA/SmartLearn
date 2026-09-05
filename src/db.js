@@ -1,4 +1,4 @@
-import Database from "@tauri-apps/plugin-sql";
+﻿import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
@@ -160,7 +160,7 @@ function calcScorePercent(questionsCount, correctCount) {
 
 function normalizeEntityName(name, label) {
   const str = String(name ?? '');
-  if (/[\r\n\v\f]/.test(str))
+  if (/[\r\n\v\f\u0085\u2028\u2029]/.test(str))
     throw new Error(label + ' cont\u00e9m quebras de linha n\u00e3o permitidas.');
   const normalized = str.normalize('NFC').replace(/[ \t]+/g, ' ').trim();
   if (!normalized) throw new Error('Informe ' + label + '.');
@@ -173,10 +173,19 @@ function rejectNulBytes(value, label) {
   }
 }
 
+const LINE_TERMINATOR_RE = /[\u0085\u2028\u2029]/u;
+function rejectLineTerminators(value, label) {
+  if (typeof value === 'string' && LINE_TERMINATOR_RE.test(value)) {
+    throw new Error(label + ' contém separadores de linha não permitidos.');
+  }
+}
+
 function validateUnitData(data) {
   rejectNulBytes(String(data.title ?? ''), 'O título');
   rejectNulBytes(String(data.sourceText ?? ''), 'A fonte');
   if (data.summaryBody != null) rejectNulBytes(data.summaryBody, 'O resumo');
+  rejectLineTerminators(String(data.title ?? ''), 'O título');
+  rejectLineTerminators(String(data.sourceText ?? ''), 'A fonte');
 }
 
 async function assertActiveSubject(subjectId) {
@@ -268,7 +277,9 @@ function validateImportContent(normalized) {
     if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
     if (!(u.title ?? u.content ?? '').trim()) throw new Error('Backup inválido: learningUnit ' + u.id + ' sem title.');
     if ((u.title ?? u.content ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos no título.');
+    rejectLineTerminators(u.title ?? u.content ?? '', 'Título da unidade ' + u.id);
     if (String(u.sourceText ?? u.source_text ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos na fonte.');
+    rejectLineTerminators(String(u.sourceText ?? u.source_text ?? ''), 'Fonte da unidade ' + u.id);
     if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
     unitIds.add(u.id);
   }
