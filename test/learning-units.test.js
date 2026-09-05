@@ -154,6 +154,68 @@ test("BrowserStore não tem seeds acadêmicos — subjects começa vazio", async
   assert.equal(subjects.length, 0);
 });
 
+// AC-003: corrupted JSON must be preserved and NOT silently replaced with empty state
+test("AC-003: JSON corrompido sinaliza erro e preserva bytes originais", async () => {
+  const corruptData = '{"subjects": [{ "unclosed json';
+  localStorage.setItem("smartlearn:browser-db", corruptData);
+  await assert.rejects(() => DB.subjects.getAll(), /corrompidos|falha/i);
+  assert.equal(localStorage.getItem("smartlearn:browser-db"), corruptData, "bytes originais inalterados");
+});
+
+// AC-003 discrimination: old code returns emptyState() on parse failure — new code throws
+test("AC-003 discrimination: null key retorna vazio, key inválida lança erro", async () => {
+  // null key = fresh install: must return empty (not throw)
+  localStorage.clear();
+  const subjects = await DB.subjects.getActive();
+  assert.deepEqual(subjects, []);
+  // invalid JSON key = corruption: must throw
+  localStorage.setItem("smartlearn:browser-db", '{bad}');
+  await assert.rejects(() => DB.subjects.getActive(), /corrompidos|falha/i);
+});
+
+// AC-026: NUL bytes in free text must be rejected
+test("AC-026: NUL em sourceText rejeitado com erro", async () => {
+  const subject = await makeSubject();
+  await assert.rejects(
+    () => DB.learningUnits.create({
+      subjectId: subject.id,
+      sourceText: "Texto\x00com NUL",
+      studyDate: "2026-09-05",
+      title: "Título",
+    }),
+    /bytes nulos/i,
+  );
+});
+
+test("AC-026: NUL em summaryBody rejeitado com erro", async () => {
+  const subject = await makeSubject();
+  await assert.rejects(
+    () => DB.learningUnits.create({
+      subjectId: subject.id,
+      sourceText: "",
+      studyDate: "2026-09-05",
+      title: "Título",
+      summaryBody: "Resumo\x00NUL",
+    }),
+    /bytes nulos/i,
+  );
+});
+
+test("AC-026 discrimination: NUL no createWithReviews também rejeitado", async () => {
+  await DB.init();
+  const task = { reviewNumber: 1, dueDate: "2026-09-06", reviewDone: false, questionsDone: false };
+  await assert.rejects(
+    () => DB.learningUnits.createWithReviews(
+      { newSubjectName: "Disciplina", newSubjectColor: "DISC-BLUE",
+        sourceText: "fonte\x00nula", studyDate: "2026-09-05", title: "Aula" },
+      [task],
+    ),
+    /bytes nulos/i,
+  );
+  const subjects = await DB.subjects.getAll();
+  assert.equal(subjects.length, 0, "nenhuma disciplina criada quando dados inválidos");
+});
+
 // AC-010: single action creates discipline + unit + reviews atomically
 test("createWithReviews newSubjectName cria disciplina + aula em uma chamada", async () => {
   await DB.init();
