@@ -1693,8 +1693,72 @@ studyForm.addEventListener("submit", async (event) => {
   }
 });
 
+function showMigrationDialog() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "migration-title");
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;" +
+      "background:rgba(0,0,0,0.55);padding:1rem;";
+
+    overlay.innerHTML = `
+      <div style="background:var(--color-surface,#fff);border-radius:12px;padding:2rem;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <h2 id="migration-title" style="margin:0 0 0.75rem;font-size:1.2rem;">Dados do navegador encontrados</h2>
+        <p style="margin:0 0 0.5rem;line-height:1.5;">
+          O SmartLearn encontrou estudos e revisões salvos neste navegador.
+          Deseja migrá-los para o banco de dados local (SQLite) para maior segurança?
+        </p>
+        <p style="margin:0 0 1.5rem;font-size:0.875rem;opacity:0.7;line-height:1.4;">
+          Após migrar, os dados do navegador serão removidos e o app usará somente o banco local.
+          Você pode exportar um backup antes nas Configurações.
+        </p>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+          <button class="primary-button" id="migration-confirm" type="button">Migrar agora</button>
+          <button class="secondary-button" id="migration-skip" type="button">Continuar sem migrar</button>
+        </div>
+        <p id="migration-status" style="margin:0.75rem 0 0;font-size:0.875rem;" hidden></p>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const status = overlay.querySelector("#migration-status");
+
+    overlay.querySelector("#migration-confirm").addEventListener("click", async () => {
+      const confirmBtn = overlay.querySelector("#migration-confirm");
+      const skipBtn = overlay.querySelector("#migration-skip");
+      confirmBtn.disabled = true;
+      skipBtn.disabled = true;
+      confirmBtn.textContent = "Migrando…";
+      status.hidden = false;
+      status.textContent = "Aguarde, transferindo dados…";
+      try {
+        await DB.migration.execute();
+        status.textContent = "Migração concluída! Recarregando…";
+        setTimeout(() => window.location.reload(), 800);
+      } catch (err) {
+        status.textContent = `Erro na migração: ${err.message}`;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Tentar novamente";
+        skipBtn.disabled = false;
+      }
+    });
+
+    overlay.querySelector("#migration-skip").addEventListener("click", () => {
+      overlay.remove();
+      resolve();
+    });
+  });
+}
+
 studyDateInput.value = getLocalDateValue();
 await dbInit;
+
+if (DB.migration?.available) {
+  await showMigrationDialog();
+}
+
 if (databaseAvailable) {
   await renderSubjects();
   await renderToday();
