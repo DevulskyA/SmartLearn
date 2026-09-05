@@ -197,7 +197,7 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 | T3.3 write buffer offline IDB | ✅ PASS | broker-transport.js |
 | T3.4 background sync on 'online' | ✅ PASS | broker-transport.js |
 | T4.1 POST /api/migrate/import | ✅ PASS | cargo 12/12 |
-| T4.2 dialog migração PT-BR UI | 🔴 HUMAN_GATE | cópia PT-BR pendente |
+| T4.2 dialog migração PT-BR UI | ✅ PASS | app.js showMigrationDialog |
 | T5.1 backup startup + rotação 30d | ✅ PASS | cargo 12/12 |
 | T6.1 validação integração | ✅ PASS | gates cargo + npm |
 | T6.2 Fresh Verifier | ✅ PASS | CORS/SQL/offline OK |
@@ -209,7 +209,6 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ## Bloqueadores ativos
 
-- T4.2: cópia PT-BR do dialog de migração (texto, confirmação) — HUMAN_GATE
 - T6.3: SERVER_FIRST_CORRECTION_READY — revisão humana antes de merge/PR
 
 ---
