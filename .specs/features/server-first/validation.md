@@ -36,12 +36,11 @@
 
 ## Gate externo (HUMAN_GATE T6.3)
 
-Revisão humana dos 19 commits em `claude/server-first-v1` antes de qualquer merge/PR/push.
+Revisão humana dos 31 commits em `claude/server-first-v1` antes de qualquer merge/PR/push.
 
 ## Critérios NÃO verificados (dívida aberta)
 
 | Item | Motivo | Debt |
 |------|--------|------|
-| Migration JS rollback (crash entre removeItem e reload) | Requer decisão de produto | D-002 |
 | SW cache invalidation strategy | Baixo risco; network-first mitiga | D-003 |
 | syncPendingWrites retry com backoff | Baixo risco; dispara no evento online | D-004 |
