@@ -45,6 +45,15 @@ Quando falha por conexão recusada (ECONNREFUSED), lança `TypeError`. Ambos res
 `createBrokerStore.transaction()`, o queue de offline usa `instanceof TypeError` — um timeout
 NÃO seria enfileirado. Isso é correto: um timeout do servidor é diferente de ausência de rede.
 
+## L-007 — Dependency injection torna IDB/localStorage testáveis em Node
+
+Funções que dependem de `indexedDB` ou `localStorage` não são testáveis diretamente em Node.js.
+O padrão adotado no projeto: aceitar um parâmetro opcional `{ queueTransaction }` em
+`createBrokerStore` (default para `queueOfflineTransaction`), e helper `withLocalStorage(store, fn)`
+em testes de migração. Ambos usam substituição temporária de globais — zero overhead de framework.
+**Variante `globalThis.*`**: útil para substituições one-shot em testes isolados.
+**Variante parâmetro default**: preferível quando o módulo tem múltiplos callers em produção.
+
 ## L-006 — `INSERT OR REPLACE` passa na validação do endpoint `/api/migrate/import`
 
 O endpoint Rust valida o prefixo da instrução SQL: `"INSERT"`, `"CREATE"`, `"PRAGMA"`.

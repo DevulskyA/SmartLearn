@@ -138,6 +138,32 @@ test("createBrokerStore throws on non-ok response", async () => {
   });
 });
 
+test("createBrokerStore.transaction queues on TypeError (network failure) and returns {queued:true}", async () => {
+  const queued = [];
+  await withFetch(async () => { throw new TypeError("Failed to fetch"); }, async () => {
+    const transport = createBrokerStore("http://127.0.0.1:57321", {
+      queueTransaction: async (stmts) => { queued.push(stmts); },
+    });
+    const stmts = [{ sql: "INSERT INTO t VALUES (?)", params: [1] }];
+    const result = await transport.transaction(stmts);
+    assert.deepEqual(result, { results: [], queued: true });
+    assert.equal(queued.length, 1, "must call queueTransaction once");
+    assert.deepEqual(queued[0], stmts);
+  });
+});
+
+test("createBrokerStore.transaction propagates non-TypeError errors (HTTP errors)", async () => {
+  await withFetch(async () => makeResponse({ error: "constraint" }, { ok: false, status: 409 }), async () => {
+    const transport = createBrokerStore("http://127.0.0.1:57321", {
+      queueTransaction: async () => assert.fail("must not queue on HTTP error"),
+    });
+    await assert.rejects(
+      () => transport.transaction([{ sql: "INSERT INTO t VALUES (?)", params: [1] }]),
+      /Broker error 409/,
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // wrapBrokerAsDatabase
 // ---------------------------------------------------------------------------

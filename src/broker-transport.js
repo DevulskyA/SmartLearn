@@ -129,7 +129,7 @@ export function registerOnlineSync(baseUrl = 'http://127.0.0.1:57321') {
 
 // ---------------------------------------------------------------------------
 
-export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
+export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321', { queueTransaction = queueOfflineTransaction } = {}) {
   async function post(path, body) {
     const resp = await fetchWithRetry(`${baseUrl}${path}`, {
       method: 'POST',
@@ -150,7 +150,7 @@ export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
       } catch (err) {
         // On network failure, buffer the write for background sync (T3.4).
         if (err instanceof TypeError) {
-          await queueOfflineTransaction(statements);
+          await queueTransaction(statements);
           return { results: [], queued: true };
         }
         throw err;
