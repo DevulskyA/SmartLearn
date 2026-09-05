@@ -3276,8 +3276,10 @@ subjectsCreateSaveBtn?.addEventListener("click", async () => {
     subjectsCreateForm.hidden = true;
     subjectsCreateMessage.textContent = "";
     await renderDisciplinas();
-  } catch {
-    subjectsCreateMessage.textContent = "Erro ao criar disciplina.";
+  } catch (error) {
+    subjectsCreateMessage.textContent = String(error?.message ?? '').toLowerCase().includes('unique')
+      ? "Já existe uma disciplina com esse nome."
+      : "Erro ao criar disciplina.";
   }
 });
 function setPlanFormVisible(visible) {
@@ -3331,7 +3333,10 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
     planNewSubjectInput.value = "";
     planStudyTitle.focus();
   } catch (error) {
-    setPlanFormMessage("Não foi possível criar a disciplina.", true);
+    const msg = String(error?.message ?? '').toLowerCase().includes('unique')
+      ? "Já existe uma disciplina com esse nome."
+      : "Não foi possível criar a disciplina.";
+    setPlanFormMessage(msg, true);
     console.error("Falha ao criar disciplina no plano.", error);
   }
 });
