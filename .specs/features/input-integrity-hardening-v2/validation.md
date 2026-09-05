@@ -16,7 +16,7 @@
 | T4 | PASS | Cancel limpa input; draft preservado em catch; renderPlan+select após save; AC-016 render-after-commit isolado |
 | T5 | PASS | isValidIsoDate calendário real; NaN/Infinity rejeitados em contagens |
 | T6 | PASS (estrutural) | assertImportData lança antes de qualquer mutação; execute_sqlite_transaction atômico |
-| T7 | PARTIAL | J1 PASS (Semiologia Médica, data ISO, form fecha, 16 revisões); J2 PASS (variant espaço/caixa reutiliza id=3); J6 PASS (JSON corrompido preservado, banner visível, writeState nunca chamado); J3/J4/J5 pendentes |
+| T7 | PARTIAL | J1 PASS (Semiologia Médica, data ISO, form fecha, 16 revisões); J2 PASS (variant espaço/caixa reutiliza id=3); J3 PASS (double-click blocked by disabled flag; 1 unit criada); J6 PASS (JSON corrompido preservado, banner visível); J4/J5 pendentes |
 | T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; Verifier formal iniciado (output não lido) |
 
 ## Spec-Anchored Acceptance Criteria
@@ -45,7 +45,7 @@
 | AC-025 | HTML/SQL-like em texto livre tratado como dados | Nenhum innerHTML/outerHTML/insertAdjacentHTML no código; SQL parametrizado | PASS |
 | AC-026 | NUL rejeitado em texto livre (sourceText, summaryBody) | rejectNulBytes+validateUnitData @ db.js; testes AC-026 @ 71421b3 | PASS |
 | AC-028 | Mesma validade por adapter; invariante não bypassável por omitir UI | normalizeEntityName rejeita \r\n\v\f @ DB layer; test/subjects.test.js DISCRIMINATION @ ac8e985 | PASS |
-| AC-029 | Fluxo completo em navegador isolado | J1 PASS: Semiologia Médica salva @ b25f0c9; J2 PASS: dedup variant; J6 PASS: corrupt preservado; J3/J4/J5 pendentes | PARTIAL |
+| AC-029 | Fluxo completo em navegador isolado | J1 PASS: Semiologia Médica salva; J2 PASS: dedup variant; J3 PASS: double-click bloqueado; J6 PASS: corrupt preservado + banner; J4/J5 pendentes | PARTIAL |
 | AC-030 | Mutações semânticas mortas | Ver tabela Discrimination Sensors | PARTIAL |
 | AC-031 | Verifier independente | Self-review adversarial (esta sessão); formal Verifier pendente | PARTIAL |
 | AC-032 | Estado honesto no prazo | CHECKPOINT_PARCIAL com pendências verdadeiras documentadas | PASS |
@@ -82,6 +82,7 @@
 | J1: Salvar aula com nova disciplina não persiste | Browser J1 @ b25f0c9 (falha era bug de execução: data em formato errado) | KILLED |
 | J2: Nome equivalente cria disciplina duplicada | Browser J2 @ b25f0c9: subjectCount=3 antes e depois | KILLED |
 | J6: JSON corrompido sobrescrito em init | Browser J6 @ b25f0c9: rawBytes CORRUPT_GARBAGE preservados; banner visível | KILLED |
+| J3: Double-click cria duas aulas | Browser J3: btn.disabled=true antes de await; segundo click bloqueado; 1 unit criada | KILLED |
 | render-after-commit erro mostrado como save-fail | app.js two-stage catch @ ed84c76 | KILLED (code) |
 
 ## Ranked Gaps (Remaining)
