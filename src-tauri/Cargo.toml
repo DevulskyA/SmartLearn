@@ -30,3 +30,6 @@ sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 tokio = { version = "1", features = ["net"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

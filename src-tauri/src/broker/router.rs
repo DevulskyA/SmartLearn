@@ -212,3 +212,209 @@ pub fn build_router(pool: SqlitePool) -> Router {
         .layer(cors)
         .with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::broker::db::{enable_wal, open_pool};
+    use axum::{
+        body::Body,
+        http::{Method, Request, StatusCode},
+    };
+    use std::{fs, time::{SystemTime, UNIX_EPOCH}};
+    use tower::ServiceExt;
+
+    struct TempDb {
+        path: std::path::PathBuf,
+    }
+    impl TempDb {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos();
+            let path =
+                std::env::temp_dir().join(format!("smartlearn-router-test-{unique}.db"));
+            Self { path }
+        }
+    }
+    impl Drop for TempDb {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+            let _ = fs::remove_file(self.path.with_extension("db-wal"));
+            let _ = fs::remove_file(self.path.with_extension("db-shm"));
+        }
+    }
+
+    fn run_async<T>(f: impl std::future::Future<Output = T>) -> T {
+        tauri::async_runtime::block_on(f)
+    }
+
+    async fn setup(db: &TempDb) -> (Router, SqlitePool) {
+        let pool = open_pool(&db.path).await.expect("open pool");
+        enable_wal(&pool).await.expect("enable WAL");
+        let router = build_router(pool.clone());
+        (router, pool)
+    }
+
+    fn json_body(v: &Value) -> Body {
+        Body::from(v.to_string())
+    }
+
+    fn post_json(uri: &str, body: Value) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(json_body(&body))
+            .unwrap()
+    }
+
+    async fn response_json(resp: axum::response::Response) -> Value {
+        let bytes =
+            axum::body::to_bytes(resp.into_body(), 65_536).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[test]
+    fn health_returns_ok() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, _) = setup(&db).await;
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri("/api/health")
+                .body(Body::empty())
+                .unwrap();
+            let resp = router.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = response_json(resp).await;
+            assert_eq!(body["ok"], Value::Bool(true));
+        });
+    }
+
+    #[test]
+    fn transaction_write_then_query_read() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, pool) = setup(&db).await;
+            let txn_req = post_json(
+                "/api/transaction",
+                serde_json::json!({
+                    "statements": [
+                        {"sql": "CREATE TABLE t (v TEXT)", "params": []},
+                        {"sql": "INSERT INTO t VALUES (?)", "params": ["broker-test"]}
+                    ]
+                }),
+            );
+            let resp = router.oneshot(txn_req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "transaction failed");
+
+            let router2 = build_router(pool.clone());
+            let query_req = post_json(
+                "/api/query",
+                serde_json::json!({"sql": "SELECT v FROM t", "params": []}),
+            );
+            let resp = router2.oneshot(query_req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = response_json(resp).await;
+            assert_eq!(body["rows"][0]["v"], Value::String("broker-test".into()));
+        });
+    }
+
+    #[test]
+    fn transaction_rollback_on_bad_sql() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, pool) = setup(&db).await;
+            // Create table first
+            let setup_req = post_json(
+                "/api/transaction",
+                serde_json::json!({
+                    "statements": [{"sql": "CREATE TABLE t (v TEXT)", "params": []}]
+                }),
+            );
+            let _ = router.oneshot(setup_req).await.unwrap();
+
+            // Transaction with valid INSERT then invalid SQL → rollback
+            let router2 = build_router(pool.clone());
+            let bad_req = post_json(
+                "/api/transaction",
+                serde_json::json!({
+                    "statements": [
+                        {"sql": "INSERT INTO t VALUES (?)", "params": ["should-not-persist"]},
+                        {"sql": "THIS IS NOT SQL", "params": []}
+                    ]
+                }),
+            );
+            let resp = router2.oneshot(bad_req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "bad SQL must be rejected");
+
+            // Row must NOT be in DB after rollback
+            let router3 = build_router(pool.clone());
+            let query_req = post_json(
+                "/api/query",
+                serde_json::json!({"sql": "SELECT COUNT(*) AS n FROM t", "params": []}),
+            );
+            let resp = router3.oneshot(query_req).await.unwrap();
+            let body = response_json(resp).await;
+            assert_eq!(body["rows"][0]["n"], Value::Number(0.into()), "rolled-back row must not persist");
+        });
+    }
+
+    #[test]
+    fn transaction_rejects_over_100_statements() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, _) = setup(&db).await;
+            let stmts: Vec<Value> = (0..=MAX_TRANSACTION_STATEMENTS)
+                .map(|_| serde_json::json!({"sql": "SELECT 1", "params": []}))
+                .collect();
+            let req = post_json(
+                "/api/transaction",
+                serde_json::json!({"statements": stmts}),
+            );
+            let resp = router.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let body = response_json(resp).await;
+            assert!(body["error"].as_str().unwrap_or("").contains("too many statements"));
+        });
+    }
+
+    #[test]
+    fn concurrent_reads_succeed_during_write() {
+        let db = TempDb::new();
+        run_async(async {
+            let pool = open_pool(&db.path).await.expect("open pool");
+            enable_wal(&pool).await.expect("enable WAL");
+            sqlx::query("CREATE TABLE t (v INTEGER)")
+                .execute(&pool)
+                .await
+                .expect("create table");
+            // 4 concurrent readers while 1 writer runs
+            let mut handles = Vec::new();
+            for i in 0..4_i64 {
+                let pool = pool.clone();
+                handles.push(tauri::async_runtime::spawn(async move {
+                    sqlx::query("SELECT ? AS v")
+                        .bind(i)
+                        .fetch_one(&pool)
+                        .await
+                        .is_ok()
+                }));
+            }
+            // Writer inserts concurrently
+            let pool2 = pool.clone();
+            let write_ok = tauri::async_runtime::spawn(async move {
+                sqlx::query("INSERT INTO t VALUES (999)")
+                    .execute(&pool2)
+                    .await
+                    .is_ok()
+            });
+            for h in handles {
+                assert!(h.await.expect("reader task"), "concurrent read must succeed");
+            }
+            assert!(write_ok.await.expect("writer task"), "concurrent write must succeed");
+        });
+    }
+}
