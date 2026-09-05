@@ -7,11 +7,11 @@
 
 ---
 
-## HANDOFF — 2026-09-05 T7-partial + AC-003 FIX (input-integrity-hardening-v2)
+## HANDOFF — 2026-09-05 T7-COMPLETO + AC-026/AC-029 IMPORT FIX (input-integrity-hardening-v2)
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: 5041b77 (fix(integrity): AC-014 clear conflicting plan filter after save)
+HEAD: b8ca836 (fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link)
 REMOTE_PR: #3 (DRAFT / open / not merged)
 WORKTREE_DIRTY:
 - .claude/launch.json  M  (port 5173→5174 + --strictPort flag; local change preserved)
@@ -23,13 +23,13 @@ PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
 PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
 BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985 | npm test 218/218 PASS @ 5041b77
-STATUS: CHECKPOINT_PARCIAL — T1-T6 + T7-partial (J1-J4+J6 PASS) + T8-partial comprovados; J5 e Verifier formal pendentes
-PENDING: J5 (import inválido browser journey); T8-formal (Verifier output não lido); AC-029 Android runtime
+GATES: npm test 218/218 PASS | cargo test 13/13 PASS | npm run build CLEAN @ ac8e985 | npm test 218/218 PASS @ b8ca836
+STATUS: CHECKPOINT_PARCIAL — T1-T7 comprovados; AC-026 import path fechado; nav Configurações adicionado; T8-formal (Verifier independente) pendente
+PENDING: T8-formal (Verifier output não lido); AC-029 Android runtime
 OPEN_GAPS: COLLATE NOCASE vs localeCompare PT-BR (documentado), AC-029 Android runtime
-CLOSED_THIS_SESSION (vs 190bb93): AC-003 (banner visível), AC-014 (filtro conflitante reset), J1-J4+J6 PASS; lançamento anterior: AC-009, AC-016, AC-017, AC-026, AC-028
+CLOSED_THIS_SESSION (vs 5041b77): AC-026 import path (validateImportContent NUL bytes), AC-029 J5 PASS (import via Configurações nav), nav Configurações visível no mobile
 
-COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b25f0c9):
+COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b8ca836):
 - 71421b3 fix(integrity): AC-003 + AC-026 — corrupted storage preserved, NUL bytes rejected
 - 65d58cc fix(integrity): AC-008/AC-009 SQLite dedup + archived discipline guard
 - 29d50d2 fix(integrity): AC-017 SQLite subjects.create dedup
@@ -39,6 +39,7 @@ COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → b25f0c9):
 - 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visivel em init failure
 - b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
 - 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
+- b8ca836 fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link
 
 ---
 

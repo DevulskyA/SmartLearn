@@ -16,8 +16,8 @@
 | T4 | PASS | Cancel limpa input; draft preservado em catch; renderPlan+select após save; AC-016 render-after-commit isolado |
 | T5 | PASS | isValidIsoDate calendário real; NaN/Infinity rejeitados em contagens |
 | T6 | PASS (estrutural) | assertImportData lança antes de qualquer mutação; execute_sqlite_transaction atômico |
-| T7 | PARTIAL | J1 PASS; J2 PASS (dedup variant); J3 PASS (double-click blocked); J4 PASS (filtro conflitante resetado, unit visível); J6 PASS (JSON corrompido preservado + banner); J5 pendente (import inválido browser journey) |
-| T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; Verifier formal iniciado (output não lido) |
+| T7 | PASS | J1 PASS; J2 PASS (dedup variant); J3 PASS (double-click blocked); J4 PASS (filtro conflitante resetado, unit visível); J5 PASS (NUL bytes em import rejeitados — validateImportContent corrigido); J6 PASS (JSON corrompido preservado + banner) |
+| T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; Verifier formal pendente |
 
 ## Spec-Anchored Acceptance Criteria
 
@@ -43,9 +43,9 @@
 | AC-022 | Backup inválido rejeitado integralmente | assertImportData lança antes de qualquer mutação | PASS |
 | AC-023 | v1/v2/v3 preservados | migrateV1ImportData existente; cargo test 13/13 | PASS |
 | AC-025 | HTML/SQL-like em texto livre tratado como dados | Nenhum innerHTML/outerHTML/insertAdjacentHTML no código; SQL parametrizado | PASS |
-| AC-026 | NUL rejeitado em texto livre (sourceText, summaryBody) | rejectNulBytes+validateUnitData @ db.js; testes AC-026 @ 71421b3 | PASS |
+| AC-026 | NUL rejeitado em texto livre (sourceText, summaryBody, title na rota de import) | rejectNulBytes+validateUnitData @ db.js (UI path @ 71421b3); validateImportContent NUL check @ b8ca836 (import path) | PASS |
 | AC-028 | Mesma validade por adapter; invariante não bypassável por omitir UI | normalizeEntityName rejeita \r\n\v\f @ DB layer; test/subjects.test.js DISCRIMINATION @ ac8e985 | PASS |
-| AC-029 | Fluxo completo em navegador isolado | J1-J4 + J6 PASS: save, dedup, double-click, filtro conflitante, corrupt; J5 pendente | PARTIAL |
+| AC-029 | Fluxo completo em navegador isolado | J1-J6 PASS: save, dedup, double-click, filtro conflitante, import NUL (b8ca836), corrupt; nav Configurações visível | PASS |
 | AC-030 | Mutações semânticas mortas | Ver tabela Discrimination Sensors | PARTIAL |
 | AC-031 | Verifier independente | Self-review adversarial (esta sessão); formal Verifier pendente | PARTIAL |
 | AC-032 | Estado honesto no prazo | CHECKPOINT_PARCIAL com pendências verdadeiras documentadas | PASS |
@@ -85,6 +85,7 @@
 | J6: JSON corrompido sobrescrito em init | Browser J6 @ b25f0c9: rawBytes CORRUPT_GARBAGE preservados; banner visível | KILLED |
 | J3: Double-click cria duas aulas | Browser J3: btn.disabled=true antes de await; segundo click bloqueado; 1 unit criada | KILLED |
 | J4: Nova aula invisível por filtro conflitante | Browser J4 @ 5041b77: planFilterSubject reset para ""; 5 units visíveis | KILLED |
+| J5: NUL bytes em import aceito sem erro | Browser J5: validateImportContent lança antes de qualquer mutação @ b8ca836 | KILLED |
 | render-after-commit erro mostrado como save-fail | app.js two-stage catch @ ed84c76 | KILLED (code) |
 
 ## Ranked Gaps (Remaining)
@@ -96,4 +97,4 @@
 
 ## Final Status
 
-CHECKPOINT_PARCIAL — 24 ACs comprovados por testes discriminativos e análise estática. T7 browser journey e AC-029 Android pendentes por ausência de runtime isolado. T8 formal Verifier pendente. Nenhum dado real tocado.
+CHECKPOINT_PARCIAL — 25 ACs comprovados por testes discriminativos e análise estática. T1-T7 completos (J1-J6 PASS). T8 formal Verifier pendente. AC-029 Android runtime pendente. Nenhum dado real tocado.
