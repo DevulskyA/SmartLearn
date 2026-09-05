@@ -11,12 +11,11 @@ Itens de dívida técnica conhecidos. Atualizar ao identificar ou resolver.
 
 ---
 
-## D-001 — `hasBrowserStoreData` não testada (localStorage)
+## ~~D-001 — `hasBrowserStoreData` não testada (localStorage)~~ ✅ FECHADA
 
-- **Risco:** Baixo. Função simples; testada indiretamente pela coverage end-to-end.
-- **Motivo:** `localStorage` não existe no ambiente Node.js de testes; seria necessário mock global.
-- **Mitigação atual:** `buildMigrationStatements` (mesma feature) está com 9 testes unitários.
-- **Caminho:** Adicionar test helper com `globalThis.localStorage = { getItem: ... }` em iteração futura.
+- **Resolvida:** 4 testes unitários adicionados em `test/migration.test.js` usando `withLocalStorage` helper
+  que substitui `globalThis.localStorage` por test scope. Cobre: key ausente, studyRecords vazio,
+  studyRecords com entrada, JSON malformado.
 
 ## D-002 — Migração não tem rollback no lado JS
 
@@ -39,8 +38,6 @@ Itens de dívida técnica conhecidos. Atualizar ao identificar ou resolver.
 - **Motivo:** Um único `break` interrompe o loop de sync no primeiro erro de rede.
 - **Caminho:** Adicionar backoff exponencial com no máximo 3 tentativas por entrada em iteração futura.
 
-## D-005 — Sem spec formal para `server-first` feature
+## ~~D-005 — Sem spec formal para `server-first` feature~~ ✅ FECHADA
 
-- **Risco:** Baixo. Implementação guiada pela sessão de spec review + loop de tasks.
-- **Caminho:** Criar `.specs/features/server-first/` com spec.md + tasks.md + validation.md.
-  Ver tarefa pendente abaixo.
+- **Resolvida:** `.specs/features/server-first/tasks.md` criado com tabela completa T1.1–T6.3 e gates.

@@ -203,7 +203,7 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 | T6.2 Fresh Verifier | ✅ PASS | CORS/SQL/offline OK |
 | T6.3 SERVER_FIRST_CORRECTION_READY | 🔴 HUMAN_GATE | aguarda revisão |
 
-**Gates finais:** cargo test 12/12 PASS | npm test 18/18 PASS
+**Gates finais:** cargo test 12/12 PASS | npm test 31/31 PASS
 
 ---
 

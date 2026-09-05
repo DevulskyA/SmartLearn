@@ -1,7 +1,34 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildMigrationStatements, BROWSER_STORE_KEY } from "../src/migration.js";
+import { buildMigrationStatements, hasBrowserStoreData, BROWSER_STORE_KEY } from "../src/migration.js";
+
+// hasBrowserStoreData reads globalThis.localStorage — mock it per-test
+function withLocalStorage(store, fn) {
+  const prev = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
+  };
+  try { return fn(); } finally { globalThis.localStorage = prev; }
+}
+
+test("hasBrowserStoreData returns false when key absent", () => {
+  assert.equal(withLocalStorage({}, () => hasBrowserStoreData()), false);
+});
+
+test("hasBrowserStoreData returns false when studyRecords empty", () => {
+  const val = JSON.stringify({ studyRecords: [] });
+  assert.equal(withLocalStorage({ [BROWSER_STORE_KEY]: val }, () => hasBrowserStoreData()), false);
+});
+
+test("hasBrowserStoreData returns true when studyRecords has entries", () => {
+  const val = JSON.stringify({ studyRecords: [{ id: 1 }] });
+  assert.equal(withLocalStorage({ [BROWSER_STORE_KEY]: val }, () => hasBrowserStoreData()), true);
+});
+
+test("hasBrowserStoreData returns false on malformed JSON", () => {
+  assert.equal(withLocalStorage({ [BROWSER_STORE_KEY]: "!!invalid" }, () => hasBrowserStoreData()), false);
+});
 
 function makeBrowserState({ subjects = [], sources = [], studyRecords = [], reviewTasks = [] } = {}) {
   return { subjects, sources, studyRecords, reviewTasks };
