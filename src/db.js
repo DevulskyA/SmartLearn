@@ -728,6 +728,30 @@ async function fetchWithRetry(url, options, retries = 1, delayMs = 200) {
   }
 }
 
+async function checkBrokerReachable(baseUrl = 'http://127.0.0.1:57321', timeoutMs = 500) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/health`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+function wrapBrokerAsDatabase(transport) {
+  return {
+    async select(sql, params = []) {
+      return transport.query(sql, params);
+    },
+    async execute(sql, params = []) {
+      const data = await transport.transaction([{ sql, params: params ?? [] }]);
+      const r = data.results?.[0] ?? {};
+      return { lastInsertId: r.last_insert_id ?? 0, rowsAffected: r.rows_affected ?? 0 };
+    },
+  };
+}
+
 function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
   async function post(path, body) {
     const resp = await fetchWithRetry(`${baseUrl}${path}`, {
@@ -758,6 +782,22 @@ export const DB = {
     if (!initialization) {
       initialization = (async () => {
         if (!hasTauriRuntime()) {
+          // Priority: BrokerStore (broker reachable) > BrowserStore (offline fallback)
+          if (await checkBrokerReachable()) {
+            const transport = createBrokerStore();
+            database = wrapBrokerAsDatabase(transport);
+            // Schema statements are idempotent; broker's SQLite is managed by Tauri app
+            for (const [index, statement] of schemaStatements.entries()) {
+              const params = index === schemaStatements.length - 1
+                ? [JSON.stringify(REVIEW_SCHEDULE)]
+                : [];
+              await database.execute(statement, params);
+            }
+            await DB.subjects.ensureColumns();
+            await DB.sources.ensureColumns();
+            await DB.studyRecords.ensureColumns();
+            return DB;
+          }
           browserStore = createBrowserStore();
           await browserStore.init();
           Object.assign(DB, browserStore);
