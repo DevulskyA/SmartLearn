@@ -74,6 +74,16 @@ em testes de migração. Ambos usam substituição temporária de globais — ze
 **Variante `globalThis.*`**: útil para substituições one-shot em testes isolados.
 **Variante parâmetro default**: preferível quando o módulo tem múltiplos callers em produção.
 
+## L-010 — Testes axum não precisam de TCP real: usar `Router::oneshot()`
+
+Para testar handlers axum, importar `tower::ServiceExt` e chamar `router.oneshot(Request)`.
+O router responde à requisição sem abrir nenhuma porta TCP. Cada teste cria seu próprio
+`Router` com um SQLite em arquivo temporário — sem conflito de porta entre testes paralelos,
+sem cleanup de servidor, sem `bind: address already in use` flaky.
+**Caso real:** `src-tauri/src/broker/router.rs` usa este padrão em todos os testes de integração (T1.4).
+O custo: o teste não exercita o stack HTTP real (headers, framing), mas exerce toda a lógica
+de roteamento, middleware CORS e handlers — suficiente para os ACs do servidor local.
+
 ## L-006 — `INSERT OR REPLACE` passa na validação do endpoint `/api/migrate/import`
 
 O endpoint Rust valida o prefixo da instrução SQL: `"INSERT"`, `"CREATE"`, `"PRAGMA"`.
