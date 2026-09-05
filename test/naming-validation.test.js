@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { validateNamingField, NAMING_PATTERN } from "../src/naming-validation.js";
+import { validateNamingField, validateTitleField, NAMING_PATTERN } from "../src/naming-validation.js";
 
 // Contract A: valid names accepted
 describe("validateNamingField — valid inputs", () => {
@@ -131,4 +131,59 @@ describe("validateNamingField — no exceptions thrown", () => {
       assert.doesNotThrow(() => validateNamingField(probe ?? "", "o campo"));
     });
   }
+});
+
+// Contract F: validateTitleField — AC-004 corpus: accepts medical typography
+describe("validateTitleField — AC-004 medical corpus accepted", () => {
+  const valid = [
+    // AC-004 literal: em dash must pass
+    "Ausculta Cardíaca — Bulhas e Sopros",
+    // medical symbols
+    "Na⁺/K⁺-ATPase e β-bloqueador",
+    "O₂, µg, pH < 7,35",
+    // plain title
+    "Homeostase",
+    // single char
+    "A",
+    // mixed punctuation
+    "Capítulo 2.3 — Bioquímica",
+  ];
+  for (const v of valid) {
+    it(`accepts "${v}"`, () => {
+      assert.strictEqual(validateTitleField(v, "o título"), null);
+    });
+  }
+});
+
+// Contract G: validateTitleField — control chars rejected, empty rejected
+describe("validateTitleField — control chars and empty rejected", () => {
+  it("empty string rejected", () => {
+    assert.ok(validateTitleField("", "o campo") !== null);
+  });
+  it("whitespace-only rejected", () => {
+    assert.ok(validateTitleField("   ", "o campo") !== null);
+  });
+  it("NUL byte rejected (AC-026)", () => {
+    assert.ok(validateTitleField("Teste\x00", "o campo") !== null);
+  });
+  it("newline rejected (single-line field)", () => {
+    assert.ok(validateTitleField("Teste\nLinha", "o campo") !== null);
+  });
+  it("carriage return rejected", () => {
+    assert.ok(validateTitleField("Teste\rOutro", "o campo") !== null);
+  });
+});
+
+// Contract H: validateTitleField discrimination — em dash valid in title, invalid for discipline
+describe("validateTitleField vs validateNamingField — field-specific policy", () => {
+  it("em dash accepted by title validator", () => {
+    assert.strictEqual(validateTitleField("Ausculta Cardíaca — Bulhas e Sopros", "título"), null);
+  });
+  it("em dash rejected by discipline name validator", () => {
+    assert.ok(validateNamingField("Fisiologia — Revisão", "disciplina") !== null);
+  });
+  it("plain discipline name accepted by both", () => {
+    assert.strictEqual(validateNamingField("Semiologia Médica", "disciplina"), null);
+    assert.strictEqual(validateTitleField("Semiologia Médica", "título"), null);
+  });
 });

@@ -159,7 +159,7 @@ function calcScorePercent(questionsCount, correctCount) {
 }
 
 function normalizeEntityName(name, label) {
-  const normalized = String(name ?? '').replace(/\s+/g, ' ').trim();
+  const normalized = String(name ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
   if (!normalized) throw new Error('Informe ' + label + '.');
   return normalized;
 }
@@ -230,7 +230,11 @@ function migrateV1ImportData(data) {
 }
 
 function isValidIsoDate(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value);
+  if (typeof value !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, mo, d] = value.split('-').map(Number);
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  return d <= new Date(y, mo, 0).getDate();
 }
 
 function validateImportContent(normalized) {
@@ -264,9 +268,9 @@ function validateImportContent(normalized) {
     taskUnitMap.set(t.id, unitId);
     const q = t.questionsCount ?? t.questions_count;
     const c = t.correctCount ?? t.correct_count;
-    if (q != null && Number(q) < 0) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem questionsCount negativo.');
+    if (q != null && (!Number.isFinite(Number(q)) || Number(q) < 0)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem questionsCount inválido.');
     if (c != null && q == null) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount sem questionsCount.');
-    if (q != null && c != null && Number(c) > Number(q)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount > questionsCount.');
+    if (q != null && c != null && (!Number.isFinite(Number(c)) || Number(c) < 0 || Number(c) > Number(q))) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount inválido.');
   }
 
   for (const e of (Array.isArray(normalized.exercises) ? normalized.exercises : [])) {
@@ -440,7 +444,7 @@ function buildImportStatements(data) {
       const c = task.correctCount ?? task.correct_count;
       if (!task.review_done && !task.reviewDone) continue;
       if (!task.questions_done && !task.questionsDone) continue;
-      if (q == null || Number(q) <= 0) continue;
+      if (q == null || !Number.isFinite(Number(q)) || Number(q) <= 0) continue;
       const taskId = task.id;
       const unitId = task.unitId ?? task.unit_id;
       const unit = unitsMap.get(unitId);

@@ -12,7 +12,7 @@ import {
 import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
-import { validateNamingField } from "./naming-validation.js";
+import { validateNamingField, validateTitleField } from "./naming-validation.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -1475,7 +1475,8 @@ export async function renderDisciplinas() {
 
     saveEditBtn.addEventListener("click", async () => {
       const newName = nameInput.value.trim();
-      if (!newName) { editMessage.textContent = "Nome obrigatório."; return; }
+      const editNameErr = validateNamingField(newName, "o nome da disciplina");
+      if (editNameErr) { editMessage.textContent = editNameErr; nameInput.focus(); return; }
       try {
         await DB.subjects.update(subj.id, { name: newName, color: editColor });
         await renderDisciplinas();
@@ -2435,9 +2436,9 @@ showSubjectFormButton.addEventListener("click", () => {
 newSubjectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = newSubjectInput.value.trim();
-
-  if (!name) {
-    setSubjectMessage("Informe o nome da disciplina.");
+  const nameValidationError = validateNamingField(name, "o nome da disciplina");
+  if (nameValidationError) {
+    setSubjectMessage(nameValidationError);
     newSubjectInput.focus();
     return;
   }
@@ -3167,6 +3168,13 @@ studyForm.addEventListener("submit", async (event) => {
     }
     return;
   }
+  const studyTitleError = validateTitleField(content, "o conteúdo estudado");
+  if (studyTitleError) {
+    studyMessage.classList.add("is-error");
+    studyMessage.textContent = studyTitleError;
+    studyContentInput.focus();
+    return;
+  }
 
   try {
     await generateReviewTasks({
@@ -3261,7 +3269,8 @@ subjectsCreateCancelBtn?.addEventListener("click", () => {
 });
 subjectsCreateSaveBtn?.addEventListener("click", async () => {
   const name = subjectsNewName?.value.trim() ?? "";
-  if (!name) { subjectsCreateMessage.textContent = "Nome obrigatório."; return; }
+  const nameErr = validateNamingField(name, "o nome da disciplina");
+  if (nameErr) { subjectsCreateMessage.textContent = nameErr; subjectsNewName?.focus(); return; }
   try {
     await DB.subjects.create(name, newSubjectColor);
     subjectsCreateForm.hidden = true;
@@ -3302,6 +3311,7 @@ planUnitCancelBtn?.addEventListener("click", () => {
   setPlanFormVisible(false);
   setPlanSubjectSubformVisible(false);
   setPlanFormMessage();
+  if (planNewSubjectInput) planNewSubjectInput.value = "";
 });
 
 planShowSubjectForm?.addEventListener("click", () => {
@@ -3334,7 +3344,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
 
   // Validate unit fields first — before creating any discipline
   if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
-  const titleError = validateNamingField(title, "o conteúdo estudado");
+  const titleError = validateTitleField(title, "o conteúdo estudado");
   if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
 
   // Auto-create discipline only after unit fields are valid

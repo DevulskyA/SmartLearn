@@ -458,6 +458,63 @@ test("exportAll/importAll roundtrip v3 preserva learningEvidence", async () => {
   assert.equal(evidence[0].questionsCount, 40);
 });
 
+// --- AC-018: isValidIsoDate calendar validation (discrimination tests) ---
+
+const BASE_SUBJ = { id: 1, name: "Fisio", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", isActive: true, sortOrder: 0 };
+const BASE_UNIT = { id: 1, subjectId: 1, studyDate: "2026-01-01", title: "Cap 1", sourceText: "", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" };
+
+test("AC-018: importAll rejeita learningUnit com studyDate impossível (2026-02-30)", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 3, subjects: [BASE_SUBJ], learningUnits: [{ ...BASE_UNIT, studyDate: "2026-02-30" }], reviewTasks: [] };
+  await assert.rejects(() => DB.importAll(backup), /studyDate/i);
+});
+
+test("AC-018: importAll rejeita learningUnit com studyDate mês inválido (2026-13-01)", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 3, subjects: [BASE_SUBJ], learningUnits: [{ ...BASE_UNIT, studyDate: "2026-13-01" }], reviewTasks: [] };
+  await assert.rejects(() => DB.importAll(backup), /studyDate/i);
+});
+
+test("AC-018: importAll rejeita studyDate com sufixo ISO (2024-01-15T12:00:00)", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 3, subjects: [BASE_SUBJ], learningUnits: [{ ...BASE_UNIT, studyDate: "2024-01-15T12:00:00" }], reviewTasks: [] };
+  await assert.rejects(() => DB.importAll(backup), /studyDate/i);
+});
+
+test("AC-018: importAll aceita 2024-02-29 (ano bissexto válido)", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 3, subjects: [BASE_SUBJ], learningUnits: [{ ...BASE_UNIT, studyDate: "2024-02-29" }], reviewTasks: [] };
+  await assert.doesNotReject(() => DB.importAll(backup));
+});
+
+test("AC-018: importAll rejeita 2026-02-29 (ano não bissexto)", async () => {
+  await DB.init();
+  const backup = { schemaVersion: 3, subjects: [BASE_SUBJ], learningUnits: [{ ...BASE_UNIT, studyDate: "2026-02-29" }], reviewTasks: [] };
+  await assert.rejects(() => DB.importAll(backup), /studyDate/i);
+});
+
+test("AC-019: importAll rejeita reviewTask com questionsCount=NaN", async () => {
+  await DB.init();
+  const backup = {
+    schemaVersion: 3,
+    subjects: [BASE_SUBJ],
+    learningUnits: [BASE_UNIT],
+    reviewTasks: [{ id: 1, unitId: 1, reviewNumber: 1, dueDate: "2026-01-08", reviewDone: false, questionsDone: false, questionsCount: NaN, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+  };
+  await assert.rejects(() => DB.importAll(backup), /questionsCount/i);
+});
+
+test("AC-019: importAll rejeita reviewTask com correctCount=Infinity", async () => {
+  await DB.init();
+  const backup = {
+    schemaVersion: 3,
+    subjects: [BASE_SUBJ],
+    learningUnits: [BASE_UNIT],
+    reviewTasks: [{ id: 1, unitId: 1, reviewNumber: 1, dueDate: "2026-01-08", reviewDone: false, questionsDone: false, questionsCount: 10, correctCount: Infinity, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }],
+  };
+  await assert.rejects(() => DB.importAll(backup), /correctCount/i);
+});
+
 // --- T4: local date boundary ---
 
 function localDate(date = new Date()) {
