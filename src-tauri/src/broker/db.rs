@@ -1,5 +1,6 @@
 use sqlx::{Pool, Sqlite, SqlitePool, sqlite::SqliteConnectOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn open_pool(db_path: &Path) -> Result<Pool<Sqlite>, sqlx::Error> {
     let options = SqliteConnectOptions::new()
@@ -30,6 +31,55 @@ pub async fn backup(pool: &Pool<Sqlite>, dest: &Path) -> Result<(), sqlx::Error>
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Remove backup files older than `keep_days` from `backup_dir` matching `smartlearn-backup-*.db`.
+pub fn rotate_backups(backup_dir: &Path, keep_days: u64) -> std::io::Result<usize> {
+    let cutoff = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .saturating_sub(keep_days * 86_400);
+
+    let mut removed = 0usize;
+    let entries = std::fs::read_dir(backup_dir)?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        if !name.starts_with("smartlearn-backup-") || !name.ends_with(".db") {
+            continue;
+        }
+        // Parse unix timestamp from filename: smartlearn-backup-<ts>.db
+        if let Some(ts_str) = name
+            .strip_prefix("smartlearn-backup-")
+            .and_then(|s| s.strip_suffix(".db"))
+        {
+            if let Ok(ts) = ts_str.parse::<u64>() {
+                if ts < cutoff {
+                    let _ = std::fs::remove_file(&path);
+                    removed += 1;
+                }
+            }
+        }
+    }
+    Ok(removed)
+}
+
+/// Take a backup into `backup_dir` then prune files older than 30 days.
+pub async fn startup_backup(pool: &Pool<Sqlite>, backup_dir: PathBuf) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let dest = backup_dir.join(format!("smartlearn-backup-{ts}.db"));
+    // VACUUM INTO fails if the destination already exists — skip if same-second double call.
+    if dest.exists() {
+        return Ok(dest);
+    }
+    backup(pool, &dest).await.map_err(|e| e.to_string())?;
+    rotate_backups(&backup_dir, 30).ok();
+    Ok(dest)
 }
 
 #[cfg(test)]
@@ -81,6 +131,34 @@ mod tests {
             let mode: String = row.try_get(0).expect("journal_mode column");
             assert_eq!(mode, "wal", "journal_mode must be wal after enable_wal");
         });
+    }
+
+    #[test]
+    fn rotate_backups_removes_old_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "smartlearn-rotate-test-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir_all(&dir).expect("create dir");
+
+        // Create two "old" backup files (ts = 0, far in the past) and one recent.
+        let old1 = dir.join("smartlearn-backup-0.db");
+        let old2 = dir.join("smartlearn-backup-1.db");
+        let recent_ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let recent = dir.join(format!("smartlearn-backup-{recent_ts}.db"));
+        let other = dir.join("other-file.db");
+        for p in &[&old1, &old2, &recent, &other] {
+            fs::write(p, b"x").expect("write file");
+        }
+
+        let removed = rotate_backups(&dir, 30).expect("rotate");
+        assert_eq!(removed, 2, "two old files must be removed");
+        assert!(!old1.exists(), "old1 must be gone");
+        assert!(!old2.exists(), "old2 must be gone");
+        assert!(recent.exists(), "recent must stay");
+        assert!(other.exists(), "non-backup files must not be touched");
+
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

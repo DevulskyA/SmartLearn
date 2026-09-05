@@ -15,6 +15,12 @@ pub async fn start_broker(app_data_dir: PathBuf) -> Result<BrokerHandle, String>
     let db_path = app_data_dir.join("smartlearn.db");
     let pool = db::open_pool(&db_path).await.map_err(|e| e.to_string())?;
     db::enable_wal(&pool).await.map_err(|e| e.to_string())?;
+    // Startup backup — best-effort; failure is logged, not fatal.
+    let backup_dir = app_data_dir.join("backups");
+    match db::startup_backup(&pool, backup_dir).await {
+        Ok(path) => log::info!("startup backup: {}", path.display()),
+        Err(e) => log::warn!("startup backup failed (non-fatal): {e}"),
+    }
     let http_router = router::build_router(pool.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:57321")
         .await
