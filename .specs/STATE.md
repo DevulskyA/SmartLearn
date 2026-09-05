@@ -38,7 +38,7 @@ LAST_PROVEN_LOCAL_GATES:
 - WEB_REAL: PASS — browser: Plano→Nova aula→save→reload→persists (localStorage, 2026-09-04)
 - WINDOWS_BUILD: PASS — cargo build PASS (2026-09-04)
 - WINDOWS_INSTALLER: PASS — cargo tauri build → MSI + NSIS produced (2026-09-04)
-- WINDOWS_REAL: HUMAN_GATE — native Tauri window requires human install→open→SQLite flow→restart smoke test
+- WINDOWS_REAL: PASS — NSIS installer from HEAD 74e3ee7 (2026-09-04 23:38); installed to C:\Users\Ariel\AppData\Local\SmartLearn; launched; human created unit "WINDOWS_REAL_UAT"; closed app; reopened; unit persisted — SQLite native persistence confirmed (2026-09-04)
 - ANDROID_INIT: PASS — cargo tauri android init success (2026-09-04)
 - ANDROID_BUILD: PASS — debug APK (app-universal-debug.apk, 608MB) + release unsigned APK (54MB) produced (2026-09-04)
 - ANDROID_REAL: PASS — emulator SmartLearn_API_36; installed debug APK; DB schema verified (all vNext tables present); learning_unit inserted → force-stop → relaunch → data persists in UI (Plano screen shows "ANDROID_REAL_TEST" unit); nav verified (Hoje/Plano/Estatísticas/Acompanhar/Disciplinas — no Cadastro); migration from main schema confirmed (app_version=1.0.0 in settings, study_records→learning_units migration happened)
@@ -79,7 +79,7 @@ TRACKING_CANONICAL:
 ATRASADO > SEM_EVIDENCIA > EM_REVISAO > EM_ESTUDO > EM_DIA
 sem regra arbitrária de 7 dias
 
-EXTERNAL_ACTIONS_NOT_AUTHORIZED: push / PR update / merge / deploy
+EXTERNAL_ACTIONS_NOT_AUTHORIZED: merge / deploy
 
 MIGRATION_MAIN_TO_VNEXT: PASS (canonical JSON authority: migration-main-to-vnext.json shared by db.js production + Rust tests; kill test: break JSON → 2 Rust tests FAIL; restore → 11/11 PASS; Android runtime confirmed migration ran)
 IMPORT_ROLLBACK: PASS (P0-3: importAll fail-closed test)
@@ -87,12 +87,11 @@ DISCRIMINATION: 10 mutants killed (prior session) + P0-3 kill test (correctCount
 BrowserStore_PARITY: PASS (WEB_REAL confirmed)
 
 KNOWN_GAPS:
-1. WINDOWS_REAL: requires human: install MSI/NSIS → open app → create unit → close → reopen → verify SQLite
-2. P1-3 runtime verification: routing code present; full end-to-end requires app execution (partially covered by ANDROID_REAL + WEB_REAL but not exhaustively)
+1. P1-3 runtime verification: routing code present; full end-to-end requires app execution (partially covered by ANDROID_REAL + WEB_REAL but not exhaustively)
 
 REMOTE_ACTIONS_AUTHORIZED: NONE
 
-STOP_CONDITION: HUMAN_GATE: READY_FOR_DELTA_AUDIT_PUSH
+STOP_CONDITION: WINDOWS_REAL=PASS confirmed — all gates closed; Ready for Review authorized
 
 COMMITS:
 - 585d766 (remote base)
