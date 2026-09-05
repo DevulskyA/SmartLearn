@@ -2,10 +2,35 @@
 
 > Full history: `.specs/project/STATE.md` + git log. This file = current snapshot only.
 
-**Date:** 2026-09-04
+**Date:** 2026-09-05
 **Governance:** TLC Strict + ECC Engineering (all sessions)
 
 ---
+
+## HANDOFF — 2026-09-05 T3 CLOSURE (input-integrity-hardening-v2)
+
+PROJECT: SmartLearn
+BRANCH: claude/fix-complete-review-sqlite-593426
+HEAD: 190bb93 (fix(integrity): T3 atomic discipline+unit save — AC-008/AC-010/AC-012)
+REMOTE_PR: #3 (DRAFT / open / not merged)
+WORKTREE_DIRTY:
+- .claude/launch.json  M  (port 5173→5174 + --strictPort flag; local change preserved)
+- src-tauri/Cargo.toml M  (CRLF line-ending only; no content change)
+- .claude/loop.md      ??  (untracked; prior loop config; preserved)
+PLAN_PATH: .specs/features/input-integrity-hardening-v2/tasks.md
+REAL_DATA_PROTECTED: no reset / seed / import / destructive migration / clean / reinstall
+PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
+JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
+PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
+BACKGROUND_WRITERS: NONE_ACTIVE
+GATES: npm test 209/209 PASS | cargo test 13/13 PASS | npm run build CLEAN
+STATUS: CHECKPOINT_PARCIAL — T2/T3/T5 comprovados; T7 browser journey + T8 Verifier pendentes
+PENDING: T7 (J1-J6 browser journey com runtime isolado) → T8 (Verifier + closure)
+OPEN_GAPS: AC-009 archived reactivation (P2), AC-026 NUL em texto livre (P2), COLLATE NOCASE vs localeCompare (documentado), AC-029 Android runtime
+
+---
+
+## PRIOR CHECKPOINT — 2026-09-04 (closed audit round; preserved for evidence)
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
