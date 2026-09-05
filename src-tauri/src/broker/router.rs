@@ -498,20 +498,39 @@ mod tests {
     }
 
     #[test]
-    fn migrate_import_rejects_delete_statement() {
+    fn migrate_import_rejects_dangerous_statements() {
+        // All of these must be rejected — any would be catastrophic inside an import.
+        let dangerous = vec![
+            "DELETE FROM anything",
+            "DROP TABLE subjects",
+            "UPDATE subjects SET is_active = 0",
+            "ALTER TABLE subjects ADD COLUMN x TEXT",
+            "ATTACH DATABASE '/tmp/evil.db' AS evil",
+            "TRUNCATE TABLE subjects",
+            "REPLACE INTO subjects VALUES (1, 'x', 't', 't', 1, 0)",
+        ];
         let db = TempDb::new();
         run_async(async {
-            let (router, _) = setup(&db).await;
-            let req = post_json(
-                "/api/migrate/import",
-                serde_json::json!({
-                    "statements": [{"sql": "DELETE FROM anything", "params": []}]
-                }),
-            );
-            let resp = router.oneshot(req).await.unwrap();
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-            let body = response_json(resp).await;
-            assert!(body["error"].as_str().unwrap_or("").contains("INSERT/CREATE/PRAGMA"));
+            for sql in &dangerous {
+                let (router, _) = setup(&db).await;
+                let req = post_json(
+                    "/api/migrate/import",
+                    serde_json::json!({
+                        "statements": [{"sql": sql, "params": []}]
+                    }),
+                );
+                let resp = router.oneshot(req).await.unwrap();
+                assert_eq!(
+                    resp.status(),
+                    StatusCode::BAD_REQUEST,
+                    "expected 400 for: {sql}"
+                );
+                let body = response_json(resp).await;
+                assert!(
+                    body["error"].as_str().unwrap_or("").contains("INSERT/CREATE/PRAGMA"),
+                    "error message wrong for: {sql}"
+                );
+            }
         });
     }
 
@@ -519,7 +538,7 @@ mod tests {
     fn execute_write_returns_rows_affected() {
         let db = TempDb::new();
         run_async(async {
-            let (router, pool) = setup(&db).await;
+            let (_router, pool) = setup(&db).await;
             sqlx::query("CREATE TABLE ex (v TEXT);")
                 .execute(&pool)
                 .await
@@ -556,7 +575,7 @@ mod tests {
     fn schema_returns_tables_list() {
         let db = TempDb::new();
         run_async(async {
-            let (router, pool) = setup(&db).await;
+            let (_router, pool) = setup(&db).await;
             sqlx::query("CREATE TABLE schema_test (id INTEGER PRIMARY KEY);")
                 .execute(&pool)
                 .await
