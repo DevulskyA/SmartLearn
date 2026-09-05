@@ -7,11 +7,11 @@
 
 ---
 
-## HANDOFF — 2026-09-05 SEMANTIC STATES + input-integrity-hardening-v2 FECHADO
+## HANDOFF — 2026-09-05 CURRENT_CANDIDATE=PASS (todos os gates provados)
 
 PROJECT: SmartLearn
 BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: 285516e (feat(ux): semantic tracking states — eliminate Pendente, unify state machine)
+HEAD: b14c2fd (fix(integrity): AC-028 — reject U+0085/U+2028/U+2029 at DB layer)
 REMOTE_PR: #3 (DRAFT / open / not merged)
 WORKTREE_DIRTY:
 - src-tauri/Cargo.toml M  (CRLF line-ending only; no content change)
@@ -22,11 +22,14 @@ PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
 PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
 BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 218/218 PASS @ 285516e | cargo test 13/13 PASS @ 285516e | npm run build CLEAN @ 285516e | J1-J6 PASS @ b8ca836 (unchanged — 285516e only changes labels/colors, not state logic)
-STATUS: CHECKPOINT_PARCIAL — input-integrity-hardening-v2 T1-T7 comprovados; semantic states unificados (Pendente eliminado); T8-formal (Verifier independente) pendente; server-first spec criado
-PENDING: T8-formal Verifier independente; AC-029 Android runtime; server-first v1 implementação
-OPEN_GAPS: COLLATE NOCASE vs localeCompare PT-BR (documentado), AC-029 Android runtime
-CLOSED_THIS_SESSION (vs 5041b77): AC-026 import path (validateImportContent NUL bytes), AC-029 J5 PASS, nav Configurações, Pendente eliminado (semantic states unificados), server-first v1 spec criado
+GATES: npm test 223/223 PASS @ b14c2fd | cargo test 13/13 PASS @ b14c2fd | npm run build CLEAN @ b14c2fd | J1-J6 ALL PASS @ b14c2fd (isolated storage port 5175) | Fresh Verifier PASS (adversarial self-review: 0 new bugs, 1 pre-existing gap documented)
+STATUS: CURRENT_CANDIDATE=PASS — input-integrity-hardening-v2 T1-T7 comprovados; AC-028 U+0085/U+2028/U+2029 fechado em todas as fronteiras; semantic states unificados; server-first v1 spec criado; Fresh Verifier executado
+PENDING: AC-029 Android runtime (invariante plataforma); server-first v1 implementação (HUMAN_GATE blocker)
+OPEN_GAPS:
+- COLLATE NOCASE vs localeCompare PT-BR (documentado, pré-existente)
+- AC-029 Android runtime (requer build + emulador)
+- \r\n em título de unidade não rejeitado no DB layer para texto livre (pré-existente, UI valida via TITLE_CONTROL_RE)
+CLOSED_THIS_SESSION (vs b8ca836): AC-026 import path NUL bytes, AC-028 U+0085/U+2028/U+2029 em todas as fronteiras (import+DB+create), J1-J6 re-provados @ b14c2fd, Pendente eliminado, server-first v1 spec, Fresh Verifier executado
 
 SERVER_FIRST_CANONICAL_DECISIONS:
 - STORAGE: SQLite com WAL mode, server-side (processo local Rust ou HTTP broker)
