@@ -514,4 +514,68 @@ mod tests {
             assert!(body["error"].as_str().unwrap_or("").contains("INSERT/CREATE/PRAGMA"));
         });
     }
+
+    #[test]
+    fn execute_write_returns_rows_affected() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, pool) = setup(&db).await;
+            sqlx::query("CREATE TABLE ex (v TEXT);")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let router2 = build_router(pool);
+            let req = post_json(
+                "/api/execute",
+                serde_json::json!({"sql": "INSERT INTO ex VALUES (?)", "params": ["hello"]}),
+            );
+            let resp = router2.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = response_json(resp).await;
+            assert_eq!(body["rows_affected"], Value::Number(1.into()));
+        });
+    }
+
+    #[test]
+    fn execute_bad_sql_returns_400() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, _) = setup(&db).await;
+            let req = post_json(
+                "/api/execute",
+                serde_json::json!({"sql": "NOT VALID SQL !!!", "params": []}),
+            );
+            let resp = router.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let body = response_json(resp).await;
+            assert!(body["error"].is_string());
+        });
+    }
+
+    #[test]
+    fn schema_returns_tables_list() {
+        let db = TempDb::new();
+        run_async(async {
+            let (router, pool) = setup(&db).await;
+            sqlx::query("CREATE TABLE schema_test (id INTEGER PRIMARY KEY);")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let router2 = build_router(pool);
+            let req = axum::http::Request::builder()
+                .method("GET")
+                .uri("/api/schema")
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let resp = router2.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = response_json(resp).await;
+            let tables = body["tables"].as_array().expect("tables array");
+            let names: Vec<&str> = tables
+                .iter()
+                .filter_map(|t| t["name"].as_str())
+                .collect();
+            assert!(names.contains(&"schema_test"), "schema_test must appear in tables list");
+        });
+    }
 }
