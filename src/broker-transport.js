@@ -33,6 +33,60 @@ export function wrapBrokerAsDatabase(transport) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Offline write buffer — IndexedDB `pending_writes` store
+// ---------------------------------------------------------------------------
+
+const IDB_NAME = 'smartlearn-offline';
+const IDB_VERSION = 1;
+const IDB_STORE = 'pending_writes';
+
+function openOfflineDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { autoIncrement: true });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function queueOfflineTransaction(statements) {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const req = tx.objectStore(IDB_STORE).add({ statements, queuedAt: Date.now() });
+    tx.oncomplete = () => resolve(req.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function drainPendingWrites() {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result ?? []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function clearPendingWrite(key) {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ---------------------------------------------------------------------------
+
 export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
   async function post(path, body) {
     const resp = await fetchWithRetry(`${baseUrl}${path}`, {
@@ -49,7 +103,16 @@ export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
 
   return {
     async transaction(statements) {
-      return post('/api/transaction', { statements });
+      try {
+        return await post('/api/transaction', { statements });
+      } catch (err) {
+        // On network failure, buffer the write for background sync (T3.4).
+        if (err instanceof TypeError) {
+          await queueOfflineTransaction(statements);
+          return { results: [], queued: true };
+        }
+        throw err;
+      }
     },
     async query(sql, params = []) {
       const data = await post('/api/query', { sql, params });
