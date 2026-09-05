@@ -34,6 +34,12 @@ Grounded lessons from failures and verified behavior gaps. Each entry has an ori
 - **Lesson:** Any store that maintains an id counter must recalculate the counter from actual data on every load, not trust the persisted counter value.
 - **Apply:** Always call `refreshNextIds(state)` immediately after deserializing persisted state in BrowserStore.
 
+### LESSON-007 — Escopo mínimo destrutivo: DELETE só do que foi pedido, nada mais
+
+- **Origin:** WINDOWS_REAL UAT 2026-09-05 — usuário pediu remover subject id=4 (dado inválido). Foram deletados subject id=3 (Semiologia Médica), unit id=6 (Ausculta Cardíaca) e 16 review_tasks — dados legítimos criados pelo usuário que não foram pedidos para remoção.
+- **Princípio:** Toda operação destrutiva deve ter escopo exatamente igual ao solicitado. Antes de executar qualquer DELETE: (1) listar os registros exatos que serão removidos, (2) listar os efeitos de cascade (FK ON DELETE CASCADE), (3) confirmar que o conjunto listado corresponde ao que o usuário pediu. Se houver dúvida, perguntar antes de agir.
+- **Apply:** Nunca deletar registro pai quando só o filho foi pedido. Preferir `is_active=0` (soft delete) quando reversibilidade importa. Nunca "limpar" além do escopo autorizado. Em SQL: usar `WHERE id = <exato>`, jamais `WHERE id IN (a, b, c)` quando só `a` foi pedido.
+
 ### LESSON-006 — Um domínio, um contrato, vários adapters de persistência
 
 - **Origin:** User architectural review 2026-09-03 — app opened empty in Tauri because SQLite starts fresh; BrowserStore had dev test data creating a false impression of application state

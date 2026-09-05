@@ -12,6 +12,7 @@ import {
 import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
+import { validateNamingField } from "./naming-validation.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -3310,14 +3311,11 @@ planShowSubjectForm?.addEventListener("click", () => {
 planNewSubjectForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = planNewSubjectInput.value.trim();
-  if (!name) {
-    planNewSubjectInput.focus();
-    return;
-  }
+  const nameError = validateNamingField(name, "o nome da disciplina");
+  if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput.focus(); return; }
   try {
     const newSubject = await DB.subjects.create(name, "DISC-BLUE");
     await renderPlan();
-    // Select the newly created subject in the form
     if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
     setPlanSubjectSubformVisible(false);
     planNewSubjectInput.value = "";
@@ -3330,15 +3328,39 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
 
 planUnitSaveBtn?.addEventListener("click", async () => {
   setPlanFormMessage();
+
+  const title = planStudyTitle?.value.trim() ?? "";
+  const studyDate = planStudyDate?.value ?? "";
+
+  // Validate unit fields first — before creating any discipline
+  if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
+  const titleError = validateNamingField(title, "o conteúdo estudado");
+  if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
+
+  // Auto-create discipline only after unit fields are valid
+  if (planNewSubjectForm && !planNewSubjectForm.hidden) {
+    const pendingName = planNewSubjectInput?.value.trim();
+    if (pendingName) {
+      const nameError = validateNamingField(pendingName, "o nome da disciplina");
+      if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
+      try {
+        const newSubject = await DB.subjects.create(pendingName, "DISC-BLUE");
+        await renderPlan();
+        if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
+        setPlanSubjectSubformVisible(false);
+        planNewSubjectInput.value = "";
+      } catch {
+        setPlanFormMessage("Não foi possível criar a disciplina.", true);
+        return;
+      }
+    }
+  }
+
   const subjectId = Number(planSubjectSelect?.value);
   const sourceText = planStudySource?.value.trim() ?? "";
-  const studyDate = planStudyDate?.value ?? "";
-  const title = planStudyTitle?.value.trim() ?? "";
   const summaryBody = planStudySummary?.value.trim() || null;
 
   if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
-  if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
-  if (!title) { setPlanFormMessage("Informe o conteúdo estudado.", true); planStudyTitle?.focus(); return; }
 
   planUnitSaveBtn.disabled = true;
   try {
