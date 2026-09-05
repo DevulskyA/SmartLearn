@@ -711,6 +711,48 @@ function createBrowserStore() {
   return store;
 }
 
+// ---------------------------------------------------------------------------
+// BrokerStore — HTTP transport over the local Rust broker (127.0.0.1:57321).
+// Provides two primitives: query (read) and transaction (atomic write).
+// Not yet wired into the DB facade; integrated in platform detection (T2.2).
+// ---------------------------------------------------------------------------
+
+async function fetchWithRetry(url, options, retries = 1, delayMs = 200) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
+
+function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
+  async function post(path, body) {
+    const resp = await fetchWithRetry(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => resp.status.toString());
+      throw new Error(`Broker error ${resp.status}: ${text}`);
+    }
+    return resp.json();
+  }
+
+  return {
+    async transaction(statements) {
+      return post('/api/transaction', { statements });
+    },
+    async query(sql, params = []) {
+      const data = await post('/api/query', { sql, params });
+      return data.rows;
+    },
+  };
+}
+
 export const DB = {
   async init() {
     if (!initialization) {
