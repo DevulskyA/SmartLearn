@@ -2073,22 +2073,41 @@ h1 {
   border: 1px solid;
 }
 
-.plan-state-badge[data-state="no-review"] {
+.plan-state-badge[data-state="SEM_EVIDENCIA"] {
   background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   border-color: var(--color-border);
 }
 
-.plan-state-badge[data-state="pending"] {
+.plan-state-badge[data-state="ATRASADO"] {
   background: var(--status-overdue-fill);
   color: var(--status-overdue-text);
   border-color: color-mix(in oklch, var(--status-overdue-text) 30%, transparent);
 }
 
-.plan-state-badge[data-state="up-to-date"] {
+.plan-state-badge[data-state="EM_REVISAO"] {
+  background: #fef9c3;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.plan-state-badge[data-state="EM_ESTUDO"] {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.plan-state-badge[data-state="EM_DIA"] {
   background: var(--status-done-fill);
   color: var(--status-done-text);
   border-color: color-mix(in oklch, var(--status-done-text) 30%, transparent);
+}
+
+:root[data-theme-mode="dark"] .plan-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; border-color: #713f12; }
+:root[data-theme-mode="dark"] .plan-state-badge[data-state="EM_ESTUDO"]  { background: #1e3a5f; color: #93c5fd; border-color: #1e40af; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-mode="light"]) .plan-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; border-color: #713f12; }
+  :root:not([data-theme-mode="light"]) .plan-state-badge[data-state="EM_ESTUDO"]  { background: #1e3a5f; color: #93c5fd; border-color: #1e40af; }
 }
 
 .performance-badge {
@@ -2415,7 +2434,7 @@ h1 {
   flex-wrap: wrap;
   margin-top: 0.5rem;
 }
-.tracking-state-badge[data-state="SEM_EVIDENCIA"] { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+.tracking-state-badge[data-state="SEM_EVIDENCIA"] { background: var(--color-surface-sunken); color: var(--color-muted); }
 .tracking-state-badge[data-state="EM_ESTUDO"] { background: #dbeafe; color: #1e40af; }
 .tracking-state-badge[data-state="EM_REVISAO"] { background: #fef9c3; color: #92400e; }
 .tracking-state-badge[data-state="ATRASADO"] { background: #fee2e2; color: #991b1b; }

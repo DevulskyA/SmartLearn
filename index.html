@@ -194,9 +194,11 @@
             </select>
             <select id="plan-filter-state" aria-label="Filtrar por estado">
               <option value="">Todos os estados</option>
-              <option value="no-review">Sem revisão</option>
-              <option value="pending">Pendente</option>
-              <option value="up-to-date">Em dia</option>
+              <option value="ATRASADO">Atrasada</option>
+              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
+              <option value="EM_REVISAO">Revisar hoje</option>
+              <option value="EM_ESTUDO">Em estudo</option>
+              <option value="EM_DIA">Em dia</option>
             </select>
             <select id="plan-sort" aria-label="Ordenar por">
               <option value="study-date-desc">Data (mais recente)</option>
@@ -221,10 +223,10 @@
             </select>
             <select id="tracking-filter-state" aria-label="Filtrar por estado">
               <option value="">Todos os estados</option>
-              <option value="SEM_EVIDENCIA">Sem evidência</option>
+              <option value="ATRASADO">Atrasada</option>
+              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
+              <option value="EM_REVISAO">Revisar hoje</option>
               <option value="EM_ESTUDO">Em estudo</option>
-              <option value="EM_REVISAO">Em revisão</option>
-              <option value="ATRASADO">Atrasado</option>
               <option value="EM_DIA">Em dia</option>
             </select>
             <select id="tracking-filter-period" aria-label="Filtrar por período">

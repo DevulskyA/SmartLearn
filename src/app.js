@@ -768,21 +768,19 @@ export async function renderStats() {
   const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
   chartEmpty.hidden = svgRendered;
 }
-function getPlanUnitState(unitId, allTasks, today) {
-  const tasks = allTasks.filter((t) => t.unitId === unitId);
-  if (tasks.length === 0) return "no-review";
-  const incomplete = tasks.filter((t) => !t.reviewDone);
-  if (incomplete.some((t) => t.dueDate <= today)) return "pending";
-  if (incomplete.length > 0) return "pending";
-  return "up-to-date";
-}
+const TRACKING_STATE_LABELS = {
+  ATRASADO: "Atrasada",
+  SEM_EVIDENCIA: "Sem prática registrada",
+  EM_REVISAO: "Revisar hoje",
+  EM_ESTUDO: "Em estudo",
+  EM_DIA: "Em dia",
+};
 
 function getPlanStateBadge(state) {
-  const labels = { "no-review": "Sem revisão", pending: "Pendente", "up-to-date": "Em dia" };
   const span = document.createElement("span");
   span.className = "plan-state-badge";
   span.dataset.state = state;
-  span.textContent = labels[state] ?? state;
+  span.textContent = TRACKING_STATE_LABELS[state] ?? state;
   return span;
 }
 
@@ -887,7 +885,7 @@ export async function renderPlan() {
   const stateFilter = planFilterState?.value ?? "";
   const filtered = sorted.filter((unit) => {
     if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
-    if (stateFilter && getPlanUnitState(unit.id, allTasks, today) !== stateFilter) return false;
+    if (stateFilter && getTrackingState(unit.id, allTasks, allEvidence, today) !== stateFilter) return false;
     return true;
   });
 
@@ -897,7 +895,7 @@ export async function renderPlan() {
   for (const unit of filtered) {
     const subject = subjectsById.get(unit.subjectId);
     const evidence = evidenceByUnitId.get(unit.id) ?? [];
-    const state = getPlanUnitState(unit.id, allTasks, today);
+    const state = getTrackingState(unit.id, allTasks, allEvidence, today);
     const nextReview = getNextReview(unit.id, allTasks);
     const exerciseCount = exerciseCountByUnitId.get(unit.id) ?? 0;
 
@@ -1198,8 +1196,7 @@ function createTrackingStateBadge(state) {
   const span = document.createElement("span");
   span.className = "tracking-state-badge";
   span.dataset.state = state;
-  const labels = { SEM_EVIDENCIA: "Sem evidência", EM_ESTUDO: "Em estudo", EM_REVISAO: "Em revisão", ATRASADO: "Atrasado", EM_DIA: "Em dia" };
-  span.textContent = labels[state] ?? state;
+  span.textContent = TRACKING_STATE_LABELS[state] ?? state;
   return span;
 }
 
