@@ -115,6 +115,62 @@ A interface é feita em HTML, CSS e JavaScript, com Vite apenas como empacotador
 O empacotamento multiplataforma usa Tauri 2. Não usar React, Vue, Next.js, Ionic, Flutter,
 React Native, Kotlin ou Swift na camada de interface do MVP.
 
+## INV-26 — Compatibilidade multiplataforma obrigatória
+
+PLATFORMS = WEB + ANDROID + WINDOWS (canônico, fixo — não alterar)
+
+Toda feature do SmartLearn deve funcionar corretamente nas três plataformas:
+- **WEB** — navegador comum; persistência via BrowserStore/localStorage
+- **ANDROID** — aplicativo Android real; distribuível Google Play; SQLite via Tauri Android
+- **WINDOWS** — aplicativo desktop Windows; runtime Tauri + WebView; SQLite via plugin-sql
+
+> WebView é o runtime interno do aplicativo Windows/Tauri, não uma quarta plataforma.
+> PASS em uma plataforma não prova as outras. Gates separados são obrigatórios.
+
+Nenhuma feature pode ser considerada DONE se funcionar em apenas uma plataforma,
+salvo exceção explícita aprovada pelo usuário com SPEC_DEVIATION registrado.
+
+### Contrato de implementação
+
+- UI e regras de negócio compartilhadas sempre que possível.
+- Código de domínio não pode depender diretamente de API exclusiva do Tauri.
+- APIs específicas de plataforma ficam atrás de adapters/bridges (hoje: `DB.*` em `db.js`).
+- Quando uma API não existir em outra plataforma: fallback funcional equivalente
+  OU `SPEC_DEVIATION` explícito aguardando decisão humana.
+- Persistência pode ter implementação diferente por plataforma, mas comportamento
+  observável deve ser equivalente entre adapters.
+- BrowserStore/web não prova SQLite/Windows. SQLite/Windows não prova Android.
+  Cada plataforma exige seu próprio gate de closure.
+
+### Gates mínimos de closure por plataforma
+
+**WEB:**
+- build web PASS
+- testes funcionais no navegador PASS
+- persistência + reload PASS
+
+**WINDOWS (Tauri + WebView):**
+- build Tauri PASS
+- cold start → persistence → UI → restart PASS
+- main→vNext migration PASS
+
+**ANDROID:**
+- build Android PASS
+- instalação + abertura PASS
+- fluxo crítico da feature PASS
+- persistência após fechar/reabrir PASS
+
+**Discrimination (todas as plataformas):**
+- código Tauri-only introduzido no caminho compartilhado deve ser detectado por teste/gate.
+
+### Precedência
+
+Se a arquitetura existente impede uma plataforma sem mudança material de código,
+o agente para em `HUMAN_GATE` com análise de impacto antes de qualquer alteração.
+O humano decide escopo e prioridade; o agente não refatora preventivamente.
+
+---
+
 ## INV-24 — Acesso ao SQLite isolado em db.js
 
 SQLite local nativo é acessado pelo plugin SQL do Tauri exclusivamente por `src/db.js`.

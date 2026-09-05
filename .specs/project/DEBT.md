@@ -32,6 +32,18 @@ Itens de dívida técnica conhecidos. Atualizar ao identificar ou resolver.
   Ao voltar online, a próxima requisição idêntica atualiza o cache.
 - **Caminho:** Adicionar header `Cache-Control: no-store` ou versão no cache-key em iteração futura.
 
+## D-006 — Conflito de porta 57321 causa degradação silenciosa para BrowserStore
+
+- **Risco:** Médio. Se a porta `127.0.0.1:57321` estiver em uso por outro processo,
+  `start_broker` falha silenciosamente, `checkBrokerReachable()` retorna `false`, e
+  `DB.init()` cai para BrowserStore. Usuário Tauri com dados em SQLite vê app vazio.
+- **Motivo:** Porta hardcoded em `BROKER_PORT = 57321` sem detecção de conflito.
+  O broker usa `TcpListener::bind` que retorna erro se a porta estiver ocupada,
+  mas o erro é absorvido pela task spawned sem JoinHandle (L-003).
+- **Caminho:** Adicionar health-check no startup do Tauri: se `checkBrokerReachable()`
+  retornar false após N ms, logar erro visível ao usuário (toast ou console) antes do
+  fallback; ou tentar portas alternativas na faixa 57321–57330.
+
 ## D-004 — `syncPendingWrites` não tem retry com backoff
 
 - **Risco:** Baixo. O sync dispara somente no evento `online`, então uma falha nessa janela é silenciosa.
