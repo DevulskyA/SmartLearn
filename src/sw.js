@@ -1,4 +1,5 @@
 const CACHE_NAME = 'smartlearn-shell-v1';
+const QUERY_CACHE_NAME = 'smartlearn-query-v1';
 
 const SHELL_ASSETS = [
   '/',
@@ -20,21 +21,60 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  const keep = new Set([CACHE_NAME, QUERY_CACHE_NAME]);
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))),
+      Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))),
     ),
   );
   self.clients.claim();
 });
 
+async function bodyHash(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Pass broker API calls straight through to the network.
-  // T3.2 will add read-cache interception for /api/query.
+  // Broker API calls: cache reads, pass writes through.
   if (url.hostname === '127.0.0.1' && url.pathname.startsWith('/api/')) {
+    // Cache GET /api/health and POST /api/query responses.
+    if (
+      (request.method === 'GET' && url.pathname === '/api/health') ||
+      (request.method === 'POST' && url.pathname === '/api/query')
+    ) {
+      event.respondWith(
+        (async () => {
+          try {
+            // Network first — fresher data when online.
+            const resp = await fetch(request.clone());
+            if (resp.ok) {
+              const bodyText = request.method === 'POST' ? await request.text() : '';
+              const key = `${url.pathname}|${await bodyHash(bodyText)}`;
+              const cacheReq = new Request(key);
+              const cache = await caches.open(QUERY_CACHE_NAME);
+              cache.put(cacheReq, resp.clone());
+            }
+            return resp;
+          } catch {
+            // Offline: serve stale cache if available.
+            const bodyText = request.method === 'POST' ? await request.text() : '';
+            const key = `${url.pathname}|${await bodyHash(bodyText)}`;
+            const cached = await caches.match(new Request(key), { cacheName: QUERY_CACHE_NAME });
+            if (cached) return cached;
+            return new Response(JSON.stringify({ error: 'offline' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        })(),
+      );
+      return;
+    }
+    // All other broker paths (/api/execute, /api/transaction, /api/schema): pass through.
     return;
   }
 
