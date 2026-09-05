@@ -27,5 +27,5 @@ Rastreamento de tarefas da feature server-first (branch: `claude/server-first-v1
 ## Gates de conclusão
 
 - `cargo test`: 16/16 PASS
-- `npm test`: 33/33 PASS (inclui testes D-001 + offline queue TypeError vs HTTP Error)
+- `npm test`: 34/34 PASS
 - Verificador fresco: sem issues de segurança ou correção
