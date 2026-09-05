@@ -1,10 +1,10 @@
 # SmartLearn Input Integrity v2 — Validation
 
-**Result**: CHECKPOINT_PARCIAL — T1-T6 + T8-partial (adversarial self-review) comprovados; T7 browser journey pendente (requer runtime isolado); formal Verifier pendente
+**Result**: CHECKPOINT_PARCIAL — T1-T6 + T7-partial (J1/J2/J6 executados) + T8-partial comprovados; J3/J4/J5 e Verifier formal pendentes
 **Date**: 2026-09-05
 **Spec**: spec.md
-**Diff range**: bddd2fc (T2/T5) → ac8e985 (T8-partial)
-**Verifier**: adversarial self-review executado (esta sessão); formal Verifier independente pendente
+**Diff range**: bddd2fc (T2/T5) → b25f0c9 (AC-003 banner + launch.json)
+**Verifier**: adversarial self-review executado; formal Verifier iniciado (output não lido por limite de tokens)
 
 ## Task Completion
 
@@ -16,15 +16,15 @@
 | T4 | PASS | Cancel limpa input; draft preservado em catch; renderPlan+select após save; AC-016 render-after-commit isolado |
 | T5 | PASS | isValidIsoDate calendário real; NaN/Infinity rejeitados em contagens |
 | T6 | PASS (estrutural) | assertImportData lança antes de qualquer mutação; execute_sqlite_transaction atômico |
-| T7 | PENDING | Browser journey J1-J6 requer runtime isolado — não executado (real data visível no browser disponível) |
-| T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; formal Verifier independente pendente |
+| T7 | PARTIAL | J1 PASS (Semiologia Médica, data ISO, form fecha, 16 revisões); J2 PASS (variant espaço/caixa reutiliza id=3); J6 PASS (JSON corrompido preservado, banner visível, writeState nunca chamado); J3/J4/J5 pendentes |
+| T8 | PARTIAL | Adversarial self-review executado: 5 gaps encontrados e corrigidos; Verifier formal iniciado (output não lido) |
 
 ## Spec-Anchored Acceptance Criteria
 
 | ID | Criterion | Evidence | Result |
 | --- | --- | --- | --- |
 | AC-001 | Isolamento de storage | BrowserStore usa localStorage em memória em testes; SQLite usa arquivo temporário | PASS |
-| AC-003 | JSON corrompido preserva bytes, não inicializa vazio | test/learning-units.test.js AC-003 discrimination @ 71421b3 | PASS |
+| AC-003 | JSON corrompido preserva bytes, não inicializa vazio; sinaliza leitura inválida | test/learning-units.test.js AC-003 discrimination @ 71421b3; banner visível em J6 @ b25f0c9 | PASS |
 | AC-004 | Ausculta Cardíaca — Bulhas e Sopros aceito | test/naming-validation.test.js Contract F @ bddd2fc | PASS |
 | AC-005 | Espaços normalizados sem colar palavras | normalizeEntityName NFC+collapse @ db.js; test/subjects.test.js DISCRIMINATION @ ac8e985 | PASS |
 | AC-006 | Vazio/invisível/controle rejeitado | validateTitleField rejeita TITLE_CONTROL_RE; validateNamingField NAMING_PATTERN | PASS |
@@ -45,7 +45,7 @@
 | AC-025 | HTML/SQL-like em texto livre tratado como dados | Nenhum innerHTML/outerHTML/insertAdjacentHTML no código; SQL parametrizado | PASS |
 | AC-026 | NUL rejeitado em texto livre (sourceText, summaryBody) | rejectNulBytes+validateUnitData @ db.js; testes AC-026 @ 71421b3 | PASS |
 | AC-028 | Mesma validade por adapter; invariante não bypassável por omitir UI | normalizeEntityName rejeita \r\n\v\f @ DB layer; test/subjects.test.js DISCRIMINATION @ ac8e985 | PASS |
-| AC-029 | Fluxo completo em navegador isolado | PENDING — requer runtime isolado | PENDING |
+| AC-029 | Fluxo completo em navegador isolado | J1 PASS: Semiologia Médica salva @ b25f0c9; J2 PASS: dedup variant; J6 PASS: corrupt preservado; J3/J4/J5 pendentes | PARTIAL |
 | AC-030 | Mutações semânticas mortas | Ver tabela Discrimination Sensors | PARTIAL |
 | AC-031 | Verifier independente | Self-review adversarial (esta sessão); formal Verifier pendente | PARTIAL |
 | AC-032 | Estado honesto no prazo | CHECKPOINT_PARCIAL com pendências verdadeiras documentadas | PASS |
@@ -57,6 +57,7 @@
 | npm test (T2) | npm test | 0 | 209/209 | bddd2fc |
 | npm test (T3) | npm test | 0 | 209/209 | 190bb93 |
 | npm test (T8-partial) | npm test | 0 | 218/218 | ac8e985 |
+| npm test (AC-003 fix) | npm test | 0 | 218/218 | b25f0c9 |
 | cargo test | cargo test --manifest-path src-tauri/Cargo.toml | 0 | 13/13 | ac8e985 |
 | npm run build | npm run build | 0 | clean 133kB | ac8e985 |
 
@@ -78,6 +79,9 @@
 | \n em nome aceito no DB layer | test/subjects.test.js DISCRIMINATION | KILLED |
 | \r em nome aceito no DB layer | test/subjects.test.js DISCRIMINATION | KILLED |
 | Espaços extras não colapsados | test/subjects.test.js DISCRIMINATION | KILLED |
+| J1: Salvar aula com nova disciplina não persiste | Browser J1 @ b25f0c9 (falha era bug de execução: data em formato errado) | KILLED |
+| J2: Nome equivalente cria disciplina duplicada | Browser J2 @ b25f0c9: subjectCount=3 antes e depois | KILLED |
+| J6: JSON corrompido sobrescrito em init | Browser J6 @ b25f0c9: rawBytes CORRUPT_GARBAGE preservados; banner visível | KILLED |
 | render-after-commit erro mostrado como save-fail | app.js two-stage catch @ ed84c76 | KILLED (code) |
 
 ## Ranked Gaps (Remaining)
