@@ -2,7 +2,6 @@ import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import {
-  fetchWithRetry,
   checkBrokerReachable,
   wrapBrokerAsDatabase,
   createBrokerStore,
