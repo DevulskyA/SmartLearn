@@ -8,7 +8,7 @@ import {
   createBrokerStore,
   registerOnlineSync,
 } from "./broker-transport.js";
-import { BROWSER_STORE_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";
+import { BROWSER_STORE_KEY, MIGRATION_BACKUP_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const REVIEW_SCHEDULE = [
@@ -740,12 +740,18 @@ export const DB = {
             await DB.sources.ensureColumns();
             await DB.studyRecords.ensureColumns();
             registerOnlineSync();
+            // Clean up migration backup from a previous successful migration
+            // (broker reachable confirms SQLite has the data).
+            try { localStorage.removeItem(MIGRATION_BACKUP_KEY); } catch {}
             // Expose migration API when BrowserStore has legacy data.
             if (hasBrowserStoreData()) {
               DB.migration = {
                 available: true,
                 async execute() {
                   const raw = localStorage.getItem(BROWSER_STORE_KEY);
+                  // Safety copy: if the app crashes between removeItem and reload,
+                  // the backup preserves the data. Cleaned up on the next broker startup.
+                  try { localStorage.setItem(MIGRATION_BACKUP_KEY, raw ?? ''); } catch {}
                   const state = JSON.parse(raw);
                   const statements = buildMigrationStatements(state);
                   const resp = await fetch('http://127.0.0.1:57321/api/migrate/import', {
@@ -755,6 +761,7 @@ export const DB = {
                   });
                   if (!resp.ok) {
                     const text = await resp.text().catch(() => resp.status.toString());
+                    try { localStorage.removeItem(MIGRATION_BACKUP_KEY); } catch {}
                     throw new Error(`Migração falhou: ${text}`);
                   }
                   localStorage.removeItem(BROWSER_STORE_KEY);
@@ -1436,4 +1443,4 @@ export {
   syncPendingWrites,
   registerOnlineSync,
 } from "./broker-transport.js";
-export { BROWSER_STORE_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";
+export { BROWSER_STORE_KEY, MIGRATION_BACKUP_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";

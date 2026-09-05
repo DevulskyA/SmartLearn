@@ -1,4 +1,6 @@
 export const BROWSER_STORE_KEY = "smartlearn:browser-db";
+// Written before removeItem during migration; cleaned up on next broker startup to confirm SQLite has the data.
+export const MIGRATION_BACKUP_KEY = "smartlearn:browser-db-migration-backup";
 
 export function hasBrowserStoreData() {
   try {

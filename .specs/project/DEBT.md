@@ -17,13 +17,13 @@ Itens de dívida técnica conhecidos. Atualizar ao identificar ou resolver.
   que substitui `globalThis.localStorage` por test scope. Cobre: key ausente, studyRecords vazio,
   studyRecords com entrada, JSON malformado.
 
-## D-002 — Migração não tem rollback no lado JS
+## ~~D-002 — Migração não tem rollback no lado JS~~ ✅ FECHADA
 
-- **Risco:** Médio. Se `execute()` lançar após limpar localStorage, dados perdidos.
-- **Motivo:** `localStorage.removeItem(BROWSER_STORE_KEY)` ocorre após `resp.ok`, mas antes do reload.
-  Se o reload falhar e o usuário fechar a aba, os dados sumirão do browser sem estar no SQLite.
-- **Mitigação atual:** O endpoint `/api/migrate/import` é atômico (transação SQLite); se falhar, lança e não limpa localStorage. O risco real é um crash entre `removeItem` e o reload.
-- **Caminho:** Copiar os dados para um campo temporário (ex.: `smartlearn:browser-db-backup`) antes de remover e só removê-lo após o reload confirmar DB disponível.
+- **Resolvida:** `MIGRATION_BACKUP_KEY` salvo em `localStorage` ANTES de `removeItem(BROWSER_STORE_KEY)`.
+  Se o app crashar no intervalo entre removeItem e reload, o backup preserva os dados.
+  Na próxima inicialização com broker reachable, DB.init() remove o backup automaticamente
+  (confirmação implícita de que SQLite tem os dados). Se a POST falhar, o backup é removido
+  imediatamente (migração não aconteceu — dados ainda no localStorage principal).
 
 ## D-003 — SW não tem estratégia de invalidação do cache de queries
 

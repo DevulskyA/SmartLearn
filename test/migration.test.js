@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildMigrationStatements, hasBrowserStoreData, BROWSER_STORE_KEY } from "../src/migration.js";
+import { buildMigrationStatements, hasBrowserStoreData, BROWSER_STORE_KEY, MIGRATION_BACKUP_KEY } from "../src/migration.js";
 
 // hasBrowserStoreData reads globalThis.localStorage — mock it per-test
 function withLocalStorage(store, fn) {
@@ -36,6 +36,11 @@ function makeBrowserState({ subjects = [], sources = [], studyRecords = [], revi
 
 test("BROWSER_STORE_KEY is the canonical localStorage key", () => {
   assert.equal(BROWSER_STORE_KEY, "smartlearn:browser-db");
+});
+
+test("MIGRATION_BACKUP_KEY is distinct from BROWSER_STORE_KEY and follows naming convention", () => {
+  assert.equal(MIGRATION_BACKUP_KEY, "smartlearn:browser-db-migration-backup");
+  assert.notEqual(MIGRATION_BACKUP_KEY, BROWSER_STORE_KEY);
 });
 
 test("buildMigrationStatements returns empty array for empty state", () => {
