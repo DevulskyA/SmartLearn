@@ -3394,6 +3394,11 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     try {
       await renderPlan();
       if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      // AC-014: clear subject filter if it would hide the newly saved unit
+      if (planFilterSubject && planFilterSubject.value && planFilterSubject.value !== String(saved.subjectId)) {
+        planFilterSubject.value = '';
+        await renderPlan();
+      }
       setPlanFormVisible(false);
       setPlanFormMessage();
       await renderToday();
