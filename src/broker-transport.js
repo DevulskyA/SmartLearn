@@ -86,6 +86,48 @@ export async function clearPendingWrite(key) {
 }
 
 // ---------------------------------------------------------------------------
+// Background sync — flush pending_writes when broker is reachable again
+// ---------------------------------------------------------------------------
+
+export async function syncPendingWrites(baseUrl = 'http://127.0.0.1:57321') {
+  const db = await openOfflineDb();
+  const entries = await new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).openCursor();
+    const rows = [];
+    req.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) { rows.push({ key: cursor.primaryKey, value: cursor.value }); cursor.continue(); }
+      else resolve(rows);
+    };
+    req.onerror = () => reject(req.error);
+  });
+
+  let synced = 0;
+  for (const { key, value } of entries) {
+    try {
+      const resp = await fetch(`${baseUrl}/api/transaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statements: value.statements }),
+      });
+      if (resp.ok) {
+        await clearPendingWrite(key);
+        synced++;
+      }
+    } catch {
+      break; // Still offline; stop and retry next time.
+    }
+  }
+  return synced;
+}
+
+export function registerOnlineSync(baseUrl = 'http://127.0.0.1:57321') {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('online', () => syncPendingWrites(baseUrl));
+}
+
+// ---------------------------------------------------------------------------
 
 export function createBrokerStore(baseUrl = 'http://127.0.0.1:57321') {
   async function post(path, body) {

@@ -6,6 +6,7 @@ import {
   checkBrokerReachable,
   wrapBrokerAsDatabase,
   createBrokerStore,
+  registerOnlineSync,
 } from "./broker-transport.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
@@ -740,6 +741,7 @@ export const DB = {
             await DB.subjects.ensureColumns();
             await DB.sources.ensureColumns();
             await DB.studyRecords.ensureColumns();
+            registerOnlineSync();
             return DB;
           }
           browserStore = createBrowserStore();
@@ -1402,4 +1404,14 @@ export const DB = {
 
 globalThis.DB = DB;
 
-export { fetchWithRetry, createBrokerStore, wrapBrokerAsDatabase, checkBrokerReachable } from "./broker-transport.js";
+export {
+  fetchWithRetry,
+  createBrokerStore,
+  wrapBrokerAsDatabase,
+  checkBrokerReachable,
+  queueOfflineTransaction,
+  drainPendingWrites,
+  clearPendingWrite,
+  syncPendingWrites,
+  registerOnlineSync,
+} from "./broker-transport.js";
