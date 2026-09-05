@@ -174,6 +174,7 @@ function rejectNulBytes(value, label) {
 }
 
 function validateUnitData(data) {
+  rejectNulBytes(String(data.title ?? ''), 'O título');
   rejectNulBytes(String(data.sourceText ?? ''), 'A fonte');
   if (data.summaryBody != null) rejectNulBytes(data.summaryBody, 'O resumo');
 }
@@ -266,6 +267,8 @@ function validateImportContent(normalized) {
     if (!subjectIds.has(u.subjectId ?? u.subject_id)) throw new Error('Backup inválido: learningUnit ' + u.id + ' referencia subject inexistente: ' + (u.subjectId ?? u.subject_id));
     if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
     if (!(u.title ?? u.content ?? '').trim()) throw new Error('Backup inválido: learningUnit ' + u.id + ' sem title.');
+    if ((u.title ?? u.content ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos no título.');
+    if (String(u.sourceText ?? u.source_text ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos na fonte.');
     if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
     unitIds.add(u.id);
   }
