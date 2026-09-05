@@ -22,6 +22,11 @@
 - [x] Backup idempotente: skip se destino já existe (guard same-second)
 - [x] Rotação 30 dias: remove apenas arquivos `smartlearn-backup-<ts>.db` mais antigos que o limite
 
+### Migração
+- [x] `MIGRATION_BACKUP_KEY` salvo antes de `removeItem(BROWSER_STORE_KEY)` — crash safety
+- [x] Se POST falhar, backup é removido imediatamente (dados ainda no localStorage principal)
+- [x] DB.init() broker path remove backup automaticamente (confirmação lazy de SQLite)
+
 ### Offline
 - [x] SW registra app-shell cache no install; serve offline mesmo sem broker
 - [x] SW não registra em Tauri (`window.__TAURI_INTERNALS__` guard em index.html)

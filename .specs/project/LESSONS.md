@@ -45,6 +45,18 @@ Quando falha por conexão recusada (ECONNREFUSED), lança `TypeError`. Ambos res
 `createBrokerStore.transaction()`, o queue de offline usa `instanceof TypeError` — um timeout
 NÃO seria enfileirado. Isso é correto: um timeout do servidor é diferente de ausência de rede.
 
+## L-009 — Padrão de safety copy para operações destructivas em localStorage
+
+Antes de qualquer `localStorage.removeItem(KEY)` que ocorre em janela assíncrona (entre await e reload):
+1. `localStorage.setItem(BACKUP_KEY, raw)` — cópia de segurança
+2. Se a operação FALHAR: remove o backup (dados ainda no source original)
+3. Se a operação PASSAR: deixa o backup; remova-o na próxima inicialização confirmando que o destino tem os dados
+
+Esse padrão reduz a janela de perda de dados a zero: o backup sempre existe quando os dados
+foram removidos do source. A limpeza do backup é feita de forma preguiçosa (lazy cleanup) na
+próxima execução bem-sucedida que confirma o destino.
+**Caso real:** D-002 migration — backup antes de removeItem(BROWSER_STORE_KEY), cleanup em DB.init().
+
 ## L-008 — Módulos adicionados depois do SW precisam ser incluídos em SHELL_ASSETS
 
 O SW caches SHELL_ASSETS no evento `install`. Módulos JS adicionados após o SW ser escrito
