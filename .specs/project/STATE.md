@@ -181,9 +181,36 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ---
 
+## server-first-v1 — Fase implementada (branch: claude/server-first-v1)
+
+| Task | Status | Evidência |
+|------|--------|-----------|
+| T1.1 SQLite pool + WAL | ✅ PASS | cargo 12/12 |
+| T1.2 axum router CORS 5 rotas | ✅ PASS | cargo 12/12 |
+| T1.3 broker startup hook Tauri | ✅ PASS | lib.rs |
+| T1.4 testes oneshot integração | ✅ PASS | 11 testes router |
+| T2.1 BrokerStore transport JS | ✅ PASS | broker-transport.js |
+| T2.2 detecção de plataforma DB.init() | ✅ PASS | db.js |
+| T2.3 contract tests fetch-mocked | ✅ PASS | npm 18/18 |
+| T3.1 SW registro + guard Tauri | ✅ PASS | sw.js + index.html |
+| T3.2 SW cache leitura /api/query | ✅ PASS | sw.js |
+| T3.3 write buffer offline IDB | ✅ PASS | broker-transport.js |
+| T3.4 background sync on 'online' | ✅ PASS | broker-transport.js |
+| T4.1 POST /api/migrate/import | ✅ PASS | cargo 12/12 |
+| T4.2 dialog migração PT-BR UI | 🔴 HUMAN_GATE | cópia PT-BR pendente |
+| T5.1 backup startup + rotação 30d | ✅ PASS | cargo 12/12 |
+| T6.1 validação integração | ✅ PASS | gates cargo + npm |
+| T6.2 Fresh Verifier | ✅ PASS | CORS/SQL/offline OK |
+| T6.3 SERVER_FIRST_CORRECTION_READY | 🔴 HUMAN_GATE | aguarda revisão |
+
+**Gates finais:** cargo test 12/12 PASS | npm test 18/18 PASS
+
+---
+
 ## Bloqueadores ativos
 
-Nenhum.
+- T4.2: cópia PT-BR do dialog de migração (texto, confirmação) — HUMAN_GATE
+- T6.3: SERVER_FIRST_CORRECTION_READY — revisão humana antes de merge/PR
 
 ---
 
