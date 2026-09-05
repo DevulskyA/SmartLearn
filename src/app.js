@@ -53,6 +53,12 @@ const dbInit = DB.init()
   })
   .catch((error) => {
     console.error("Falha ao inicializar o banco local.", error);
+    const banner = document.createElement('div');
+    banner.id = 'db-error-banner';
+    banner.setAttribute('role', 'alert');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
+    banner.textContent = 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
+    document.body.prepend(banner);
     return false;
   });
 
