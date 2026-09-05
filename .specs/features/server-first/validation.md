@@ -25,6 +25,8 @@
 ### Offline
 - [x] SW registra app-shell cache no install; serve offline mesmo sem broker
 - [x] SW não registra em Tauri (`window.__TAURI_INTERNALS__` guard em index.html)
+- [x] SHELL_ASSETS contém todos os módulos JS importados pela aplicação (migration.js incluído, shell-v2)
+- [x] `/api/migrate/import` não cacheado pelo SW (pass-through correto)
 - [x] Escritas offline enfileiradas no IDB são drenadas ao evento `online`
 
 ## Gate externo (HUMAN_GATE T6.3)
