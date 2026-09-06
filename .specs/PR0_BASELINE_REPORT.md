@@ -20,13 +20,18 @@ metadata:
 HEAD:           1fa27ac4acc3cee0fc40408609a72b6549d3d0a2
 FIXES:          0  (no P0/P1 defects found)
 P0_P1:          0 open
-JS:             223/223 PASS  (npm test, node v24.19.0)
-RUST:           13/13 PASS   (cargo test, src-tauri/)
-BUILD:          PASS dev profile — Finished in 1.28s
-J1_J6:          ISOLATED — each test file owns localStorage mock + beforeEach clear; BrowserStore reads fresh on every call
-DISCRIMINATION: All existing sensors verified; 0 new sensors needed (no P0/P1 altered)
-VERIFIER:       No material gap — see Fresh Verifier below
-DEFERRED:       3 P2 items documented below
+JS:             223/223 PASS  (npm test, node v24.19.0, fresh run)
+RUST:           13/13 PASS   (cargo test, src-tauri/, fresh run)
+BUILD:          PASS dev profile — Finished in 279ms (fresh run)
+J1:             PASS — empty sandbox; Semiologia Médica + Ausculta Cardíaca unit created; subjectId=1 linked; 16 review tasks; persisted after reload
+J2:             PASS — "  SEMIOLOGIA MÉDICA  " triggered unique constraint; 1 subject preserved; double-click produced 1 unit (AC-013)
+J3:             PASS — QuotaExceededError injected; unitCount=2 unchanged (zero partial state); draft preserved; retry saved 3rd unit
+J4:             PASS — filter "Semiologia Médica" reset to "" after saving "Fisiologia" unit; O₂/Na⁺/K⁺ summary persisted
+J5:             PASS — schemaVersion=99 rejected ("O backup é inválido"); state unchanged; valid v3 roundtrip imported successfully
+J6:             PASS — corrupt bytes "CORRUPT_GARBAGE{not valid json!!!@#$%^&*}" identical after reload; recovery banner shown
+DISCRIMINATION: N/A — FIXES=0; no production code changed; no new sensors needed
+VERIFIER:       PASS — no material gap; 1 new P2 added (see Fresh Verifier + Deferred D4)
+DEFERRED:       4 P2 items documented below (D1–D4) + 3 HUMAN_GATE items (D5–D7)
 READY_FOR_BASELINE_REVIEW: YES — pending HUMAN_GATE: UAT Tauri (Windows) + UAT Android
 ```
 
@@ -104,13 +109,14 @@ READY_FOR_BASELINE_REVIEW: YES — pending HUMAN_GATE: UAT Tauri (Windows) + UAT
 | ALGORITHMS.LEGACY, SCHEDULE_OFFSETS fonte única | scheduler.test.js | ✓ |
 | generateReviewDates: 16 revisões em ISO-8601 crescente | review-schedule.test.js | ✓ |
 
-### T7 — Test integrity: CLEAN (3 P2 deferred)
+### T7 — Test integrity: CLEAN (4 P2 deferred)
 
 | Observação | Arquivo | Linha | Severidade |
 |-----------|---------|-------|-----------|
 | Nome de teste diz "schemaVersion 2" mas verifica 3 | learning-units.test.js | 104 | P2 — stale description |
 | `assert.ok(evidence.length >= 1)` — deveria ser `=== 1` | learning-evidence.test.js | 310 | P2 — weak assertion (não mascara bug: idempotence test usa ===1) |
 | `let callCount = 0` nunca assertado | learning-units.test.js | 329 | P2 — dead code em teste |
+| M2 kill test é environment-dependent (UTC-3 only); SQLite path não coberto | learning-evidence.test.js | 537 | P2 (NEW-P2 — Fresh Verifier) — ambas implementações corretas; gap é test-integrity only |
 
 Nenhum teste copia implementação, usa skip, ou desvia de produção.
 
@@ -133,7 +139,10 @@ Nenhum teste copia implementação, usa skip, ou desvia de produção.
 **Argumento 5:** "`evidence.length >= 1` could mask duplication bug."
 **Análise:** PARCIALMENTE VERDADEIRO. Mas idempotence test (`runMigrationFromReviewTasks é idempotente`) usa `=== 1` e detectaria duplicação. Não há gap real. P2.
 
-**VEREDICTO FRESH VERIFIER: Nenhum gap material encontrado.**
+**Argumento 6:** "M2 kill test `evidenceDate usa dia local` passa em UTC-3 mas não discriminaria em UTC; SQLite adapter `completeReviewWithEvidence` em `src/db.js:1909` não tem parâmetro `_now` injetável — gap de cobertura."
+**Análise:** VERDADEIRO. Kill test depende do fuso horário do ambiente. Não cobre SQLite path. Porém: ambas as implementações chamam `localDateIso()` corretamente; nenhum bug real existe. Gap é puramente test-integrity (não consegue falsificar a correção em UTC). Escalado para P2 (D4 — ver Deferred). Não é P0/P1.
+
+**VEREDICTO FRESH VERIFIER: PASS — nenhum gap material. 1 novo P2 adicionado (D4).**
 
 ---
 
@@ -144,6 +153,7 @@ Nenhum teste copia implementação, usa skip, ou desvia de produção.
 | D1 | test/learning-units.test.js | 104 | Stale test name: "schemaVersion 2" mas verifica 3. Renomear para "schemaVersion 3" em próxima iteração. |
 | D2 | test/learning-evidence.test.js | 310 | Weak assertion `>= 1` na migration v2→v3. Fortalecer para `=== 1` em próxima iteração. |
 | D3 | test/learning-units.test.js | 329 | `let callCount = 0` nunca assertado — remover em próxima iteração. |
-| D4 | T5 cross-adapter | N/A | Sem teste que execute mesmo fluxo em BrowserStore e SQLite comparativamente. Requer Tauri runtime. HUMAN_GATE. |
-| D5 | UAT Tauri | N/A | UAT Windows com app desktop real. HUMAN_GATE. |
-| D6 | UAT Android | N/A | UAT Android com device/emulator. HUMAN_GATE. |
+| D4 | test/learning-evidence.test.js | 537 | **NEW-P2 (Fresh Verifier):** M2 kill test environment-dependent (discrimina apenas em UTC-3); SQLite path `completeReviewWithEvidence` em src/db.js:1909 sem parâmetro `_now` injetável. Ambas implementações corretas (`localDateIso()` usado corretamente). Gap é test-integrity only; fortalecer cobertura em próxima iteração. |
+| D5 | T5 cross-adapter | N/A | Sem teste que execute mesmo fluxo em BrowserStore e SQLite comparativamente. Requer Tauri runtime. HUMAN_GATE. |
+| D6 | UAT Tauri | N/A | UAT Windows com app desktop real. HUMAN_GATE. |
+| D7 | UAT Android | N/A | UAT Android com device/emulator. HUMAN_GATE. |
