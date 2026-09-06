@@ -1,155 +1,81 @@
-# INVARIANTS.md — SmartLearn MVP
+# INVARIANTS.md — SmartLearn
 
-Estas regras são invariantes obrigatórias. Nenhuma decisão de implementação pode violá-las.
-Se uma funcionalidade exige violar uma invariante, a funcionalidade está errada, não a invariante.
+Estas regras governam a evolução do SmartLearn. Uma feature que precise violá-las exige primeiro uma decisão explícita de produto e atualização deste contrato.
 
----
+## INV-01 — Energia para aprender, não para gerenciar
+O aluno deve gastar energia estudando, não operando o sistema. A sofisticação adaptativa deve permanecer principalmente interna.
 
-## INV-01 — Menos trabalho que a planilha
+## INV-02 — Mobile-first e baixa fricção
+A aplicação deve continuar funcional em telas pequenas e ações comuns devem permanecer curtas, claras e previsvisíveis.
 
-O sistema nunca deve exigir do aluno mais trabalho do que a planilha original exigia.
-Se a planilha resolvia algo com uma célula, o app deve resolver com no máximo um clique.
+## INV-03 — Local-first
+Os dados do aluno permanecem no dispositivo no baseline atual. Nenhuma conta, backend ou banco remoto é necessário para usar o produto.
 
-## INV-02 — Tela principal é Detalhes
+## INV-04 — Uma base Tauri 2
+Desktop, Android e iOS continuam compartilhando a mesma base Tauri 2. Não introduzir uma segunda aplicação móvel sem decisão arquitetural explícita.
 
-A tela principal do app é o equivalente à aba `Detalhes` da planilha.
-É a primeira coisa que o aluno vê ao abrir o app.
+## INV-05 — SQL isolado
+Todo acesso SQLite nativo permanece em `src/db.js`. Módulos de domínio não executam SQL diretamente.
 
-## INV-03 — Cadastro é equivalente à aba RP
+## INV-06 — Backup e restauração preservados
+Exportação e importação de backup continuam requisitos do produto. Novas entidades persistidas devem participar do esquema de backup antes de serem consideradas completas.
 
-A tela de cadastro é o equivalente à aba `RP / Revisões Periódicas`.
-O aluno registra o que estudou. O sistema faz o resto.
+## INV-07 — Compatibilidade de dados durante a migração
+A evolução do motor pedagógico não pode invalidar silenciosamente estudos e revisões existentes. Migrações devem ser aditivas ou possuir transformação e rollback verificáveis.
 
-## INV-04 — Revisões geradas automaticamente
+## INV-08 — Domínio exige independência
+Sucesso assistido não pode ser tratado como equivalente a desempenho independente. Uma solução revelada fornece ensino, mas zero evidência positiva de mastery naquela tentativa.
 
-O aluno cadastra o estudo uma vez. O sistema gera todas as revisões automaticamente.
-O usuário não clica em "gerar revisões". Isso acontece no momento do cadastro.
+## INV-09 — Domínio exige tempo
+O sistema não pode declarar aprendizagem durável apenas com acertos concentrados em uma única sessão. O mastery gate deve exigir evidência retardada enquanto este contrato estiver vigente.
 
-## INV-05 — Usuário nunca cria revisões manualmente
+## INV-10 — Transferência é dimensão própria
+Retenção e transferência devem permanecer distinguíveis no learner model e nas avaliações. Reescrever superficialmente uma questão não basta para classificá-la como transferência.
 
-No fluxo normal, o usuário nunca cria uma revisão manualmente.
-Revisões só existem porque um estudo foi cadastrado.
+## INV-11 — Erro é evidência, não diagnóstico automático
+Um único erro não autoriza atribuir uma causa cognitiva definitiva. Causas de erro permanecem hipóteses revisáveis por nova evidência.
 
-## INV-05A — Disciplina é entidade reutilizável, não texto repetido
+## INV-12 — Erro confiante tem tratamento especial
+Resposta incorreta acompanhada de alta confiança deve poder gerar hipótese de misconception e falha de calibração; o sistema não deve reduzi-la a simples percentual perdido.
 
-Disciplina é cadastrada uma vez e reutilizada nos fluxos de estudo/RP.
-No fluxo normal, o aluno seleciona uma disciplina existente; ele não digita o nome da disciplina
-como texto livre a cada estudo. O sistema deve evitar digitação repetitiva e esforço cognitivo
-desnecessário.
+## INV-13 — Assistência sempre observável
+Qualquer evento usado pelo learner model deve conseguir representar quanta assistência estava disponível e/ou foi usada.
 
-## INV-05B — Fonte é entidade reutilizável, não texto repetido
+## INV-14 — Fonte antes da geração
+Quando geração por IA entrar no fluxo médico, objetos educacionais devem manter rastreabilidade suficiente para reconstruir a fonte que sustenta o conteúdo.
 
-Fonte é cadastrada uma vez e reutilizada nos fluxos de estudo/RP.
-No fluxo normal, o aluno seleciona uma fonte existente; ele não digita o nome da fonte
-como texto livre a cada estudo. `study_records` deve referenciar fonte por `source_id`.
-Disciplina e fonte devem ser normalizadas antes de salvar: `trim()`, colapso de espaços
-múltiplos e comparação case-insensitive para impedir duplicatas por caixa ou espaço.
+## INV-15 — Gerador não valida a si mesmo
+Uma mesma geração plausível não constitui prova de correção. Conteúdo médico gerado precisa de verificação independente apropriada ao risco antes de virar fonte canônica do aluno.
 
-## INV-06 — Registro de exercícios é simples
+## INV-16 — Modelo simples antes de modelo opaco
+Modelos aprendidos, knowledge tracing complexo ou políticas adaptativas sofisticadas só entram quando superarem um baseline transparente em métrica relevante para aprendizagem.
 
-Registrar exercícios não pode ser complexo. O aluno está cansado.
-Interface mínima: checkbox "fez questões", campo quantidade, campo acertos.
+## INV-17 — Métrica soberana
+A prioridade de avaliação é desempenho independente e retardado, transferência e integração. Engajamento, streak, volume de questões e score imediato são métricas auxiliares.
 
-## INV-07 — Percentual calculado automaticamente
+## INV-18 — Mudança pedagógica exige teste
+Uma alteração relevante do motor de aprendizagem precisa declarar qual outcome pretende melhorar e como será comparada ao comportamento anterior.
 
-O percentual de acertos é sempre calculado pelo sistema.
-Fórmula: `scorePercent = (correctCount / questionsCount) * 100`.
-O aluno nunca digita percentual.
+## INV-19 — Complexidade deve pagar aluguel
+Nenhuma abstração, modelo ou camada adaptativa entra apenas por elegância técnica. Deve resolver risco real, melhorar observabilidade ou produzir ganho educacional/operacional mensurável.
 
-## INV-08 — Estatística mostra evolução
+## INV-20 — Preservar o app funcional durante a evolução
+A migração para o novo SmartLearn ocorre incrementalmente. O scheduler, banco e UI legados podem coexistir temporariamente com o novo learning core enquanto cada substituição é validada.
 
-A tela de estatísticas deve mostrar a evolução do desempenho ao longo do tempo.
-Não é suficiente mostrar apenas totais acumulados.
+## INV-21 — Regras pedagógicas testáveis
+Sempre que uma decisão pedagógica puder ser representada deterministicamente, ela deve viver em módulo testável separado de UI e persistência.
 
-## INV-09 — Gráfico de evolução é obrigatório
+## INV-22 — Incerteza explícita
+O learner model deve representar incerteza ou força de evidência. Não apresentar heurísticas como fatos psicológicos sobre o aluno.
 
-O gráfico de evolução das notas (percentual de acertos ao longo do tempo) é obrigatório no MVP.
-Não é opcional. Não pode ser substituído apenas por tabela de números.
+## INV-23 — Interface em PT-BR e registro adulto
+A interface permanece em português do Brasil, clara, sóbria e sem gamificação infantilizante ou ruído motivacional.
 
-## INV-10 — Uma aplicação para desktop, iOS e Android
+## INV-24 — Um clique quando possível
+Ações frequentes continuam priorizando um clique quando isso não sacrificar segurança, significado pedagógico ou integridade dos dados.
 
-O produto usa uma única base Tauri 2 para desktop, iOS e Android.
-Desktop é o primeiro alvo de execução local. Android é o alvo móvel posterior.
-iOS deve permanecer preparado na mesma base, com build real posterior em ambiente Apple/Mac.
+## INV-25 — Git e gates obrigatórios
+Mudanças materiais devem permanecer rastreáveis em Git, possuir critérios de aceitação e passar pelos gates relevantes antes de integração.
 
-## INV-11 — Mobile usa cards
-
-No celular, a tela principal (Detalhes/Hoje) usa cards.
-Cada tarefa de revisão é um card com todas as informações e ações visíveis.
-
-## INV-12 — Desktop pode usar tabela
-
-No desktop, a tela pode usar layout em tabela, semelhante à planilha original.
-O layout muda por breakpoint, não por modo manual.
-
-## INV-13 — Dados locais em SQLite nativo
-
-Todos os dados ficam em banco SQLite nativo no próprio dispositivo.
-O banco pertence ao app, não ao navegador. Nenhum dado é enviado a servidor externo no MVP.
-
-## INV-14 — Exportação de backup é obrigatória
-
-Exportar os dados como arquivo JSON é parte obrigatória do MVP.
-Não é funcionalidade extra. É requisito.
-
-## INV-15 — Importação de backup é obrigatória
-
-Importar um arquivo JSON de backup é parte obrigatória do MVP.
-O aluno deve conseguir migrar dados entre dispositivos via arquivo.
-
-## INV-16 — Sem Supabase
-
-Não usar Supabase em nenhuma fase deste MVP.
-
-## INV-17 — Sem backend
-
-Não usar nenhum backend neste MVP. Nem Node.js, nem Python, nem PHP, nem qualquer servidor.
-
-## INV-18 — Sem banco remoto
-
-Não usar banco de dados remoto neste MVP. Nem PostgreSQL, nem MySQL, nem SQLite em servidor.
-
-## INV-19 — Interface web, empacotamento com Tauri 2
-
-A interface é feita em HTML, CSS e JavaScript, com Vite apenas como empacotador mínimo.
-O empacotamento multiplataforma usa Tauri 2. Não usar React, Vue, Next.js, Ionic, Flutter,
-React Native, Kotlin ou Swift na camada de interface do MVP.
-
-## INV-24 — Acesso ao SQLite isolado em db.js
-
-SQLite local nativo é acessado pelo plugin SQL do Tauri exclusivamente por `src/db.js`.
-Nenhuma outra parte da aplicação pode executar SQL diretamente.
-
-## INV-25 — Git obrigatório desde o início
-
-O repositório Git local deve existir antes da implementação funcional. Cada task deve produzir
-um commit próprio e deixar o projeto funcional. Tasks diferentes não podem ser misturadas.
-Codex é responsável por GitHub, branches remotas e pull requests. Claude não cria repositório
-GitHub nem faz push remoto sem instrução explícita.
-
-## INV-20 — Sem complexidade extra no MVP
-
-Não adicionar no MVP:
-- IA ou sugestões inteligentes
-- Gamificação
-- Banco de questões
-- Caderno de erros complexo
-- Redistribuição avançada de revisões
-- Arquivamento sofisticado
-
-Essas funcionalidades podem existir em versões futuras, nunca neste MVP.
-
-## INV-21 — Automático por padrão
-
-Se algo puder ser feito automaticamente, deve ser automático.
-O aluno não deve tomar decisão que o sistema pode tomar por ele.
-
-## INV-22 — Um clique por ação
-
-Se algo puder ser feito com um clique, não deve exigir dois.
-Confirmações desnecessárias são proibidas.
-
-## INV-23 — Energia para estudar, não para gerenciar
-
-O aluno deve gastar energia estudando, não operando o sistema.
-Qualquer fluxo que exija mais de 3 passos para uma ação comum é candidato a simplificação.
+## Regras legadas explicitamente supersedidas
+As restrições antigas que proibiam permanentemente IA, banco de questões, caderno de erros, redistribuição adaptativa ou mecanismos inteligentes eram limites do MVP original e deixam de governar a direção do produto. Esses mecanismos agora são permitidos quando entram incrementalmente, preservam as invariantes acima e demonstram valor verificável.
