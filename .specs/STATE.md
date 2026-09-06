@@ -17,7 +17,17 @@ PR3:           #3 MERGED into main (931dbd9, 2026-09-06)
 PR1:           #5 server-central-foundation-v1 MERGED into main (f645a07, 2026-09-06)
 MAIN:          f645a0730f6e37560de813b1610f359a57419f27 (contains both merges)
 
-STATUS: T01 DONE (reconciliation), T02 IN_PROGRESS (heritage matrix filled; PRODUCT.md/INVARIANTS.md AS-IS/target pass pending).
+STATUS: Phase 00 (T01-T06) DONE. HEAD=be7cd75.
+- T01 DONE: reconciliation evidence recorded (18e903b -> e5292fa merge -> 62ea681 pack -> bfbb82b heritage).
+- T02 DONE: Heritage Coverage Matrix filled with real evidence (7 PROVEN, 2 PARTIAL w/ linked GAP to T25-T28/T29-T33). STATE.md restructured.
+- T03 DONE: fixed E2E harness defects (two-click flow tested instead of real single-click; length>0 instead of exact deltas). New AC-03 test proves true single-save atomic path already works: 1 click on #plan-unit-save-btn -> +1 subject, +1 unit, +16 reviews. AC-04 honestly BLOCKED_EXTERNAL (no DI seam to inject mid-write failure without touching product for test-only purpose).
+- T04 DONE: fixed real product bug — NAMING_PATTERN rejected em-dash/Greek/superscripts in discipline names (AC-05 violation). Extended allowlist surgically; kept sentence-signal symbols (@#$%^`~|\) rejected. Updated 3 tests that had proven the old (non-compliant) behavior as contract.
+- T05 DONE: scripts/check-test-inventory.mjs (npm run test:inventory) proves no orphan test files. .github/workflows/ci.yml created (not pushed).
+- T06 DONE: found and fixed missing SIGTERM/SIGINT graceful-shutdown handler in server/src/main.js. server/test/process-smoke.test.js (4 tests): cwd-independence, occupied-port clean exit, restart-same-DB, SIGTERM (win32 limitation documented honestly).
+
+Gates at Phase 00 close: root 231/231, server 21/21 (x3 repeat, no native crash), rust 13/13, build PASS, e2e 12/12, test:inventory PASS.
+
+NEXT_STEP: Phase 01 (T07-T12) — identity/security (HTTP envelope, accounts, scrypt passwords, sessions+CSRF+revocation, request abuse limits, cross-user isolation). Marked HIGH-RISK by the plan itself (design.md §3, tasks.md T07-T12 risk 4-5/5). Recommend adversarial/discrimination testing per task and NOT rushing through in one sitting.
 
 PRESERVED_HISTORY: everything below this block (2026-09-05 and earlier) is historical PR-0/PR-1 evidence, superseded as the active plan by smartlearn-v1-consolidated-v2 per design.md §1. Do not treat it as current authority; it remains valid evidence of what the merged foundation already proved (223 client / 17 server / 13 Rust tests, PR-0 J1-J6, PR-1 gates).
 
