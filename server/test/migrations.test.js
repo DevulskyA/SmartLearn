@@ -103,6 +103,34 @@ test('broken migration rolls back — no row in schema_migrations', () => {
   }
 });
 
+test('broken migration is fully atomic — no partial table created', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = tmpMigDir();
+  try {
+    // Two statements: first creates a table (would persist without transaction),
+    // second fails. Without db.transaction() the partial CREATE would survive.
+    writeFileSync(
+      join(mDir, '001-partial.sql'),
+      'CREATE TABLE partial_rollback_probe (id INTEGER PRIMARY KEY);\nINSERT INTO nonexistent_xyz (v) VALUES (1);\n'
+    );
+
+    const db = openDb(path);
+    assert.throws(() => runMigrations(db, mDir));
+
+    const tbl = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='partial_rollback_probe'"
+    ).get();
+    assert.equal(tbl, undefined, 'partial table must not exist after rollback');
+
+    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    assert.equal(n, 0, 'schema_migrations must be empty after rollback');
+    db.close();
+  } finally {
+    cleanupDb();
+    cleanupM();
+  }
+});
+
 test('validateMigrations passes after correct apply', () => {
   const { path, cleanup } = tmpDb();
   try {
