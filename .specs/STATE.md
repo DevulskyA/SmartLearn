@@ -7,56 +7,66 @@
 
 ---
 
-## HANDOFF — 2026-09-05 CURRENT_CANDIDATE=PASS (todos os gates provados)
+## HANDOFF — 2026-09-05 PR-0 BASELINE CLOSED
 
-PROJECT: SmartLearn
-BRANCH: claude/fix-complete-review-sqlite-593426
-HEAD: b14c2fd (fix(integrity): AC-028 — reject U+0085/U+2028/U+2029 at DB layer)
-REMOTE_PR: #3 (DRAFT / open / not merged)
-WORKTREE_DIRTY:
-- src-tauri/Cargo.toml M  (CRLF line-ending only; no content change)
-- .claude/loop.md      ??  (untracked; prior loop config; preserved)
-PLAN_PATH: .specs/features/input-integrity-hardening-v2/tasks.md
+FEATURE:       input-integrity-hardening-v2 (PR #3)
+PHASE:         PR-0 Baseline Closure — CONCLUÍDO
+BRANCH_A:      claude/fix-complete-review-sqlite-593426 @ c28af47
+BRANCH_B:      claude/server-first-v1 @ fcd599e
+PR3:           #3 DRAFT / open / not merged (audit code baseline)
+PR4:           #4 DRAFT / open (experimental; replan-v2 = histórico de auditoria, NÃO plano canônico)
+
+COMPLETED:
+- J1 PASS — empty sandbox; unit created; subjectId linked; 16 review tasks; persisted after reload
+- J2 PASS — dedup fired (unique constraint); 1 subject; double-click = 1 unit (AC-013)
+- J3 PASS — QuotaExceededError; zero partial state; draft preserved; retry succeeded
+- J4 PASS — filter reset after save under different subject; summary persisted
+- J5 PASS — schemaVersion=99 rejected; state unchanged; valid v3 roundtrip imported
+- J6 PASS — corrupt bytes identical after reload; recovery banner shown
+- JS: 223/223 PASS (fresh run)
+- Rust: 13/13 PASS (fresh run)
+- Build: PASS 279ms (fresh run)
+- DISCRIMINATION: N/A — FIXES=0
+- Fresh Verifier: PASS — no material gap; 1 new P2 added (D4)
+- P0/P1: 0 open
+- REPORT: .specs/PR0_BASELINE_REPORT.md @ c28af47
+
+IN_PROGRESS: NONE
+
+NEXT_STEP: AGUARDAR plano PR-1 produzido pelo ChatGPT. Claude Code = EXECUTOR; não escolhe arquitetura, roadmap, ou próximo trabalho.
+
+BLOCKERS:
+- HUMAN_GATE: UAT Tauri Windows (app desktop real)
+- HUMAN_GATE: UAT Android (device/emulador)
+- HUMAN_GATE: decisões de infraestrutura PR-1 (Axum/auth/hosting/porta) — ver abaixo
+
+DEFERRED_P2:
+- D1: test/learning-units.test.js:104 — stale test name "schemaVersion 2" verifica 3
+- D2: test/learning-evidence.test.js:310 — weak assertion `>= 1` (não mascara bug)
+- D3: test/learning-units.test.js:329 — dead variable `callCount` nunca assertado
+- D4: test/learning-evidence.test.js:537 — M2 kill test UTC-3 only; SQLite path sem _now injection; ambas implementações corretas; gap = test-integrity only
+
+UNCOMMITTED_PRESERVED (não commitados intencionalmente):
+- .claude/loop.md          (untracked — prior loop config)
+- .specs/features/smartlearn-server-first-v1/tasks.md  (modified — rascunho spec broker-era; NÃO autoridade)
+- src-tauri/Cargo.toml     (modified — CRLF line-ending only; sem mudança de conteúdo)
+
 REAL_DATA_PROTECTED: no reset / seed / import / destructive migration / clean / reinstall
 PLATFORMS: WEB + ANDROID + WINDOWS (WebView = runtime, not 4th platform)
 JAVA_INVARIANT: JDK/Gradle toolchain only; no product Java/Kotlin without HUMAN_GATE
-PUBLICATION: NONE authorized (no push / PR update / Ready / merge / deploy / release)
-BACKGROUND_WRITERS: NONE_ACTIVE
-GATES: npm test 223/223 PASS @ b14c2fd | cargo test 13/13 PASS @ b14c2fd | npm run build CLEAN @ b14c2fd | J1-J6 ALL PASS @ b14c2fd (isolated storage port 5175) | Fresh Verifier PASS (adversarial self-review: 0 new bugs, 1 pre-existing gap documented)
-STATUS: CURRENT_CANDIDATE=PASS — input-integrity-hardening-v2 T1-T7 comprovados; AC-028 U+0085/U+2028/U+2029 fechado em todas as fronteiras; semantic states unificados; server-first v1 spec criado; Fresh Verifier executado
-PENDING: AC-029 Android runtime (invariante plataforma); server-first v1 implementação (HUMAN_GATE blocker)
-OPEN_GAPS:
-- COLLATE NOCASE vs localeCompare PT-BR (documentado, pré-existente)
-- AC-029 Android runtime (requer build + emulador)
-- \r\n em título de unidade não rejeitado no DB layer para texto livre (pré-existente, UI valida via TITLE_CONTROL_RE)
-CLOSED_THIS_SESSION (vs b8ca836): AC-026 import path NUL bytes, AC-028 U+0085/U+2028/U+2029 em todas as fronteiras (import+DB+create), J1-J6 re-provados @ b14c2fd, Pendente eliminado, server-first v1 spec, Fresh Verifier executado
 
-SERVER_FIRST_CANONICAL_DECISIONS:
-- STORAGE: SQLite com WAL mode, server-side (processo local Rust ou HTTP broker)
-- WEB_PLATFORM: thin shell (PWA ou Tauri WebView) — não usa localStorage para dados de produção
-- BROKER: HTTP broker local (localhost only) compartilha SQLite entre Web, Windows e futuramente Android
-- IDENTITY: multiusuário local com perfis; sem auth cloud na v1
-- MIGRATION: backward-compatible; migração segura de BrowserStore → SQLite ao adotar broker
-- PWA_OFFLINE: leitura offline via cache de service worker; escrita buffered com sync ao reconectar
-- SPEC_PATH: .specs/features/smartlearn-server-first-v1/ (spec.md, design.md, tasks.md)
-
-COMMITS_SINCE_LAST_CHECKPOINT (190bb93 → 285516e):
-- 71421b3 fix(integrity): AC-003 + AC-026 — corrupted storage preserved, NUL bytes rejected
-- 65d58cc fix(integrity): AC-008/AC-009 SQLite dedup + archived discipline guard
-- 29d50d2 fix(integrity): AC-017 SQLite subjects.create dedup
-- ed84c76 fix(integrity): AC-016 two-stage render-after-commit + NUL literal source fix
-- ac8e985 fix(integrity): normalizeEntityName — line terminator rejection at DB layer (AC-028)
-- 283a8d3 docs(spec): extract input-integrity-hardening-v2 planning documents
-- 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visível em init failure
-- b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
-- 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
-- b8ca836 fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link
-- d1f174b docs(state): update checkpoint — T7 PASS, AC-026/AC-029 closed @ b8ca836
-- 285516e feat(ux): semantic tracking states — eliminate Pendente, unify state machine
-- 5f64244 fix(integrity): AC-003 sinalizar leitura invalida — banner visivel em init failure
-- b25f0c9 chore(dev): add dev-isolated launch config on port 5175 for J7 browser journeys
-- 5041b77 fix(integrity): AC-014 clear conflicting plan filter after save
-- b8ca836 fix(integrity): AC-026/AC-029 import NUL validation + Configuracoes nav link
+SERVER_CENTRAL_DECISIONS (supersede broker-era decisions; autoridade = goal aprovado 2026-09-05):
+- STORAGE: SQLite + WAL mode no servidor central (processo independente, não subprocess Tauri)
+- AUTHORITY: servidor central = única autoridade dos dados; não device do aluno
+- WEB_PLATFORM: uma única Web/PWA responsiva; sem fork de UI por plataforma
+- SHELLS: Windows e Android = shells finos da mesma aplicação (Tauri WebView aponta para servidor)
+- OFFLINE_V1: leitura offline da agenda sincronizada + campo lastSyncedAt; defasagem aceita
+- WRITES: criar/alterar/concluir revisão exige conexão; erro imediato se offline
+- OFFLINE_WRITE: escrita offline ADIADA — sem buffer, sem queue, sem sync background
+- SCHEDULER: simples/fixo agora; adaptativo/FSRS adiado
+- MIGRATION: NO_DATA_LOSS — toda migration preserva dados
+- INFRA_PENDING: Axum, porta, auth, hosting, deployment = decisões técnicas a validar no plano PR-1 (HUMAN_GATE)
+- REPLAN_V2: .specs/replan-v2/ = histórico de auditoria (FASE A-E); NÃO autoridade do planejamento futuro
 
 ---
 
