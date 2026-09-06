@@ -42,10 +42,11 @@ STATUS UPDATE: Phase 01 (T07-T12) DONE + independently verified. Phase 02 in pro
 - T14 DONE: subjects API (list/create/rename/archive/reactivate/reorder/delete-empty), shared/text-validation.js as new single source for name rules.
 - T15 DONE: atomic unit+16-reviews creation in one transaction, shared/review-schedule.js, operation-key idempotency. Found+fixed a real calendar bug (JS Date silently overflows Feb 30 to Mar 2 instead of rejecting it).
 - T16 DONE (1a932d2): agenda (Intl-based local-day buckets: overdue/today/tomorrow/completedToday) + complete() (review-only vs question-based, server-derived score, one aggregate REVIEW evidence row, ALREADY_COMPLETED guard) + reopen() (never mutates prior evidence). Found a test-harness limitation (not a product bug): `Date.now` mocking does not reliably affect bare `new Date()` on this Node/V8 — fixed via an injectable `now` parameter on complete().
+- T17 DONE (e29c057): exercises service (owned list/create/edit/archive/reorder) with migrations/006-exercise-archive.sql (archived_at, archive-not-delete). edit() always appends a new exercise_versions row, never mutates an existing one — a past attempt reference stays resolvable to exactly what it was scored against even after later edits/archival. provenance enum (MANUAL/SOURCE/AI_GENERATED) enforced at service layer.
 
-Gates at this point: server 143/143, root 240/240, rust 13/13, build PASS, e2e 17/17, test:inventory PASS.
+Gates at this point: server 151/151, root 240/240, rust 13/13, build PASS, e2e 17/17, test:inventory PASS.
 
-NEXT_STEP: T17 (exercises with immutable versions and provenance) — Phase 02 continues. No blockers.
+NEXT_STEP: T18 (aggregate evidence + settings contracts) — Phase 02 continues. No blockers.
 
 PRESERVED_HISTORY: everything below this block (2026-09-05 and earlier) is historical PR-0/PR-1 evidence, superseded as the active plan by smartlearn-v1-consolidated-v2 per design.md §1. Do not treat it as current authority; it remains valid evidence of what the merged foundation already proved (223 client / 17 server / 13 Rust tests, PR-0 J1-J6, PR-1 gates).
 
