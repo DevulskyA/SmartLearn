@@ -13,6 +13,7 @@ import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
+import * as AuthUI from "./auth-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -2342,6 +2343,9 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
   }
+  if (nextScreen === "account") {
+    renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));
+  }
 }
 
 let currentThemePreference = getStoredThemePreference();
@@ -3420,5 +3424,91 @@ if (import.meta.env?.DEV) {
     console.log('[UAT] Medical dataset seeded. Reload to refresh UI.');
   };
 }
+
+// T11: minimal account experience. Independent of the BrowserStore-backed
+// learning screens above — see auth-ui.js header comment. Session expiry
+// here never clears any of the learning-form drafts managed elsewhere.
+const accountLoggedOutView = document.querySelector("#account-logged-out-view");
+const accountLoggedInView = document.querySelector("#account-logged-in-view");
+const accountLoginForm = document.querySelector("#account-login-form");
+const accountRegisterForm = document.querySelector("#account-register-form");
+const accountPasswordForm = document.querySelector("#account-password-form");
+const accountLogoutBtn = document.querySelector("#account-logout-btn");
+const accountLoggedInAs = document.querySelector("#account-logged-in-as");
+
+function setAccountMessage(formId, text = "", isError = false) {
+  const el = document.querySelector(`#${formId}-message`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
+
+async function renderAccount() {
+  const user = await AuthUI.bootstrap();
+  const loggedIn = !!user;
+  if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
+  if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
+  if (loggedIn && accountLoggedInAs) {
+    accountLoggedInAs.textContent = `Conectado como ${user.emailDisplay}`;
+  }
+}
+
+document.querySelector("#account-show-register")?.addEventListener("click", () => {
+  accountLoginForm.hidden = true;
+  accountRegisterForm.hidden = false;
+});
+document.querySelector("#account-show-login")?.addEventListener("click", () => {
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountLoginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-login");
+  const email = accountLoginForm.email.value.trim();
+  const password = accountLoginForm.password.value;
+  const result = await AuthUI.login(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-login", result.message, true);
+    return; // draft (email/password fields) stays as typed on failure
+  }
+  accountLoginForm.reset();
+  await renderAccount();
+});
+
+accountRegisterForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-register");
+  const email = accountRegisterForm.email.value.trim();
+  const password = accountRegisterForm.password.value;
+  const result = await AuthUI.register(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-register", result.message, true);
+    return;
+  }
+  setAccountMessage("account-register", "Conta criada com sucesso. Entre com suas credenciais.");
+  accountRegisterForm.reset();
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountPasswordForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-password");
+  const currentPassword = accountPasswordForm.currentPassword.value;
+  const newPassword = accountPasswordForm.newPassword.value;
+  const result = await AuthUI.changePassword(currentPassword, newPassword);
+  if (!result.ok) {
+    setAccountMessage("account-password", result.message, true);
+    return;
+  }
+  setAccountMessage("account-password", "Senha alterada com sucesso.");
+  accountPasswordForm.reset();
+});
+
+accountLogoutBtn?.addEventListener("click", async () => {
+  await AuthUI.logout();
+  await renderAccount();
+});
 
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

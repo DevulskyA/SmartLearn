@@ -16,7 +16,8 @@ async function preflight(page) {
   const screens = await page.locator('[data-screen]').evaluateAll(
     els => els.map(e => e.getAttribute('data-screen')).sort()
   );
-  expect(screens).toEqual(['plan', 'settings', 'stats', 'subjects', 'today', 'tracking']);
+  // T11 added the "account" screen alongside the existing learning screens.
+  expect(screens).toEqual(['account', 'plan', 'settings', 'stats', 'subjects', 'today', 'tracking']);
   const saveBtn = await page.locator('#plan-unit-save-btn').count();
   expect(saveBtn, 'expected #plan-unit-save-btn to exist on this build').toBeGreaterThan(0);
 }

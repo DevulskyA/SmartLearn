@@ -6,6 +6,7 @@ import {
 } from '../auth/session-tokens.js';
 import { generateCsrfToken } from '../auth/csrf.js';
 import { createRateLimiter, DEFAULT_ACCOUNT_MAX_ATTEMPTS, DEFAULT_IP_MAX_ATTEMPTS } from '../auth/rate-limit.js';
+import { consumeResetToken } from '../auth/reset-tokens.js';
 import * as users from '../repositories/users.js';
 import * as sessions from '../repositories/sessions.js';
 
@@ -147,6 +148,53 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
     clearSessionCookie(reply, isProduction);
     reply.status(204);
     return null;
+  });
+
+  // Consumes a token an operator already issued out-of-band (server/scripts/
+  // reset-password.mjs) and generated for this account. There is no path
+  // that issues a token to a remote caller — this is recovery completion,
+  // not recovery initiation. Single-use: a second attempt with the same
+  // token fails even if the password value would otherwise be valid.
+  app.post('/auth/reset-password', {
+    config: { public: true },
+    schema: {
+      body: {
+        type: 'object',
+        required: ['token', 'newPassword'],
+        properties: {
+          token: { type: 'string' },
+          newPassword: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { token, newPassword } = request.body;
+
+    const shapeError = validatePasswordShape(newPassword);
+    if (shapeError) {
+      reply.status(400);
+      return { error: { code: 'VALIDATION_FAILED', field: 'newPassword', message: shapeError } };
+    }
+
+    let userId;
+    try {
+      userId = consumeResetToken(db, token);
+    } catch {
+      // Never distinguish "invalid", "used" or "expired" to the caller —
+      // all three are handled identically to avoid leaking token state.
+      reply.status(400);
+      return { error: { code: 'INVALID_RESET_TOKEN' } };
+    }
+
+    const { hash, salt, algorithm, params } = await hashPassword(newPassword);
+    db.prepare('UPDATE users SET password_hash=?, password_salt=?, password_algorithm=?, password_params=?, updated_at=? WHERE id=?')
+      .run(hash, salt, algorithm, params, new Date().toISOString(), userId);
+
+    // A password reset is a recovery event: revoke every existing session,
+    // including any the attacker might already hold.
+    sessions.revokeAllForUser(db, userId);
+
+    return { ok: true };
   });
 
   app.post('/auth/password', {

@@ -64,6 +64,12 @@
           </svg>
           <span>Configurações</span>
         </button>
+        <button class="nav-item" type="button" data-screen="account" aria-controls="screen-account">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>
+          </svg>
+          <span>Conta</span>
+        </button>
       </nav>
 
       <main class="app-main" tabindex="-1">
@@ -524,6 +530,74 @@
             </div>
             <p class="form-message" id="reset-message" role="status" aria-live="polite"></p>
           </section>
+        </section>
+
+        <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Servidor central</p>
+              <h1 id="title-account">Conta</h1>
+            </div>
+          </div>
+
+          <div class="form-card" id="account-logged-out-view">
+            <form class="study-form" id="account-login-form">
+              <h2 id="account-login-title">Entrar</h2>
+              <div class="field-group">
+                <label for="account-login-email">E-mail</label>
+                <input id="account-login-email" name="email" type="email" required autocomplete="email">
+              </div>
+              <div class="field-group">
+                <label for="account-login-password">Senha</label>
+                <input id="account-login-password" name="password" type="password" required autocomplete="current-password">
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Entrar</button>
+                <button class="text-button" type="button" id="account-show-register">Ainda não tem conta? Criar uma</button>
+              </div>
+              <p class="form-message" id="account-login-message" role="status" aria-live="polite"></p>
+            </form>
+
+            <form class="study-form" id="account-register-form" hidden>
+              <h2 id="account-register-title">Criar conta</h2>
+              <div class="field-group">
+                <label for="account-register-email">E-mail</label>
+                <input id="account-register-email" name="email" type="email" required autocomplete="email">
+              </div>
+              <div class="field-group">
+                <label for="account-register-password">Senha</label>
+                <input id="account-register-password" name="password" type="password" required autocomplete="new-password" minlength="15">
+                <p class="field-message">Mínimo de 15 caracteres.</p>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Criar conta</button>
+                <button class="text-button" type="button" id="account-show-login">Já tem conta? Entrar</button>
+              </div>
+              <p class="form-message" id="account-register-message" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+
+          <div class="form-card" id="account-logged-in-view" hidden>
+            <p id="account-logged-in-as"></p>
+            <form class="study-form" id="account-password-form">
+              <h2>Alterar senha</h2>
+              <div class="field-group">
+                <label for="account-current-password">Senha atual</label>
+                <input id="account-current-password" name="currentPassword" type="password" required autocomplete="current-password">
+              </div>
+              <div class="field-group">
+                <label for="account-new-password">Nova senha</label>
+                <input id="account-new-password" name="newPassword" type="password" required autocomplete="new-password" minlength="15">
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Alterar senha</button>
+              </div>
+              <p class="form-message" id="account-password-message" role="status" aria-live="polite"></p>
+            </form>
+            <div class="settings-actions">
+              <button class="secondary-button" id="account-logout-btn" type="button">Sair</button>
+            </div>
+          </div>
         </section>
       </main>
     </div>

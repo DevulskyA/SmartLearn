@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyCors from '@fastify/cors';
 import { fileURLToPath } from 'node:url';
 import { validateMigrations } from './migrations.js';
 import { applyDomainEnvelope } from './http-contract.js';
@@ -11,6 +12,15 @@ const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.met
 export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [] } = {}) {
   const app = Fastify({ logger: false });
   await app.register(fastifyCookie);
+  // No wildcard credentialed CORS (design.md §3): exact configured origins
+  // only, credentials enabled so the session cookie round-trips, and only
+  // the headers/methods the API actually uses.
+  await app.register(fastifyCors, {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
+  });
 
   app.get('/health/live', async () => {
     return { status: 'alive' };
