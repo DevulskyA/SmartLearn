@@ -1,4 +1,4 @@
-import { test, after, beforeEach } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,8 +14,6 @@ function tmpDb() {
   const dir = mkdtempSync(join(tmpdir(), 'sl-health-'));
   return { dir, path: join(dir, 'test.db'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
-
-beforeEach(() => { if (typeof globalThis.gc === 'function') globalThis.gc(); });
 
 test('/health/live returns 200', async () => {
   const app = buildApp(null);

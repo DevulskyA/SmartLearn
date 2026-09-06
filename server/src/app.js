@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import { fileURLToPath } from 'node:url';
 import { validateMigrations } from './migrations.js';
 
-const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../../migrations', import.meta.url));
+const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
 export function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   const app = Fastify({ logger: false });
