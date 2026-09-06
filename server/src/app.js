@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { validateMigrations } from './migrations.js';
 import { applyDomainEnvelope } from './http-contract.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerSubjectRoutes } from './routes/subjects.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -59,6 +60,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
       allowedOrigins,
     });
     registerAuthRoutes(v1, db, { isProduction });
+    registerSubjectRoutes(v1, db);
   }, { prefix: '/v1' });
 
   return app;
