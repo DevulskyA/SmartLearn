@@ -75,6 +75,20 @@ export function agenda(db, userId, { date, timezoneOverride } = {}) {
 }
 
 /**
+ * Full owned listing, optionally scoped to one unit — unlike agenda()'s
+ * date-bucketed view, this returns every review task regardless of due
+ * date or completion state. Needed by tracking/analytics-style screens
+ * that reason over a unit's whole review history, not just what's due now.
+ */
+export function list(db, userId, { unitId } = {}) {
+  const query = unitId !== undefined
+    ? `${TASK_SELECT} AND rt.unit_id = ? ORDER BY rt.due_date`
+    : `${TASK_SELECT} ORDER BY rt.due_date`;
+  const params = unitId !== undefined ? [userId, unitId] : [userId];
+  return db.prepare(query).all(...params).map(taskDto);
+}
+
+/**
  * Completes a review task. Omitting `questionsCount` is review-only
  * completion (valid — heritage.md: "É válido concluir uma revisão sem
  * responder questões"; no fake evidence is invented). With questions,

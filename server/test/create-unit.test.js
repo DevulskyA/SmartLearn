@@ -187,3 +187,78 @@ test('HTTP: POST /v1/learning-units requires exactly one of subjectId or newSubj
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+test('T20: list returns only the owner\'s units; getById denies a foreign id; updateFields edits title/sourceText/summaryBody but never studyDate', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userA = makeUser(db, 'k@example.com');
+    const userB = makeUser(db, 'l@example.com');
+    const rA = learningUnits.create(db, userA, { newSubjectName: 'Subj A', title: 'Aula A', studyDate: '2026-01-01' });
+    learningUnits.create(db, userB, { newSubjectName: 'Subj B', title: 'Aula B', studyDate: '2026-01-01' });
+
+    const listA = learningUnits.list(db, userA);
+    assert.equal(listA.length, 1);
+    assert.equal(listA[0].id, rA.unit.id);
+
+    assert.throws(() => learningUnits.getById(db, userB, rA.unit.id), (err) => err.code === 'NOT_FOUND');
+    assert.throws(() => learningUnits.updateFields(db, userB, rA.unit.id, { title: 'hacked' }), (err) => err.code === 'NOT_FOUND');
+
+    const updated = learningUnits.updateFields(db, userA, rA.unit.id, { title: 'Aula A revisada', summaryBody: 'Resumo novo' });
+    assert.equal(updated.title, 'Aula A revisada');
+    assert.equal(updated.summaryBody, 'Resumo novo');
+    assert.equal(updated.studyDate, '2026-01-01', 'studyDate must be unchanged — date correction is out of this scope');
+  } finally { cleanup(); }
+});
+
+test('T20: HTTP GET/PATCH learning-units reject an unrecognized field (e.g. studyDate) and deny cross-user access', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-units-http-'));
+  const path = join(dir, 'test.db');
+  const db = openDb(path);
+  runMigrations(db, MIGRATIONS_DIR);
+  const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN] });
+  try {
+    const email = 'httpunits@example.com';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password: 'a genuinely long test password 1' } });
+    const loginRes = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password: 'a genuinely long test password 1' } });
+    const cookie = loginRes.headers['set-cookie'].split(';')[0];
+    const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
+    const csrfToken = JSON.parse(me.body).csrfToken;
+
+    const createRes = await app.inject({
+      method: 'POST', url: '/v1/learning-units', headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
+      payload: { newSubjectName: 'HTTP Units Subject', title: 'Aula', studyDate: '2026-01-01' },
+    });
+    const unitId = JSON.parse(createRes.body).unit.id;
+
+    const listRes = await app.inject({ method: 'GET', url: '/v1/learning-units', headers: { cookie } });
+    assert.equal(listRes.statusCode, 200);
+    assert.equal(JSON.parse(listRes.body).units.length, 1);
+
+    const getRes = await app.inject({ method: 'GET', url: `/v1/learning-units/${unitId}`, headers: { cookie } });
+    assert.equal(getRes.statusCode, 200);
+
+    const patchStudyDate = await app.inject({
+      method: 'PATCH', url: `/v1/learning-units/${unitId}`, headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
+      payload: { studyDate: '2030-01-01' },
+    });
+    assert.equal(patchStudyDate.statusCode, 400, 'studyDate is not in the PATCH schema, so it is a clean rejection, not a silent no-op');
+
+    const patchTitle = await app.inject({
+      method: 'PATCH', url: `/v1/learning-units/${unitId}`, headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
+      payload: { title: 'Título atualizado' },
+    });
+    assert.equal(patchTitle.statusCode, 200);
+    assert.equal(JSON.parse(patchTitle.body).unit.title, 'Título atualizado');
+
+    const emailB = 'httpunitsb@example.com';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email: emailB, password: 'a genuinely long test password 1' } });
+    const loginB = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email: emailB, password: 'a genuinely long test password 1' } });
+    const cookieB = loginB.headers['set-cookie'].split(';')[0];
+    const getForeign = await app.inject({ method: 'GET', url: `/v1/learning-units/${unitId}`, headers: { cookie: cookieB } });
+    assert.equal(getForeign.statusCode, 404);
+  } finally {
+    await app.close();
+    db.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

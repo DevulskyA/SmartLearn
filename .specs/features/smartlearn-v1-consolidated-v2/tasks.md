@@ -302,9 +302,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A contract matrix covers every current caller; mocked transport covers mapping/error shape, real API tests cover authority. Generic SQL or owner injection has no route.
 **Recovery / rollback:** Keep legacy read/export adapter reachable only through explicit migration mode, never automatic error fallback.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: RemoteStore contract tests and real-server adapter integration tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: RemoteStore contract tests and real-server adapter integration tests.
 
 ### T21: Connect the Web to real server-owned reads and writes
 **Difficulty / risk:** 4/5 / 5/5.

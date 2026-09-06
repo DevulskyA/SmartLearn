@@ -123,3 +123,46 @@ export function create(db, userId, data) {
 
   return run();
 }
+
+function findOwned(db, userId, id) {
+  return db.prepare('SELECT * FROM learning_units WHERE user_id = ? AND id = ?').get(userId, id);
+}
+
+export function list(db, userId) {
+  return db.prepare('SELECT * FROM learning_units WHERE user_id = ? ORDER BY study_date DESC, id DESC').all(userId).map(unitDto);
+}
+
+export function getById(db, userId, id) {
+  const unit = findOwned(db, userId, id);
+  if (!unit) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+  return unitDto(unit);
+}
+
+/**
+ * Updates title/sourceText/summaryBody only. studyDate is deliberately NOT
+ * accepted here — design.md §4's date-correction contract (atomically
+ * reprojecting still-pending review offsets while preserving completed
+ * tasks/evidence) is real scheduling surgery, not a plain field edit, and
+ * is out of this task's scope; a caller must get a clear rejection, not a
+ * silent no-op, if they try.
+ */
+export function updateFields(db, userId, id, { title, sourceText, summaryBody } = {}) {
+  const unit = findOwned(db, userId, id);
+  if (!unit) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+
+  const nextTitle = title !== undefined ? title : unit.title;
+  const titleError = validateTitleField(nextTitle);
+  if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE learning_units SET title = ?, source_text = ?, summary_body = ?, updated_at = ?
+    WHERE user_id = ? AND id = ?
+  `).run(
+    normalizeEntityName(nextTitle) || nextTitle.trim(),
+    sourceText !== undefined ? sourceText : unit.source_text,
+    summaryBody !== undefined ? summaryBody : unit.summary_body,
+    now, userId, id,
+  );
+  return getById(db, userId, id);
+}

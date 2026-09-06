@@ -15,6 +15,17 @@ function handleError(err, reply) {
 }
 
 export function registerReviewRoutes(app, db) {
+  app.get('/review-tasks', {
+    schema: { querystring: { type: 'object', properties: { unitId: { type: 'string' } } } },
+  }, async (request, reply) => {
+    let unitId;
+    if (request.query.unitId !== undefined) {
+      unitId = Number(request.query.unitId);
+      if (!Number.isInteger(unitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    }
+    return { reviewTasks: reviews.list(db, request.actor.userId, { unitId }) };
+  });
+
   app.get('/agenda', {
     schema: { querystring: { type: 'object', properties: { date: { type: 'string' } } } },
   }, async (request) => {

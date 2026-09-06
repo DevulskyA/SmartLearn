@@ -234,3 +234,41 @@ test('a user cannot complete or reopen a review task owned by another user', () 
     assert.throws(() => reviews.reopen(db, userB, task.id), (err) => err.code === 'NOT_FOUND');
   } finally { cleanup(); }
 });
+
+test('T20: list() returns every owned review task regardless of due date/completion, optionally scoped to one unit', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'k@example.com');
+    const unitA = makeUnitWithReviews(db, userId, '2020-01-01');
+    const unitB = makeUnitWithReviews(db, userId, '2026-06-01');
+
+    const all = reviews.list(db, userId);
+    assert.equal(all.length, 32, 'both units\' 16 tasks each must be present, not just what agenda() would bucket as due');
+
+    const scopedToA = reviews.list(db, userId, { unitId: unitA.unit.id });
+    assert.equal(scopedToA.length, 16);
+    assert.ok(scopedToA.every(t => t.unitId === unitA.unit.id));
+
+    const taskA = scopedToA[0];
+    reviews.complete(db, userId, taskA.id, { questionsCount: 3, correctCount: 2 });
+    const afterComplete = reviews.list(db, userId, { unitId: unitA.unit.id }).find(t => t.id === taskA.id);
+    assert.ok(afterComplete.completedAt, 'list() must reflect completion state, not just pending items');
+  } finally { cleanup(); }
+});
+
+test('T20: a user cannot list another user\'s review tasks via a foreign unitId', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userA = makeUser(db, 'l@example.com');
+    const userB = makeUser(db, 'm@example.com');
+    const unitA = makeUnitWithReviews(db, userA, '2026-01-01');
+    makeUnitWithReviews(db, userB, '2026-01-01');
+
+    // list() is user-scoped at the SQL WHERE clause level: passing another
+    // user's unitId under userB's own userId returns zero rows, never a
+    // cross-user leak (there is no owned-unit check to bypass because the
+    // JOIN chain itself is user_id-scoped throughout).
+    const result = reviews.list(db, userB, { unitId: unitA.unit.id });
+    assert.deepEqual(result, []);
+  } finally { cleanup(); }
+});

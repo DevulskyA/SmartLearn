@@ -15,6 +15,40 @@ function handleError(err, reply) {
 }
 
 export function registerLearningUnitRoutes(app, db) {
+  app.get('/learning-units', async (request) => {
+    return { units: learningUnits.list(db, request.actor.userId) };
+  });
+
+  app.get('/learning-units/:id', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { unit: learningUnits.getById(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.patch('/learning-units/:id', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          sourceText: { type: 'string' },
+          summaryBody: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { unit: learningUnits.updateFields(db, request.actor.userId, id, request.body) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/learning-units', {
     schema: {
       body: {
