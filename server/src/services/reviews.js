@@ -1,4 +1,5 @@
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
+import { get as getSettings } from './settings.js';
 
 export class ReviewError extends Error {
   constructor(code, message, field) {
@@ -23,8 +24,7 @@ function addDays(dateStr, days) {
 }
 
 function getUserTimezone(db, userId) {
-  const row = db.prepare('SELECT timezone FROM user_settings WHERE user_id = ?').get(userId);
-  return row?.timezone ?? 'America/Sao_Paulo';
+  return getSettings(db, userId).timezone;
 }
 
 function taskDto(row) {

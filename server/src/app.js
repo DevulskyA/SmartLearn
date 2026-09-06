@@ -9,6 +9,8 @@ import { registerSubjectRoutes } from './routes/subjects.js';
 import { registerLearningUnitRoutes } from './routes/learning-units.js';
 import { registerReviewRoutes } from './routes/reviews.js';
 import { registerExerciseRoutes } from './routes/exercises.js';
+import { registerEvidenceRoutes } from './routes/evidence.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -67,6 +69,8 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerLearningUnitRoutes(v1, db);
     registerReviewRoutes(v1, db);
     registerExerciseRoutes(v1, db);
+    registerEvidenceRoutes(v1, db);
+    registerSettingsRoutes(v1, db);
   }, { prefix: '/v1' });
 
   return app;

@@ -273,9 +273,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** q/c must be integers in range; REVIEW bypass fails; scores are derived; unknown performance is not zero; settings changes remain tenant scoped and leave factual evidence untouched.
 **Recovery / rollback:** Additive fields/defaults with backward-compatible DTOs; preserve aggregate records.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Evidence/filter/settings API tests and REVIEW-bypass mutation.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Evidence/filter/settings API tests and REVIEW-bypass mutation.
 
 ### T19: Deliver owned logical export and server backup contracts
 **Difficulty / risk:** 4/5 / 5/5.
