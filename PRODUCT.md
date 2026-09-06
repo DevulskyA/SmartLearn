@@ -1,37 +1,66 @@
 # SmartLearn — Product Context
 
-**Register:** product (the design serves the tool; the tool is the point).
-
 ## What it is
-A local-first desktop/mobile app (Tauri 2 + vanilla HTML/CSS/JS + SQLite) for
-spaced-repetition study. The user logs what they studied; the app generates a
-fixed 16-step review schedule (1, 7, 15, 30… up to 390 days) per study record
-and surfaces what is due each day. Per review, the user records whether the
-review and the practice questions were done, the questions/correct counts (which
-yield a percentage), and an optional note.
+SmartLearn is a local-first learning system for Medicine that converts source material into a structured learning loop: study, independent retrieval, error evidence, spaced retesting, transfer and integrated performance.
 
-## Who uses it
-A single Brazilian civil-service exam candidate ("concurseiro") preparing over
-many months. Disciplines are real and exam-specific (Língua Portuguesa, AFO,
-Arquivologia, Legislação, Conhecimentos sobre o DF…). Sessions are daily, often
-early morning or late at night, frequently on a phone. The mood is disciplined
-but fatigued: this is a long grind, and the daily screen should feel calm,
-unambiguous about what is urgent, and quietly motivating when the day is cleared.
+The current Tauri 2 + vanilla HTML/CSS/JS + SQLite application remains the product base. The existing review workflow is preserved during migration, but the product direction is no longer a fixed review calendar. The target is a transparent adaptive learning engine whose decisions are grounded in observable evidence about what the learner can do independently over time.
 
-## Tone
-Focused, grown-up, encouraging without being cute. Portuguese (pt-BR)
-throughout. No gamified noise, no streak-shaming. Urgency is communicated
-honestly (an overdue review is overdue) but never with alarm-fatigue.
+## Primary user
+A medical student studying large volumes of source-grounded content over months or years, often on a phone and often under cognitive fatigue. The interface must remain simple even when the internal learner model becomes sophisticated.
 
-## Anti-references
-- Generic blue-and-white SaaS dashboards (the current look leans this way).
-- Notion-cream minimalist productivity clones.
-- Gamified flashcard apps (confetti, mascots, XP bars).
+## Product objective
+Maximize durable, independent and transferable learning per unit of learner effort.
+
+The system should answer:
+
+> What learning experience should this learner perform next to improve a specific competency, given the evidence currently available and the uncertainty around it?
+
+## Core learning loop
+
+`source -> competency -> attempt -> evidence -> error hypothesis -> intervention -> delayed retest -> transfer -> mastery`
+
+The system must distinguish:
+- exposure from recognition;
+- recognition from retrieval;
+- assisted success from independent success;
+- immediate performance from delayed retention;
+- retention from transfer;
+- aggregate score from evidence of specific competencies.
+
+## Current migration strategy
+The existing application is a working legacy baseline and must remain usable while the learning core is introduced incrementally.
+
+1. Preserve current local-first data, UI simplicity and build targets.
+2. Introduce a pure, testable learning-evidence core.
+3. Add competencies and learning-event persistence.
+4. Instrument current review completion as evidence rather than replacing the interface immediately.
+5. Add error hypotheses and mastery state.
+6. Add transfer tasks and adaptive intervention.
+7. Replace fixed scheduling only after the new scheduler demonstrates superior learning outcomes.
 
 ## Strategic principles
-1. **The day's truth, at a glance.** Overdue vs. due-today vs. done must be
-   distinguishable in under a second, on a phone.
-2. **Logging is one tap, detail is opt-in.** Marking a review done is the
-   primary action; recording scores/notes is progressive disclosure.
-3. **Local and private.** No accounts, no network. The data is the user's.
-4. **Mobile-first.** The primary device is a phone held in one hand.
+1. **Independent performance is the target.** Assistance can teach, but assisted success is not mastery.
+2. **Evidence before inference.** The system records what happened before inferring why it happened.
+3. **Errors are diagnostic signals.** Error causes remain hypotheses until supported by converging evidence.
+4. **Transfer is explicit.** Remembering trained material and applying it in a novel context are measured separately.
+5. **Source fidelity matters.** Medical learning objects must remain traceable to source material as AI-assisted generation is introduced.
+6. **Simple surface, sophisticated engine.** The learner should spend energy studying, not managing the adaptive system.
+7. **Local and private by default.** No account or remote backend is required for the current product architecture.
+8. **Measured improvement only.** A new adaptive mechanism is promoted only when independent outcomes justify its complexity.
+
+## Pedagogical authority
+Implementation decisions that affect learning behavior must consult:
+- `docs/research/SMARTLEARN_PEDAGOGICAL_CONTRACT_V1.md`
+- `.specs/features/evidence-learning-core-v1/spec.md` for the current migration milestone
+
+The pedagogical contract supersedes legacy assumptions that intelligent learning mechanisms are permanently out of scope.
+
+## Tone and UX
+Focused, adult, calm and low-friction. Portuguese (pt-BR) in the product UI. Avoid gamified noise, unnecessary management controls and interfaces that expose internal model complexity to the learner.
+
+## Technical baseline
+- Tauri 2
+- HTML/CSS/JavaScript
+- SQLite local through `src/db.js`
+- Desktop + Android from one codebase; iOS kept build-compatible
+- No remote database or mandatory account in the current architecture
