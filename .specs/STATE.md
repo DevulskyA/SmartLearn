@@ -27,7 +27,24 @@ STATUS: Phase 00 (T01-T06) DONE. HEAD=be7cd75.
 
 Gates at Phase 00 close: root 231/231, server 21/21 (x3 repeat, no native crash), rust 13/13, build PASS, e2e 12/12, test:inventory PASS.
 
-NEXT_STEP: Phase 01 (T07-T12) — identity/security (HTTP envelope, accounts, scrypt passwords, sessions+CSRF+revocation, request abuse limits, cross-user isolation). Marked HIGH-RISK by the plan itself (design.md §3, tasks.md T07-T12 risk 4-5/5). Recommend adversarial/discrimination testing per task and NOT rushing through in one sitting.
+STATUS UPDATE: Phase 01 (T07-T12) DONE + independently verified. Phase 02 in progress (T13-T15 DONE). HEAD=e71756f.
+
+- T07 DONE: /v1 strict envelope (default-deny actor, AJV strict, JSON-only errors).
+- T08 DONE: users/sessions schema, synchronous=FULL.
+- T09 DONE: bounded scrypt auth (N=131072, decoy-hash for unknown accounts).
+- T10 DONE: sessions+CSRF+cookies, /me /logout /password.
+- T11 DONE: minimal account UI (self-contained, not yet gating learning screens — real cutover is T20-T24), operator reset-token CLI.
+- T12 DONE: trustProxy config, LRU-fixed rate limiter.
+- **Independent Fresh Verifier round 1 (separate subagent) found a REAL exploitable defect**: login's malformed-email path called real scrypt (runDecoyHash) BEFORE any rate-limit check; /auth/register had zero rate limiting; scrypt queue had no size cap. VERIFIER_RESULT=FAIL.
+- Fixed: rate-limit checked first in login/register; added register limiter; added MAX_QUEUE_LENGTH=100 backstop; fixed a real test-isolation bug (rate limiters were module singletons, now created per registerAuthRoutes() call).
+- **Independent Fresh Verifier round 2 (different subagent) confirmed the fix**: traced code, reran all tests, AND built+ran a real exploit script against the actual spawned server process (571ms->12ms transition at exactly the account limit). VERIFIER_RESULT=PASS. Found one more (lower-severity, requires-auth) gap: /auth/password had no rate limit either — fixed immediately, same pattern.
+- T13 DONE: learning-domain schema (subjects/learning_units/review_tasks/exercises/exercise_versions/learning_evidence/user_settings) with COMPOSITE FKs (user_id, parent_id) making cross-user linkage a database-level impossibility, verified by direct SQL injection attempts that throw real FK errors.
+- T14 DONE: subjects API (list/create/rename/archive/reactivate/reorder/delete-empty), shared/text-validation.js as new single source for name rules.
+- T15 DONE: atomic unit+16-reviews creation in one transaction, shared/review-schedule.js, operation-key idempotency. Found+fixed a real calendar bug (JS Date silently overflows Feb 30 to Mar 2 instead of rejecting it).
+
+Gates at this point: server 132/132, root 240/240, rust 13/13, build PASS, e2e 17/17, test:inventory PASS (31 files).
+
+NEXT_STEP: T16 (agenda + review completion modes) — Phase 02 continues. No blockers.
 
 PRESERVED_HISTORY: everything below this block (2026-09-05 and earlier) is historical PR-0/PR-1 evidence, superseded as the active plan by smartlearn-v1-consolidated-v2 per design.md §1. Do not treat it as current authority; it remains valid evidence of what the merged foundation already proved (223 client / 17 server / 13 Rust tests, PR-0 J1-J6, PR-1 gates).
 
