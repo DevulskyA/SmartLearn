@@ -1,7 +1,9 @@
 // NAMING_PATTERN: discipline/subject names only. Accepts letters (accented), numbers, spaces,
-// hyphens, slashes, parentheses and basic punctuation. Rejects em dashes, curly quotes and
-// other typographic chars that signal pasted sentences rather than typed category names.
-export const NAMING_PATTERN = /^[a-zA-ZÀ-ÖØ-öø-ÿ0-9 \-\/\(\)\.\,\:\;\'\°\+\=\[\]]+$/;
+// hyphens, slashes, parentheses, basic punctuation, and valid medical/scientific typography
+// (Greek letters, superscripts/subscripts, en/em dash, common math symbols — AC-05). Still
+// rejects curly quotes and sentence-signal symbols (@ # $ % ^ ` ~ | \) that indicate a pasted
+// sentence rather than a typed category name.
+export const NAMING_PATTERN = /^[a-zA-ZÀ-ÖØ-öø-ÿ0-9 \-\/\(\)\.\,\:\;\'\°\+\=\[\]–—Ͱ-Ͽ⁰-₟²³¹±µ×÷<>]+$/;
 
 // C0 controls, DEL, C1 controls and Unicode line/paragraph separators.
 // Does NOT restrict medical typography: em dash, superscripts, Greek letters, etc.

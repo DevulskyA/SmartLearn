@@ -147,24 +147,39 @@ test('medical unicode ACCEPTED in study title/content field', async ({ page }) =
   expect(db.learningUnits.some(u => u.title === specialContent)).toBe(true);
 });
 
-test('KNOWN GAP: medical unicode REJECTED in discipline name (NAMING_PATTERN too strict vs spec)', async ({ page }) => {
+test('AC-05 (T04 fix): medical unicode ACCEPTED in discipline name, exact round trip', async ({ page }) => {
   await page.locator('#plan-show-subject-form').click();
   const specialName = 'Farmacologia — β-bloqueadores e Na⁺/K⁺-ATPase';
   await page.locator('#plan-new-subject-input').fill(specialName);
   await page.locator('#plan-new-subject-form button[type="submit"]').click();
-  await page.waitForTimeout(500);
-
-  const screenText = await page.locator('.plan-new-unit-form').first().innerText();
-  const hasMessage = /caracteres não permitidos/i.test(screenText);
-  expect(hasMessage, 'rejection must give visible feedback, not fail silently').toBe(true);
+  await page.waitForFunction(
+    (name) => {
+      const raw = localStorage.getItem('smartlearn:browser-db');
+      if (!raw) return false;
+      return JSON.parse(raw).subjects.some(s => s.name === name);
+    },
+    specialName,
+    { timeout: 5000 }
+  );
 
   const options = await page.locator('#plan-subject-select option').allInnerTexts();
-  const created = options.includes(specialName);
-  // KNOWN GAP vs AC-05 / heritage.md: this SHOULD be true, currently false.
-  // src/naming-validation.js NAMING_PATTERN excludes em-dash/Greek/superscript
-  // for discipline names specifically; validateTitleField (content, tested
-  // above) already allows them. Scoped fix belongs to T04.
-  expect(created).toBe(false);
+  expect(options, 'exact semantic text must survive round trip (AC-05)').toContain(specialName);
+
+  const db = await snapshot(page);
+  expect(db.subjects.filter(s => s.name === specialName)).toHaveLength(1);
+});
+
+test('discipline name still rejects sentence-signal symbols (@) with visible feedback', async ({ page }) => {
+  await page.locator('#plan-show-subject-form').click();
+  await page.locator('#plan-new-subject-input').fill('Medicina@Interna');
+  await page.locator('#plan-new-subject-form button[type="submit"]').click();
+  await page.waitForTimeout(400);
+
+  const screenText = await page.locator('.plan-new-unit-form').first().innerText();
+  expect(/caracteres não permitidos/i.test(screenText)).toBe(true);
+
+  const db = await snapshot(page);
+  expect(db.subjects.some(s => s.name === 'Medicina@Interna')).toBe(false);
 });
 
 test('control char U+2028 in discipline name: rejected with visible message, not persisted', async ({ page }) => {

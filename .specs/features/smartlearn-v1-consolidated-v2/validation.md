@@ -35,6 +35,7 @@ Executor previously reported client 223/223, server 17/17, Rust 13/13, build, pr
 | Native Rust suite | NOT_RUN | |
 | Production Web build | NOT_RUN | |
 | Target-proven E2E | NOT_RUN | |
+| Unified Unicode validation (T04) | PASS | Extended `NAMING_PATTERN` in src/naming-validation.js to accept en/em dash (U+2013/U+2014), Greek letters (U+0370-U+03FF), superscripts/subscripts (U+2070-U+209F + legacy ¹²³), and µ ± × ÷ < >, while still rejecting sentence-signal ASCII symbols (@ # $ % ^ \` ~ \| \\) and curly quotes — surgical extension, not full allowlist removal, per T04 "smallest sufficient change". Verified via node -e against exact AC-05 corpus (Na⁺/K⁺-ATPase, β-bloqueador, O₂, µg, pH < 7,35, em-dash) before editing tests. Updated test/naming-validation.test.js (Contract C/D/H) to assert acceptance instead of rejection for em-dash/Greek/superscripts, kept rejection assertions for @ and control chars. Updated e2e KNOWN GAP test to AC-05 PASS test with exact round-trip assertion. 68/68 naming-validation unit tests PASS, 231/231 full root suite PASS (was 223, +8 new positive-case tests), 12/12 E2E PASS (was 11, +1 new sentence-signal-still-rejected test). |
 | Identity/CSRF/cross-user security | NOT_RUN | |
 | Single-save and no-partial-state | NOT_RUN | |
 | Review-only and question-evidence semantics | NOT_RUN | |
