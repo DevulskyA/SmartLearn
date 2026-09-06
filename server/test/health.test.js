@@ -1,4 +1,4 @@
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -57,8 +57,6 @@ test('/health/ready returns 503 when WAL not active', async () => {
     cleanup();
   }
 });
-
-after(() => { if (typeof globalThis.gc === 'function') globalThis.gc(); });
 
 test('/health/ready returns 503 when foreign_keys OFF', async () => {
   const { path, cleanup } = tmpDb();
