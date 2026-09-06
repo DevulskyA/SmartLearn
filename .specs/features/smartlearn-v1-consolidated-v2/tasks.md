@@ -260,9 +260,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Only owner can read answers/manage exercises; an archived/edited item does not corrupt an existing attempt reference; invalid provenance is rejected; order is deterministic.
 **Recovery / rollback:** Keep old item versions and use archive instead of deleting referenced items.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Exercise/version/provenance tests with direct relation checks.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Exercise/version/provenance tests with direct relation checks.
 
 ### T18: Implement aggregate evidence and actual settings contracts
 **Difficulty / risk:** 3/5 / 4/5.
