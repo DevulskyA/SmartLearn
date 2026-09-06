@@ -55,6 +55,14 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
   // in tests) incorrectly share a limiter.
   const loginRateLimiter = createRateLimiter();
   const registerRateLimiter = createRateLimiter();
+  // Round-2 verifier finding: /auth/password called verifyPassword()
+  // unconditionally on every authenticated request with no per-route limit
+  // — a low-privilege authenticated account could flood it with wrong
+  // currentPassword values, forcing real scrypt work against the shared
+  // 2-slot queue used by every other user's login/register. Keyed by
+  // userId (authenticated, no IP spoofing concern here).
+  const passwordChangeRateLimiter = createRateLimiter();
+  const DEFAULT_PASSWORD_CHANGE_MAX_ATTEMPTS = 10;
   app.post('/auth/register', { config: { public: true }, schema: registerBodySchema }, async (request, reply) => {
     const { email, password } = request.body;
     const ipKey = `ip:${request.ip}`;
@@ -240,6 +248,15 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
     },
   }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body;
+    const userKey = `user:${request.actor.userId}`;
+
+    // Rate-limit gate BEFORE verifyPassword's real scrypt cost, same
+    // principle as login/register.
+    if (passwordChangeRateLimiter.isBlocked(userKey, DEFAULT_PASSWORD_CHANGE_MAX_ATTEMPTS)) {
+      reply.status(401);
+      return { error: { code: 'INVALID_CREDENTIALS' } };
+    }
+
     const record = users.findByIdWithSecrets(db, request.actor.userId);
     if (!record) {
       reply.status(401);
@@ -250,9 +267,11 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
       hash: record.password_hash, salt: record.password_salt, params: record.password_params,
     });
     if (!currentValid) {
+      passwordChangeRateLimiter.recordFailure(userKey);
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
+    passwordChangeRateLimiter.reset(userKey);
 
     const shapeError = validatePasswordShape(newPassword);
     if (shapeError) {

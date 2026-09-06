@@ -172,6 +172,35 @@ test('SECURITY FIX: the shared scrypt queue itself has a hard size cap independe
   assert.ok(fulfilled.length > 0, 'jobs within the cap must still succeed normally');
 });
 
+test('SECURITY FIX round 2 (found by second independent verifier): /auth/password is rate-limited per user, wrong-password floods do not reach unbounded scrypt', async () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], trustProxy: false });
+    try {
+      const email = 'passwordflood@example.com';
+      const password = 'a genuinely long real password 1';
+      await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+      const loginRes = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+      const cookie = loginRes.headers['set-cookie'].split(';')[0];
+      const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
+      const csrfToken = JSON.parse(me.body).csrfToken;
+
+      const timings = [];
+      for (let i = 0; i < 13; i++) {
+        const start = Date.now();
+        const res = await app.inject({
+          method: 'POST', url: '/v1/auth/password', headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
+          payload: { currentPassword: 'wrong wrong wrong wrong', newPassword: 'irrelevant long password here' },
+        });
+        timings.push(Date.now() - start);
+        assert.equal(res.statusCode, 401);
+      }
+      const lastTiming = timings[timings.length - 1];
+      assert.ok(lastTiming < 100, `expected the rate-limited request to be fast (no scrypt), got ${lastTiming}ms`);
+    } finally { await app.close(); }
+  } finally { cleanup(); }
+});
+
 test('T12 (cross-reference to T10): one user genuinely cannot retrieve another user\'s session data via any header trick', async () => {
   const { db, cleanup } = tmpDb();
   try {
