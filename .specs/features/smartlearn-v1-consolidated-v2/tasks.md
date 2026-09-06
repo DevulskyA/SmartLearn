@@ -286,9 +286,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Logical round trip matches every supported value/relation; physical copy passes integrity check and content comparison; user A export contains no user B or auth secrets.
 **Recovery / rollback:** Exports are read-only; failed backup leaves original untouched and removes only owned incomplete temporary output.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Backup/export integration tests and omission/tenant-leak discriminators.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Backup/export integration tests and omission/tenant-leak discriminators.
 
 ## Phase 03 - Server-authoritative Web
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.
