@@ -55,6 +55,7 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Requirement:** V1-02, V1-16. **Acceptance:** AC-01, AC-27.
 **Where:** PRODUCT.md; README.md; .specs/project/{PROJECT,INVARIANTS}.md; .specs/STATE.md; current agent entrypoints; .specs/governance/.
 **What / implementation:** Write current medical/server-central identity and an AS-IS versus target distinction. Preserve invariant IDs and archive superseded local-first prohibitions with pointers. Link this plan and a short reconstructed pedagogical contract; do not copy old governance wholesale or claim empirical validation. Mark old SESSION_MEMENTO historical. STATE points to active task, not the full history.
+**Heritage amendment:** Create heritage.md (Heritage Contract) and complete an initial Heritage Coverage Matrix using CURRENT repo evidence. Reconcile each historical function (subjects, learning_units, scheduler, agenda, evidence, analytics, tracking, backup) as PROVEN, GAP or SUPERSEDED. Do not implement product features merely to fill the table.
 **Tests and discriminating evidence:** A fresh reader can identify Node server stack, actual remaining local-client transition, fixed schedule, read-only offline target, next task and authorization boundaries without conflicting active instructions.
 **Recovery / rollback:** One documentation commit; preserve historical documents in Git and avoid unrelated skill edits.
 **Done when:**
@@ -638,6 +639,7 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Requirement:** V1-22. **Acceptance:** AC-17, AC-27.
 **Where:** server/src/domain/priorities.js; existing analytics/tracking adapters; src/analytics-ui.js; relevant tests.
 **What / implementation:** Reuse correct analytics logic after dependency audit. Order overdue/due work predictably and expose optional weak-practice suggestions from observed recent evidence with sample sizes/reason codes. Distinguish absent evidence, self-report and independent attempts; do not double-count aggregate+item events or alter the fixed schedule.
+**Heritage amendment:** Verify H-05, H-06, H-07 and H-08 from heritage.md: volume+outcome (never percentage alone when counts exist), history/schedule separation (scheduler changes never rewrite evidence), honest denominators (weighted accuracy over simple mean of session percentages), and unit-level evolution (weak/improving/declining/insufficient-evidence units identifiable).
 **Tests and discriminating evidence:** Known fixture events produce exact denominators/date windows and explainable ordering; no record yields invented zero performance/mastery; cached offline priorities reflect snapshot age.
 **Recovery / rollback:** Priorities/analytics are recalculable views; disable challenger scoring while keeping raw facts and baseline statistics.
 **Done when:**
@@ -690,6 +692,7 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Requirement:** V1-11, V1-17, V1-18, V1-22. **Acceptance:** AC-03, AC-10, AC-13, AC-19, AC-20, AC-21, AC-27.
 **Where:** e2e/student-journeys.spec.js; current validation.md.
 **What / implementation:** Run source upload -> proposal/draft -> acceptance -> practice -> evidence -> review -> progress, with second browser and restart. Include manual source/aggregate fallback, failed network request and a returning student with imported data. Use source-reviewed fixtures, not invented medical correctness.
+**Heritage amendment:** At least one journey must prove the modern end-to-end descendant of the original core loop (create learning unit → automatic schedule → Hoje decision → practice/review → evidence → analytics/tracking) without the student performing spreadsheet-like manual administration.
 **Tests and discriminating evidence:** The student can complete the learning loop without hidden administrative steps; every saved result has the intended owner/source/history and no redundant counting. Live AI and mocks remain separately labelled.
 **Recovery / rollback:** Open bounded defects against the failing journey; preserve passing neighboring behavior.
 **Done when:**
@@ -732,6 +735,7 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Requirement:** V1-24. **Acceptance:** AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27.
 **Where:** All current tests and .specs/features/smartlearn-v1-consolidated-v2/validation.md.
 **What / implementation:** Freeze a candidate and run all required code/build/E2E/native/migration gates against exact source and isolated data. Re-derive AC coverage rather than summing test counts. Execute material mutation families from acceptance.md. External unavailability is explicit, never replaced with a fake pass.
+**Heritage amendment:** Add Heritage Coverage Matrix (heritage.md) reconciliation to this gate. Every row must be PROVEN or explicitly SUPERSEDED. A remaining material GAP blocks V1 validation unless the current approved Product Constitution explicitly places it outside V1.
 **Tests and discriminating evidence:** Each AC has test/file/command/environment/SHA/result and required platform evidence. Surviving mutants become scoped defects. Existing 223/17/13 baselines are protected by behavior/test inventory, not a forced final test count.
 **Recovery / rollback:** Fix only identified defects, then rerun affected gates and closure; preserve the previous candidate and evidence.
 **Done when:**
@@ -758,6 +762,7 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Requirement:** V1-24. **Acceptance:** AC-28.
 **Where:** .specs/STATE.md; final validation; local checkpoints; owned process/job registry.
 **What / implementation:** Record implementation, V1 validation and release status separately. Persist validated local commits and all required evidence; list any real-data/provider/runtime/admin gates. Prepare publication instructions without executing unauthorized remote changes. Cancel only this mission's loop and stop owned temporary processes. Then apply the standing user request for shutdown.exe /h as the last action if this execution is terminal and Windows permissions permit.
+**Heritage amendment:** Identify in the final checkpoint any historical spreadsheet capability deliberately superseded or deferred (see heritage.md section C), so future agents do not accidentally "restore" old spreadsheet behavior.
 **Tests and discriminating evidence:** New session can resume from exact SHA/task/evidence without chat; no repeated empty wait reports or phase-boundary hibernation. V1 complete is declared only when required gates passed; otherwise a precise terminal blocked checkpoint is delivered.
 **Recovery / rollback:** Preserve all incomplete intentional work; no blanket cleanup, branch deletion or data reset.
 **Done when:**
