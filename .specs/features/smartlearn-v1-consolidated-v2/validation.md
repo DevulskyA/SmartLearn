@@ -27,7 +27,7 @@ Executor previously reported client 223/223, server 17/17, Rust 13/13, build, pr
 
 | Gate | Status | Candidate/environment/command/evidence |
 | --- | --- | --- |
-| Worktree/authority reconciliation | NOT_RUN | |
+| Worktree/authority reconciliation (T01) | PASS | Continuation `claude/smartlearn-v1-complete` before=18e903b2f297a251764b8e37a567a0fef1634664 (215c89d + E2E harness, pre-integration). `git merge origin/main` (f645a0730f6e37560de813b1610f359a57419f27, containing 23358b6 PR#3 + 215c89d PR-1 via merge-commits) -> after=e5292fa03ef29efa4bf0c90d640ba9699192f133, clean ort merge, only diff: deletion of `data/smartlearn-backup-importavel.json` (4015 lines), confirmed via `git log --oneline -- <path>` to be the same legacy non-medical dataset main had already deliberately removed (commit da4684b "chore(data): remove legacy non-medical backup dataset") — not new data loss. Then materialized consolidated-v2 pack (62ea681) + heritage.md + T02/T45/T49/T52/T54 amendments (bfbb82b). `git merge-base --is-ancestor 23358b6.. HEAD` and `...215c89d.. HEAD` both true. `npm test` post-merge: 223/223 PASS. Sibling worktree `fix-complete-review-sqlite-593426` (PR#3 branch) observed DIRTY with another session's uncommitted work (.claude/loop.md, docs/research/, .specs tasks.md status edit) — recorded, not touched, not merged. |
 | Source and intended test inventory | NOT_RUN | |
 | Client/shared suite | NOT_RUN | |
 | Server suite and real SQLite | NOT_RUN | |
