@@ -351,15 +351,15 @@ During T02 create and maintain this table in heritage.md:
 
 | Heritage function | Modern owner | Status | Evidence | Decision |
 | --- | --- | --- | --- | --- |
-| Discipline catalog | subjects / Disciplinas | PROVEN/GAP/SUPERSEDED | test/path | preserve/improve |
-| Master study entry | learning_units / Plano | ... | ... | ... |
-| Automatic schedule | review_tasks/scheduler | ... | ... | ... |
-| Daily decision surface | Hoje/agenda | ... | ... | ... |
-| Execution results | learning_evidence | ... | ... | ... |
-| Discipline performance | analytics | ... | ... | ... |
-| Unit evolution | analytics | ... | ... | ... |
-| Longitudinal tracking | Acompanhamento | ... | ... | ... |
-| Backup/recoverability | export/backup/migration | ... | ... | ... |
+| Discipline catalog | subjects / Disciplinas | PROVEN | `src/db.js` subjects table (UNIQUE COLLATE NOCASE, sortOrder, isActive); `test/subjects.test.js`; dedup verified interactively (case-insensitive rejection) | preserve as-is; server-side owned table per design.md §3-4 (T13) |
+| Master study entry | learning_units / Plano | PROVEN | `src/app.js` `renderPlan()` + `plan-new-unit-form` (subject/source/date/title/summary); `test/learning-units.test.js`; interactively verified atomic subject+unit+16-review creation | preserve UX shape; server-side atomicity per design.md §4 (T13-T14) |
+| Automatic schedule | review_tasks/scheduler | PROVEN | `src/scheduler.js` re-exports `REVIEW_DAY_OFFSETS` from `src/review-schedule.js` (single shared pure source, `[1,7,15,30,60,90,120,150,180,210,240,270,300,330,360,390]`, 16 offsets); `test/review-schedule.test.js`, `test/scheduler.test.js` | preserve exactly; historical 13-offset sequence explicitly NOT restored (heritage.md section C) |
+| Daily decision surface | Hoje/agenda | PROVEN | `src/app.js` `renderToday()`; overdue/doneToday/tomorrow sections observed in live DOM; `data-review-list`/`data-count-for` attributes | preserve; becomes `/v1/agenda` server endpoint per design.md §4 (T20+) |
+| Execution results | learning_evidence | PARTIAL — aggregate PROVEN, item-level GAP | `test/learning-evidence.test.js`; aggregate questionsCount+correctCount persisted and derived (confirmed via `src/stats.js`, `src/analytics.js`). Item-level `exercise_attempts`/`learning_events`/`competencies` (design.md §7) not yet implemented — planned T29-T33 | preserve aggregate path; build item-level reconstruction per design.md §7 (T29-T33), never fabricate individual attempts from aggregates |
+| Discipline performance | analytics | PROVEN | `src/stats.js:40-57` sums `questionsCount`/`correctCount` across evidence before dividing (weighted), not per-session average | preserve; matches H-07 exactly, no change needed |
+| Unit evolution | analytics | PROVEN | `src/analytics.js:112-144` `byUnit()`: `weightedAccuracy = totalC/totalQ` as primary metric; `scoresSequence` (per-session %) feeds `trend` only, never the primary ranking | preserve; matches H-07+H-08 exactly |
+| Longitudinal tracking | Acompanhamento | PROVEN | `src/tracking-state.js`: exact precedence ATRASADO > SEM_EVIDENCIA > EM_REVISAO > EM_ESTUDO > EM_DIA (comment explicitly says "No arbitrary day-count rule"); `renderTracking()` in app.js; `test/tracking-state.test.js` | preserve exactly; matches design.md §10 canonical definition verbatim |
+| Backup/recoverability | export/backup/migration | PARTIAL — client PROVEN, server GAP | `src/app.js` `exportBackup()`/`importBackup()` (client-side JSON export/import) exist and are used interactively. Server-side `/v1/backup/export`, `/v1/imports/preview`+`/commit` with checksum/idempotency (design.md §6) not yet implemented — planned T25-T28 | preserve client UX where useful; build NO_DATA_LOSS server migration pipeline (T25-T28) before any real cutover |
 
 STATUS RULES:
 

@@ -7,7 +7,27 @@
 
 ---
 
-## HANDOFF — 2026-09-05 PR-0 BASELINE CLOSED
+## HANDOFF — 2026-09-06 SMARTLEARN_V1_CONSOLIDATED_V2 ACTIVE
+
+FEATURE:       smartlearn-v1-consolidated-v2 (T01-T54, AC-01..AC-28)
+AUTHORITY:     .specs/features/smartlearn-v1-consolidated-v2/{spec,design,heritage,tasks,acceptance}.md
+BRANCH:        claude/smartlearn-v1-complete
+HEAD:          bfbb82b (pre-T01-execution checkpoint) -> advancing per task commits below
+PR3:           #3 MERGED into main (931dbd9, 2026-09-06)
+PR1:           #5 server-central-foundation-v1 MERGED into main (f645a07, 2026-09-06)
+MAIN:          f645a0730f6e37560de813b1610f359a57419f27 (contains both merges)
+
+STATUS: T01 DONE (reconciliation), T02 IN_PROGRESS (heritage matrix filled; PRODUCT.md/INVARIANTS.md AS-IS/target pass pending).
+
+PRESERVED_HISTORY: everything below this block (2026-09-05 and earlier) is historical PR-0/PR-1 evidence, superseded as the active plan by smartlearn-v1-consolidated-v2 per design.md §1. Do not treat it as current authority; it remains valid evidence of what the merged foundation already proved (223 client / 17 server / 13 Rust tests, PR-0 J1-J6, PR-1 gates).
+
+SIBLING_WORKTREE_DIRTY (observed, not touched): `fix-complete-review-sqlite-593426` (PR#3 branch) has another session's uncommitted changes (.claude/loop.md, docs/research/, .specs tasks.md status edit) as of 2026-09-06. Not part of this mission; do not merge/reconcile without separate authorization.
+
+NEXT_STEP: finish T02 (PRODUCT.md AS-IS/target doc pass), then T03 (prove one-save E2E path, fix wrong locators from prior session).
+
+---
+
+## HANDOFF — 2026-09-05 PR-0 BASELINE CLOSED (historical, superseded above)
 
 FEATURE:       input-integrity-hardening-v2 (PR #3)
 PHASE:         PR-0 Baseline Closure — CONCLUÍDO
