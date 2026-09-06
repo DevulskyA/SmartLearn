@@ -9,8 +9,8 @@ import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [] } = {}) {
-  const app = Fastify({ logger: false });
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false } = {}) {
+  const app = Fastify({ logger: false, trustProxy });
   await app.register(fastifyCookie);
   // No wildcard credentialed CORS (design.md §3): exact configured origins
   // only, credentials enabled so the session cookie round-trips, and only

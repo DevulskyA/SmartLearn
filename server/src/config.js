@@ -12,4 +12,11 @@ export const config = {
   // Comma-separated; dev default matches the Vite dev server origin.
   allowedOrigins: (process.env.SMARTLEARN_ALLOWED_ORIGINS ?? 'http://localhost:5173')
     .split(',').map(s => s.trim()).filter(Boolean),
+  // T12: trust X-Forwarded-For only when explicitly enabled for a known
+  // reverse-proxy topology. Disabled by default — Fastify then uses the
+  // real TCP peer address for request.ip, so a spoofed X-Forwarded-For from
+  // a direct client cannot evade IP-based rate limiting. Only enable this
+  // (and only with a correctly configured hop count / proxy IP list) once
+  // this server is actually deployed behind a specific trusted proxy.
+  trustProxy: process.env.SMARTLEARN_TRUST_PROXY === 'true',
 };
