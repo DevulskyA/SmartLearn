@@ -40,6 +40,28 @@ Each mutation is applied in scratch, `npm --prefix server test` is run, result v
 - `npm run build` exits 0
 - Fresh Verifier passes independently
 
+## Final Closure Evidence — 2026-09-06
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| NATIVE_CRASH | NONE | better-sqlite3 upgraded 11.10.0→13.0.3; --expose-gc/--test-isolation=none removed; no crash |
+| SERVER_TESTS | 17/17 PASS | `node --test` clean, no flags |
+| CLIENT_TESTS | 223/223 PASS | Root `npm test` scoped to test/*.test.js |
+| RUST | 13/13 PASS | `cargo test` in src-tauri/ |
+| BUILD | PASS | `npm run build` exit 0 |
+| REAL_PROCESS_SMOKE | PASS | Server started as real child process; /health/live 200; /health/ready 200; restart same DB /health/ready 200 |
+| MUTATIONS | 5/5 KILLED | M1–M5 covered by health+migrations tests; no logic changed |
+| VERIFIER_INDEPENDENT | YES | Separate subagent, fresh context |
+| VERIFIER_RESULT | PASS | 11/11 checks PASS on final HEAD |
+| P0/P1 | 0 | No blocking issues |
+
+Fixes applied during closure hardening:
+- `DEFAULT_MIGRATIONS_DIR` in migrations.js and app.js: `../../migrations` → `../migrations` (worktree root bug, only visible in real-process smoke)
+- Removed `beforeEach(gc)` and `after(gc)` hooks from health.test.js
+- Updated better-sqlite3 from ^11.9.1 to ^13.0.3
+
+**READY_FOR_PR1_REVIEW = YES**
+
 ## Deferred (out of scope for this PR)
 
 - Authentication
