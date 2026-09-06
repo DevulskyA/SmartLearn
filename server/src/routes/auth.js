@@ -21,7 +21,7 @@ const registerBodySchema = {
   },
 };
 
-const loginRateLimiter = createRateLimiter();
+const DEFAULT_REGISTER_IP_MAX_ATTEMPTS = 20;
 
 function issueSession(db, userId, isProduction) {
   const rawToken = generateSessionToken();
@@ -47,8 +47,28 @@ function clearSessionCookie(reply, isProduction) {
  * controls cookie Secure/name per design.md §3.
  */
 export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
+  // Scoped to this call (one per real server process in production, one
+  // per test's buildApp() call in tests) rather than module-level — a
+  // module singleton here would leak rate-limit state across independently
+  // constructed apps sharing the same test-fixture IP, and would make two
+  // buildApp() calls in the same process (never happens in prod, but does
+  // in tests) incorrectly share a limiter.
+  const loginRateLimiter = createRateLimiter();
+  const registerRateLimiter = createRateLimiter();
   app.post('/auth/register', { config: { public: true }, schema: registerBodySchema }, async (request, reply) => {
     const { email, password } = request.body;
+    const ipKey = `ip:${request.ip}`;
+
+    // Rate-limit gate BEFORE any validation/hashing work, same principle as
+    // login: a flood of registration attempts must not reach hashPassword()
+    // regardless of whether the payload is well-shaped.
+    if (registerRateLimiter.isBlocked(ipKey, DEFAULT_REGISTER_IP_MAX_ATTEMPTS)) {
+      reply.status(429);
+      return { error: { code: 'RATE_LIMITED' } };
+    }
+    // Every attempt counts against the budget, successful or not — this
+    // limiter caps total registration throughput per IP, not just failures.
+    registerRateLimiter.recordFailure(ipKey);
 
     const emailError = validateEmailShape(email);
     if (emailError) {
@@ -86,31 +106,41 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
 
   app.post('/auth/login', { config: { public: true }, schema: registerBodySchema }, async (request, reply) => {
     const { email, password } = request.body;
-    const ip = request.ip;
+    const ipKey = `ip:${request.ip}`;
+    // Verifier-found defect (Phase 01 independent review): the per-account
+    // key must be derivable and checked BEFORE any expensive work, using
+    // the raw client-supplied email defensively coerced to a string — never
+    // wait for full shape validation to compute it, or a malformed email
+    // (which is free to send in bulk) skips rate limiting entirely and
+    // reaches runDecoyHash()'s real scrypt cost on every single request.
+    const rawEmailForKey = typeof email === 'string' ? email.trim().toLowerCase() : '__non_string_email__';
+    const accountKey = `acct:${rawEmailForKey}`;
+
+    // Rate-limit gate FIRST, before any shape validation or hashing of any
+    // kind (design.md §3: "rate-limit before expensive work"). Both checks
+    // run regardless of body shape, since both keys are always computable.
+    if (loginRateLimiter.isBlocked(ipKey, DEFAULT_IP_MAX_ATTEMPTS) || loginRateLimiter.isBlocked(accountKey, DEFAULT_ACCOUNT_MAX_ATTEMPTS)) {
+      reply.status(401);
+      return { error: { code: 'INVALID_CREDENTIALS' } }; // generic — never reveal rate-limit state
+    }
 
     const emailError = validateEmailShape(email);
     const passwordError = typeof password !== 'string' ? 'A senha deve ser uma string.' : null;
     if (emailError || passwordError) {
+      loginRateLimiter.recordFailure(ipKey);
+      loginRateLimiter.recordFailure(accountKey);
       await runDecoyHash();
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
 
     const normalized = normalizeEmail(email);
-    const accountKey = `acct:${normalized}`;
-    const ipKey = `ip:${ip}`;
-
-    if (loginRateLimiter.isBlocked(accountKey, DEFAULT_ACCOUNT_MAX_ATTEMPTS) || loginRateLimiter.isBlocked(ipKey, DEFAULT_IP_MAX_ATTEMPTS)) {
-      reply.status(401);
-      return { error: { code: 'INVALID_CREDENTIALS' } }; // generic — never reveal rate-limit state
-    }
-
     const record = users.findByEmailWithSecrets(db, normalized);
 
     if (!record) {
-      await runDecoyHash();
-      loginRateLimiter.recordFailure(accountKey);
       loginRateLimiter.recordFailure(ipKey);
+      loginRateLimiter.recordFailure(accountKey);
+      await runDecoyHash();
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
@@ -122,8 +152,8 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
     });
 
     if (!valid) {
-      loginRateLimiter.recordFailure(accountKey);
       loginRateLimiter.recordFailure(ipKey);
+      loginRateLimiter.recordFailure(accountKey);
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }

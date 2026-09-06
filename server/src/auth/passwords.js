@@ -19,6 +19,19 @@ export const PASSWORD_MAX_UTF8_BYTES = 1024;
 // Unbounded concurrent hashing is a trivial DoS vector against health/other
 // requests on the same event loop. Cap concurrent jobs; excess callers queue.
 const MAX_CONCURRENT_HASH_JOBS = 2;
+// Verifier-found defect (Phase 01 independent review): this queue had no
+// size cap, so a caller that reaches this pool at all (even one correctly
+// past a per-route rate limiter, or via a route that has none) could still
+// grow it without bound, backing up every legitimate login/register behind
+// an ever-longer wait and growing memory with queued closures. Routes are
+// now rate-limited BEFORE calling into this module at all (see auth.js),
+// but this cap is a second, independent backstop — bounded memory here does
+// not depend on every current and future caller getting its own limiter
+// right.
+const MAX_QUEUE_LENGTH = 100;
+export class HashQueueOverloadedError extends Error {
+  constructor() { super('Password hashing queue is overloaded.'); this.code = 'HASH_QUEUE_OVERLOADED'; }
+}
 let activeJobs = 0;
 const queue = [];
 
@@ -38,6 +51,8 @@ function runBounded(fn) {
     };
     if (activeJobs < MAX_CONCURRENT_HASH_JOBS) {
       task();
+    } else if (queue.length >= MAX_QUEUE_LENGTH) {
+      reject(new HashQueueOverloadedError());
     } else {
       queue.push(task);
     }

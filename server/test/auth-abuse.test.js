@@ -8,6 +8,7 @@ import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { buildApp } from '../src/app.js';
 import { createRateLimiter } from '../src/auth/rate-limit.js';
+import { hashPassword } from '../src/auth/passwords.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const TEST_ORIGIN = 'https://smartlearn.test';
@@ -109,6 +110,66 @@ test('T12: no unbounded expensive work — concurrent login storm settles withou
       assert.ok(results.every(r => r.status === 'fulfilled'), 'all concurrent login attempts must settle, not hang');
     } finally { await app.close(); }
   } finally { cleanup(); }
+});
+
+test('SECURITY FIX (found by independent verifier): malformed email cannot bypass the rate limiter to force unbounded real/decoy scrypt work', async () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], trustProxy: false });
+    try {
+      // A malformed email (fails validateEmailShape) previously reached
+      // runDecoyHash() — a real scrypt call — BEFORE any rate-limit check.
+      // After the fix, the same malformed-email key is rate-limited exactly
+      // like a valid one: once blocked, requests must return quickly
+      // (no scrypt attempted), not just eventually 401 after paying the cost.
+      const email = 'not-a-valid-email-shape';
+      const timings = [];
+      for (let i = 0; i < 15; i++) {
+        const start = Date.now();
+        const res = await app.inject({
+          method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN },
+          payload: { email, password: 'whatever' },
+        });
+        timings.push(Date.now() - start);
+        assert.equal(res.statusCode, 401);
+      }
+      // DEFAULT_ACCOUNT_MAX_ATTEMPTS is 10 — by request 15, the account key
+      // must be blocked, meaning this request never reached runDecoyHash().
+      const lastTiming = timings[timings.length - 1];
+      assert.ok(lastTiming < 100, `expected the rate-limited (post-block) request to be fast (no scrypt), got ${lastTiming}ms`);
+    } finally { await app.close(); }
+  } finally { cleanup(); }
+});
+
+test('SECURITY FIX: /auth/register is itself rate-limited per IP (previously unlimited)', async () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], trustProxy: false });
+    try {
+      let lastStatus;
+      for (let i = 0; i < 25; i++) {
+        const res = await app.inject({
+          method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN },
+          payload: { email: `flood-${i}@example.com`, password: 'a perfectly valid password 123' },
+        });
+        lastStatus = res.statusCode;
+      }
+      assert.equal(lastStatus, 429, 'expected registration flood to eventually be rate-limited (429), not accepted indefinitely');
+    } finally { await app.close(); }
+  } finally { cleanup(); }
+});
+
+test('SECURITY FIX: the shared scrypt queue itself has a hard size cap independent of any route-level limiter', async () => {
+  // Bypass HTTP entirely and hammer the password module directly, proving
+  // the backstop works even for a hypothetical future caller that forgets
+  // to rate-limit at the route level.
+  const jobs = Array.from({ length: 250 }, (_, i) => hashPassword(`direct queue pressure test ${i}`));
+  const results = await Promise.allSettled(jobs);
+  const rejected = results.filter(r => r.status === 'rejected');
+  assert.ok(rejected.length > 0, 'expected some jobs to be rejected once the queue cap is exceeded, proving the cap is real');
+  assert.ok(rejected.every(r => r.reason?.code === 'HASH_QUEUE_OVERLOADED'), 'rejections must be the specific overload error, not a generic failure');
+  const fulfilled = results.filter(r => r.status === 'fulfilled');
+  assert.ok(fulfilled.length > 0, 'jobs within the cap must still succeed normally');
 });
 
 test('T12 (cross-reference to T10): one user genuinely cannot retrieve another user\'s session data via any header trick', async () => {

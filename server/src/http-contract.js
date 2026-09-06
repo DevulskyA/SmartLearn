@@ -21,6 +21,7 @@ export const ERROR_CODES = Object.freeze({
   CONFLICT: 'CONFLICT',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',
+  SERVICE_OVERLOADED: 'SERVICE_OVERLOADED',
 });
 
 function errorBody(code, requestId, field) {
@@ -101,6 +102,10 @@ export function applyDomainEnvelope(app, { resolveActor = denyAllActorResolver, 
     }
     if (err.statusCode === 401) {
       reply.status(401).send(errorBody(ERROR_CODES.UNAUTHENTICATED, requestId));
+      return;
+    }
+    if (err.code === 'HASH_QUEUE_OVERLOADED') {
+      reply.status(503).send(errorBody(ERROR_CODES.SERVICE_OVERLOADED, requestId));
       return;
     }
     // Never leak err.message (may contain SQL/paths) for unexpected errors.
