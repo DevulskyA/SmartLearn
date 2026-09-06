@@ -50,7 +50,11 @@ Gates at this point: server 165/165, root 240/240, rust 13/13, build PASS, e2e 1
 
 PHASE 02 (T13-T19) COMPLETE.
 
-NEXT_STEP: Phase 03 (Server-authoritative Web) begins at T20 (map every existing DB caller, implement RemoteStore). This is a higher-risk phase — it cuts the actual Web app over from BrowserStore/localStorage to the real server for reads/writes. No blockers, but proceed carefully and re-verify the phase-entry dependency (T19 done) before starting.
+- T20 DONE (2c3d520): inventoried every DB.* caller (delegated to a read-only Explore subagent) before writing anything. Found a real pre-existing bug (app.js:1534 `DB.subjects.delete` never existed, silently swallowed) and two real server gaps (no learning-units list/update, no unscoped review-tasks listing) — added learning-units.list/getById/updateFields (title/source/summary only, studyDate excluded — that's design.md §4's date-correction-reschedule, out of scope) and reviews.list(). Built src/api-client.js (typed ApiError vs NetworkError) and src/remote-store.js (drop-in DB-shaped export over /v1, with DTO adapters where the new model deliberately differs — exercises flatten versioned shape, reviewTasks synthesizes reviewDone from completedAt since there are no per-task question/score columns anymore). importAll/clearAll throw NOT_YET_SUPPORTED (T22's UX decision, not faked here). db.js/BrowserStore is UNTOUCHED — actual UI cutover is T21.
+
+Gates at this point: root 257/257, server 169/169, rust 13/13, build PASS, e2e 17/17 (unchanged), test:inventory PASS (36 files).
+
+NEXT_STEP: T21 (connect the Web to real server-owned reads/writes) — this is where src/app.js's screen controllers actually start importing remote-store.js instead of db.js. High-risk: two-browser-context E2E required (same account observes exact state changes; another user sees none; server restart persists; network loss causes a clear write failure without BrowserStore fallback). No blockers.
 
 PRESERVED_HISTORY: everything below this block (2026-09-05 and earlier) is historical PR-0/PR-1 evidence, superseded as the active plan by smartlearn-v1-consolidated-v2 per design.md §1. Do not treat it as current authority; it remains valid evidence of what the merged foundation already proved (223 client / 17 server / 13 Rust tests, PR-0 J1-J6, PR-1 gates).
 
