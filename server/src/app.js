@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { fileURLToPath } from 'node:url';
 import { validateMigrations } from './migrations.js';
 import { applyDomainEnvelope } from './http-contract.js';
+import { registerAuthRoutes } from './routes/auth.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -41,6 +42,7 @@ export function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   // /health's public minimal behavior does not leak into /v1.
   app.register(async (v1) => {
     applyDomainEnvelope(v1);
+    registerAuthRoutes(v1, db);
   }, { prefix: '/v1' });
 
   return app;
