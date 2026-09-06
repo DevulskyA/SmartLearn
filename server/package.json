@@ -1,0 +1,20 @@
+{
+  "name": "smartlearn-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --expose-gc --test --test-isolation=none"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "fastify": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true
+  }
+}
