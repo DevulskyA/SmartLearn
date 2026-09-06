@@ -1,6 +1,13 @@
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
+import {
+  checkBrokerReachable,
+  wrapBrokerAsDatabase,
+  createBrokerStore,
+  registerOnlineSync,
+} from "./broker-transport.js";
+import { BROWSER_STORE_KEY, MIGRATION_BACKUP_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";
 
 const DATABASE_URL = "sqlite:smartlearn.db";
 const REVIEW_SCHEDULE = [
@@ -268,7 +275,7 @@ function hasTauriRuntime() {
 }
 
 function createBrowserStore() {
-  const STORAGE_KEY = "smartlearn:browser-db";
+  const STORAGE_KEY = BROWSER_STORE_KEY;
   const defaultSettings = {
     key: "main",
     appVersion: "1.0.0",
@@ -711,11 +718,59 @@ function createBrowserStore() {
   return store;
 }
 
+// ---------------------------------------------------------------------------
 export const DB = {
   async init() {
     if (!initialization) {
       initialization = (async () => {
         if (!hasTauriRuntime()) {
+          // Priority: BrokerStore (broker reachable) > BrowserStore (offline fallback)
+          if (await checkBrokerReachable()) {
+            const transport = createBrokerStore();
+            database = wrapBrokerAsDatabase(transport);
+            // Schema statements are idempotent; broker's SQLite is managed by Tauri app
+            for (const [index, statement] of schemaStatements.entries()) {
+              const params = index === schemaStatements.length - 1
+                ? [JSON.stringify(REVIEW_SCHEDULE)]
+                : [];
+              await database.execute(statement, params);
+            }
+            await DB.subjects.ensureColumns();
+            await DB.sources.ensureColumns();
+            await DB.studyRecords.ensureColumns();
+            registerOnlineSync();
+            // Clean up migration backup from a previous successful migration
+            // (broker reachable confirms SQLite has the data).
+            try { localStorage.removeItem(MIGRATION_BACKUP_KEY); } catch {}
+            // Expose migration API when BrowserStore has legacy data.
+            if (hasBrowserStoreData()) {
+              DB.migration = {
+                available: true,
+                async execute() {
+                  const raw = localStorage.getItem(BROWSER_STORE_KEY);
+                  // Safety copy: if the app crashes between removeItem and reload,
+                  // the backup preserves the data. Cleaned up on the next broker startup.
+                  try { localStorage.setItem(MIGRATION_BACKUP_KEY, raw ?? ''); } catch {}
+                  const state = JSON.parse(raw);
+                  const statements = buildMigrationStatements(state);
+                  const resp = await fetch('http://127.0.0.1:57321/api/migrate/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ statements }),
+                  });
+                  if (!resp.ok) {
+                    const text = await resp.text().catch(() => resp.status.toString());
+                    try { localStorage.removeItem(MIGRATION_BACKUP_KEY); } catch {}
+                    throw new Error(`Migração falhou: ${text}`);
+                  }
+                  localStorage.removeItem(BROWSER_STORE_KEY);
+                  DB.migration.available = false;
+                  return resp.json();
+                },
+              };
+            }
+            return DB;
+          }
           browserStore = createBrowserStore();
           await browserStore.init();
           Object.assign(DB, browserStore);
@@ -1375,3 +1430,16 @@ export const DB = {
 };
 
 globalThis.DB = DB;
+
+export {
+  fetchWithRetry,
+  createBrokerStore,
+  wrapBrokerAsDatabase,
+  checkBrokerReachable,
+  queueOfflineTransaction,
+  drainPendingWrites,
+  clearPendingWrite,
+  syncPendingWrites,
+  registerOnlineSync,
+} from "./broker-transport.js";
+export { BROWSER_STORE_KEY, MIGRATION_BACKUP_KEY, hasBrowserStoreData, buildMigrationStatements } from "./migration.js";

@@ -1,3 +1,5 @@
+pub mod broker;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{sqlite::SqliteConnectOptions, Connection, Executor, SqliteConnection};
@@ -100,6 +102,16 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            let app_handle = app.handle().clone();
+            let data_dir = app.path().app_data_dir()?;
+            tauri::async_runtime::spawn(async move {
+                match broker::start_broker(data_dir).await {
+                    Ok(handle) => {
+                        app_handle.manage(handle);
+                    }
+                    Err(e) => log::warn!("broker not started (app continues): {e}"),
+                }
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

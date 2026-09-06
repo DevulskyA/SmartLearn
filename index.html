@@ -11,6 +11,12 @@
       applyThemePreference(getStoredThemePreference());
     </script>
     <script type="module" src="/src/app.js"></script>
+    <script>
+      // Register SW only in web browsers (not Tauri WebView).
+      if ('serviceWorker' in navigator && !window.__TAURI_INTERNALS__) {
+        navigator.serviceWorker.register('/src/sw.js', { scope: '/' });
+      }
+    </script>
   </head>
   <body>
     <div class="app-shell">

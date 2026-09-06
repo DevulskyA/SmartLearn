@@ -1,0 +1,46 @@
+# validation.md — server-first
+
+## Gates obrigatórios (automatizados)
+
+| Gate | Comando | Resultado esperado |
+|------|---------|-------------------|
+| Cargo tests | `cargo test` | 16/16 PASS |
+| npm tests | `npm test` | 34/34 PASS |
+
+## Critérios de aceitação verificados (T6.2 Fresh Verifier)
+
+### Segurança
+- [x] CORS não usa wildcard (`*`); usa `AllowOrigin::predicate` com lista explícita
+- [x] `/api/migrate/import` valida prefixo SQL: rejeita DELETE/DROP/UPDATE/REPLACE puro
+- [x] Backup VACUUM: rejeita caminhos com aspas simples (guard contra path injection)
+- [x] Broker escuta exclusivamente em `127.0.0.1` (loopback), nunca `0.0.0.0`
+
+### Correção
+- [x] `hasBrowserStoreData` retorna `false` em JSON malformado (não lança)
+- [x] `createBrokerStore.transaction` enfileira em IDB somente para `TypeError` (rede), não `Error` HTTP
+- [x] `INSERT OR REPLACE` passa na validação do endpoint (prefixo "INSERT")
+- [x] Backup idempotente: skip se destino já existe (guard same-second)
+- [x] Rotação 30 dias: remove apenas arquivos `smartlearn-backup-<ts>.db` mais antigos que o limite
+
+### Migração
+- [x] `MIGRATION_BACKUP_KEY` salvo antes de `removeItem(BROWSER_STORE_KEY)` — crash safety
+- [x] Se POST falhar, backup é removido imediatamente (dados ainda no localStorage principal)
+- [x] DB.init() broker path remove backup automaticamente (confirmação lazy de SQLite)
+
+### Offline
+- [x] SW registra app-shell cache no install; serve offline mesmo sem broker
+- [x] SW não registra em Tauri (`window.__TAURI_INTERNALS__` guard em index.html)
+- [x] SHELL_ASSETS contém todos os módulos JS importados pela aplicação (migration.js incluído, shell-v2)
+- [x] `/api/migrate/import` não cacheado pelo SW (pass-through correto)
+- [x] Escritas offline enfileiradas no IDB são drenadas ao evento `online`
+
+## Gate externo (HUMAN_GATE T6.3)
+
+Revisão humana dos 31 commits em `claude/server-first-v1` antes de qualquer merge/PR/push.
+
+## Critérios NÃO verificados (dívida aberta)
+
+| Item | Motivo | Debt |
+|------|--------|------|
+| SW cache invalidation strategy | Baixo risco; network-first mitiga | D-003 |
+| syncPendingWrites retry com backoff | Baixo risco; dispara no evento online | D-004 |
