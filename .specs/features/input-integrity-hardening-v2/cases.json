@@ -1,0 +1,1063 @@
+{
+  "purpose": "Vetores para testes que importam produção. Não contém cópia de validador.",
+  "provenance": "Política proposta em spec.md, dados sintéticos sem informações pessoais.",
+  "vectors": [
+    {
+      "id": "TXT-01",
+      "family": "subject",
+      "input": "  Semiologia  Médica  ",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "Semiologia Médica"
+    },
+    {
+      "id": "TXT-02",
+      "family": "subject",
+      "input": "Medicina Interna",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "Medicina Interna"
+    },
+    {
+      "id": "TXT-03",
+      "family": "title",
+      "input": "Ausculta Cardíaca — Bulhas e Sopros",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "Ausculta Cardíaca — Bulhas e Sopros"
+    },
+    {
+      "id": "TXT-04",
+      "family": "title",
+      "input": "Na⁺/K⁺-ATPase e potencial de membrana",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "Na⁺/K⁺-ATPase e potencial de membrana"
+    },
+    {
+      "id": "TXT-05",
+      "family": "title",
+      "input": "β-bloqueadores e receptores",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "β-bloqueadores e receptores"
+    },
+    {
+      "id": "TXT-06",
+      "family": "title",
+      "input": "O₂, CO₂ e pH < 7,35",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "O₂, CO₂ e pH < 7,35"
+    },
+    {
+      "id": "TXT-07",
+      "family": "title",
+      "input": "H. pylori — estudo inicial (parte 1/2)",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "H. pylori — estudo inicial (parte 1/2)"
+    },
+    {
+      "id": "TXT-08",
+      "family": "title",
+      "input": "Sinal de d’Espine e doença de Crohn",
+      "expect": "accept",
+      "reason": "conteúdo legítimo",
+      "ac": [
+        "AC-004",
+        "AC-005"
+      ],
+      "expectedValue": "Sinal de d’Espine e doença de Crohn"
+    },
+    {
+      "id": "TXT-09",
+      "family": "subject",
+      "input": "",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-10",
+      "family": "subject",
+      "input": " ",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-11",
+      "family": "subject",
+      "input": "\t\n",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-12",
+      "family": "subject",
+      "input": "   ",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-13",
+      "family": "subject",
+      "input": "​﻿",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-14",
+      "family": "subject",
+      "input": ";;;",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-15",
+      "family": "subject",
+      "input": "!!!",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-16",
+      "family": "subject",
+      "input": "́",
+      "expect": "reject",
+      "reason": "vazio/controle/sem letra ou número",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-17",
+      "family": "subject",
+      "input": null,
+      "expect": "reject",
+      "reason": "tipo inválido",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-18",
+      "family": "subject",
+      "input": false,
+      "expect": "reject",
+      "reason": "tipo inválido",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-19",
+      "family": "subject",
+      "input": 13,
+      "expect": "reject",
+      "reason": "tipo inválido",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-20",
+      "family": "subject",
+      "input": [],
+      "expect": "reject",
+      "reason": "tipo inválido",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-21",
+      "family": "subject",
+      "input": {},
+      "expect": "reject",
+      "reason": "tipo inválido",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-22",
+      "family": "subject",
+      "input": "Semiologia\nMédica",
+      "expect": "reject",
+      "reason": "campo de uma linha",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-23",
+      "family": "subject",
+      "input": "Semiologia\u0000Médica",
+      "expect": "reject",
+      "reason": "NUL",
+      "ac": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "TXT-24",
+      "family": "subject",
+      "input": " Semiologia Médica ",
+      "expect": "accept",
+      "reason": "espaços horizontais Unicode",
+      "ac": [
+        "AC-005"
+      ],
+      "expectedValue": "Semiologia Médica"
+    },
+    {
+      "id": "TXT-25",
+      "family": "subject",
+      "input": "Semiologia Médica",
+      "expect": "accept",
+      "reason": "NFC",
+      "ac": [
+        "AC-007"
+      ],
+      "expectedValue": "Semiologia Médica"
+    },
+    {
+      "id": "TXT-26",
+      "family": "title",
+      "input": "  Aula  1 — revisão  ",
+      "expect": "accept",
+      "reason": "espaço interno preservado",
+      "ac": [
+        "AC-005"
+      ],
+      "expectedValue": "Aula  1 — revisão"
+    },
+    {
+      "id": "TXT-27",
+      "family": "freeText",
+      "input": "Linha 1\n\n  Linha 2\tconteúdo",
+      "expect": "accept_literal",
+      "reason": "render seguro sem remover texto",
+      "ac": [
+        "AC-025",
+        "AC-026"
+      ],
+      "expectedValue": "Linha 1\n\n  Linha 2\tconteúdo"
+    },
+    {
+      "id": "TXT-28",
+      "family": "freeText",
+      "input": "👩‍⚕️ Estudo de O₂ e Na⁺",
+      "expect": "accept_literal",
+      "reason": "render seguro sem remover texto",
+      "ac": [
+        "AC-025",
+        "AC-026"
+      ],
+      "expectedValue": "👩‍⚕️ Estudo de O₂ e Na⁺"
+    },
+    {
+      "id": "TXT-29",
+      "family": "freeText",
+      "input": "<img src=x onerror=alert(1)>\n<script>alert(1)</script>",
+      "expect": "accept_literal",
+      "reason": "render seguro sem remover texto",
+      "ac": [
+        "AC-025",
+        "AC-026"
+      ],
+      "expectedValue": "<img src=x onerror=alert(1)>\n<script>alert(1)</script>"
+    },
+    {
+      "id": "TXT-30",
+      "family": "freeText",
+      "input": "Robert'); DROP TABLE subjects;--",
+      "expect": "accept_literal",
+      "reason": "render seguro sem remover texto",
+      "ac": [
+        "AC-025",
+        "AC-026"
+      ],
+      "expectedValue": "Robert'); DROP TABLE subjects;--"
+    },
+    {
+      "id": "TXT-31",
+      "family": "freeText",
+      "input": "pH < 7,35; A & B; α → β; 100%",
+      "expect": "accept_literal",
+      "reason": "render seguro sem remover texto",
+      "ac": [
+        "AC-025",
+        "AC-026"
+      ],
+      "expectedValue": "pH < 7,35; A & B; α → β; 100%"
+    },
+    {
+      "id": "TXT-32",
+      "family": "freeText",
+      "input": "texto\u0000oculto",
+      "expect": "reject",
+      "reason": "NUL em texto",
+      "ac": [
+        "AC-026"
+      ]
+    },
+    {
+      "id": "TXT-33",
+      "family": "source",
+      "input": "Guyton & Hall, 14ª ed., cap. 9, pp. 101–110",
+      "expect": "accept",
+      "reason": "fonte livre",
+      "ac": [
+        "AC-004"
+      ]
+    },
+    {
+      "id": "TXT-34",
+      "family": "source",
+      "input": "",
+      "expect": "CONTRACT_CHECK",
+      "reason": "Obrigatoriedade de fonte deve seguir contrato vigente; não inventar nova política.",
+      "ac": [
+        "AC-004"
+      ]
+    },
+    {
+      "id": "DATE-01",
+      "family": "civilDate",
+      "input": "2024-02-29",
+      "expect": "accept",
+      "reason": "data existente",
+      "ac": [
+        "AC-018"
+      ],
+      "expectedValue": "2024-02-29"
+    },
+    {
+      "id": "DATE-02",
+      "family": "civilDate",
+      "input": "2026-09-05",
+      "expect": "accept",
+      "reason": "data existente",
+      "ac": [
+        "AC-018"
+      ],
+      "expectedValue": "2026-09-05"
+    },
+    {
+      "id": "DATE-03",
+      "family": "civilDate",
+      "input": "2026-12-31",
+      "expect": "accept",
+      "reason": "data existente",
+      "ac": [
+        "AC-018"
+      ],
+      "expectedValue": "2026-12-31"
+    },
+    {
+      "id": "DATE-04",
+      "family": "civilDate",
+      "input": "2026-02-29",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-05",
+      "family": "civilDate",
+      "input": "2026-02-30",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-06",
+      "family": "civilDate",
+      "input": "2026-13-01",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-07",
+      "family": "civilDate",
+      "input": "2026-00-10",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-08",
+      "family": "civilDate",
+      "input": "2026-09-00",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-09",
+      "family": "civilDate",
+      "input": "2026-04-31",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-10",
+      "family": "civilDate",
+      "input": "2026-09-05lixo",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-11",
+      "family": "civilDate",
+      "input": "2026-09-05T10:00:00Z",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-12",
+      "family": "civilDate",
+      "input": "05/09/2026",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-13",
+      "family": "civilDate",
+      "input": "2026-9-5",
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-14",
+      "family": "civilDate",
+      "input": true,
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "DATE-15",
+      "family": "civilDate",
+      "input": null,
+      "expect": "reject",
+      "reason": "formato/calendário/tipo inválido",
+      "ac": [
+        "AC-018"
+      ]
+    },
+    {
+      "id": "NUM-01",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 7
+      },
+      "expect": "accept",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-02",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 0
+      },
+      "expect": "accept",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-03",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 10
+      },
+      "expect": "accept",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-04",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 15
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-05",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 0,
+        "correctCount": 0
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-06",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": -1,
+        "correctCount": 0
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-07",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": -1
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-08",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10.5,
+        "correctCount": 5
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-09",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 5.5
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-10",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": null
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-11",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": true,
+        "correctCount": 0
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-12",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": false
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-13",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": "10",
+        "correctCount": 7
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-14",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": []
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-15",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 9007199254740992,
+        "correctCount": 1
+      },
+      "expect": "reject",
+      "reason": "tipo canônico/integridade",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-01",
+      "family": "uiCountRequired",
+      "input": "10",
+      "expect": "accept",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-02",
+      "family": "uiCountRequired",
+      "input": " 10 ",
+      "expect": "accept",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-03",
+      "family": "uiCountRequired",
+      "input": "",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-04",
+      "family": "uiCountRequired",
+      "input": "1e2",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-05",
+      "family": "uiCountRequired",
+      "input": "0x10",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-06",
+      "family": "uiCountRequired",
+      "input": "2.5",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-07",
+      "family": "uiCountRequired",
+      "input": "2,5",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-08",
+      "family": "uiCountRequired",
+      "input": "dez",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-09",
+      "family": "uiCountRequired",
+      "input": "Infinity",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "PARSE-10",
+      "family": "uiCountRequired",
+      "input": "NaN",
+      "expect": "reject",
+      "reason": "conversão explícita na fronteira",
+      "ac": [
+        "AC-019"
+      ]
+    },
+    {
+      "id": "NUM-16",
+      "family": "draftReview",
+      "input": {
+        "questionsCount": null,
+        "correctCount": null
+      },
+      "expect": "accept_absence",
+      "reason": "não fabricar score",
+      "ac": [
+        "AC-020"
+      ]
+    },
+    {
+      "id": "NUM-17",
+      "family": "draftReview",
+      "input": {
+        "questionsCount": null,
+        "correctCount": 2
+      },
+      "expect": "reject",
+      "reason": "acertos sem questões",
+      "ac": [
+        "AC-020"
+      ]
+    },
+    {
+      "id": "NUM-18",
+      "family": "evidenceV3",
+      "input": {
+        "questionsCount": 10,
+        "correctCount": 7,
+        "scorePercent": 999
+      },
+      "expect": "accept_recompute",
+      "reason": "cache não é autoridade",
+      "ac": [
+        "AC-024"
+      ],
+      "expectedValue": 70
+    }
+  ],
+  "journeys": [
+    {
+      "id": "J1",
+      "goal": "Caso literal do usuário",
+      "steps": [
+        "Sandbox vazia; criar aula pelo Plano",
+        "Abrir Nova disciplina; digitar Semiologia Médica",
+        "Título: Ausculta Cardíaca — Bulhas e Sopros; data válida",
+        "Clicar SOMENTE Salvar aula",
+        "Verificar disciplina selecionada, aula visível e IDs vinculados",
+        "Recarregar e confirmar mesmo conteúdo"
+      ],
+      "expected": "1 disciplina + 1 aula + revisões canônicas; nenhum clique intermediário",
+      "acs": [
+        "AC-004",
+        "AC-010",
+        "AC-014",
+        "AC-029"
+      ]
+    },
+    {
+      "id": "J2",
+      "goal": "Reuso e dupla ativação",
+      "steps": [
+        "Sandbox com Semiologia Médica ativa",
+        "Abrir Nova disciplina e digitar \"  SEMIOLOGIA MÉDICA  \"",
+        "Preencher aula diferente",
+        "Dupla ativação rápida de Salvar aula"
+      ],
+      "expected": "Mesmo subjectId; só uma nova aula; sem disciplina/revisão duplicada",
+      "acs": [
+        "AC-008",
+        "AC-013"
+      ]
+    },
+    {
+      "id": "J3",
+      "goal": "Erro recuperável",
+      "steps": [
+        "Sandbox com sentinelas prévias",
+        "Nova disciplina e aula",
+        "Injetar falha depois da primeira escrita no adapter real",
+        "Salvar",
+        "Corrigir causa e repetir uma vez"
+      ],
+      "expected": "Na falha, zero escrita parcial e rascunho intacto; na repetição, uma composição",
+      "acs": [
+        "AC-012",
+        "AC-016",
+        "AC-028"
+      ]
+    },
+    {
+      "id": "J4",
+      "goal": "Salvo invisível por filtro",
+      "steps": [
+        "Filtro aponta a outra disciplina",
+        "Criar disciplina/aula válida",
+        "Salvar",
+        "Inspecionar lista/dropdown e filtro",
+        "Editar resumo com O₂ e Na⁺/K⁺; salvar; recarregar"
+      ],
+      "expected": "Resultado visível/acesso explícito focado; texto preservado",
+      "acs": [
+        "AC-014",
+        "AC-026",
+        "AC-029"
+      ]
+    },
+    {
+      "id": "J5",
+      "goal": "Import inválido preserva dados",
+      "steps": [
+        "Sandbox populada; snapshot lógico",
+        "Importar backup v3 com data impossível/linha inválida/cache incorreto em variantes separadas",
+        "Comparar estado após cada variante",
+        "Importar v1/v2/v3 legítimos e roundtrip"
+      ],
+      "expected": "Inválidos rejeitados integralmente; cache derivado quando único defeito; legítimos preservados",
+      "acs": [
+        "AC-018",
+        "AC-022",
+        "AC-023",
+        "AC-024"
+      ]
+    },
+    {
+      "id": "J6",
+      "goal": "Armazenamento corrupto não é vazio",
+      "steps": [
+        "Sandbox Web com JSON malformado",
+        "Inicializar aplicação",
+        "Confirmar mensagem de recuperação e ausência de escrita",
+        "Comparar valor bruto antes/depois"
+      ],
+      "expected": "Bytes idênticos, zero seed, sem falso banco vazio saudável",
+      "acs": [
+        "AC-003"
+      ]
+    },
+    {
+      "id": "J7",
+      "goal": "Texto hostil continua texto",
+      "steps": [
+        "Salvar resumo HTML-like do corpus",
+        "Mostrar em Plano e revisão",
+        "Verificar DOM e sentinela de script",
+        "Exportar/importar na sandbox e mostrar novamente"
+      ],
+      "expected": "Nenhum evento/script executado; literal preservado",
+      "acs": [
+        "AC-025",
+        "AC-026"
+      ]
+    },
+    {
+      "id": "J8",
+      "goal": "Arquivado e troca de modo",
+      "steps": [
+        "Disciplina equivalente arquivada",
+        "Tentar nome em Nova disciplina",
+        "Cancelar subform",
+        "Selecionar outra ativa e salvar"
+      ],
+      "expected": "Não reativar/criar arquivada; save usa ID explicitamente selecionado",
+      "acs": [
+        "AC-009",
+        "AC-015"
+      ]
+    }
+  ],
+  "mutations": [
+    {
+      "id": "M1",
+      "target": "validador real de título",
+      "change": "rejeitar U+2014 com sintaxe válida",
+      "killer": "TXT-03 / J1"
+    },
+    {
+      "id": "M2",
+      "target": "caller público de save/import",
+      "change": "omitir validador",
+      "killer": "entrada inválida pelo consumidor público"
+    },
+    {
+      "id": "M3",
+      "target": "readState/init",
+      "change": "erro de parse vira emptyState e grava",
+      "killer": "J6 / AC-003"
+    },
+    {
+      "id": "M4",
+      "target": "resolver/normalizador",
+      "change": "omitir chave/trim",
+      "killer": "TXT-01 / J2"
+    },
+    {
+      "id": "M5",
+      "target": "validador de data",
+      "change": "validar só prefixo ou aceitar dia impossível",
+      "killer": "DATE-05 e DATE-10"
+    },
+    {
+      "id": "M6",
+      "target": "evidence/import",
+      "change": "ler correctCount de questionsCount",
+      "killer": "NUM-04"
+    },
+    {
+      "id": "M7",
+      "target": "persistência composta",
+      "change": "primeira escrita fora da transação",
+      "killer": "J3"
+    },
+    {
+      "id": "M8",
+      "target": "handler de sucesso",
+      "change": "omitir atualização de catálogo/lista",
+      "killer": "J1 / J4 sem reload"
+    },
+    {
+      "id": "M9",
+      "target": "render real",
+      "change": "trocar textContent por sink que interpreta HTML",
+      "killer": "J7 em sandbox"
+    }
+  ],
+  "properties": [
+    "normalize(normalize(x)) == normalize(x)",
+    "invalid save/import leaves prior state unchanged",
+    "roundtrip preserves IDs and medical text",
+    "created ID selected and rendered immediately",
+    "adapters agree on applicable cases"
+  ],
+  "notes": [
+    "NaN e Infinity só em chamadas JS diretas; não são JSON válido.",
+    "Para limite vigente L, gerar L-1/L/L+1 usando limite real.",
+    "Contagens antigas de testes não são metas."
+  ]
+}

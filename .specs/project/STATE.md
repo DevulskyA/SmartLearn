@@ -6,9 +6,32 @@ Memória persistente do projeto. Atualizar a cada sessão significativa.
 
 ## Status atual
 
-- **Fase:** UX linear e fontes como entidades reutilizáveis concluídas. TASK-019 concluída.
-- **Data:** 2026-06-23
-- **Próxima ação:** Revisão humana da UX linear e validação final em Windows/Android.
+- **Fase:** Pre-PR Hardening — closure técnica em andamento; UAT Tauri pendente execução humana.
+- **Data:** 2026-09-05
+- **Próxima ação:** Executar UAT-1..UAT-6 no Tauri Desktop real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`). Após UAT Tauri PASS: gate Web + gate Android per INV-26 (ou SPEC_DEVIATION explícito). Depois: DRAFT PR → auditoria adversarial → merge.
+- **Testes:** 97 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
+- **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
+- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook), `35b2328` (fresh verifier), `7256ca3` (DEC-013-V2) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
+- **DEC-013-V2:** ACCEPTED (2026-09-05) — `source_text` canônico, `sources` removido, INV-05B SUPERSEDED, DEBT-004 RESOLVED.
+- **INV-26:** Novo invariante global de compatibilidade multiplataforma (Web/Tauri/Android). Todo gate de closure futuro deve incluir gate por plataforma ou SPEC_DEVIATION aprovado.
+- **TLC_INSTALLATION_MISMATCH = TRUE**: `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` ausentes do runtime atual. STRUCTURAL_VALIDATION = UNVERIFIED para todas as features. Não bloqueia UAT nem PR — bloqueia apenas certificação TLC formal. Ver DEBT-009.
+
+### Multiplatform closure policy (INV-26)
+
+Vigora a partir de 2026-09-05. Features futuras: gates Web + Tauri + Android obrigatórios ou SPEC_DEVIATION explícito.
+
+**Análise de impacto — feature atual (`smartlearn-pre-pr-closure-hardening`):**
+
+| Aspecto | Resultado |
+|---------|-----------|
+| Dispatch pattern | COMPLIANT — `hasTauriRuntime()` em db.js; BrowserStore = Web; SQLite = Tauri+Android |
+| APIs Tauri em caminho compartilhado | NONE — `invoke()` confinado a db.js e saveBackupFile (guarda correta) |
+| BrowserStore (Web) coberto | PASS — 97/97 node:test |
+| SQLite/Tauri coberto | PASS — 8/8 cargo test + UAT pendente |
+| Android gate | **MISSING** — não há gate Android para esta feature. Android usa o mesmo adapter SQLite do Tauri desktop (mesmo código db.js), mas não há build/install/flow evidence para esta feature. |
+| Web browser funcional | **MISSING** — node:test cobre BrowserStore mas não renderização real em navegador. |
+
+**Decisão requerida antes do merge:** SPEC_DEVIATION (aceitar risco Android+Web-browser sem gate) ou adicionar gates. A auditoria externa decidirá.
 
 ---
 
@@ -123,24 +146,21 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ### DEC-013 — Disciplinas e fontes como entidades reutilizáveis com seed inicial
 - **Data:** 2026-06-23
-- **Decisão:** Disciplina e fonte não serão digitadas repetidamente no fluxo normal de RP. Ambas
-  são entidades próprias: `subjects` e `sources`. O cadastro RP usa `subject_id` e `source_id`.
-  O banco recebe seed inicial com as disciplinas da planilha original e a fonte `Grancursos`.
-- **Seed inicial de disciplinas:** `Língua Portuguesa`, `Conhecimentos sobre o DF`, `Legislação`,
-  `Administração`, `AFO`, `Arquivologia`, `Recursos Materiais`.
-- **Seed inicial de fontes:** `Grancursos`.
-- **Normalização obrigatória:** antes de salvar disciplina ou fonte, aplicar `trim()`, colapsar
-  espaços múltiplos e comparar case-insensitive para impedir duplicatas por caixa ou espaço.
-- **Consequências:**
-  - `sources` deve ter `id`, `name`, `created_at`, `updated_at`, `is_active` e `sort_order`.
-  - `study_records.source TEXT` deixa de ser o contrato normal; o vínculo correto é
-    `study_records.source_id INTEGER NOT NULL REFERENCES sources(id)`.
-  - `DB.studyRecords.create()` recebe `{ subjectId, sourceId, studyDate, content }`.
-  - RP/Cadastro deve selecionar fonte por lista/autocomplete e oferecer quick add `+ Nova fonte`.
-  - `Grancursos` deve existir automaticamente e ficar pré-selecionado quando for a única fonte ativa.
-  - Importação de estudos históricos/aulas fica fora desta correção e deve ser task separada.
-- **Status:** Implementada na TASK-018.
-- **Irreversível no MVP:** Sim.
+- **Status:** ⚠️ SUPERSEDED_FOR_VNEXT — ver DEC-013-V2
+- **Decisão original (histórica):** Disciplina e fonte são entidades próprias (`subjects`, `sources`). Seed inicial com disciplinas de concurso + fonte `Grancursos`.
+- **Por que superseded:** Teste real com fluxo Fisiologia/Guyton revelou que fonte é texto livre (varia por capítulo/apostila); entidade `sources` cria fricção sem benefício. Usuário é estudante de Medicina, não de concurso.
+
+### DEC-013-V2 — Fonte como texto livre, estado inicial VAZIO
+- **Data:** 2026-09-03
+- **Aprovada:** 2026-09-05 — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL executado.
+- **Status:** ✅ ACCEPTED
+- **Decisão:** Fonte é campo texto livre em `learning_units.source_text`. Tabela `sources` não existe e não deve ser recriada.
+  Estado inicial do banco é VAZIO — sem seeds de disciplinas, fontes ou conteúdo acadêmico.
+  DEV fixtures permanecem estritamente DEV-only via `import.meta.env?.DEV` + `fixtures/dev-dataset.js`.
+- **Invariante substituída:** INV-05B → SUPERSEDED. Nova regra canônica: "Fonte é texto livre descritivo do conteúdo estudado; pertence à unidade de aprendizagem (`source_text`)."
+- **DEC-015 reinterpretado:** Reset via Configurações retorna banco a estado VAZIO — seeds padrão NÃO são reaplicados.
+- **Referência de implementação:** commits `09ea0d8` (hipótese inicial), domain-redesign WP-DRD-01..08.
+- **DEBT-004:** RESOLVED.
 
 ### DEC-014 — Tela Hoje linear com ReviewRow e cadastro minimalista
 - **Data:** 2026-06-23
@@ -153,14 +173,32 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 - **Irreversível no MVP:** Sim.
 
 
+### DEC-016 — Arquitetura vNext: Resumo Mestre + Exercícios + Scheduler Boundary
+- **Data:** 2026-09-02 (v2 — corrigido após deep planning audit)
+- **Decisão:** SmartLearn evolui para suportar o ciclo longitudinal completo:
+  Material → Resumo Mestre → Exercícios → Revisões → Evidência → Relearning.
+  DEC-003 (16 revisões fixas) é SUPERSEDED_FOR_VNEXT: scheduler encapsulado em `scheduler.js`.
+  Algoritmo 'legacy' preserva comportamento atual como DEFAULT.
+  study_records ganha `summary_body TEXT NULL` (additive via ensureColumns).
+  Nova tabela `exercises` (ON DELETE CASCADE para study_records).
+  Backup JSON inclui exercises na versão 2.0.0.
+- **Ordem de WPs (v2):** WP-01 Tests → WP-02 Scheduler → WP-03 Resumo Mestre → WP-04 Resumo Diário → WP-05 Exercícios → WP-06 Ciclo integrado
+- **Nota crítica sobre FSRS:** `scheduler.js` encapsula legacy mas NÃO é interface FSRS.
+  FSRS requer `repeat(card_state, rating, now) → next_due` — interface completamente diferente.
+  Cold-start aceitável na migração (mesmo comportamento do Anki). FSRS = WP-07, LATER.
+- **Risco de escala:** Schedule fixo gera ~1.190 revisões/dia no ano 3 de Medicina.
+  FSRS é necessário, não opcional, para uso longitudinal. Revisar prioridade após WP-06.
+- **BUG-005:** JÁ CORRIGIDO no código atual. WP-01 é somente testes, sem implementação de fix.
+- **Pré-condições:** HUMAN_GATE: VNEXT_PLAN_APPROVAL antes de qualquer implementação.
+- **Irreversível no MVP:** Não — cada WP é independente e revertível.
+- **Referência:** `.specs/features/smartlearn-learning-vnext/` (spec.md v2, design.md v2, tasks.md v2)
+
 ### DEC-015 — Limpeza total da base local via Configurações
 - **Data:** 2026-06-23
-- **Decisão:** A tela de Configurações deve oferecer uma ação destrutiva para apagar toda a base local, permitindo reiniciar um novo ciclo de estudo a partir de um banco limpo.
-- **Consequências:**
-  - O aluno deve ser orientado a exportar o backup antes da limpeza.
-  - A ação exige confirmação explícita por risco de perda total dos dados locais.
-  - Após a limpeza, o aplicativo volta ao estado inicial com os seeds padrão reaplicados na próxima inicialização.
-- **Irreversível no MVP:** Sim.
+- **Status:** REINTERPRETAÇÃO PROPOSTA — aguarda HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL
+- **Decisão original:** Após limpeza, seeds padrão são reaplicados na próxima inicialização.
+- **Reinterpretação proposta (2026-09-03):** Seeds NÃO são reaplicados. Estado após reset é VAZIO. O aluno cadastra suas próprias disciplinas. Nenhum conteúdo acadêmico pré-injetado (nem medicina, nem concurso).
+- **Tornar definitivo:** apenas após HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL.
 
 ---
 
@@ -181,9 +219,29 @@ Ver DEC-008 para a decisão atual sobre o banco de dados.
 
 ---
 
+## HUMAN_GATES ativos
+
+| Gate | Bloqueio | Referência |
+|------|---------|-----------|
+| UI_ANALYTICS_DESIGN_APPROVAL | NÃO implementar código; NÃO push/PR/merge | `.specs/features/smartlearn-ui-analytics-vnext/` |
+| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco real tem dados do usuário | `.specs/features/smartlearn-domain-redesign/design.md §8` |
+
+**Resolvido:** DOMAIN_REDESIGN_APPROVAL — implementado (WP-DRD-01..08, commits 5a43fd4..77911b3).
+**Superseded:** PUSH_AND_PR_APPROVAL — aguarda UI_ANALYTICS_DESIGN_APPROVAL + implementação completa + Tauri/SQLite real + UATs.
+
+## TLC_INSTALLATION_MISMATCH
+
+- **Registrado em:** 2026-09-03
+- **Descrição:** Incompatibilidade potencial entre `@tauri-apps/plugin-sql` versão instalada e a feature SQLite nas permissões Tauri 2. Observado durante planejamento de UAT em ambiente Tauri real.
+- **Impacto:** Migrations SQL (`ensureColumns`) e `ON DELETE CASCADE` não foram validados em SQLite nativo nesta sessão — apenas BrowserStore.
+- **Ação requerida:** Executar `npm run tauri dev` em ambiente desktop, verificar migrations em banco legado com dados reais, confirmar `PRAGMA foreign_keys = ON` ativo.
+- **Prioridade:** Alta — bloqueia validação completa antes do merge.
+
+---
+
 ## Bloqueadores ativos
 
-Nenhum.
+Nenhum técnico. HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL bloqueia implementação (não é bloqueador técnico — é gate de aprovação intencional).
 
 ---
 

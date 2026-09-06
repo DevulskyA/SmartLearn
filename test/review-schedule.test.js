@@ -16,3 +16,21 @@ test("generateReviewDates cria 16 revisões nas datas esperadas", () => {
 test("generateReviewDates rejeita data inválida", () => {
   assert.throws(() => generateReviewDates("invalida"), /inválida/i);
 });
+
+test("generateReviewDates produz 16 datas todas em formato ISO-8601 válido", () => {
+  const dates = generateReviewDates("2026-09-02");
+
+  assert.equal(dates.length, 16);
+  for (const d of dates) {
+    assert.match(d, /^\d{4}-\d{2}-\d{2}$/, `"${d}" deve ser formato AAAA-MM-DD`);
+    assert.ok(!Number.isNaN(Date.parse(d)), `"${d}" deve ser data válida`);
+  }
+});
+
+test("generateReviewDates produz datas em ordem estritamente crescente", () => {
+  const dates = generateReviewDates("2026-09-02");
+
+  for (let i = 1; i < dates.length; i++) {
+    assert.ok(dates[i] > dates[i - 1], `dates[${i}]="${dates[i]}" deve ser maior que dates[${i - 1}]="${dates[i - 1]}"`);
+  }
+});

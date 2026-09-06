@@ -37,13 +37,14 @@ No fluxo normal, o aluno seleciona uma disciplina existente; ele não digita o n
 como texto livre a cada estudo. O sistema deve evitar digitação repetitiva e esforço cognitivo
 desnecessário.
 
-## INV-05B — Fonte é entidade reutilizável, não texto repetido
+## ~~INV-05B~~ — SUPERSEDED por DEC-013-V2 (2026-09-05)
 
-Fonte é cadastrada uma vez e reutilizada nos fluxos de estudo/RP.
-No fluxo normal, o aluno seleciona uma fonte existente; ele não digita o nome da fonte
-como texto livre a cada estudo. `study_records` deve referenciar fonte por `source_id`.
-Disciplina e fonte devem ser normalizadas antes de salvar: `trim()`, colapso de espaços
-múltiplos e comparação case-insensitive para impedir duplicatas por caixa ou espaço.
+~~Fonte é entidade reutilizável, não texto repetido.~~
+
+**Substituída por:** Fonte é campo texto livre (`source_text`) em `learning_units`.
+O aluno descreve livremente a origem do conteúdo (livro, capítulo, apostila).
+Tabela `sources` e `source_id` não existem. Não recriar.
+Normalização básica (`trim()`) é aplicada ao salvar; não há deduplicação de fontes.
 
 ## INV-06 — Registro de exercícios é simples
 
@@ -114,6 +115,62 @@ Não usar banco de dados remoto neste MVP. Nem PostgreSQL, nem MySQL, nem SQLite
 A interface é feita em HTML, CSS e JavaScript, com Vite apenas como empacotador mínimo.
 O empacotamento multiplataforma usa Tauri 2. Não usar React, Vue, Next.js, Ionic, Flutter,
 React Native, Kotlin ou Swift na camada de interface do MVP.
+
+## INV-26 — Compatibilidade multiplataforma obrigatória
+
+PLATFORMS = WEB + ANDROID + WINDOWS (canônico, fixo — não alterar)
+
+Toda feature do SmartLearn deve funcionar corretamente nas três plataformas:
+- **WEB** — navegador comum; persistência via BrowserStore/localStorage
+- **ANDROID** — aplicativo Android real; distribuível Google Play; SQLite via Tauri Android
+- **WINDOWS** — aplicativo desktop Windows; runtime Tauri + WebView; SQLite via plugin-sql
+
+> WebView é o runtime interno do aplicativo Windows/Tauri, não uma quarta plataforma.
+> PASS em uma plataforma não prova as outras. Gates separados são obrigatórios.
+
+Nenhuma feature pode ser considerada DONE se funcionar em apenas uma plataforma,
+salvo exceção explícita aprovada pelo usuário com SPEC_DEVIATION registrado.
+
+### Contrato de implementação
+
+- UI e regras de negócio compartilhadas sempre que possível.
+- Código de domínio não pode depender diretamente de API exclusiva do Tauri.
+- APIs específicas de plataforma ficam atrás de adapters/bridges (hoje: `DB.*` em `db.js`).
+- Quando uma API não existir em outra plataforma: fallback funcional equivalente
+  OU `SPEC_DEVIATION` explícito aguardando decisão humana.
+- Persistência pode ter implementação diferente por plataforma, mas comportamento
+  observável deve ser equivalente entre adapters.
+- BrowserStore/web não prova SQLite/Windows. SQLite/Windows não prova Android.
+  Cada plataforma exige seu próprio gate de closure.
+
+### Gates mínimos de closure por plataforma
+
+**WEB:**
+- build web PASS
+- testes funcionais no navegador PASS
+- persistência + reload PASS
+
+**WINDOWS (Tauri + WebView):**
+- build Tauri PASS
+- cold start → persistence → UI → restart PASS
+- main→vNext migration PASS
+
+**ANDROID:**
+- build Android PASS
+- instalação + abertura PASS
+- fluxo crítico da feature PASS
+- persistência após fechar/reabrir PASS
+
+**Discrimination (todas as plataformas):**
+- código Tauri-only introduzido no caminho compartilhado deve ser detectado por teste/gate.
+
+### Precedência
+
+Se a arquitetura existente impede uma plataforma sem mudança material de código,
+o agente para em `HUMAN_GATE` com análise de impacto antes de qualquer alteração.
+O humano decide escopo e prioridade; o agente não refatora preventivamente.
+
+---
 
 ## INV-24 — Acesso ao SQLite isolado em db.js
 

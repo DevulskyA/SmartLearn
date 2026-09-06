@@ -8,31 +8,31 @@ function getLocalDateValue(date = new Date()) {
 }
 
 export const Stats = {
-  calculate(reviewTasks, studyRecords, subjects, today = getLocalDateValue()) {
-    const studiesById = new Map(studyRecords.map((record) => [record.id, record]));
+  calculate(reviewTasks, evidence, learningUnits, subjects, today = getLocalDateValue()) {
+    const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
     const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
 
-    const completedExercises = reviewTasks
-      .filter((task) => task.questionsDone)
-      .map((task) => {
-        const studyRecord = studiesById.get(task.studyRecordId);
-        const subject = subjectsById.get(studyRecord?.subjectId);
-        const values = getReviewScoreValues(task.questionsCount, task.correctCount);
+    const completedExercises = evidence
+      .filter((ev) => ev.questionsCount != null && ev.correctCount != null)
+      .map((ev) => {
+        const unit = unitsById.get(ev.unitId);
+        const subject = subjectsById.get(unit?.subjectId);
+        const values = getReviewScoreValues(ev.questionsCount, ev.correctCount);
 
         return {
-          ...task,
+          ...ev,
           ...values,
           subjectName: subject?.name ?? "Sem disciplina",
-          content: studyRecord?.content ?? "Conteúdo indisponível",
-          completedAt: task.completedAt ?? "",
+          title: unit?.title ?? "Conteúdo indisponível",
+          completedAt: ev.completedAt ?? "",
         };
       })
-      .filter((task) => !task.isOverflow && task.questionsCount != null && task.correctCount != null)
+      .filter((ev) => !ev.isOverflow)
       .sort((a, b) => {
         const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
         if (subjectComparison !== 0) return subjectComparison;
-        const contentComparison = a.content.localeCompare(b.content, "pt-BR");
-        if (contentComparison !== 0) return contentComparison;
+        const titleComparison = a.title.localeCompare(b.title, "pt-BR");
+        if (titleComparison !== 0) return titleComparison;
         return b.completedAt.localeCompare(a.completedAt);
       });
 

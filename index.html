@@ -34,11 +34,11 @@
           </svg>
           <span>Hoje</span>
         </button>
-        <button class="nav-item" type="button" data-screen="register" aria-controls="screen-register">
+        <button class="nav-item" type="button" data-screen="plan" aria-controls="screen-plan">
           <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M5 3.5h14v17H5zM8 7h8M8 11h8M8 15h5" />
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
           </svg>
-          <span>Cadastro</span>
+          <span>Plano</span>
         </button>
         <button class="nav-item" type="button" data-screen="stats" aria-controls="screen-stats">
           <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -46,10 +46,21 @@
           </svg>
           <span>Estatísticas</span>
         </button>
+        <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Acompanhar</span>
+        </button>
+        <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          <span>Disciplinas</span>
+        </button>
         <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
           <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
-            <path d="m19.4 15 .1.1 1.2 2-2.6 2.6-2-1.2-.1-.1a8 8 0 0 1-2 .8V21h-4v-2.8a8 8 0 0 1-2-.8l-.1.1-2 1.2-2.6-2.6 1.2-2 .1-.1a8 8 0 0 1-.8-2H3V8h2.8a8 8 0 0 1 .8-2l-.1-.1-1.2-2 2.6-2.6 2 1.2.1.1a8 8 0 0 1 2-.8V1h4v.8a8 8 0 0 1 2 .8l.1-.1 2-1.2 2.6 2.6-1.2 2-.1.1a8 8 0 0 1 .8 2H21v4h-1.8a8 8 0 0 1-.8 2Z" />
+            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span>Configurações</span>
         </button>
@@ -63,7 +74,18 @@
               <h1 id="title-today">Hoje</h1>
             </div>
             <p id="today-date-label"></p>
+            <button class="text-button" id="daily-summary-btn" type="button" hidden>Resumo do Dia</button>
           </div>
+
+          <div class="daily-summary-panel" id="daily-summary-panel" hidden aria-labelledby="daily-summary-heading" role="region">
+            <div class="daily-summary-header">
+              <h2 id="daily-summary-heading">Resumos de hoje</h2>
+              <button class="text-button" id="daily-summary-close" type="button" aria-label="Fechar painel de resumos">&times; Fechar</button>
+            </div>
+            <div id="daily-summary-list" class="daily-summary-list"></div>
+          </div>
+
+          <div class="today-load-summary" id="today-load-summary" aria-live="polite" hidden></div>
 
           <div class="review-dashboard" id="review-dashboard">
             <section class="review-block review-block-overdue" id="block-overdue" aria-labelledby="title-overdue" hidden>
@@ -108,6 +130,145 @@
           </div>
         </section>
 
+        <section class="screen" id="screen-plan" data-screen-panel="plan" aria-labelledby="title-plan" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Conteúdo</p>
+              <h1 id="title-plan">Plano</h1>
+            </div>
+            <button class="primary-button" id="plan-new-unit-btn" type="button">+ Nova aula</button>
+          </div>
+          <div class="plan-new-unit-form form-card" id="plan-new-unit-form" hidden>
+            <div class="section-heading compact-heading">
+              <p class="eyebrow">Plano</p>
+              <h2>Nova aula</h2>
+            </div>
+            <div class="form-grid">
+              <div class="field-group form-grid-wide">
+                <label for="plan-subject-select">Disciplina</label>
+                <div class="inline-form-row inline-select-row">
+                  <select id="plan-subject-select" name="planSubject">
+                    <option value="">Selecione...</option>
+                  </select>
+                  <button class="text-button" id="plan-show-subject-form" type="button" aria-expanded="false" aria-controls="plan-new-subject-form">
+                    <span aria-hidden="true">+</span> Nova disciplina
+                  </button>
+                </div>
+                <form class="inline-form" id="plan-new-subject-form" hidden novalidate>
+                  <div class="field-group inline-form-field">
+                    <label for="plan-new-subject-input">Nome da nova disciplina</label>
+                    <div class="inline-form-row">
+                      <input id="plan-new-subject-input" name="planSubjectName" type="text" maxlength="100" autocomplete="off" />
+                      <button class="primary-button" type="submit">Adicionar</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-source">Fonte</label>
+                <input id="plan-study-source" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" />
+              </div>
+              <div class="field-group">
+                <label for="plan-study-date">Data da aula</label>
+                <input id="plan-study-date" type="date" required />
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-title">Conteúdo estudado</label>
+                <input id="plan-study-title" type="text" maxlength="240" placeholder="Ex.: Lei de Frank-Starling" required />
+              </div>
+              <div class="field-group form-grid-wide">
+                <label for="plan-study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
+                <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado..."></textarea>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="primary-button" id="plan-unit-save-btn" type="button">Salvar aula</button>
+              <button class="small-button" id="plan-unit-cancel-btn" type="button">Cancelar</button>
+              <p class="form-message" id="plan-unit-form-message" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div class="plan-filters" id="plan-filters">
+            <select id="plan-filter-subject" aria-label="Filtrar por disciplina">
+              <option value="">Todas as disciplinas</option>
+            </select>
+            <select id="plan-filter-state" aria-label="Filtrar por estado">
+              <option value="">Todos os estados</option>
+              <option value="ATRASADO">Atrasada</option>
+              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
+              <option value="EM_REVISAO">Revisar hoje</option>
+              <option value="EM_ESTUDO">Em estudo</option>
+              <option value="EM_DIA">Em dia</option>
+            </select>
+            <select id="plan-sort" aria-label="Ordenar por">
+              <option value="study-date-desc">Data (mais recente)</option>
+              <option value="subject">Disciplina</option>
+              <option value="next-review">Próxima revisão</option>
+            </select>
+          </div>
+          <div class="plan-list" id="plan-list" aria-live="polite"></div>
+          <p class="panel-empty" id="plan-empty" hidden>Nenhuma aula cadastrada.</p>
+        </section>
+
+        <section class="screen" id="screen-tracking" data-screen-panel="tracking" aria-labelledby="title-tracking" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Processo</p>
+              <h1 id="title-tracking">Acompanhamento</h1>
+            </div>
+          </div>
+          <div class="tracking-filters" id="tracking-filters">
+            <select id="tracking-filter-subject" aria-label="Filtrar por disciplina">
+              <option value="">Todas as disciplinas</option>
+            </select>
+            <select id="tracking-filter-state" aria-label="Filtrar por estado">
+              <option value="">Todos os estados</option>
+              <option value="ATRASADO">Atrasada</option>
+              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
+              <option value="EM_REVISAO">Revisar hoje</option>
+              <option value="EM_ESTUDO">Em estudo</option>
+              <option value="EM_DIA">Em dia</option>
+            </select>
+            <select id="tracking-filter-period" aria-label="Filtrar por período">
+              <option value="">Qualquer período</option>
+              <option value="last-30">Últimos 30 dias</option>
+              <option value="last-90">Últimos 90 dias</option>
+              <option value="last-365">Último ano</option>
+            </select>
+          </div>
+          <div class="tracking-list" id="tracking-list" aria-live="polite"></div>
+          <p class="panel-empty" id="tracking-empty" hidden>Nenhuma aula encontrada.</p>
+        </section>
+
+        <section class="screen" id="screen-subjects" data-screen-panel="subjects" aria-labelledby="title-subjects" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Organização</p>
+              <h1 id="title-subjects">Disciplinas</h1>
+            </div>
+            <button class="primary-button" id="subjects-show-create-btn" type="button">+ Nova disciplina</button>
+          </div>
+          <div class="subjects-create-form form-card" id="subjects-create-form" hidden>
+            <div class="form-grid">
+              <div class="field-group form-grid-wide">
+                <label for="subjects-new-name">Nome da disciplina</label>
+                <input id="subjects-new-name" type="text" maxlength="100" autocomplete="off" />
+              </div>
+              <div class="field-group form-grid-wide">
+                <span class="field-label">Cor</span>
+                <div class="color-picker" id="subjects-new-color-picker" role="radiogroup" aria-label="Cor da disciplina"></div>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="primary-button" id="subjects-create-save-btn" type="button">Salvar</button>
+              <button class="small-button" id="subjects-create-cancel-btn" type="button">Cancelar</button>
+              <p class="form-message" id="subjects-create-message" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+          <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
+          <p class="panel-empty" id="subjects-catalog-empty" hidden>Nenhuma disciplina cadastrada.</p>
+        </section>
+
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
           <h1 id="title-register">Cadastro</h1>
           <div class="form-card">
@@ -115,7 +276,7 @@
               <div class="section-heading">
                 <p class="eyebrow">Novo estudo</p>
                 <h2>Cadastro rápido</h2>
-                <p>Escolha disciplina e fonte, depois informe data e conteúdo. Os cadastros auxiliares ficam abaixo.</p>
+                <p>Escolha a disciplina, informe a fonte e o conteúdo do estudo.</p>
               </div>
 
               <div class="form-grid">
@@ -133,15 +294,8 @@
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-source">Fonte</label>
-                  <div class="inline-form-row inline-select-row">
-                    <select id="study-source" name="studySource" required>
-                      <option value="">Selecione...</option>
-                    </select>
-                    <button class="text-button" id="show-source-form" type="button" aria-expanded="false" aria-controls="new-source-form">
-                      <span aria-hidden="true">+</span> Nova fonte
-                    </button>
-                  </div>
+                  <label for="study-source-text">Fonte</label>
+                  <input id="study-source-text" name="studySourceText" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" />
                   <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
                 </div>
 
@@ -153,6 +307,11 @@
                 <div class="field-group form-grid-wide">
                   <label for="study-content">Conteúdo estudado</label>
                   <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
+                </div>
+
+                <div class="field-group form-grid-wide">
+                  <label for="study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
+                  <textarea id="study-summary" name="studySummary" rows="5" placeholder="Escreva aqui o resumo do conteúdo estudado..."></textarea>
                 </div>
               </div>
 
@@ -167,16 +326,6 @@
                 <label for="new-subject-input">Nome da nova disciplina</label>
                 <div class="inline-form-row">
                   <input id="new-subject-input" name="subjectName" type="text" maxlength="100" autocomplete="off" />
-                  <button class="primary-button" type="submit">Adicionar</button>
-                </div>
-              </div>
-            </form>
-
-            <form class="inline-form" id="new-source-form" hidden novalidate>
-              <div class="field-group inline-form-field">
-                <label for="new-source-input">Nome da nova fonte para este estudo</label>
-                <div class="inline-form-row">
-                  <input id="new-source-input" name="sourceName" type="text" maxlength="100" autocomplete="off" />
                   <button class="primary-button" type="submit">Adicionar</button>
                 </div>
               </div>
@@ -197,23 +346,13 @@
               <div class="section-heading compact-heading">
                 <p class="eyebrow">Disciplinas cadastradas</p>
                 <h2 id="subject-manager-title">Gerenciar disciplinas</h2>
-                <p>Edite, desative ou exclua disciplinas. Excluir apaga estudos e revisões relacionados.</p>
+                <p>Edite ou desative disciplinas. Disciplinas com estudos não podem ser excluídas.</p>
               </div>
               <div class="subject-list" id="subject-list" aria-live="polite"></div>
               <p class="panel-empty" id="subjects-empty">Nenhuma disciplina cadastrada.</p>
               <p class="field-message" id="subject-manager-message" role="alert" aria-live="polite"></p>
             </section>
 
-            <section class="source-manager" aria-labelledby="source-manager-title">
-              <div class="section-heading compact-heading">
-                <p class="eyebrow">Fontes cadastradas</p>
-                <h2 id="source-manager-title">Gerenciar fontes</h2>
-                <p>Cadastro auxiliar de fontes reutilizáveis. O uso principal da fonte acontece junto do estudo.</p>
-              </div>
-              <div class="source-list" id="source-list" aria-live="polite"></div>
-              <p class="panel-empty" id="sources-empty">Nenhuma fonte cadastrada.</p>
-              <p class="field-message" id="source-manager-message" role="alert" aria-live="polite"></p>
-            </section>
           </div>
         </section>
 
@@ -233,6 +372,23 @@
             <article class="metric-card"><span>Questões</span><strong id="metric-questions">0</strong></article>
             <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
+
+          <section class="stats-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
+            <div class="stats-panel-heading">
+              <div>
+                <p class="eyebrow">Por disciplina</p>
+                <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
+              </div>
+              <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
+                <option value="worst-first">Pior → melhor</option>
+                <option value="best-first">Melhor → pior</option>
+                <option value="volume">Volume de questões</option>
+                <option value="trend">Tendência</option>
+              </select>
+            </div>
+            <div class="subject-kpi-list" id="subject-kpi-list" aria-live="polite"></div>
+            <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
+          </section>
 
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
@@ -274,8 +430,58 @@
             <p class="panel-empty" id="subject-averages-empty">Registre questões concluídas para ver as médias.</p>
           </section>
 
+          <section class="stats-panel" aria-labelledby="unit-stats-title">
+            <div class="stats-panel-heading">
+              <div>
+                <p class="eyebrow">Por conteúdo</p>
+                <h2 id="unit-stats-title">Desempenho por aula</h2>
+              </div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
+                  <option value="">Todas as tendências</option>
+                  <option value="IMPROVING">Melhorando</option>
+                  <option value="DECLINING">Caindo</option>
+                  <option value="STABLE">Estável</option>
+                  <option value="INSUFFICIENT">Insuficiente</option>
+                </select>
+                <select id="stats-unit-filter-period" aria-label="Filtrar por período">
+                  <option value="">Qualquer período</option>
+                  <option value="last-30">Últimos 30 dias</option>
+                  <option value="last-90">Últimos 90 dias</option>
+                  <option value="last-365">Último ano</option>
+                </select>
+                <select id="stats-unit-sort" aria-label="Ordenar por">
+                  <option value="worst-first">Pior score (padrão)</option>
+                  <option value="trend">Tendência</option>
+                  <option value="volume">Volume</option>
+                  <option value="subject">Disciplina</option>
+                  <option value="last-activity">Última atividade</option>
+                </select>
+              </div>
+            </div>
+            <div class="unit-stats-list" id="unit-stats-list" aria-live="polite"></div>
+            <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
+          </section>
+
           <section class="stats-panel chart-panel" aria-labelledby="evolution-title">
-            <div class="stats-panel-heading"><div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução das notas</h2></div></div>
+            <div class="stats-panel-heading">
+              <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="evolution-filter-period" aria-label="Período do gráfico">
+                  <option value="3">3 meses</option>
+                  <option value="6">6 meses</option>
+                  <option value="12">12 meses</option>
+                  <option value="0">Tudo</option>
+                </select>
+              </div>
+            </div>
+            <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
             <canvas id="evolution-chart" hidden></canvas>
             <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
           </section>
@@ -321,6 +527,14 @@
         </section>
       </main>
     </div>
+
+    <dialog id="confirm-dialog" aria-modal="true">
+      <p id="confirm-dialog-message"></p>
+      <div class="confirm-dialog-actions">
+        <button id="confirm-dialog-cancel" type="button" class="secondary-button">Cancelar</button>
+        <button id="confirm-dialog-ok" type="button" class="small-button is-danger">Confirmar</button>
+      </div>
+    </dialog>
   </body>
 </html>
 

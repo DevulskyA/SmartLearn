@@ -1,0 +1,9 @@
+{
+  "version": "main-to-vnext",
+  "preMigration": [
+    "ALTER TABLE study_records RENAME TO learning_units",
+    "ALTER TABLE review_tasks RENAME COLUMN study_record_id TO unit_id",
+    "ALTER TABLE exercises RENAME COLUMN study_record_id TO unit_id"
+  ],
+  "sourceResolution": "UPDATE learning_units SET source_text = COALESCE((SELECT name FROM sources WHERE sources.id = learning_units.source_id), '') WHERE source_text = ''"
+}
