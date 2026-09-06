@@ -2,113 +2,96 @@
 
 ## Visão
 
-Transformar uma planilha de controle de estudos e revisões periódicas em uma única aplicação
-multiplataforma, simples e rápida — usável em desktop, iPhone/iOS e Android, sem conta,
-sem servidor e sem fricção.
+Transformar o SmartLearn em um sistema local-first de aprendizagem médica adaptativa que converte material-fonte em estudo, recuperação independente, análise de erro, revisão espaçada, transferência e domínio verificável, mantendo a superfície simples para o aluno.
 
 ## Problema
 
-Alunos que estudam para concursos, vestibulares ou certificações precisam revisar o conteúdo
-em intervalos específicos para fixar o aprendizado. A planilha funcionava, mas:
+A versão legada organiza revisões periódicas e registra desempenho, mas ainda trata aprendizagem principalmente como calendário + percentual agregado. Esse modelo não distingue desempenho assistido de domínio independente, não representa competências explicitamente, não mede transferência e não usa o erro como evidência diagnóstica estruturada.
 
-- É difícil de usar no celular.
-- Exige manipulação manual de datas e fórmulas.
-- Não é acessível fora do computador onde está salva.
-- Não gera alertas ou organiza o que fazer hoje.
+## Objetivo do produto
 
-## Solução
+Maximizar aprendizagem durável, independente e transferível por unidade de esforço do aluno.
 
-Uma aplicação Tauri 2 com interface web que:
+A pergunta operacional do motor é:
 
-1. Substitui a planilha sem aumentar a complexidade.
-2. Funciona no celular tão bem quanto no desktop.
-3. Organiza automaticamente o que o aluno deve revisar hoje.
-4. Gera revisões automaticamente ao registrar um estudo.
-5. Salva tudo localmente, sem precisar de internet ou conta.
-6. Permite backup e restauração via arquivo JSON.
+> Qual experiência de aprendizagem deve vir agora para melhorar uma competência específica, dadas as evidências disponíveis e a incerteza sobre o estado do aluno?
 
-## Usuário
+## Estratégia de evolução
 
-Aluno individual que:
-- Estuda regularmente para provas, concursos ou certificações.
-- Já usava (ou poderia usar) uma planilha de revisões periódicas.
-- Acessa pelo celular na maior parte do tempo.
-- Está frequentemente cansado ao abrir o app.
-- Não quer aprender uma ferramenta complexa.
+O sistema atual permanece funcional enquanto o novo motor entra por camadas:
+
+1. núcleo de evidência puro e testável;
+2. competências e eventos de aprendizagem persistidos;
+3. instrumentação das revisões atuais como evidência;
+4. hipóteses de erro e estado de domínio;
+5. transferência e integração clínica;
+6. política adaptativa de intervenção;
+7. scheduling adaptativo validado contra o baseline fixo;
+8. modelos aprendidos apenas quando dados e avaliações justificarem sua complexidade.
 
 ## Princípio central
 
-> O aluno deve gastar energia estudando, não gerenciando o sistema.
+> O aluno deve gastar energia aprendendo; a complexidade deve ficar dentro do sistema.
 
-## Versionamento
+## Stack
 
-O projeto usa Git desde o início. TASK-000 inicializa o repositório local e cria o primeiro
-commit apenas com specs aprovadas e estrutura inicial. Cada task posterior usa commit próprio
-e deve deixar o repositório funcional. Codex é responsável por GitHub, branches remotas e pull
-requests; Claude não cria repositório GitHub nem faz push remoto sem instrução explícita.
+| Camada | Tecnologia |
+| --- | --- |
+| Interface | HTML5 + CSS3 + JavaScript ES modules |
+| Build | Vite |
+| App | Tauri 2 |
+| Persistência | SQLite nativo via `@tauri-apps/plugin-sql` |
+| Domínio pedagógico | módulos JavaScript puros, independentes de UI/SQL sempre que possível |
+| Primeiro alvo | Desktop |
+| Móvel | Android na mesma base; iOS compatível para build Apple posterior |
+| Backend | nenhum no baseline local-first |
 
-## Stack do MVP
+## Fronteiras arquiteturais
 
-| Camada         | Tecnologia                              |
-|---------------|----------------------------------------|
-| Estrutura     | HTML5                                  |
-| Estilo        | CSS3 (sem framework)                   |
-| Lógica        | JavaScript puro (ES6+)                 |
-| Build web     | Vite (empacotador mínimo)              |
-| Banco local   | SQLite nativo via `@tauri-apps/plugin-sql` |
-| Empacotamento | Tauri 2                                |
-| Primeiro alvo | Desktop                                |
-| Alvos móveis  | Android posterior; iOS preparado na mesma base |
-| Backend       | Nenhum                                 |
+- SQL permanece restrito a `src/db.js`.
+- Regras pedagógicas determinísticas devem ser isoladas de persistência e apresentação quando isso aumentar testabilidade.
+- UI não deve reproduzir a complexidade interna do learner model.
+- Geradores de IA futuros não podem ser usados como validadores de sua própria correção.
+- Conteúdo médico gerado deve manter provenance quando a geração source-grounded entrar no produto.
 
-## Estrutura do projeto
+## Estado da migração
 
-```
-SmartLearn/
-├── .git/
-├── .gitignore
-├── .specs/
-├── package.json
-├── vite.config.js
-├── index.html
-├── src/
-│   ├── app.js
-│   ├── db.js
-│   ├── stats.js
-│   └── styles.css
-├── src-tauri/
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   └── src/
-│       └── main.rs
-└── README.md
-```
+A feature `evidence-learning-core-v1` inicia a transição sem alterar o comportamento existente do scheduler, banco ou UI. Ela cria o contrato mínimo para representar:
 
-## Escopo do MVP
+- tipo de evidência;
+- nível de assistência;
+- confiança opcional;
+- hipóteses concorrentes de erro;
+- evidência de recuperação retardada;
+- transferência;
+- gate conservador de mastery.
 
-**Dentro do MVP:**
-- Cadastro de disciplinas
-- Cadastro de estudo (modelo RP)
-- Geração automática de revisões
-- Tela Hoje/Detalhes com cards e tabela responsiva
-- Marcar revisão como feita
-- Registrar questões, acertos e comentário
-- Estatísticas básicas com gráfico de evolução
-- Exportar/importar backup JSON
-- Aplicação desktop empacotada com Tauri 2 e SQLite nativo
-- Mesma base preparada para Android e iOS
+## Fora do primeiro milestone
 
-**Fora do MVP (sem data):**
-- Conta de usuário / login
-- Sincronização em nuvem
-- IA ou sugestões inteligentes
-- Gamificação
-- Banco de questões
-- Build real iOS (requer ambiente Apple/Mac)
-- Compartilhamento entre usuários
+- migração SQLite de eventos;
+- geração automática de perguntas;
+- LLM tutor;
+- substituição do scheduler fixo;
+- deep knowledge tracing;
+- sincronização em nuvem;
+- conta de usuário;
+- gamificação.
+
+Esses itens podem entrar apenas em milestones posteriores e devem provar ganho material sobre o baseline quando aumentarem complexidade.
+
+## Autoridade pedagógica
+
+Toda alteração de aprendizagem deve consultar, nesta ordem:
+
+1. `docs/research/SMARTLEARN_PEDAGOGICAL_CONTRACT_V1.md`;
+2. spec da feature atual;
+3. comportamento e testes atuais do repositório;
+4. evidência científica adicional validada para a decisão específica.
 
 ## Referências
 
-- [INVARIANTS.md](INVARIANTS.md) — Regras que nunca podem ser violadas
-- [ROADMAP.md](ROADMAP.md) — Fases e milestones
-- [STATE.md](STATE.md) — Decisões, bloqueadores e pendências
+- [INVARIANTS.md](INVARIANTS.md)
+- [ROADMAP.md](ROADMAP.md)
+- [STATE.md](STATE.md)
+- [`../../docs/research/SMARTLEARN_PEDAGOGICAL_CONTRACT_V1.md`](../../docs/research/SMARTLEARN_PEDAGOGICAL_CONTRACT_V1.md)
+- [`../features/evidence-learning-core-v1/spec.md`](../features/evidence-learning-core-v1/spec.md)
