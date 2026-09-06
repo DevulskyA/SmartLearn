@@ -32,12 +32,12 @@ test('001-bootstrap creates server_meta', () => {
   }
 });
 
-test('001-bootstrap records one row in schema_migrations', () => {
+test('001-bootstrap records exactly one row for version 1 in schema_migrations', () => {
   const { path, cleanup } = tmpDb();
   try {
     const db = openDb(path);
     runMigrations(db, REAL_MIGRATIONS_DIR);
-    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations WHERE version = 1').get();
     assert.equal(n, 1);
     db.close();
   } finally {
@@ -45,14 +45,15 @@ test('001-bootstrap records one row in schema_migrations', () => {
   }
 });
 
-test('idempotent — second run does not duplicate rows', () => {
+test('idempotent — second run does not duplicate any migration row', () => {
   const { path, cleanup } = tmpDb();
   try {
     const db = openDb(path);
     runMigrations(db, REAL_MIGRATIONS_DIR);
+    const { n: firstRunCount } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
     runMigrations(db, REAL_MIGRATIONS_DIR);
-    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
-    assert.equal(n, 1);
+    const { n: secondRunCount } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    assert.equal(secondRunCount, firstRunCount, 'rerunning migrations must not add or duplicate rows');
     db.close();
   } finally {
     cleanup();

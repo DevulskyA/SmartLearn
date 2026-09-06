@@ -10,7 +10,11 @@ export function openDb(dbPath) {
   const db = new Database(dbPath);
   db.pragma('foreign_keys = ON');
   db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
+  // T08 / design.md §2: strengthened from NORMAL to FULL now that this
+  // database holds authoritative user identity data. A planned durability
+  // upgrade for the new scope, not a correction of the PR-1 foundation's
+  // earlier NORMAL choice (which had no user data yet).
+  db.pragma('synchronous = FULL');
   db.pragma('busy_timeout = 5000');
   return db;
 }
