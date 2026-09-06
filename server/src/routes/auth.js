@@ -1,6 +1,13 @@
 import { hashPassword, verifyPassword, validatePasswordShape, runDecoyHash } from '../auth/passwords.js';
 import { normalizeEmail, validateEmailShape } from '../auth/email.js';
+import {
+  generateSessionToken, hashToken, sessionCookieName, sessionCookieOptions,
+  SESSION_ABSOLUTE_LIFETIME_MS,
+} from '../auth/session-tokens.js';
+import { generateCsrfToken } from '../auth/csrf.js';
+import { createRateLimiter, DEFAULT_ACCOUNT_MAX_ATTEMPTS, DEFAULT_IP_MAX_ATTEMPTS } from '../auth/rate-limit.js';
 import * as users from '../repositories/users.js';
+import * as sessions from '../repositories/sessions.js';
 
 const registerBodySchema = {
   body: {
@@ -13,13 +20,32 @@ const registerBodySchema = {
   },
 };
 
+const loginRateLimiter = createRateLimiter();
+
+function issueSession(db, userId, isProduction) {
+  const rawToken = generateSessionToken();
+  const tokenHash = hashToken(rawToken);
+  const csrfToken = generateCsrfToken();
+  const issuedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + SESSION_ABSOLUTE_LIFETIME_MS).toISOString();
+  const session = sessions.createSession(db, { tokenHash, userId, issuedAt, expiresAt, csrfToken });
+  return { rawToken, session };
+}
+
+function setSessionCookie(reply, rawToken, isProduction) {
+  reply.setCookie(sessionCookieName(isProduction), rawToken, sessionCookieOptions(isProduction));
+}
+
+function clearSessionCookie(reply, isProduction) {
+  reply.clearCookie(sessionCookieName(isProduction), { path: '/' });
+}
+
 /**
- * Registers /v1/auth/register and /v1/auth/login on the given Fastify
- * instance. Both are marked public (bypass the default-deny actor check —
- * you cannot be authenticated before you have an account/session). Neither
- * issues a session cookie yet: that lands in T10 alongside CSRF wiring.
+ * Registers auth routes on the given Fastify instance (expected to be the
+ * /v1 sub-context with applyDomainEnvelope already applied). `isProduction`
+ * controls cookie Secure/name per design.md §3.
  */
-export function registerAuthRoutes(app, db) {
+export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
   app.post('/auth/register', { config: { public: true }, schema: registerBodySchema }, async (request, reply) => {
     const { email, password } = request.body;
 
@@ -59,20 +85,31 @@ export function registerAuthRoutes(app, db) {
 
   app.post('/auth/login', { config: { public: true }, schema: registerBodySchema }, async (request, reply) => {
     const { email, password } = request.body;
+    const ip = request.ip;
 
     const emailError = validateEmailShape(email);
     const passwordError = typeof password !== 'string' ? 'A senha deve ser uma string.' : null;
     if (emailError || passwordError) {
-      await runDecoyHash(); // constant-shape: still pay the hashing cost
+      await runDecoyHash();
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
 
     const normalized = normalizeEmail(email);
+    const accountKey = `acct:${normalized}`;
+    const ipKey = `ip:${ip}`;
+
+    if (loginRateLimiter.isBlocked(accountKey, DEFAULT_ACCOUNT_MAX_ATTEMPTS) || loginRateLimiter.isBlocked(ipKey, DEFAULT_IP_MAX_ATTEMPTS)) {
+      reply.status(401);
+      return { error: { code: 'INVALID_CREDENTIALS' } }; // generic — never reveal rate-limit state
+    }
+
     const record = users.findByEmailWithSecrets(db, normalized);
 
     if (!record) {
-      await runDecoyHash(); // unknown account: same timing shape as a wrong password
+      await runDecoyHash();
+      loginRateLimiter.recordFailure(accountKey);
+      loginRateLimiter.recordFailure(ipKey);
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
@@ -84,11 +121,75 @@ export function registerAuthRoutes(app, db) {
     });
 
     if (!valid) {
+      loginRateLimiter.recordFailure(accountKey);
+      loginRateLimiter.recordFailure(ipKey);
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
 
-    // T10 adds session issuance + cookie here. For now, confirm identity only.
+    loginRateLimiter.reset(accountKey);
+    loginRateLimiter.reset(ipKey);
+
+    const { rawToken } = issueSession(db, record.id, isProduction);
+    setSessionCookie(reply, rawToken, isProduction);
+
+    return { user: users.findById(db, record.id) };
+  });
+
+  // Authenticated bootstrap: confirms identity and hands back this
+  // session's CSRF token for subsequent mutating requests.
+  app.get('/auth/me', async (request) => {
+    return { user: users.findById(db, request.actor.userId), csrfToken: request.actor.csrfToken };
+  });
+
+  app.post('/auth/logout', async (request, reply) => {
+    sessions.revoke(db, request.actor.sessionId);
+    clearSessionCookie(reply, isProduction);
+    reply.status(204);
+    return null;
+  });
+
+  app.post('/auth/password', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['currentPassword', 'newPassword'],
+        properties: {
+          currentPassword: { type: 'string' },
+          newPassword: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { currentPassword, newPassword } = request.body;
+    const record = users.findByIdWithSecrets(db, request.actor.userId);
+    if (!record) {
+      reply.status(401);
+      return { error: { code: 'UNAUTHENTICATED' } };
+    }
+
+    const currentValid = await verifyPassword(currentPassword, {
+      hash: record.password_hash, salt: record.password_salt, params: record.password_params,
+    });
+    if (!currentValid) {
+      reply.status(401);
+      return { error: { code: 'INVALID_CREDENTIALS' } };
+    }
+
+    const shapeError = validatePasswordShape(newPassword);
+    if (shapeError) {
+      reply.status(400);
+      return { error: { code: 'VALIDATION_FAILED', field: 'newPassword', message: shapeError } };
+    }
+
+    const { hash, salt, algorithm, params } = await hashPassword(newPassword);
+    db.prepare('UPDATE users SET password_hash=?, password_salt=?, password_algorithm=?, password_params=?, updated_at=? WHERE id=?')
+      .run(hash, salt, algorithm, params, new Date().toISOString(), record.id);
+
+    // Password change revokes every OTHER session; the current one stays
+    // valid so the user isn't logged out by their own change.
+    sessions.revokeAllForUser(db, record.id, { exceptId: request.actor.sessionId });
+
     return { user: users.findById(db, record.id) };
   });
 }

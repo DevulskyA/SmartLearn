@@ -1,13 +1,16 @@
 import Fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import { fileURLToPath } from 'node:url';
 import { validateMigrations } from './migrations.js';
 import { applyDomainEnvelope } from './http-contract.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [] } = {}) {
   const app = Fastify({ logger: false });
+  await app.register(fastifyCookie);
 
   app.get('/health/live', async () => {
     return { status: 'alive' };
@@ -41,8 +44,11 @@ export function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   // actor, strict AJV, JSON-only errors) do not leak onto /health, and
   // /health's public minimal behavior does not leak into /v1.
   app.register(async (v1) => {
-    applyDomainEnvelope(v1);
-    registerAuthRoutes(v1, db);
+    applyDomainEnvelope(v1, {
+      resolveActor: createSessionActorResolver(db, { isProduction }),
+      allowedOrigins,
+    });
+    registerAuthRoutes(v1, db, { isProduction });
   }, { prefix: '/v1' });
 
   return app;

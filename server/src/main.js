@@ -5,7 +5,7 @@ import { buildApp } from './app.js';
 
 const db = openDb(config.dbPath);
 runMigrations(db);
-const app = buildApp(db);
+const app = await buildApp(db, undefined, { isProduction: config.isProduction, allowedOrigins: config.allowedOrigins });
 
 try {
   await app.listen({ host: config.host, port: config.port });

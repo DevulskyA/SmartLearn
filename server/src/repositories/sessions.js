@@ -11,16 +11,17 @@ function toSafeDto(row) {
     expiresAt: row.expires_at,
     lastSeen: row.last_seen,
     revokedAt: row.revoked_at,
+    csrfToken: row.csrf_token,
   };
 }
 
-export function createSession(db, { tokenHash, userId, issuedAt, expiresAt }) {
+export function createSession(db, { tokenHash, userId, issuedAt, expiresAt, csrfToken }) {
   const stmt = db.prepare(`
-    INSERT INTO sessions (token_hash, user_id, issued_at, expires_at, last_seen)
-    VALUES (@tokenHash, @userId, @issuedAt, @expiresAt, @issuedAt)
+    INSERT INTO sessions (token_hash, user_id, issued_at, expires_at, last_seen, csrf_token)
+    VALUES (@tokenHash, @userId, @issuedAt, @expiresAt, @issuedAt, @csrfToken)
   `);
   try {
-    const result = stmt.run({ tokenHash, userId, issuedAt, expiresAt });
+    const result = stmt.run({ tokenHash, userId, issuedAt, expiresAt, csrfToken: csrfToken ?? null });
     return findById(db, result.lastInsertRowid);
   } catch (err) {
     if (String(err.message).includes('FOREIGN KEY')) {

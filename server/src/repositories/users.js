@@ -47,3 +47,9 @@ export function findByEmail(db, normalizedEmail) {
 export function findByEmailWithSecrets(db, normalizedEmail) {
   return db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail) ?? null;
 }
+
+// Used only by the password-change path (T10). Same secrecy contract as
+// findByEmailWithSecrets.
+export function findByIdWithSecrets(db, id) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) ?? null;
+}

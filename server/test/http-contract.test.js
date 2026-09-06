@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { applyDomainEnvelope, ERROR_CODES } from '../src/http-contract.js';
 
+const TEST_ORIGIN = 'https://smartlearn.test';
+
 function buildTestApp() {
   const app = Fastify({ logger: false });
 
@@ -13,6 +15,7 @@ function buildTestApp() {
     // that T09/T10 will inject as resolveActor. Never present in production.
     applyDomainEnvelope(v1, {
       resolveActor: async (request) => request.headers['x-test-actor'] || null,
+      allowedOrigins: [TEST_ORIGIN],
     });
 
     v1.get('/whoami', async (request) => ({ actor: request.actor }));
@@ -65,6 +68,7 @@ test('AC-08: unknown body field is rejected, not silently stripped', async () =>
   const res = await app.inject({
     method: 'POST',
     url: '/v1/echo',
+    headers: { origin: TEST_ORIGIN },
     payload: { name: 'ok', userId: 999, extra: 'unexpected' },
   });
   assert.equal(res.statusCode, 400);
@@ -77,6 +81,7 @@ test('AC-06/AC-08: body.userId as a would-be actor override is rejected as an un
   const res = await app.inject({
     method: 'POST',
     url: '/v1/echo',
+    headers: { origin: TEST_ORIGIN },
     payload: { name: 'ok', userId: 42 },
   });
   assert.equal(res.statusCode, 400, 'client-supplied userId must never be accepted as an access authority');
@@ -87,6 +92,7 @@ test('wrong primitive type is rejected, not coerced', async () => {
   const res = await app.inject({
     method: 'POST',
     url: '/v1/echo',
+    headers: { origin: TEST_ORIGIN },
     payload: { name: 12345 },
   });
   assert.equal(res.statusCode, 400);
@@ -140,4 +146,26 @@ test('a request id is generated when the client does not supply one', async () =
   const app = buildTestApp();
   const res = await app.inject({ method: 'GET', url: '/v1/public-probe' });
   assert.ok(res.headers['x-request-id'], 'expected a generated x-request-id header');
+});
+
+test('T10: a mutating request with a missing Origin is rejected 403, even on a public route', async () => {
+  const app = buildTestApp();
+  const res = await app.inject({ method: 'POST', url: '/v1/echo', payload: { name: 'x' } });
+  assert.equal(res.statusCode, 403);
+});
+
+test('T10: a mutating request with an unexpected Origin is rejected 403', async () => {
+  const app = buildTestApp();
+  const res = await app.inject({
+    method: 'POST', url: '/v1/echo',
+    headers: { origin: 'https://evil.example.com' },
+    payload: { name: 'x' },
+  });
+  assert.equal(res.statusCode, 403);
+});
+
+test('T10: GET requests are never subject to the origin/CSRF check', async () => {
+  const app = buildTestApp();
+  const res = await app.inject({ method: 'GET', url: '/v1/public-probe' }); // no Origin header at all
+  assert.equal(res.statusCode, 200);
 });

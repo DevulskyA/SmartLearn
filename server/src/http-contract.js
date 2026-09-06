@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import Ajv from 'ajv';
+import { originIsAllowed, requiresCsrfCheck, csrfTokensMatch } from './auth/csrf.js';
 
 // T07: strict /v1 domain envelope.
 // - default-deny actor resolution: every /v1 route requires request.actor to
@@ -43,7 +44,7 @@ const denyAllActorResolver = async () => null;
  * (body.userId, headers, query) as an access authority. Defaults to a
  * fail-closed resolver so /v1 denies everything until a real one is wired in.
  */
-export function applyDomainEnvelope(app, { resolveActor = denyAllActorResolver } = {}) {
+export function applyDomainEnvelope(app, { resolveActor = denyAllActorResolver, allowedOrigins = [] } = {}) {
   app.setValidatorCompiler(({ schema }) => {
     return ajv.compile({ ...schema, additionalProperties: false });
   });
@@ -58,6 +59,29 @@ export function applyDomainEnvelope(app, { resolveActor = denyAllActorResolver }
 
   app.addHook('preHandler', async (request) => {
     request.actor = (await resolveActor(request)) ?? null;
+  });
+
+  // design.md §3: exact-origin validation for login/register AND mutations
+  // (runs regardless of auth state), plus a per-session CSRF synchronizer
+  // token required on authenticated mutations. Missing/null/unexpected
+  // Origin fails closed — the only bypass is a route explicitly marked
+  // `config: { skipOriginCheck: true }` for isolated non-browser test tooling.
+  app.addHook('preHandler', async (request, reply) => {
+    if (!requiresCsrfCheck(request.method)) return;
+    if (request.routeOptions?.config?.skipOriginCheck) return;
+
+    if (!originIsAllowed(request.headers.origin, allowedOrigins)) {
+      reply.status(403).send(errorBody(ERROR_CODES.FORBIDDEN, request.requestId));
+      return reply;
+    }
+
+    if (request.actor?.csrfToken) {
+      const provided = request.headers['x-csrf-token'];
+      if (!csrfTokensMatch(request.actor.csrfToken, provided)) {
+        reply.status(403).send(errorBody(ERROR_CODES.FORBIDDEN, request.requestId));
+        return reply;
+      }
+    }
   });
 
   app.addHook('preHandler', async (request, reply) => {
