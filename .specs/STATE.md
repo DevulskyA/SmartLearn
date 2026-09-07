@@ -7,10 +7,41 @@
 
 ---
 
-## CHECKPOINT — 2026-09-07 (pre-/clear)
+## CHECKPOINT — 2026-09-07 (session 2, pre-/clear)
+
+Supersedes the "session 1" checkpoint immediately below (same day — that one
+is now historical; kept, not deleted, per this file's own append convention).
 
 WHERE ARE WE?
-Worktree `C:/Projetos/SmartLearn/.claude/worktrees/smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`, HEAD `8e933f6`. T01-T22 of the T01-T54 plan are done and gated. T23 is open, partially implemented, uncommitted.
+Worktree `C:/Projetos/SmartLearn/.claude/worktrees/smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`, HEAD `56b2c6018c285a199f1e2e5c60b2216105f9fab2` (reconciled against Git directly this session — confirmed a real, linear descendant of `bfbb82b`, 37 commits ahead, no reset performed). T01-T22 of the T01-T54 plan are PROVEN (`tasks.md` canonical checkboxes: 66/162 `[x]` = exactly T01-T22 × 3; verified by direct grep, not assumed). T23 is open, partially implemented, uncommitted — unchanged since session 1 (no new implementation happened this session; this session did status reconciliation + an external-audit pack, not product work).
+
+WHAT IS PROVEN?
+T01-T22 — same evidence as session 1 (server/root/rust/build/e2e/test:inventory counts in validation.md, unchanged). Additionally this session: `tasks.md`'s own Done-when checkboxes for T01-T22 were found drifted (`[ ]` despite PROVEN) and reconciled to `[x]` in two atomic commits (`4b16ddd` T13-T15, re-running those 3 test files live: 35/35 PASS; `56b2c60` T01-T12, evidence reused from validation.md, not re-run — see commit messages for the exact commit SHAs cited as evidence per task).
+
+WHAT IS IN PROGRESS?
+T23 (prove one-intention UX, retries and recoverable errors on server) — identical to session 1, re-confirmed via `git diff --stat`: `src/app.js` only, 33 insertions/4 deletions, unchanged. Per-save-intent `operationKey` tracker (`createOperationKeyTracker()`) wired into Plano's `planUnitSaveBtn` click handler. NOT started: Cadastro's equivalent tracker (`studyForm`/`generateReviewTasks()`); `e2e/atomic-save.spec.js`; no gate (re)run against this edit — still UNVERIFIED.
+
+WHAT IS NEXT?
+Finish T23: Cadastro operationKey wiring -> `e2e/atomic-save.spec.js` (double-click, response-lost-after-commit, mid-transaction failure, render-failure-after-successful-save) -> full gate -> validation.md evidence -> commit. Then T24 (independent Fresh Verifier for the whole server-authoritative-Web slice — must NOT be the same session/maker that did T23, per this file's own governance line). Then T25/T34/T39 all become simultaneously dependency-ready (see `02_NEXT_PHASE_INPUTS.md` in the audit pack below) — GATE_P1 (document-learning priority) is still unresolved and still explicitly deferred by the user.
+
+WHAT IS BLOCKED?
+Nothing technical. This session was explicitly told to stop before implementing T23 further and produce only this checkpoint.
+
+WHAT MUST NOT BE FORGOTTEN?
+- **Conductor cockpit created 2026-09-07** at `conductor/` (this worktree only): `conductor/tracks.md` = painel principal, `conductor/tracks/smartlearn-v1/plan.md` = checklist operacional, `conductor/workflow.md` = Bridge Contract. This file remains authority on conflict.
+- **T01-T22 canonical status reconciled 2026-09-07** (commits `4b16ddd`, `56b2c60`): `tasks.md` Done-when checkboxes now correctly show `[x]` for T01-T22, matching this file and validation.md. No task ID/wording/dependency changed.
+- **External audit pack produced 2026-09-07** (outside this worktree, in the session's scratchpad, not committed): `SMARTLEARN_V1_AUDIT_PACK.zip`, final SHA-256 `5183370b5c256296e456ec7e96c4c3f03a7e8bf7dee250914288c8bb38d2a352` — a full evidence snapshot (specs/design/tasks/validation/heritage/STATE/conductor + tracked source tree at HEAD + git evidence + T23 status) prepared for external review (GPT-6), not yet acted upon.
+- `src/app.js` has real, wanted, uncommitted T23 work (git status: `M src/app.js`) — do not discard; finish and commit it or explicitly decide otherwise first.
+- The `operationKey` renew-on-ApiError-but-not-NetworkError rule is a deliberate design decision, still NOT written into design.md/tasks.md — belongs in T23's validation.md entry when written.
+- No push/merge/deploy occurred; all commits are local only, on `claude/smartlearn-v1-complete`.
+- **Product-priority correction RECORDED, NOT executed**: `.specs/features/smartlearn-v1-consolidated-v2/document-learning-backlog-DOC-01-72.md` (DOC-01..DOC-72). DOC-01 audit has NOT been run. Explicitly deferred by the user. Finish T23 (and likely T24) before touching this.
+
+---
+
+## CHECKPOINT — 2026-09-07 (session 1, historical — superseded above, same day)
+
+WHERE ARE WE?
+Worktree `C:/Projetos/SmartLearn/.claude/worktrees/smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`, HEAD `8e933f6` (stale — session 2 advanced this to `56b2c60` via 2 status-reconciliation commits; no product code changed). T01-T22 of the T01-T54 plan are done and gated. T23 is open, partially implemented, uncommitted.
 
 WHAT IS PROVEN?
 T01-T22, each with a commit and a full green gate at commit time (server/root/rust/build/e2e/test:inventory — exact counts already in this file's T01-T22 entries below and in validation.md; not repeated here). Last full gate actually run: at T22 close (cb5762e/8e933f6) — server 174/174, root 259/259, rust 13/13, build PASS, e2e 26/26, test:inventory PASS (39 files).
@@ -25,12 +56,6 @@ WHAT IS BLOCKED?
 Nothing technical. Session is paused solely because the user explicitly asked to stop (repeatedly) mid-T23.
 
 WHAT MUST NOT BE FORGOTTEN?
-- **Conductor cockpit created 2026-09-07** at `conductor/` (this worktree only):
-  `conductor/tracks.md` = painel principal (sprints S00-S09, milestones M0-M9,
-  status agregado); `conductor/tracks/smartlearn-v1/plan.md` = checklist
-  operacional por task; `conductor/workflow.md` = Bridge Contract Conductor+TLC.
-  This file (`.specs/STATE.md`) remains the authority on conflict — Conductor
-  is a projection, not a replacement (see workflow.md rule 1).
 - `src/app.js` has real, wanted, uncommitted T23 work (git status: `M src/app.js`) — do not discard; either finish and commit it or explicitly decide otherwise before touching that file further.
 - The `operationKey` renew-on-ApiError-but-not-NetworkError rule above is a deliberate design decision made this session and is NOT yet written anywhere else (not in design.md/tasks.md) — if T23's validation.md entry is written later, this rationale belongs there.
 - No test/dev server processes were left running by this session (all manually-spawned Node/Vite instances from live-browser verification were killed).
