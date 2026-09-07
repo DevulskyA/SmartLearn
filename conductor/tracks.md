@@ -16,7 +16,7 @@ Current Sprint: S03 — Web Authority Cutover
 ✅ S00 — Authority & Baseline               6/6   T01-T06
 ✅ S01 — Identity & Security                6/6   T07-T12
 ✅ S02 — Learning Domain Server             7/7   T13-T19
-🔄 S03 — Web Authority Cutover              3/5   T20-T24
+✅ S03 — Web Authority Cutover              5/5   T20-T24
 ⛔ GATE_P1 — Product Priority Decision      0/1   (ver abaixo)
 ⬜ S04 — Data Migration / NO_DATA_LOSS      0/4   T25-T28
 ⬜ S05 — Learning Evidence                  0/5   T29-T33
@@ -30,31 +30,26 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T23 — DONE**
+**T24 — DONE. PHASE 03 CLOSED.**
 
 ```
-✅ Plano operationKey wired
-✅ Cadastro operationKey wiring
-✅ e2e/atomic-save.spec.js (4/4: double-click, response-lost-after-commit,
-   mid-transaction failure, render-failure-after-successful-save)
-✅ full gate (server 174/174, root 259/259, rust 13/13, build PASS,
-   e2e 30/30, test:inventory PASS 40 files)
-✅ evidence recorded (validation.md)
-⬜ atomic commit
+✅ Independent Fresh Verifier PASS (frozen HEAD 9a8c7cb; identity/ownership/
+   parity/DTO/no-fallback all independently proven, zero defects)
+✅ Gap found+closed: production-build E2E (e2e/production-build.spec.js —
+   real npm run build + server's own staticDir single-origin serving, no
+   Vite dev server involved at all)
+✅ full gate: server 174/174, root 259/259, rust 13/13, build PASS,
+   e2e 31/31 (30 + 1 new), test:inventory PASS 41 files
+✅ evidence recorded (validation.md, two T24 rows)
+✅ tasks.md T24 done-when boxes all [x]
+✅ atomic commit
 ```
 
-Decisão de design tomada nesta sessão, ainda não escrita em design.md/tasks.md:
-renovar `operationKey` em sucesso ou cancelamento explícito, e em `ApiError`
-definitivo (reenvio editado = nova intenção); **não** renovar em
-`NetworkError` (resultado desconhecido — retry deve reusar a mesma key para
-o guard de idempotência do T15 devolver o resultado original em vez de
-duplicar).
-
 ```
-LAST_PROVEN = T23 (committed 9a8c7cb)
-IN_PROGRESS = T24 (independent Fresh Verifier subagent running against frozen HEAD 9a8c7cb)
-NEXT_TASK   = finish T24 — Phase 03 NOT closed until it reports PASS/FAIL
-BLOCKERS    = none (T24 in progress, not stalled)
+LAST_PROVEN = T24 (Phase 03 closed)
+NEXT_TASK   = T25 — Normalize supported legacy snapshots without data
+              invention (Phase 04) — dependency-ready, NOT started
+BLOCKERS    = none
 DIRTY       = none — working tree clean
 ```
 
@@ -118,11 +113,11 @@ Exit gate: servidor é autoridade real do domínio.
 Nota: checkboxes de T13-T15 em `tasks.md` estão desatualizados (mostram `[ ]`
 apesar de DONE confirmado em STATE.md) — reconciliar ao tocar nesses arquivos.
 
-### 🔄 S03 — Web Authority Cutover (T20-T24) — IN PROGRESS
+### ✅ S03 — Web Authority Cutover (T20-T24) — PROVEN
 ✅ T20 RemoteStore + inventário DB.*, ✅ T21 cutover autenticado single-origin,
-✅ T22 paridade de telas sem perda de dados, ✅ T23 (ver CURRENT acima),
-⬜ T24 fecha a fatia com Fresh Verifier independente.
-Exit: Web deixa de ter autoridade paralela (BrowserStore) significativa.
+✅ T22 paridade de telas sem perda de dados, ✅ T23 one-intention UX no servidor,
+✅ T24 fecha a fatia: Fresh Verifier independente PASS + production-build E2E.
+Exit: Web deixa de ter autoridade paralela (BrowserStore) significativa. FECHADO.
 
 ### ⬜ S04 — NO_DATA_LOSS Migration (T25-T28)
 Normalização de snapshots legados sem invenção de dados → preview/mapping →

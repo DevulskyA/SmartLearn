@@ -65,7 +65,7 @@ Gate no fechamento: server 165/165, root 240/240, rust 13/13, build PASS, e2e 17
 
 ---
 
-## Sprint S03 — Web Authority Cutover 🔄 IN_PROGRESS (4/5)
+## Sprint S03 — Web Authority Cutover ✅ PROVEN (5/5)
 
 - [x] T20 — Map every existing DB caller and implement RemoteStore
 - [x] T21 — Connect the Web to real server-owned reads and writes
@@ -82,8 +82,23 @@ Gate no fechamento: server 165/165, root 240/240, rust 13/13, build PASS, e2e 17
         rust 13/13, build PASS, e2e 30/30 (26 existentes + 4 novos),
         test:inventory PASS (40 arquivos)
   - [x] evidência registrada em validation.md
-  - [ ] commit atômico
-- [ ] T24 — Close the server-authoritative Web slice (Fresh Verifier independente da fatia inteira; não antes; NÃO pode ser esta mesma sessão)
+  - [x] commit atômico
+- [x] T24 — Close the server-authoritative Web slice
+  - [x] Independent Fresh Verifier (subagent separado de quem fez T20-T23)
+        rodou contra HEAD congelado 9a8c7cb: 32/32 checagens HTTP diretas de
+        ownership/isolamento entre 2 contas reais, comparação campo-a-campo
+        de todo DTO cliente/servidor, verificação estrutural de que não
+        existe fallback local gravável — PASS, zero defeitos
+  - [x] Gap real encontrado e fechado: nenhum e2e havia rodado contra o
+        build de produção real (só contra o dev server do Vite). Fechado com
+        `e2e/production-build.spec.js` — `npm run build` real + servidor
+        real servindo `dist/` via `staticDir` (o próprio caminho de
+        produção single-origin do T21), navegador batendo direto nessa
+        origem, sem Vite. Confirmado não-flaky (3 execuções limpas).
+  - [x] gate completo: server 174/174, root 259/259, rust 13/13, build PASS,
+        e2e 31/31 (30 existentes + 1 novo), test:inventory PASS (41 arquivos)
+  - [x] evidência registrada em validation.md (duas linhas T24)
+  - [x] commit atômico
 
 Decisão de design do T23 (ainda não escrita em design.md/tasks.md): renovar
 `operationKey` em sucesso/cancelamento explícito e em `ApiError` definitivo;
@@ -91,6 +106,8 @@ Decisão de design do T23 (ainda não escrita em design.md/tasks.md): renovar
 idempotência do T15 (não T23) devolver o resultado original em vez de duplicar.
 
 Gate no fechamento do T23: server 174/174, root 259/259, rust 13/13, build PASS, e2e 30/30 (39→40 arquivos), test:inventory PASS.
+
+**PHASE 03 FECHADA.** Próxima tarefa dependency-ready: T25 (Sprint S04).
 
 ---
 

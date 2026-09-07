@@ -7,6 +7,47 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 5, PHASE 03 CLOSED)
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after.
+
+Closed the exact, single remaining gap from session 4 below (production-build
+E2E) with the smallest sufficient harness: new `e2e/production-build.spec.js`
+builds the real SPA (`npm run build`), spawns the real server with
+`SMARTLEARN_STATIC_DIR` pointed at that build (T21's actual single-origin
+production-serving path), and drives a real browser directly at that
+server's own origin — no Vite dev server anywhere in the loop. One
+walking-skeleton journey (register -> login -> create unit -> reload ->
+persists) plus a check that the served HTML contains no `@vite/client`
+(proving it's genuinely the built artifact). Confirmed stable (3 clean runs).
+Full e2e re-run with it included: 31/31 PASS (30 existing + 1 new),
+test:inventory PASS (41 files). Server/root/rust/build were not re-run —
+nothing outside `e2e/` and docs changed this session, so their last recorded
+values stand (server 174/174, root 259/259, rust 13/13, build PASS — all
+already current at this HEAD, confirmed by `npm run build` itself running
+clean 4 times as part of the new spec's own setup).
+
+T24's 3 done-when boxes in tasks.md are now all `[x]`: independent verifier
+PASS (session 4's HTTP/DTO-level evidence) + this production-build E2E PASS
++ full relevant code gates green. See validation.md's two T24 rows (verifier
+evidence, then this gap-closure row) for full detail.
+
+PHASE 03 EXIT GATE: SATISFIED. Phase 03 is CLOSED. T01-T24 all PROVEN
+(commit + validation.md evidence row + tasks.md `[x]` each).
+
+NEXT_TASK: T25 ("Normalize supported legacy snapshots without data
+invention", Phase 04) is now the first dependency-ready task — its only
+listed dependency (T24) is closed. Not started this session per explicit
+instruction to close Phase 03 documentally and then stop.
+
+BLOCKERS: none.
+
+WORKING TREE / UNCOMMITTED FILES: none — `e2e/production-build.spec.js`
+(new) plus this file and validation.md/tasks.md's T24 updates are the only
+changes this session, all committed together.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 4, Phase 03 doc closure — STILL NOT closed, real gate gap found)
 
 BRANCH: `claude/smartlearn-v1-complete`. HEAD: `125de99` (docs(state) checkpoint below).

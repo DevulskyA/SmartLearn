@@ -354,9 +354,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** All essential Web flows run against temporary real server data from two accounts; existing client/server/Rust/build gates remain green; required contracts are mapped to tests.
 **Recovery / rollback:** A slice failure opens a precise fix task; no blanket restart or premature V1 declaration.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Full relevant code gates, production-build E2E and independent verifier at frozen candidate.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Full relevant code gates, production-build E2E and independent verifier at frozen candidate.
 
 ## Phase 04 - Lossless migration tooling
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.
