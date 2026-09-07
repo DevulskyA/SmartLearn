@@ -18,7 +18,7 @@ Current Sprint: S03 — Web Authority Cutover
 ✅ S02 — Learning Domain Server             7/7   T13-T19
 ✅ S03 — Web Authority Cutover              5/5   T20-T24
 ⛔ GATE_P1 — Product Priority Decision      0/1   (ver abaixo)
-⬜ S04 — Data Migration / NO_DATA_LOSS      0/4   T25-T28
+🔄 S04 — Data Migration / NO_DATA_LOSS      1/4   T25-T28
 ⬜ S05 — Learning Evidence                  0/5   T29-T33
 ⬜ S06 — Document Learning Core             0/5   T34-T38
 ⬜ S07 — PWA / Windows / Android            0/6   T39-T44
@@ -30,25 +30,30 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T24 — DONE. PHASE 03 CLOSED.**
+**T25 — DONE.**
 
 ```
-✅ Independent Fresh Verifier PASS (frozen HEAD 9a8c7cb; identity/ownership/
-   parity/DTO/no-fallback all independently proven, zero defects)
-✅ Gap found+closed: production-build E2E (e2e/production-build.spec.js —
-   real npm run build + server's own staticDir single-origin serving, no
-   Vite dev server involved at all)
-✅ full gate: server 174/174, root 259/259, rust 13/13, build PASS,
-   e2e 31/31 (30 + 1 new), test:inventory PASS 41 files
-✅ evidence recorded (validation.md, two T24 rows)
-✅ tasks.md T24 done-when boxes all [x]
+✅ shared/import-normalization.js — pure, read-only normalization of the
+   REAL v1/v2/v3 legacy export shapes src/db.js already produces
+✅ server/test/import-fixtures/ — golden fixtures built from the literal
+   v1/v2 shapes already committed in test/learning-evidence.test.js
+✅ hard-rejects (whole import, never partial): unsupported version,
+   duplicate id, invalid/impossible date, cross-entity dangling ref,
+   invalid counts, unguessable exercise provenance, completed+scored
+   review task with no matching evidence row
+✅ cosmetic gaps defaulted + reported as warnings (never blocking)
+✅ server/test/import-normalization.test.js: 14/14
+✅ full gate: server 188/188 (was 174, +14), root 259/259, build PASS,
+   test:inventory PASS 42 files (rust untouched, last 13/13 stands)
+✅ evidence recorded (validation.md)
+✅ tasks.md T25 done-when boxes all [x]
 ✅ atomic commit
 ```
 
 ```
-LAST_PROVEN = T24 (Phase 03 closed)
-NEXT_TASK   = T25 — Normalize supported legacy snapshots without data
-              invention (Phase 04) — dependency-ready, NOT started
+LAST_PROVEN = T25
+NEXT_TASK   = T26 — Implement import preview and explicit ID mapping
+              (Phase 04) — dependency-ready, NOT started
 BLOCKERS    = none
 DIRTY       = none — working tree clean
 ```
@@ -119,9 +124,10 @@ apesar de DONE confirmado em STATE.md) — reconciliar ao tocar nesses arquivos.
 ✅ T24 fecha a fatia: Fresh Verifier independente PASS + production-build E2E.
 Exit: Web deixa de ter autoridade paralela (BrowserStore) significativa. FECHADO.
 
-### ⬜ S04 — NO_DATA_LOSS Migration (T25-T28)
-Normalização de snapshots legados sem invenção de dados → preview/mapping →
-commit atômico idempotente → UI de migração + ensaio de recuperação.
+### 🔄 S04 — NO_DATA_LOSS Migration (T25-T28) — IN PROGRESS
+✅ T25 normalização de snapshots legados sem invenção de dados,
+⬜ T26 preview/mapping, ⬜ T27 commit atômico idempotente,
+⬜ T28 UI de migração + ensaio de recuperação.
 Nenhum dado real migra automaticamente.
 
 ### ⬜ S05 — Learning Evidence (T29-T33)

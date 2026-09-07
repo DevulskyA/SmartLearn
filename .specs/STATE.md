@@ -7,6 +7,53 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 6, T25 DONE — PHASE 04 IN PROGRESS)
+
+Reconciled first, per this file's own governance: HEAD `9334410` confirmed
+(matched the last checkpoint exactly), `git status --short` empty, tasks.md
+T24 all `[x]`/T25 all `[ ]` confirmed by direct read before starting — no
+work began on stale assumption.
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after.
+
+T25 ("Normalize supported legacy snapshots without data invention") DONE:
+`shared/import-normalization.js` — pure, read-only, no I/O — normalizes the
+REAL v1/v2/v3 legacy export shapes `src/db.js` already produces (not
+invented shapes; golden fixtures under `server/test/import-fixtures/` are
+built from the literal fixtures already committed in
+`test/learning-evidence.test.js`/`test/learning-units.test.js`) into one
+canonical, source-agnostic, `legacy*Id`-keyed representation. Per design.md
+§6's hard-reject list, the whole import is rejected (never partial) on:
+unsupported version, duplicate ids, invalid/impossible dates, cross-entity
+dangling references, invalid counts, unguessable exercise provenance, and —
+the acceptance criterion's own named case — a completed+scored reviewTask
+with no matching evidence row. All issues in one source are collected and
+reported together, not just the first. Cosmetic gaps (color/sortOrder/
+timestamps) get a safe disclosed default in a `warnings` array instead of
+blocking. `server/test/import-normalization.test.js`: 14/14 PASS. Full gate:
+server 188/188 (was 174, +14), root 259/259 (unchanged), build PASS,
+test:inventory PASS (42 files, was 41). Rust not re-run — untouched by this
+task, last recorded 13/13 stands.
+
+T25's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's T25
+row for full detail. This task is deliberately read-only normalization
+only — no preview, no ID mapping, no account/commit logic yet; that is
+T26/T27's job, both still `[ ]` and NOT started.
+
+NEXT_TASK: T26 — "Implement import preview and explicit ID mapping"
+(depends on T25, now dependency-ready). T27 depends on T26 in turn; T28 on
+T27. Per the user's own standing instruction, independent tasks with no
+open dependency may continue without stopping between them — but each
+still needs its own real gate run and evidence before its checkboxes flip.
+
+BLOCKERS: none.
+
+WORKING TREE / UNCOMMITTED FILES: none — this checkpoint plus the T25
+implementation/tests/fixtures are the only changes this session, committed
+together.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 5, PHASE 03 CLOSED)
 
 BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after.

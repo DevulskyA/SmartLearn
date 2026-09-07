@@ -121,9 +121,24 @@ sem descartar T01-T54. Explicitamente adiado pelo usuário em 2026-09-07.
 
 ---
 
-## Sprint S04 — NO_DATA_LOSS Migration ⬜ TODO (0/4)
+## Sprint S04 — NO_DATA_LOSS Migration 🔄 IN_PROGRESS (1/4)
 
-- [ ] T25 — Normalize supported legacy snapshots without data invention
+- [x] T25 — Normalize supported legacy snapshots without data invention
+  - [x] `shared/import-normalization.js` (pure, read-only; real v1/v2/v3
+        shapes from `src/db.js`, not invented ones)
+  - [x] `server/test/import-fixtures/` golden fixtures (from the literal
+        v1/v2 fixtures already committed in `test/learning-evidence.test.js`)
+  - [x] hard-rejects whole import on: unsupported version, duplicate id,
+        invalid/impossible date, cross-entity dangling ref, invalid counts,
+        unguessable exercise provenance, completed+scored review task with
+        no matching evidence row (the acceptance criterion's own named case)
+  - [x] cosmetic gaps (color/sortOrder/timestamps) defaulted + warned, never
+        blocking
+  - [x] `server/test/import-normalization.test.js` 14/14
+  - [x] gate: server 188/188 (was 174, +14), root 259/259, build PASS,
+        test:inventory PASS (42 arquivos)
+  - [x] evidência registrada em validation.md
+  - [x] commit atômico
 - [ ] T26 — Implement import preview and explicit ID mapping
 - [ ] T27 — Commit imports atomically and idempotently
 - [ ] T28 — Deliver migration UI and recovery rehearsal

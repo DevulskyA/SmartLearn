@@ -370,9 +370,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Golden synthetic fixtures cover all supported versions and edge aliases; normalization is deterministic and reports every lossy/ambiguous input. A single missing evidence row is detected.
 **Recovery / rollback:** Read-only normalization; original bytes/checksum retained.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Golden fixture/unit/property-style normalization tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Golden fixture/unit/property-style normalization tests.
 
 ### T26: Implement import preview and explicit ID mapping
 **Difficulty / risk:** 4/5 / 5/5.
