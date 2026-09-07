@@ -7,6 +7,78 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 12, T37 DONE)
+
+Fresh session reconciliation. The prompt's own reference checkpoint
+claimed `REPORTED_HEAD=e2f8c0e`/`LAST_COMPLETED_TASK=T33`/
+`SERVER=262/262` — but real `git rev-parse --short HEAD` was
+`d6935b7` (T36), `git status --short` was empty, tasks.md showed
+T34/T35/T36 all `[x]` and T37 all `[ ]`, and a cold `npm --prefix
+server test` re-run confirmed 290/290 matching validation.md's own T36
+row exactly. Per this session's own instruction ("Git + árvore real +
+testes/evidência prevalecem sobre STATE.md em qualquer divergência"),
+proceeded from the REAL state (T36 done, T37 next) rather than
+re-doing T34-T36 or trusting the prompt's stale reference. Divergence
+recorded here as instructed; no work was redone.
+
+T37 ("Implement bounded AI draft generation with verified adapter
+contracts") DONE — hardest task in the plan (5/5, 5/5).
+`server/src/ai/fake-provider.js` (deterministic, no network, treats
+segment text as inert data only). `server/src/ai/draft-schema.js`
+(`validateDraft`) is the one boundary both providers go through
+identically: rejects malformed/unsupported-field drafts outright,
+quarantines any citation whose page isn't in the real input segments,
+drops a question left with zero valid citations, rejects a draft that
+loses every question to quarantine. `server/src/ai/anthropic-
+provider.js`: a real, correctly-built adapter for the one configured
+real-provider design.md calls for — untrusted-data framing around
+source text, tested entirely against injected/mocked `fetchImpl`. NO
+real network call to any provider was made or will be made from this
+environment — no credentials exist here, and paid-provider use without
+the user's fresh explicit permission is exactly what this project's
+safety rules forbid. `server/src/services/generated-drafts.js`:
+`selectProvider()` requires ALL FOUR of apiKey/model/consentGranted/a
+positive budgetCapUsd before the live path is reachable — missing any
+one falls back to fake, verified directly (never a partial live pass).
+`createDraft()` bounds input size before any provider call, deadlines
+the call itself, and only ever persists `status='DRAFT'` — no
+unit/exercise is created (T38's job). Added
+`server/src/routes/generated-drafts.js` (not in T37's own Where clause
+but necessary plumbing, same precedent as T30/T34/T36) and
+`server/migrations/015-generated-drafts.sql`.
+
+`server/test/ai-drafts.test.js` (20/20): fake-provider determinism +
+injection-resistance, exhaustive schema/quarantine coverage, mocked
+adapter suite (missing-credentials never touches fetchImpl, success,
+non-ok, non-JSON, real timeout/abort), `selectProvider`'s all-four
+proof, real-DB draft creation, input-size bound, an end-to-end
+prompt-injection-has-no-effect proof against the real `users` table,
+cross-user denial, full real-HTTP pipeline. Full gate: server 310/310
+(was 290, +20), root 259/259 unchanged, test:inventory PASS (56 files,
+was 55). Build/rust/e2e not re-run — untouched (no client/native file
+touched), last recorded values stand.
+
+T37's 3 done-when boxes are `[x]` in tasks.md, with the live-provider
+gate explicitly noted as its own conditional clause. See validation.md's
+T37 row for the full **BLOCKED_EXTERNAL** record on the live-provider
+half — the local implementation is PASS, the live-network integration
+has not been and cannot be exercised here without the user supplying
+real credentials/consent/budget config.
+
+NEXT_TASK: T38 ("Accept generated material atomically into normal
+study", depends on T37 AND T17, both closed) —
+server/src/services/accept-draft.js + src/draft-review-ui.js +
+e2e/draft-acceptance.spec.js. This is Phase 06's LAST task — closing it
+closes Phase 06 (T34-T38), the same way T24/T28/T33 closed their
+phases. Show draft provenance/uncertainty, permit inspection/edit,
+accept unit+exercises+versions+source-links+16 reviews in ONE
+idempotent transaction; acceptance records who accepted and the draft
+version; never declares scientific/medical validation of unsupported
+content. Repeated acceptance must return the same result; a midway
+failure must leave no partial accepted material.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 11, T36 DONE)
 
 Continued directly from this session's T35 checkpoint. `git status

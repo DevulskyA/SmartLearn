@@ -35,4 +35,16 @@ export const config = {
   sourcesDir: process.env.SMARTLEARN_SOURCES_DIR ?? './data/sources',
   sourceMaxBytes: Number(process.env.SMARTLEARN_SOURCE_MAX_BYTES ?? 25 * 1024 * 1024),
   sourceQuotaBytes: Number(process.env.SMARTLEARN_SOURCE_QUOTA_BYTES ?? 200 * 1024 * 1024),
+  // T37: the real-provider AI draft path is unavailable unless ALL THREE
+  // are explicitly configured — an operator's deliberate choice, never a
+  // default. No hardcoded model name/version: this is a business decision
+  // for whoever deploys this server, not something to guess here. Missing
+  // any one of these means the fake provider runs instead; it never
+  // becomes a fabricated "live" pass (design.md/T37).
+  aiApiKey: process.env.SMARTLEARN_AI_API_KEY || null,
+  aiModel: process.env.SMARTLEARN_AI_MODEL || null,
+  aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
+  aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,
+  aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
+  aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
 };

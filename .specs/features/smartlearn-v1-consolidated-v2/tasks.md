@@ -532,9 +532,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Invalid JSON/fake citations/injection/timeout are rejected or quarantined; fake fixture path passes without network; separately record whether an authorized real-provider call passed. Missing credentials never becomes a fake LIVE PASS.
 **Recovery / rollback:** Disable provider capability; manual proposals and existing study remain usable.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Adapter/schema/prompt-injection tests; live integration only with explicit configured authorization and budget.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Adapter/schema/prompt-injection tests; live integration only with explicit configured authorization and budget (live path itself BLOCKED_EXTERNAL — no credentials configured in this environment; see validation.md).
 
 ### T38: Accept generated material atomically into normal study
 **Difficulty / risk:** 4/5 / 5/5.
