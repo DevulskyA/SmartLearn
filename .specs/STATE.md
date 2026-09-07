@@ -7,6 +7,67 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 11, T35 DONE)
+
+Continued directly from this session's T34 checkpoint. `git status
+--short` empty before starting, tasks.md T34 all `[x]`/T35 all `[ ]`
+confirmed.
+
+T35 ("Extract PDF text with page provenance under limits") DONE. New
+pinned dependency `pdfjs-dist@6.3.289` (Node 24-compatible `legacy`
+build, text-extraction only, no canvas/rendering).
+`server/src/pdf/extract-worker.js` runs in a `worker_threads` Worker
+(never the main thread): no network fetch attempted (cMap/font URLs
+left undefined), `isEvalSupported: false` (no PDF-embedded code ever
+evaluated). `server/src/pdf/classify-extraction-error.js` maps pdf.js
+exceptions to explicit statuses, unit-tested with synthetic errors
+(constructing a genuinely-encrypted PDF fixture was judged
+disproportionate). `server/src/services/source-extraction.js`
+(`extractSource`/`listPages`) bounds the worker with a memory limit and
+a deadline (`worker.terminate()` + `TIMEOUT` on expiry); a successful
+extraction atomically replaces `source_pages`; any other outcome only
+updates `sources.extraction_status` — the original file is never
+opened for writing by any path here (verified byte-identical
+before/after a failed extraction).
+`server/migrations/013-source-extraction.sql` adds the extraction
+columns + `source_pages` table.
+
+Found and fixed a real bug WHILE building the test fixture (not a
+product bug): `server/test/pdf-fixtures/build-fixture-pdf.js`'s
+originally-narrow MediaBox silently truncated pdf.js's
+`getTextContent()` output at the page's visible boundary — reproduced
+directly outside the worker before concluding the fixture's page
+geometry (not the extraction code) was at fault; fixed by widening it,
+documented in the fixture file.
+
+`server/test/pdf-extraction.test.js` (7/7): classifier unit tests,
+real multi-page fixture with exact text/page-index/checksum/parser-
+version, truncated-PDF explicit failure with original file untouched,
+1ms-deadline TIMEOUT proof, idempotent re-extraction, cross-user
+denial, nonexistent-source rejection. Full gate: server 282/282 (was
+274, +8), root 259/259 unchanged, test:inventory PASS (53 files, was
+52). Build/rust/e2e not re-run — untouched, last recorded values
+stand.
+
+T35's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T35 row for full detail.
+
+NEXT_TASK: T36 ("Create inspectable source-to-unit proposals", depends
+on T35 AND T15, both closed) —
+server/src/services/content-proposals.js + src/source-proposals-ui.js +
+e2e/source-proposals.spec.js. Chunk `listPages()` output by source
+structure/page boundaries (max 10 pages by default per design.md §8),
+show original excerpt/pages beside a proposed title/summary/units,
+allow manual correction before acceptance, persist source-segment links
+independently from hint text. Every proposed unit must be attributable
+to exact source segments; nothing is created in the real learning
+domain until explicit acceptance (that's T38's job). This task has a
+real client/UI component (`src/source-proposals-ui.js` + an e2e spec),
+unlike T34/T35 — expect a client build + e2e re-run this time, not a
+skip.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 11, T34 DONE — PHASE 06 STARTED)
 
 Fresh session reconciliation (not a continuation of session 10's live

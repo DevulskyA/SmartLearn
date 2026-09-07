@@ -506,9 +506,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Multi-page fixture preserves text and page mapping; malformed/resource-heavy fixtures time out safely and workers exit; extract failure leaves original source intact.
 **Recovery / rollback:** Extraction is reproducible from source; discard only incomplete derived output.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Parser fixture tests plus process deadline/cleanup smoke.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Parser fixture tests plus process deadline/cleanup smoke.
 
 ### T36: Create inspectable source-to-unit proposals
 **Difficulty / risk:** 3/5 / 4/5.
