@@ -223,6 +223,25 @@ test('T27: a stored count that no longer matches the actual data is caught by re
   } finally { cleanup(); }
 });
 
+test('T28 independent-review fix: re-committing an ALREADY-committed preview still returns the original result even after its original expiry window has passed', async () => {
+  const { app, db, cleanup } = await freshApp();
+  try {
+    const { userId } = await registerAndAuth(app, 'mallory@example.com');
+    const rawSource = loadFixture('v3-schema.json');
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const preview = imports.createPreview(db, userId, rawSource, createdAt);
+
+    const withinWindow = new Date(createdAt.getTime() + 5 * 60 * 1000);
+    const first = imports.commitImport(db, userId, preview.id, withinWindow);
+
+    const wellPastOriginalExpiry = new Date(createdAt.getTime() + imports.PREVIEW_LIFETIME_MS + 60 * 60 * 1000);
+    const second = imports.commitImport(db, userId, preview.id, wellPastOriginalExpiry);
+
+    assert.deepEqual(second, first);
+    assert.equal(countRows(db, 'subjects', userId), 1); // still exactly the one real commit — no duplicate, no crash
+  } finally { cleanup(); }
+});
+
 test('T27: an expired preview cannot be committed', async () => {
   const { app, db, cleanup } = await freshApp();
   try {

@@ -37,16 +37,23 @@ function buildCounts(normalized) {
 
 // Design.md §6: "Nonempty conflicts never overwrite by name." The only
 // independent uniqueness constraint in this schema is subjects(user_id,
-// name) (T13) — a name collision with an existing ACTIVE owned subject is
-// the one real conflict class. Everything else (units/reviewTasks/
-// exercises) has no naming constraint of its own; each is proposed to
-// CREATE under whichever legacySubjectId it references, and a caller can
-// see a unit is effectively unreachable by cross-referencing that
-// legacySubjectId against the subject mapping's own CONFLICT entries —
-// this task reports the plan, it does not resolve conflicts.
+// name) (T13, UNIQUE regardless of is_active) — a name collision with ANY
+// existing owned subject, active or archived, is a real conflict class,
+// exactly like services/subjects.js's own create() already treats an
+// archived homonym as a conflict rather than a silent reactivation
+// (independent-review fix: the original query here filtered to
+// is_active = 1 only, so an archived homonym reported zero conflicts at
+// preview time and then hit the raw UNIQUE constraint — an unclassified
+// 500, not the intended clean 409 — at commit time instead). Everything
+// else (units/reviewTasks/exercises) has no naming constraint of its own;
+// each is proposed to CREATE under whichever legacySubjectId it
+// references, and a caller can see a unit is effectively unreachable by
+// cross-referencing that legacySubjectId against the subject mapping's
+// own CONFLICT entries — this task reports the plan, it does not resolve
+// conflicts.
 function buildMappingAndConflicts(db, userId, normalized) {
   const existingByKey = new Map(
-    db.prepare('SELECT id, name FROM subjects WHERE user_id = ? AND is_active = 1').all(userId)
+    db.prepare('SELECT id, name, is_active FROM subjects WHERE user_id = ?').all(userId)
       .map((row) => [nameKey(row.name), row]),
   );
 
@@ -56,7 +63,8 @@ function buildMappingAndConflicts(db, userId, normalized) {
   for (const subject of normalized.subjects) {
     const existing = existingByKey.get(nameKey(subject.name));
     if (existing) {
-      conflicts.push({ entity: 'subject', legacyId: subject.legacyId, name: subject.name, existingId: existing.id, reason: 'NAME_ALREADY_EXISTS' });
+      const reason = existing.is_active ? 'NAME_ALREADY_EXISTS' : 'ARCHIVED_HOMONYM';
+      conflicts.push({ entity: 'subject', legacyId: subject.legacyId, name: subject.name, existingId: existing.id, reason });
       mapping.push({ entity: 'subject', legacyId: subject.legacyId, action: 'CONFLICT', existingId: existing.id });
     } else {
       mapping.push({ entity: 'subject', legacyId: subject.legacyId, action: 'CREATE' });
@@ -193,11 +201,19 @@ function offsetDaysBetween(studyDate, dueDate) {
 export function commitImport(db, userId, previewId, now = new Date()) {
   const row = findOwned(db, userId, previewId);
   if (!row) throw new ImportError('NOT_FOUND', 'Prévia de importação não encontrada.');
-  if (new Date(row.expires_at).getTime() < now.getTime()) {
-    throw new ImportError('PREVIEW_EXPIRED', 'Prévia de importação expirada. Envie o arquivo novamente.');
-  }
+
+  // Independent-review fix: the cached-result short-circuit must be
+  // checked BEFORE expiry, not after — expires_at is set once at preview
+  // creation and never advances on a successful commit, so a retry
+  // submitted after that original 30-minute window (e.g. the commit
+  // succeeded server-side but the response was lost — a NetworkError, per
+  // src/api-client.js) must still return the original result rather than
+  // a spurious PREVIEW_EXPIRED for a request that already succeeded.
   if (row.committed_at) {
     return JSON.parse(row.commit_result_json);
+  }
+  if (new Date(row.expires_at).getTime() < now.getTime()) {
+    throw new ImportError('PREVIEW_EXPIRED', 'Prévia de importação expirada. Envie o arquivo novamente.');
   }
 
   const report = JSON.parse(row.report_json);

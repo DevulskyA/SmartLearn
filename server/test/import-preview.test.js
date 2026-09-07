@@ -79,6 +79,26 @@ test('T26: a subject name colliding with an existing owned subject is reported a
   } finally { cleanup(); }
 });
 
+test('T28 independent-review fix: a subject name colliding with an ARCHIVED owned subject is also a conflict, not silently mapped to CREATE', async () => {
+  const { app, cleanup } = await freshApp();
+  try {
+    const { cookie, csrfToken } = await registerAndAuth(app, 'ivy@example.com');
+    const created = JSON.parse((await post(app, '/v1/subjects', { name: 'Farmacologia' }, { cookie, 'x-csrf-token': csrfToken })).body).subject;
+    await app.inject({
+      method: 'PATCH', url: `/v1/subjects/${created.id}`,
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
+      payload: { isActive: false },
+    });
+
+    const res = await post(app, '/v1/imports/preview', { rawSource: loadFixture('v3-schema.json') }, { cookie, 'x-csrf-token': csrfToken });
+    const { preview } = JSON.parse(res.body);
+    assert.equal(preview.conflicts.length, 1);
+    assert.equal(preview.conflicts[0].reason, 'ARCHIVED_HOMONYM');
+    const subjectMapping = preview.mapping.find((m) => m.entity === 'subject');
+    assert.equal(subjectMapping.action, 'CONFLICT');
+  } finally { cleanup(); }
+});
+
 test('T26: cross-user reuse fails — a preview owned by one account is invisible to another', async () => {
   const { app, cleanup } = await freshApp();
   try {
