@@ -7,6 +7,50 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 4, Phase 03 doc closure — STILL NOT closed, real gate gap found)
+
+BRANCH: `claude/smartlearn-v1-complete`. HEAD: `125de99` (docs(state) checkpoint below).
+Working tree: clean (`git status --short` empty) before and after this session; no
+product code touched.
+
+Phase 03: NOT closed. T24's independent Fresh Verifier subagent finished and
+reported VERIFIER_RESULT=PASS against frozen HEAD `9a8c7cb` (full gate reruns
+server 174/174, root 259/259, rust 13/13, build PASS, e2e 30/30,
+test:inventory PASS/40 files, plus 32/32 independent HTTP ownership/isolation
+checks and a full DTO field-by-field cross-check — zero defects, no fix
+needed). Checked that report against T24's own done-when criteria in
+tasks.md and found it does NOT fully satisfy them: criterion 3 requires
+"production-build E2E" as a distinct item from the dev e2e suite and the
+verifier itself. `playwright.config.js`'s only webServer config runs
+`npx vite --port 5199` (the Vite DEV server) — confirmed by reading the file
+directly. No production-build E2E run exists anywhere in this feature's
+history (T20-T23 nor this verifier pass). Recorded this gap honestly as a
+new T24 row in validation.md rather than marking T24 done on a partial
+match. tasks.md T24 boxes correctly remain `[ ]`. See validation.md's T24
+row for full detail.
+
+T01-T23: PROVEN (commit + validation.md evidence row + tasks.md `[x]` each,
+unchanged from prior checkpoints).
+T24: OPEN — identity/ownership/parity/DTO-identity/no-local-fallback all
+independently verified PASS; production-build E2E gate still missing.
+
+NEXT_TASK (exact, still T24, NOT T25): close the production-build E2E gap —
+either add a second Playwright project/config pointed at a real
+`npm run build` + `vite preview` (or the server's own T21 `staticDir`
+SPA-serving mode) and record its result, or make an explicit, recorded
+scope decision that dev-server E2E is accepted instead — then check T24's
+3 done-when boxes and add its validation.md PASS row. T25 (Phase 04,
+"Normalize supported legacy snapshots without data invention") must NOT
+start before T24 actually closes.
+
+BLOCKERS: none external. The production-build E2E gate is real, well-defined,
+unstarted work — not a stall and not ambiguous.
+
+WORKING TREE / UNCOMMITTED FILES: none — this checkpoint commit is the only
+change this session (this file + validation.md's new T24 row).
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 3, Phase 03 reconciliation — NOT closed)
 
 Reconciled directly against Git, not assumed. HEAD `9a8c7cb`
