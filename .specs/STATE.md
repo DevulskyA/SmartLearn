@@ -7,6 +7,32 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (pre-/clear)
+
+WHERE ARE WE?
+Worktree `C:/Projetos/SmartLearn/.claude/worktrees/smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`, HEAD `8e933f6`. T01-T22 of the T01-T54 plan are done and gated. T23 is open, partially implemented, uncommitted.
+
+WHAT IS PROVEN?
+T01-T22, each with a commit and a full green gate at commit time (server/root/rust/build/e2e/test:inventory — exact counts already in this file's T01-T22 entries below and in validation.md; not repeated here). Last full gate actually run: at T22 close (cb5762e/8e933f6) — server 174/174, root 259/259, rust 13/13, build PASS, e2e 26/26, test:inventory PASS (39 files).
+
+WHAT IS IN PROGRESS?
+T23 (prove one-intention UX, retries and recoverable errors on server). Done so far (uncommitted, in `src/app.js` only): a per-save-intent `operationKey` tracker (`createOperationKeyTracker()`) wired into Plano's `planUnitSaveBtn` click handler and forwarded to `DB.learningUnits.createWithReviews`. Renewal rule: renew on success or explicit form cancel; renew on a definitive `ApiError` (validation/conflict — an edited resubmission is a new intent); do NOT renew on `NetworkError` (unknown outcome — a retry must replay the same key so the server's existing T15 idempotency guard returns the original result instead of creating a duplicate). No server-side change was needed (T15 already supports `operationKey`). NOT started: the equivalent tracker for the Cadastro screen's `studyForm` (same `generateReviewTasks()` call, a separate intent); `e2e/atomic-save.spec.js` (not created); no gate has been (re)run against this edit — UNVERIFIED against the real server and against the existing e2e suites.
+
+WHAT IS NEXT?
+Finish T23: Cadastro operationKey wiring -> e2e/atomic-save.spec.js (double-click, response-lost-after-commit via Playwright route interception against a real server, mid-transaction failure, render-failure-after-successful-save) -> full gate -> validation.md evidence -> commit. Then T24 (closes Phase 03; independent Fresh Verifier for the whole server-authoritative-Web slice is explicitly assigned there, not before). Then T25+ (Phase 04, lossless migration tooling).
+
+WHAT IS BLOCKED?
+Nothing technical. Session is paused solely because the user explicitly asked to stop (repeatedly) mid-T23.
+
+WHAT MUST NOT BE FORGOTTEN?
+- `src/app.js` has real, wanted, uncommitted T23 work (git status: `M src/app.js`) — do not discard; either finish and commit it or explicitly decide otherwise before touching that file further.
+- The `operationKey` renew-on-ApiError-but-not-NetworkError rule above is a deliberate design decision made this session and is NOT yet written anywhere else (not in design.md/tasks.md) — if T23's validation.md entry is written later, this rationale belongs there.
+- No test/dev server processes were left running by this session (all manually-spawned Node/Vite instances from live-browser verification were killed).
+- No push/merge/deploy occurred; all commits are local only, on `claude/smartlearn-v1-complete`.
+- **Product-priority correction RECORDED, NOT executed**: `.specs/features/smartlearn-v1-consolidated-v2/document-learning-backlog-DOC-01-72.md` — a 72-item backlog (DOC-01..DOC-72) proposing to bring the document→summary→questions→active-study vertical slice forward in priority, without discarding T01-T54. Explicitly deferred by the user ("A execução vai ser depois") — DOC-01 (audit against current spec/design/heritage/tasks/acceptance) has NOT been run. Finish T23 (and likely T24) before touching this.
+
+---
+
 ## HANDOFF — 2026-09-06 SMARTLEARN_V1_CONSOLIDATED_V2 ACTIVE
 
 FEATURE:       smartlearn-v1-consolidated-v2 (T01-T54, AC-01..AC-28)
