@@ -545,9 +545,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Repeated acceptance returns the same result; midway failure leaves no partial accepted material; citations remain resolvable; source/AI/manual provenance remain distinct.
 **Recovery / rollback:** Keep original draft/source and reversible acceptance metadata; no deletion of later learner evidence.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Acceptance API/E2E and partial-write/double-acceptance mutants.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Acceptance API/E2E and partial-write/double-acceptance mutants.
 
 ## Phase 07 - Offline PWA, wrappers and reminders
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.

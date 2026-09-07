@@ -18,6 +18,7 @@ import { validateNamingField, validateTitleField } from "./naming-validation.js"
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
 import * as SourceProposalsUI from "./source-proposals-ui.js";
+import * as DraftReviewUI from "./draft-review-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -2182,8 +2183,65 @@ function createSourceProposalItem(proposal) {
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
   excerpt.hidden = true;
 
-  li.append(range, titleInput, saveBtn, toggleBtn, excerpt);
+  const generateDraftBtn = document.createElement("button");
+  generateDraftBtn.type = "button";
+  generateDraftBtn.className = "small-button";
+  generateDraftBtn.dataset.action = "generate-draft";
+  generateDraftBtn.textContent = "Gerar rascunho com IA";
+
+  const draftPanel = document.createElement("div");
+  draftPanel.className = "source-draft-panel";
+  draftPanel.hidden = true;
+
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
   return li;
+}
+
+// T38: renders one generated draft for inspection/acceptance. Every
+// rendering carries the same explicit caveat — this is unverified AI
+// output, not a medical/scientific claim (design.md/T37/T38).
+function renderDraftPanel(draftPanel, draft) {
+  draftPanel.dataset.draftId = String(draft.id);
+  draftPanel.replaceChildren();
+
+  const caveat = createTextElement(
+    "p",
+    "source-draft-caveat",
+    "Rascunho gerado por IA — não verificado. Revise cada questão antes de aceitar; isto não é uma validação científica ou médica do conteúdo.",
+  );
+  const summary = createTextElement("p", "source-draft-summary", draft.summary);
+
+  const questionsList = document.createElement("ul");
+  questionsList.className = "source-draft-questions";
+  for (const question of draft.questions ?? []) {
+    const item = document.createElement("li");
+    item.append(
+      createTextElement("p", "source-draft-question", question.question),
+      createTextElement("p", "source-draft-answer", question.answer),
+    );
+    questionsList.append(item);
+  }
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.className = "source-draft-subject-input";
+  subjectInput.placeholder = "Nome da disciplina";
+
+  const dateInput = document.createElement("input");
+  dateInput.type = "date";
+  dateInput.className = "source-draft-date-input";
+  dateInput.value = getLocalDateValue();
+
+  const acceptBtn = document.createElement("button");
+  acceptBtn.type = "button";
+  acceptBtn.className = "primary-button";
+  acceptBtn.dataset.action = "accept-draft";
+  acceptBtn.textContent = "Aceitar e criar aula";
+
+  const resultMessage = createTextElement("p", "source-draft-result", "");
+
+  draftPanel.append(caveat, summary, questionsList, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.hidden = false;
 }
 
 function renderSourceProposals(proposals) {
@@ -2282,6 +2340,57 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       }
     } finally {
       saveBtn.disabled = false;
+    }
+    return;
+  }
+
+  const generateDraftBtn = event.target.closest('[data-action="generate-draft"]');
+  if (generateDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    generateDraftBtn.disabled = true;
+    setSourcesMessage("Gerando rascunho com IA...");
+    try {
+      const result = await DraftReviewUI.generateDraft(proposalId);
+      if (!result.ok) {
+        setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
+        return;
+      }
+      renderDraftPanel(draftPanel, result.draft);
+      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+    } finally {
+      generateDraftBtn.disabled = false;
+    }
+    return;
+  }
+
+  const acceptDraftBtn = event.target.closest('[data-action="accept-draft"]');
+  if (acceptDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    const draftId = draftPanel.dataset.draftId;
+    const subjectInput = draftPanel.querySelector(".source-draft-subject-input");
+    const dateInput = draftPanel.querySelector(".source-draft-date-input");
+    const resultMessage = draftPanel.querySelector(".source-draft-result");
+
+    acceptDraftBtn.disabled = true;
+    try {
+      const result = await DraftReviewUI.acceptDraft(draftId, { newSubjectName: subjectInput?.value, studyDate: dateInput?.value });
+      if (!result.ok) {
+        if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
+        acceptDraftBtn.disabled = false;
+        return;
+      }
+      if (resultMessage) {
+        resultMessage.classList.remove("is-error");
+        resultMessage.textContent = `Aula criada: ${result.acceptance.exerciseCount} exercício(s), ${result.acceptance.reviewCount} revisões agendadas.`;
+      }
+      acceptDraftBtn.textContent = "Aceito";
+      await Promise.all([renderSubjects(), renderStudies(), renderToday()]);
+    } catch (error) {
+      if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
+      console.error("Falha ao aceitar rascunho.", error);
+      acceptDraftBtn.disabled = false;
     }
   }
 });

@@ -55,6 +55,8 @@ function toDraftDto(row) {
     promptVersion: row.prompt_version,
     status: row.status,
     createdAt: row.created_at,
+    acceptedAt: row.accepted_at ?? null,
+    acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
   };
 }

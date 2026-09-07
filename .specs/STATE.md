@@ -7,6 +7,68 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 12, T38 DONE — PHASE 06 CLOSED)
+
+Continued directly from this session's T37 checkpoint. `git status
+--short` empty before starting, tasks.md T37 all `[x]`/T38 all `[ ]`
+confirmed.
+
+T38 ("Accept generated material atomically into normal study") DONE —
+Phase 06's last task. `server/migrations/016-draft-acceptance.sql`
+adds the one-way DRAFT->ACCEPTED transition columns on
+`generated_drafts` plus `exercise_source_citations` (a real link from
+an exercise_version to the exact source page(s) it cited).
+`server/src/services/accept-draft.js` (`acceptDraft`) creates a
+subject (reusing `resolveOrCreateSubject`, newly exported from
+`learning-units.js` rather than reimplemented), one unit (titled from
+the proposal's own T36 title), exactly 16 reviews, and one
+exercise+exercise_version (`provenance='AI_GENERATED'`) per draft
+question with real citation rows — ALL in one transaction, verified
+zero-partial-rows on a mid-acceptance failure. Idempotency is bound to
+the draft's own state exactly like T27's commitImport: an
+already-ACCEPTED draft returns the first result verbatim regardless of
+new params passed on retry. Citations verified resolvable to real
+`source_pages` text; AI/manual provenance verified to coexist
+correctly. Nothing here claims scientific/medical validation — the
+"unverified" caveat lives in the UI, never fabricated into stored data.
+
+Added `POST /v1/drafts/:id/accept` (necessary plumbing, not in T38's
+own Where clause, same precedent as T30/T34/T36/T37). Client:
+`src/draft-review-ui.js` (pure) plus an extension of the "Fontes" card
+— each proposal gets a "Gerar rascunho com IA" button revealing a
+caveat, the real Q&A, and an accept form whose button becomes
+"Aceito"/disabled after success.
+
+`server/test/accept-draft.test.js` (7/7) + `e2e/draft-acceptance.spec.js`
+(1/1, new): full happy path with citation-resolvability and provenance
+proofs, idempotent repeat, midway-failure zero-rows, calendar-invalid
+pre-transaction rejection, cross-user denial, real-HTTP pipeline, and
+a real browser proving the unit appears on Plano and a second
+real-HTTP accept with different params changes nothing. Full gate:
+server 317/317 (was 310, +7), root 259/259 unchanged, build PASS,
+test:inventory PASS (58 files, was 56), full e2e 37/37 (36 pre-existing
++ 1 new, zero regressions).
+
+T38's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T38 row for full detail.
+
+**PHASE 06 EXIT GATE: SATISFIED.** T34-T38 all proven (commit +
+validation.md evidence row + tasks.md `[x]` each), all required gates
+green, zero P0/P1 open — T37's live-provider half remains its own
+explicitly recorded BLOCKED_EXTERNAL, not a defect. Phase 06 (Source
+and AI draft pipeline) is CLOSED.
+
+NEXT_TASK: Phase 07 ("Offline PWA, wrappers and reminders", T39-T44+)
+is now dependency-ready — T39's only listed dependency is T24, already
+closed. T39 ("Build the versioned owned offline agenda snapshot") —
+server/src/routes/agenda-snapshot.js + server/test/agenda-
+snapshot.test.js. Pending/overdue and known-future agenda, minimal
+display records, schemaVersion/dataRevision/generatedAt/timezone,
+paginated with one consistent generation; client swaps only a complete
+validated generation; no secrets or other-tenant data.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 12, T37 DONE)
 
 Fresh session reconciliation. The prompt's own reference checkpoint

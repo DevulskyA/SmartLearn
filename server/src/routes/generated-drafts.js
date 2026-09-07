@@ -1,8 +1,9 @@
 import * as drafts from '../services/generated-drafts.js';
+import { acceptDraft, AcceptDraftError } from '../services/accept-draft.js';
 import { config } from '../config.js';
 
 function handleError(err, reply) {
-  if (err instanceof drafts.DraftError) {
+  if (err instanceof drafts.DraftError || err instanceof AcceptDraftError) {
     const statusByCode = {
       NOT_FOUND: 404,
       INPUT_TOO_LARGE: 413,
@@ -11,6 +12,9 @@ function handleError(err, reply) {
       TIMEOUT: 504,
       PROVIDER_ERROR: 502,
       NETWORK_ERROR: 502,
+      VALIDATION_FAILED: 400,
+      INVALID_STATE: 409,
+      SUBJECT_CONFLICT: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
@@ -66,6 +70,28 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { draft: drafts.getDraft(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.post('/drafts/:id/accept', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        required: ['studyDate'],
+        properties: {
+          subjectId: { type: 'integer' },
+          newSubjectName: { type: 'string' },
+          newSubjectColor: { type: 'string' },
+          studyDate: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { acceptance: acceptDraft(db, request.actor.userId, id, request.body) };
     } catch (err) { return handleError(err, reply); }
   });
 }

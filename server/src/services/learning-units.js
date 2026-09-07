@@ -46,7 +46,7 @@ function unitDto(row) {
  * transaction-aware and this resolution must commit atomically with the
  * unit + review rows it's part of (AC-03/AC-04).
  */
-function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, newSubjectColor }) {
+export function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, newSubjectColor }) {
   if (newSubjectName) {
     const error = validateNamingField(newSubjectName, 'o nome da disciplina');
     if (error) throw new LearningUnitError('VALIDATION_FAILED', error, 'newSubjectName');
