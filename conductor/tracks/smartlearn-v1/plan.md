@@ -65,28 +65,32 @@ Gate no fechamento: server 165/165, root 240/240, rust 13/13, build PASS, e2e 17
 
 ---
 
-## Sprint S03 — Web Authority Cutover 🔄 IN_PROGRESS (3/5)
+## Sprint S03 — Web Authority Cutover 🔄 IN_PROGRESS (4/5)
 
 - [x] T20 — Map every existing DB caller and implement RemoteStore
 - [x] T21 — Connect the Web to real server-owned reads and writes
 - [x] T22 — Complete screen and settings parity without losing old data
-- [ ] 🔄 T23 — Prove one-intention UX, retries and recoverable errors on server
+- [x] T23 — Prove one-intention UX, retries and recoverable errors on server
   - [x] Plano `operationKey` wired (`createOperationKeyTracker()` em `src/app.js`, `planUnitSaveBtn`)
-  - [ ] Cadastro `operationKey` wiring (mesmo padrão, `studyForm`/`generateReviewTasks()`)
-  - [ ] `e2e/atomic-save.spec.js` (double-click, response-lost-after-commit via
-        interceptação de rota Playwright, falha mid-transaction, falha de
-        render pós-save bem-sucedido)
-  - [ ] gate completo rodado contra este edit (hoje UNVERIFIED)
-  - [ ] evidência registrada em validation.md
+  - [x] Cadastro `operationKey` wiring (mesmo padrão, `studyForm`/`generateReviewTasks()`, tracker independente `studySaveOperation`)
+  - [x] `e2e/atomic-save.spec.js` (4/4: double-click via 2 requests HTTP reais
+        concorrentes sob a mesma operationKey, response-lost-after-commit via
+        `route.fetch()`+`route.abort()`, mid-transaction failure via UNIQUE
+        constraint real de subjects(user_id,name), falha de render pós-save
+        via GET interceptado)
+  - [x] gate completo rodado contra este edit: server 174/174, root 259/259,
+        rust 13/13, build PASS, e2e 30/30 (26 existentes + 4 novos),
+        test:inventory PASS (40 arquivos)
+  - [x] evidência registrada em validation.md
   - [ ] commit atômico
-- [ ] T24 — Close the server-authoritative Web slice (Fresh Verifier independente da fatia inteira; não antes)
+- [ ] T24 — Close the server-authoritative Web slice (Fresh Verifier independente da fatia inteira; não antes; NÃO pode ser esta mesma sessão)
 
 Decisão de design do T23 (ainda não escrita em design.md/tasks.md): renovar
 `operationKey` em sucesso/cancelamento explícito e em `ApiError` definitivo;
 **não** renovar em `NetworkError` — retry deve reusar a key para o guard de
 idempotência do T15 (não T23) devolver o resultado original em vez de duplicar.
 
-Gate no fechamento do T22: server 174/174, root 259/259, rust 13/13, build PASS, e2e 26/26, test:inventory PASS (39 arquivos).
+Gate no fechamento do T23: server 174/174, root 259/259, rust 13/13, build PASS, e2e 30/30 (39→40 arquivos), test:inventory PASS.
 
 ---
 

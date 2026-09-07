@@ -7,6 +7,47 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 3, T23 closed)
+
+Supersedes session 2 immediately below (same day). Resumed after `/clear` via
+goal reconciliation: found the real T01-T54 plan lives in this worktree
+(`smartlearn-v1-complete`), not the repo root `main` — confirmed by memory
+pointer + `git worktree list`, not assumed.
+
+WHERE ARE WE? HEAD `9c41004` at session start, `M src/app.js` only. Finished
+T23 in this session: added Cadastro's `operationKey` wiring (`studySaveOperation`
+tracker, same `createOperationKeyTracker()` pattern Plano already used —
+confirmed via `remote-store.js:createWithReviews` that no server change was
+needed, since it forwards the whole payload including `operationKey`
+straight through). Wrote `e2e/atomic-save.spec.js` (4/4): double-click via
+two concurrent real HTTP requests under the same key, response-lost-after-
+commit via `route.fetch()`+`route.abort()`, mid-transaction failure via the
+real UNIQUE(user_id,name) subjects constraint firing inside
+`resolveOrCreateSubject`'s own `db.transaction()`, and render-failure-after-
+successful-save via an aborted follow-up GET.
+
+WHAT IS PROVEN? T23 done-when items all checked in tasks.md; evidence
+recorded in validation.md. Full gate green: server 174/174, root 259/259,
+rust 13/13, build PASS, e2e 30/30 (26 existing unchanged + 4 new),
+test:inventory PASS (40 files, was 39).
+
+WHAT IS NEXT? Commit this T23 work as one atomic commit. Then T24 — an
+independent Fresh Verifier for the whole server-authoritative-Web slice —
+explicitly MUST NOT be the same session/maker that did T23 per this file's
+own governance line; a future session (or a fresh subagent) should run it,
+not this one. Conductor cockpit (`conductor/tracks.md`,
+`conductor/tracks/smartlearn-v1/plan.md`) updated in lockstep.
+
+WHAT IS BLOCKED? Nothing technical. T24's Fresh Verifier independence
+requirement is a process constraint, not an external blocker.
+
+WHAT MUST NOT BE FORGOTTEN?
+- GATE_P1 (DOC-01..72 document-learning priority backlog) remains explicitly
+  deferred by the user — do not start it before T24.
+- No push/merge/deploy this session; all work local on `claude/smartlearn-v1-complete`.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 2, pre-/clear)
 
 Supersedes the "session 1" checkpoint immediately below (same day — that one

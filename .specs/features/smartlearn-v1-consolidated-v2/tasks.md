@@ -341,9 +341,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Database and UI each show exactly one intended outcome, 16 linked tasks and no orphan rows. Error focus and correction/retry are usable.
 **Recovery / rollback:** Change only request/form lifecycle; keep saved data and operation ledger intact.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Real-server fault-injection E2E; inject faults in test harness, not production debug endpoints.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Real-server fault-injection E2E; inject faults in test harness, not production debug endpoints.
 
 ### T24: Close the server-authoritative Web slice
 **Difficulty / risk:** 3/5 / 4/5.

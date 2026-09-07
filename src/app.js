@@ -1,6 +1,7 @@
 ﻿import "./styles.css";
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
+import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks } from "./scheduler.js";
@@ -3282,7 +3283,9 @@ studyForm.addEventListener("submit", async (event) => {
       studyDate,
       title: content,
       summaryBody,
+      operationKey: studySaveOperation.key,
     });
+    studySaveOperation.renew();
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     await renderStudies();
     studyContentInput.value = "";
@@ -3290,7 +3293,8 @@ studyForm.addEventListener("submit", async (event) => {
     if (studySourceTextInput) studySourceTextInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof NetworkError)) studySaveOperation.renew();
     studyMessage.classList.add("is-error");
     studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
   }
@@ -3404,6 +3408,23 @@ function setPlanFormMessage(msg = "", isError = false) {
   planUnitFormMessage.classList.toggle("is-error", isError);
 }
 
+// T23: one operation key per save INTENT, not per click/request. A
+// double-click or a retry after a lost response reuses the same key, so
+// the server's idempotency guard (T15) returns the original result
+// instead of creating a second unit. Only renew() on an actual new
+// intent (a prior save succeeded, or the user explicitly cancels) — never
+// on a failed attempt, since a retry of the same typed data IS the same
+// intent.
+function createOperationKeyTracker() {
+  let key = crypto.randomUUID();
+  return {
+    get key() { return key; },
+    renew() { key = crypto.randomUUID(); },
+  };
+}
+const planSaveOperation = createOperationKeyTracker();
+const studySaveOperation = createOperationKeyTracker();
+
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
 });
@@ -3413,6 +3434,7 @@ planUnitCancelBtn?.addEventListener("click", () => {
   setPlanSubjectSubformVisible(false);
   setPlanFormMessage();
   if (planNewSubjectInput) planNewSubjectInput.value = "";
+  planSaveOperation.renew();
 });
 
 planShowSubjectForm?.addEventListener("click", () => {
@@ -3474,10 +3496,13 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
-      : { subjectId, sourceText, studyDate, title, summaryBody };
+      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
-    // Save succeeded — clear draft immediately; render failures below must NOT re-submit
+    // Save succeeded (or an idempotent retry returned the original result)
+    // — this intent is done, the next save is a genuinely new one.
+    planSaveOperation.renew();
+    // Clear draft immediately; render failures below must NOT re-submit
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
@@ -3498,7 +3523,15 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     } catch {
       setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
     }
-  } catch {
+  } catch (error) {
+    // Only a NetworkError (we genuinely don't know whether the server
+    // committed) keeps the same key, so a retry of the same draft
+    // resolves as an idempotent replay rather than a duplicate. A
+    // definitive rejection (validation, subject conflict) renews it —
+    // the user is expected to change something before retrying, and
+    // reusing the key there would misreport an edited resubmission as an
+    // idempotency conflict instead of validating it fresh.
+    if (!(error instanceof NetworkError)) planSaveOperation.renew();
     setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
   } finally {
     planUnitSaveBtn.disabled = false;

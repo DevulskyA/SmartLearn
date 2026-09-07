@@ -30,14 +30,16 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T23 — IN PROGRESS** (uncommitted, `src/app.js` only)
+**T23 — DONE**
 
 ```
 ✅ Plano operationKey wired
-⬜ Cadastro operationKey wiring
-⬜ e2e/atomic-save.spec.js
-⬜ full gate
-⬜ evidence recorded
+✅ Cadastro operationKey wiring
+✅ e2e/atomic-save.spec.js (4/4: double-click, response-lost-after-commit,
+   mid-transaction failure, render-failure-after-successful-save)
+✅ full gate (server 174/174, root 259/259, rust 13/13, build PASS,
+   e2e 30/30, test:inventory PASS 40 files)
+✅ evidence recorded (validation.md)
 ⬜ atomic commit
 ```
 
@@ -49,11 +51,11 @@ o guard de idempotência do T15 devolver o resultado original em vez de
 duplicar).
 
 ```
-LAST_PROVEN = T22
-IN_PROGRESS = T23
-NEXT_TASK   = T23 (Cadastro wiring) → T24
-BLOCKERS    = none (pausa foi por pedido explícito do usuário)
-DIRTY       = src/app.js — trabalho intencional do T23, não descartar
+LAST_PROVEN = T23
+IN_PROGRESS = none
+NEXT_TASK   = commit T23 → T24 (independent Fresh Verifier, must NOT be this session)
+BLOCKERS    = none
+DIRTY       = src/app.js + e2e/atomic-save.spec.js — T23 work, pending commit
 ```
 
 ---
@@ -118,7 +120,7 @@ apesar de DONE confirmado em STATE.md) — reconciliar ao tocar nesses arquivos.
 
 ### 🔄 S03 — Web Authority Cutover (T20-T24) — IN PROGRESS
 ✅ T20 RemoteStore + inventário DB.*, ✅ T21 cutover autenticado single-origin,
-✅ T22 paridade de telas sem perda de dados, 🔄 T23 (ver CURRENT acima),
+✅ T22 paridade de telas sem perda de dados, ✅ T23 (ver CURRENT acima),
 ⬜ T24 fecha a fatia com Fresh Verifier independente.
 Exit: Web deixa de ter autoridade paralela (BrowserStore) significativa.
 
