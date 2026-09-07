@@ -108,19 +108,30 @@ export function create(db, userId, { unitId, question, answer, hint, provenance 
 /**
  * Editing NEVER rewrites a prior version row — it appends a new one
  * (AC-18: a past attempt scored against an earlier version must keep
- * seeing exactly what was shown then, even after later edits).
+ * seeing exactly what was shown then, even after later edits). A
+ * partial update (any subset of question/answer/hint/provenance,
+ * matching every other update endpoint in this codebase) is merged onto
+ * the current version's values before validating and inserting — a
+ * caller correcting only a typo in the hint should not have to resend
+ * the full question/provenance too.
  */
-export function edit(db, userId, exerciseId, { question, answer, hint, provenance }) {
+export function edit(db, userId, exerciseId, { question, answer, hint, provenance } = {}) {
   const exercise = findOwnedExercise(db, userId, exerciseId);
   if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
-  validateQuestionAndProvenance({ question, provenance });
+  const current = latestVersionRow(db, userId, exerciseId);
+
+  const nextQuestion = question !== undefined ? question : current.question;
+  const nextAnswer = answer !== undefined ? answer : current.answer;
+  const nextHint = hint !== undefined ? hint : current.hint;
+  const nextProvenance = provenance !== undefined ? provenance : current.provenance;
+  validateQuestionAndProvenance({ question: nextQuestion, provenance: nextProvenance });
 
   db.transaction(() => {
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO exercise_versions (user_id, exercise_id, question, answer, hint, provenance, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, exerciseId, question, answer ?? null, hint ?? null, provenance, now);
+    `).run(userId, exerciseId, nextQuestion, nextAnswer ?? null, nextHint ?? null, nextProvenance, now);
     db.prepare('UPDATE exercises SET updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, exerciseId);
   })();
 

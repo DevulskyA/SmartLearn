@@ -35,7 +35,10 @@ const subjects = {
     const all = await subjects.getAll();
     return all.filter((s) => s.isActive);
   },
-  async create({ name, color }) {
+  // Matches src/db.js's real signature: (name, color) — two positional
+  // args, not one merged object. app.js's Cadastro-screen new-subject
+  // form calls this as `DB.subjects.create(name)` with color omitted.
+  async create(name, color = 'DISC-BLUE') {
     const { subject } = await apiRequest('/v1/subjects', { method: 'POST', body: { name, color } });
     return subject;
   },
@@ -226,7 +229,10 @@ const exercises = {
     const { exercises: rows } = await apiRequest(`/v1/learning-units/${unitId}/exercises`);
     return rows.map(mapExercise);
   },
-  async create({ unitId, questionText, answerText, hintText, provenance }) {
+  // Matches src/db.js's real signature: (unitId, fields) — two args, not
+  // one merged object. app.js's actual call sites (add-exercise) rely on
+  // this exact shape.
+  async create(unitId, { questionText, answerText, hintText, provenance } = {}) {
     const { exercise } = await apiRequest(`/v1/learning-units/${unitId}/exercises`, {
       method: 'POST',
       body: { question: questionText, answer: answerText, hint: hintText, provenance },

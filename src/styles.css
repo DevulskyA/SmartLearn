@@ -942,6 +942,16 @@ h1 {
   margin-top: 1rem;
 }
 
+/* T22: .secondary-button/.primary-button set their own `display`, which
+   (being an author rule) always beats the browser's default [hidden]
+   style regardless of stylesheet order — so an element's `.hidden = true`
+   silently had no visual effect for any button. Restoring [hidden]'s
+   effect explicitly for the settings actions that now get hidden
+   programmatically in remote mode (import/reset). */
+.settings-actions [hidden] {
+  display: none;
+}
+
 .stats-panel-heading {
   margin-bottom: 1rem;
 }

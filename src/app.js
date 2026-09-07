@@ -416,12 +416,68 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     task.correctCount != null ||
     (task.comment ?? "") !== "";
 
-  const expandButton = document.createElement("button");
-  expandButton.type = "button";
-  expandButton.className = "review-expand";
-  expandButton.dataset.action = "expand";
-  expandButton.setAttribute("aria-expanded", String(hasScoreData));
-  expandButton.textContent = "Ver desempenho";
+  // Collapsible detail: questions-done toggle, free-form score inputs,
+  // comment. None of these have a server-mode equivalent (T20/heritage.md:
+  // the new model records evidence atomically via the exercises Q&A flow
+  // or the external-exercises form below, never a free-standing manual
+  // patch of questionsDone/score/comment) — showing controls that would
+  // fail on every use is worse than not showing them, so remote mode
+  // simply omits this panel rather than rendering a broken one.
+  const detail = document.createElement("div");
+  detail.className = "review-row-detail";
+  detail.hidden = true;
+
+  let expandButton = null;
+  if (!REMOTE_MODE) {
+    expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "review-expand";
+    expandButton.dataset.action = "expand";
+    expandButton.setAttribute("aria-expanded", String(hasScoreData));
+    expandButton.textContent = "Ver desempenho";
+    detail.hidden = !hasScoreData;
+
+    const questionsDoneLabel = document.createElement("label");
+    questionsDoneLabel.className = "check-control review-toggle";
+    const questionsDoneInput = document.createElement("input");
+    questionsDoneInput.type = "checkbox";
+    questionsDoneInput.checked = task.questionsDone;
+    questionsDoneInput.dataset.action = "questions-done";
+    questionsDoneInput.dataset.reviewId = String(task.id);
+    questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
+    questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+
+    const scoreInputs = document.createElement("div");
+    scoreInputs.className = "review-score-inputs";
+    const live = document.createElement("div");
+    live.className = "review-score-live";
+    live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
+    const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
+    score.dataset.scoreFor = String(task.id);
+    score.setAttribute("aria-label", "Percentual de acertos");
+    live.append(score);
+    scoreInputs.append(
+      createScoreInput(task, "questionsCount", "Questões"),
+      createScoreInput(task, "correctCount", "Acertos"),
+      live,
+    );
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "comment-control review-note";
+    commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
+    const commentInput = document.createElement("textarea");
+    commentInput.rows = 2;
+    commentInput.maxLength = 500;
+    commentInput.value = task.comment ?? "";
+    commentInput.placeholder = "Anote uma dúvida ou ponto importante";
+    commentInput.dataset.action = "comment";
+    commentInput.dataset.reviewId = String(task.id);
+    commentInput.dataset.committedValue = task.comment ?? "";
+    commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
+    commentLabel.append(commentInput);
+
+    detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  }
 
   const externalBtn = document.createElement("button");
   externalBtn.type = "button";
@@ -430,53 +486,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   externalBtn.setAttribute("aria-expanded", "false");
   externalBtn.textContent = "Exercícios externos";
 
-  primary.append(reviewDoneLabel, expandButton, externalBtn);
-
-  // Collapsible detail: questions, score, comment
-  const detail = document.createElement("div");
-  detail.className = "review-row-detail";
-  detail.hidden = !hasScoreData;
-
-  const questionsDoneLabel = document.createElement("label");
-  questionsDoneLabel.className = "check-control review-toggle";
-  const questionsDoneInput = document.createElement("input");
-  questionsDoneInput.type = "checkbox";
-  questionsDoneInput.checked = task.questionsDone;
-  questionsDoneInput.dataset.action = "questions-done";
-  questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
-
-  const scoreInputs = document.createElement("div");
-  scoreInputs.className = "review-score-inputs";
-  const live = document.createElement("div");
-  live.className = "review-score-live";
-  live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
-  const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
-  score.dataset.scoreFor = String(task.id);
-  score.setAttribute("aria-label", "Percentual de acertos");
-  live.append(score);
-  scoreInputs.append(
-    createScoreInput(task, "questionsCount", "Questões"),
-    createScoreInput(task, "correctCount", "Acertos"),
-    live,
-  );
-
-  const commentLabel = document.createElement("label");
-  commentLabel.className = "comment-control review-note";
-  commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
-  const commentInput = document.createElement("textarea");
-  commentInput.rows = 2;
-  commentInput.maxLength = 500;
-  commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
-  commentInput.dataset.action = "comment";
-  commentInput.dataset.reviewId = String(task.id);
-  commentInput.dataset.committedValue = task.comment ?? "";
-  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
-  commentLabel.append(commentInput);
-
-  detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  primary.append(reviewDoneLabel, ...(expandButton ? [expandButton] : []), externalBtn);
 
   // External exercises section
   const externalSection = document.createElement("div");
@@ -1867,6 +1877,20 @@ export async function renderSettings() {
   lastBackupLabel.textContent = settings?.lastBackupAt
     ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
     : "Nenhum backup exportado.";
+
+  // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
+  // mode (T20) — restoring a snapshot into the server, and a full-account
+  // wipe, are real operations the migration phase (T25+) and an explicit
+  // future owned-reset endpoint must define deliberately, not something a
+  // client-only local-DB affordance can honestly offer against someone
+  // else's data authority. Rather than leave buttons that fail every
+  // click, this is the "safe explanatory state" tasks.md T22 asks for:
+  // hidden buttons, a plain-language reason in their place.
+  if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
+  if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
+  if (REMOTE_MODE) {
+    setResetMessage("Apagar todos os dados ainda não é uma operação suportada no modo servidor.");
+  }
 }
 
 function hasTauriRuntime() {
@@ -1916,7 +1940,15 @@ export async function exportBackup() {
       return; // exportação cancelada pelo usuário
     }
 
-    await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    // Best-effort bookkeeping only — the export itself already succeeded
+    // and was saved, so a failure here (e.g. remote mode doesn't track
+    // lastBackupAt at all, per T18's settings contract) must never turn
+    // an already-successful export into a reported failure.
+    try {
+      await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    } catch (metaError) {
+      console.warn("Não foi possível registrar a data do último backup.", metaError);
+    }
     await renderSettings();
     backupMessage.textContent = "Backup exportado com sucesso.";
   } catch (error) {
@@ -2330,6 +2362,20 @@ function isKnownScreen(screenId) {
 
 const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings"]);
 
+// T22: "register" (#screen-register, "Cadastro") was removed from the NAV
+// in a prior decision (P1-2), but is NOT dead — it is the only UI in the
+// app that manages exercises (add/edit/delete), a real product capability
+// with no other entry point today (confirmed by hands-on verification:
+// Plano's own unit rows have no exercise-authoring section at all). An
+// earlier version of this comment/redirect wrongly assumed it was a
+// redundant duplicate of Plano's create-unit flow and redirected #register
+// away, which would have made exercise management completely
+// unreachable — reverted before landing. Preserving required entry
+// behavior (per tasks.md T22) means leaving #register reachable exactly
+// as P1-2 left it: nav-hidden, but a direct/bookmarked hash still works.
+// A real fix (surfacing exercise management from Plano/Hoje instead of
+// this legacy screen) is future UI work, not a T22 redirect decision.
+
 export function showScreen(screenId, { focus = false } = {}) {
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
@@ -2376,6 +2422,18 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
   if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+  }
+  // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
+  // list populated on plain navigation — renderStudies() only ran after a
+  // submission through this same form, leaving units created elsewhere
+  // (e.g. Plano) invisible here even though the underlying data is the
+  // same. Exercise management lives exclusively on this screen (no other
+  // entry point exists), so a unit not appearing here means its
+  // exercises are unmanageable — a real, previously-silent gap, fixed by
+  // wiring this screen's list to the same on-navigate pattern every
+  // other screen already uses.
+  if (nextScreen === "register" && databaseAvailable) {
+    renderStudies().catch((error) => console.error("Falha ao carregar estudos.", error));
   }
   if (nextScreen === "account") {
     renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));

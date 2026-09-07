@@ -146,6 +146,23 @@ test('subjects.delete routes to DELETE (deleteIfEmpty semantics) rather than the
   } finally { globalThis.fetch = realFetch; }
 });
 
+test('T22: subjects.create(name, color) matches db.js\'s real two-positional-arg signature (not a merged object) — the Cadastro screen calls it as create(name) alone', async () => {
+  const calls = mockFetch([{ status: 201, body: { subject: { id: 1, name: 'X', color: 'DISC-BLUE', isActive: true, sortOrder: 0, createdAt: 'a', updatedAt: 'a' } } }]);
+  try {
+    await DB.subjects.create('X');
+    assert.deepEqual(JSON.parse(calls[0].opts.body), { name: 'X', color: 'DISC-BLUE' }, 'color must default exactly like db.js does when the caller omits it');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('T22: exercises.create(unitId, fields) matches db.js\'s real two-arg signature (unitId is NOT merged into the fields object)', async () => {
+  const calls = mockFetch([{ status: 201, body: { exercise: { id: 1, unitId: 5, orderIndex: 0, archivedAt: null, createdAt: 'a', updatedAt: 'a', currentVersion: { question: 'Q', answer: 'A', hint: null, provenance: 'MANUAL' } } } }]);
+  try {
+    await DB.exercises.create(5, { questionText: 'Q', answerText: 'A', provenance: 'MANUAL' });
+    assert.equal(calls[0].url, `${REAL_API_BASE}/v1/learning-units/5/exercises`);
+    assert.deepEqual(JSON.parse(calls[0].opts.body), { question: 'Q', answer: 'A', provenance: 'MANUAL' });
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('exercises DTO flattens the versioned server shape to the old flat field names', async () => {
   const versioned = {
     id: 5, unitId: 1, orderIndex: 0, archivedAt: null, createdAt: 'a', updatedAt: 'b',
@@ -289,7 +306,7 @@ async function bootstrapSession(email) {
 test('real API: full authority-scoped round trip — subjects, learning units, agenda, exercises, evidence, settings, export', async () => {
   await bootstrapSession('remotestore-a@example.com');
   try {
-    const subject = await DB.subjects.create({ name: 'RemoteStore Subject', color: 'DISC-GREEN' });
+    const subject = await DB.subjects.create('RemoteStore Subject', 'DISC-GREEN');
     assert.ok(subject.id);
     const subjects = await DB.subjects.getAll();
     assert.ok(subjects.some((s) => s.id === subject.id));
@@ -307,7 +324,7 @@ test('real API: full authority-scoped round trip — subjects, learning units, a
     const completed = await DB.completeReviewWithEvidence({ taskId: task.id, questionsCount: 4, correctCount: 3 });
     assert.equal(completed.score, 0.75);
 
-    const exercise = await DB.exercises.create({ unitId: created.unit.id, questionText: 'O que é X?', answerText: 'É Y', provenance: 'MANUAL' });
+    const exercise = await DB.exercises.create(created.unit.id, { questionText: 'O que é X?', answerText: 'É Y', provenance: 'MANUAL' });
     assert.equal(exercise.questionText, 'O que é X?');
     const exerciseList = await DB.exercises.getAll(created.unit.id);
     assert.equal(exerciseList.length, 1);

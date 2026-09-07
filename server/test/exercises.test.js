@@ -102,6 +102,28 @@ test('editing appends a new version, preserves the old one unchanged, and getVer
   } finally { cleanup(); }
 });
 
+test('T22: edit() is a real partial update — omitted fields (e.g. provenance) carry over from the current version, matching every other update endpoint here', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'z@example.com');
+    const unit = makeUnit(db, userId);
+    const created = exercises.create(db, userId, { unitId: unit.id, question: 'Original', answer: 'A1', hint: 'H1', provenance: 'SOURCE' });
+
+    // src/app.js's real "save-exercise-edit" handler only ever sends
+    // questionText/answerText/hintText, never provenance — this must not
+    // be rejected as if provenance were required on every edit.
+    const edited = exercises.edit(db, userId, created.id, { question: 'Updated', answer: 'A2', hint: 'H2' });
+    assert.equal(edited.currentVersion.question, 'Updated');
+    assert.equal(edited.currentVersion.provenance, 'SOURCE', 'provenance must carry over unchanged when omitted');
+
+    const hintOnly = exercises.edit(db, userId, created.id, { hint: 'H3' });
+    assert.equal(hintOnly.currentVersion.hint, 'H3');
+    assert.equal(hintOnly.currentVersion.question, 'Updated', 'question must carry over unchanged when omitted');
+    assert.equal(hintOnly.currentVersion.answer, 'A2', 'answer must carry over unchanged when omitted');
+    assert.equal(hintOnly.currentVersion.provenance, 'SOURCE');
+  } finally { cleanup(); }
+});
+
 test('archiving an exercise does not corrupt an existing version reference; reactivate restores it to the active list', () => {
   const { db, cleanup } = tmpDb();
   try {

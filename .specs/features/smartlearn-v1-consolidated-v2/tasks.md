@@ -328,9 +328,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Every protected current journey has a server-mode equivalent; data previously visible locally remains recoverable; zero inaccessible core method or silent no-op. Theme preference remains compatible.
 **Recovery / rollback:** Retain legacy export tooling and old source data; isolate UI rewrites by screen.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Feature-parity E2E plus affected unit/adapter tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Feature-parity E2E plus affected unit/adapter tests.
 
 ### T23: Prove one-intention UX, retries and recoverable errors on server
 **Difficulty / risk:** 3/5 / 4/5.
