@@ -519,9 +519,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Every proposed unit is attributable to exact source segments; user can inspect before any learning unit is created; chunk boundaries do not silently discard pages.
 **Recovery / rollback:** Keep proposals separate from accepted material and retain source unchanged.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Chunk/source-link tests and inspection UI E2E.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Chunk/source-link tests and inspection UI E2E.
 
 ### T37: Implement bounded AI draft generation with verified adapter contracts
 **Difficulty / risk:** 5/5 / 5/5.

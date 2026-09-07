@@ -58,6 +58,17 @@ const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
  * field,message,requestId}} envelope when present) and NetworkError when
  * the request never reached the server at all.
  */
+async function handleResponse(res) {
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  const json = res.status === 204 ? null : await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const err = json?.error ?? {};
+    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId });
+  }
+  return json;
+}
+
 export async function apiRequest(path, { method = 'GET', body } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -75,12 +86,26 @@ export async function apiRequest(path, { method = 'GET', body } = {}) {
     throw new NetworkError(`Falha de rede ao acessar ${path}: ${err.message}`);
   }
 
-  // 204 No Content (e.g. DELETE) has no body to parse.
-  const json = res.status === 204 ? null : await res.json().catch(() => null);
+  return handleResponse(res);
+}
 
-  if (!res.ok) {
-    const err = json?.error ?? {};
-    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId });
+/**
+ * Multipart upload (T34's /v1/sources, and any future file-upload route).
+ * Deliberately NOT `apiRequest` with a FormData body: this never sets
+ * Content-Type itself, so the browser attaches its own `multipart/
+ * form-data; boundary=...` header — setting it manually here would omit
+ * the boundary and break parsing server-side.
+ */
+export async function apiUpload(path, formData) {
+  const headers = {};
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, credentials: 'include', body: formData });
+  } catch (err) {
+    throw new NetworkError(`Falha de rede ao acessar ${path}: ${err.message}`);
   }
-  return json;
+
+  return handleResponse(res);
 }

@@ -1,8 +1,9 @@
 import * as sourceStorage from '../services/source-storage.js';
+import { extractSource, SourceExtractionError } from '../services/source-extraction.js';
 import { config } from '../config.js';
 
 function handleError(err, reply) {
-  if (err instanceof sourceStorage.SourceError) {
+  if (err instanceof sourceStorage.SourceError || err instanceof SourceExtractionError) {
     const statusByCode = {
       VALIDATION_FAILED: 400,
       UNSUPPORTED_FILE_TYPE: 400,
@@ -17,7 +18,7 @@ function handleError(err, reply) {
   throw err;
 }
 
-export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, maxBytes = config.sourceMaxBytes, quotaBytes = config.sourceQuotaBytes } = {}) {
+export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, maxBytes = config.sourceMaxBytes, quotaBytes = config.sourceQuotaBytes, extractionDeadlineMs, extractionMemoryLimitMb } = {}) {
   app.get('/sources', async (request) => {
     return { sources: sourceStorage.list(db, request.actor.userId) };
   });
@@ -76,6 +77,24 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
           quotaBytes,
         }),
       };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // Deliberately synchronous from the caller's point of view (awaits the
+  // full bounded worker run, T35) — this route has no separate polling
+  // status endpoint yet; a future large-scale UI can add one without
+  // changing this contract, since the result is just read back from
+  // `sources.extraction_status` either way.
+  app.post('/sources/:id/extract', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const options = { sourcesDir };
+      if (extractionDeadlineMs !== undefined) options.deadlineMs = extractionDeadlineMs;
+      if (extractionMemoryLimitMb !== undefined) options.memoryLimitMb = extractionMemoryLimitMb;
+      return { extraction: await extractSource(db, request.actor.userId, id, options) };
     } catch (err) { return handleError(err, reply); }
   });
 }

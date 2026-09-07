@@ -17,6 +17,7 @@ import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
+import * as SourceProposalsUI from "./source-proposals-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -240,6 +241,12 @@ const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
 const migrationResultPanel = document.querySelector("#migration-result-panel");
 const migrationResultSummary = document.querySelector("#migration-result-summary");
 const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
+const sourcesCard = document.querySelector("#sources-card");
+const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
+const sourcesFileInput = document.querySelector("#sources-file-input");
+const sourcesMessage = document.querySelector("#sources-message");
+const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
+const sourcesProposalsList = document.querySelector("#sources-proposals-list");
 let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
@@ -1915,6 +1922,9 @@ export async function renderSettings() {
   // mirroring how import/reset are REMOTE_MODE-only in the opposite
   // direction above.
   if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
+  // T36: source upload/proposals only exist against the real server
+  // (T34-T36) — same REMOTE_MODE-only reasoning as the migration card.
+  if (sourcesCard) sourcesCard.hidden = !REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
@@ -2133,6 +2143,147 @@ migrationDownloadReportBtn?.addEventListener("click", async () => {
     `smartlearn-migracao-${getLocalDateValue()}.json`,
     JSON.stringify(migrationLastReport, null, 2),
   );
+});
+
+function setSourcesMessage(message = "", isError = false) {
+  if (!sourcesMessage) return;
+  sourcesMessage.classList.toggle("is-error", isError);
+  sourcesMessage.textContent = message;
+}
+
+function createSourceProposalItem(proposal) {
+  const li = document.createElement("li");
+  li.className = "source-proposal-item";
+  li.dataset.proposalId = String(proposal.id);
+
+  const range = createTextElement(
+    "p",
+    "source-proposal-range",
+    proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`,
+  );
+
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.className = "source-proposal-title-input";
+  titleInput.value = proposal.title;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "small-button";
+  saveBtn.dataset.action = "save-proposal-title";
+  saveBtn.textContent = "Salvar título";
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "text-button";
+  toggleBtn.dataset.action = "toggle-proposal-excerpt";
+  toggleBtn.textContent = "Ver trecho da fonte";
+
+  const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
+  excerpt.hidden = true;
+
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt);
+  return li;
+}
+
+function renderSourceProposals(proposals) {
+  if (!sourcesProposalsList) return;
+  sourcesProposalsList.replaceChildren();
+  for (const proposal of proposals) {
+    sourcesProposalsList.append(createSourceProposalItem(proposal));
+  }
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+}
+
+sourcesChooseFileButton?.addEventListener("click", () => {
+  sourcesFileInput?.click();
+});
+
+sourcesFileInput?.addEventListener("change", async () => {
+  const [file] = sourcesFileInput.files ?? [];
+  if (!file) return;
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
+  if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+
+  try {
+    setSourcesMessage("Enviando PDF...");
+    const uploadResult = await SourceProposalsUI.uploadSource(file);
+    if (!uploadResult.ok) {
+      setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
+      return;
+    }
+
+    setSourcesMessage("Extraindo texto do PDF...");
+    const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
+    if (!extractResult.ok) {
+      setSourcesMessage(extractResult.message || "Não foi possível extrair o texto do PDF.", true);
+      return;
+    }
+    if (extractResult.extraction.status !== "EXTRACTED") {
+      const reasons = {
+        ENCRYPTED: "Este PDF está criptografado e não pode ser lido.",
+        TIMEOUT: "A extração excedeu o tempo limite.",
+        IMAGE_ONLY_OR_UNREADABLE: "Este PDF parece ser apenas imagem (sem texto extraível).",
+        EXTRACTION_FAILED: "Não foi possível extrair o texto deste PDF.",
+      };
+      setSourcesMessage(reasons[extractResult.extraction.status] || "Não foi possível extrair o texto deste PDF.", true);
+      return;
+    }
+
+    setSourcesMessage("Gerando trechos propostos...");
+    const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
+    if (!chunkResult.ok) {
+      setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
+      return;
+    }
+
+    renderSourceProposals(chunkResult.proposals);
+    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.`);
+  } catch (error) {
+    setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
+    console.error("Falha ao processar fonte enviada.", error);
+  } finally {
+    sourcesFileInput.value = "";
+  }
+});
+
+sourcesProposalsList?.addEventListener("click", async (event) => {
+  const item = event.target.closest(".source-proposal-item");
+  if (!item) return;
+  const proposalId = item.dataset.proposalId;
+
+  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
+  if (toggleBtn) {
+    const excerptEl = item.querySelector(".source-proposal-excerpt");
+    if (!excerptEl) return;
+    if (excerptEl.hidden) {
+      const result = await SourceProposalsUI.getProposal(proposalId);
+      if (result.ok) excerptEl.textContent = result.proposal.excerpt;
+      excerptEl.hidden = false;
+      toggleBtn.textContent = "Ocultar trecho da fonte";
+    } else {
+      excerptEl.hidden = true;
+      toggleBtn.textContent = "Ver trecho da fonte";
+    }
+    return;
+  }
+
+  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
+  if (saveBtn) {
+    const input = item.querySelector(".source-proposal-title-input");
+    if (!input) return;
+    saveBtn.disabled = true;
+    try {
+      const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
+      if (result.ok) {
+        setSourcesMessage("Título atualizado.");
+      } else {
+        setSourcesMessage(result.message || "Não foi possível salvar o título.", true);
+      }
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
 });
 
 export async function importBackup(file) {

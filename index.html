@@ -565,6 +565,22 @@
               <button class="secondary-button" id="migration-download-report" type="button">Baixar relatório</button>
             </div>
           </section>
+
+          <section class="settings-card" id="sources-card" aria-labelledby="sources-title" hidden>
+            <div class="section-heading">
+              <p class="eyebrow">Fontes</p>
+              <h2 id="sources-title">Fontes em PDF</h2>
+              <p>Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="secondary-button file-button" id="sources-choose-file" type="button">Selecionar PDF</button>
+              <input class="visually-hidden" id="sources-file-input" type="file" accept=".pdf,application/pdf" tabindex="-1" aria-hidden="true" />
+            </div>
+            <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
+            <div id="sources-proposals-panel" hidden>
+              <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
+            </div>
+          </section>
         </section>
 
         <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>

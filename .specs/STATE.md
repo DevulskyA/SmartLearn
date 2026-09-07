@@ -7,6 +7,62 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 11, T36 DONE)
+
+Continued directly from this session's T35 checkpoint. `git status
+--short` empty before starting, tasks.md T35 all `[x]`/T36 all `[ ]`
+confirmed.
+
+T36 ("Create inspectable source-to-unit proposals") DONE — the first
+task in this phase with a real client/UI component.
+`server/migrations/014-content-proposals.sql` adds `content_proposals`
+(a real `source_id`+page-range link, never free text). `server/src/
+services/content-proposals.js` (`chunkSource`/`listProposals`/
+`getProposal`/`renameProposal`): requires `EXTRACTED` status,
+partitions T35's real pages sequentially into <=10-page groups (design.
+md §8), verified to cover every page exactly once with no gap/overlap;
+chunk text is recomputed live from `source_pages` on every read, never
+duplicated/snapshotted; only the title is editable; re-chunking
+replaces the prior proposal set wholesale. Added `POST /v1/sources/:id/
+extract` (T35's first HTTP consumer) and the proposals routes, all
+inside the standard `/v1` auth/CSRF context.
+
+Client: `src/api-client.js` gained `apiUpload()` (multipart, never sets
+its own Content-Type). `src/source-proposals-ui.js` (pure, mirrors
+migration-ui.js) plus a new REMOTE_MODE-only "Fontes" card on
+Configurações — the first real UI for the whole T34-T36 source
+pipeline.
+
+Found and fixed a real bug while writing this task: the client's
+bodyless `POST .../proposals` was rejected by AJV's strict body-schema
+validation (Fastify parses an empty body as `undefined`, not `{}`) —
+fixed by sending an explicit `{}`.
+
+`server/test/content-proposals.test.js` (8/8) + `e2e/source-
+proposals.spec.js` (1/1, new): real upload -> extract -> chunk ->
+inspect -> rename through the actual UI, byte-exact excerpt
+verification, server-side rename persistence proof, and proof that
+zero subjects/units were created by this flow. Full gate: server
+290/290 (was 282, +8), root 259/259 unchanged, build PASS,
+test:inventory PASS (55 files, was 53), full e2e 36/36 (35 pre-existing
++ 1 new, zero regressions from the Configurações UI change).
+
+T36's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T36 row for full detail.
+
+NEXT_TASK: T37 ("Implement bounded AI draft generation with verified
+adapter contracts", depends on T36) —
+server/src/ai/ + server/src/services/generated-drafts.js +
+server/test/ai-drafts.test.js. This is the hardest task in the entire
+plan (difficulty 5/5, risk 5/5): a deterministic fake provider (buildable
+and testable now) PLUS one configured real-provider adapter requiring
+credentials/consent/budget this session cannot authorize on its own —
+expect a genuine BLOCKED_EXTERNAL on the live-integration half even
+after the fake-provider path and schema/injection defenses are fully
+built and tested.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 11, T35 DONE)
 
 Continued directly from this session's T34 checkpoint. `git status

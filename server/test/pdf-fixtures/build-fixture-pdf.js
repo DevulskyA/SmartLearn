@@ -35,14 +35,18 @@ export function buildFixturePdf(pagesText) {
   // agree with Latin-1 above 0x7F.
   const fontObj = pdfObject(fontId, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
 
+  // Wide MediaBox: pdf.js clips a text run's extracted string at the page
+  // boundary, so a narrow page silently truncates getTextContent() output
+  // for anything longer than a few characters -- discovered by direct
+  // reproduction while writing this fixture. Sized from the longest page's
+  // actual character count (generously, 14pt/char at 18pt Helvetica) so an
+  // arbitrarily long fixture string is never clipped, not just a "typical" one.
+  const longestPageLength = Math.max(...pagesText.map((t) => t.length), 1);
+  const pageWidth = Math.max(2000, longestPageLength * 14 + 100);
+
   const pageObjs = pageIds.map((id, i) => pdfObject(
     id,
-    // Wide MediaBox: pdf.js clips a text run's extracted string at the page
-    // boundary, so a narrow page silently truncates getTextContent() output
-    // for anything longer than a few characters -- discovered by direct
-    // reproduction while writing this fixture. 2000pt comfortably fits any
-    // realistic single-line fixture string at 18pt Helvetica.
-    `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 2000 200] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`
+    `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} 200] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`
   ));
 
   const contentObjs = pagesText.map((text, i) => {
