@@ -7,6 +7,61 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 10, T33 DONE — PHASE 05 CLOSED)
+
+Continued directly from this session's T32 checkpoint. `git status
+--short` empty before starting, tasks.md T32 all `[x]`/T33 all `[ ]`
+confirmed.
+
+T33 ("Preserve an experimental challenger without promoting it") DONE
+— Phase 05's last task. `server/src/domain/experimental/mastery-
+policy.js` (`evaluateChallenger`) reconstructs the historical mastery/
+error-hypothesis ideas from context.md's audited Branch 2 as a small,
+versioned, DISABLED-BY-DEFAULT offline/shadow policy consuming T32's
+evidence-profile output only — no route/service/UI/schedule/DB-write
+path exists for it anywhere. Historical thresholds (24h/0.8/0.35)
+preserved as literal named constants, not re-derived or applied as a
+hard gate. No label is ever "mastered"; `validated` is always false;
+one independent-correct observation never reaches the strongest label
+even when explicitly enabled (requires >=2, zero conflicts);
+conflicting evidence always overrides any pattern label. Hypotheses
+are grounded only in real schema fields (assistance, conflict, missing
+observations) — no fabricated procedural/conceptual signals.
+
+`server/test/experimental-mastery-policy.test.js` (9/9), including a
+real-DB integration proof that invoking the enabled challenger changes
+zero rows across review_tasks/learning_evidence/learning_events/
+exercise_attempts. New `.specs/features/smartlearn-v1-consolidated-v2/
+pedagogical-validation.md` records `SCIENTIFIC_LEARNING_BENEFIT:
+NOT_ESTABLISHED` and a 4-step human-gated promotion path.
+
+Full gate: server 262/262 (was 253, +9), root 259/259 unchanged,
+test:inventory PASS (51 files, was 50). Build/rust/e2e not re-run —
+untouched (pure domain + markdown only), last recorded values stand.
+
+T33's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T33 row for full detail.
+
+**PHASE 05 EXIT GATE: SATISFIED.** T29-T33 all proven (commit +
+validation.md evidence row + tasks.md `[x]` each), all required gates
+green, zero P0/P1 open. Phase 05 (Reconstructed learning evidence) is
+CLOSED.
+
+NEXT_TASK: Phase 06 ("Source and AI draft pipeline", T34-T38) is now
+dependency-ready — T34's only listed dependency is T24, already closed
+long before this phase. T34 ("Secure private PDF upload and source
+ownership", depends on T24) — server/src/routes/sources.js +
+server/src/services/source-storage.js +
+server/migrations/0NN-sources.sql (renumber from the plan's suggested
+005 — next real number is 012) + server/test/uploads.test.js. Bounded
+private source upload outside web root, owner scope, random filenames,
+streaming size checks, file/content verification, quotas; reject path
+traversal and unsupported/encrypted input; state-changing multipart
+upload uses the same auth/CSRF contract as every other mutating route
+in this codebase.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 10, T32 DONE)
 
 Continued directly from this session's T31 checkpoint. `git status

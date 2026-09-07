@@ -477,9 +477,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Enabling/disabling the challenger leaves schedules, evidence and public learner claims unchanged by default; replay fixtures expose thresholds and prior failure cases; pending educational validation remains pending.
 **Recovery / rollback:** Remove/disable the derived challenger without affecting any stored learning fact.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Policy validation + no-effect integration test; separate pedagogical review, no invented learning-benefit PASS.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Policy validation + no-effect integration test; separate pedagogical review, no invented learning-benefit PASS.
 
 ## Phase 06 - Source and AI draft pipeline
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.
