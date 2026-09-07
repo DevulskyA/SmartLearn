@@ -59,6 +59,7 @@ export function normalizeLearningEvent(input, { now }) {
     assessmentMethod,
     provenance = 'APP',
     occurredAt,
+    confidence = null,
   } = input ?? {};
 
   requirePositiveInt(unitId, 'unitId');
@@ -85,6 +86,14 @@ export function normalizeLearningEvent(input, { now }) {
     throw new LearningEventError('VALIDATION_FAILED', 'correctsEventId só é válido em eventos CORRECTION.', 'correctsEventId');
   }
 
+  // Confidence is a separate, optional self-report signal — it never
+  // affects outcome/assistance validation and must never be trusted as a
+  // proxy for correctness (design.md: "keep confidence separate from
+  // correctness"; T32's evidence profile depends on this staying true).
+  if (confidence !== null && (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence < 0 || confidence > 1)) {
+    throw new LearningEventError('VALIDATION_FAILED', 'confidence deve ser um número entre 0 e 1, ou omitido.', 'confidence');
+  }
+
   return Object.freeze({
     unitId,
     competencyId,
@@ -98,6 +107,7 @@ export function normalizeLearningEvent(input, { now }) {
     assistanceUsed,
     assessmentMethod,
     provenance,
+    confidence,
     schemaVersion: SCHEMA_VERSION,
     occurredAt,
     recordedAt: now,

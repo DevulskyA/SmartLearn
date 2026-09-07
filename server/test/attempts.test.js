@@ -107,6 +107,22 @@ test('reveal-then-correct stays assisted: submitting CORRECT after revealSolutio
   } finally { cleanup(); }
 });
 
+test('confidence is optional, round-trips through submit, and never affects the recorded outcome', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'j2@example.com');
+    const unit = makeUnit(db, userId);
+    const exercise = makeExercise(db, userId, unit.id);
+    const started = attempts.start(db, userId, { exerciseId: exercise.id });
+
+    const result = attempts.submit(db, userId, started.id, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT', confidence: 0.2 });
+    assert.equal(result.confidence, 0.2);
+    const event = db.prepare('SELECT outcome, confidence FROM learning_events WHERE id = ?').get(result.eventId);
+    assert.equal(event.outcome, 'CORRECT', 'a low confidence must not downgrade the recorded outcome');
+    assert.equal(event.confidence, 0.2);
+  } finally { cleanup(); }
+});
+
 test('missing outcome/assistance observation stays UNKNOWN, never a coerced default (MX10)', () => {
   const { db, cleanup } = tmpDb();
   try {

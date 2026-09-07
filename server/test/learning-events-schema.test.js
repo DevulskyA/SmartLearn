@@ -206,8 +206,25 @@ test('normalizeLearningEvent: omitted assistance/outcome stay UNKNOWN, never coe
   assert.equal(result.outcome, 'UNKNOWN');
   assert.equal(result.assistanceAvailable, 'UNKNOWN');
   assert.equal(result.assistanceUsed, 'UNKNOWN');
+  assert.equal(result.confidence, null, 'omitted confidence must stay null, never a coerced 0');
   assert.equal(result.schemaVersion, 1);
   assert.equal(result.recordedAt, now);
+});
+
+test('normalizeLearningEvent: confidence is validated (0-1) but never affects outcome/assistance validation or classification (design.md: kept separate from correctness)', () => {
+  const now = '2026-01-01T00:00:00.000Z';
+  const base = { unitId: 1, attemptId: 1, exerciseVersionId: 1, sequence: 1, assessmentMethod: 'SELF_REPORT', occurredAt: now };
+
+  const lowConfidenceCorrect = normalizeLearningEvent({ ...base, outcome: 'CORRECT', confidence: 0.1 }, { now });
+  assert.equal(lowConfidenceCorrect.outcome, 'CORRECT', 'low confidence must not downgrade a CORRECT outcome');
+  assert.equal(lowConfidenceCorrect.confidence, 0.1);
+
+  const highConfidenceIncorrect = normalizeLearningEvent({ ...base, outcome: 'INCORRECT', confidence: 0.95 }, { now });
+  assert.equal(highConfidenceIncorrect.outcome, 'INCORRECT', 'high confidence must not upgrade an INCORRECT outcome');
+
+  assert.throws(() => normalizeLearningEvent({ ...base, confidence: 1.5 }, { now }), (e) => e.field === 'confidence');
+  assert.throws(() => normalizeLearningEvent({ ...base, confidence: -0.1 }, { now }), (e) => e.field === 'confidence');
+  assert.throws(() => normalizeLearningEvent({ ...base, confidence: 'high' }, { now }), (e) => e.field === 'confidence');
 });
 
 test('normalizeLearningEvent: rejects unknown enum values and non-integer coercion attempts', () => {

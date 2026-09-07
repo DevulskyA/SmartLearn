@@ -7,6 +7,60 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 10, T32 DONE)
+
+Continued directly from this session's T31 checkpoint. `git status
+--short` empty before starting, tasks.md T31 all `[x]`/T32 all `[ ]`
+confirmed.
+
+T32 ("Reconstruct a transparent evidence profile") DONE. Retroactively
+fixed a real gap first: `learning_events` had no `confidence` column at
+all even though design.md requires it kept separate from correctness —
+`server/migrations/011-event-confidence.sql` (nullable REAL, single-
+column CHECK) + threaded through `normalizeLearningEvent`,
+`attempts.submit()`, `review-results.correctItemEvent()`.
+
+`server/src/domain/evidence-profile.js` (`buildEvidenceProfile`, pure,
+no DB/clock access, explicit `asOf`/`policyVersion`): classifies each
+event into INDEPENDENT_CORRECT/INDEPENDENT_INCORRECT/ASSISTED/UNKNOWN
+(assistance dominates outcome — an assisted CORRECT is never
+independent, ELC-X08; UNKNOWN never coerces to a false-certainty
+bucket, ELC-X01/MX10). Corrections collapse via max-sequence-per-attempt
+(re-implemented locally, pure). Conflicting independent evidence is
+surfaced explicitly, never auto-resolved (ELC-X05/X09). Time separation
+is computed only from real `occurredAt` timestamps — a forged
+`delayHours` field on an input event has zero effect (MX12) — and no
+24h/0.8/0.35 threshold is applied (those are T33's territory, if ever
+promoted). Transfer evidence requires an explicit `isTransfer:true`
+from already-reviewed metadata, never inferred. The profile has NO
+mastery/mastered field at all, asserted directly via `Object.keys()` —
+"one correct recognition is not mastery" holds structurally.
+
+`server/test/evidence-profile.test.js` (14/14): boundary, ELC-X01/X02/
+X05/X08 restaged, determinism under shuffled input, correction/retry,
+no-mastery-field, confidence-independence, forged-delayHours
+discriminator, transfer-tagging, asOf cutoff. Full gate: server
+253/253 (was 237, +16), root 259/259 unchanged, test:inventory PASS
+(50 files, was 49). Build/rust/e2e not re-run — untouched (pure domain
+module only), last recorded values stand.
+
+T32's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T32 row for full detail.
+
+NEXT_TASK: T33 ("Preserve an experimental challenger without promoting
+it", depends on T32, now dependency-ready) —
+server/src/domain/experimental/ + test fixtures + a pedagogical
+validation artifact. Translate the historical mastery/error heuristics
+into a small versioned offline/shadow policy consuming T32's
+evidence-profile output — disabled by default, no user-facing mastered
+label, no schedule effect, no automatic diagnosis. Historical
+thresholds (24h/0.8/0.35) are explicit provisional parameters, not
+product law. This is Phase 05's last task; closing it should update
+STATE/validation for the phase exit gate the same way T24/T28 did for
+their phases.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 10, T31 DONE)
 
 Continued directly from this session's T30 checkpoint. `git status

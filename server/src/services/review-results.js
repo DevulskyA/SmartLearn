@@ -78,6 +78,7 @@ export function reconcile(db, userId, reviewTaskId) {
     outcome: e.outcome,
     assistanceUsed: e.assistance_used,
     exerciseVersionId: e.exercise_version_id,
+    confidence: e.confidence,
   }));
 
   const aggregate = latestAggregate ? {
@@ -121,7 +122,7 @@ export function reconcile(db, userId, reviewTaskId) {
  * boundary T29/T30 already use, so it can never silently defer to a
  * false-certainty default either.
  */
-export function correctItemEvent(db, userId, eventId, { outcome, assistanceUsed }, now = () => new Date()) {
+export function correctItemEvent(db, userId, eventId, { outcome, assistanceUsed, confidence } = {}, now = () => new Date()) {
   const original = db.prepare('SELECT * FROM learning_events WHERE user_id = ? AND id = ?').get(userId, eventId);
   if (!original) throw new ReviewResultError('NOT_FOUND', 'Evento não encontrado.');
 
@@ -146,6 +147,7 @@ export function correctItemEvent(db, userId, eventId, { outcome, assistanceUsed 
       assessmentMethod: original.assessment_method,
       provenance: original.provenance,
       occurredAt: nowIso,
+      confidence: confidence !== undefined ? confidence : original.confidence,
     }, { now: nowIso });
   } catch (err) {
     if (err instanceof LearningEventError) throw new ReviewResultError(err.code, err.message, err.field);
@@ -156,13 +158,14 @@ export function correctItemEvent(db, userId, eventId, { outcome, assistanceUsed 
     INSERT INTO learning_events (
       user_id, unit_id, competency_id, attempt_id, exercise_version_id, corrects_event_id,
       kind, sequence, outcome, assistance_available, assistance_used, assessment_method,
-      provenance, schema_version, occurred_at, recorded_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      provenance, schema_version, occurred_at, recorded_at, confidence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     userId, normalized.unitId, normalized.competencyId, normalized.attemptId, normalized.exerciseVersionId, normalized.correctsEventId,
     normalized.kind, normalized.sequence, normalized.outcome, normalized.assistanceAvailable, normalized.assistanceUsed,
-    normalized.assessmentMethod, normalized.provenance, normalized.schemaVersion, normalized.occurredAt, normalized.recordedAt
+    normalized.assessmentMethod, normalized.provenance, normalized.schemaVersion, normalized.occurredAt, normalized.recordedAt,
+    normalized.confidence
   );
 
-  return { eventId: result.lastInsertRowid, correctsEventId: eventId, outcome: normalized.outcome, assistanceUsed: normalized.assistanceUsed };
+  return { eventId: result.lastInsertRowid, correctsEventId: eventId, outcome: normalized.outcome, assistanceUsed: normalized.assistanceUsed, confidence: normalized.confidence };
 }

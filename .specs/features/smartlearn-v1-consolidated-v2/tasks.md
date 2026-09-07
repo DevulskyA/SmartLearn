@@ -464,9 +464,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** All relevant ELC-X probes have safe specified outcomes; out-of-order/duplicate events are invariant; conflicting later evidence is visible; one correct recognition is not mastery.
 **Recovery / rollback:** Profiles are derived and versioned; raw events remain untouched and can be recalculated.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Pure deterministic profile tests, boundary inputs and targeted omission/type/time mutants.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Pure deterministic profile tests, boundary inputs and targeted omission/type/time mutants.
 
 ### T33: Preserve an experimental challenger without promoting it
 **Difficulty / risk:** 3/5 / 4/5.

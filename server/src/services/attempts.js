@@ -176,6 +176,7 @@ export function submit(db, userId, attemptId, { outcome = 'UNKNOWN', assessmentM
         assistanceUsed: attempt.max_assistance,
         assessmentMethod,
         occurredAt: nowIso,
+        confidence,
       }, { now: nowIso });
     } catch (err) {
       if (err instanceof LearningEventError) throw new AttemptError(err.code, err.message, err.field);
@@ -188,12 +189,13 @@ export function submit(db, userId, attemptId, { outcome = 'UNKNOWN', assessmentM
       INSERT INTO learning_events (
         user_id, unit_id, competency_id, attempt_id, exercise_version_id, kind, sequence,
         outcome, assistance_available, assistance_used, assessment_method, provenance,
-        schema_version, occurred_at, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APP', ?, ?, ?)
+        schema_version, occurred_at, recorded_at, confidence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APP', ?, ?, ?, ?)
     `).run(
       userId, normalized.unitId, normalized.competencyId, normalized.attemptId, normalized.exerciseVersionId,
       normalized.kind, normalized.sequence, normalized.outcome, normalized.assistanceAvailable,
-      normalized.assistanceUsed, normalized.assessmentMethod, normalized.schemaVersion, normalized.occurredAt, normalized.recordedAt
+      normalized.assistanceUsed, normalized.assessmentMethod, normalized.schemaVersion, normalized.occurredAt, normalized.recordedAt,
+      normalized.confidence
     );
 
     const result = {
@@ -201,7 +203,7 @@ export function submit(db, userId, attemptId, { outcome = 'UNKNOWN', assessmentM
       eventId: eventResult.lastInsertRowid,
       outcome: normalized.outcome,
       assistanceUsed: normalized.assistanceUsed,
-      confidence,
+      confidence: normalized.confidence,
       submittedAt: nowIso,
     };
 
