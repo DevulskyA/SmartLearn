@@ -425,9 +425,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Missing help remains UNKNOWN; duplicate event/attempt does not count twice; cross-owner or wrong-version link fails; aggregates retain exact counts and remain distinguishable.
 **Recovery / rollback:** Additive schema with old aggregates readable; no drop/overwrite migration.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Schema and domain input tests, duplicate/unknown/coercion adversarial fixtures.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Schema and domain input tests, duplicate/unknown/coercion adversarial fixtures.
 
 ### T30: Capture actual practice assistance and item version
 **Difficulty / risk:** 4/5 / 5/5.

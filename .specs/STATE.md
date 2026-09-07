@@ -7,6 +7,63 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 10, T29 DONE — PHASE 05 STARTED)
+
+Reconciled first: HEAD confirmed at T28's commit, `git status --short`
+empty, tasks.md T28 all `[x]`/T29 all `[ ]` confirmed by direct read
+before starting. `.specs/STATE.md` + tasks.md + acceptance.md AC-16/17/18
++ design.md's "Reconstructed learning evidence" section + context.md's
+ELC-X01/X10/X11 findings read; rest of the plan history not reread.
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after
+(this checkpoint's own commit is the only change).
+
+T29 ("Add attributable item-level event schema") DONE — Phase 05's
+first task, schema-only as scoped. `server/migrations/009-learning-
+events.sql` (design's suggested "004" renumbered to 009 — 004-008 already
+committed, same renumbering precedent T13 recorded) adds `competencies`,
+`exercise_attempts` and an immutable `learning_events` ledger, all on the
+established composite `(user_id, parent_id)` FK pattern. Two structural
+invariants enforced at the DB level: `UNIQUE(user_id, attempt_id,
+sequence)` (attempt/sequence idempotency — MX11, a replayed duplicate
+event is rejected, not just de-duplicated in app code) and a two-way
+CHECK pairing `kind='CORRECTION'` with a non-null `corrects_event_id`
+(T31's audit-append contract). `assistance_available`/`assistance_used`
+both default `'UNKNOWN'`, never `'NONE'` (MX10 — the concrete fault this
+schema exists to make structurally impossible); `exercise_attempts.
+max_assistance` deliberately defaults `'NONE'` instead, recorded as an
+intentional asymmetry since the app fully observes every attempt it
+starts itself. `server/src/domain/learning-event.js`
+(`normalizeLearningEvent`, pure, explicit `now` input) is the T30
+insert-time validation boundary: rejects unknown enums and non-integer
+coercion attempts (numeric-string sequence, object competencyId — see
+ELC-X10). `server/test/learning-events-schema.test.js` (11/11) covers
+table creation, the NONE-vs-UNKNOWN asymmetry, duplicate-sequence
+rejection, the CORRECTION pairing CHECK both directions plus
+original-row-untouched proof, cross-user composite-FK rejection, and the
+domain module's own adversarial fixtures.
+
+Full gate: server 219/219 (was 208, +11), root 259/259 (unchanged,
+server-only change), test:inventory PASS (46 files, was 45). Build/
+rust/e2e not re-run — untouched by this task, last recorded values
+stand (build PASS, rust 13/13, e2e 34/34).
+
+T29's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T29 row for full detail.
+
+NEXT_TASK: T30 ("Capture actual practice assistance and item version",
+depends on T29, now dependency-ready) — server/src/routes/attempts.js +
+server/src/services/attempts.js + src/practice-ui.js +
+e2e/practice.spec.js. Server-owned attempt lifecycle: start attempt,
+expose hint/solution as attributable actions (each bumping
+exercise_attempts.max_assistance), submit outcome via
+normalizeLearningEvent + INSERT into learning_events. Reveal-then-correct
+must stay assisted permanently once a solution is shown; concurrent/
+repeated submit must be idempotent via the (attempt_id, sequence)
+constraint just built.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 9, T28 DONE — PHASE 04 CLOSED)
 
 Reconciled first: HEAD confirmed at T27's commit, `git status --short` empty,
