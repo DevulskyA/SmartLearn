@@ -161,8 +161,11 @@ test('password change via the real UI: old password stops working, new one logs 
 });
 
 test('learning screens remain reachable and independent of account login state', async ({ page }) => {
-  // The rest of the app must not be gated behind login yet (T20+ does the
-  // real cutover) — Hoje/Plano/etc. keep working with BrowserStore.
+  // This spec never sets window.__SMARTLEARN_REMOTE_MODE__, so the app
+  // stays on the default local BrowserStore path (src/app.js's REMOTE_MODE
+  // switch, T21) — Hoje/Plano/etc. keep working without login regardless.
+  // The remote-mode login gate is covered separately by
+  // e2e/server-authority.spec.js.
   await page.locator('[data-screen="today"]').click();
   await expect(page.locator('#screen-today')).toBeVisible();
   await page.locator('[data-screen="plan"]').click();

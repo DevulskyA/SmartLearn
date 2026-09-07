@@ -1,5 +1,6 @@
 ﻿import "./styles.css";
-import { DB } from "./db.js";
+import { DB as LocalDB } from "./db.js";
+import { DB as RemoteDB } from "./remote-store.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks } from "./scheduler.js";
@@ -46,10 +47,32 @@ function showConfirm(message) {
   });
 }
 
+// T21: explicit, configuration-controlled authority switch — never an
+// automatic/implicit fallback. Default is the existing local BrowserStore/
+// SQLite path (db.js), completely unchanged; the real server-authoritative
+// path (remote-store.js) is opt-in via this runtime flag so it can be
+// staged and tested (e.g. e2e/server-authority.spec.js sets it via
+// page.addInitScript, the same mechanism already used for
+// window.__SMARTLEARN_API_BASE__) without touching the many existing
+// screens/tests that still assume the local store. Flipping this default
+// once every screen has real server parity is T22-T24's job, not this one's.
+const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
+const DB = REMOTE_MODE ? RemoteDB : LocalDB;
+
 let databaseAvailable = false;
+// In remote mode, "available" also requires a logged-in session — there is
+// no local schema to fail to open, but every domain call needs an
+// authenticated actor. This is the "distinguish unavailable server from
+// empty data" seam: a reachable-but-unauthenticated server is a distinct,
+// visible state (redirect to login), never rendered as an empty agenda.
+let authenticated = !REMOTE_MODE;
 const dbInit = DB.init()
-  .then(() => {
+  .then(async () => {
     databaseAvailable = true;
+    if (REMOTE_MODE) {
+      const user = await AuthUI.bootstrap();
+      authenticated = !!user;
+    }
     return true;
   })
   .catch((error) => {
@@ -58,7 +81,9 @@ const dbInit = DB.init()
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
-    banner.textContent = 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
+    banner.textContent = REMOTE_MODE
+      ? 'Erro: não foi possível conectar ao servidor. Tente novamente em instantes.'
+      : 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
     document.body.prepend(banner);
     return false;
   });
@@ -2303,8 +2328,17 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
+const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings"]);
+
 export function showScreen(screenId, { focus = false } = {}) {
-  const nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+  let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+
+  // Remote mode: a data screen with no authenticated session is a login
+  // requirement, not empty data — redirect to Conta rather than attempting
+  // (and failing 401 on) a render.
+  if (REMOTE_MODE && databaseAvailable && !authenticated && DATA_SCREENS.has(nextScreen)) {
+    nextScreen = "account";
+  }
 
   for (const panel of screenPanels) {
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
@@ -3206,7 +3240,7 @@ studyForm.addEventListener("submit", async (event) => {
 
 studyDateInput.value = getLocalDateValue();
 await dbInit;
-if (databaseAvailable) {
+if (databaseAvailable && authenticated) {
   await renderSubjects();
   await renderToday();
 }
@@ -3474,6 +3508,10 @@ accountLoginForm?.addEventListener("submit", async (event) => {
   }
   accountLoginForm.reset();
   await renderAccount();
+  // Stays on Conta (matches the existing T11 login UX: "Conectado como X")
+  // rather than auto-navigating — only the auth-gate state changes, so a
+  // manual click on any data screen now works instead of bouncing back here.
+  if (REMOTE_MODE) authenticated = true;
 });
 
 accountRegisterForm?.addEventListener("submit", async (event) => {
@@ -3508,6 +3546,7 @@ accountPasswordForm?.addEventListener("submit", async (event) => {
 
 accountLogoutBtn?.addEventListener("click", async () => {
   await AuthUI.logout();
+  if (REMOTE_MODE) authenticated = false;
   await renderAccount();
 });
 

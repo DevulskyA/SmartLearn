@@ -19,4 +19,9 @@ export const config = {
   // (and only with a correctly configured hop count / proxy IP list) once
   // this server is actually deployed behind a specific trusted proxy.
   trustProxy: process.env.SMARTLEARN_TRUST_PROXY === 'true',
+  // T21: "one origin" production remote mode — when set, this server also
+  // serves the built SPA (npm run build's dist/) so the browser's own
+  // origin IS the API origin (no CORS needed for that deployment shape).
+  // Unset by default: dev keeps using the Vite dev server + proxy/CORS.
+  staticDir: process.env.SMARTLEARN_STATIC_DIR || null,
 };

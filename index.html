@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#f7f7f3" />
     <title>SmartLearn</title>
     <script type="module">
+      // T21: explicit, build-time default for the server-authoritative
+      // mode switch (see src/app.js's REMOTE_MODE). A pre-set value (e.g.
+      // an e2e test's page.addInitScript) always wins — this only supplies
+      // the default for real dev/production runs.
+      if (window.__SMARTLEARN_REMOTE_MODE__ === undefined) {
+        window.__SMARTLEARN_REMOTE_MODE__ = import.meta.env.VITE_REMOTE_MODE === "1";
+      }
+    </script>
+    <script type="module">
       import { applyThemePreference, getStoredThemePreference } from "/src/theme.js";
 
       applyThemePreference(getStoredThemePreference());

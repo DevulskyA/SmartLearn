@@ -315,9 +315,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Two browser contexts with the same account observe exact state changes; another user sees none; server restart persists; network loss causes a clear write failure without BrowserStore fallback.
 **Recovery / rollback:** Use a configuration-controlled staging path and preserved legacy data source; never silently select a different authority.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Real HTTP plus two-context E2E, server outage/401/404 assertions.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Real HTTP plus two-context E2E, server outage/401/404 assertions.
 
 ### T22: Complete screen and settings parity without losing old data
 **Difficulty / risk:** 4/5 / 4/5.

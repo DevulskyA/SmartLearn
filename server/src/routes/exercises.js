@@ -13,8 +13,8 @@ const EXERCISE_BODY_SCHEMA = {
   type: 'object',
   properties: {
     question: { type: 'string' },
-    answer: { type: 'string' },
-    hint: { type: 'string' },
+    answer: { type: ['string', 'null'] },
+    hint: { type: ['string', 'null'] },
     provenance: { type: 'string', enum: ['MANUAL', 'SOURCE', 'AI_GENERATED'] },
   },
 };

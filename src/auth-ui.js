@@ -6,6 +6,7 @@
 // Session expiry here never touches or clears any unsent local learning-form
 // draft; the two are fully independent state.
 import { t } from './i18n/index.js';
+import { setCsrfToken } from './api-client.js';
 
 const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE__) || 'http://localhost:3000';
 
@@ -43,6 +44,10 @@ export async function bootstrap() {
     currentUser = null;
     csrfToken = null;
   }
+  // Domain routes (src/remote-store.js, via src/api-client.js) share this
+  // same session/CSRF token — kept in sync in exactly one place so callers
+  // never have to know two separate auth modules exist.
+  setCsrfToken(csrfToken);
   return currentUser;
 }
 
@@ -63,6 +68,7 @@ export async function logout() {
   await apiFetch('/v1/auth/logout', { method: 'POST', csrf: true });
   currentUser = null;
   csrfToken = null;
+  setCsrfToken(null);
 }
 
 export async function changePassword(currentPassword, newPassword) {

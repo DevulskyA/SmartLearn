@@ -177,19 +177,21 @@ test('learningEvidence DTO bridges type->context and fraction score->percent, ke
   } finally { globalThis.fetch = realFetch; }
 });
 
-test('reviewTasks DTO synthesizes reviewDone from completedAt without inventing per-task question fields', async () => {
-  const doneTask = { id: 1, unitId: 1, unitTitle: 'Aula', subjectId: 1, subjectName: 'Sub', dueDate: '2026-01-01', completedAt: '2026-01-01T00:00:00Z' };
-  const pendingTask = { id: 2, unitId: 1, unitTitle: 'Aula', subjectId: 1, subjectName: 'Sub', dueDate: '2026-02-01', completedAt: null };
+test('reviewTasks DTO synthesizes reviewDone from completedAt and reviewNumber from the shared fixed-offset position, without inventing per-task question fields', async () => {
+  const doneTask = { id: 1, unitId: 1, unitTitle: 'Aula', subjectId: 1, subjectName: 'Sub', dueDate: '2026-01-01', completedAt: '2026-01-01T00:00:00Z', offsetDays: 1 };
+  const pendingTask = { id: 2, unitId: 1, unitTitle: 'Aula', subjectId: 1, subjectName: 'Sub', dueDate: '2026-02-01', completedAt: null, offsetDays: 30 };
   mockFetch([{ status: 200, body: { date: '2026-01-01', timezone: 'UTC', overdue: [], today: [doneTask], tomorrow: [pendingTask], completedToday: [] } }]);
   try {
     const today = await DB.reviewTasks.getForToday('2026-01-01');
     assert.equal(today[0].reviewDone, true);
+    assert.equal(today[0].reviewNumber, 1, 'offsetDays=1 is the 1st entry in the fixed schedule');
   } finally { globalThis.fetch = realFetch; }
 
   mockFetch([{ status: 200, body: { date: '2026-01-01', timezone: 'UTC', overdue: [], today: [], tomorrow: [pendingTask], completedToday: [] } }]);
   try {
     const tomorrow = await DB.reviewTasks.getTomorrow('2026-01-02');
     assert.equal(tomorrow[0].reviewDone, false);
+    assert.equal(tomorrow[0].reviewNumber, 4, 'offsetDays=30 is the 4th entry in the fixed schedule');
   } finally { globalThis.fetch = realFetch; }
 });
 

@@ -1,7 +1,9 @@
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import { validateMigrations } from './migrations.js';
 import { applyDomainEnvelope } from './http-contract.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -16,7 +18,7 @@ import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false } = {}) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null } = {}) {
   const app = Fastify({ logger: false, trustProxy });
   await app.register(fastifyCookie);
   // No wildcard credentialed CORS (design.md §3): exact configured origins
@@ -74,6 +76,28 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerSettingsRoutes(v1, db);
     registerBackupRoutes(v1, db);
   }, { prefix: '/v1' });
+
+  // Explicit opt-in only (T21 "one origin" production remote mode) — every
+  // existing test/dev call site omits `staticDir` and gets exactly the API
+  // server it always has, no filesystem coupling to a built dist/ that may
+  // not exist in that environment. When set, this must point at a real,
+  // already-built directory — buildApp does not build it.
+  if (staticDir) {
+    if (!existsSync(staticDir)) {
+      throw new Error(`staticDir does not exist: ${staticDir} — build the SPA first (npm run build).`);
+    }
+    await app.register(fastifyStatic, { root: staticDir });
+    // SPA fallback: any GET that isn't /health or /v1 and isn't a real
+    // static file resolves to index.html so client-side routing (the
+    // #hash screen router) keeps working on a hard reload/deep link.
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method !== 'GET' || request.url.startsWith('/v1') || request.url.startsWith('/health')) {
+        reply.status(404);
+        return { error: { code: 'NOT_FOUND' } };
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return app;
 }

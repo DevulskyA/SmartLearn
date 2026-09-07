@@ -14,7 +14,12 @@
 // exactly what design.md/T20 forbid ("API errors never create local
 // success"). Every write path in remote-store.js must let both propagate.
 
-const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE__) || 'http://localhost:3000';
+// Relative by default (T21 "one origin"): the Vite dev proxy and the
+// production static+API server both make '/v1/...' resolve to the right
+// place without needing an absolute host. Tests/staging that genuinely
+// run the API on a different origin override via window.__SMARTLEARN_API_BASE__
+// (same mechanism src/auth-ui.js already uses for its own auth/* calls).
+const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE__) || '';
 
 export class ApiError extends Error {
   constructor(code, message, { status, field, requestId } = {}) {

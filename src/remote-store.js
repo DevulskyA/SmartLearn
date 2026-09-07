@@ -11,6 +11,7 @@
 // that can inject an owner id — every request rides the session cookie,
 // and the server derives user_id itself.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
+import { REVIEW_DAY_OFFSETS } from '../shared/review-schedule.js';
 
 export class RemoteStoreError extends Error {
   constructor(code, message) {
@@ -113,6 +114,10 @@ function mapReviewTask(row) {
     dueDate: row.dueDate,
     completedAt: row.completedAt,
     reviewDone: row.completedAt != null,
+    // The fixed schedule is a shared, ordered constant, so a task's
+    // 1-based position in it is derivable from its stored offset — no
+    // separate reviewNumber column exists or is needed server-side.
+    reviewNumber: REVIEW_DAY_OFFSETS.indexOf(row.offsetDays) + 1,
   };
 }
 

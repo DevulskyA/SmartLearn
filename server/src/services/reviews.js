@@ -36,6 +36,7 @@ function taskDto(row) {
     subjectName: row.subject_name,
     dueDate: row.due_date,
     completedAt: row.completed_at,
+    offsetDays: row.offset_days,
   };
 }
 
