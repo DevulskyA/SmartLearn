@@ -493,9 +493,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Wrong user cannot fetch source; fake PDF/oversize/path payload is rejected without residual accepted rows/files; duplicate source checksum handling is explicit per user.
 **Recovery / rollback:** Quarantine/delete only owned incomplete staging files; retain original accepted files.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Upload security tests with synthetic fixtures, no real user documents.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Upload security tests with synthetic fixtures, no real user documents.
 
 ### T35: Extract PDF text with page provenance under limits
 **Difficulty / risk:** 4/5 / 5/5.

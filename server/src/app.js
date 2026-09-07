@@ -2,9 +2,11 @@ import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import fastifyMultipart from '@fastify/multipart';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { validateMigrations } from './migrations.js';
+import { config } from './config.js';
 import { applyDomainEnvelope } from './http-contract.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerSubjectRoutes } from './routes/subjects.js';
@@ -16,11 +18,12 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerAttemptRoutes } from './routes/attempts.js';
+import { registerSourceRoutes } from './routes/sources.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null } = {}) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {} } = {}) {
   const app = Fastify({ logger: false, trustProxy });
   await app.register(fastifyCookie);
   // No wildcard credentialed CORS (design.md §3): exact configured origins
@@ -69,6 +72,11 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
       resolveActor: createSessionActorResolver(db, { isProduction }),
       allowedOrigins,
     });
+    // T34: registered inside /v1 (not the root app) so a multipart body is
+    // only ever accepted on the same authenticated, CSRF-checked context
+    // every other mutating route already requires — there is no unscoped
+    // upload surface on this server.
+    await v1.register(fastifyMultipart, { limits: { files: 1, fileSize: sources.maxBytes ?? config.sourceMaxBytes } });
     registerAuthRoutes(v1, db, { isProduction });
     registerSubjectRoutes(v1, db);
     registerLearningUnitRoutes(v1, db);
@@ -79,6 +87,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerBackupRoutes(v1, db);
     registerImportRoutes(v1, db);
     registerAttemptRoutes(v1, db);
+    registerSourceRoutes(v1, db, sources);
   }, { prefix: '/v1' });
 
   // Explicit opt-in only (T21 "one origin" production remote mode) — every

@@ -10,6 +10,7 @@ const app = await buildApp(db, undefined, {
   allowedOrigins: config.allowedOrigins,
   trustProxy: config.trustProxy,
   staticDir: config.staticDir,
+  sources: { sourcesDir: config.sourcesDir, maxBytes: config.sourceMaxBytes, quotaBytes: config.sourceQuotaBytes },
 });
 
 try {

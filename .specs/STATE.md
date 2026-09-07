@@ -7,6 +7,75 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 11, T34 DONE — PHASE 06 STARTED)
+
+Fresh session reconciliation (not a continuation of session 10's live
+context): `git branch --show-current` = `claude/smartlearn-v1-complete`,
+`git rev-parse --short HEAD` = `e2f8c0e` (matched the expected
+checkpoint exactly), `git status --short` empty, tasks.md T33 all `[x]`
+confirmed, T34 all `[ ]` confirmed, server gate re-run cold and
+confirmed 262/262 before touching anything — no divergence from the
+prior session's recorded checkpoint.
+
+T34 ("Secure private PDF upload and source ownership") DONE — Phase
+06's first task. New pinned dependency: `@fastify/multipart@10.1.1`
+(needed for real streaming size enforcement — no existing dependency
+does that). `server/migrations/012-sources.sql` (renumbered from the
+plan's suggested 005; next real number was 012) adds `sources`
+(`UNIQUE(user_id, checksum)` for per-user dedup; `status` has no CHECK
+enum yet, deliberately, since T35 will need more values than SQLite can
+add to an existing CHECK). `server/src/services/source-storage.js`
+(`acceptUpload`/`list`/`getById`): validates declared content-type AND
+real magic bytes (`%PDF-`), heuristically rejects an apparent
+`/Encrypt` trailer (explicit heuristic, not authoritative — T35's real
+parse is), the on-disk filename is always a fresh random hex string
+with the original filename stored only as sanitized display metadata
+(never used to build a path — path traversal is structurally inert),
+quota/size caps checked before any disk write, and a byte-identical
+re-upload by the same user returns the existing row (explicit dedup,
+with race-recovery on a genuine `SQLITE_CONSTRAINT_UNIQUE`).
+`server/src/routes/sources.js` registered inside the same
+authenticated/CSRF-checked `/v1` context as every other mutating route.
+
+Caught and fixed mid-session: an authoring-tool artifact briefly wrote
+literal NUL/control bytes into `source-storage.js` while I was typing a
+hex-escape regex (`/[\x00-\x1F\x7F]/`) — some layer in the tool chain
+interpreted the escape literally. Caught immediately via a Node
+byte-level check (`buffer.includes(0)`) before any test ran, and fixed
+by rewriting the sanitizer to strip control characters via codepoint
+comparison instead of any hex-escape regex, avoiding the whole class of
+risk. Noting this here as a reusable lesson: verify byte-level file
+content after any edit involving `\x`/`\u`-style escape sequences in
+this tool chain, don't just trust the Read tool's rendered output.
+
+`server/test/uploads.test.js` (12/12): valid-PDF acceptance +
+random-filename proof, fake-PDF/encrypted/oversize rejection (each with
+zero-residual-row-and-file proof), path-traversal containment,
+same-user dedup, cross-user non-conflict, quota enforcement, wrong-
+content-type rejection, cross-user fetch denial, and 2 real-HTTP
+multipart lifecycle tests. Full gate: server 274/274 (was 262, +12),
+root 259/259 unchanged, build PASS, test:inventory PASS (52 files, was
+51). Rust/e2e not re-run — untouched (server-only, no client/native
+file touched), last recorded values stand (rust 13/13, e2e 35/35).
+
+T34's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T34 row for full detail.
+
+NEXT_TASK: T35 ("Extract PDF text with page provenance under limits",
+depends on T34, now dependency-ready) —
+server/src/pdf/extract-worker.js + server/src/services/source-
+extraction.js + server/test/pdf-extraction.test.js. Pin a maintained
+PDF.js/pdfjs-dist release compatible with Node 24 (a new dependency,
+like T34's), extract per-page text in a bounded child/worker process
+(deadline + memory bound, no network/executable content from the PDF),
+record source checksum/parser version/page indices/diagnostics.
+Image-only/encrypted/unreadable documents get an explicit status —
+T34's `/Encrypt` heuristic becomes checkable against T35's real parse
+result here. No silent OCR, no invented text, extraction failure must
+leave the original source file untouched.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 10, T33 DONE — PHASE 05 CLOSED)
 
 Continued directly from this session's T32 checkpoint. `git status

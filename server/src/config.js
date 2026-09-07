@@ -28,4 +28,11 @@ export const config = {
   // oversized batch before any write, not partway through it.
   importMaxRows: Number(process.env.SMARTLEARN_IMPORT_MAX_ROWS ?? 5000),
   importMaxBytes: Number(process.env.SMARTLEARN_IMPORT_MAX_BYTES ?? 5_000_000),
+  // T34: private uploaded sources (PDFs) live outside the static root, in
+  // their own directory (never served by @fastify/static). design.md §8:
+  // "cap initially at 25 MiB" per file; per-account quota is a separate,
+  // explicitly configured operational limit, not a pedagogical rule.
+  sourcesDir: process.env.SMARTLEARN_SOURCES_DIR ?? './data/sources',
+  sourceMaxBytes: Number(process.env.SMARTLEARN_SOURCE_MAX_BYTES ?? 25 * 1024 * 1024),
+  sourceQuotaBytes: Number(process.env.SMARTLEARN_SOURCE_QUOTA_BYTES ?? 200 * 1024 * 1024),
 };
