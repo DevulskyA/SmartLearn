@@ -25,6 +25,12 @@ WHAT IS BLOCKED?
 Nothing technical. Session is paused solely because the user explicitly asked to stop (repeatedly) mid-T23.
 
 WHAT MUST NOT BE FORGOTTEN?
+- **Conductor cockpit created 2026-09-07** at `conductor/` (this worktree only):
+  `conductor/tracks.md` = painel principal (sprints S00-S09, milestones M0-M9,
+  status agregado); `conductor/tracks/smartlearn-v1/plan.md` = checklist
+  operacional por task; `conductor/workflow.md` = Bridge Contract Conductor+TLC.
+  This file (`.specs/STATE.md`) remains the authority on conflict — Conductor
+  is a projection, not a replacement (see workflow.md rule 1).
 - `src/app.js` has real, wanted, uncommitted T23 work (git status: `M src/app.js`) — do not discard; either finish and commit it or explicitly decide otherwise before touching that file further.
 - The `operationKey` renew-on-ApiError-but-not-NetworkError rule above is a deliberate design decision made this session and is NOT yet written anywhere else (not in design.md/tasks.md) — if T23's validation.md entry is written later, this rationale belongs there.
 - No test/dev server processes were left running by this session (all manually-spawned Node/Vite instances from live-browser verification were killed).
