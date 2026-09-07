@@ -45,9 +45,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Record exact before/after SHAs, file inventory and hashes of preserved dirty files. The resulting source contains the foundation plus intentional continuation changes only.
 **Recovery / rollback:** Retain original refs and untouched dirty files; stop on unexpected conflicts, never reset to the old snapshot.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Git ancestry/diff inspection; no application data or app startup required.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Git ancestry/diff inspection; no application data or app startup required.
 
 ### T02: Reconcile product authority and adopt proportionate learning principles
 **Difficulty / risk:** 3/5 / 3/5.
@@ -59,9 +59,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A fresh reader can identify Node server stack, actual remaining local-client transition, fixed schedule, read-only offline target, next task and authorization boundaries without conflicting active instructions.
 **Recovery / rollback:** One documentation commit; preserve historical documents in Git and avoid unrelated skill edits.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Document link/contradiction review; TLC spec/tasks validators when available, with commands and results recorded.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Document link/contradiction review; TLC spec/tasks validators when available, with commands and results recorded.
 
 ### T03: Prove the existing one-save path and correct the E2E harness
 **Difficulty / risk:** 3/5 / 4/5.
@@ -72,9 +72,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** One-save works with one subject/one unit/16 linked tasks; injected save failure leaves exact pre-state. Wrong target fails preflight. A timeout looking for an absent error is not classified as a page crash. A genuine crash needs page crash/console/process evidence.
 **Recovery / rollback:** Retain diagnostic traces privately; keep only stable regression tests. Product edits only after a failing acceptance test discriminates the defect.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: npm run test:e2e -- e2e/smartlearn-plan-flow.spec.js; root unit tests for any affected product path.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: npm run test:e2e -- e2e/smartlearn-plan-flow.spec.js; root unit tests for any affected product path.
 
 ### T04: Unify safe Unicode validation without changing valid medical content
 **Difficulty / risk:** 2/5 / 3/5.
@@ -85,9 +85,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Creation, rename, save and export preserve the same valid string. Empty/overlong/control input is rejected visibly with drafts preserved. Reintroducing the old allowlist fails the new acceptance test.
 **Recovery / rollback:** Revert this narrow validator/caller commit if unrelated accepted text regresses; never modify saved user text in place.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Focused text-validation unit tests, affected existing tests, and Unicode E2E; no full UI redesign.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Focused text-validation unit tests, affected existing tests, and Unicode E2E; no full UI redesign.
 
 ### T05: Make all test families discoverable and establish CI
 **Difficulty / risk:** 3/5 / 4/5.
@@ -98,9 +98,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A nested or src-located intended test is either run or explicitly mapped; there is no silent exclusion. A failing fixture test makes its CI job fail. No .only/skip hides a required criterion. CI remote result stays UNVERIFIED until an authorized push runs it.
 **Recovery / rollback:** Workflow/script change only; do not remove existing tests or broad-enable install scripts.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: npm test; npm --prefix server test; npm run build; cargo test --locked --manifest-path src-tauri/Cargo.toml; npm run test:e2e.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: npm test; npm --prefix server test; npm run build; cargo test --locked --manifest-path src-tauri/Cargo.toml; npm run test:e2e.
 
 ### T06: Prove clean-install and native lifecycle stability
 **Difficulty / risk:** 3/5 / 4/5.
@@ -111,9 +111,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Normal node:test runs repeatedly without native crash; real HTTP live/ready respond, restart retains a temporary marker and all child processes are joined. Failure to listen returns a nonzero exit and closes DB handles.
 **Recovery / rollback:** Restore prior lock/manifests in scratch for diagnosis; unresolved native crash is a reproducer/blocker, not hidden by forced GC.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: npm --prefix server test; explicit real-process smoke; clean npm ci logs; regressions only for changed boundaries.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: npm --prefix server test; explicit real-process smoke; clean npm ci logs; regressions only for changed boundaries.
 
 ## Phase 01 - Identity and security
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.
@@ -127,9 +127,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Unknown fields, body.userId, wrong primitive types and unauthenticated access are rejected. API errors remain JSON and never SPA HTML. Logs omit secrets and stack/SQL details from responses.
 **Recovery / rollback:** Isolated plugin can be removed without changing health or stored data.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Focused server HTTP tests plus existing server suite.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Focused server HTTP tests plus existing server suite.
 
 ### T08: Add owned accounts and session persistence
 **Difficulty / risk:** 4/5 / 5/5.
@@ -140,9 +140,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Fresh and existing foundation databases migrate idempotently; broken migration rolls back; duplicate email conflicts; session cannot reference missing user; expected WAL/FK/FULL settings are observed.
 **Recovery / rollback:** Forward repair or restore a test snapshot; never remove identity data to downgrade a real database.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Identity/migration tests; existing M1-M5-style mutation checks for modified persistence behavior.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Identity/migration tests; existing M1-M5-style mutation checks for modified persistence behavior.
 
 ### T09: Implement bounded password authentication
 **Difficulty / risk:** 4/5 / 5/5.
@@ -153,9 +153,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Same password gets different hashes; correct/wrong cases work; long Unicode passphrases survive; plaintext never reaches database/log output; overloaded hashing is rejected safely and health stays responsive.
 **Recovery / rollback:** Keep hash algorithm metadata backward-readable; no destructive password conversion.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Password/route tests with production parameters verified at least once; performance tests identify runtime and load, not universal speed claims.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Password/route tests with production parameters verified at least once; performance tests identify runtime and load, not universal speed claims.
 
 ### T10: Implement sessions, CSRF and revocation
 **Difficulty / risk:** 4/5 / 5/5.
@@ -166,9 +166,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Expiry/logout/revocation deny access; cross-origin/null-origin forged writes fail; session fixation is not accepted; tokens are absent from URLs/storage/export/logs. Clock is injected in tests.
 **Recovery / rollback:** Revoke test sessions if needed; preserve users and historical domain data.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Auth integration tests; mutations bypassing actor, expiry or CSRF must fail.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Auth integration tests; mutations bypassing actor, expiry or CSRF must fail.
 
 ### T11: Add the minimal account experience and recovery boundary
 **Difficulty / risk:** 3/5 / 4/5.
@@ -179,9 +179,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Keyboard journey registers/signs in/out; errors are understandable and contain no sensitive existence leak. UI clears old identity/caches on switch. Operator fixture token expires and is single-use.
 **Recovery / rollback:** Feature toggle account UI during staged cutover; real user remains on the explicit legacy path until migration acceptance.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Auth browser E2E plus route tests; no live reset of a real account.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Auth browser E2E plus route tests; no live reset of a real account.
 
 ### T12: Enforce authentication abuse limits and security review
 **Difficulty / risk:** 4/5 / 5/5.
@@ -192,9 +192,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Repeated failures throttle and recover after expiry; spoofed forwarding headers do not evade policy; no unbounded expensive work; one user cannot retrieve another session. Reviewer evidence is recorded at the frozen SHA.
 **Recovery / rollback:** Tune bounded operational limits via reviewed config; preserve required security controls.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Focused abuse tests, independent security review and full server gate.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Focused abuse tests, independent security review and full server gate.
 
 ## Phase 02 - Owned learning-domain API
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.

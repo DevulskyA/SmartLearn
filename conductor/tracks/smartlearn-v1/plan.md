@@ -53,10 +53,13 @@ STATE.md confirmar DONE. Reinspecionado (não re-suposto): rodados
 isolados — 35/35 PASS no HEAD atual. Checkboxes canônicos corrigidos para `[x]`
 em `tasks.md`. Nenhum ID/wording/dependência alterado.
 
-⚠️ **Discrepância remanescente, fora de escopo desta reconciliação**: `tasks.md`
-também mostra T01-T12 com `[ ]` apesar de STATE.md/verificador independente
-confirmarem PROVEN. Não corrigido aqui — usuário pediu reconciliação
-específica de T13-T15 apenas. Mesma classe de problema, ação futura.
+✅ **Reconciliado 2026-09-07 (parte 2)**: T01-T12 tinham a mesma inconsistência
+(`[ ]` apesar de PROVEN). Auditados contra validation.md linhas 30-47 (evidência
+já registrada: commits reais 5aa402f/8dd276b+bfbb82b/b605c24/50b27dd/efcd2f2/
+be7cd75/0040f0c/23e73fa/a76da38/5618e49/53188e5/e779d6b + contagens de teste +
+2 rounds de verificador independente em T12) — evidência reaproveitada, sem
+re-execução de suíte grande por cerimônia. Checkboxes corrigidos para `[x]`.
+`tasks.md` agora tem 66 `[x]` (T01-T22 × 3) e 96 `[ ]` (T23-T54 × 3) — consistente.
 
 Gate no fechamento: server 165/165, root 240/240, rust 13/13, build PASS, e2e 17/17, test:inventory PASS (35 arquivos).
 
