@@ -18,7 +18,7 @@ Current Sprint: S03 — Web Authority Cutover
 ✅ S02 — Learning Domain Server             7/7   T13-T19
 ✅ S03 — Web Authority Cutover              5/5   T20-T24
 ⛔ GATE_P1 — Product Priority Decision      0/1   (ver abaixo)
-🔄 S04 — Data Migration / NO_DATA_LOSS      3/4   T25-T28
+✅ S04 — Data Migration / NO_DATA_LOSS      4/4   T25-T28
 ⬜ S05 — Learning Evidence                  0/5   T29-T33
 ⬜ S06 — Document Learning Core             0/5   T34-T38
 ⬜ S07 — PWA / Windows / Android            0/6   T39-T44
@@ -30,39 +30,40 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T27 — DONE.**
+**T28 — DONE. PHASE 04 CLOSED.**
 
 ```
-✅ server/migrations/008-import-commit.sql (import_previews.committed_at,
-   commit_result_json)
-✅ server/src/services/imports.js: commitImport() + POST
-   /v1/imports/:id/commit
-✅ idempotency bound to previewId identity (checksum-bound since T26) —
-   re-commit same previewId -> original result, zero new rows, no
-   operationKey needed
-✅ nonempty name conflict -> 409 IMPORT_HAS_CONFLICTS, whole commit
-   refused (conflict resolution is T28's job)
-✅ row/byte capacity preflight (config.importMaxRows/importMaxBytes)
-   before any write -> 413 IMPORT_TOO_LARGE
-✅ one db.transaction() across subjects->units->reviewTasks->
-   exercises+versions->evidence; unresolvable legacy*Id ref throws
-   IMPORT_INTEGRITY_ERROR -> atomic rollback (proven per entity boundary)
-✅ final reconciliation: inserted counts vs preview's reported counts,
-   checked before transaction returns
-✅ offset_days recomputed (UTC calendar-day diff studyDate<->dueDate)
-✅ server/test/import-commit.test.js: 11/11
-✅ full gate: server 206/206 (was 195, +11), root 259/259, build PASS,
-   test:inventory PASS 44 files (rust/e2e untouched, last 13/13 + 31/31 stand)
+✅ src/migration-ui.js (pure, DOM-free) + "Importar de um backup antigo"
+   card on Configuracoes (REMOTE_MODE-only)
+✅ select file -> preview (counts/warnings/conflicts, confirm disabled
+   while unresolved) -> confirm dialog -> commit -> result + downloadable
+   JSON report
+✅ e2e/migration.spec.js: 3/3 (happy path + real /v1/export round trip
+   proof + byte-identical source file; cancelled-preview rehearsal;
+   name-conflict-blocks-commit rehearsal)
+✅ migration-runbook.md: HUMAN_GATE REAL_USER_MIGRATION_APPROVAL —
+   "Live approval status: NOT GRANTED" (fixture rehearsal != real cutover)
+✅ independent data-integrity review, 2 rounds (fresh subagents, T24
+   fresh-verifier pattern):
+   round 1 found 2 real bugs in imports.js (both NO_DATA_LOSS-safe,
+   clean rollback, but real contract breaks): (a) commit-after-expiry
+   idempotency broke AC-12's retry guarantee, (b) archived-subject-name
+   conflicts invisible at preview time -> unclassified 500 at commit
+   round 1 fixes applied + 2 new discriminating tests
+   round 2 (different subagent) confirmed both fixes correct/complete,
+   zero remaining defects: VERIFIER_RESULT=PASS
+✅ full gate: server 208/208 (was 195 pre-T27), root 259/259, build PASS,
+   test:inventory PASS 45 files, full e2e 34/34 (31+3, no regressions)
 ✅ evidence recorded (validation.md)
-✅ tasks.md T27 done-when boxes all [x]
-✅ atomic commit
+✅ tasks.md T28 done-when boxes all [x]
+✅ 2 atomic commits (T28 feature; independent-review fixes)
 ```
 
 ```
-LAST_PROVEN = T27
-NEXT_TASK   = T28 — Deliver migration UI and recovery rehearsal
-              (Phase 04, final task) — dependency-ready, NOT started.
-              Closing it closes Phase 04.
+LAST_PROVEN = T28 — PHASE 04 (T25-T28) CLOSED, exit gate satisfied
+NEXT_TASK   = Phase 05 (T29-T33, "Reconstructed learning evidence") —
+              dependency-ready (T24 was its only dependency, already
+              closed). NOT started.
 BLOCKERS    = none
 DIRTY       = none — working tree clean
 ```

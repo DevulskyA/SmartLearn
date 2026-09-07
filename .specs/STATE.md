@@ -7,6 +7,81 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 9, T28 DONE — PHASE 04 CLOSED)
+
+Reconciled first: HEAD confirmed at T27's commit, `git status --short` empty,
+tasks.md T27 all `[x]`/T28 all `[ ]` confirmed by direct read before
+starting.
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after
+(this checkpoint's own commits are the only changes).
+
+T28 ("Deliver migration UI and recovery rehearsal") DONE — Phase 04's
+last task. `src/migration-ui.js` (pure, DOM-free API layer, mirrors
+`src/auth-ui.js`) + a new REMOTE_MODE-only "Importar de um backup
+antigo" card on Configurações (`index.html`/`src/app.js`) drive the real
+T25-T27 pipeline end to end: select file -> preview (counts/warnings/
+conflicts, confirm disabled while unresolved) -> confirm behind a real
+dialog -> commit -> result panel + downloadable JSON report.
+`e2e/migration.spec.js` (3/3): full happy path with a genuine owned
+export round trip proof (real HTTP fetch to `/v1/export` over the
+session, not client-side rendering) plus a byte-identical source-file
+check; cancelled-preview rehearsal (zero rows, account still
+migratable after); name-conflict rehearsal (confirm blocked, nothing
+committed). `.specs/features/smartlearn-v1-consolidated-v2/
+migration-runbook.md` records the whole pipeline and an explicit
+`HUMAN_GATE: REAL_USER_MIGRATION_APPROVAL` — "Live approval status: NOT
+GRANTED" — per the task's own instruction that no fixture rehearsal
+(every e2e run uses a synthetic test account) counts as that
+authorization.
+
+Independent data-integrity review (T28's own required gate, matching
+this project's T24 fresh-verifier pattern) ran two rounds. Round 1 (a
+subagent with zero context from the build) found 2 real bugs in
+`server/src/services/imports.js`, both NO_DATA_LOSS-safe (clean
+rollback in both cases) but real contract breaks: (a) `commitImport`
+checked preview expiry before its own `committed_at` cached-result
+short-circuit, so retrying an already-succeeded commit after the
+original 30-minute window elapsed wrongly threw `PREVIEW_EXPIRED`
+instead of returning the original result (breaks AC-12's
+idempotent-retry guarantee for a lost-response-after-real-success
+retry); (b) preview-time conflict detection was scoped to
+`is_active = 1`, so a name colliding with an ARCHIVED subject was
+invisible at preview time and only surfaced as an unclassified 500 at
+commit time. Both fixed (reordered the check; dropped the `is_active`
+filter and added an `ARCHIVED_HOMONYM` reason, mirroring
+`subjects.js`'s own archived-homonym handling), with 2 new
+discriminating tests. Round 2 (a second, independent subagent)
+confirmed both fixes correct and complete, reasoned through several
+edge cases, found zero remaining defects: `VERIFIER_RESULT=PASS`.
+
+Full gate after fixes: server 208/208 (was 195 pre-T27), root 259/259,
+build PASS, test:inventory PASS (45 files), full e2e suite 34/34 (31
+existing + 3 new migration tests), no regressions. Rust not re-run —
+untouched, last recorded 13/13 stands.
+
+T28's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T28 row for full detail.
+
+**PHASE 04 EXIT GATE: SATISFIED.** T25-T28 all proven (commit +
+validation.md evidence row + tasks.md `[x]` each), all required gates
+green, zero P0/P1 open, evidence recorded in validation.md/this file.
+Phase 04 (Lossless migration tooling) is CLOSED.
+
+NEXT_TASK: Phase 05 ("Reconstructed learning evidence", T29-T33) is now
+dependency-ready (T24 was its only listed dependency, already closed).
+Not started this session.
+
+BLOCKERS: none.
+
+WORKING TREE / UNCOMMITTED FILES: none — 2 commits this session: (1) a
+`fix(t27)` for the independent review's 2 confirmed bugs, since
+imports.js was already-committed T27 code, not new T28 work; (2)
+`feat(t28)` for the migration UI/e2e/runbook itself, plus this
+checkpoint and the tasks.md/validation.md/conductor updates.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 8, T27 DONE)
 
 Reconciled first: HEAD `2664d40` confirmed, `git status --short` empty,

@@ -539,6 +539,32 @@
             </div>
             <p class="form-message" id="reset-message" role="status" aria-live="polite"></p>
           </section>
+
+          <section class="settings-card" id="migration-card" aria-labelledby="migration-title" hidden>
+            <div class="section-heading">
+              <p class="eyebrow">Migração</p>
+              <h2 id="migration-title">Importar de um backup antigo</h2>
+              <p>Envie um arquivo de exportação local (v1, v2 ou v3) para revisar o que será migrado antes de confirmar. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="secondary-button file-button" id="migration-choose-file" type="button">Selecionar arquivo antigo</button>
+              <input class="visually-hidden" id="migration-file-input" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
+            </div>
+            <p class="form-message" id="migration-message" role="status" aria-live="polite"></p>
+            <div id="migration-preview-panel" hidden>
+              <dl class="migration-counts" id="migration-counts"></dl>
+              <ul class="migration-warnings" id="migration-warnings"></ul>
+              <ul class="migration-conflicts" id="migration-conflicts"></ul>
+              <div class="settings-actions">
+                <button class="primary-button" id="migration-confirm-btn" type="button">Confirmar importação</button>
+                <button class="secondary-button" id="migration-cancel-btn" type="button">Cancelar</button>
+              </div>
+            </div>
+            <div id="migration-result-panel" hidden>
+              <p id="migration-result-summary"></p>
+              <button class="secondary-button" id="migration-download-report" type="button">Baixar relatório</button>
+            </div>
+          </section>
         </section>
 
         <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>

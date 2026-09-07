@@ -409,9 +409,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A fresh test user migrates a representative fixture end-to-end and restores a test backup; old source remains byte-identical; live approval status is explicit.
 **Recovery / rollback:** Abort without changing authority; keep readable source until separate real cutover succeeds.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Migration E2E, full owned export round trip and independent data-integrity review.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Migration E2E, full owned export round trip and independent data-integrity review.
 
 ## Phase 05 - Reconstructed learning evidence
 Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage reviewed, relevant gates pass, independent verification where material, and compact STATE updated. Continue immediately to the next available task.

@@ -159,7 +159,7 @@ sem descartar T01-T54. Explicitamente adiado pelo usuário em 2026-09-07.
   - [x] evidência registrada em validation.md
   - [x] commit atômico
 - [x] T27 — Commit imports atomically and idempotently
-- [ ] T28 — Deliver migration UI and recovery rehearsal
+- [x] T28 — Deliver migration UI and recovery rehearsal
 
 ---
 

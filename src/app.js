@@ -16,6 +16,7 @@ import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
+import * as MigrationUI from "./migration-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -226,6 +227,21 @@ const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
 const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
+const migrationCard = document.querySelector("#migration-card");
+const migrationChooseFileButton = document.querySelector("#migration-choose-file");
+const migrationFileInput = document.querySelector("#migration-file-input");
+const migrationMessage = document.querySelector("#migration-message");
+const migrationPreviewPanel = document.querySelector("#migration-preview-panel");
+const migrationCounts = document.querySelector("#migration-counts");
+const migrationWarnings = document.querySelector("#migration-warnings");
+const migrationConflicts = document.querySelector("#migration-conflicts");
+const migrationConfirmBtn = document.querySelector("#migration-confirm-btn");
+const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
+const migrationResultPanel = document.querySelector("#migration-result-panel");
+const migrationResultSummary = document.querySelector("#migration-result-summary");
+const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
+let migrationActivePreview = null;
+let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
 const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1892,6 +1908,11 @@ export async function renderSettings() {
   if (REMOTE_MODE) {
     setResetMessage("Apagar todos os dados ainda não é uma operação suportada no modo servidor.");
   }
+  // T28: legacy-import migration only exists against the real server
+  // (T25-T27) — no local-only equivalent, so it's REMOTE_MODE-only,
+  // mirroring how import/reset are REMOTE_MODE-only in the opposite
+  // direction above.
+  if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
@@ -1974,6 +1995,143 @@ function setResetMessage(message = "", isError = false) {
   resetMessage.classList.toggle("is-error", isError);
   resetMessage.textContent = message;
 }
+
+function setMigrationMessage(message = "", isError = false) {
+  if (!migrationMessage) return;
+  migrationMessage.classList.toggle("is-error", isError);
+  migrationMessage.textContent = message;
+}
+
+function resetMigrationPanels() {
+  migrationActivePreview = null;
+  migrationLastReport = null;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  if (migrationCounts) migrationCounts.replaceChildren();
+  if (migrationWarnings) migrationWarnings.replaceChildren();
+  if (migrationConflicts) migrationConflicts.replaceChildren();
+}
+
+function renderMigrationPreview(preview) {
+  migrationActivePreview = preview;
+  if (migrationCounts) {
+    migrationCounts.replaceChildren();
+    for (const [key, value] of Object.entries(preview.counts ?? {})) {
+      const dt = document.createElement("dt");
+      dt.textContent = MigrationUI.entityLabel(key);
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      migrationCounts.append(dt, dd);
+    }
+  }
+  if (migrationWarnings) {
+    migrationWarnings.replaceChildren();
+    for (const warning of preview.warnings ?? []) {
+      const li = document.createElement("li");
+      li.textContent = warning.message ?? warning.code ?? String(warning);
+      migrationWarnings.append(li);
+    }
+  }
+  const hasConflicts = (preview.conflicts ?? []).length > 0;
+  if (migrationConflicts) {
+    migrationConflicts.replaceChildren();
+    for (const conflict of preview.conflicts ?? []) {
+      const li = document.createElement("li");
+      li.textContent = conflict.reason === 'ARCHIVED_HOMONYM'
+        ? `"${conflict.name}" já existe nesta conta como disciplina arquivada — reative-a nas Disciplinas ou renomeie a de origem e envie o arquivo novamente.`
+        : `"${conflict.name}" já existe nesta conta — renomeie a disciplina de origem e envie o arquivo novamente para importar este item.`;
+      migrationConflicts.append(li);
+    }
+  }
+  if (migrationConfirmBtn) migrationConfirmBtn.disabled = hasConflicts;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = false;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  setMigrationMessage(hasConflicts
+    ? "Há conflitos de nome — resolva-os antes de confirmar (veja a lista abaixo)."
+    : "Revise os itens acima. Confirmar grava esses dados nesta conta.");
+}
+
+migrationChooseFileButton?.addEventListener("click", () => {
+  migrationFileInput?.click();
+});
+
+migrationFileInput?.addEventListener("change", async () => {
+  const [file] = migrationFileInput.files ?? [];
+  if (!file) return;
+  resetMigrationPanels();
+  setMigrationMessage("Lendo e validando o arquivo...");
+  try {
+    const rawSource = JSON.parse(await readFileText(file));
+    const result = await MigrationUI.previewImport(rawSource);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível gerar a prévia desta importação.", true);
+      return;
+    }
+    renderMigrationPreview(result.preview);
+  } catch (error) {
+    setMigrationMessage(
+      error instanceof SyntaxError
+        ? "O arquivo selecionado não contém JSON válido."
+        : "Não foi possível ler o arquivo selecionado.",
+      true,
+    );
+    console.error("Falha ao gerar prévia de migração.", error);
+  } finally {
+    migrationFileInput.value = "";
+  }
+});
+
+migrationCancelBtn?.addEventListener("click", () => {
+  resetMigrationPanels();
+  setMigrationMessage("Importação cancelada. Nenhum dado foi alterado.");
+});
+
+migrationConfirmBtn?.addEventListener("click", async () => {
+  if (!migrationActivePreview) return;
+  const confirmed = await showConfirm(
+    "Confirmar grava estes dados de forma real e definitiva nesta conta. Continuar?",
+  );
+  if (!confirmed) return;
+
+  migrationConfirmBtn.disabled = true;
+  setMigrationMessage("Confirmando importação...");
+  try {
+    const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível confirmar a importação.", true);
+      migrationConfirmBtn.disabled = false; // still on the preview panel — must stay clickable to retry
+      return;
+    }
+    migrationLastReport = MigrationUI.buildMigrationReport({ preview: migrationActivePreview, commit: result.commit });
+    if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+    if (migrationResultPanel) migrationResultPanel.hidden = false;
+    if (migrationResultSummary) {
+      const parts = Object.entries(result.commit.counts ?? {})
+        .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
+      migrationResultSummary.textContent = `Importação concluída — ${parts.join(", ")}.`;
+    }
+    setMigrationMessage("");
+    // Deliberately NOT re-enabling migrationConfirmBtn here: the preview
+    // panel is now hidden, so its own enabled/disabled state is moot until
+    // the next previewImport() explicitly sets it — resetting it here on a
+    // delay (after these renders) could otherwise race a fresh preview the
+    // user already started uploading and silently re-enable a
+    // conflict-blocked confirm underneath them.
+    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
+  } catch (error) {
+    setMigrationMessage("Não foi possível confirmar a importação.", true);
+    migrationConfirmBtn.disabled = false;
+    console.error("Falha ao confirmar migração.", error);
+  }
+});
+
+migrationDownloadReportBtn?.addEventListener("click", async () => {
+  if (!migrationLastReport) return;
+  await saveBackupFile(
+    `smartlearn-migracao-${getLocalDateValue()}.json`,
+    JSON.stringify(migrationLastReport, null, 2),
+  );
+});
 
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
