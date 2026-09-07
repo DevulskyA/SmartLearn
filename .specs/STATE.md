@@ -7,6 +7,41 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 3, Phase 03 reconciliation — NOT closed)
+
+Reconciled directly against Git, not assumed. HEAD `9a8c7cb`
+(`fix(t23): prove one-intention UX with real server fault-injection E2E`),
+branch `claude/smartlearn-v1-complete`, working tree clean (`git status
+--short` empty).
+
+T23: DONE — all 3 done-when boxes checked in tasks.md, evidence row in
+validation.md, committed at `9a8c7cb`. See detailed session-3 checkpoint
+immediately below for what was built.
+
+T24 ("Close the server-authoritative Web slice"): IN_PROGRESS, NOT closed.
+Per this plan's own governance (STATE.md/tasks.md T24: "independent
+verifier at frozen candidate"), T24 must be verified by a session/maker
+independent of the one that built T20-T23 — this session cannot self-certify
+it. An independent verifier subagent was launched against this exact frozen
+HEAD (`9a8c7cb`) and is still running as of this checkpoint; no PASS/FAIL
+has been recorded yet, tasks.md T24 done-when boxes correctly remain `[ ]`,
+and no T24 row exists yet in validation.md.
+
+PHASE 03 EXIT GATE ("acceptance coverage reviewed, relevant gates pass,
+independent verification where material, and compact STATE updated"):
+NOT SATISFIED — blocked on T24's independent verification completing.
+Phase 03 is therefore NOT closed.
+
+BLOCKERS: none external; T24 verification is in progress, not stalled.
+
+NEXT_TASK: finish T24 (await/continue the independent verifier, then record
+its PASS/FAIL evidence in tasks.md + validation.md + here). T25 (Phase 04,
+"Normalize supported legacy snapshots without data invention") is the first
+unproven Phase 04 task and the expected next task AFTER Phase 03 actually
+closes — it has NOT been started and must not start before T24 closes.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 3, T23 closed)
 
 Supersedes session 2 immediately below (same day). Resumed after `/clear` via

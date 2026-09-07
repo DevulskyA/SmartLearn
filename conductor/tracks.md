@@ -51,11 +51,11 @@ o guard de idempotência do T15 devolver o resultado original em vez de
 duplicar).
 
 ```
-LAST_PROVEN = T23
-IN_PROGRESS = none
-NEXT_TASK   = commit T23 → T24 (independent Fresh Verifier, must NOT be this session)
-BLOCKERS    = none
-DIRTY       = src/app.js + e2e/atomic-save.spec.js — T23 work, pending commit
+LAST_PROVEN = T23 (committed 9a8c7cb)
+IN_PROGRESS = T24 (independent Fresh Verifier subagent running against frozen HEAD 9a8c7cb)
+NEXT_TASK   = finish T24 — Phase 03 NOT closed until it reports PASS/FAIL
+BLOCKERS    = none (T24 in progress, not stalled)
+DIRTY       = none — working tree clean
 ```
 
 ---
