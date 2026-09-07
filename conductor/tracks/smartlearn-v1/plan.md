@@ -47,10 +47,16 @@ recebeu rate limit pelo mesmo padrão.
 - [x] T18 — Implement aggregate evidence and actual settings contracts
 - [x] T19 — Deliver owned logical export and server backup contracts
 
-⚠️ **Reconciliação necessária**: `tasks.md` tem `[ ]` (não marcado) em T13-T15
-apesar de STATE.md confirmar DONE com evidência (schema/FK tests, unit+16
-reviews atômico, bug real de calendário Feb-30 corrigido). Ao editar
-`tasks.md` novamente, atualizar esses três checkboxes para `[x]`.
+✅ **Reconciliado 2026-09-07**: `tasks.md` tinha `[ ]` em T13-T15 apesar de
+STATE.md confirmar DONE. Reinspecionado (não re-suposto): rodados
+`server/test/domain-schema.test.js` + `subjects.test.js` + `create-unit.test.js`
+isolados — 35/35 PASS no HEAD atual. Checkboxes canônicos corrigidos para `[x]`
+em `tasks.md`. Nenhum ID/wording/dependência alterado.
+
+⚠️ **Discrepância remanescente, fora de escopo desta reconciliação**: `tasks.md`
+também mostra T01-T12 com `[ ]` apesar de STATE.md/verificador independente
+confirmarem PROVEN. Não corrigido aqui — usuário pediu reconciliação
+específica de T13-T15 apenas. Mesma classe de problema, ação futura.
 
 Gate no fechamento: server 165/165, root 240/240, rust 13/13, build PASS, e2e 17/17, test:inventory PASS (35 arquivos).
 

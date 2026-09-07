@@ -208,9 +208,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Direct cross-user or cross-unit inserts fail; count/context invariants fail closed; migration preserves existing infrastructure/users and reruns safely.
 **Recovery / rollback:** Additive migration; rollback tested on a copy, no real database downgrade.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: SQLite schema/integrity tests and negative direct SQL fixtures (test-only).
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: SQLite schema/integrity tests and negative direct SQL fixtures (test-only).
 
 ### T14: Implement subject management with shared normalization
 **Difficulty / risk:** 3/5 / 4/5.
@@ -221,9 +221,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Medical Unicode round trips; two users may own same display name; one user cannot create duplicates by case/whitespace; delete-nonempty and foreign-owned ID fail without effects.
 **Recovery / rollback:** Small service/route commit; no renaming of existing user data.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Subject API and Unicode contract tests; cross-user and validation mutations.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Subject API and Unicode contract tests; cross-user and validation mutations.
 
 ### T15: Move unit creation and fixed scheduling into one transaction
 **Difficulty / risk:** 4/5 / 5/5.
@@ -234,9 +234,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Correct exact due dates including leap days and timezone boundaries; injected failure after subject/unit leaves zero partial state; same operation retry adds nothing; changed payload conflicts.
 **Recovery / rollback:** Keep client legacy path explicit during staging; do not recalculate all schedules.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Focused schedule/unit transaction tests; mutants removing transaction, owner scope, an offset or idempotency are killed.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Focused schedule/unit transaction tests; mutants removing transaction, owner scope, an offset or idempotency are killed.
 
 ### T16: Implement agenda and both review completion modes
 **Difficulty / risk:** 4/5 / 5/5.
