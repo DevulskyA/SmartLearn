@@ -7,6 +7,68 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 10, T30 DONE)
+
+Continued directly from this same session's T29 checkpoint (no restart,
+no re-read of plan history beyond T30's own tasks.md entry + AC-16/17/18
++ design.md's practice-assistance section). `git status --short` empty
+before starting, tasks.md T29 all `[x]`/T30 all `[ ]` confirmed.
+
+T30 ("Capture actual practice assistance and item version") DONE.
+`server/src/services/attempts.js` + `server/src/routes/attempts.js`
+(start/hint/reveal-solution/submit/getById), registered in
+`server/src/app.js`. Three structural guarantees, each directly tested:
+(1) `start()` pins the exercise's CURRENT version at that instant and
+never re-resolves it, so a later edit (which only appends a new version,
+T17) cannot retroactively change what an attempt was scored against
+(AC-18); (2) `max_assistance` only ever escalates (`NONE < HINT <
+PARTIAL_SOLUTION < SOLUTION`) via a shared `bumpAssistance()`, never
+lowers; (3) `submit()` reads `assistanceUsed` from the attempt's own
+tracked state, never from the request body — reveal-then-correct is
+structurally impossible to record as independent (AC-16/AC-17).
+Idempotency reuses T15/T16's `checkIdempotency`/`recordIdempotency`
+pattern exactly; a keyless resubmit of a SUBMITTED attempt fails closed
+(409 `ALREADY_SUBMITTED`), matching `reviews.complete()`'s contract.
+
+Client: `src/remote-store.js` gained a REMOTE_MODE-only `attempts`
+namespace; `src/app.js`'s EXISTING review-exercise reveal/judge UI (the
+aggregate flow T16/T22 already accepted, not a new screen) now lazily
+starts an attempt on first reveal, calls `revealSolution` at that same
+moment (the "Ver resposta" action already existed), calls `useHint`
+right after start when the item's hint text is present (recorded
+honestly — this UI shows hints unconditionally, not gated behind their
+own action, a documented scope limit not a fabricated NONE), and calls
+`submit` on Acertei/Errei. Every call is best-effort/REMOTE_MODE-gated —
+a failure only logs, never blocks the existing aggregate-evidence save
+path (recovery/rollback: "legacy aggregate practice remains supported").
+
+`server/test/attempts.test.js` (10/10) + `e2e/practice.spec.js` (1/1,
+new — real browser: create exercise via Cadastro, reveal answer on
+Hoje's real review-exercise-item, confirm over real HTTP that reveal
+already recorded `maxAssistance: 'SOLUTION'` before judging, then judge
+and confirm `status: 'SUBMITTED'`).
+
+Full gate: server 229/229 (was 219, +10), root 259/259 (unchanged),
+build PASS, test:inventory PASS (48 files, was 46), full `npx playwright
+test` 35/35 (34 existing + 1 new, zero regressions in the touched
+Cadastro/Hoje flow). Rust not re-run — untouched, last recorded 13/13
+stands.
+
+T30's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T30 row for full detail.
+
+NEXT_TASK: T31 ("Reconcile item observations with aggregate results",
+depends on T30, now dependency-ready) —
+server/src/services/review-results.js — link item-derived
+learning_events results to the review's aggregate learning_evidence so
+dashboard totals don't double-count the same practice twice; manual
+external q/c stays aggregate-only; review-only completion still emits
+no fabricated correctness; corrections append/revise via the
+kind='CORRECTION'/corrects_event_id pair T29 already built, retaining
+original facts.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 10, T29 DONE — PHASE 05 STARTED)
 
 Reconciled first: HEAD confirmed at T28's commit, `git status --short`

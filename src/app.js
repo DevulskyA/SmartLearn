@@ -608,6 +608,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
       exItem.dataset.exerciseAnswered = "false";
+      exItem.dataset.exerciseId = String(exercise.id);
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -3085,21 +3086,58 @@ reviewDashboard.addEventListener("click", (event) => {
   detail.hidden = !expanded;
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+// T30: lazily starts a server-owned attempt the first time an exercise's
+// answer is revealed in this review, then records the reveal itself as an
+// attributable action. REMOTE_MODE-only (no local equivalent, same pattern
+// as migration-ui.js) and best-effort: a failure here never blocks the
+// existing reveal/judge UI or the aggregate evidence this review already
+// saves — item-level tracking is additive, not a dependency of the save path.
+async function ensureAttemptStarted(exItem) {
+  if (!REMOTE_MODE || !DB.attempts || !exItem) return null;
+  if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
+  const exerciseId = Number(exItem.dataset.exerciseId);
+  if (!Number.isInteger(exerciseId)) return null;
+  try {
+    const attempt = await DB.attempts.start(exerciseId);
+    exItem.dataset.attemptId = String(attempt.id);
+    // The hint (when this exercise has one) is already visible in the DOM
+    // unconditionally, not gated behind its own action — so the truthful
+    // observation is that assistance was available from the start, not a
+    // fabricated NONE for a hint the learner could already see.
+    if (exItem.querySelector(".review-exercise-hint")) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (hintError) { console.error("Falha ao registrar uso de dica (item-level tracking).", hintError); }
+    }
+    return exItem.dataset.attemptId;
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa de exercício (item-level tracking).", error);
+    return null;
+  }
+}
+
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
   const answerEl = button.nextElementSibling;
   if (!answerEl) return;
+  const wasHidden = answerEl.hidden;
   answerEl.hidden = !answerEl.hidden;
   button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
   if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
     const judgment = exItem.querySelector(".exercise-judgment");
     if (judgment) judgment.hidden = false;
   }
+  if (wasHidden && !answerEl.hidden) {
+    const attemptId = await ensureAttemptStarted(exItem);
+    if (attemptId) {
+      try { await DB.attempts.revealSolution(attemptId); }
+      catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
+    }
+  }
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
@@ -3108,6 +3146,14 @@ reviewDashboard.addEventListener("click", (event) => {
   const isCorrect = button.dataset.action === "exercise-acertei";
   exItem.dataset.exerciseAnswered = "true";
   exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
+
+  if (REMOTE_MODE && DB.attempts && exItem.dataset.attemptId) {
+    try {
+      await DB.attempts.submit(exItem.dataset.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+    } catch (error) {
+      console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
+    }
+  }
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
   }

@@ -255,6 +255,38 @@ const exercises = {
   },
 };
 
+// -- attempts (T30) -----------------------------------------------------------
+// Item-level, attributable practice — distinct from the aggregate
+// learningEvidence path above. assistanceUsed is never sent by this client:
+// the server derives it from the attempt's own tracked hint/reveal actions
+// (AC-16), so no caller here can claim independence after using a hint.
+
+const attempts = {
+  async start(exerciseId, { competencyId } = {}) {
+    const { attempt } = await apiRequest(`/v1/exercises/${exerciseId}/attempts`, {
+      method: 'POST',
+      body: competencyId != null ? { competencyId } : {},
+    });
+    return attempt;
+  },
+  async useHint(attemptId) {
+    return apiRequest(`/v1/attempts/${attemptId}/hint`, { method: 'POST' });
+  },
+  async revealSolution(attemptId) {
+    return apiRequest(`/v1/attempts/${attemptId}/reveal-solution`, { method: 'POST' });
+  },
+  async submit(attemptId, { outcome, assessmentMethod, confidence, operationKey } = {}) {
+    return apiRequest(`/v1/attempts/${attemptId}/submit`, {
+      method: 'POST',
+      body: { outcome, assessmentMethod, confidence, operationKey },
+    });
+  },
+  async getById(attemptId) {
+    const { attempt } = await apiRequest(`/v1/attempts/${attemptId}`);
+    return attempt;
+  },
+};
+
 // -- learning evidence ----------------------------------------------------------
 // Field-name/scale bridge only: old `context` -> new `type`, old
 // `scorePercent` (0-100) -> new `score` (0-1 fraction, or null for unknown
@@ -344,6 +376,7 @@ export const DB = {
   learningUnits,
   reviewTasks,
   exercises,
+  attempts,
   learningEvidence,
   completeReviewWithEvidence,
   settings,

@@ -438,9 +438,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Concurrent/repeated submit is idempotent; reveal-then-correct stays assisted; editing an exercise leaves historical attempt content intact; missing observation stays unknown.
 **Recovery / rollback:** Keep event history; disable the new practice entrypoint if needed while legacy aggregate practice remains supported.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Attempt lifecycle API/E2E; assistance-reset/version-swap mutants killed.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Attempt lifecycle API/E2E; assistance-reset/version-swap mutants killed.
 
 ### T31: Reconcile item observations with aggregate results
 **Difficulty / risk:** 4/5 / 5/5.
