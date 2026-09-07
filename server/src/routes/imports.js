@@ -7,6 +7,9 @@ function handleError(err, reply) {
       NOT_FOUND: 404,
       PREVIEW_EXPIRED: 410,
       PREVIEW_TAMPERED: 409,
+      IMPORT_HAS_CONFLICTS: 409,
+      IMPORT_TOO_LARGE: 413,
+      IMPORT_INTEGRITY_ERROR: 500,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, message: err.message, details: err.details } };
@@ -38,6 +41,16 @@ export function registerImportRoutes(app, db) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { preview: imports.getPreview(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.post('/imports/:id/commit', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { commit: imports.commitImport(db, request.actor.userId, id) };
     } catch (err) { return handleError(err, reply); }
   });
 }

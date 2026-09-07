@@ -7,6 +7,61 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 8, T27 DONE)
+
+Reconciled first: HEAD `2664d40` confirmed, `git status --short` empty,
+tasks.md T26 all `[x]`/T27 all `[ ]` confirmed by direct read before
+starting.
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after.
+
+T27 ("Commit imports atomically and idempotently") DONE — the
+highest-risk task in the plan (5/5 difficulty AND risk), first task that
+actually writes imported data into a real account. `commitImport()` added
+to `server/src/services/imports.js` + `server/migrations/008-import-commit.sql`
+(`import_previews.committed_at`/`commit_result_json`) + `POST
+/v1/imports/:id/commit`. Idempotency is bound to the previewId itself
+(already 1:1 to one checksum-verified source via T26) rather than an
+optional client operationKey — re-committing the same previewId always
+returns the original result, zero new rows, no client cooperation
+required. Unresolved name conflicts (T26's `NAME_ALREADY_EXISTS`) refuse
+the whole commit (409) rather than silently overwriting — conflict
+resolution is explicitly T28's job. Row/byte capacity preflight runs
+before any write. The apply itself is one `db.transaction()` across all
+5 entity types with per-legacy-id reference resolution through freshly
+built id maps; an unresolvable reference throws inside the transaction
+(atomic rollback), and a final reconciliation pass re-checks every
+entity's inserted count against the preview's own reported counts before
+letting the transaction return. `offset_days` for migrated review_tasks
+is recomputed (UTC calendar-day diff between unit studyDate and task
+dueDate) since T25's normalized shape doesn't carry it.
+`server/test/import-commit.test.js`: 11/11 — happy path, duplicate-commit
+no-op, cross-user 404, conflict refusal, oversized-batch rejection, 4
+independent corrupted-reference rollback tests (one per entity boundary:
+unit->subject, reviewTask->unit, exercise->unit, evidence->reviewTask),
+1 reconciliation-mismatch test, 1 expired-preview test. Full gate: server
+206/206 (was 195, +11), root 259/259 (unchanged), build PASS,
+test:inventory PASS (44 files, was 43). Rust/e2e not re-run — untouched
+by this server-only task, last recorded values stand (rust 13/13, e2e
+31/31).
+
+T27's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T27 row for full detail, including the idempotency-mechanism design
+decision (checksum-bound previewId identity, not operationKey) recorded
+there since design.md leaves the exact mechanism open.
+
+NEXT_TASK: T28 — "Deliver migration UI and recovery rehearsal" (depends
+on T27, now dependency-ready). This is Phase 04's last task — closing it
+closes the phase. Not started this session.
+
+BLOCKERS: none.
+
+WORKING TREE / UNCOMMITTED FILES: none — this checkpoint plus the T27
+implementation/tests/migration are the only changes this session,
+committed together.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 7, T26 DONE)
 
 Reconciled first: HEAD `620fcb4` confirmed, `git status --short` empty,

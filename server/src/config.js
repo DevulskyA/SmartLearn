@@ -24,4 +24,8 @@ export const config = {
   // origin IS the API origin (no CORS needed for that deployment shape).
   // Unset by default: dev keeps using the Vite dev server + proxy/CORS.
   staticDir: process.env.SMARTLEARN_STATIC_DIR || null,
+  // T27: capacity preflight for a legacy-import commit — reject an
+  // oversized batch before any write, not partway through it.
+  importMaxRows: Number(process.env.SMARTLEARN_IMPORT_MAX_ROWS ?? 5000),
+  importMaxBytes: Number(process.env.SMARTLEARN_IMPORT_MAX_BYTES ?? 5_000_000),
 };

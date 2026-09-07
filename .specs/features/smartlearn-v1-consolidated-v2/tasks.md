@@ -396,9 +396,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Injected failure at every entity boundary rolls back; duplicate retry adds zero records; wrong-user mappings fail; deliberately removed/corrupted row is caught by reconciliation.
 **Recovery / rollback:** Keep source backup, preview and mapping ledger; test restore in a temporary copy only.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Full migration integration and missing-row/wrong-link/double-import mutants.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Full migration integration and missing-row/wrong-link/double-import mutants.
 
 ### T28: Deliver migration UI and recovery rehearsal
 **Difficulty / risk:** 4/5 / 5/5.

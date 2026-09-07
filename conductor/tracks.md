@@ -18,7 +18,7 @@ Current Sprint: S03 — Web Authority Cutover
 ✅ S02 — Learning Domain Server             7/7   T13-T19
 ✅ S03 — Web Authority Cutover              5/5   T20-T24
 ⛔ GATE_P1 — Product Priority Decision      0/1   (ver abaixo)
-🔄 S04 — Data Migration / NO_DATA_LOSS      2/4   T25-T28
+🔄 S04 — Data Migration / NO_DATA_LOSS      3/4   T25-T28
 ⬜ S05 — Learning Evidence                  0/5   T29-T33
 ⬜ S06 — Document Learning Core             0/5   T34-T38
 ⬜ S07 — PWA / Windows / Android            0/6   T39-T44
@@ -30,36 +30,39 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T26 — DONE.**
+**T27 — DONE.**
 
 ```
-✅ server/migrations/007-import-previews.sql (import_previews,
-   UNIQUE(user_id, source_checksum))
-✅ server/src/services/imports.js + server/src/routes/imports.js
-   (POST /v1/imports/preview, GET /v1/imports/:id)
-✅ runs T25's normalizeLegacyExport() first; invalid source -> 400,
-   zero preview rows created
-✅ real SHA-256 checksum of exact bytes; owned report (counts/warnings/
-   conflicts/mapping); 30-min expiry
-✅ subject-name collision vs existing ACTIVE owned subject -> CONFLICT,
-   never silently CREATE
-✅ cross-user reuse -> 404 (same pattern as subjects.js foreign-id)
-✅ stale (expired) and tampered (bytes changed) rejected — injectable
-   clock, tested at service level
-✅ server/test/import-preview.test.js: 7/7
-✅ full gate: server 195/195 (was 188, +7), root 259/259, build PASS,
-   test:inventory PASS 43 files (rust untouched, last 13/13 stands)
+✅ server/migrations/008-import-commit.sql (import_previews.committed_at,
+   commit_result_json)
+✅ server/src/services/imports.js: commitImport() + POST
+   /v1/imports/:id/commit
+✅ idempotency bound to previewId identity (checksum-bound since T26) —
+   re-commit same previewId -> original result, zero new rows, no
+   operationKey needed
+✅ nonempty name conflict -> 409 IMPORT_HAS_CONFLICTS, whole commit
+   refused (conflict resolution is T28's job)
+✅ row/byte capacity preflight (config.importMaxRows/importMaxBytes)
+   before any write -> 413 IMPORT_TOO_LARGE
+✅ one db.transaction() across subjects->units->reviewTasks->
+   exercises+versions->evidence; unresolvable legacy*Id ref throws
+   IMPORT_INTEGRITY_ERROR -> atomic rollback (proven per entity boundary)
+✅ final reconciliation: inserted counts vs preview's reported counts,
+   checked before transaction returns
+✅ offset_days recomputed (UTC calendar-day diff studyDate<->dueDate)
+✅ server/test/import-commit.test.js: 11/11
+✅ full gate: server 206/206 (was 195, +11), root 259/259, build PASS,
+   test:inventory PASS 44 files (rust/e2e untouched, last 13/13 + 31/31 stand)
 ✅ evidence recorded (validation.md)
-✅ tasks.md T26 done-when boxes all [x]
+✅ tasks.md T27 done-when boxes all [x]
 ✅ atomic commit
 ```
 
 ```
-LAST_PROVEN = T26
-NEXT_TASK   = T27 — Commit imports atomically and idempotently
-              (Phase 04) — dependency-ready, NOT started. Highest-risk
-              task in this phase (5/5 difficulty AND risk) — first task
-              that actually writes imported data.
+LAST_PROVEN = T27
+NEXT_TASK   = T28 — Deliver migration UI and recovery rehearsal
+              (Phase 04, final task) — dependency-ready, NOT started.
+              Closing it closes Phase 04.
 BLOCKERS    = none
 DIRTY       = none — working tree clean
 ```
