@@ -18,7 +18,7 @@ Current Sprint: S03 — Web Authority Cutover
 ✅ S02 — Learning Domain Server             7/7   T13-T19
 ✅ S03 — Web Authority Cutover              5/5   T20-T24
 ⛔ GATE_P1 — Product Priority Decision      0/1   (ver abaixo)
-🔄 S04 — Data Migration / NO_DATA_LOSS      1/4   T25-T28
+🔄 S04 — Data Migration / NO_DATA_LOSS      2/4   T25-T28
 ⬜ S05 — Learning Evidence                  0/5   T29-T33
 ⬜ S06 — Document Learning Core             0/5   T34-T38
 ⬜ S07 — PWA / Windows / Android            0/6   T39-T44
@@ -30,30 +30,36 @@ Current Sprint: S03 — Web Authority Cutover
 
 ## CURRENT
 
-**T25 — DONE.**
+**T26 — DONE.**
 
 ```
-✅ shared/import-normalization.js — pure, read-only normalization of the
-   REAL v1/v2/v3 legacy export shapes src/db.js already produces
-✅ server/test/import-fixtures/ — golden fixtures built from the literal
-   v1/v2 shapes already committed in test/learning-evidence.test.js
-✅ hard-rejects (whole import, never partial): unsupported version,
-   duplicate id, invalid/impossible date, cross-entity dangling ref,
-   invalid counts, unguessable exercise provenance, completed+scored
-   review task with no matching evidence row
-✅ cosmetic gaps defaulted + reported as warnings (never blocking)
-✅ server/test/import-normalization.test.js: 14/14
-✅ full gate: server 188/188 (was 174, +14), root 259/259, build PASS,
-   test:inventory PASS 42 files (rust untouched, last 13/13 stands)
+✅ server/migrations/007-import-previews.sql (import_previews,
+   UNIQUE(user_id, source_checksum))
+✅ server/src/services/imports.js + server/src/routes/imports.js
+   (POST /v1/imports/preview, GET /v1/imports/:id)
+✅ runs T25's normalizeLegacyExport() first; invalid source -> 400,
+   zero preview rows created
+✅ real SHA-256 checksum of exact bytes; owned report (counts/warnings/
+   conflicts/mapping); 30-min expiry
+✅ subject-name collision vs existing ACTIVE owned subject -> CONFLICT,
+   never silently CREATE
+✅ cross-user reuse -> 404 (same pattern as subjects.js foreign-id)
+✅ stale (expired) and tampered (bytes changed) rejected — injectable
+   clock, tested at service level
+✅ server/test/import-preview.test.js: 7/7
+✅ full gate: server 195/195 (was 188, +7), root 259/259, build PASS,
+   test:inventory PASS 43 files (rust untouched, last 13/13 stands)
 ✅ evidence recorded (validation.md)
-✅ tasks.md T25 done-when boxes all [x]
+✅ tasks.md T26 done-when boxes all [x]
 ✅ atomic commit
 ```
 
 ```
-LAST_PROVEN = T25
-NEXT_TASK   = T26 — Implement import preview and explicit ID mapping
-              (Phase 04) — dependency-ready, NOT started
+LAST_PROVEN = T26
+NEXT_TASK   = T27 — Commit imports atomically and idempotently
+              (Phase 04) — dependency-ready, NOT started. Highest-risk
+              task in this phase (5/5 difficulty AND risk) — first task
+              that actually writes imported data.
 BLOCKERS    = none
 DIRTY       = none — working tree clean
 ```
@@ -126,8 +132,8 @@ Exit: Web deixa de ter autoridade paralela (BrowserStore) significativa. FECHADO
 
 ### 🔄 S04 — NO_DATA_LOSS Migration (T25-T28) — IN PROGRESS
 ✅ T25 normalização de snapshots legados sem invenção de dados,
-⬜ T26 preview/mapping, ⬜ T27 commit atômico idempotente,
-⬜ T28 UI de migração + ensaio de recuperação.
+✅ T26 preview/mapping (zero side-effect, conflitos, expiry, tamper),
+⬜ T27 commit atômico idempotente, ⬜ T28 UI de migração + ensaio de recuperação.
 Nenhum dado real migra automaticamente.
 
 ### ⬜ S05 — Learning Evidence (T29-T33)

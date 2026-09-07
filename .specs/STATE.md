@@ -7,6 +7,54 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 7, T26 DONE)
+
+Reconciled first: HEAD `620fcb4` confirmed, `git status --short` empty,
+tasks.md T25 all `[x]`/T26 all `[ ]` confirmed by direct read.
+
+BRANCH: `claude/smartlearn-v1-complete`. Working tree: clean before/after.
+
+T26 ("Implement import preview and explicit ID mapping") DONE: new
+`server/migrations/007-import-previews.sql` (`import_previews`,
+`UNIQUE(user_id, source_checksum)`) + `server/src/services/imports.js` +
+`server/src/routes/imports.js` (`POST /v1/imports/preview`,
+`GET /v1/imports/:id`), wired into app.js. Runs T25's
+`normalizeLegacyExport()` first (invalid source -> 400, zero preview rows
+created); computes a real SHA-256 checksum of the exact bytes received;
+reports counts/warnings/conflicts/proposed mapping scoped to the owner,
+expiring in 30 minutes. A legacy subject name colliding with an existing
+ACTIVE owned subject (the only real uniqueness constraint in this schema,
+T13) is a `NAME_ALREADY_EXISTS` conflict, never silently mapped to CREATE.
+Cross-user reuse fails (404, same pattern as subjects.js's foreign-id
+handling). Stale (expired, 30 min) and tampered (bytes changed since
+preview) reads are rejected via an injectable-clock `getPreview()`/
+`verifyPreview()`, tested directly at the service level with a fixed
+clock. `server/test/import-preview.test.js`: 7/7. Full gate: server
+195/195 (was 188, +7), root 259/259 (unchanged), build PASS,
+test:inventory PASS (43 files, was 42). Rust not re-run — untouched, last
+13/13 stands.
+
+T26's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's T26
+row for full detail, including the explicit scoping decision that
+"proposed mapping" at preview time is a CREATE/CONFLICT plan keyed by
+legacyId, not a fabricated final row id (real ids only exist after an
+actual commit transaction, which is T27's job, not built).
+
+NEXT_TASK: T27 — "Commit imports atomically and idempotently" (depends on
+T26, now dependency-ready). T27 is the highest-risk task in this phase
+(5/5 difficulty AND risk) — it's the first task that actually WRITES
+imported data into a real account, so it needs particular care around
+NO_DATA_LOSS, injected-failure rollback at every entity boundary, and
+capacity limits, per its own done-when criteria. Not started this session.
+
+BLOCKERS: none.
+
+WORKING TREE / UNCOMMITTED FILES: none — this checkpoint plus the T26
+implementation/tests/migration are the only changes this session,
+committed together.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 6, T25 DONE — PHASE 04 IN PROGRESS)
 
 Reconciled first, per this file's own governance: HEAD `9334410` confirmed

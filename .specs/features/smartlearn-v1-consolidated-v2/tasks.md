@@ -383,9 +383,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Preview changes zero learning rows; cross-user reuse fails; record counts and relations are listed; stale/tampered preview or unknown schema is rejected.
 **Recovery / rollback:** Discard only owned temporary preview records/files, not original source or account data.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Preview no-side-effect, ownership and tamper tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Preview no-side-effect, ownership and tamper tests.
 
 ### T27: Commit imports atomically and idempotently
 **Difficulty / risk:** 5/5 / 5/5.

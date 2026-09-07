@@ -139,7 +139,25 @@ sem descartar T01-T54. Explicitamente adiado pelo usuário em 2026-09-07.
         test:inventory PASS (42 arquivos)
   - [x] evidência registrada em validation.md
   - [x] commit atômico
-- [ ] T26 — Implement import preview and explicit ID mapping
+- [x] T26 — Implement import preview and explicit ID mapping
+  - [x] `server/migrations/007-import-previews.sql` (`import_previews`,
+        `UNIQUE(user_id, source_checksum)`)
+  - [x] `server/src/services/imports.js` + `server/src/routes/imports.js`
+        (`POST /v1/imports/preview`, `GET /v1/imports/:id`)
+  - [x] roda `normalizeLegacyExport()` do T25 primeiro; fonte inválida ->
+        400, zero linhas de prévia criadas
+  - [x] checksum SHA-256 real dos bytes exatos; relatório owned (counts/
+        warnings/conflicts/mapping); expira em 30 min
+  - [x] colisão de nome de disciplina com disciplina ativa existente ->
+        CONFLICT, nunca CREATE silencioso
+  - [x] reuso cross-user falha (404, mesmo padrão de subjects.js)
+  - [x] prévia obsoleta (expirada) e adulterada (bytes mudaram) rejeitadas
+        — clock injetável, testado no nível de serviço
+  - [x] `server/test/import-preview.test.js` 7/7
+  - [x] gate: server 195/195 (was 188, +7), root 259/259, build PASS,
+        test:inventory PASS (43 arquivos)
+  - [x] evidência registrada em validation.md
+  - [x] commit atômico
 - [ ] T27 — Commit imports atomically and idempotently
 - [ ] T28 — Deliver migration UI and recovery rehearsal
 

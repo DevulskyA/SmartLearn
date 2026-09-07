@@ -14,6 +14,7 @@ import { registerExerciseRoutes } from './routes/exercises.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerBackupRoutes } from './routes/backup.js';
+import { registerImportRoutes } from './routes/imports.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -75,6 +76,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerEvidenceRoutes(v1, db);
     registerSettingsRoutes(v1, db);
     registerBackupRoutes(v1, db);
+    registerImportRoutes(v1, db);
   }, { prefix: '/v1' });
 
   // Explicit opt-in only (T21 "one origin" production remote mode) — every
