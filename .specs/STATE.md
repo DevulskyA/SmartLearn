@@ -7,6 +7,57 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 10, T31 DONE)
+
+Continued directly from this session's T30 checkpoint. `git status
+--short` empty before starting, tasks.md T30 all `[x]`/T31 all `[ ]`
+confirmed.
+
+T31 ("Reconcile item observations with aggregate results") DONE.
+`server/migrations/010-attempt-review-link.sql` adds a plain nullable
+`exercise_attempts.review_task_id` (no composite FK — SQLite can't add
+one via ADD COLUMN; app-layer enforcement in `attempts.start()` instead,
+same tradeoff T17 recorded for `exercises.provenance`). Client/route
+wiring now threads the real review task id through so a practice
+attempt is actually linked to the review it happened during.
+
+`server/src/services/review-results.js`: `reconcile()` collapses each
+attempt's events to its highest-sequence row (a correction always
+outranks what it corrects, per T29's own CHECK) and returns
+`reconciledTotalCount`/`reconciledCorrectCount` that is NEVER the sum
+of item counts + the aggregate — items win when they exist
+(`ITEMS_ONLY`/`ITEMS_OVER_AGGREGATE`), aggregate is the fallback
+(`AGGREGATE_ONLY`), empty is `NONE` with null counts (no fabricated
+zero, MX07). EXTERNAL/INITIAL_PRACTICE evidence has no review_task_id
+at all, so it's structurally invisible here. `correctItemEvent()`
+appends an audited CORRECTION event through T29's normalization
+boundary; the original event stays untouched.
+
+`server/test/result-reconciliation.test.js` (8/8) covers items-only,
+aggregate-only, the discriminating "same practice counted exactly
+once" case, assistance-visible-in-itemEvents, empty-review NONE,
+EXTERNAL-evidence invisibility, correction/retry, and cross-user
+denial. Full gate: server 237/237 (was 229, +8), root 259/259
+unchanged, build PASS, test:inventory PASS (49 files, was 48),
+targeted e2e re-run (practice.spec.js + feature-parity.spec.js) 5/5,
+zero regressions. Rust not re-run, last recorded 13/13 stands.
+
+T31's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T31 row for full detail.
+
+NEXT_TASK: T32 ("Reconstruct a transparent evidence profile", depends
+on T31, now dependency-ready) — server/src/domain/evidence-profile.js +
+server/test/evidence-profile.test.js. Pure calculations over
+unique owner-scoped learning_events with explicit asOf/policyVersion:
+observed independent/assisted/unknown outcomes, time separation,
+reviewed transfer evidence, conflicting results, missing observations
+with supporting event IDs. Confidence stays separate from correctness;
+one correct recognition is not mastery; caller-supplied delay is never
+trusted as history (design.md's ELC-X01 through X10 failure catalog in
+context.md is the discriminating fixture set to probe against).
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 10, T30 DONE)
 
 Continued directly from this same session's T29 checkpoint (no restart,

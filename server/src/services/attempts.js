@@ -41,6 +41,7 @@ function attemptDto(row) {
     id: row.id,
     unitId: row.unit_id,
     competencyId: row.competency_id,
+    reviewTaskId: row.review_task_id,
     exerciseVersionId: row.exercise_version_id,
     status: row.status,
     maxAssistance: row.max_assistance,
@@ -56,7 +57,7 @@ function attemptDto(row) {
  * version, T17) can never retroactively change what an in-flight or past
  * attempt was scored against (AC-18).
  */
-export function start(db, userId, { exerciseId, competencyId = null }, now = () => new Date()) {
+export function start(db, userId, { exerciseId, competencyId = null, reviewTaskId = null }, now = () => new Date()) {
   const found = findOwnedExerciseWithVersion(db, userId, exerciseId);
   if (!found || !found.version) throw new AttemptError('NOT_FOUND', 'Exercício não encontrado.');
   if (found.exercise.archived_at) throw new AttemptError('VALIDATION_FAILED', 'Exercício arquivado não pode iniciar nova tentativa.');
@@ -65,12 +66,20 @@ export function start(db, userId, { exerciseId, competencyId = null }, now = () 
     const owned = db.prepare('SELECT id FROM competencies WHERE user_id = ? AND id = ? AND unit_id = ?').get(userId, competencyId, found.exercise.unit_id);
     if (!owned) throw new AttemptError('NOT_FOUND', 'Competência não encontrada nesta aula.');
   }
+  if (reviewTaskId !== null) {
+    // Same-unit invariant enforced here at the service layer (010's
+    // migration note): a reviewTaskId belonging to a DIFFERENT unit than
+    // this exercise would make T31's reconciliation nonsensical (an
+    // attempt "during" a review of unrelated content).
+    const owned = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND id = ? AND unit_id = ?').get(userId, reviewTaskId, found.exercise.unit_id);
+    if (!owned) throw new AttemptError('NOT_FOUND', 'Revisão não encontrada nesta aula.');
+  }
 
   const nowIso = now().toISOString();
   const result = db.prepare(`
-    INSERT INTO exercise_attempts (user_id, unit_id, competency_id, exercise_version_id, status, max_assistance, started_at)
-    VALUES (?, ?, ?, ?, 'STARTED', 'NONE', ?)
-  `).run(userId, found.exercise.unit_id, competencyId, found.version.id, nowIso);
+    INSERT INTO exercise_attempts (user_id, unit_id, competency_id, exercise_version_id, review_task_id, status, max_assistance, started_at)
+    VALUES (?, ?, ?, ?, ?, 'STARTED', 'NONE', ?)
+  `).run(userId, found.exercise.unit_id, competencyId, found.version.id, reviewTaskId, nowIso);
 
   return {
     ...attemptDto(findOwnedAttempt(db, userId, result.lastInsertRowid)),

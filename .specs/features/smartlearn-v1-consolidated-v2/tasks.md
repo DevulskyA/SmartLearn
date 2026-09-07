@@ -451,9 +451,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** The same practice produces correct aggregate totals exactly once; assistance stays available to evidence views; imported/manual results do not become independent attempts.
 **Recovery / rollback:** Retain original aggregates and raw events; rebuild derived views instead of deleting facts.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Reconciliation tests with mixed manual/item/imported data and correction/retry paths.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Reconciliation tests with mixed manual/item/imported data and correction/retry paths.
 
 ### T32: Reconstruct a transparent evidence profile
 **Difficulty / risk:** 4/5 / 4/5.

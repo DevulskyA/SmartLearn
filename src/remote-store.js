@@ -262,11 +262,11 @@ const exercises = {
 // (AC-16), so no caller here can claim independence after using a hint.
 
 const attempts = {
-  async start(exerciseId, { competencyId } = {}) {
-    const { attempt } = await apiRequest(`/v1/exercises/${exerciseId}/attempts`, {
-      method: 'POST',
-      body: competencyId != null ? { competencyId } : {},
-    });
+  async start(exerciseId, { competencyId, reviewTaskId } = {}) {
+    const body = {};
+    if (competencyId != null) body.competencyId = competencyId;
+    if (reviewTaskId != null) body.reviewTaskId = reviewTaskId;
+    const { attempt } = await apiRequest(`/v1/exercises/${exerciseId}/attempts`, { method: 'POST', body });
     return attempt;
   },
   async useHint(attemptId) {

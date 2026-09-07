@@ -13,14 +13,14 @@ export function registerAttemptRoutes(app, db) {
   app.post('/exercises/:exerciseId/attempts', {
     schema: {
       params: { type: 'object', required: ['exerciseId'], properties: { exerciseId: { type: 'string' } } },
-      body: { type: 'object', properties: { competencyId: { type: 'integer' } } },
+      body: { type: 'object', properties: { competencyId: { type: 'integer' }, reviewTaskId: { type: 'integer' } } },
     },
   }, async (request, reply) => {
     const exerciseId = Number(request.params.exerciseId);
     if (!Number.isInteger(exerciseId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       reply.status(201);
-      return { attempt: attempts.start(db, request.actor.userId, { exerciseId, competencyId: request.body?.competencyId ?? null }) };
+      return { attempt: attempts.start(db, request.actor.userId, { exerciseId, competencyId: request.body?.competencyId ?? null, reviewTaskId: request.body?.reviewTaskId ?? null }) };
     } catch (err) { return handleError(err, reply); }
   });
 

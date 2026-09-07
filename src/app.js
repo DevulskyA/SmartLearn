@@ -609,6 +609,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       exItem.className = "review-exercise-item";
       exItem.dataset.exerciseAnswered = "false";
       exItem.dataset.exerciseId = String(exercise.id);
+      exItem.dataset.reviewTaskId = String(task.id);
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -3097,8 +3098,9 @@ async function ensureAttemptStarted(exItem) {
   if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
   const exerciseId = Number(exItem.dataset.exerciseId);
   if (!Number.isInteger(exerciseId)) return null;
+  const reviewTaskId = Number(exItem.dataset.reviewTaskId);
   try {
-    const attempt = await DB.attempts.start(exerciseId);
+    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
     exItem.dataset.attemptId = String(attempt.id);
     // The hint (when this exercise has one) is already visible in the DOM
     // unconditionally, not gated behind its own action — so the truthful
