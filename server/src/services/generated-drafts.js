@@ -54,7 +54,9 @@ function toDraftDto(row) {
     modelVersion: row.model_version,
     promptVersion: row.prompt_version,
     status: row.status,
+    revision: row.revision,
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
     acceptedAt: row.accepted_at ?? null,
     acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
@@ -118,6 +120,54 @@ export async function createDraft(db, userId, proposalId, {
   );
 
   return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid)), live: provider.live };
+}
+
+/**
+ * C3 (audit): "permite inspeção/edição" before acceptance. Only ever
+ * touches a DRAFT-status row -- editing an already-ACCEPTED draft is
+ * rejected (its content is now history, T17/A1's own immutability
+ * principle). The edited content is re-validated through the exact same
+ * draft-schema.js boundary a freshly generated draft goes through (no
+ * special "trusted because a human typed it" bypass), against this
+ * proposal's real segments, so a hand-edited citation still can't point
+ * at a page that was never actually part of the source excerpt.
+ * Bumps `revision` -- the value acceptDraft() requires an exact match on,
+ * so a concurrent accept racing this edit gets an explicit conflict
+ * rather than silently publishing whichever version happened to land in
+ * the database last.
+ */
+export function reviseDraft(db, userId, draftId, { summary, questions } = {}, now = () => new Date()) {
+  const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
+  if (!draftRow) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (draftRow.status !== 'DRAFT') {
+    throw new DraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser editado.`);
+  }
+
+  const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
+  if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+
+  const current = JSON.parse(draftRow.draft_json);
+  const candidate = {
+    summary: summary !== undefined ? summary : current.summary,
+    questions: questions !== undefined ? questions : current.questions,
+    modelVersion: draftRow.model_version,
+    promptVersion: draftRow.prompt_version,
+  };
+
+  let validated;
+  try {
+    validated = validateDraft(candidate, { segments: found.segments });
+  } catch (err) {
+    if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
+    throw err;
+  }
+
+  const nowIso = now().toISOString();
+  const draftContent = { summary: validated.summary, questions: validated.questions, quarantinedCount: validated.quarantinedCount };
+  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+    .run(JSON.stringify(draftContent), nowIso, userId, draftId);
+
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId));
 }
 
 export function getDraft(db, userId, draftId) {

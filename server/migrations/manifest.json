@@ -88,5 +88,15 @@
     "version": 18,
     "name": "citation-snapshot",
     "checksum": "0db65c48be79ddef584845990a1d2d74cc3f3a89dd636bded6d56cc6a3d019a3"
+  },
+  {
+    "version": 19,
+    "name": "draft-revision",
+    "checksum": "28d0d3d0e0ae7cca8b9e67c73bc1131306d65c7cca9b812b77f79bcd215fee1c"
+  },
+  {
+    "version": 20,
+    "name": "page-quality",
+    "checksum": "a3de6807c2fbd6915cb16ad1c13650e0e4b7a2ff9d3e281c6858c619b8ec604f"
   }
 ]

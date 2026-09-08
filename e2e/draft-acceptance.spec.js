@@ -109,17 +109,17 @@ test('generating and accepting a draft through the real UI creates a real unit w
   expect(firstAcceptance.draft.status).toBe('ACCEPTED');
 
   // Repeated acceptance (same draft, real HTTP) must not create a second unit.
-  const secondAcceptRes = await page.evaluate(async ({ base, id }) => {
+  const secondAcceptRes = await page.evaluate(async ({ base, id, revision }) => {
     const meRes = await fetch(`${base}/v1/auth/me`, { credentials: 'include' });
     const me = await meRes.json();
     const res = await fetch(`${base}/v1/drafts/${id}/accept`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', 'x-csrf-token': me.csrfToken },
-      body: JSON.stringify({ newSubjectName: 'Outra disciplina', studyDate: '2099-01-01' }),
+      body: JSON.stringify({ newSubjectName: 'Outra disciplina', studyDate: '2099-01-01', expectedRevision: revision }),
     });
     return res.json();
-  }, { base: API_BASE, id: draftId });
+  }, { base: API_BASE, id: draftId, revision: firstAcceptance.draft.revision });
   expect(secondAcceptRes.acceptance.acceptedAt).toBe(firstAcceptance.draft.acceptedAt);
 
   const unitsAfter = await page.evaluate(async (base) => {

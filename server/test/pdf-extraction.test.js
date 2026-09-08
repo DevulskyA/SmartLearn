@@ -8,7 +8,7 @@ import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import * as sourceStorage from '../src/services/source-storage.js';
 import { extractSource, listPages, SourceExtractionError } from '../src/services/source-extraction.js';
-import { classifyExtractionError } from '../src/pdf/classify-extraction-error.js';
+import { classifyExtractionError, rollUpExtractionStatus } from '../src/pdf/classify-extraction-error.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -167,6 +167,59 @@ test('C4: a stale (superseded) extraction attempt never overwrites a newer attem
     // Exactly one generation's worth of pages exists — no half-applied mix.
     const pages = listPages(db, userId, source.id);
     assert.equal(pages.length, 1);
+  } finally { cleanup(); }
+});
+
+test('rollUpExtractionStatus: at least one OK page always yields EXTRACTED, regardless of other pages\' status', () => {
+  assert.equal(rollUpExtractionStatus([{ status: 'OK' }]), 'EXTRACTED');
+  assert.equal(rollUpExtractionStatus([{ status: 'OK' }, { status: 'EMPTY' }, { status: 'FAILED' }]), 'EXTRACTED');
+});
+
+test('rollUpExtractionStatus: zero OK pages with at least one EMPTY (no FAILED) yields IMAGE_ONLY_OR_UNREADABLE', () => {
+  assert.equal(rollUpExtractionStatus([{ status: 'EMPTY' }, { status: 'EMPTY' }]), 'IMAGE_ONLY_OR_UNREADABLE');
+});
+
+test('rollUpExtractionStatus: every page FAILED (no OK, no EMPTY) yields EXTRACTION_FAILED', () => {
+  assert.equal(rollUpExtractionStatus([{ status: 'FAILED' }, { status: 'FAILED' }]), 'EXTRACTION_FAILED');
+});
+
+// C5 (audit): "existe algum texto" is not "extração válida" -- a document
+// with a real, usable page ALONGSIDE a legitimately blank/image-only page
+// (e.g. a scanned cover sheet) must report the document as usable overall
+// while still recording each page's own real status, never silently
+// treating the empty page as if it held real content.
+test('C5: a document mixing a real text page with a legitimately empty page reports EXTRACTED overall, with per-page status distinguishing OK from EMPTY', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'i@example.com');
+    const buffer = buildFixturePdf(['Farmacologia real', 'conteudo irrelevante', 'Terceira pagina real'], { emptyPages: [2] });
+    const source = sourceStorage.acceptUpload(db, userId, { buffer, originalName: 'mixed.pdf', contentType: 'application/pdf', sourcesDir, ...UPLOAD_DEFAULTS });
+
+    const result = await extractSource(db, userId, source.id, { sourcesDir });
+    assert.equal(result.status, 'EXTRACTED', 'one legitimately blank page must not fail the whole document');
+    assert.equal(result.okPageCount, 2);
+    assert.equal(result.emptyPageCount, 1);
+    assert.equal(result.failedPageCount, 0);
+
+    const pages = listPages(db, userId, source.id);
+    assert.equal(pages.find((p) => p.pageIndex === 1).pageStatus, 'OK');
+    assert.equal(pages.find((p) => p.pageIndex === 2).pageStatus, 'EMPTY');
+    assert.equal(pages.find((p) => p.pageIndex === 2).text, '', 'an empty page must never have fabricated text');
+    assert.equal(pages.find((p) => p.pageIndex === 3).pageStatus, 'OK');
+  } finally { cleanup(); }
+});
+
+test('C5: a document where every page is legitimately empty reports IMAGE_ONLY_OR_UNREADABLE, not EXTRACTED', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'j@example.com');
+    const buffer = buildFixturePdf(['a', 'b'], { emptyPages: [1, 2] });
+    const source = sourceStorage.acceptUpload(db, userId, { buffer, originalName: 'blank.pdf', contentType: 'application/pdf', sourcesDir, ...UPLOAD_DEFAULTS });
+
+    const result = await extractSource(db, userId, source.id, { sourcesDir });
+    assert.equal(result.status, 'IMAGE_ONLY_OR_UNREADABLE');
+    assert.equal(result.okPageCount, 0);
+    assert.equal(result.emptyPageCount, 2);
   } finally { cleanup(); }
 });
 

@@ -259,6 +259,89 @@ test('a user cannot create, list, or read a draft for a proposal owned by anothe
     await assert.rejects(() => drafts.createDraft(db, userB, proposal.id, {}), (err) => err.code === 'NOT_FOUND');
     assert.throws(() => drafts.listDrafts(db, userB, proposal.id), (err) => err.code === 'NOT_FOUND');
     assert.throws(() => drafts.getDraft(db, userB, draft.id), (err) => err.code === 'NOT_FOUND');
+    assert.throws(() => drafts.reviseDraft(db, userB, draft.id, { summary: 'hacked' }), (err) => err.code === 'NOT_FOUND');
+  } finally { cleanup(); }
+});
+
+// --- C3 (audit): DRAFT_PUBLICATION_BOUNDARY -- revision + edit ---------
+
+test('reviseDraft: a well-formed edit replaces the content and bumps revision; the original text is gone (this is an edit, not a version-history append — the draft is not yet history)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'f@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir, ['conteudo original'], 10);
+    const draft = await drafts.createDraft(db, userId, proposal.id, {});
+    assert.equal(draft.revision, 1);
+
+    const revised = drafts.reviseDraft(db, userId, draft.id, {
+      summary: 'Resumo corrigido manualmente',
+      questions: [{ question: 'Pergunta corrigida?', answer: 'Resposta corrigida', hint: null, sourceSpans: [{ pageIndex: 1 }] }],
+    });
+    assert.equal(revised.revision, 2);
+    assert.equal(revised.summary, 'Resumo corrigido manualmente');
+    assert.equal(revised.questions[0].question, 'Pergunta corrigida?');
+
+    const reread = drafts.getDraft(db, userId, draft.id);
+    assert.equal(reread.revision, 2);
+    assert.equal(reread.summary, 'Resumo corrigido manualmente');
+  } finally { cleanup(); }
+});
+
+test('reviseDraft rejects a citation pointing outside the proposal\'s real pages — hand-editing cannot bypass draft-schema.js', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'g2@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir, ['conteudo'], 10);
+    const draft = await drafts.createDraft(db, userId, proposal.id, {});
+
+    assert.throws(
+      () => drafts.reviseDraft(db, userId, draft.id, {
+        questions: [{ question: 'Q', answer: 'A', hint: null, sourceSpans: [{ pageIndex: 999 }] }],
+      }),
+      (err) => err.code === 'INVALID_DRAFT',
+    );
+    assert.equal(drafts.getDraft(db, userId, draft.id).revision, 1, 'a rejected edit must not bump the revision');
+  } finally { cleanup(); }
+});
+
+test('reviseDraft refuses to edit an already-ACCEPTED draft — its content is history now', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'h2@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir, ['conteudo'], 10);
+    const draft = await drafts.createDraft(db, userId, proposal.id, {});
+
+    const { acceptDraft } = await import('../src/services/accept-draft.js');
+    acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
+
+    assert.throws(
+      () => drafts.reviseDraft(db, userId, draft.id, { summary: 'tentando editar depois de aceito' }),
+      (err) => err.code === 'INVALID_STATE',
+    );
+  } finally { cleanup(); }
+});
+
+test('C3: a persisted DRAFT never appears on any study path (units, subjects, exercises) — only accepting it makes anything appear', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'i2@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir, ['conteudo do draft invisivel'], 10);
+    const draft = await drafts.createDraft(db, userId, proposal.id, {});
+    assert.equal(draft.status, 'DRAFT');
+
+    // Every real study-serving table must be completely empty while the
+    // draft merely exists — a draft has no unit_id, so it cannot leak into
+    // any of these queries by construction, not merely by app-layer filter.
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM learning_units WHERE user_id = ?').get(userId).n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM subjects WHERE user_id = ?').get(userId).n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM exercises WHERE user_id = ?').get(userId).n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM review_tasks WHERE user_id = ?').get(userId).n, 0);
+
+    const { acceptDraft } = await import('../src/services/accept-draft.js');
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Agora sim', studyDate: '2026-03-01', expectedRevision: draft.revision });
+
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM learning_units WHERE user_id = ?').get(userId).n, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM exercises WHERE user_id = ? AND unit_id = ?').get(userId, result.unit.id).n, 1);
   } finally { cleanup(); }
 });
 

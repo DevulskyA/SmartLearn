@@ -41,7 +41,7 @@ function unitDto(row) {
  * medically validated — it is ordinary, editable learning material like
  * any manually created exercise, just tagged with its real provenance.
  */
-export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate } = {}, now = () => new Date()) {
+export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', 'Rascunho não encontrado.');
 
@@ -50,6 +50,18 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   }
   if (draftRow.status !== 'DRAFT') {
     throw new AcceptDraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser aceito.`);
+  }
+
+  // C3 (audit): the caller must identify EXACTLY the revision it reviewed.
+  // A concurrent edit (reviseDraft) bumps this draft's revision — if that
+  // happened between the caller's last read and this accept call, fail
+  // closed rather than silently publishing whatever content now happens
+  // to be in draft_json (which the caller never actually saw).
+  if (!Number.isInteger(expectedRevision)) {
+    throw new AcceptDraftError('VALIDATION_FAILED', 'Informe expectedRevision (a revisão do rascunho que foi revisada).', 'expectedRevision');
+  }
+  if (expectedRevision !== draftRow.revision) {
+    throw new AcceptDraftError('REVISION_CONFLICT', 'O rascunho foi editado desde a última leitura. Recarregue e revise a versão atual antes de aceitar.');
   }
 
   if (!DATE_RE.test(studyDate ?? '')) {

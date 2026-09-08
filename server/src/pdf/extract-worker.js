@@ -10,7 +10,7 @@
 // separate scripting/annotation-forms manager this code never touches.
 import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
-import { classifyExtractionError } from './classify-extraction-error.js';
+import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -31,20 +31,23 @@ async function run() {
     return;
   }
 
+  // C5 (audit): each page gets its OWN error boundary -- one malformed or
+  // resource-heavy page (a real, not-uncommon PDF defect) must never abort
+  // extraction of an otherwise-good document. A per-page failure becomes an
+  // explicit FAILED page_status, not a document-wide EXTRACTION_FAILED.
   const pages = [];
   for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    pages.push({ index: i, text: content.items.map((item) => item.str).join('') });
+    try {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map((item) => item.str).join('');
+      pages.push({ index: i, text, status: text.trim().length > 0 ? 'OK' : 'EMPTY' });
+    } catch (err) {
+      pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });
+    }
   }
 
-  const hasAnyText = pages.some((p) => p.text.trim().length > 0);
-  parentPort.postMessage({
-    status: hasAnyText ? 'EXTRACTED' : 'IMAGE_ONLY_OR_UNREADABLE',
-    pages,
-    pageCount: doc.numPages,
-    parserVersion: pdfjs.version,
-  });
+  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version });
 }
 
 run().catch((err) => {

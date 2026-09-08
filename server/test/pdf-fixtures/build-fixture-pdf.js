@@ -10,9 +10,16 @@ function pdfObject(id, body) {
 /**
  * @param {string[]} pagesText one string per page; each becomes the page's
  *   entire extractable text content.
+ * @param {{emptyPages?: number[]}} [options] 1-based page numbers whose
+ *   /Contents is deliberately pointed at a nonexistent indirect object —
+ *   real-world equivalent of a scanned/image-only page: pdf.js resolves
+ *   this leniently (no exception) and simply extracts no text for that
+ *   page, letting a real "mixed OK/EMPTY pages in one document" fixture
+ *   be built without a corrupted/unparseable file overall (verified by
+ *   direct reproduction against the real pdf.js parser).
  * @returns {Buffer} a well-formed single/multi-page PDF.
  */
-export function buildFixturePdf(pagesText) {
+export function buildFixturePdf(pagesText, { emptyPages = [] } = {}) {
   const pageCount = pagesText.length;
   const header = '%PDF-1.4\n';
 
@@ -44,9 +51,11 @@ export function buildFixturePdf(pagesText) {
   const longestPageLength = Math.max(...pagesText.map((t) => t.length), 1);
   const pageWidth = Math.max(2000, longestPageLength * 14 + 100);
 
+  const emptyPageSet = new Set(emptyPages);
+  const NONEXISTENT_OBJECT_ID = 9999; // never assigned to any real object
   const pageObjs = pageIds.map((id, i) => pdfObject(
     id,
-    `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} 200] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`
+    `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} 200] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${emptyPageSet.has(i + 1) ? NONEXISTENT_OBJECT_ID : contentIds[i]} 0 R >>`
   ));
 
   const contentObjs = pagesText.map((text, i) => {

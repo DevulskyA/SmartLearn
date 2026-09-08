@@ -15,6 +15,7 @@ function handleError(err, reply) {
       VALIDATION_FAILED: 400,
       INVALID_STATE: 409,
       SUBJECT_CONFLICT: 409,
+      REVISION_CONFLICT: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
@@ -73,17 +74,49 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  app.patch('/drafts/:id', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          questions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['question', 'answer', 'sourceSpans'],
+              properties: {
+                question: { type: 'string' },
+                answer: { type: 'string' },
+                hint: { type: ['string', 'null'] },
+                sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.reviseDraft(db, request.actor.userId, id, request.body) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/drafts/:id/accept', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
       body: {
         type: 'object',
-        required: ['studyDate'],
+        required: ['studyDate', 'expectedRevision'],
         properties: {
           subjectId: { type: 'integer' },
           newSubjectName: { type: 'string' },
           newSubjectColor: { type: 'string' },
           studyDate: { type: 'string' },
+          expectedRevision: { type: 'integer' },
         },
       },
     },

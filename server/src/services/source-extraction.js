@@ -91,8 +91,8 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
 
     if (result.status === 'EXTRACTED') {
       db.prepare('DELETE FROM source_pages WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
-      const insertPage = db.prepare('INSERT INTO source_pages (user_id, source_id, page_index, text, created_at) VALUES (?, ?, ?, ?, ?)');
-      for (const page of result.pages) insertPage.run(userId, sourceId, page.index, page.text, nowIso);
+      const insertPage = db.prepare('INSERT INTO source_pages (user_id, source_id, page_index, text, created_at, page_status) VALUES (?, ?, ?, ?, ?, ?)');
+      for (const page of result.pages) insertPage.run(userId, sourceId, page.index, page.text, nowIso, page.status ?? 'OK');
       db.prepare(`
         UPDATE sources SET extraction_status = ?, parser_version = ?, page_count = ?, extracted_at = ?
         WHERE user_id = ? AND id = ?
@@ -104,12 +104,23 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
     return true;
   })();
 
-  return { sourceId, status: result.status, pageCount: result.pageCount ?? null, errorMessage: result.errorMessage ?? null, applied };
+  // C5 (audit): "existe algum texto" is not "extração válida" -- surface
+  // the per-page breakdown alongside the document-level status so a
+  // caller can decide whether a document with a few empty/failed pages
+  // alongside mostly-good ones is safe to use as-is.
+  const okCount = (result.pages ?? []).filter((p) => p.status === 'OK').length;
+  const emptyCount = (result.pages ?? []).filter((p) => p.status === 'EMPTY').length;
+  const failedCount = (result.pages ?? []).filter((p) => p.status === 'FAILED').length;
+
+  return {
+    sourceId, status: result.status, pageCount: result.pageCount ?? null, errorMessage: result.errorMessage ?? null, applied,
+    okPageCount: okCount, emptyPageCount: emptyCount, failedPageCount: failedCount,
+  };
 }
 
 export function listPages(db, userId, sourceId) {
   if (!findOwnedSource(db, userId, sourceId)) throw new SourceExtractionError('NOT_FOUND', 'Fonte não encontrada.');
-  return db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
+  return db.prepare('SELECT page_index, text, page_status FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
     .all(userId, sourceId)
-    .map((row) => ({ pageIndex: row.page_index, text: row.text }));
+    .map((row) => ({ pageIndex: row.page_index, text: row.text, pageStatus: row.page_status }));
 }

@@ -2202,6 +2202,7 @@ function createSourceProposalItem(proposal) {
 // output, not a medical/scientific claim (design.md/T37/T38).
 function renderDraftPanel(draftPanel, draft) {
   draftPanel.dataset.draftId = String(draft.id);
+  draftPanel.dataset.revision = String(draft.revision);
   draftPanel.replaceChildren();
 
   const caveat = createTextElement(
@@ -2375,7 +2376,11 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
 
     acceptDraftBtn.disabled = true;
     try {
-      const result = await DraftReviewUI.acceptDraft(draftId, { newSubjectName: subjectInput?.value, studyDate: dateInput?.value });
+      const result = await DraftReviewUI.acceptDraft(draftId, {
+        newSubjectName: subjectInput?.value,
+        studyDate: dateInput?.value,
+        expectedRevision: Number(draftPanel.dataset.revision),
+      });
       if (!result.ok) {
         if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
         acceptDraftBtn.disabled = false;

@@ -51,7 +51,7 @@ test('accepting a draft creates exactly one subject/unit/16 reviews/N exercises 
     const userId = makeUser(db, 'a@example.com');
     const { source, draft } = await makeDraft(db, userId, sourcesDir, ['Farmacocinética básica', 'Farmacodinâmica básica']);
 
-    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01' });
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
     assert.equal(result.reviewCount, 16);
     assert.equal(result.exerciseCount, 2);
     assert.equal(result.acceptedBy, userId);
@@ -98,7 +98,7 @@ test('A1: a historical citation stays reconstructible after the source is re-ext
   try {
     const userId = makeUser(db, 'a2@example.com');
     const { source, draft } = await makeDraft(db, userId, sourcesDir, ['Texto original da página um']);
-    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia A1', studyDate: '2026-03-01' });
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia A1', studyDate: '2026-03-01', expectedRevision: draft.revision });
 
     const [version] = db.prepare(`
       SELECT ev.* FROM exercise_versions ev
@@ -124,14 +124,62 @@ test('A1: a historical citation stays reconstructible after the source is re-ext
   } finally { cleanup(); }
 });
 
+test('C3: accepting with a stale expectedRevision after a concurrent edit is an explicit conflict, never a silent publish of the un-reviewed content', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'c3@example.com');
+    const { draft } = await makeDraft(db, userId, sourcesDir, ['conteudo original do rascunho']);
+    const staleRevision = draft.revision;
+
+    // Someone (or another tab) edits the draft between when this caller
+    // read it and when they click accept.
+    drafts.reviseDraft(db, userId, draft.id, {
+      summary: 'Resumo revisado por outra sessão',
+      questions: [{ question: 'Pergunta revisada?', answer: 'Resposta revisada', hint: null, sourceSpans: [{ pageIndex: 1 }] }],
+    });
+
+    assert.throws(
+      () => acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: staleRevision }),
+      (err) => err.code === 'REVISION_CONFLICT',
+    );
+    assert.equal(db.prepare('SELECT COUNT(*) as n FROM learning_units WHERE user_id = ?').get(userId).n, 0, 'a revision conflict must create nothing');
+
+    // Accepting with the CURRENT revision succeeds and publishes the
+    // content the caller would see if they reloaded — the edited version,
+    // not the stale one they originally fetched.
+    const current = drafts.getDraft(db, userId, draft.id);
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: current.revision });
+    const [version] = db.prepare(`
+      SELECT ev.question, ev.answer FROM exercise_versions ev
+      JOIN exercises e ON e.user_id = ev.user_id AND e.id = ev.exercise_id
+      WHERE ev.user_id = ? AND e.unit_id = ?
+    `).all(userId, result.unit.id);
+    assert.equal(version.question, 'Pergunta revisada?');
+    assert.equal(version.answer, 'Resposta revisada');
+  } finally { cleanup(); }
+});
+
+test('acceptDraft requires an explicit expectedRevision — omitting it is a validation error, never an implicit accept-whatever-is-current', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'c3b@example.com');
+    const { draft } = await makeDraft(db, userId, sourcesDir, ['conteudo']);
+
+    assert.throws(
+      () => acceptDraft(db, userId, draft.id, { newSubjectName: 'X', studyDate: '2026-03-01' }),
+      (err) => err.code === 'VALIDATION_FAILED' && err.field === 'expectedRevision',
+    );
+  } finally { cleanup(); }
+});
+
 test('repeated acceptance returns the exact same result and creates nothing new', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
     const userId = makeUser(db, 'b@example.com');
     const { draft } = await makeDraft(db, userId, sourcesDir, ['conteudo unico']);
 
-    const first = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01' });
-    const second = acceptDraft(db, userId, draft.id, { newSubjectName: 'Ignorado desta vez', studyDate: '2099-01-01' });
+    const first = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
+    const second = acceptDraft(db, userId, draft.id, { newSubjectName: 'Ignorado desta vez', studyDate: '2099-01-01', expectedRevision: draft.revision });
     assert.deepEqual(first, second, 'a repeated acceptance must return the identical first result, ignoring any new params');
 
     assert.equal(db.prepare('SELECT COUNT(*) as n FROM subjects WHERE user_id = ?').get(userId).n, 1);
@@ -151,7 +199,7 @@ test('a midway failure (foreign-owned subjectId) leaves zero partial rows and th
     const { draft } = await makeDraft(db, userId, sourcesDir, ['conteudo']);
 
     assert.throws(
-      () => acceptDraft(db, userId, draft.id, { subjectId: foreignSubjectId, studyDate: '2026-03-01' }),
+      () => acceptDraft(db, userId, draft.id, { subjectId: foreignSubjectId, studyDate: '2026-03-01', expectedRevision: draft.revision }),
       (err) => err instanceof AcceptDraftError && err.code === 'NOT_FOUND',
     );
 
@@ -172,7 +220,7 @@ test('a calendar-invalid studyDate is rejected before any row is written', async
     // generateReviewDates (shared/review-schedule.js) throws a plain Error
     // for a calendar-invalid date — same as learning-units.js's own
     // create() does; accept-draft.js does not re-wrap it.
-    assert.throws(() => acceptDraft(db, userId, draft.id, { newSubjectName: 'X', studyDate: '2026-02-30' }));
+    assert.throws(() => acceptDraft(db, userId, draft.id, { newSubjectName: 'X', studyDate: '2026-02-30', expectedRevision: draft.revision }));
     assert.equal(db.prepare('SELECT COUNT(*) as n FROM learning_units WHERE user_id = ?').get(userId).n, 0);
   } finally { cleanup(); }
 });
@@ -182,7 +230,7 @@ test('AI-generated and manually-authored exercises coexist on the same unit with
   try {
     const userId = makeUser(db, 'e@example.com');
     const { draft } = await makeDraft(db, userId, sourcesDir, ['conteudo']);
-    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01' });
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
 
     const manual = exercisesService.create(db, userId, { unitId: result.unit.id, question: 'Pergunta manual', answer: 'Resposta manual', provenance: 'MANUAL' });
     assert.equal(manual.currentVersion.provenance, 'MANUAL');
@@ -203,7 +251,7 @@ test('a user cannot accept a draft owned by another user', async () => {
     const userB = makeUser(db, 'g@example.com');
     const { draft } = await makeDraft(db, userA, sourcesDir, ['conteudo']);
 
-    assert.throws(() => acceptDraft(db, userB, draft.id, { newSubjectName: 'X', studyDate: '2026-03-01' }), (err) => err.code === 'NOT_FOUND');
+    assert.throws(() => acceptDraft(db, userB, draft.id, { newSubjectName: 'X', studyDate: '2026-03-01', expectedRevision: draft.revision }), (err) => err.code === 'NOT_FOUND');
   } finally { cleanup(); }
 });
 
@@ -244,12 +292,13 @@ test('HTTP: full pipeline over real HTTP — upload, extract, chunk, draft, and 
       method: 'POST', url: `/v1/proposals/${proposalId}/drafts`,
       headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' }, payload: {},
     });
-    const draftId = JSON.parse(draftRes.body).draft.id;
+    const draftBody = JSON.parse(draftRes.body).draft;
+    const draftId = draftBody.id;
 
     const acceptRes = await app.inject({
       method: 'POST', url: `/v1/drafts/${draftId}/accept`,
       headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
-      payload: { newSubjectName: 'Farmacologia HTTP', studyDate: '2026-03-01' },
+      payload: { newSubjectName: 'Farmacologia HTTP', studyDate: '2026-03-01', expectedRevision: draftBody.revision },
     });
     assert.equal(acceptRes.statusCode, 200);
     const acceptance = JSON.parse(acceptRes.body).acceptance;
@@ -265,7 +314,7 @@ test('HTTP: full pipeline over real HTTP — upload, extract, chunk, draft, and 
     const secondAcceptRes = await app.inject({
       method: 'POST', url: `/v1/drafts/${draftId}/accept`,
       headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
-      payload: { newSubjectName: 'Different', studyDate: '2099-01-01' },
+      payload: { newSubjectName: 'Different', studyDate: '2099-01-01', expectedRevision: draftBody.revision },
     });
     assert.equal(secondAcceptRes.statusCode, 200);
     assert.deepEqual(JSON.parse(secondAcceptRes.body).acceptance, acceptance);

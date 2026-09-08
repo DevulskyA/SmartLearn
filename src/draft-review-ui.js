@@ -34,15 +34,22 @@ export async function getDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
-/** The one real, definitive action in this module: creates a unit +
+/**
+ * The one real, definitive action in this module: creates a unit +
  * exercises + 16 reviews from the draft's current content. Idempotent by
  * draftId — calling this again for an already-accepted draft returns the
- * exact original result rather than creating anything twice. */
-export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate }) {
+ * exact original result rather than creating anything twice.
+ *
+ * `expectedRevision` must be the revision the caller actually read (from
+ * `generateDraft`/`getDraft`'s own `draft.revision`) — the server rejects
+ * the call with `REVISION_CONFLICT` if the draft was edited since, rather
+ * than silently publishing content the caller never reviewed.
+ */
+export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision }) {
   try {
     const { acceptance } = await apiRequest(`/v1/drafts/${draftId}/accept`, {
       method: 'POST',
-      body: { subjectId, newSubjectName, newSubjectColor, studyDate },
+      body: { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision },
     });
     return { ok: true, acceptance };
   } catch (err) { return fail(err); }
