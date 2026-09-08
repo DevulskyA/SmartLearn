@@ -20,6 +20,7 @@ import * as MigrationUI from "./migration-ui.js";
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import * as OfflineStore from "./offline-store.js";
+import * as OfflineUI from "./offline-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -79,6 +80,10 @@ const dbInit = DB.init()
       // T40: best-effort — a registration/sync failure here never blocks
       // boot, same "failure only logs" contract as T30's client wiring.
       OfflineStore.registerServiceWorker().catch(() => {});
+      // T41: app-wide connectivity indicator + reconnect handling (session
+      // revalidation + resync), mounted once regardless of auth outcome so
+      // it can show "offline" state even for a not-yet-authenticated tab.
+      OfflineUI.mount({ onReconnect: () => { if (authenticated) return renderToday(); } });
       if (user) {
         authenticated = true;
         OfflineStore.syncSnapshot(user.id).catch(() => {});
@@ -4201,5 +4206,22 @@ accountLogoutBtn?.addEventListener("click", async () => {
   }
   await renderAccount();
 });
+
+// T41: a 401 mid-session (server-side expiry/revocation — see
+// api-client.js's handleResponse) locks protected operations and clears
+// stale identity. NOT a logout: the cached offline snapshot legitimately
+// still belongs to this same account, so it is deliberately NOT purged —
+// only OfflineStore.purgeAllAccounts() (an explicit logout/account-switch)
+// does that. Re-confirms with the server (rather than trusting the
+// dispatched event alone) before actually clearing local state.
+if (REMOTE_MODE) {
+  OfflineUI.onUnauthenticated(async () => {
+    const user = await AuthUI.bootstrap();
+    if (user) return; // a stray/transient 401 — the session is actually still valid
+    authenticated = false;
+    await renderAccount();
+    if (DATA_SCREENS.has(window.location.hash.slice(1))) showScreen("account");
+  });
+}
 
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

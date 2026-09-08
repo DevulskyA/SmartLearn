@@ -10,28 +10,25 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=b0e6d9b
+CURRENT_HEAD=<set at commit, see final checkpoint below>
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=T40
-NEXT_TASK=T41
+LAST_COMPLETED_TASK=T41
+NEXT_TASK=T42
 NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b)
-RECENT_COMMITS=
-  b0e6d9b feat(t40): PWA shell and private cache lifecycle
-  eabea37 feat(t40-prep): T39 versioned owned offline agenda snapshot — Phase 07 begins
-  ea74bc3 docs: record Phase 06 history-integrity audit disposition
+RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b), T41 (see final checkpoint below)
+RECENT_COMMITS=see final checkpoint below
 
 SERVER_GATE=340/340
-ROOT_GATE=259/259
-E2E_GATE=40/40 (real browser + real spawned server + genuine Playwright network-offline emulation, not mocked)
-TEST_INVENTORY=60 test files (PASS via scripts/check-test-inventory.mjs)
+ROOT_GATE=265/265
+E2E_GATE=42/42 (real browser + real spawned server + genuine Playwright network-offline emulation, not mocked)
+TEST_INVENTORY=61 test files (PASS via scripts/check-test-inventory.mjs)
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
-PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 NOT_STARTED)
+PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 NOT_STARTED)
 
 QUALITY_STANDARD_ID=SMARTLEARN_QUALITY_V1
 QUALITY_STANDARD_VERSION=1.0.0
@@ -61,7 +58,7 @@ CONFIRMED_P0_P1_OPEN=0
 ### Invariants a new session must not lose (index only — design.md/heritage.md/acceptance.md remain the source of truth)
 
 - Central server is the sole authority for owned domain data (T20-T24); no client ever wins a conflict over it.
-- Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (next, NOT_STARTED) closes every mutation entrypoint offline.
+- Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (DONE) closes every mutation entrypoint offline via a single choke-point guard in api-client.js.
 - No authoritative offline write queue/outbox exists or is planned for V1 — a failed offline mutation attempt fails visibly; it is never queued for later replay or shown as a fake success.
 - `review_tasks` = scheduling projection (recalculable), NEVER the historical record of what happened.
 - `learning_evidence`/`learning_events` = historical facts; corrections append (kind='CORRECTION'), never overwrite.
@@ -72,6 +69,76 @@ CONFIRMED_P0_P1_OPEN=0
 - NO_DATA_LOSS is a standing constraint on every migration/import path (T25-T28).
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
+
+---
+
+## CHECKPOINT — 2026-09-07 (session 14, T41 DONE)
+
+Continued directly from this same session's T40 checkpoint, with a
+mid-session governance detour in between (adopted the user's top-0.1%
+quality standard as a canonical repo artifact — see
+`.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` — no code
+touched during that detour). `git status --short` empty before
+starting T41, tasks.md T40 all `[x]`/T41 all `[ ]` confirmed.
+
+T41 ("Enforce offline read-only actions visibly and technically")
+DONE. Deviated from the plan's literal `Where` on purpose (documented
+in validation.md, same precedent as T40's `public/` move): instead of
+touching each of the ~15+ scattered mutation-triggering UI handlers in
+`app.js`, the guard sits at the ONE shared transport choke point —
+`src/api-client.js`'s `apiRequest()`/`apiUpload()` — verified to be
+`remote-store.js`'s only caller (grep: zero direct `fetch()` elsewhere
+in it), so every create/complete/edit/import/accept-draft entrypoint
+is covered automatically. New `OfflineError`: a mutating request is
+refused BEFORE `fetch()` is called when `navigator.onLine===false`
+(verified: zero network attempt made). `handleResponse()` now
+dispatches `window.dispatchEvent(new CustomEvent('smartlearn:
+unauthenticated'))` on any 401 (every `/v1` route already requires an
+actor, so a 401 there is structurally always "was logged in, now
+isn't", never "not logged in yet").
+
+`src/offline-ui.js` (new): app-wide connectivity banner (all screens,
+not just Hoje) with `lastSyncedAt`; `handleReconnect()` on the
+browser's `online` event RE-CONFIRMS the session via `AuthUI.
+bootstrap()` (never trusts the client's own stale belief) before
+resyncing; `onUnauthenticated(handler)` is a thin broadcast seam.
+`app.js`'s registered handler re-confirms via bootstrap (a stray 401
+on an actually-still-valid session is NOT treated as expiry — verified
+this doesn't fire when the session is real), clears `authenticated`,
+and redirects off protected screens — deliberately does NOT purge the
+cached offline snapshot (expiry is not a logout; T40's AC-23 purge
+stays scoped to real logout/account-switch only).
+
+No optimistic UI and no write queue existed anywhere in this codebase
+already — `e2e/offline-writes.spec.js` proves that STAYS true (every
+IndexedDB object store enumerated before/after a failed offline
+attempt is identical; no outbox was ever created), rather than adding
+new code to prevent something that was never built.
+
+`test/remote-store.test.js` (+6, 25/25 in that file): OfflineError
+pre-flight block with zero fetch calls; GET still attempted offline;
+online mutation unaffected; apiUpload gets the same guard; 401
+dispatches the event exactly once with ApiError still propagating;
+non-401 never dispatches. `e2e/offline-writes.spec.js` (2/2, new):
+offline "Salvar aula" shows a visible error and creates nothing
+(confirmed both immediately and after a real online reload); clearing
+the session cookie mid-session — merely navigating to a protected
+screen is enough to trigger the lock via its own authenticated GET —
+surfaces the logged-out view unprompted, and survives a cold reload.
+
+Full gate: server 340/340 unchanged (client-only task), root 265/265
+(was 259, +6), build PASS, test:inventory PASS (61 files, was 60, +1),
+full `npx playwright test` 42/42 (40 pre-existing + 2 new, zero
+regressions). Rust not re-run — untouched, last recorded 13/13 stands.
+
+T41's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T41 row for full detail, including the choke-point deviation reasoning.
+
+NEXT_TASK: T42 ("Deliver the Windows wrapper using the same
+application" — check tasks.md for its exact dependency list, Where,
+and acceptance criteria before starting; likely to need the Windows
+Tauri/WebView toolchain this project has used before, per earlier
+sessions' STATE.md history).
 
 ---
 

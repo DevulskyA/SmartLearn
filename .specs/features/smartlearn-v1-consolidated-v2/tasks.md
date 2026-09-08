@@ -582,14 +582,14 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Difficulty / risk:** 3/5 / 4/5.
 **Depends on:** T40.
 **Requirement:** V1-19. **Acceptance:** AC-22, AC-23.
-**Where:** src/offline-ui.js; src/api-client.js; all mutation entrypoints; e2e/offline-writes.spec.js.
+**Where:** src/offline-ui.js; src/api-client.js (the actual enforcement point for "all mutation entrypoints" — see validation.md for why); e2e/offline-writes.spec.js.
 **What / implementation:** Show lastSyncedAt/stale state and preserve access to known agenda. Disable/explain authoritative actions offline, while server denial remains decisive. Failed requests preserve a form draft in memory but create no persistent outbox or fake success. Reconnect refreshes data and revalidates session.
 **Tests and discriminating evidence:** Create/complete/edit/import/accept-draft offline changes zero server/cache truth and no pending_writes exists. An expired online session locks protected operations and clears stale identity as specified.
 **Recovery / rollback:** Disable cache feature without changing source/server authority; keep failed drafts recoverable within the current view.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Exhaustive mutation-entrypoint offline tests and outbox/no-fallback code inspection.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Exhaustive mutation-entrypoint offline tests and outbox/no-fallback code inspection.
 
 ### T42: Deliver the Windows wrapper using the same application
 **Difficulty / risk:** 4/5 / 5/5.

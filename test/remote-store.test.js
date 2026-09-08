@@ -25,7 +25,7 @@ const REAL_API_BASE = `http://127.0.0.1:${port}`;
 
 globalThis.window = { __SMARTLEARN_API_BASE__: REAL_API_BASE };
 
-const { apiRequest, ApiError, NetworkError, setCsrfToken } = await import('../src/api-client.js');
+const { apiRequest, apiUpload, ApiError, NetworkError, OfflineError, setCsrfToken } = await import('../src/api-client.js');
 const { DB, RemoteStoreError } = await import('../src/remote-store.js');
 
 const realFetch = globalThis.fetch;
@@ -126,6 +126,73 @@ test('apiRequest throws NetworkError (never a false success) when fetch itself r
   try {
     await assert.rejects(() => apiRequest('/v1/subjects'), (err) => err instanceof NetworkError);
   } finally { globalThis.fetch = realFetch; }
+});
+
+// -- T41: offline-mutation and session-expiry guards ------------------------
+
+function withOffline(onLine, fn) {
+  const desc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine }, configurable: true });
+  return Promise.resolve(fn()).finally(() => Object.defineProperty(globalThis, 'navigator', desc));
+}
+
+test('apiRequest refuses a MUTATING call with OfflineError, without ever calling fetch, when navigator.onLine is false', () => withOffline(false, async () => {
+  let called = false;
+  globalThis.fetch = () => { called = true; throw new Error('must not be called'); };
+  try {
+    await assert.rejects(
+      () => apiRequest('/v1/subjects', { method: 'POST', body: { name: 'X' } }),
+      (err) => err instanceof OfflineError,
+    );
+    assert.equal(called, false, 'no network attempt may be made once the browser already knows it is offline');
+  } finally { globalThis.fetch = realFetch; }
+}));
+
+test('apiRequest still attempts a GET while offline (only mutations are pre-flight blocked — reads have their own OfflineStore-backed path)', () => withOffline(false, async () => {
+  const calls = mockFetch([{ status: 200, body: { subjects: [] } }]);
+  try {
+    await apiRequest('/v1/subjects');
+    assert.equal(calls.length, 1);
+  } finally { globalThis.fetch = realFetch; }
+}));
+
+test('apiRequest proceeds normally when navigator.onLine is true (or unknown/undefined — never fails OPEN into blocking a real online mutation)', () => withOffline(true, async () => {
+  const calls = mockFetch([{ status: 200, body: { subject: { id: 1 } } }]);
+  try {
+    await apiRequest('/v1/subjects', { method: 'POST', body: { name: 'X' } });
+    assert.equal(calls.length, 1);
+  } finally { globalThis.fetch = realFetch; }
+}));
+
+test('apiUpload refuses to start while offline, without ever calling fetch', () => withOffline(false, async () => {
+  let called = false;
+  globalThis.fetch = () => { called = true; throw new Error('must not be called'); };
+  try {
+    await assert.rejects(() => apiUpload('/v1/sources', new FormData()), (err) => err instanceof OfflineError);
+    assert.equal(called, false);
+  } finally { globalThis.fetch = realFetch; }
+}));
+
+test('a 401 response dispatches smartlearn:unauthenticated exactly once, and the ApiError itself still propagates normally', async () => {
+  const events = [];
+  const originalWindow = globalThis.window;
+  globalThis.window = { ...originalWindow, dispatchEvent: (e) => events.push(e.type) };
+  mockFetch([{ status: 401, body: { error: { code: 'UNAUTHENTICATED' } } }]);
+  try {
+    await assert.rejects(() => apiRequest('/v1/subjects'), (err) => err instanceof ApiError && err.status === 401);
+    assert.deepEqual(events, ['smartlearn:unauthenticated']);
+  } finally { globalThis.fetch = realFetch; globalThis.window = originalWindow; }
+});
+
+test('a non-401 error response never dispatches smartlearn:unauthenticated', async () => {
+  const events = [];
+  const originalWindow = globalThis.window;
+  globalThis.window = { ...originalWindow, dispatchEvent: (e) => events.push(e.type) };
+  mockFetch([{ status: 409, body: { error: { code: 'CONFLICT' } } }]);
+  try {
+    await assert.rejects(() => apiRequest('/v1/subjects', { method: 'POST', body: {} }), (err) => err instanceof ApiError);
+    assert.deepEqual(events, []);
+  } finally { globalThis.fetch = realFetch; globalThis.window = originalWindow; }
 });
 
 test('subjects DTO passes through unchanged (server shape already matches the UI contract)', async () => {
