@@ -7,6 +7,48 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 13, PHASE 06 HISTORY-INTEGRITY AUDIT)
+
+Reconciled first: real HEAD was `111652c` at end (started this session
+at `bc2044c`, T38/Phase 06 already closed) — the prompt's own reference
+checkpoint (T33/e2f8c0e) was stale again; followed git+tests, not the
+stale reference, per this session's own explicit instruction.
+
+Re-audited T34-T38 against 5 hypotheses (A1-A5) and 6 contracts
+(SOURCE_IDENTITY/CONTENT_VERSIONING/DRAFT_PUBLICATION_BOUNDARY/
+PROCESSING_IDEMPOTENCY/EXTRACTION_QUALITY/TRANSITIVE_OWNERSHIP), each
+reinvestigated against real code, not assumed from the audit prompt.
+Found and fixed 5 real gaps across 4 commits:
+
+- **A5** (`4858ee2`): readiness gate couldn't detect a migration missing
+  from disk or never applied — fixed with a git-tracked `manifest.json`.
+- **C4** (`d0dc118`): concurrent PDF extraction calls could let a stale
+  attempt overwrite a newer one — fixed with `extraction_generation`.
+- **A1** (`8b8d389`): citations pointed at mutable `source_pages` — a
+  re-extraction could retroactively change accepted history — fixed
+  with frozen `page_text_snapshot`/`parser_version_snapshot`.
+- **C3+C5** (`111652c`): T38 never built its own spec'd "edit before
+  accept," with no concurrency guard — fixed with `reviseDraft()` +
+  revision-checked `acceptDraft()`; a single bad PDF page could abort
+  extraction of an entire good document, with no per-page quality
+  signal — fixed with per-page try/catch + `source_pages.page_status`.
+
+A2, A3, A4 REFUTED (already correct in current code, verified directly,
+no changes made). C1/C2/C6 PROVEN via the A1 fix plus extensive
+existing T17/T29-T38 test coverage.
+
+Full gate: server 335/335 (was 290 at Phase 06 close), root 259/259
+unchanged, build PASS, test:inventory PASS (58 files), e2e 37/37
+(confirmed clean before the final C3+C5 commit, spot-checked again
+after). See validation.md's "Phase 06 history-integrity audit" row for
+full per-hypothesis/per-contract detail.
+
+NEXT_TASK: T39 ("Build the versioned owned offline agenda snapshot",
+Phase 07 start) — unaffected by this audit, still dependency-ready
+(depends only on T24, closed long ago).
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 12, T38 DONE — PHASE 06 CLOSED)
 
 Continued directly from this session's T37 checkpoint. `git status
