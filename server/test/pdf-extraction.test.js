@@ -140,6 +140,36 @@ test('a user cannot extract or list pages for a source owned by another user', a
   } finally { cleanup(); }
 });
 
+// C4 (audit): a slower, since-superseded extraction attempt finishing
+// after a newer one must never overwrite the newer attempt's result.
+// Two calls started back-to-back (before either awaits its worker) bump
+// generation to 1 then 2 synchronously -- the first call is permanently
+// superseded the instant the second one starts, regardless of which
+// worker message arrives first.
+test('C4: a stale (superseded) extraction attempt never overwrites a newer attempt\'s result, whichever finishes last', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'h@example.com');
+    const source = uploadFixture(db, userId, sourcesDir, ['conteudo estavel entre tentativas']);
+
+    const [first, second] = await Promise.all([
+      extractSource(db, userId, source.id, { sourcesDir }),
+      extractSource(db, userId, source.id, { sourcesDir }),
+    ]);
+
+    assert.equal(first.applied, false, 'the first-started attempt must be superseded once a second one starts');
+    assert.equal(second.applied, true, 'the second (latest-started) attempt must be the one that actually persists');
+
+    const row = db.prepare('SELECT extraction_generation, extraction_status FROM sources WHERE id = ?').get(source.id);
+    assert.equal(row.extraction_generation, 2);
+    assert.equal(row.extraction_status, 'EXTRACTED');
+
+    // Exactly one generation's worth of pages exists — no half-applied mix.
+    const pages = listPages(db, userId, source.id);
+    assert.equal(pages.length, 1);
+  } finally { cleanup(); }
+});
+
 test('extracting a nonexistent source is rejected without creating any page rows', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {

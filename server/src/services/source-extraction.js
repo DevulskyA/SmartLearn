@@ -60,17 +60,36 @@ function runWorker(filePath, { deadlineMs, memoryLimitMb }) {
  * extraction's pages are atomically replaced (never left half-updated) on
  * re-extraction, since this is a derived, recomputable projection, not the
  * historical record.
+ *
+ * C4 (audit): this function `await`s a real worker call, so two concurrent
+ * invocations for the SAME source can genuinely interleave (unlike every
+ * synchronous service in this codebase). `extraction_generation` is bumped
+ * synchronously the instant an attempt starts, fixing this attempt's
+ * identity before the (possibly slow) worker ever runs. When the worker
+ * resolves, the result is only PERSISTED if this attempt's generation is
+ * still the current one -- a slower, since-superseded attempt's result is
+ * still returned to ITS OWN caller (`applied: false`), so nobody is lied
+ * to about what actually happened, but it can never overwrite a newer
+ * attempt's already-written outcome.
  */
 export async function extractSource(db, userId, sourceId, { sourcesDir, deadlineMs = 30_000, memoryLimitMb = 256 }, now = () => new Date()) {
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new SourceExtractionError('NOT_FOUND', 'Fonte não encontrada.');
 
+  const myGeneration = db.transaction(() => {
+    db.prepare('UPDATE sources SET extraction_generation = extraction_generation + 1 WHERE user_id = ? AND id = ?').run(userId, sourceId);
+    return db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId).extraction_generation;
+  })();
+
   const filePath = join(sourcesDir, source.filename);
   const result = await runWorker(filePath, { deadlineMs, memoryLimitMb });
   const nowIso = now().toISOString();
 
-  if (result.status === 'EXTRACTED') {
-    db.transaction(() => {
+  const applied = db.transaction(() => {
+    const current = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
+    if (!current || current.extraction_generation !== myGeneration) return false;
+
+    if (result.status === 'EXTRACTED') {
       db.prepare('DELETE FROM source_pages WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
       const insertPage = db.prepare('INSERT INTO source_pages (user_id, source_id, page_index, text, created_at) VALUES (?, ?, ?, ?, ?)');
       for (const page of result.pages) insertPage.run(userId, sourceId, page.index, page.text, nowIso);
@@ -78,13 +97,14 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
         UPDATE sources SET extraction_status = ?, parser_version = ?, page_count = ?, extracted_at = ?
         WHERE user_id = ? AND id = ?
       `).run('EXTRACTED', result.parserVersion, result.pageCount, nowIso, userId, sourceId);
-    })();
-  } else {
-    db.prepare('UPDATE sources SET extraction_status = ?, extracted_at = ? WHERE user_id = ? AND id = ?')
-      .run(result.status, nowIso, userId, sourceId);
-  }
+    } else {
+      db.prepare('UPDATE sources SET extraction_status = ?, extracted_at = ? WHERE user_id = ? AND id = ?')
+        .run(result.status, nowIso, userId, sourceId);
+    }
+    return true;
+  })();
 
-  return { sourceId, status: result.status, pageCount: result.pageCount ?? null, errorMessage: result.errorMessage ?? null };
+  return { sourceId, status: result.status, pageCount: result.pageCount ?? null, errorMessage: result.errorMessage ?? null, applied };
 }
 
 export function listPages(db, userId, sourceId) {
