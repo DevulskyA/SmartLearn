@@ -7,6 +7,69 @@
 
 ---
 
+## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
+
+```
+CURRENT_HEAD=b0e6d9b
+BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
+CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
+LAST_COMPLETED_TASK=T40
+NEXT_TASK=T41
+NEXT_TASK_STATUS=NOT_STARTED
+WORKTREE_STATUS=CLEAN
+BLOCKERS=none
+
+RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b)
+RECENT_COMMITS=
+  b0e6d9b feat(t40): PWA shell and private cache lifecycle
+  eabea37 feat(t40-prep): T39 versioned owned offline agenda snapshot — Phase 07 begins
+  ea74bc3 docs: record Phase 06 history-integrity audit disposition
+
+SERVER_GATE=340/340
+ROOT_GATE=259/259
+E2E_GATE=40/40 (real browser + real spawned server + genuine Playwright network-offline emulation, not mocked)
+TEST_INVENTORY=60 test files (PASS via scripts/check-test-inventory.mjs)
+
+PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
+PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 NOT_STARTED)
+```
+
+### PHASE 06 audit result — proven; do NOT re-audit without new concrete regression evidence
+
+```
+A1=CONFIRMED_FIXED (8b8d389)
+A2=REFUTED
+A3=REFUTED
+A4=REFUTED
+A5=CONFIRMED_FIXED (4858ee2)
+
+SOURCE_IDENTITY=PROVEN
+CONTENT_VERSIONING=PROVEN
+DRAFT_PUBLICATION_BOUNDARY=PROVEN
+PROCESSING_IDEMPOTENCY=PROVEN
+EXTRACTION_QUALITY=PROVEN
+TRANSITIVE_OWNERSHIP=PROVEN
+
+CONFIRMED_P0_P1_OPEN=0
+```
+
+### Invariants a new session must not lose (index only — design.md/heritage.md/acceptance.md remain the source of truth)
+
+- Central server is the sole authority for owned domain data (T20-T24); no client ever wins a conflict over it.
+- Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (next, NOT_STARTED) closes every mutation entrypoint offline.
+- No authoritative offline write queue/outbox exists or is planned for V1 — a failed offline mutation attempt fails visibly; it is never queued for later replay or shown as a fake success.
+- `review_tasks` = scheduling projection (recalculable), NEVER the historical record of what happened.
+- `learning_evidence`/`learning_events` = historical facts; corrections append (kind='CORRECTION'), never overwrite.
+- 16 fixed reviews per unit (D+1...D+390) stays fixed/non-configurable for V1.
+- AI-generated content stays `status='DRAFT'` until explicit human acceptance (`accept-draft.js`) — nothing in the real learning domain exists before that.
+- Historical provenance (source → extraction → proposal → draft → accepted exercise/citation) must stay reconstructible — the Phase 06 audit's A1 fix specifically froze citation snapshots against exactly this regression class.
+- Ownership is server-side and transitive via composite `(user_id, id)` FKs — a cross-user reference is a database-level impossibility, not just an app-layer check.
+- NO_DATA_LOSS is a standing constraint on every migration/import path (T25-T28).
+- House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
+- Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 14, T40 DONE)
 
 Continued directly from this same session's T39 checkpoint (no restart).
