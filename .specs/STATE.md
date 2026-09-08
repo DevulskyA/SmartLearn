@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=<set at commit, see final checkpoint below>
+CURRENT_HEAD=bc10040
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
 LAST_COMPLETED_TASK=T41
@@ -19,8 +19,13 @@ NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b), T41 (see final checkpoint below)
-RECENT_COMMITS=see final checkpoint below
+RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b), T41 (bc10040)
+RECENT_COMMITS=
+  bc10040 feat(t41): enforce offline read-only actions visibly and technically
+  4a775ee docs(governance): adopt SmartLearn Quality Standard V1 as canonical inherited contract
+  33798c9 docs(state): add compact machine-scannable checkpoint block for context handoff
+  b0e6d9b feat(t40): PWA shell and private cache lifecycle
+  eabea37 feat(t40-prep): T39 versioned owned offline agenda snapshot — Phase 07 begins
 
 SERVER_GATE=340/340
 ROOT_GATE=265/265
