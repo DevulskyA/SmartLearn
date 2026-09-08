@@ -1,0 +1,82 @@
+[
+  {
+    "version": 1,
+    "name": "bootstrap",
+    "checksum": "0f7d7eb8b7352a7b7474b83f8a06b42037d0d9615331347e2cf5aa65ac6472dd"
+  },
+  {
+    "version": 2,
+    "name": "identity",
+    "checksum": "b75183c6af2f21b9ca2fc501f17576b0dd8886d63a427846358195db09ca3533"
+  },
+  {
+    "version": 3,
+    "name": "session-csrf",
+    "checksum": "69480560e560e7682d53e553f79bed5f7fa39cf02087feed97b69c9c3080270d"
+  },
+  {
+    "version": 4,
+    "name": "learning-domain",
+    "checksum": "783d92c2ef128080bd60f18647bef3d9d316471898348d66ec5fa0cf394725f7"
+  },
+  {
+    "version": 5,
+    "name": "operation-idempotency",
+    "checksum": "474abf2fa8111d99ded49840bfe9a2b3091cdee82432b73f73250f2987f55f0d"
+  },
+  {
+    "version": 6,
+    "name": "exercise-archive",
+    "checksum": "09b2f6ce4d6ed661ad1cac7eaf7c53f1a03e59bcadc6dac6c70b586537436597"
+  },
+  {
+    "version": 7,
+    "name": "import-previews",
+    "checksum": "b2d725ec35cb73762b3bf333c664c527f39bde01ffc7ab0006a72cc36ab7bf23"
+  },
+  {
+    "version": 8,
+    "name": "import-commit",
+    "checksum": "86469c65825da786acd92cb70fa227d6d713ccc03b99734e9ef4846727d37957"
+  },
+  {
+    "version": 9,
+    "name": "learning-events",
+    "checksum": "43d0a30e0f60d0b5bfee757f5971399654ab1ea61668d848a2a517465e574558"
+  },
+  {
+    "version": 10,
+    "name": "attempt-review-link",
+    "checksum": "b05a3c207f4f9a8959ce92c5acb850cfbde8fccb24c460de20972460a1cc1803"
+  },
+  {
+    "version": 11,
+    "name": "event-confidence",
+    "checksum": "8b5d8196f14aebae80d60d4d61a7f0954b5cd81e31de2ef17e33b23ea2fb642b"
+  },
+  {
+    "version": 12,
+    "name": "sources",
+    "checksum": "bbd35e97aadfd27b079d803a9d9ec2cea9b049d738c453ed8e1143e2344ca6c5"
+  },
+  {
+    "version": 13,
+    "name": "source-extraction",
+    "checksum": "c870ea9e22bf37ff8d8668efc8cc9ff157e6c14cf28acabbd9684ba2565a5e38"
+  },
+  {
+    "version": 14,
+    "name": "content-proposals",
+    "checksum": "509091316508d4d0228d4d30cbd712092647c170a83b3cf3b35605ff7fa9f29d"
+  },
+  {
+    "version": 15,
+    "name": "generated-drafts",
+    "checksum": "6e6e0d115ed21453de29928797abb7d7ab68e449ed466150b0ff3f50f2421411"
+  },
+  {
+    "version": 16,
+    "name": "draft-acceptance",
+    "checksum": "8f6535a3dcb9a16ccfec39cce1103c0efa3d8ebbd9a3cf1b75c697122c17f777"
+  }
+]
