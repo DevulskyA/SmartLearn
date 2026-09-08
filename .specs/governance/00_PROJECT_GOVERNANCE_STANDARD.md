@@ -15,6 +15,37 @@ The governing principle is evidence reconstruction:
 - Impact analysis predicts blast radius before legacy code is changed.
 - Verification attempts to disprove completion before declaring PASS.
 
+## Quality Standard (SmartLearn)
+
+For this project, `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` is a canonical, inherited layer above every phase contract and task acceptance criterion — see that file's own "Status and inheritance" section for the exact hierarchy and the rule that task-local requirements may only add to it, never silently weaken it.
+
+Session preflight, every task:
+
+```text
+BOOTSTRAP
+   ↓
+QUALITY STANDARD loaded  (.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md)
+   ↓
+STATE reconciled  (.specs/STATE.md against Git)
+   ↓
+task + acceptance criteria loaded
+   ↓
+relevant design loaded
+   ↓
+execution
+```
+
+Task closure, every task:
+
+```text
+TASK ACCEPTANCE CRITERIA PROVEN
+   + REGRESSION GATES GREEN
+   + QUALITY STANDARD's materially applicable dimensions satisfied
+   = TASK DONE
+```
+
+Apply only the dimensions materially relevant to the change (see the Quality Standard file's own worked examples); no materially relevant dimension may be skipped.
+
 ## Mandatory change lifecycle
 
 Every modification to existing behavior follows this sequence:
@@ -206,7 +237,8 @@ A feature cannot be PASS when any of these are true:
 - a surviving discrimination mutation exists;
 - a SPEC_DEVIATION is unresolved;
 - validation evidence is “worked visually” without the required environment;
-- STATE claims a result contradicted by Git/worktree/tests.
+- STATE claims a result contradicted by Git/worktree/tests;
+- a materially applicable dimension of `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` is left unsatisfied.
 
 ## State update
 

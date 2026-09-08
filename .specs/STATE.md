@@ -32,6 +32,11 @@ TEST_INVENTORY=60 test files (PASS via scripts/check-test-inventory.mjs)
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
 PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 NOT_STARTED)
+
+QUALITY_STANDARD_ID=SMARTLEARN_QUALITY_V1
+QUALITY_STANDARD_VERSION=1.0.0
+QUALITY_STANDARD_PATH=.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md
+QUALITY_STANDARD_STATUS=CANONICAL
 ```
 
 ### PHASE 06 audit result — proven; do NOT re-audit without new concrete regression evidence
