@@ -569,14 +569,14 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Difficulty / risk:** 4/5 / 5/5.
 **Depends on:** T39, T21.
 **Requirement:** V1-19. **Acceptance:** AC-22, AC-23.
-**Where:** public/manifest.webmanifest; src/service-worker.js; src/offline-store.js; e2e/offline.spec.js.
+**Where:** public/manifest.webmanifest; public/service-worker.js (moved from the plan's suggested src/service-worker.js — a service worker's registration scope can never exceed its own directory without a `Service-Worker-Allowed` header, so living in public/ gives it root scope in both dev and a real build with zero extra server config; see validation.md); src/offline-store.js; e2e/offline.spec.js.
 **What / implementation:** Cache versioned static assets and an explicit owned snapshot store. Add navigation fallback, controlled update activation and cache migration. Scope cache by trusted origin/account; logout/switch purges private data. Never cache mutation responses or authentication material generically.
 **Tests and discriminating evidence:** Cold offline reopen after prior sync displays the app/agenda; corrupt or partial new cache does not replace good old snapshot; user B never sees A after switch.
 **Recovery / rollback:** Keep last valid static/data generation until successful activation; do not erase legacy source data.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Browser offline/restart/update/account-switch E2E, stale generation tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Browser offline/restart/update/account-switch E2E, stale generation tests.
 
 ### T41: Enforce offline read-only actions visibly and technically
 **Difficulty / risk:** 3/5 / 4/5.

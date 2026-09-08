@@ -19,6 +19,7 @@ import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
+import * as OfflineStore from "./offline-store.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -75,7 +76,22 @@ const dbInit = DB.init()
     databaseAvailable = true;
     if (REMOTE_MODE) {
       const user = await AuthUI.bootstrap();
-      authenticated = !!user;
+      // T40: best-effort — a registration/sync failure here never blocks
+      // boot, same "failure only logs" contract as T30's client wiring.
+      OfflineStore.registerServiceWorker().catch(() => {});
+      if (user) {
+        authenticated = true;
+        OfflineStore.syncSnapshot(user.id).catch(() => {});
+      } else if (AuthUI.wasLastBootstrapNetworkError() && OfflineStore.getLastAccountId()) {
+        // Cold offline reopen: the server can't confirm a session, but a
+        // previously-synced account exists on this device — presume it for
+        // read-only offline display. The server remains the sole real
+        // session authority the moment it's reachable again; nothing here
+        // grants any write capability (T41's job to keep it that way).
+        authenticated = true;
+      } else {
+        authenticated = false;
+      }
     }
     return true;
   })
@@ -666,7 +682,72 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   return row;
 }
 
+// T40: read-only fallback for "cold offline reopen after prior sync
+// displays the app/agenda". Deliberately renders plain text rows, not
+// createReviewRow's interactive complete/reveal actions — those require a
+// live server round-trip that offline-by-definition cannot make (T41
+// disables mutation UI explicitly; this predates that, so it just never
+// offers the action at all rather than offering one that would silently
+// fail). Only overdue/today buckets are shown: T39's snapshot excludes
+// already-completed tasks, so "done today" has no offline equivalent.
+async function renderOfflineToday(accountId) {
+  const snapshot = await OfflineStore.loadSnapshot(accountId);
+  const today = getLocalDateValue();
+
+  let banner = document.querySelector("#offline-banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "offline-banner";
+    banner.setAttribute("role", "status");
+    banner.style.cssText = "position:sticky;top:0;z-index:100;background:#92400e;color:#fff;padding:.5rem 1rem;font-size:.8125rem;text-align:center;";
+    mainContent?.prepend(banner);
+  }
+  banner.hidden = false;
+  banner.textContent = snapshot
+    ? `Modo offline — última sincronização: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(snapshot.syncedAt))}.`
+    : "Modo offline — nenhuma agenda sincronizada anteriormente.";
+
+  const overdue = (snapshot?.items ?? []).filter((i) => i.dueDate < today);
+  const dueToday = (snapshot?.items ?? []).filter((i) => i.dueDate === today);
+  const groups = { overdue, today: dueToday, doneToday: [] };
+
+  for (const [groupName, tasks] of Object.entries(groups)) {
+    const block = reviewGroups[groupName];
+    const list = block.querySelector(`[data-review-list="${groupName}"]`);
+    const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    list.replaceChildren();
+    count.textContent = String(tasks.length);
+    block.hidden = tasks.length === 0;
+    for (const item of tasks) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+  }
+
+  todayEmptyState.hidden = true;
+  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0);
+  todayTomorrow.hidden = true;
+  if (todayLoadSummary) {
+    const parts = [];
+    if (overdue.length > 0) parts.push(`${overdue.length} vencida${overdue.length !== 1 ? "s" : ""}`);
+    if (dueToday.length > 0) parts.push(`${dueToday.length} hoje`);
+    todayLoadSummary.hidden = parts.length === 0;
+    todayLoadSummary.textContent = parts.join(" · ");
+  }
+  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+}
+
 export async function renderToday() {
+  const existingOfflineBanner = document.querySelector("#offline-banner");
+  if (REMOTE_MODE && !navigator.onLine) {
+    const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+    return renderOfflineToday(accountId);
+  }
+  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
+
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
   const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
@@ -4073,7 +4154,11 @@ accountLoginForm?.addEventListener("submit", async (event) => {
   // Stays on Conta (matches the existing T11 login UX: "Conectado como X")
   // rather than auto-navigating — only the auth-gate state changes, so a
   // manual click on any data screen now works instead of bouncing back here.
-  if (REMOTE_MODE) authenticated = true;
+  if (REMOTE_MODE) {
+    authenticated = true;
+    const user = AuthUI.getCurrentUser();
+    if (user) OfflineStore.syncSnapshot(user.id).catch(() => {});
+  }
 });
 
 accountRegisterForm?.addEventListener("submit", async (event) => {
@@ -4108,7 +4193,12 @@ accountPasswordForm?.addEventListener("submit", async (event) => {
 
 accountLogoutBtn?.addEventListener("click", async () => {
   await AuthUI.logout();
-  if (REMOTE_MODE) authenticated = false;
+  if (REMOTE_MODE) {
+    authenticated = false;
+    // AC-23: the next account to log in on this device must never be able
+    // to read this account's cached agenda snapshot.
+    await OfflineStore.purgeAllAccounts();
+  }
   await renderAccount();
 });
 

@@ -12,6 +12,15 @@ const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE_
 
 let csrfToken = null;
 let currentUser = null;
+let lastBootstrapWasNetworkError = false;
+
+/** T40: true only after the MOST RECENT bootstrap() call failed because
+ * the server was unreachable (offline), as opposed to a confirmed "no
+ * session" response. Lets a cold offline reopen tell "not logged in" apart
+ * from "unknown — presume the last session on this device, read-only". */
+export function wasLastBootstrapNetworkError() {
+  return lastBootstrapWasNetworkError;
+}
 
 function errorMessage(code) {
   return t(`auth.error.${code}`) === `auth.error.${code}` ? t('auth.error.generic') : t(`auth.error.${code}`);
@@ -21,12 +30,22 @@ async function apiFetch(path, { method = 'GET', body, csrf = false } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (csrf && csrfToken) headers['X-CSRF-Token'] = csrfToken;
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    credentials: 'include', // send/receive the HttpOnly session cookie
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      credentials: 'include', // send/receive the HttpOnly session cookie
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // T40: offline/unreachable server is a DISTINCT outcome from "the
+    // server said no" (same NetworkError-vs-ApiError split api-client.js
+    // already makes) — never throws here, so a cold offline reopen's
+    // bootstrap() call can fail closed to "unknown session" instead of
+    // crashing app.js's whole init chain into its fatal-error banner.
+    return { ok: false, status: 0, body: null, networkError: true };
+  }
   const json = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, body: json };
 }
@@ -37,6 +56,7 @@ export function getCurrentUser() {
 
 export async function bootstrap() {
   const res = await apiFetch('/v1/auth/me');
+  lastBootstrapWasNetworkError = !!res.networkError;
   if (res.ok) {
     currentUser = res.body.user;
     csrfToken = res.body.csrfToken;

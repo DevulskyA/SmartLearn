@@ -7,6 +7,83 @@
 
 ---
 
+## CHECKPOINT — 2026-09-07 (session 14, T40 DONE)
+
+Continued directly from this same session's T39 checkpoint (no restart).
+`git status --short` empty before starting, tasks.md T39 all `[x]`/T40
+all `[ ]` confirmed.
+
+T40 ("Implement PWA shell and private cache lifecycle") DONE. Deviated
+from the plan's literal `Where` on purpose: the service worker lives
+at `public/service-worker.js`, not `src/service-worker.js` — SW
+registration scope can't exceed its own directory without a
+`Service-Worker-Allowed` header, and `public/` gets root scope for
+free in both dev and a real build (verified against a REAL `vite
+build` via `production-build.spec.js`, still 1/1). Static caching is
+runtime/opportunistic (network-first, cache on success, serve from
+cache on failure) rather than a fixed precache list — Vite dev serves
+an unbundled ES module graph, one request per `import`, so a hardcoded
+manifest would miss most of the app. `/v1/*`/`/health/*` are
+structurally excluded from the fetch handler — no API response is ever
+in Cache Storage. Cache migration: `SHELL_CACHE_VERSION` bump +
+`activate`-time deletion of every other `smartlearn-shell-*` cache.
+Update activation is client-driven (`offline-store.js` posts
+SKIP_WAITING only after seeing a real waiting worker, then reloads
+once on `controllerchange`) — the SW itself never self-activates over
+an open tab.
+
+`src/offline-store.js`'s data half: `syncSnapshot()` pages through
+T39's endpoint fully before ever writing IndexedDB; a 409
+REVISION_CHANGED restarts up to 3x; exhausting retries/an unrecognized
+schemaVersion/any error leaves the prior good snapshot untouched
+(proven directly: forcing every page to 409 via a real Playwright
+route intercept leaves `dataRevision` byte-identical). `purgeAllAccounts()`
+clears the WHOLE store plus a `localStorage` last-account-id pointer,
+not just the current row (AC-23, defense in depth beyond per-account
+keying).
+
+Found and fixed a real, previously-undiscovered gap while building
+this: `AuthUI.bootstrap()`'s `apiFetch` let a network-failure `fetch()`
+rejection propagate unhandled — this would have crashed `app.js`'s
+whole `dbInit` chain into its fatal "cannot connect" banner on EVERY
+cold offline reopen, before this task's own code could run at all.
+Fixed in `src/auth-ui.js` (catch + `{ok:false, networkError:true}`) +
+a new `wasLastBootstrapNetworkError()`; `app.js`'s `dbInit` now
+presumes "same device, same account, offline, read-only" using that
+flag plus `OfflineStore.getLastAccountId()`, rather than bouncing to
+login — grants no write capability, server stays sole real authority.
+`renderToday()` branches to a new read-only `renderOfflineToday()`
+when `REMOTE_MODE && !navigator.onLine`, bucketing the cached
+snapshot's raw `dueDate`s against the device's own current date.
+
+`e2e/offline.spec.js` (3/3, new — real spawned server + real browser +
+genuine Playwright network-offline emulation, not mocked fetch): cold
+offline reopen after an online resync shows the real shell + cached
+agenda; a forced-409-exhausted sync leaves the prior good revision
+unchanged; a second account sees zero of the first's rows after a
+real logout->register->login switch, even offline.
+
+Full gate: server 340/340 unchanged (client-only task), root 259/259
+unchanged, build PASS (real `vite build`, not just dev-server), full
+`npx playwright test` 40/40 (37 pre-existing + 3 new, zero
+regressions), test:inventory PASS (60 files, was 59, +1). Rust not
+re-run — untouched, last recorded 13/13 stands.
+
+T40's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's
+T40 row for full detail, including the scope-deviation reasoning.
+
+NEXT_TASK: T41 ("Enforce offline read-only actions visibly and
+technically", depends on T40 — check tasks.md for its exact dependency
+list and Where before starting). T39/T40 already built the read path;
+T41's job is making every MUTATION path fail closed and visibly when
+offline (not just "the fetch happens to reject"), completing the
+read-only-offline contract this checkpoint's `renderOfflineToday()`
+already assumes (it renders zero interactive actions, but nothing yet
+stops a stale cached screen's leftover online-mode controls from being
+clicked while offline).
+
+---
+
 ## CHECKPOINT — 2026-09-07 (session 14, T39 DONE)
 
 Reconciled first: worktree `claude/smartlearn-v1-complete` HEAD `ea74bc3`
