@@ -71,7 +71,9 @@ test('accepting a draft creates exactly one subject/unit/16 reviews/N exercises 
     assert.ok(versions.every((v) => v.provenance === 'AI_GENERATED'));
 
     // Citations remain resolvable: every cited page actually has real
-    // extracted text in source_pages.
+    // extracted text in source_pages, and the citation's own frozen
+    // snapshot matches it at acceptance time (A1: the snapshot is what
+    // survives a LATER re-extraction, proven in the dedicated test below).
     for (const version of versions) {
       const citations = db.prepare('SELECT * FROM exercise_source_citations WHERE user_id = ? AND exercise_version_id = ?').all(userId, version.id);
       assert.ok(citations.length > 0);
@@ -80,12 +82,45 @@ test('accepting a draft creates exactly one subject/unit/16 reviews/N exercises 
         const page = db.prepare('SELECT text FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index = ?').get(userId, citation.source_id, citation.page_index);
         assert.ok(page, 'a citation must resolve to a real source_pages row');
         assert.ok(page.text.length > 0);
+        assert.equal(citation.page_text_snapshot, page.text);
+        assert.ok(citation.parser_version_snapshot);
       }
     }
 
     const draftRow = db.prepare('SELECT status, accepted_unit_id FROM generated_drafts WHERE id = ?').get(draft.id);
     assert.equal(draftRow.status, 'ACCEPTED');
     assert.equal(draftRow.accepted_unit_id, result.unit.id);
+  } finally { cleanup(); }
+});
+
+test('A1: a historical citation stays reconstructible after the source is re-extracted with different content', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'a2@example.com');
+    const { source, draft } = await makeDraft(db, userId, sourcesDir, ['Texto original da página um']);
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia A1', studyDate: '2026-03-01' });
+
+    const [version] = db.prepare(`
+      SELECT ev.* FROM exercise_versions ev
+      JOIN exercises e ON e.user_id = ev.user_id AND e.id = ev.exercise_id
+      WHERE ev.user_id = ? AND e.unit_id = ?
+    `).all(userId, result.unit.id);
+    const [citation] = db.prepare('SELECT * FROM exercise_source_citations WHERE user_id = ? AND exercise_version_id = ?').all(userId, version.id);
+    assert.equal(citation.page_text_snapshot, 'Texto original da página um');
+
+    // Simulate a later re-extraction that produces DIFFERENT text for the
+    // exact same (source_id, page_index) -- e.g. a parser upgrade, or a
+    // fix for a bad first pass. This is exactly what
+    // source-extraction.js's DELETE+INSERT re-extraction does for real.
+    db.prepare('UPDATE source_pages SET text = ? WHERE user_id = ? AND source_id = ? AND page_index = ?')
+      .run('Texto COMPLETAMENTE DIFERENTE após reextração', userId, source.id, citation.page_index);
+
+    const citationAfter = db.prepare('SELECT page_text_snapshot FROM exercise_source_citations WHERE id = ?').get(citation.id);
+    assert.equal(
+      citationAfter.page_text_snapshot,
+      'Texto original da página um',
+      'a historical citation must keep pointing to what was actually shown, immune to a later re-extraction of the same page',
+    );
   } finally { cleanup(); }
 });
 

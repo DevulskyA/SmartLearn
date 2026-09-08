@@ -62,6 +62,16 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
 
   const draftContent = JSON.parse(draftRow.draft_json);
 
+  // A1 (audit): source_pages is a mutable, recomputable projection
+  // (re-extraction replaces it wholesale) — a citation is about to become
+  // part of accepted history and must freeze what it actually cites RIGHT
+  // NOW, independent of anything that might happen to source_pages later.
+  const sourceRow = db.prepare('SELECT parser_version FROM sources WHERE user_id = ? AND id = ?').get(userId, proposal.source_id);
+  const pageTextByIndex = new Map(
+    db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ?').all(userId, proposal.source_id)
+      .map((row) => [row.page_index, row.text]),
+  );
+
   const run = db.transaction(() => {
     let subject;
     try {
@@ -87,15 +97,18 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
       VALUES (?, ?, ?, ?, ?, 'AI_GENERATED', ?)
     `);
     const insertCitation = db.prepare(`
-      INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at, page_text_snapshot, parser_version_snapshot)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     draftContent.questions.forEach((question, index) => {
       const exerciseResult = insertExercise.run(userId, unit.id, index, nowIso, nowIso);
       const versionResult = insertVersion.run(userId, exerciseResult.lastInsertRowid, question.question, question.answer, question.hint ?? null, nowIso);
       for (const span of question.sourceSpans) {
-        insertCitation.run(userId, versionResult.lastInsertRowid, proposal.source_id, span.pageIndex, nowIso);
+        insertCitation.run(
+          userId, versionResult.lastInsertRowid, proposal.source_id, span.pageIndex, nowIso,
+          pageTextByIndex.get(span.pageIndex) ?? null, sourceRow?.parser_version ?? null,
+        );
       }
     });
 

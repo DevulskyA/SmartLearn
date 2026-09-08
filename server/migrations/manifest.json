@@ -83,5 +83,10 @@
     "version": 17,
     "name": "extraction-generation",
     "checksum": "c0d444db2b96c709726d90bc4eb213a8c9bd8dc56491f06c5a38df645fd02317"
+  },
+  {
+    "version": 18,
+    "name": "citation-snapshot",
+    "checksum": "0db65c48be79ddef584845990a1d2d74cc3f3a89dd636bded6d56cc6a3d019a3"
   }
 ]
