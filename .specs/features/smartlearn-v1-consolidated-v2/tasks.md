@@ -561,9 +561,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Snapshot includes future tasks beyond today; concurrent changes cannot create a mixed incomplete generation; wrong-user access fails; last sync time reflects receipt of a valid generation.
 **Recovery / rollback:** Snapshots are derived; retain last valid generation on fetch/validation failure.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Snapshot consistency/ownership/size tests.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Snapshot consistency/ownership/size tests.
 
 ### T40: Implement PWA shell and private cache lifecycle
 **Difficulty / risk:** 4/5 / 5/5.
