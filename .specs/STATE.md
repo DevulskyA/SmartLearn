@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=(this commit — see git log for the exact SHA; a docs-only follow-up fills this line in, same precedent as T41's)
+CURRENT_HEAD=5990ea4
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
 LAST_COMPLETED_TASK=T42
@@ -19,9 +19,9 @@ NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T40 (b0e6d9b), T41 (bc10040), T42 (this commit)
+RECENT_COMPLETED_TASKS=T40 (b0e6d9b), T41 (bc10040), T42 (5990ea4)
 RECENT_COMMITS=
-  (this commit) feat(t42): Windows wrapper — trusted-origin window, capability lockdown, AC-24 navigator.onLine fix
+  5990ea4 feat(t42): Windows wrapper on trusted origin, capability lockdown, AC-24 native-UAT fix
   bc10040 feat(t41): enforce offline read-only actions visibly and technically
   4a775ee docs(governance): adopt SmartLearn Quality Standard V1 as canonical inherited contract
   33798c9 docs(state): add compact machine-scannable checkpoint block for context handoff
