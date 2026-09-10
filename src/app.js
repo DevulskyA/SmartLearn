@@ -751,19 +751,37 @@ export async function renderToday() {
     const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
     return renderOfflineToday(accountId);
   }
-  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
 
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
-    await Promise.all([
-      DB.reviewTasks.getForToday(today),
-      DB.reviewTasks.getOverdue(today),
-      DB.reviewTasks.getCompletedToday(today),
-      DB.reviewTasks.getTomorrow(tomorrow),
-      DB.learningUnits.getAll(),
-      DB.subjects.getAll(),
-    ]);
+  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects;
+  try {
+    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
+      await Promise.all([
+        DB.reviewTasks.getForToday(today),
+        DB.reviewTasks.getOverdue(today),
+        DB.reviewTasks.getCompletedToday(today),
+        DB.reviewTasks.getTomorrow(tomorrow),
+        DB.learningUnits.getAll(),
+        DB.subjects.getAll(),
+      ]);
+  } catch (error) {
+    // T42 fix (AC-24): navigator.onLine only reflects the OS network
+    // adapter's link state, not whether the SmartLearn server itself is
+    // reachable — a dead/restarting/firewalled server with Wi-Fi otherwise
+    // up never flips navigator.onLine, so the check above alone can't catch
+    // it. A NetworkError here means fetch() itself never got a response
+    // (api-client.js's own distinction) — route it through the same
+    // read-only snapshot path as a known-offline cold start. Any other
+    // error (a real HTTP response, auth, etc.) is a different failure and
+    // must keep propagating, not get silently reinterpreted as "offline".
+    if (REMOTE_MODE && error instanceof NetworkError) {
+      const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+      return renderOfflineToday(accountId);
+    }
+    throw error;
+  }
+  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
@@ -2018,11 +2036,11 @@ function hasTauriRuntime() {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
 }
 
-// Salva o JSON em disco. No runtime Tauri (desktop/Android) usa o diálogo
-// nativo + fs; o WebView do Android ignora <a download>, então o caminho
-// nativo é obrigatório lá. No navegador (modo dev) cai no <a download>.
+// Salva o JSON em disco. O wrapper remoto não recebe diálogo/FS nativos:
+// nele, exportar permanece um download do próprio WebView. O caminho nativo
+// fica restrito ao legado local, onde as permissões correspondentes existem.
 async function saveBackupFile(filename, contents) {
-  if (hasTauriRuntime()) {
+  if (hasTauriRuntime() && !REMOTE_MODE) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({

@@ -600,9 +600,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Web and Windows share owned server state; remote content has no arbitrary SQL/filesystem/shell access; offline cold start shows last valid snapshot; precise build SHA and runtime evidence recorded.
 **Recovery / rollback:** Preserve installed user data/export option; release/cutover remains authorized separately.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Rust tests/build, capability security checks and real Windows runtime UAT in isolated app data.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Rust tests/build, capability security checks and real Windows runtime UAT in isolated app data.
 
 ### T43: Deliver the Android wrapper without a second product UI
 **Difficulty / risk:** 4/5 / 5/5.

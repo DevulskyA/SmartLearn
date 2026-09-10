@@ -2,7 +2,32 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{sqlite::SqliteConnectOptions, Connection, Executor, SqliteConnection};
 use std::path::Path;
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+const DEV_APP_ORIGIN: &str = "http://127.0.0.1:3000";
+
+fn configured_app_url(origin: Option<&str>) -> Result<tauri::Url, String> {
+    let raw_origin = origin
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(DEV_APP_ORIGIN);
+    let parsed: tauri::Url = raw_origin
+        .parse()
+        .map_err(|error| format!("SMARTLEARN_APP_ORIGIN is not a valid URL: {error}"))?;
+    let is_loopback = matches!(parsed.host_str(), Some("localhost") | Some("127.0.0.1") | Some("::1"));
+    let is_permitted_scheme = parsed.scheme() == "https" || (parsed.scheme() == "http" && is_loopback);
+
+    if !is_permitted_scheme
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+    {
+        return Err("SMARTLEARN_APP_ORIGIN must be an HTTPS origin without credentials, path, query, or fragment (HTTP is allowed only for loopback)".to_string());
+    }
+
+    Ok(parsed)
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +110,16 @@ async fn execute_sqlite_transaction(
     execute_sqlite_transaction_at_path(&database_path, statements).await
 }
 
+// T42: the plugins/command below (tauri-plugin-sql/dialog/fs,
+// execute_sqlite_transaction) are the OLD local-first architecture's data
+// broker — still registered so their own proven Rust test suite above stays
+// intact (nothing here was ever proven wrong; deleting it is a separate,
+// larger, explicitly-authorized decision, not this task's). They are
+// UNREACHABLE from the window this app actually opens: capabilities/
+// default.json grants only `core:default` — Tauri v2 denies any IPC call
+// a capability file doesn't explicitly list, independent of what's
+// registered here. design.md §9: "Remote content receives no generic SQL,
+// shell or filesystem capability."
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -100,6 +135,22 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // T42: the wrapper loads one configured trusted application
+            // origin. It is only native chrome around the server-backed web
+            // app; no bundled local-authority fallback is claimed until an
+            // actual native cold-start test proves one is needed.
+            let app_url = configured_app_url(
+                std::env::var("SMARTLEARN_APP_ORIGIN").ok().as_deref(),
+            )?;
+
+            WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
+                .title("SmartLearn")
+                .inner_size(800.0, 600.0)
+                .resizable(true)
+                .initialization_script("window.__SMARTLEARN_REMOTE_MODE__ = true;")
+                .build()?;
+
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -108,7 +159,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{execute_sqlite_transaction_at_path, TransactionStatement};
+    use super::{configured_app_url, execute_sqlite_transaction_at_path, TransactionStatement};
     use serde_json::json;
     use sqlx::{Connection, Row, SqliteConnection};
     use std::{
@@ -144,6 +195,31 @@ mod tests {
 
     fn run_async<T>(future: impl std::future::Future<Output = T>) -> T {
         tauri::async_runtime::block_on(future)
+    }
+
+    #[test]
+    fn configured_app_url_accepts_https_and_loopback_only() {
+        assert_eq!(
+            configured_app_url(Some("https://app.smartlearn.example/"))
+                .expect("HTTPS origin should be accepted")
+                .as_str(),
+            "https://app.smartlearn.example/"
+        );
+        assert!(configured_app_url(Some("http://127.0.0.1:3000/")).is_ok());
+        assert!(configured_app_url(Some("http://example.test/")).is_err());
+    }
+
+    #[test]
+    fn configured_app_url_rejects_untrusted_url_parts() {
+        for origin in [
+            "https://user:password@app.smartlearn.example/",
+            "https://app.smartlearn.example/path",
+            "https://app.smartlearn.example/?query=value",
+            "https://app.smartlearn.example/#fragment",
+            "file:///C:/sensitive.html",
+        ] {
+            assert!(configured_app_url(Some(origin)).is_err(), "{origin} must be rejected");
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 > Full history: `.specs/project/STATE.md` + git log. This file = current snapshot only.
 
-**Date:** 2026-09-05
+**Date:** 2026-09-10
 **Governance:** TLC Strict + ECC Engineering (all sessions)
 
 ---
@@ -10,30 +10,33 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=bc10040
+CURRENT_HEAD=(this commit — see git log for the exact SHA; a docs-only follow-up fills this line in, same precedent as T41's)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=T41
-NEXT_TASK=T42
+LAST_COMPLETED_TASK=T42
+NEXT_TASK=T43
 NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T39 (eabea37), T40 (b0e6d9b), T41 (bc10040)
+RECENT_COMPLETED_TASKS=T40 (b0e6d9b), T41 (bc10040), T42 (this commit)
 RECENT_COMMITS=
+  (this commit) feat(t42): Windows wrapper — trusted-origin window, capability lockdown, AC-24 navigator.onLine fix
   bc10040 feat(t41): enforce offline read-only actions visibly and technically
   4a775ee docs(governance): adopt SmartLearn Quality Standard V1 as canonical inherited contract
   33798c9 docs(state): add compact machine-scannable checkpoint block for context handoff
   b0e6d9b feat(t40): PWA shell and private cache lifecycle
-  eabea37 feat(t40-prep): T39 versioned owned offline agenda snapshot — Phase 07 begins
 
-SERVER_GATE=340/340
-ROOT_GATE=265/265
-E2E_GATE=42/42 (real browser + real spawned server + genuine Playwright network-offline emulation, not mocked)
-TEST_INVENTORY=61 test files (PASS via scripts/check-test-inventory.mjs)
+SERVER_GATE=340/340 (last proven at T42; T42 does not change server code)
+ROOT_GATE=267/267
+E2E_GATE=43/43 (was 42, +1: AC-24 discriminating regression — dead API server, navigator.onLine left true, never inferred from setOffline)
+TEST_INVENTORY=62 test files (PASS via scripts/check-test-inventory.mjs)
+RUST_GATE=15/15
+WINDOWS_BUILD=PASS (release exe + MSI + NSIS rebuilt from this clean T42 candidate)
+T42_NATIVE_UAT=PASS — real per-user NSIS install (Start Menu/registry-registered, no UAC), online login+sync verified, then only the SmartLearn server process killed (Windows network/Wi-Fi left up) and the installed app reopened: offline banner + real cached snapshot shown, no white screen, no connection-refused dialog. Verified against a from-scratch WebView2 profile (EBWebView cache wiped) to rule out a stale cached shell.
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
-PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 NOT_STARTED)
+PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 DONE)
 
 QUALITY_STANDARD_ID=SMARTLEARN_QUALITY_V1
 QUALITY_STANDARD_VERSION=1.0.0
@@ -63,7 +66,7 @@ CONFIRMED_P0_P1_OPEN=0
 ### Invariants a new session must not lose (index only — design.md/heritage.md/acceptance.md remain the source of truth)
 
 - Central server is the sole authority for owned domain data (T20-T24); no client ever wins a conflict over it.
-- Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (DONE) closes every mutation entrypoint offline via a single choke-point guard in api-client.js.
+- Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (DONE) closes every mutation entrypoint offline via a single choke-point guard in api-client.js; T42 (DONE) proved the read path natively — the offline/live branch decision must never rest solely on `navigator.onLine` (it only reflects the network adapter, not server reachability), always fall back to the cached snapshot on a genuine `NetworkError`.
 - No authoritative offline write queue/outbox exists or is planned for V1 — a failed offline mutation attempt fails visibly; it is never queued for later replay or shown as a fake success.
 - `review_tasks` = scheduling projection (recalculable), NEVER the historical record of what happened.
 - `learning_evidence`/`learning_events` = historical facts; corrections append (kind='CORRECTION'), never overwrite.
@@ -74,6 +77,81 @@ CONFIRMED_P0_P1_OPEN=0
 - NO_DATA_LOSS is a standing constraint on every migration/import path (T25-T28).
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
+
+---
+
+## CHECKPOINT — 2026-09-10 (session 15, T42 DONE)
+
+Resumed from this same worktree's T42-in-progress state (session 14 had left
+implementation done and non-native gates green, but native Windows UAT
+blocked — the computer-use runtime available then had no way to launch or
+inspect a native app window). This session got a different capability
+(computer-use with `request_access`/window control) and used it to actually
+finish the task, in three passes:
+
+**Pass 1 — rebuilt + reattempted native UAT, still blocked.** The release
+exe on disk was stale (built before the last `lib.rs` edit); rebuilt via
+`npx tauri build`, then tried driving the raw `smartlearn.exe` directly.
+`request_access` refused it three times, even with a real visible window —
+the resolver only recognizes Start-Menu/registry-registered applications,
+never an unregistered running process, confirming this is a hard tooling
+wall, not a fluke.
+
+**Pass 2 — unblocked via the generated installer, found a real AC-24 bug.**
+The `tauri build` output already includes an NSIS installer; running it
+`/S` (silent) installed per-user with **no UAC prompt** (Tauri's NSIS
+default `installMode` is `currentUser`), registering the app with the Start
+Menu — `request_access` then granted it. Online UAT passed clean (real
+account, real subject/unit, "Hoje" showed the synced agenda). Cold-start
+with the server process killed (Windows/Wi-Fi network otherwise fully up)
+reproducibly showed the generic empty state, no offline banner, not the
+just-synced snapshot — a real functional gap, not a test artifact (confirmed
+twice, including after correctly forcing a fresh sync first).
+
+**Root cause**: `renderToday()` (`src/app.js`) branched to the offline
+snapshot path only on `!navigator.onLine`, which reflects the OS network
+adapter's link state, not whether the SmartLearn server specifically
+answers. `e2e/offline.spec.js`'s existing cold-start test always used
+`page.context().setOffline(true)`, which *also* flips `navigator.onLine`
+false — so the green E2E suite structurally could never exercise "server
+down, network up", the most realistic real-world failure mode and exactly
+what native UAT found.
+
+**Pass 3 — regression test written first, then the fix.** New E2E test in
+`e2e/offline.spec.js` (a dedicated, disposable second API server killed
+directly, `setOffline` never called) reproduced the exact failure — proven
+red before the fix (uncaught `NetworkError` in `renderToday`, empty agenda),
+proven green after. Fix: `renderToday`'s live `Promise.all` is wrapped in
+`try/catch`; a caught `NetworkError` (api-client.js's own transport-failure
+type, already used elsewhere in this file for the identical distinction)
+now routes to the existing `renderOfflineToday()` fallback, same as the
+`navigator.onLine` branch; any other error (a real HTTP response, auth,
+etc.) still propagates untouched — `navigator.onLine` stays an auxiliary
+fast-path signal, never the sole authority. Re-verified end-to-end on the
+real installed app after wiping its WebView2 profile (`%LOCALAPPDATA%\
+com.devulsky.smartlearn\EBWebView`) from scratch, to rule out a stale
+Service-Worker-cached shell masking the fix: online sync, then server-only
+kill with network left up, showed the real offline banner and the correct
+cached snapshot.
+
+Full gate after the fix: Rust 15/15, root 267/267, server 340/340
+unchanged, build PASS, test:inventory PASS (62 files unchanged), full
+`npx playwright test` 43/43 (42 pre-existing + 1 new AC-24 regression, zero
+other regressions), `npx tauri build` PASS (MSI+NSIS regenerated from the
+fixed source), native Windows UAT PASS as described above.
+`src-tauri/Cargo.toml`'s pre-existing CRLF-only diff (confirmed empty via
+`git diff`) was discarded before commit, not carried in.
+
+T42's 3 done-when boxes are all `[x]` in tasks.md. See validation.md's T42
+row for full detail.
+
+NEXT_TASK: T43 ("Deliver the Android wrapper without a second product UI" —
+check tasks.md for its exact dependency list, Where, and acceptance criteria
+before starting. Note: T43's `Where` and T44's `Where` both plausibly touch
+the same native capability/bridge files (`src-tauri/src/lib.rs`,
+`src-tauri/capabilities/default.json`) T42 just settled — confirm their
+actual diffs don't collide before running them in parallel, e.g. via a
+dual-lane-style tool).
 
 ---
 

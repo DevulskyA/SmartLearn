@@ -187,6 +187,75 @@ test('a sync attempt that fails partway never replaces the last good snapshot', 
   expect(revisionAfterFailure).toBe(goodRevision);
 });
 
+test('a reachable network but a dead SmartLearn server still falls back to the cached snapshot (AC-24)', async ({ page }) => {
+  // T42 regression: navigator.onLine reflects only the OS network adapter's
+  // link state, not whether the SmartLearn server specifically answers.
+  // Every other test in this file uses page.context().setOffline(true),
+  // which ALSO flips navigator.onLine false — so none of them can exercise
+  // "Wi-Fi/network fully up, but this one server is down/unreachable",
+  // which is what native Windows UAT actually reproduced (T42 checkpoint).
+  // This test kills a dedicated API server (never touching context.setOffline
+  // or navigator.onLine) so the failure the app sees is a genuine fetch()
+  // rejection — the same NetworkError path a real dead/restarting/firewalled
+  // server produces — while the Vite shell server on :5199 stays up.
+  const port = 13962;
+  const base = `http://localhost:${port}`;
+  const dir = mkdtempSync(join(tmpdir(), 'sl-e2e-serverdown-'));
+  const path = join(dir, 'e2e.db');
+  const proc = spawn(process.execPath, [MAIN_JS], {
+    env: {
+      ...process.env,
+      SMARTLEARN_DB_PATH: path,
+      PORT: String(port),
+      HOST: 'localhost',
+      NODE_ENV: 'test',
+      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+    },
+    stdio: 'ignore',
+  });
+  try {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      try { if ((await fetch(`${base}/health/ready`)).status === 200) break; } catch { /* not up yet */ }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    await page.addInitScript((b) => {
+      window.__SMARTLEARN_API_BASE__ = b;
+      window.__SMARTLEARN_REMOTE_MODE__ = true;
+    }, base);
+
+    const email = uniqueEmail('serverdown');
+    await registerAndLogin(page, email, 'a genuinely long test password 1');
+    await waitForServiceWorkerActive(page);
+    await createUnit(page, { subjectName: 'Nefrologia Offline', title: 'Filtracao Offline', studyDate: '2020-01-01' });
+
+    const syncResponse = page.waitForResponse(
+      (res) => res.url().includes('/v1/agenda-snapshot') && res.status() === 200,
+      { timeout: 5000 },
+    );
+    await page.reload();
+    await syncResponse; // proves the just-created unit is in the stored snapshot
+
+    proc.kill(); // the API server dies; navigator.onLine is never touched
+    await new Promise((r) => setTimeout(r, 300));
+
+    await page.reload();
+    // Same assertions as the "known offline" test above: shell loads (no
+    // browser offline error page), and the offline banner + last-synced
+    // snapshot appear — proving this failure mode gets the same read-only
+    // fallback as a real navigator.onLine===false cold start.
+    await expect(page.locator('.app-header .brand')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-screen="today"]').click();
+    await expect(page.locator('#offline-banner')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-review-list="overdue"] .review-row').first()).toContainText('Filtracao Offline', { timeout: 5000 });
+  } finally {
+    proc.kill();
+    await new Promise((r) => setTimeout(r, 300));
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('a second account never sees the first account\'s agenda after switching, even offline', async ({ page }) => {
   await enableRemoteMode(page);
   const emailA = uniqueEmail('switchA');
