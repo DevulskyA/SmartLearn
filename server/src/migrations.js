@@ -9,6 +9,25 @@ function sha256(content) {
   return createHash('sha256').update(content).digest('hex');
 }
 
+// Migration checksums must identify SQL content, not the checkout's line
+// endings: the same file is CRLF on a Windows working tree (core.autocrlf)
+// and LF on Linux CI, yet must hash identically. The canonical checksum is
+// SHA-256 over CRLF/CR normalized to LF. `legacyCRLFChecksum` reconstructs
+// the checksum a CRLF checkout of the SAME content would have produced, so
+// databases that recorded that historical value stay valid without a
+// migration of their own schema_migrations rows.
+export function normalizeLineEndings(content) {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+export function canonicalChecksum(content) {
+  return sha256(normalizeLineEndings(content));
+}
+
+function legacyCRLFChecksum(content) {
+  return sha256(normalizeLineEndings(content).replace(/\n/g, '\r\n'));
+}
+
 function parseMigrationFile(filename) {
   const m = filename.match(/^(\d+)-(.+)\.sql$/);
   if (!m) return null;
@@ -23,9 +42,19 @@ function listMigrations(migrationsDir) {
       const meta = parseMigrationFile(f);
       if (!meta) return null;
       const content = readFileSync(join(migrationsDir, f), 'utf8');
-      return { file: f, ...meta, content, checksum: sha256(content) };
+      return {
+        file: f,
+        ...meta,
+        content,
+        checksum: canonicalChecksum(content),
+        legacyChecksum: legacyCRLFChecksum(content),
+      };
     })
     .filter(Boolean);
+}
+
+function checksumMatches(recordedChecksum, m) {
+  return recordedChecksum === m.checksum || recordedChecksum === m.legacyChecksum;
 }
 
 function ensureSchemaTable(db) {
@@ -52,7 +81,7 @@ export function runMigrations(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
     const existing = getRow.get(m.version);
 
     if (existing) {
-      if (existing.checksum !== m.checksum) {
+      if (!checksumMatches(existing.checksum, m)) {
         throw new Error(
           `Migration ${m.file}: checksum mismatch. Stored: ${existing.checksum}, File: ${m.checksum}`
         );
@@ -93,7 +122,7 @@ export function validateMigrations(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
 
   for (const m of onDisk) {
     const existing = getRow.get(m.version);
-    if (existing && existing.checksum !== m.checksum) {
+    if (existing && !checksumMatches(existing.checksum, m)) {
       throw new Error(`Migration ${m.file}: checksum mismatch`);
     }
   }

@@ -4,8 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync, readdirSync, copyFileSync, unlinkSy
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { openDb } from '../src/db.js';
-import { runMigrations, validateMigrations } from '../src/migrations.js';
+import { runMigrations, validateMigrations, canonicalChecksum, normalizeLineEndings } from '../src/migrations.js';
 
 const REAL_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -132,6 +133,66 @@ test('broken migration is fully atomic — no partial table created', () => {
   }
 });
 
+test('canonical checksum is line-ending independent: same SQL content hashes the same whether the file is LF or CRLF', () => {
+  const lfContent = 'CREATE TABLE IF NOT EXISTS eol_probe (\n  id INTEGER PRIMARY KEY\n);\n';
+  const crlfContent = lfContent.replace(/\n/g, '\r\n');
+  const crContent = lfContent.replace(/\n/g, '\r');
+  assert.notEqual(lfContent, crlfContent, 'sanity: fixtures actually differ byte-for-byte');
+  assert.equal(canonicalChecksum(lfContent), canonicalChecksum(crlfContent));
+  assert.equal(canonicalChecksum(lfContent), canonicalChecksum(crContent));
+  assert.equal(normalizeLineEndings(crlfContent), lfContent);
+});
+
+test('a real change to SQL content still changes the canonical checksum, regardless of line ending', () => {
+  const original = 'CREATE TABLE IF NOT EXISTS eol_probe (id INTEGER PRIMARY KEY);\r\n';
+  const changed = 'CREATE TABLE IF NOT EXISTS eol_probe (id INTEGER PRIMARY KEY, extra TEXT);\r\n';
+  assert.notEqual(canonicalChecksum(original), canonicalChecksum(changed));
+});
+
+test('a database that recorded the historical CRLF checksum for a migration stays valid after switching to canonical (LF) checksums', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = tmpMigDir();
+  try {
+    const lfContent = 'CREATE TABLE IF NOT EXISTS legacy_crlf_probe (id INTEGER PRIMARY KEY);\n';
+    const crlfContent = lfContent.replace(/\n/g, '\r\n');
+    writeFileSync(join(mDir, '001-legacy.sql'), lfContent);
+    writeFileSync(
+      join(mDir, 'manifest.json'),
+      JSON.stringify([{ version: 1, name: 'legacy', checksum: canonicalChecksum(lfContent) }])
+    );
+
+    const historicalCrlfChecksum = createHash('sha256').update(crlfContent).digest('hex');
+    assert.notEqual(
+      historicalCrlfChecksum,
+      canonicalChecksum(lfContent),
+      'sanity: the historical CRLF checksum must actually differ from the canonical one'
+    );
+
+    const db = openDb(path);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version    INTEGER NOT NULL PRIMARY KEY,
+        name       TEXT    NOT NULL,
+        checksum   TEXT    NOT NULL,
+        applied_at TEXT    NOT NULL
+      )
+    `);
+    db.prepare(
+      'INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)'
+    ).run(1, 'legacy', historicalCrlfChecksum, new Date().toISOString());
+
+    assert.doesNotThrow(() => runMigrations(db, mDir));
+    assert.doesNotThrow(() => validateMigrations(db, mDir));
+
+    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    assert.equal(n, 1, 'the historical row must not be duplicated by re-running migrations');
+    db.close();
+  } finally {
+    cleanupDb();
+    cleanupM();
+  }
+});
+
 test('validateMigrations passes after correct apply', () => {
   const { path, cleanup } = tmpDb();
   try {
@@ -232,8 +293,19 @@ test('A5: readiness fails when an on-disk migration is not accounted for in the 
   } finally { cleanupDb(); cleanupM(); }
 });
 
-test('the real, committed manifest.json exactly matches the real migrations directory checksums right now', () => {
+test('the real, committed manifest.json exactly matches the canonical checksum of every real migration file on disk', () => {
   const manifest = JSON.parse(readFileSync(join(REAL_MIGRATIONS_DIR, 'manifest.json'), 'utf8'));
   const onDiskFiles = readdirSync(REAL_MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'));
   assert.equal(manifest.length, onDiskFiles.length, 'manifest.json must list exactly the migrations that exist on disk');
+
+  for (const entry of manifest) {
+    const file = onDiskFiles.find((f) => parseInt(f.match(/^(\d+)-/)[1], 10) === entry.version);
+    assert.ok(file, `manifest lists version ${entry.version} but no matching file exists on disk`);
+    const content = readFileSync(join(REAL_MIGRATIONS_DIR, file), 'utf8');
+    assert.equal(
+      entry.checksum,
+      canonicalChecksum(content),
+      `manifest checksum for ${file} must equal the canonical (line-ending independent) checksum of its real content`
+    );
+  }
 });
