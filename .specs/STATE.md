@@ -10,29 +10,30 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=ba1f6b0 (LOCAL-01A; the LOCAL-01B commit lands one ahead of it)
+CURRENT_HEAD=a384240 (LOCAL-01B; the PV1-01 commit lands one ahead of it)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=LOCAL-01B
-NEXT_TASK=none recorded — LOCAL-01 (Desktop local-first authority) is now fully closed; next work item to be decided by the user
+LAST_COMPLETED_TASK=PV1-01
+NEXT_TASK=awaiting external planning
 NEXT_TASK_STATUS=N/A
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T42 (5990ea4), LOCAL-00 (e2e determinism fix), LOCAL-01A (Desktop local-first backend), LOCAL-01B (standalone Node packaging)
+RECENT_COMPLETED_TASKS=LOCAL-01A (Desktop local-first backend), LOCAL-01B (standalone Node packaging), PV1-01 (first product journey: material -> unit -> Estudar agora -> practice -> evidence -> next review)
 RECENT_COMMITS=
+  feat(pv1): connect material acceptance to initial study
   feat(local-01b): package Desktop's local-authority backend as a standalone bundle, no system Node required
   test(e2e): make production journey assertion deterministic (LOCAL-00)
   feat(local-01a): Desktop runs the existing backend as a local loopback authority
   0d112bc docs(architecture): adopt local-first desktop and minimal companion (ARCH-01)
   a922999 fix(ci): make migration checksums line-ending independent (CI-01)
-  5990ea4 feat(t42): Windows wrapper on trusted origin, capability lockdown, AC-24 native-UAT fix
 
-SERVER_GATE=343/343 unchanged (LOCAL-01B touched no server code)
+SERVER_GATE=343/343 unchanged (PV1-01 touched no server code)
 ROOT_GATE=267/267 unchanged
-E2E_GATE=45/45 unchanged (LOCAL-01B touched no client/e2e-relevant file)
-TEST_INVENTORY=63 test files unchanged
-RUST_GATE=29/29 (was 20, +9 — LOCAL-01B's standalone_backend_paths/resolve_backend_launch/strip_windows_verbatim_prefix pure-function tests)
+E2E_GATE=47/47 (was 45, +2 — e2e/product-value.spec.js's two tests)
+TEST_INVENTORY=64 test files (was 63, +1 — e2e/product-value.spec.js)
+RUST_GATE=29/29 unchanged (PV1-01 touched no Rust code)
+PV1-01_STATUS=DONE — see PV1-01 block below for full evidence.
 WINDOWS_BUILD=PASS — `cargo build` (debug); a full `npx tauri build` (MSI/NSIS) was not re-run this session, same precedent as LOCAL-01A's own native proof (a debug `cargo run`-equivalent binary + real bundled resources is the standalone-launch proof, not a release installer)
 T42_NATIVE_UAT=PASS — real per-user NSIS install (Start Menu/registry-registered, no UAC), online login+sync verified, then only the SmartLearn server process killed (Windows network/Wi-Fi left up) and the installed app reopened: offline banner + real cached snapshot shown, no white screen, no connection-refused dialog. Verified against a from-scratch WebView2 profile (EBWebView cache wiped) to rule out a stale cached shell.
 LOCAL01A_NATIVE_PROOF=PASS — real `cargo run` window (no external SmartLearn server running anywhere), backend confirmed listening ONLY on `127.0.0.1:<dynamic port>` (netstat), real UI register+login+"Nova aula"+16-review creation, DB confirmed inside `%APPDATA%\com.devulsky.smartlearn\smartlearn-server\`, a FULL close+relaunch (new process, new port, fresh backend) showed the same account/unit still present, window close left zero orphan processes after a real bug was found and fixed (see validation.md's LOCAL-01A row). Test data cleaned up from the real app_data_dir afterward.
@@ -156,6 +157,110 @@ CONFIRMED_P0_P1_OPEN=0
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
 - MII (mnemonic/infographic pedagogical artifacts) is a canonical, recurring capability of SmartLearn, confirmed by the user 2026-09-10 — not yet reflected in tasks.md/acceptance.md. Sequence: MII-1 (mnemonic architecture) DONE; MII-2 (infographic blueprint) is the active stage; MII-3 (production/render/refinement) is next. Do not invent a detailed SmartLearn-integration architecture before MII-2/MII-3 produce their actual contract — when they do, the integration point is additive to the existing pipeline (source → accepted content → exercises → MII when pedagogically material → practice → evidence), not a parallel path that bypasses T20-T24's provenance/versioning guarantees.
+
+---
+
+## CHECKPOINT — 2026-09-11 (session 19, PV1-01 DONE)
+
+Reconciled first per explicit instruction: `git branch --show-current` /
+`git rev-parse --short HEAD` / `git status --short` confirmed
+`claude/smartlearn-v1-complete` @ `a384240`, worktree clean — matched
+exactly before any work started.
+
+**PV1-01** ("close the first real learning journey on Desktop") DONE —
+`index.html`, `src/app.js`, `src/styles.css` changed; `e2e/product-
+value.spec.js` new; `e2e/source-proposals.spec.js`, `e2e/draft-
+acceptance.spec.js`, `e2e/smartlearn-plan-flow.spec.js` adapted (see
+below). No new domain, DB, migration, or backend — everything reuses
+existing contracts exactly as instructed.
+
+**Materiais** (1): the "Fontes" pipeline (upload -> extract -> chunk ->
+proposal -> draft -> accept), previously nested in Configurações, is now
+its own primary screen (`#screen-materials`, nav button `data-screen=
+"materials"`) — same element ids/handlers moved wholesale, zero pipeline
+logic duplicated. Exclusive to `LOCAL_DESKTOP_AUTHORITY`
+(`REMOTE_MODE && LOCAL_AUTHORITY`): the nav item is hidden otherwise, and
+`showScreen()` now redirects a direct `#materials` hash away for any
+other session — proven by a dedicated discrimination test, not just
+nav-hiding (a direct hash could otherwise still expose the panel).
+Real bug found and fixed while proving this: `.nav-item`'s own
+`display: flex` (an author rule) silently beat the browser's default
+`[hidden]` style, exactly the same class of bug already documented at
+this file's `.settings-actions [hidden]` comment (T22) — the nav item
+stayed visually visible despite `hidden` being set. Fixed with the same
+established pattern (`.nav-item[hidden] { display: none; }`).
+
+**Continuity after accept** (2): the accept-draft success handler now
+also renders an "Estudar agora" button, using the unit id the acceptance
+response already returns (`result.acceptance.unit` — confirmed field
+names directly from `accept-draft.js`'s own `unitDto`, no invented
+contract) — no extra fetch needed, no requirement to go find the unit in
+Plano/Hoje.
+
+**Estudar agora / study-now screen** (3): new focused, one-question-at-a-
+time surface (`#screen-study-now`, no permanent nav entry, per the task's
+own wording) showing discipline/title, Resumo Mestre (when the unit has
+one), and exercises one at a time (question -> "Ver resposta" -> real
+answer/hint -> "Acertei"/"Errei" -> next).
+
+**Reused ledger, not a new quiz system** (4): each question reuses
+`DB.attempts.start(exerciseId)` (deliberately no `reviewTaskId` — this is
+`INITIAL_PRACTICE`, never a scheduled review, and never creates or
+completes a `review_task`), `DB.attempts.revealSolution`, and `DB.
+attempts.submit({outcome, assessmentMethod:'SELF_REPORT'})` — the exact
+same contract `src/app.js`'s existing Hoje review UI already uses
+(`ensureAttemptStarted`), just without a `reviewTaskId`.
+
+**Automatic evidence** (5): on the last question, `questionsCount`/
+`correctCount` are the real session tally (never user-typed) and
+`DB.learningEvidence.create({unitId, context:'INITIAL_PRACTICE',
+questionsCount, correctCount, evidenceDate})` fires automatically, then
+the result panel shows `X/Y corretas — Z%` and the next review date —
+computed by reusing the exact same `getNextReview()` helper Plano already
+uses (`DB.reviewTasks.getByUnit(unitId)` + earliest non-done `dueDate`),
+not a new calculation. The 16 reviews are untouched by this flow (proven
+directly via `GET /v1/review-tasks?unitId=`).
+
+Existing tests adapted (not weakened) for the Materiais relocation:
+`e2e/source-proposals.spec.js` and `e2e/draft-acceptance.spec.js` now set
+`window.__SMARTLEARN_LOCAL_AUTHORITY__ = true` and navigate via
+`[data-screen="materials"]` instead of `"settings"` — same assertions,
+same ids, just reached through the real new location. `e2e/smartlearn-
+plan-flow.spec.js`'s own `preflight()` (an intentional "stale/wrong
+target must fail" DOM-enumeration guard) needed its expected `[data-
+screen]` list updated to include `"materials"` — the guard doing exactly
+its job when a new real screen was added.
+
+`e2e/product-value.spec.js` (2/2, new): the full real journey — PDF
+upload through the actual UI, real deterministic-provider draft
+generation, accept, "Estudar agora", Resumo Mestre shown, two exercises
+answered with a deliberately MIXED outcome (not trivially all-correct),
+each attempt's real server-side state independently verified via direct
+`GET /v1/attempts/:id` (`maxAssistance`, `reviewTaskId` absence, `status`
+transitions STARTED->SUBMITTED) rather than trusted from the DOM alone,
+exactly one `INITIAL_PRACTICE` evidence row with the real 1/2 count via
+direct `GET /v1/learning-evidence`, exactly 16 `review_tasks` still
+pending via direct `GET /v1/review-tasks`, the shown next-review date
+cross-checked against the real earliest due date, and persistence proven
+by a real page reload. Second test: a REMOTE_AUTHORITY-without-local
+session never gets Materiais, neither via nav nor a direct `#materials`
+hash.
+
+Full gate: Rust 29/29 unchanged, server 343/343 unchanged, root 267/267
+unchanged, build PASS, `npm run package:standalone` PASS (re-staged, not
+installed — no MSI needed for this task), test:inventory PASS (64 files,
+was 63, +1), full `npx playwright test` 47/47 (45 pre-existing + 2 new,
+zero regressions after the preflight-list fix above).
+
+No improvement ideas surfaced worth deferring beyond what's already
+tracked — the one interesting observation (the `[hidden]`-vs-author-rule
+footgun already had one prior precedent in this codebase, T22's
+`.settings-actions [hidden]`) is now fixed at its second occurrence, not
+generalized into a blanket rule, per this task's own "don't refactor
+what's not necessary" instruction.
+
+NEXT_TASK: awaiting external planning — this session was explicitly not
+authorized to choose the next work item.
 
 ---
 

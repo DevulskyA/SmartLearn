@@ -51,9 +51,13 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
+  // PV1-01: Materiais (this same "Fontes" pipeline) is now exclusive to
+  // LOCAL_DESKTOP_AUTHORITY, relocated out of Configurações — see
+  // e2e/local-authority.spec.js for the origin of this init-script pattern.
   await page.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
   const email = `draft-accept-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = 'a genuinely long test password 1';
@@ -72,7 +76,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
-  await page.locator('[data-screen="settings"]').click();
+  await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
 
   const pdfBuffer = buildFixturePdf(['Farmacocinética: absorção e distribuição']);

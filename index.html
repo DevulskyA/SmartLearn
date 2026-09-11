@@ -45,6 +45,13 @@
           </svg>
           <span>Hoje</span>
         </button>
+        <button class="nav-item" type="button" data-screen="materials" aria-controls="screen-materials" hidden>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M15 3v4h4M9 13h6M9 17h6" stroke-linecap="round" />
+          </svg>
+          <span>Materiais</span>
+        </button>
         <button class="nav-item" type="button" data-screen="plan" aria-controls="screen-plan">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
@@ -568,7 +575,16 @@
             </div>
           </section>
 
-          <section class="settings-card" id="sources-card" aria-labelledby="sources-title" hidden>
+        </section>
+
+        <section class="screen" id="screen-materials" data-screen-panel="materials" aria-labelledby="title-materials" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Fontes</p>
+              <h1 id="title-materials">Materiais</h1>
+            </div>
+          </div>
+          <section class="settings-card" id="sources-card" aria-labelledby="sources-title">
             <div class="section-heading">
               <p class="eyebrow">Fontes</p>
               <h2 id="sources-title">Fontes em PDF</h2>
@@ -582,6 +598,48 @@
             <div id="sources-proposals-panel" hidden>
               <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
             </div>
+          </section>
+        </section>
+
+        <section class="screen" id="screen-study-now" data-screen-panel="study-now" aria-labelledby="title-study-now" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow" id="study-now-subject"></p>
+              <h1 id="title-study-now"></h1>
+            </div>
+          </div>
+
+          <section class="settings-card" id="study-now-summary-card" aria-labelledby="study-now-summary-title" hidden>
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-summary-title">Resumo Mestre</h2>
+            </div>
+            <p id="study-now-summary-body"></p>
+          </section>
+
+          <section class="settings-card" id="study-now-practice-card" aria-labelledby="study-now-practice-title">
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-practice-title">Praticar</h2>
+              <p id="study-now-progress"></p>
+            </div>
+            <div id="study-now-question-area">
+              <p id="study-now-question-text"></p>
+              <p id="study-now-hint-text" class="field-message" hidden></p>
+              <button class="secondary-button" id="study-now-reveal-btn" type="button">Ver resposta</button>
+              <p id="study-now-answer-text" hidden></p>
+              <div id="study-now-judgment" class="exercise-judgment" hidden>
+                <button class="primary-button" id="study-now-correct-btn" type="button">Acertei</button>
+                <button class="secondary-button" id="study-now-incorrect-btn" type="button">Errei</button>
+              </div>
+            </div>
+            <p class="panel-empty" id="study-now-no-exercises" hidden>Esta aula ainda não tem exercícios.</p>
+          </section>
+
+          <section class="settings-card" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-result-title">Resultado</h2>
+            </div>
+            <p id="study-now-result-text"></p>
+            <p id="study-now-next-review-text"></p>
           </section>
         </section>
 

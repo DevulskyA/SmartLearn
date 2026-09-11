@@ -306,6 +306,15 @@ button {
     background-color 140ms ease;
 }
 
+/* PV1-01: same footgun as T22's .settings-actions [hidden] comment below —
+   .nav-item's own `display: flex` (an author rule) always beats the
+   browser's default [hidden] style, so Materiais's `.hidden = true` for
+   non-LOCAL_DESKTOP_AUTHORITY sessions would otherwise stay visibly
+   rendered despite the attribute being set. */
+.nav-item[hidden] {
+  display: none;
+}
+
 .nav-item:hover {
   background: var(--color-surface-sunken);
   color: var(--color-primary);

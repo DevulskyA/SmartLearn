@@ -17,7 +17,13 @@ async function preflight(page) {
     els => els.map(e => e.getAttribute('data-screen')).sort()
   );
   // T11 added the "account" screen alongside the existing learning screens.
-  expect(screens).toEqual(['account', 'plan', 'settings', 'stats', 'subjects', 'today', 'tracking']);
+  // PV1-01 added "materials" as a nav item (LOCAL_DESKTOP_AUTHORITY-only,
+  // hidden here since this suite runs in plain local-DB mode — but the
+  // nav button itself is always present in the DOM, just `hidden`, so it
+  // still shows up in this [data-screen] enumeration). "study-now" has no
+  // nav item by design (task's own wording: reachable via "Estudar agora",
+  // not a permanent nav entry), so it never appears in this list.
+  expect(screens).toEqual(['account', 'materials', 'plan', 'settings', 'stats', 'subjects', 'today', 'tracking']);
   const saveBtn = await page.locator('#plan-unit-save-btn').count();
   expect(saveBtn, 'expected #plan-unit-save-btn to exist on this build').toBeGreaterThan(0);
 }

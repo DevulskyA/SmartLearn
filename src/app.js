@@ -75,6 +75,18 @@ const DB = REMOTE_MODE ? RemoteDB : LocalDB;
 // LOCAL_DESKTOP_AUTHORITY branches — this module's copy is for renderToday.
 const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
 
+// PV1-01: Materiais (the PDF -> proposal -> draft -> accept pipeline,
+// relocated from Configurações to its own primary screen) is exclusive to
+// LOCAL_DESKTOP_AUTHORITY — Companion (not implemented yet) stays a
+// read-only surface, and REMOTE_AUTHORITY-without-local-authority keeps
+// the existing server endpoints reachable (nothing removed server-side)
+// but never surfaces this as a product screen. This flag is stable for
+// the whole session (set once by the window init script before this
+// module loads), so it's safe to apply it once here rather than on every
+// navigation.
+const materialsNavItem = document.querySelector('[data-screen="materials"]');
+if (materialsNavItem) materialsNavItem.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+
 let databaseAvailable = false;
 // In remote mode, "available" also requires a logged-in session — there is
 // no local schema to fail to open, but every domain call needs an
@@ -273,12 +285,28 @@ const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
 const migrationResultPanel = document.querySelector("#migration-result-panel");
 const migrationResultSummary = document.querySelector("#migration-result-summary");
 const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
-const sourcesCard = document.querySelector("#sources-card");
 const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
 const sourcesFileInput = document.querySelector("#sources-file-input");
 const sourcesMessage = document.querySelector("#sources-message");
 const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
 const sourcesProposalsList = document.querySelector("#sources-proposals-list");
+const studyNowSubjectEl = document.querySelector("#study-now-subject");
+const studyNowTitleEl = document.querySelector("#title-study-now");
+const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
+const studyNowSummaryBody = document.querySelector("#study-now-summary-body");
+const studyNowProgress = document.querySelector("#study-now-progress");
+const studyNowQuestionArea = document.querySelector("#study-now-question-area");
+const studyNowQuestionText = document.querySelector("#study-now-question-text");
+const studyNowHintText = document.querySelector("#study-now-hint-text");
+const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
+const studyNowAnswerText = document.querySelector("#study-now-answer-text");
+const studyNowJudgment = document.querySelector("#study-now-judgment");
+const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
+const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
+const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
+const studyNowResultCard = document.querySelector("#study-now-result-card");
+const studyNowResultText = document.querySelector("#study-now-result-text");
+const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
 let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
@@ -2046,9 +2074,6 @@ export async function renderSettings() {
   // mirroring how import/reset are REMOTE_MODE-only in the opposite
   // direction above.
   if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
-  // T36: source upload/proposals only exist against the real server
-  // (T34-T36) — same REMOTE_MODE-only reasoning as the migration card.
-  if (sourcesCard) sourcesCard.hidden = !REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
@@ -2514,6 +2539,22 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
         resultMessage.textContent = `Aula criada: ${result.acceptance.exerciseCount} exercício(s), ${result.acceptance.reviewCount} revisões agendadas.`;
       }
       acceptDraftBtn.textContent = "Aceito";
+      // PV1-01: continuity after accept — the acceptance response already
+      // carries the created unit (real contract field: `acceptance.unit`,
+      // confirmed in server/src/services/accept-draft.js's `unitDto`), so
+      // "Estudar agora" needs no extra fetch. The user should never have
+      // to go find the just-created unit in Plano/Hoje themselves.
+      if (!draftPanel.querySelector('[data-action="study-now"]')) {
+        const studyNowBtn = document.createElement("button");
+        studyNowBtn.type = "button";
+        studyNowBtn.className = "primary-button";
+        studyNowBtn.dataset.action = "study-now";
+        studyNowBtn.textContent = "Estudar agora";
+        studyNowBtn.addEventListener("click", () => {
+          startStudyNow(result.acceptance.unit, result.acceptance.subject?.name);
+        });
+        draftPanel.append(studyNowBtn);
+      }
       await Promise.all([renderSubjects(), renderStudies(), renderToday()]);
     } catch (error) {
       if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
@@ -2522,6 +2563,173 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
     }
   }
 });
+
+// PV1-01: the first learning journey's focused study surface — reachable
+// via "Estudar agora" right after accepting a draft, not necessarily a
+// permanent nav item (task's own wording). Reuses the existing
+// DB.attempts/DB.exercises/DB.learningEvidence contracts exactly as the
+// Hoje review UI does (see ensureAttemptStarted above) — the one real
+// difference is deliberate: no reviewTaskId is ever passed (this is
+// INITIAL_PRACTICE, not a scheduled review), and no review_task is ever
+// created or completed by this flow. One question at a time, per spec.
+let studyNowState = null;
+
+async function startStudyNow(unit, subjectName) {
+  if (!unit) return;
+  studyNowSubjectEl.textContent = subjectName ?? "";
+  studyNowTitleEl.textContent = unit.title ?? "";
+  if (unit.summaryBody) {
+    studyNowSummaryCard.hidden = false;
+    studyNowSummaryBody.textContent = unit.summaryBody;
+  } else {
+    studyNowSummaryCard.hidden = true;
+    studyNowSummaryBody.textContent = "";
+  }
+  studyNowResultCard.hidden = true;
+  studyNowResultText.textContent = "";
+  studyNowNextReviewText.textContent = "";
+  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, correctCount: 0, answeredCount: 0 };
+  showScreen("study-now", { focus: true });
+
+  try {
+    studyNowState.exercises = await DB.exercises.getAll(unit.id);
+  } catch (error) {
+    console.error("Falha ao carregar exercícios da unidade.", error);
+    studyNowState.exercises = [];
+  }
+  renderStudyNowQuestion();
+}
+
+function renderStudyNowQuestion() {
+  const state = studyNowState;
+  if (!state) return;
+
+  if (state.exercises.length === 0) {
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = false;
+    studyNowProgress.textContent = "";
+    return;
+  }
+
+  if (state.index >= state.exercises.length) {
+    finishStudyNowSession();
+    return;
+  }
+
+  studyNowNoExercises.hidden = true;
+  studyNowQuestionArea.hidden = false;
+
+  const exercise = state.exercises[state.index];
+  studyNowQuestionText.textContent = exercise.questionText;
+  studyNowAnswerText.textContent = exercise.answerText;
+  studyNowAnswerText.hidden = true;
+  if (exercise.hintText) {
+    // Honest reuse, not invention: shown unconditionally exactly like the
+    // Hoje review UI already does (a hint the learner can already see is
+    // truthfully "available", not a fabricated NONE for it).
+    studyNowHintText.textContent = exercise.hintText;
+    studyNowHintText.hidden = false;
+  } else {
+    studyNowHintText.hidden = true;
+    studyNowHintText.textContent = "";
+  }
+  studyNowJudgment.hidden = true;
+  studyNowRevealBtn.hidden = false;
+  studyNowRevealBtn.textContent = "Ver resposta";
+  studyNowProgress.textContent = `Questão ${state.index + 1} de ${state.exercises.length}`;
+  state.attemptId = null;
+  delete studyNowQuestionArea.dataset.attemptId;
+}
+
+async function finishStudyNowSession() {
+  const state = studyNowState;
+  if (!state) return;
+  studyNowQuestionArea.hidden = true;
+  studyNowProgress.textContent = "";
+
+  const { unitId, answeredCount, correctCount } = state;
+  if (answeredCount > 0) {
+    try {
+      await DB.learningEvidence.create({
+        unitId,
+        context: "INITIAL_PRACTICE",
+        questionsCount: answeredCount,
+        correctCount,
+        evidenceDate: getLocalDateValue(),
+      });
+    } catch (error) {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+    }
+  }
+
+  const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+  studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+
+  try {
+    const tasks = await DB.reviewTasks.getByUnit(unitId);
+    const next = getNextReview(unitId, tasks);
+    studyNowNextReviewText.textContent = next ? `Próxima revisão: ${formatDate(next)}` : "Nenhuma revisão pendente.";
+  } catch (error) {
+    console.error("Falha ao buscar próxima revisão.", error);
+    studyNowNextReviewText.textContent = "";
+  }
+
+  studyNowResultCard.hidden = false;
+  studyNowState = null;
+  renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+  renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+}
+
+studyNowRevealBtn?.addEventListener("click", async () => {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+  const exercise = state.exercises[state.index];
+
+  studyNowAnswerText.hidden = false;
+  studyNowJudgment.hidden = false;
+  studyNowRevealBtn.hidden = true;
+
+  if (REMOTE_MODE && DB.attempts) {
+    try {
+      // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
+      const attempt = await DB.attempts.start(exercise.id);
+      state.attemptId = attempt.id;
+      // Real, observable signal (same idiom as ensureAttemptStarted's
+      // exItem.dataset.attemptId above) — lets tests confirm a real
+      // server-owned attempt exists without a dedicated listing endpoint.
+      studyNowQuestionArea.dataset.attemptId = String(attempt.id);
+      if (exercise.hintText) {
+        try { await DB.attempts.useHint(attempt.id); }
+        catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
+      }
+      await DB.attempts.revealSolution(attempt.id);
+    } catch (error) {
+      console.error("Falha ao iniciar tentativa (prática inicial).", error);
+    }
+  }
+});
+
+async function judgeStudyNow(isCorrect) {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+
+  state.answeredCount += 1;
+  if (isCorrect) state.correctCount += 1;
+
+  if (REMOTE_MODE && DB.attempts && state.attemptId) {
+    try {
+      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+    } catch (error) {
+      console.error("Falha ao registrar resultado (prática inicial).", error);
+    }
+  }
+
+  state.index += 1;
+  renderStudyNowQuestion();
+}
+
+studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
+studyNowIncorrectBtn?.addEventListener("click", () => judgeStudyNow(false));
 
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
@@ -2909,7 +3117,7 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
-const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings"]);
+const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now"]);
 
 // T22: "register" (#screen-register, "Cadastro") was removed from the NAV
 // in a prior decision (P1-2), but is NOT dead — it is the only UI in the
@@ -2933,6 +3141,15 @@ export function showScreen(screenId, { focus = false } = {}) {
   // (and failing 401 on) a render.
   if (REMOTE_MODE && databaseAvailable && !authenticated && DATA_SCREENS.has(nextScreen)) {
     nextScreen = "account";
+  }
+
+  // PV1-01: Materiais is exclusive to LOCAL_DESKTOP_AUTHORITY — a direct/
+  // bookmarked #materials hash must not expose the screen under plain
+  // REMOTE_AUTHORITY (no local backend), even though the nav item is
+  // already hidden for that case (hiding the nav button alone doesn't
+  // stop a direct hash navigation).
+  if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
+    nextScreen = DEFAULT_SCREEN;
   }
 
   for (const panel of screenPanels) {
