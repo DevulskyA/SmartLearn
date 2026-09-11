@@ -77,6 +77,7 @@ CONFIRMED_P0_P1_OPEN=0
 - NO_DATA_LOSS is a standing constraint on every migration/import path (T25-T28).
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
+- MII (mnemonic/infographic pedagogical artifacts) is a canonical, recurring capability of SmartLearn, confirmed by the user 2026-09-10 — not yet reflected in tasks.md/acceptance.md. Sequence: MII-1 (mnemonic architecture) DONE; MII-2 (infographic blueprint) is the active stage; MII-3 (production/render/refinement) is next. Do not invent a detailed SmartLearn-integration architecture before MII-2/MII-3 produce their actual contract — when they do, the integration point is additive to the existing pipeline (source → accepted content → exercises → MII when pedagogically material → practice → evidence), not a parallel path that bypasses T20-T24's provenance/versioning guarantees.
 
 ---
 
