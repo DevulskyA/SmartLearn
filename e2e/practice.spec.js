@@ -83,6 +83,19 @@ test('revealing an answer and judging it in the real review UI creates a server-
   await expect(row.getByText('Qual a capital da Farmacologia?')).toBeVisible({ timeout: 5000 });
 
   await page.locator('[data-screen="today"]').click();
+
+  // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): with all 16 reviews overdue,
+  // Hoje must lead with one clear primary action, not force the user to
+  // scan every row themselves.
+  const primaryAction = page.locator('#today-primary-action');
+  await expect(primaryAction).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#today-primary-action-text')).toContainText('vencida');
+  const primaryReviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  expect(primaryReviewId).toBeTruthy();
+  await page.locator('#today-primary-action-btn').click();
+  const primaryRow = page.locator(`.review-row[data-review-id="${primaryReviewId}"]`);
+  await expect(primaryRow).toHaveClass(/is-highlighted/);
+
   const exItem = page.locator('.review-exercise-item', { hasText: 'Qual a capital da Farmacologia?' }).first();
   await expect(exItem).toBeVisible({ timeout: 5000 });
 

@@ -192,6 +192,9 @@ const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
 const reviewDashboard = document.querySelector("#review-dashboard");
+const todayPrimaryAction = document.querySelector("#today-primary-action");
+const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
+const todayPrimaryActionBtn = document.querySelector("#today-primary-action-btn");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
@@ -869,6 +872,25 @@ export async function renderToday() {
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
       list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
+    }
+  }
+
+  // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
+  // with data already fetched above — no new scheduler, no change to the
+  // 16-review schedule. Priority: overdue (oldest first, already the
+  // server's own sort order) > today > (tomorrow/none handled by the
+  // existing todayTomorrow/todaySuccessState elements below, which
+  // already communicate those two cases adequately).
+  if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
+    const primaryTask = overdueReviews[0] ?? pendingToday[0] ?? null;
+    if (primaryTask) {
+      todayPrimaryActionText.textContent = overdueReviews.length > 0
+        ? (overdueReviews.length === 1 ? "Você tem 1 revisão vencida." : `Você tem ${overdueReviews.length} revisões vencidas.`)
+        : (pendingToday.length === 1 ? "Você tem 1 revisão para hoje." : `Você tem ${pendingToday.length} revisões para hoje.`);
+      todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
+      todayPrimaryAction.hidden = false;
+    } else {
+      todayPrimaryAction.hidden = true;
     }
   }
 
@@ -3663,6 +3685,16 @@ studyList.addEventListener("click", async (event) => {
       console.error("Falha ao salvar estudo.", error);
     }
   }
+});
+
+todayPrimaryActionBtn?.addEventListener("click", () => {
+  const reviewId = todayPrimaryActionBtn.dataset.reviewId;
+  if (!reviewId) return;
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: "smooth", block: "start" });
+  row.classList.add("is-highlighted");
+  setTimeout(() => row.classList.remove("is-highlighted"), 2000);
 });
 
 reviewDashboard.addEventListener("click", (event) => {
