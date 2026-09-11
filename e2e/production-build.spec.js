@@ -126,10 +126,18 @@ test('the real production build, served single-origin with no Vite involved, com
   await page.locator('#plan-study-title').fill('Prod bundle journey');
   await page.locator('#plan-unit-save-btn').click();
 
-  await expect(page.getByText('Prod bundle journey')).toBeVisible({ timeout: 5000 });
+  // Structural locator, not getByText: the plan list row's own title span
+  // is the one place this unit's title is guaranteed to render exactly
+  // once — other elements sharing this text (e.g. a review-content heading
+  // or summary display) belong to a different part of the screen and must
+  // not be conflated with "the unit appears in Plano".
+  const planRowTitle = page.locator('#plan-list .plan-row-compact .plan-unit-title', {
+    hasText: 'Prod bundle journey',
+  });
+  await expect(planRowTitle).toBeVisible({ timeout: 5000 });
 
   await page.reload();
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="plan"]').click();
-  await expect(page.getByText('Prod bundle journey')).toBeVisible({ timeout: 5000 });
+  await expect(planRowTitle).toBeVisible({ timeout: 5000 });
 });
