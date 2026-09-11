@@ -147,32 +147,111 @@ fn wait_for_local_backend_ready(child: &mut Child, port: u16, timeout: Duration)
     }
 }
 
-/// Spawns the EXISTING server/src/main.js as a local child process (dev-time
-/// proof: locates it relative to this Tauri crate, requires `node` already
-/// on PATH and `dist/` already built via `npm run build` — LOCAL-01B is
-/// where standalone Node packaging gets solved, not here). Loopback-only,
-/// dynamic port, app-data-scoped DB/sources paths (LOCAL-01A items 2/C/D).
-fn spawn_local_backend(app_data_dir: &Path) -> Result<LocalBackend, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let server_entry: PathBuf = Path::new(manifest_dir).join("..").join("server").join("src").join("main.js");
+/// LOCAL-01B: the standalone package (`npm run package:standalone`, see
+/// scripts/package-standalone.mjs) stages a self-contained copy of the
+/// backend under the app's resource dir: a bundled Node binary
+/// (`node-runtime/node[.exe]` — copied from `process.execPath` at package
+/// time, never resolved via PATH), the server's own `src/`+`migrations/`+
+/// `node_modules/`+`package.json` (`server-runtime/`), and the built
+/// frontend (`dist-runtime/`). Pure and independently testable: given a
+/// candidate resource dir, returns the three launch paths only if ALL THREE
+/// are actually present — a partially-staged or never-packaged resource dir
+/// (e.g. only the tracked `.gitkeep` placeholders from a fresh checkout)
+/// correctly yields `None`, never a half-valid launch.
+/// Tauri's `resource_dir()` returns a canonicalized path, which on Windows
+/// carries the `\\?\` extended-length-path prefix. That prefix is normally
+/// transparent, but Node's own entry-point resolution (`resolveMainPath` ->
+/// `realpathSync`) mishandles it — confirmed directly during this task's own
+/// native proof (a `\\?\`-prefixed entry arg made Node try to `lstat` the
+/// bare string `"C:"` and crash with EISDIR before ever reading
+/// `server/src/main.js`). Stripping the prefix here (verified harmless: this
+/// project's real install paths are far under Windows' ~260-char legacy
+/// limit) is the fix — applied once, at the resource_dir source, so every
+/// path derived from it (node binary, server entry, static dir) is already
+/// a plain path by the time it reaches `Command::new`/`Command::arg`.
+fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        if let Some(stripped) = path.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
+fn standalone_backend_paths(resource_dir: &Path) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+    let node_exe = resource_dir.join("node-runtime").join(node_binary_name);
+    let server_entry = resource_dir.join("server-runtime").join("src").join("main.js");
+    let static_dir = resource_dir.join("dist-runtime");
+
+    if node_exe.is_file() && server_entry.is_file() && static_dir.is_dir() {
+        Some((node_exe, server_entry, static_dir))
+    } else {
+        None
+    }
+}
+
+/// Decides which `node` binary and which `server/src/main.js` to launch.
+/// Pure (no process spawn, no I/O beyond `Path::exists`/`is_file` checks) —
+/// independently testable for the exact invariant LOCAL-01B exists to prove:
+/// a RELEASE build (`debug_build=false`) NEVER falls back to a bare `"node"`
+/// PATH lookup. If the standalone resources aren't staged, release returns
+/// `Err` outright — it would rather fail loudly than silently pick up
+/// whatever `node` happens to be first on the end user's PATH (which,
+/// per this task, must not be assumed to exist at all). Only a DEBUG build
+/// (`cargo tauri dev`, unpackaged) may fall back to the dev-checkout-relative
+/// `node`-on-PATH behavior LOCAL-01A originally shipped — preserving the
+/// existing development workflow unchanged when nobody has run
+/// `npm run package:standalone` yet.
+fn resolve_backend_launch(
+    resource_dir: &Path,
+    manifest_dir: &Path,
+    debug_build: bool,
+) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+    if let Some(paths) = standalone_backend_paths(resource_dir) {
+        return Ok(paths);
+    }
+
+    if !debug_build {
+        return Err(format!(
+            "standalone backend resources not found under {} — run `npm run package:standalone` \
+             before building a release (this build refuses to fall back to a `node` PATH lookup)",
+            resource_dir.display()
+        ));
+    }
+
+    // Dev-time fallback: LOCAL-01A's original behavior, unchanged, so
+    // `cargo tauri dev` keeps working before anyone packages anything.
+    let server_entry = manifest_dir.join("..").join("server").join("src").join("main.js");
     if !server_entry.exists() {
         return Err(format!(
             "local backend entry point not found at {}: run this from the SmartLearn project checkout",
             server_entry.display()
         ));
     }
-    let static_dir: PathBuf = Path::new(manifest_dir).join("..").join("dist");
+    let static_dir = manifest_dir.join("..").join("dist");
     if !static_dir.exists() {
         return Err(format!(
             "{} does not exist — build the frontend first (npm run build) before starting the local-authority backend",
             static_dir.display()
         ));
     }
+    Ok((PathBuf::from("node"), server_entry, static_dir))
+}
+
+/// Spawns the local backend, launching either the standalone bundled Node
+/// binary (LOCAL-01B, production) or the dev-checkout's `node` on PATH
+/// (LOCAL-01A, unpackaged dev fallback) per `resolve_backend_launch`.
+/// Loopback-only, dynamic port, app-data-scoped DB/sources paths.
+fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<LocalBackend, String> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let (node_program, server_entry, static_dir) =
+        resolve_backend_launch(resource_dir, manifest_dir, cfg!(debug_assertions))?;
 
     let port = pick_free_local_port()?;
     let env = local_backend_env(app_data_dir, port, &static_dir);
 
-    let mut command = Command::new("node");
+    let mut command = Command::new(&node_program);
     command
         .arg(&server_entry)
         .envs(env)
@@ -180,7 +259,7 @@ fn spawn_local_backend(app_data_dir: &Path) -> Result<LocalBackend, String> {
         .stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(|e| {
-        format!("failed to spawn local backend (`node` on PATH required for this dev-time proof): {e}")
+        format!("failed to spawn local backend (program: {}): {e}", node_program.display())
     })?;
 
     wait_for_local_backend_ready(&mut child, port, LOCAL_BACKEND_READY_TIMEOUT)?;
@@ -334,7 +413,10 @@ pub fn run() {
             // trusted origin, no local process spawned at all.
             let (app_url, local_authority, local_backend) = if local_authority_enabled() {
                 let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
-                let backend = spawn_local_backend(&app_data_dir)?;
+                let resource_dir = strip_windows_verbatim_prefix(
+                    app.path().resource_dir().map_err(|error| error.to_string())?,
+                );
+                let backend = spawn_local_backend(&resource_dir, &app_data_dir)?;
                 let origin = backend.origin.clone();
                 (origin, true, Some(backend))
             } else {
@@ -399,8 +481,9 @@ pub fn run() {
 mod tests {
     use super::{
         configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
-        pick_free_local_port, wait_for_local_backend_ready, LocalBackend, TransactionStatement,
-        LOCAL_BACKEND_HOST,
+        pick_free_local_port, resolve_backend_launch, standalone_backend_paths,
+        strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
+        TransactionStatement, LOCAL_BACKEND_HOST,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -465,6 +548,165 @@ mod tests {
         ] {
             assert!(configured_app_url(Some(origin)).is_err(), "{origin} must be rejected");
         }
+    }
+
+    #[test]
+    fn strip_windows_verbatim_prefix_removes_the_extended_length_marker() {
+        let stripped = strip_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\Projetos\SmartLearn"));
+        if cfg!(windows) {
+            assert_eq!(stripped, PathBuf::from(r"C:\Projetos\SmartLearn"));
+        } else {
+            assert_eq!(stripped, PathBuf::from(r"\\?\C:\Projetos\SmartLearn"));
+        }
+    }
+
+    #[test]
+    fn strip_windows_verbatim_prefix_is_a_no_op_without_the_marker() {
+        let plain = PathBuf::from(r"C:\Projetos\SmartLearn");
+        assert_eq!(strip_windows_verbatim_prefix(plain.clone()), plain);
+    }
+
+    // LOCAL-01B: fixture for a resource dir with the three standalone
+    // artifacts actually staged (mirrors what scripts/package-standalone.mjs
+    // produces), so tests can assert on the resolution logic without ever
+    // spawning a process or touching the real project checkout.
+    struct StagedResourceDir {
+        path: PathBuf,
+    }
+
+    impl StagedResourceDir {
+        fn create_fully_staged() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("smartlearn-standalone-test-{unique}"));
+            let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+            fs::create_dir_all(path.join("node-runtime")).expect("create node-runtime dir");
+            fs::write(path.join("node-runtime").join(node_binary_name), b"fake-node-binary")
+                .expect("write fake node binary");
+            fs::create_dir_all(path.join("server-runtime").join("src")).expect("create server-runtime/src");
+            fs::write(path.join("server-runtime").join("src").join("main.js"), b"// fake entry")
+                .expect("write fake main.js");
+            fs::create_dir_all(path.join("dist-runtime")).expect("create dist-runtime dir");
+            Self { path }
+        }
+
+        fn create_unstaged() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("smartlearn-standalone-empty-test-{unique}"));
+            fs::create_dir_all(&path).expect("create empty resource dir");
+            Self { path }
+        }
+    }
+
+    impl Drop for StagedResourceDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn standalone_backend_paths_none_when_resources_not_staged() {
+        let empty = StagedResourceDir::create_unstaged();
+        assert!(
+            standalone_backend_paths(&empty.path).is_none(),
+            "a fresh checkout (only tracked .gitkeep placeholders, no real binaries) must not \
+             be treated as a valid standalone package"
+        );
+    }
+
+    #[test]
+    fn standalone_backend_paths_some_and_exact_when_fully_staged() {
+        let staged = StagedResourceDir::create_fully_staged();
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        let (node_exe, server_entry, static_dir) = standalone_backend_paths(&staged.path)
+            .expect("fully staged resource dir must resolve");
+        assert_eq!(node_exe, staged.path.join("node-runtime").join(node_binary_name));
+        assert_eq!(server_entry, staged.path.join("server-runtime").join("src").join("main.js"));
+        assert_eq!(static_dir, staged.path.join("dist-runtime"));
+    }
+
+    #[test]
+    fn standalone_backend_paths_none_when_only_partially_staged() {
+        // node-runtime present but server-runtime/src/main.js missing --
+        // must never launch with only half the standalone package staged.
+        let staged = StagedResourceDir::create_unstaged();
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        fs::create_dir_all(staged.path.join("node-runtime")).expect("create node-runtime dir");
+        fs::write(staged.path.join("node-runtime").join(node_binary_name), b"fake").expect("write");
+        fs::create_dir_all(staged.path.join("dist-runtime")).expect("create dist-runtime dir");
+        assert!(standalone_backend_paths(&staged.path).is_none());
+    }
+
+    #[test]
+    fn resolve_backend_launch_prefers_staged_standalone_resources_in_release() {
+        let staged = StagedResourceDir::create_fully_staged();
+        let (node_program, ..) =
+            resolve_backend_launch(&staged.path, Path::new("/irrelevant"), false)
+                .expect("release build with staged resources must resolve");
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        assert_eq!(
+            node_program,
+            staged.path.join("node-runtime").join(node_binary_name),
+            "release must launch the exact bundled binary path, never a bare PATH-resolved name"
+        );
+    }
+
+    #[test]
+    fn resolve_backend_launch_release_never_falls_back_to_path_node() {
+        // The central LOCAL-01B invariant: a release build with no staged
+        // standalone resources must hard-fail, never silently construct a
+        // bare `Command::new("node")` that would resolve via PATH.
+        let unstaged = StagedResourceDir::create_unstaged();
+        let error = resolve_backend_launch(&unstaged.path, Path::new("/irrelevant"), false)
+            .expect_err("release build without staged resources must error, not fall back to PATH");
+        assert!(
+            error.contains("package:standalone"),
+            "error must point at the packaging step, got: {error}"
+        );
+    }
+
+    #[test]
+    fn resolve_backend_launch_debug_falls_back_to_path_node_only_when_unstaged() {
+        // Preserves LOCAL-01A's exact dev-time behavior: a debug build with
+        // no staged resources still uses the dev-checkout-relative
+        // `node` PATH lookup, so `cargo tauri dev` keeps working unchanged.
+        let unstaged = StagedResourceDir::create_unstaged();
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let result = resolve_backend_launch(&unstaged.path, manifest_dir, true);
+        match result {
+            Ok((node_program, _, _)) => {
+                assert_eq!(
+                    node_program,
+                    PathBuf::from("node"),
+                    "debug fallback must use the bare PATH-resolved `node`, matching LOCAL-01A"
+                );
+            }
+            Err(error) => {
+                // Only acceptable if this checkout genuinely has no dist/
+                // built yet (server/main.js missing is not expected in CI).
+                assert!(
+                    error.contains("dist") || error.contains("main.js"),
+                    "unexpected error shape: {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn resolve_backend_launch_debug_prefers_staged_resources_over_path_node() {
+        // Even in a debug build, once the standalone package IS staged, it
+        // must win over the PATH fallback -- proves the standalone path is
+        // exercised by `cargo tauri dev` too (matches what a real "package
+        // then dev" proof run would use), not only by release builds.
+        let staged = StagedResourceDir::create_fully_staged();
+        let (node_program, ..) = resolve_backend_launch(&staged.path, Path::new("/irrelevant"), true)
+            .expect("debug build with staged resources must resolve");
+        assert_ne!(node_program, PathBuf::from("node"));
     }
 
     #[test]

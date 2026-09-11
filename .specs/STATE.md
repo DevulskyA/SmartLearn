@@ -10,31 +10,33 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=a6c6c45 (LOCAL-00 fix; the LOCAL-01A commit lands one ahead of it)
+CURRENT_HEAD=ba1f6b0 (LOCAL-01A; the LOCAL-01B commit lands one ahead of it)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=LOCAL-01A
-NEXT_TASK=LOCAL-01B
-NEXT_TASK_STATUS=NOT_STARTED
+LAST_COMPLETED_TASK=LOCAL-01B
+NEXT_TASK=none recorded — LOCAL-01 (Desktop local-first authority) is now fully closed; next work item to be decided by the user
+NEXT_TASK_STATUS=N/A
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T42 (5990ea4), LOCAL-00 (e2e determinism fix), LOCAL-01A (Desktop local-first backend)
+RECENT_COMPLETED_TASKS=T42 (5990ea4), LOCAL-00 (e2e determinism fix), LOCAL-01A (Desktop local-first backend), LOCAL-01B (standalone Node packaging)
 RECENT_COMMITS=
+  feat(local-01b): package Desktop's local-authority backend as a standalone bundle, no system Node required
   test(e2e): make production journey assertion deterministic (LOCAL-00)
   feat(local-01a): Desktop runs the existing backend as a local loopback authority
   0d112bc docs(architecture): adopt local-first desktop and minimal companion (ARCH-01)
   a922999 fix(ci): make migration checksums line-ending independent (CI-01)
   5990ea4 feat(t42): Windows wrapper on trusted origin, capability lockdown, AC-24 native-UAT fix
 
-SERVER_GATE=343/343 unchanged (LOCAL-01A touched no server code)
+SERVER_GATE=343/343 unchanged (LOCAL-01B touched no server code)
 ROOT_GATE=267/267 unchanged
-E2E_GATE=45/45 (was 43, +2: e2e/local-authority.spec.js's A/B — LOCAL-00's fix + LOCAL-01A's new spec)
-TEST_INVENTORY=63 test files (was 62, +1 — e2e/local-authority.spec.js)
-RUST_GATE=20/20 (was 15, +5 — LOCAL-01A's local-backend spawn/readiness/env/cleanup tests)
-WINDOWS_BUILD=PASS (unchanged; last recorded at T42 stands — LOCAL-01A's own native proof used `cargo run`, not a fresh `tauri build`)
+E2E_GATE=45/45 unchanged (LOCAL-01B touched no client/e2e-relevant file)
+TEST_INVENTORY=63 test files unchanged
+RUST_GATE=29/29 (was 20, +9 — LOCAL-01B's standalone_backend_paths/resolve_backend_launch/strip_windows_verbatim_prefix pure-function tests)
+WINDOWS_BUILD=PASS — `cargo build` (debug); a full `npx tauri build` (MSI/NSIS) was not re-run this session, same precedent as LOCAL-01A's own native proof (a debug `cargo run`-equivalent binary + real bundled resources is the standalone-launch proof, not a release installer)
 T42_NATIVE_UAT=PASS — real per-user NSIS install (Start Menu/registry-registered, no UAC), online login+sync verified, then only the SmartLearn server process killed (Windows network/Wi-Fi left up) and the installed app reopened: offline banner + real cached snapshot shown, no white screen, no connection-refused dialog. Verified against a from-scratch WebView2 profile (EBWebView cache wiped) to rule out a stale cached shell.
 LOCAL01A_NATIVE_PROOF=PASS — real `cargo run` window (no external SmartLearn server running anywhere), backend confirmed listening ONLY on `127.0.0.1:<dynamic port>` (netstat), real UI register+login+"Nova aula"+16-review creation, DB confirmed inside `%APPDATA%\com.devulsky.smartlearn\smartlearn-server\`, a FULL close+relaunch (new process, new port, fresh backend) showed the same account/unit still present, window close left zero orphan processes after a real bug was found and fixed (see validation.md's LOCAL-01A row). Test data cleaned up from the real app_data_dir afterward.
+LOCAL01B_STANDALONE_PROOF=PASS — the debug `smartlearn.exe` was launched with `SMARTLEARN_LOCAL_AUTHORITY=true` and `PATH` stripped of the `nodejs` directory; `Get-CimInstance Win32_Process` confirmed the spawned child's `ExecutablePath` was the BUNDLED `target\debug\node-runtime\node.exe` (never `C:\Program Files\nodejs\node.exe`), listening loopback-only on a fresh dynamic port. Direct HTTP against that real backend (mirroring LOCAL-01A's own proof style): `/health/ready`->200, register->201, login->200 (real session cookie), `/v1/auth/me`->200 (real csrfToken), `POST /v1/learning-units`->201 (16 reviews scheduled). A graceful `CloseMainWindow()` (real `WM_CLOSE`, not a force-kill) was confirmed to exit BOTH the parent `smartlearn.exe` and the bundled child `node.exe` — zero orphan — proven twice across two separate full runs. Between those two runs: a full close+relaunch (new PID, new dynamic port, fresh backend spawn) then login+`GET /v1/learning-units` returned the exact same account/unit with its original `createdAt`, proving real full-restart persistence, not an in-memory artifact. Test data (1 user, 1 unit — verified to be exactly this proof's own rows before deleting) removed from the real `%APPDATA%\com.devulsky.smartlearn\smartlearn-server\` afterward; the unrelated pre-existing top-level `smartlearn.db` (T42-era) was left untouched.
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
 PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 DONE) — T43/T44 DEFERRED/SUPERSEDED by ARCH-01, see below
@@ -52,7 +54,8 @@ T44_STATUS=DEFERRED
 PRODUCT_PRIORITY=Desktop local-first journey first (material -> estudar -> praticar -> evidência -> próxima ação); Companion Web/PWA comes after that journey is validated
 
 LOCAL01A_STATUS=DONE — Desktop reuses the existing server as a spawned local loopback backend (127.0.0.1, dynamic port, app-data-scoped DB/sources), verified with real native UAT. See validation.md's LOCAL-01A row for full detail.
-LOCAL01_STATUS=IN_PROGRESS — LOCAL-01A done; LOCAL-01B (standalone Node packaging, no dev-machine Node dependency required) is the next open step. LOCAL-01 as a whole is NOT closed.
+LOCAL01B_STATUS=DONE — `npm run package:standalone` (scripts/package-standalone.mjs) stages a self-contained copy of the backend (server/src+migrations+node_modules+package.json, the repo-root shared/ cross-cutting dependency, the built dist/, and the exact currently-running Node binary via `process.execPath`) under `src-tauri/resources/{server-runtime,shared,dist-runtime,node-runtime}`; tauri.conf.json's `bundle.resources` embeds them into the app's resource_dir. lib.rs's `resolve_backend_launch` (pure, unit-tested) resolves the bundled node/entry/static paths and — the core LOCAL-01B invariant — a RELEASE build with no staged resources hard-errors rather than ever constructing a bare `Command::new("node")` that could resolve via PATH; only a DEBUG build without staged resources falls back to LOCAL-01A's original dev-checkout/PATH-node behavior, preserving `cargo tauri dev` unchanged for anyone who hasn't packaged anything. Two real bugs found and fixed while proving this against a real launch: (1) `server/src/services/*.js` import a repo-root `../../../shared/*.js` cross-cutting module the packaging script initially didn't stage (`ERR_MODULE_NOT_FOUND`) — fixed by staging `shared/` as a sibling of `server-runtime`, matching the original repo's relative layout; (2) Tauri's `resource_dir()` returns a Windows `\\?\`-extended-length-prefixed path, which Node's own entry-point resolution (`resolveMainPath`/`realpathSync`) mishandled into an `EISDIR` crash trying to `lstat` the bare string `"C:"` — fixed by `strip_windows_verbatim_prefix`, applied once at the resource_dir source. See LOCAL01B_STANDALONE_PROOF above for the full native-launch evidence (process-identity proof via `Get-CimInstance`, HTTP-level auth+unit-creation+persistence proof, twice-verified clean shutdown). A `cargo build` from a resources-directory state with ONLY the tracked `.gitkeep` placeholders (simulating a fresh checkout before anyone runs the packaging script) was verified to still succeed — the standalone packaging step is opt-in, not a new hard requirement for normal development.
+LOCAL01_STATUS=DONE — LOCAL-01A and LOCAL-01B both closed. LOCAL-01 (Desktop restored as its own local-first authority, per ARCH-01) is now fully closed.
 ```
 
 ## ARCHITECTURE SUPERSESSION — ARCH-01 (2026-09-11, canonical, externally decided)
@@ -98,7 +101,7 @@ ROADMAP IMPACT:
   Windows/Web/Android functional parity is no longer a V1 requirement.
   16 fixed reviews, House Simulator's separateness, and MII as a canonical capability are UNCHANGED by this pivot.
 
-NEXT_TASK=LOCAL-01 (recorded as of ARCH-01's own decision; LOCAL-01A of this is now DONE — see LOCAL01A_STATUS above and validation.md — NEXT_TASK is now LOCAL-01B)
+NEXT_TASK=LOCAL-01 (recorded as of ARCH-01's own decision; LOCAL-01A and LOCAL-01B are both now DONE — see LOCAL01A_STATUS/LOCAL01B_STATUS above — LOCAL-01 as a whole is closed; next work item not yet decided)
   Restore the Desktop Windows surface as the complete local-first product, preserving as much existing code/domain
   as possible, WITHOUT yet implementing the Companion.
   OBJECTIVE: the Windows app must run the complete experience without depending on the cloud server as the authority
@@ -111,9 +114,9 @@ NEXT_TASK=LOCAL-01 (recorded as of ARCH-01's own decision; LOCAL-01A of this is 
     - no Companion implemented yet;                                [MET — untouched]
     - no new parallel architecture;                                [MET — no second domain/backend built]
     - preserving existing data is mandatory.                       [MET — nothing deleted; old T42 remote path untouched, still default]
-  LOCAL-01B (open): standalone Node packaging so the end user's machine does not need a dev-installed Node — LOCAL-01A
+  LOCAL-01B (DONE): standalone Node packaging so the end user's machine does not need a dev-installed Node — LOCAL-01A
   deliberately used the dev machine's own `node` on PATH (explicit in its own spec) and is not itself production
-  packaging.
+  packaging. See LOCAL01B_STATUS above for the full solution/evidence.
 
 PRODUCT_PRIORITY: make the Desktop journey (material -> estudar -> praticar -> evidência -> próxima ação) excellent
   first. The Companion comes after that journey is validated.
@@ -153,6 +156,126 @@ CONFIRMED_P0_P1_OPEN=0
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
 - MII (mnemonic/infographic pedagogical artifacts) is a canonical, recurring capability of SmartLearn, confirmed by the user 2026-09-10 — not yet reflected in tasks.md/acceptance.md. Sequence: MII-1 (mnemonic architecture) DONE; MII-2 (infographic blueprint) is the active stage; MII-3 (production/render/refinement) is next. Do not invent a detailed SmartLearn-integration architecture before MII-2/MII-3 produce their actual contract — when they do, the integration point is additive to the existing pipeline (source → accepted content → exercises → MII when pedagogically material → practice → evidence), not a parallel path that bypasses T20-T24's provenance/versioning guarantees.
+
+---
+
+## CHECKPOINT — 2026-09-11 (session 18, LOCAL-01B DONE)
+
+Reconciled first per this session's own explicit instruction (Git + observable
+evidence prevail over STATE/plan/memory): `git branch --show-current` /
+`git rev-parse --short HEAD` / `git status --short` confirmed
+`claude/smartlearn-v1-complete` @ `ba1f6b0`, worktree clean — matched exactly.
+Also reconciled that the checked-out `C:\Projetos\SmartLearn` root (branch
+`main` @ `f645a07`) is a DIFFERENT, unrelated checkout — this worktree
+(`.claude/worktrees/smartlearn-v1-complete`) is the only one with LOCAL-01A's
+own commit history, confirmed via `git worktree list` before touching
+anything.
+
+**LOCAL-01B** (`scripts/package-standalone.mjs` new; `package.json`,
+`.gitignore`, `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs` changed)
+DONE — closes LOCAL-01 as a whole. Chose the simplest solution available in
+this actual repo: Tauri's own `bundle.resources` mechanism (no new plugin,
+no new IPC capability — `server/package.json` has no `devDependencies`
+section at all, so its existing `node_modules` already IS the exact
+production dependency tree the passing server suite uses, zero npm
+reinstall/network call/native-rebuild risk). The packaging script stages
+`server/{src,migrations,node_modules,package.json}` (LOCAL-01B's own
+`server-runtime/`), the repo-root `shared/` cross-cutting module (discovered
+missing mid-task — see below), the built `dist/`, and the exact Node binary
+currently running the script (`process.execPath`, never a PATH lookup) into
+`src-tauri/resources/`; `tauri.conf.json` embeds those into the packaged
+app's `resource_dir`.
+
+`lib.rs`'s new `resolve_backend_launch` (pure, no I/O beyond existence
+checks — independently unit-tested) is the actual safety invariant this
+task exists to prove: a RELEASE build with no staged standalone resources
+returns `Err` outright, never silently building a bare `Command::new
+("node")` that could pick up whatever `node` happens to be first on an end
+user's PATH (which this task must not assume exists at all). Only a DEBUG
+build without staged resources falls back to LOCAL-01A's original
+dev-checkout-relative `node`-on-PATH behavior — `cargo tauri dev` keeps
+working unchanged for anyone who hasn't run `npm run package:standalone`
+yet, verified directly: a `cargo build` was run against a resources
+directory containing ONLY the tracked `.gitkeep` placeholders (simulating a
+fresh checkout) and it still succeeded.
+
+Two real, previously-latent bugs were found and fixed while proving this
+against a real native launch (not caught by inspection alone): (1)
+`server/src/services/{accept-draft,imports,learning-units,settings,
+subjects}.js` import a repo-root `../../../shared/*.js` module
+(`text-validation.js`, `review-schedule.js`, `import-normalization.js`) the
+packaging script's first version never staged — a real launch crashed with
+`ERR_MODULE_NOT_FOUND` before this was caught; fixed by staging `shared/`
+as a sibling of `server-runtime` in the resource tree, preserving the exact
+relative depth (`services/foo.js` -> `../../../shared/x.js`) the original
+repo layout already has. (2) `app.path().resource_dir()` returns a Windows
+`\\?\`-extended-length-prefixed path; passed straight through to Node as
+its entry argument, this crashed Node's own `resolveMainPath` ->
+`realpathSync` with `EISDIR: illegal operation on a directory, lstat 'C:'`
+— a genuine Node-side bug with that path form, confirmed by reproducing it
+directly, then fixed with `strip_windows_verbatim_prefix` (Windows-only,
+applied once at the resource_dir source, unit-tested both with and without
+the prefix present).
+
+Full native standalone proof (real `smartlearn.exe`, `SMARTLEARN_LOCAL_
+AUTHORITY=true`, `PATH` stripped of the `nodejs` directory before launch):
+`Get-CimInstance Win32_Process` confirmed the spawned child's
+`ExecutablePath` was the bundled `target\debug\node-runtime\node.exe`
+(never `C:\Program Files\nodejs\node.exe`), `Get-NetTCPConnection` confirmed
+it listening loopback-only on a fresh dynamic port. Direct HTTP against
+that real backend proved: `/health/ready`->200; register->201; login->200
+with a real session cookie; `/v1/auth/me`->200 with a real csrfToken;
+`POST /v1/learning-units`->201 with 16 reviews scheduled (canonical
+schedule). A graceful `CloseMainWindow()` (real `WM_CLOSE`, deliberately
+NOT a force-kill, since LOCAL-01A's own orphan-process bug only reproduces
+under the app's real close path) was confirmed via process inspection to
+exit BOTH the parent `smartlearn.exe` and the bundled child `node.exe` —
+zero orphan — proven across two separate full runs. Between those two runs:
+a complete close, then a fresh relaunch (new PID, new dynamic port, fresh
+backend spawn), then login + `GET /v1/learning-units` returned the exact
+same account/unit with its original `createdAt` — real full-restart
+persistence, not an in-memory artifact. Test data (verified to be exactly
+this proof's own 1 user/1 unit before deleting, via a direct read-only
+`better-sqlite3` query against the real DB file) was removed from the real
+`%APPDATA%\com.devulsky.smartlearn\smartlearn-server\` afterward; the
+unrelated pre-existing top-level `smartlearn.db` (T42-era) was left
+untouched.
+
+Also fixed, discovered while wiring the `.gitignore` entries for the new
+`src-tauri/resources/` tree: a `dir/**/*` + `!dir/**/.gitkeep` negation
+pattern does NOT actually work in git (a parent-directory exclusion cannot
+be selectively re-included by a deeper negation) — confirmed directly via
+`git add --dry-run` silently matching nothing. Replaced with one `dir/*` +
+`!dir/.gitkeep` pair per concrete subdirectory, confirmed via the same
+dry-run to stage exactly the four `.gitkeep` files and nothing else.
+
+`src-tauri/src/lib.rs` (+9 tests, 29/29 in the crate): `standalone_backend_
+paths` (none when unstaged, none when only partially staged, exact match
+when fully staged), `resolve_backend_launch` (release prefers staged
+resources; release with no staged resources errors pointing at
+`package:standalone`, never falls back to PATH; debug falls back to PATH
+`node` only when unstaged, matching LOCAL-01A byte-for-byte; debug prefers
+staged resources over the PATH fallback when both are available), `strip_
+windows_verbatim_prefix` (removes the marker; no-op without it). Full gate:
+Rust 29/29 (was 20, +9), server 343/343 unchanged, root 267/267 unchanged,
+test:inventory PASS (63 files unchanged), full `npx playwright test` 45/45
+unchanged (LOCAL-01B touched no client/e2e-relevant file), `cargo build`
+(debug) PASS both with real staged resources and with only `.gitkeep`
+placeholders. `npx tauri build` (a full release MSI/NSIS) was not re-run
+this session — same precedent LOCAL-01A itself set (a debug binary + real
+bundled resources is the standalone-launch proof, not a release installer).
+
+LOCAL-01B's DONE criteria (standalone without system Node; fresh auth;
+unit creation; full-restart persistence; clean backend termination; dev
+workflow intact; targeted+full gates green) are all met — see
+LOCAL01B_STANDALONE_PROOF and LOCAL01B_STATUS above for the itemized
+evidence. LOCAL-01 (Desktop restored as its own local-first authority, per
+ARCH-01) is now CLOSED as a whole.
+
+NEXT_TASK: none recorded by this session — LOCAL-01 is closed and this
+session was not authorized to choose the next work item (T43/T44 stay
+DEFERRED/DEFERRED_SUPERSEDED per ARCH-01, not reactivated). The user
+decides what comes next.
 
 ---
 

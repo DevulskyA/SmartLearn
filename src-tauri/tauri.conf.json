@@ -25,6 +25,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "resources/server-runtime": "server-runtime",
+      "resources/shared": "shared",
+      "resources/dist-runtime": "dist-runtime",
+      "resources/node-runtime": "node-runtime"
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

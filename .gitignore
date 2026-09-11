@@ -5,6 +5,23 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 
+# LOCAL-01B: these four dirs must stay present (tracked, via .gitkeep) in a
+# fresh checkout so tauri.conf.json's bundle.resources mapping always
+# resolves and `cargo build`/`tauri dev` never fails before anyone has run
+# `npm run package:standalone` -- only their real (large, generated)
+# contents are ignored. A `**/*` pattern here would exclude the directories
+# themselves too, which git cannot selectively re-include a file under
+# (parent-directory exclusion beats a deeper negation) -- one `dir/*` +
+# `!dir/.gitkeep` pair per directory avoids that pitfall.
+src-tauri/resources/server-runtime/*
+!src-tauri/resources/server-runtime/.gitkeep
+src-tauri/resources/shared/*
+!src-tauri/resources/shared/.gitkeep
+src-tauri/resources/dist-runtime/*
+!src-tauri/resources/dist-runtime/.gitkeep
+src-tauri/resources/node-runtime/*
+!src-tauri/resources/node-runtime/.gitkeep
+
 .env
 .env.*
 !.env.example
