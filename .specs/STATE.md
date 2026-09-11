@@ -10,14 +10,49 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=a384240 (LOCAL-01B; the PV1-01 commit lands one ahead of it)
+CURRENT_HEAD=07585a4
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
-CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=PV1-01
+CURRENT_PHASE=SMARTLEARN_PRODUCT_FIRST_V1 (5/5 slices DONE, all committed)
+LAST_COMPLETED_TASK=SMARTLEARN_PRODUCT_FIRST_V1 Slice 5 (Pareto pass)
 NEXT_TASK=awaiting external planning
 NEXT_TASK_STATUS=N/A
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
+
+GOVERNING PHILOSOPHY (2026-09-11): SMARTLEARN_PRODUCT_FIRST_V1 is now the
+canonical operating philosophy for this project (full text given by the
+user, not reproduced here) — product value to the student outranks
+architecture/process completeness. See commits b992ec7..07585a4 for the
+first pass under it. Future sessions should read that instruction (or
+its summary from the user) before defaulting back to heavier process.
+
+SMARTLEARN_PRODUCT_FIRST_V1_RESULTS:
+  Slice 1 (b992ec7): real-provider (Anthropic) draft prompt rewritten for
+    actual pedagogical quality — varied question types, teaching answers,
+    genuine hints, faithful/proportional summary. Fake provider
+    deliberately left dumb (no real language understanding to vary
+    honestly). Only observable once real AI credentials are configured
+    (not available/authorized in this environment).
+  Slice 2 (ed97883): initial-practice session no longer ends on a bare
+    score — "Revisar meus erros (N)" shows the missed Q&A, reusing
+    exactly what the session already had in memory.
+  Slice 3 (7cca6d5): Hoje surfaces one primary action (oldest overdue >
+    today's first item) instead of a wall of fully-expanded rows; button
+    scrolls straight to and highlights that exact row.
+  Slice 4/5 (07585a4): full manual journey run for real (spawned server +
+    plain browser in LOCAL_DESKTOP_AUTHORITY mode — see index.html's new
+    VITE_LOCAL_AUTHORITY dev default). 5 real frictions found and fixed:
+    raw-filename default title, a field-name-leaking error message,
+    fake-provider mid-word truncation, scroll position not resetting on
+    screen switch, missing accessible names on two draft-review inputs.
+  Also generalized (3rd real occurrence): a `[hidden]` vs. component-
+    `display` CSS bug, now one global `[hidden]{display:none!important}`
+    rule (src/styles.css) instead of three narrow per-component patches.
+
+Full gate at closing: Rust 29/29, server 343/343, root 267/267, build
+PASS, package:standalone PASS, test:inventory 64 files, e2e 47/47 — all
+unchanged from before this philosophy pass except the +2 tests already
+counted under PV1-01 (session before this one).
 
 RECENT_COMPLETED_TASKS=LOCAL-01A (Desktop local-first backend), LOCAL-01B (standalone Node packaging), PV1-01 (first product journey: material -> unit -> Estudar agora -> practice -> evidence -> next review)
 RECENT_COMMITS=
