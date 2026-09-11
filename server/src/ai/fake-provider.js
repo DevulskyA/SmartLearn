@@ -15,6 +15,18 @@ export const FAKE_MODEL_VERSION = 'fake-v1';
 const SUMMARY_SNIPPET_LENGTH = 150;
 const ANSWER_SNIPPET_LENGTH = 80;
 
+// SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: found in a real manual journey — a
+// raw character-count slice cut mid-word (e.g. "...cardiaca ocor"),
+// which reads as broken even for content everyone knows is a test double.
+// This does not add any interpretation/intelligence the fake provider
+// deliberately doesn't have — it only avoids severing a word.
+function trimToWordBoundary(text, maxLength) {
+  if (text.length <= maxLength) return text;
+  const slice = text.slice(0, maxLength);
+  const lastSpace = slice.lastIndexOf(' ');
+  return (lastSpace > 0 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
 /**
  * @param {{segments: {pageIndex:number, text:string}[], promptVersion: string}} input
  * @returns {Promise<object>} a RAW draft — NOT yet validated against
@@ -23,11 +35,11 @@ const ANSWER_SNIPPET_LENGTH = 80;
  */
 export async function generateDraft({ segments, promptVersion }) {
   const joinedText = segments.map((s) => s.text).join(' ').trim();
-  const summary = joinedText.slice(0, SUMMARY_SNIPPET_LENGTH) || '(sem texto extraído)';
+  const summary = trimToWordBoundary(joinedText, SUMMARY_SNIPPET_LENGTH) || '(sem texto extraído)';
 
   const questions = segments.map((segment) => ({
     question: `O que este trecho (página ${segment.pageIndex}) aborda?`,
-    answer: segment.text.slice(0, ANSWER_SNIPPET_LENGTH) || '(sem conteúdo nesta página)',
+    answer: trimToWordBoundary(segment.text, ANSWER_SNIPPET_LENGTH) || '(sem conteúdo nesta página)',
     hint: null,
     sourceSpans: [{ pageIndex: segment.pageIndex }],
   }));

@@ -2399,11 +2399,13 @@ function renderDraftPanel(draftPanel, draft) {
   subjectInput.type = "text";
   subjectInput.className = "source-draft-subject-input";
   subjectInput.placeholder = "Nome da disciplina";
+  subjectInput.setAttribute("aria-label", "Nome da disciplina");
 
   const dateInput = document.createElement("input");
   dateInput.type = "date";
   dateInput.className = "source-draft-date-input";
   dateInput.value = getLocalDateValue();
+  dateInput.setAttribute("aria-label", "Data da aula");
 
   const acceptBtn = document.createElement("button");
   acceptBtn.type = "button";
@@ -3218,6 +3220,16 @@ export function showScreen(screenId, { focus = false } = {}) {
   for (const panel of screenPanels) {
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
   }
+
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey
+  // — the scrollable container (.app-main) kept whatever scroll offset the
+  // PREVIOUS screen had, so switching screens after scrolling down landed
+  // mid-content on the new screen instead of at its top (observed
+  // navigating a scrolled Conta into Materiais — arrived mid-paragraph,
+  // not at the "Materiais" heading). showScreen() is the one place every
+  // real screen switch goes through; a same-screen re-click scrolling
+  // back to top is reasonable, not a regression.
+  if (mainContent) mainContent.scrollTop = 0;
 
   for (const item of navigationItems) {
     const isActive = item.dataset.screen === nextScreen;

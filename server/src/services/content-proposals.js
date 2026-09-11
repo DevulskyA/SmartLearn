@@ -32,9 +32,20 @@ function chunkText(db, userId, sourceId, pageStart, pageEnd) {
   return rows.map((r) => r.text).join('\n\n');
 }
 
+// SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found doing a real manual
+// journey — the default proposal title (and therefore, if never
+// manually edited, the study unit's own title later) was the RAW
+// uploaded filename including its extension, e.g. "insuficiencia-
+// cardiaca.pdf — páginas 1-3". A raw filename as the first thing a
+// student sees on their study screen reads as unfinished. Still fully
+// editable either way (this only changes the DEFAULT).
+function stripKnownExtension(filename) {
+  return filename.replace(/\.(pdf|PDF)$/, '');
+}
+
 function defaultTitle(source, pageStart, pageEnd) {
   const range = pageStart === pageEnd ? `página ${pageStart}` : `páginas ${pageStart}-${pageEnd}`;
-  return `${source.original_name} — ${range}`;
+  return `${stripKnownExtension(source.original_name)} — ${range}`;
 }
 
 function toSummaryDto(row) {

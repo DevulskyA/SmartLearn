@@ -15,6 +15,15 @@
       if (window.__SMARTLEARN_REMOTE_MODE__ === undefined) {
         window.__SMARTLEARN_REMOTE_MODE__ = import.meta.env.VITE_REMOTE_MODE === "1";
       }
+      // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: same pattern as REMOTE_MODE
+      // above — lets `npm run dev` exercise the LOCAL_DESKTOP_AUTHORITY
+      // path (Materiais, Estudar agora) in a plain browser tab for manual
+      // product QA, without needing the Tauri shell. A real Tauri session
+      // always sets this via its own window init script first, which wins
+      // over this default exactly like REMOTE_MODE does.
+      if (window.__SMARTLEARN_LOCAL_AUTHORITY__ === undefined) {
+        window.__SMARTLEARN_LOCAL_AUTHORITY__ = import.meta.env.VITE_LOCAL_AUTHORITY === "1";
+      }
     </script>
     <script type="module">
       import { applyThemePreference, getStoredThemePreference } from "/src/theme.js";

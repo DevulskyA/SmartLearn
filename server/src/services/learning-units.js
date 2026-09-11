@@ -68,7 +68,10 @@ export function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, 
     return db.prepare('SELECT * FROM subjects WHERE id = ?').get(result.lastInsertRowid);
   }
 
-  if (!subjectId) throw new LearningUnitError('VALIDATION_FAILED', 'Informe subjectId ou newSubjectName.', 'subjectId');
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: found in a real manual journey —
+  // this message previously leaked raw API field names ("Informe subjectId
+  // ou newSubjectName.") straight to the end user.
+  if (!subjectId) throw new LearningUnitError('VALIDATION_FAILED', 'Informe uma disciplina para esta aula.', 'subjectId');
   const subject = db.prepare('SELECT * FROM subjects WHERE user_id = ? AND id = ?').get(userId, subjectId);
   if (!subject) throw new LearningUnitError('NOT_FOUND', 'Disciplina não encontrada.', 'subjectId');
   if (!subject.is_active) throw new LearningUnitError('VALIDATION_FAILED', 'Selecione uma disciplina ativa.', 'subjectId');
