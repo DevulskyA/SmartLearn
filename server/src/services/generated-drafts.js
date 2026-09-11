@@ -73,7 +73,12 @@ function toDraftDto(row) {
  * one" gets no special trust.
  */
 export async function createDraft(db, userId, proposalId, {
-  promptVersion = '1',
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 1: bumped from '1' -- the real
+  // provider's prompt (anthropic-provider.js) changed materially (varied
+  // question types, teaching answers, genuine hints), and promptVersion
+  // is stored per draft precisely so a version change like this is
+  // distinguishable in stored/historical drafts, not silently conflated.
+  promptVersion = '2',
   apiKey = null,
   model = null,
   consentGranted = false,
