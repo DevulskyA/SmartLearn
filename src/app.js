@@ -65,6 +65,16 @@ function showConfirm(message) {
 const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
 const DB = REMOTE_MODE ? RemoteDB : LocalDB;
 
+// LOCAL-01A / ARCH-01: Desktop still uses REMOTE_MODE=true (same
+// remote-store.js/API-HTTP pipeline as before — see .specs/STATE.md's
+// "ARCHITECTURE SUPERSESSION" section), but the "remote" it talks to is a
+// backend running on THIS computer (127.0.0.1 loopback), started by the
+// Tauri wrapper, not a cloud server. Set once by src-tauri/src/lib.rs's
+// window init script, never by remote/web content. api-client.js and
+// offline-ui.js each read this same flag independently for their own
+// LOCAL_DESKTOP_AUTHORITY branches — this module's copy is for renderToday.
+const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+
 let databaseAvailable = false;
 // In remote mode, "available" also requires a logged-in session — there is
 // no local schema to fail to open, but every domain call needs an
@@ -747,7 +757,12 @@ async function renderOfflineToday(accountId) {
 
 export async function renderToday() {
   const existingOfflineBanner = document.querySelector("#offline-banner");
-  if (REMOTE_MODE && !navigator.onLine) {
+  // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
+  // nothing about a loopback backend's reachability — Desktop must not
+  // treat "no Wi-Fi/internet" as "no authority" (STATE.md's ARCHITECTURE
+  // SUPERSESSION §3). This read-only snapshot fallback stays REMOTE_MODE
+  // (non-local) territory only.
+  if (REMOTE_MODE && !LOCAL_AUTHORITY && !navigator.onLine) {
     const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
     return renderOfflineToday(accountId);
   }
@@ -775,7 +790,11 @@ export async function renderToday() {
     // read-only snapshot path as a known-offline cold start. Any other
     // error (a real HTTP response, auth, etc.) is a different failure and
     // must keep propagating, not get silently reinterpreted as "offline".
-    if (REMOTE_MODE && error instanceof NetworkError) {
+    // LOCAL-01A: a local backend that's down is a real, explicit failure
+    // (item E of LOCAL-01A's discriminating tests) — it must surface as an
+    // error, never get silently reinterpreted as "offline, show the last
+    // snapshot" the way a genuinely unreachable REMOTE cloud server does.
+    if (REMOTE_MODE && !LOCAL_AUTHORITY && error instanceof NetworkError) {
       const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
       return renderOfflineToday(accountId);
     }

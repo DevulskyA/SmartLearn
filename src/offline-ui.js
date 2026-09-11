@@ -21,15 +21,26 @@ function ensureIndicator() {
   return indicatorEl;
 }
 
+/** LOCAL-01A: on the Desktop local-first surface this same indicator would
+ * otherwise read `navigator.onLine`, which tracks the OS network adapter,
+ * not whether the loopback backend (127.0.0.1) is reachable — losing
+ * Wi-Fi/internet must never make Desktop claim "offline, read-only" when
+ * its own local backend is unaffected. Set once by the Tauri wrapper's
+ * window init script (src-tauri/src/lib.rs), never by remote/web content. */
+function isLocalDesktopAuthority() {
+  return typeof window !== 'undefined' && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+}
+
 /** Re-derives and shows/hides the connectivity banner from the CURRENT
  * `navigator.onLine` state — safe to call any time (offline/online
  * transitions, screen navigation, after a sync attempt). Exported so
  * screens that build their own more specific offline messaging (T40's
  * `renderOfflineToday`) can still trigger a refresh of this one after
- * their own render, keeping both in sync. */
+ * their own render, keeping both in sync. LOCAL-01A: a no-op under
+ * LOCAL_DESKTOP_AUTHORITY — see isLocalDesktopAuthority() above. */
 export async function refreshIndicator() {
   const el = ensureIndicator();
-  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+  if (isLocalDesktopAuthority() || typeof navigator === 'undefined' || navigator.onLine !== false) {
     el.hidden = true;
     return;
   }

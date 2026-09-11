@@ -100,10 +100,29 @@ async function handleResponse(res) {
   return json;
 }
 
+/** LOCAL-01A: true only for the Desktop local-first surface, where this
+ * same api-client/remote-store pipeline talks to a backend running on this
+ * computer (127.0.0.1 loopback), not a remote cloud server. T41's
+ * `navigator.onLine` read-only guard exists because a REMOTE server may be
+ * genuinely unreachable while the OS still reports a network link; that
+ * reasoning does not apply to a loopback backend, whose reachability
+ * `navigator.onLine` says nothing meaningful about either way. Set once by
+ * the Tauri Desktop wrapper's window init script (src-tauri/src/lib.rs),
+ * never by remote/web content — ARCH-01/STATE.md's "ARCHITECTURE
+ * SUPERSESSION" section. */
+function isLocalDesktopAuthority() {
+  return typeof window !== 'undefined' && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+}
+
 /** T41: true only when the browser is CERTAIN it has no network. Checked
  * only for mutating methods — a stale GET is fine to attempt (T39/T40's
- * offline reads already go through OfflineStore, never a live GET). */
+ * offline reads already go through OfflineStore, never a live GET).
+ * LOCAL-01A: this guard is specific to REMOTE_AUTHORITY (T41's original
+ * scope); it never applies under LOCAL_DESKTOP_AUTHORITY, where a failed
+ * request against the loopback backend still surfaces as a normal
+ * NetworkError from the fetch() below, never silently blocked pre-flight. */
 function isDefinitelyOffline(method) {
+  if (isLocalDesktopAuthority()) return false;
   return MUTATING_METHODS.has(method) && typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 

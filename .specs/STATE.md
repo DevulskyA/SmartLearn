@@ -10,30 +10,31 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=a922999 (CI-01 fix; this ARCH-01 docs commit lands one ahead of it)
+CURRENT_HEAD=a6c6c45 (LOCAL-00 fix; the LOCAL-01A commit lands one ahead of it)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
-LAST_COMPLETED_TASK=T42
-NEXT_TASK=LOCAL-01
+LAST_COMPLETED_TASK=LOCAL-01A
+NEXT_TASK=LOCAL-01B
 NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
-RECENT_COMPLETED_TASKS=T40 (b0e6d9b), T41 (bc10040), T42 (5990ea4)
+RECENT_COMPLETED_TASKS=T42 (5990ea4), LOCAL-00 (e2e determinism fix), LOCAL-01A (Desktop local-first backend)
 RECENT_COMMITS=
+  test(e2e): make production journey assertion deterministic (LOCAL-00)
+  feat(local-01a): Desktop runs the existing backend as a local loopback authority
+  0d112bc docs(architecture): adopt local-first desktop and minimal companion (ARCH-01)
+  a922999 fix(ci): make migration checksums line-ending independent (CI-01)
   5990ea4 feat(t42): Windows wrapper on trusted origin, capability lockdown, AC-24 native-UAT fix
-  bc10040 feat(t41): enforce offline read-only actions visibly and technically
-  4a775ee docs(governance): adopt SmartLearn Quality Standard V1 as canonical inherited contract
-  33798c9 docs(state): add compact machine-scannable checkpoint block for context handoff
-  b0e6d9b feat(t40): PWA shell and private cache lifecycle
 
-SERVER_GATE=343/343 (was 340; +3 migration checksum tests, CI-01)
-ROOT_GATE=267/267
-E2E_GATE=43/43 (unchanged by CI-01/ARCH-01; not re-run this session — no client/e2e-relevant file touched)
-TEST_INVENTORY=62 test files (PASS via scripts/check-test-inventory.mjs)
-RUST_GATE=15/15
-WINDOWS_BUILD=PASS (unchanged by CI-01/ARCH-01; last recorded at T42 stands)
+SERVER_GATE=343/343 unchanged (LOCAL-01A touched no server code)
+ROOT_GATE=267/267 unchanged
+E2E_GATE=45/45 (was 43, +2: e2e/local-authority.spec.js's A/B — LOCAL-00's fix + LOCAL-01A's new spec)
+TEST_INVENTORY=63 test files (was 62, +1 — e2e/local-authority.spec.js)
+RUST_GATE=20/20 (was 15, +5 — LOCAL-01A's local-backend spawn/readiness/env/cleanup tests)
+WINDOWS_BUILD=PASS (unchanged; last recorded at T42 stands — LOCAL-01A's own native proof used `cargo run`, not a fresh `tauri build`)
 T42_NATIVE_UAT=PASS — real per-user NSIS install (Start Menu/registry-registered, no UAC), online login+sync verified, then only the SmartLearn server process killed (Windows network/Wi-Fi left up) and the installed app reopened: offline banner + real cached snapshot shown, no white screen, no connection-refused dialog. Verified against a from-scratch WebView2 profile (EBWebView cache wiped) to rule out a stale cached shell.
+LOCAL01A_NATIVE_PROOF=PASS — real `cargo run` window (no external SmartLearn server running anywhere), backend confirmed listening ONLY on `127.0.0.1:<dynamic port>` (netstat), real UI register+login+"Nova aula"+16-review creation, DB confirmed inside `%APPDATA%\com.devulsky.smartlearn\smartlearn-server\`, a FULL close+relaunch (new process, new port, fresh backend) showed the same account/unit still present, window close left zero orphan processes after a real bug was found and fixed (see validation.md's LOCAL-01A row). Test data cleaned up from the real app_data_dir afterward.
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
 PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 DONE) — T43/T44 DEFERRED/SUPERSEDED by ARCH-01, see below
@@ -49,6 +50,9 @@ ARCHITECTURE_PIVOT_STATUS=CANONICAL — see "ARCHITECTURE SUPERSESSION" section 
 T43_STATUS=DEFERRED_SUPERSEDED (full Android product wrapper, as originally scoped against server-central-as-universal-authority, is not the current target)
 T44_STATUS=DEFERRED
 PRODUCT_PRIORITY=Desktop local-first journey first (material -> estudar -> praticar -> evidência -> próxima ação); Companion Web/PWA comes after that journey is validated
+
+LOCAL01A_STATUS=DONE — Desktop reuses the existing server as a spawned local loopback backend (127.0.0.1, dynamic port, app-data-scoped DB/sources), verified with real native UAT. See validation.md's LOCAL-01A row for full detail.
+LOCAL01_STATUS=IN_PROGRESS — LOCAL-01A done; LOCAL-01B (standalone Node packaging, no dev-machine Node dependency required) is the next open step. LOCAL-01 as a whole is NOT closed.
 ```
 
 ## ARCHITECTURE SUPERSESSION — ARCH-01 (2026-09-11, canonical, externally decided)
@@ -94,19 +98,22 @@ ROADMAP IMPACT:
   Windows/Web/Android functional parity is no longer a V1 requirement.
   16 fixed reviews, House Simulator's separateness, and MII as a canonical capability are UNCHANGED by this pivot.
 
-NEXT_TASK=LOCAL-01
+NEXT_TASK=LOCAL-01 (recorded as of ARCH-01's own decision; LOCAL-01A of this is now DONE — see LOCAL01A_STATUS above and validation.md — NEXT_TASK is now LOCAL-01B)
   Restore the Desktop Windows surface as the complete local-first product, preserving as much existing code/domain
   as possible, WITHOUT yet implementing the Companion.
   OBJECTIVE: the Windows app must run the complete experience without depending on the cloud server as the authority
   for its own study data.
   CRITERIA (decided; do not invent beyond these — the technical solution is supplied externally before implementation):
-    - full UI runs on Windows;
-    - core data persisted locally;
-    - no requirement to upload full PDFs to the cloud;
-    - reuse existing infrastructure wherever possible;
-    - no Companion implemented yet;
-    - no new parallel architecture;
-    - preserving existing data is mandatory.
+    - full UI runs on Windows;                                    [MET by LOCAL-01A]
+    - core data persisted locally;                                [MET by LOCAL-01A]
+    - no requirement to upload full PDFs to the cloud;             [MET by LOCAL-01A — sourcesDir is local]
+    - reuse existing infrastructure wherever possible;             [MET by LOCAL-01A — same Node/Fastify/SQLite backend, spawned locally]
+    - no Companion implemented yet;                                [MET — untouched]
+    - no new parallel architecture;                                [MET — no second domain/backend built]
+    - preserving existing data is mandatory.                       [MET — nothing deleted; old T42 remote path untouched, still default]
+  LOCAL-01B (open): standalone Node packaging so the end user's machine does not need a dev-installed Node — LOCAL-01A
+  deliberately used the dev machine's own `node` on PATH (explicit in its own spec) and is not itself production
+  packaging.
 
 PRODUCT_PRIORITY: make the Desktop journey (material -> estudar -> praticar -> evidência -> próxima ação) excellent
   first. The Companion comes after that journey is validated.
@@ -146,6 +153,89 @@ CONFIRMED_P0_P1_OPEN=0
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
 - MII (mnemonic/infographic pedagogical artifacts) is a canonical, recurring capability of SmartLearn, confirmed by the user 2026-09-10 — not yet reflected in tasks.md/acceptance.md. Sequence: MII-1 (mnemonic architecture) DONE; MII-2 (infographic blueprint) is the active stage; MII-3 (production/render/refinement) is next. Do not invent a detailed SmartLearn-integration architecture before MII-2/MII-3 produce their actual contract — when they do, the integration point is additive to the existing pipeline (source → accepted content → exercises → MII when pedagogically material → practice → evidence), not a parallel path that bypasses T20-T24's provenance/versioning guarantees.
+
+---
+
+## CHECKPOINT — 2026-09-11 (session 17, LOCAL-00 + LOCAL-01A)
+
+Reconciled first: expected `claude/smartlearn-v1-complete` @ `0d112bc`
+(this same worktree's own previous checkpoint), worktree clean — confirmed
+exactly via `git branch --show-current`/`git rev-parse --short HEAD`/`git
+status --short` before touching anything, per this session's own explicit
+instruction.
+
+**LOCAL-00** (`e2e/production-build.spec.js`): fixed the one pre-existing
+e2e failure flagged at the end of the prior checkpoint (a strict-mode
+ambiguous `getByText` matching 3 elements) with a structural locator, not
+`.first()`. Verified 3x consecutively in isolation, then full suite 43/43
+(was 42/43). Commit: `test(e2e): make production journey assertion
+deterministic`.
+
+**LOCAL-01A** (`src-tauri/src/lib.rs`, `src/api-client.js`, `src/app.js`,
+`src/offline-ui.js`, `e2e/local-authority.spec.js`): first implementation
+step of ARCH-01's local-first pivot. Desktop now reuses the EXISTING
+Node/Fastify/SQLite backend as a LOCAL process on 127.0.0.1 (not a
+rebuilt Rust domain, per ARCH-01's explicit decision) — `lib.rs` picks a
+free loopback port itself, spawns `server/src/main.js` with
+`SMARTLEARN_DB_PATH`/`SMARTLEARN_SOURCES_DIR` under the app's own
+`app_data_dir`, `SMARTLEARN_STATIC_DIR` pointing at the built `dist/`
+(single-origin, reusing T21's mechanism), and `SMARTLEARN_ALLOWED_ORIGINS`
+set to exactly that origin. `wait_for_local_backend_ready` blocks on a
+real `/health/ready` 200 before the window is ever built — a failed start
+aborts `setup()` entirely, never opening a window pretending an
+empty/working state. `api-client.js`/`offline-ui.js`/`app.js` each gained
+an `isLocalDesktopAuthority()`/`LOCAL_AUTHORITY` check so T41's
+`navigator.onLine` mutation-block and offline banner apply only to
+REMOTE_AUTHORITY (a loopback backend's reachability has nothing to do
+with the OS network adapter) — verified both ways, not just the new path,
+via `e2e/local-authority.spec.js`'s tests A and B.
+
+Two real, previously-latent bugs were found and fixed while proving this
+against a real native window (not caught by inspection or by the unit/e2e
+tests alone): `auth-ui.js`'s own independent `API_BASE` default
+(`'http://localhost:3000'`, separate from `api-client.js`'s relative
+default) was masked until now by T42's dev origin happening to also be
+port 3000 — LOCAL-01A's dynamic port exposed it immediately via DevTools
+showing every `/v1/auth/*` request going to the wrong port; fixed by
+`lib.rs` setting `window.__SMARTLEARN_API_BASE__` explicitly. And closing
+the window left the spawned `node.exe` backend orphaned — `LocalBackend`'s
+`Drop` alone doesn't run under Tauri's default "last window closed ->
+`std::process::exit()`" path, confirmed live via `Get-Process`; fixed with
+an explicit `on_window_event(CloseRequested)` handler, with a new Rust
+test (`dropping_local_backend_actually_kills_the_child_process`) proving
+the kill mechanism against a real OS process holding a real port, and a
+second live run confirming zero orphan after the fix.
+
+Full native proof (no external SmartLearn server running anywhere):
+`SMARTLEARN_LOCAL_AUTHORITY=true cargo run` opened a real window;
+`netstat` confirmed the backend listening ONLY on `127.0.0.1:<dynamic
+port>`; real UI register/login/create-unit/16-review-schedule, cross-
+checked directly against the running backend's own `/health/ready` and
+`/v1/learning-units`; DB confirmed inside
+`%APPDATA%\com.devulsky.smartlearn\smartlearn-server\`; a full close+
+relaunch (new process, new port, fresh backend spawn) showed the same
+account and unit still present. Test data created during this live proof
+was deleted from the real `app_data_dir` afterward — nothing left behind
+in the user's real profile.
+
+Full gate: server 343/343 unchanged, root 267/267 unchanged, build PASS,
+test:inventory PASS (63 files, was 62, +1), full `npx playwright test`
+45/45 (43 after LOCAL-00's fix + 2 new from `local-authority.spec.js`,
+zero regressions), Rust 20/20 (was 15, +5). Commit: `feat(local-01a):
+Desktop runs the existing backend as a local loopback authority`.
+
+`LOCAL-01A`'s criteria (recorded verbatim in the ARCHITECTURE SUPERSESSION
+block above) are all met — see the `[MET ...]` annotations added there.
+`LOCAL-01` as a WHOLE is explicitly NOT closed: `LOCAL-01B` (standalone
+Node packaging, no dev-machine Node dependency) is the next open step,
+per this session's own instruction not to solve distribution in LOCAL-01A.
+Companion, Android, notifications, cloud sync, local AI, the 16-review
+schedule, the pedagogical algorithm, and server code were all explicitly
+untouched, per this session's own "NÃO FAZER" list.
+
+NEXT_TASK: `LOCAL-01B` — its technical solution, like LOCAL-01A's, is
+expected to be supplied externally before implementation; do not invent
+its design from this checkpoint alone.
 
 ---
 
