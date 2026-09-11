@@ -174,6 +174,18 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#study-now-result-text')).toHaveText('1/2 corretas — 50,0%');
 
+  // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): the session never ends on a
+  // bare score alone when there was at least one wrong answer.
+  const reviewErrorsBtn = page.locator('#study-now-review-errors-btn');
+  await expect(reviewErrorsBtn).toBeVisible();
+  await expect(reviewErrorsBtn).toContainText('Revisar meus erros (1)');
+  await expect(page.locator('#study-now-errors-list')).toBeHidden();
+  await reviewErrorsBtn.click();
+  await expect(page.locator('#study-now-errors-list')).toBeVisible();
+  await expect(page.locator('.study-now-error-item')).toHaveCount(1);
+  await expect(page.locator('.study-now-error-question')).toContainText('página 2');
+  await expect(page.locator('.study-now-error-answer')).not.toHaveText('');
+
   // 14. Exactly one INITIAL_PRACTICE evidence row, correct counts.
   const unitsAfter = await page.evaluate(async (base) => {
     const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });

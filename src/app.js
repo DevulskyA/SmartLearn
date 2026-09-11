@@ -307,6 +307,8 @@ const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
 const studyNowResultCard = document.querySelector("#study-now-result-card");
 const studyNowResultText = document.querySelector("#study-now-result-text");
 const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
+const studyNowReviewErrorsBtn = document.querySelector("#study-now-review-errors-btn");
+const studyNowErrorsList = document.querySelector("#study-now-errors-list");
 let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
@@ -2588,7 +2590,10 @@ async function startStudyNow(unit, subjectName) {
   studyNowResultCard.hidden = true;
   studyNowResultText.textContent = "";
   studyNowNextReviewText.textContent = "";
-  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, correctCount: 0, answeredCount: 0 };
+  studyNowReviewErrorsBtn.hidden = true;
+  studyNowErrorsList.hidden = true;
+  studyNowErrorsList.replaceChildren();
+  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, correctCount: 0, answeredCount: 0, wrongExercises: [] };
   showScreen("study-now", { focus: true });
 
   try {
@@ -2674,11 +2679,38 @@ async function finishStudyNowSession() {
     studyNowNextReviewText.textContent = "";
   }
 
+  // Slice 2: the session must not end on a bare score alone — the wrong
+  // answers are the most valuable part of it. Reuses exactly the
+  // question/answer this same session already showed; no new quiz
+  // mechanism, no new analytics, no schema change.
+  if (state.wrongExercises.length > 0) {
+    studyNowReviewErrorsBtn.hidden = false;
+    studyNowReviewErrorsBtn.textContent = `Revisar meus erros (${state.wrongExercises.length})`;
+    studyNowErrorsList.replaceChildren();
+    for (const wrong of state.wrongExercises) {
+      const li = document.createElement("li");
+      li.className = "study-now-error-item";
+      li.append(
+        createTextElement("p", "study-now-error-question", wrong.questionText),
+        createTextElement("p", "study-now-error-answer", wrong.answerText),
+      );
+      studyNowErrorsList.append(li);
+    }
+  } else {
+    studyNowReviewErrorsBtn.hidden = true;
+    studyNowErrorsList.hidden = true;
+  }
+
   studyNowResultCard.hidden = false;
   studyNowState = null;
   renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
   renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
 }
+
+studyNowReviewErrorsBtn?.addEventListener("click", () => {
+  studyNowErrorsList.hidden = !studyNowErrorsList.hidden;
+  studyNowReviewErrorsBtn.setAttribute("aria-expanded", String(!studyNowErrorsList.hidden));
+});
 
 studyNowRevealBtn?.addEventListener("click", async () => {
   const state = studyNowState;
@@ -2714,7 +2746,16 @@ async function judgeStudyNow(isCorrect) {
   if (!state || state.index >= state.exercises.length) return;
 
   state.answeredCount += 1;
-  if (isCorrect) state.correctCount += 1;
+  if (isCorrect) {
+    state.correctCount += 1;
+  } else {
+    // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): keep the exact question/answer
+    // this session already has in memory — no new fetch, no new quiz
+    // mechanism, just remembering what was already shown so the result
+    // screen can offer "Revisar meus erros" instead of ending on a bare score.
+    const exercise = state.exercises[state.index];
+    state.wrongExercises.push({ questionText: exercise.questionText, answerText: exercise.answerText });
+  }
 
   if (REMOTE_MODE && DB.attempts && state.attemptId) {
     try {

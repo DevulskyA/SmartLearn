@@ -27,6 +27,19 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* SMARTLEARN_PRODUCT_FIRST_V1: a component's own `display` rule (an
+   author rule) always beats the browser's default `[hidden]` style,
+   regardless of stylesheet order — this specific bug was independently
+   hit and manually patched three times in this file (T22's
+   `.settings-actions [hidden]`, PV1-01's `.nav-item[hidden]`, Slice 2's
+   `.study-now-errors-list[hidden]`) before being generalized here.
+   `!important` is deliberate and safe: `hidden` is an explicit
+   "not relevant right now" signal with no legitimate reason to be
+   visually overridden anywhere in this app. */
+[hidden] {
+  display: none !important;
+}
+
 /* Discipline palette — light */
 :root {
   --disc-color-disc-blue: #2563eb;
@@ -304,15 +317,6 @@ button {
     border-color 140ms ease,
     color 140ms ease,
     background-color 140ms ease;
-}
-
-/* PV1-01: same footgun as T22's .settings-actions [hidden] comment below —
-   .nav-item's own `display: flex` (an author rule) always beats the
-   browser's default [hidden] style, so Materiais's `.hidden = true` for
-   non-LOCAL_DESKTOP_AUTHORITY sessions would otherwise stay visibly
-   rendered despite the attribute being set. */
-.nav-item[hidden] {
-  display: none;
 }
 
 .nav-item:hover {
@@ -951,14 +955,28 @@ h1 {
   margin-top: 1rem;
 }
 
-/* T22: .secondary-button/.primary-button set their own `display`, which
-   (being an author rule) always beats the browser's default [hidden]
-   style regardless of stylesheet order — so an element's `.hidden = true`
-   silently had no visual effect for any button. Restoring [hidden]'s
-   effect explicitly for the settings actions that now get hidden
-   programmatically in remote mode (import/reset). */
-.settings-actions [hidden] {
-  display: none;
+.study-now-errors-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.study-now-error-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+}
+
+.study-now-error-question {
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+.study-now-error-answer {
+  margin: 0;
 }
 
 .stats-panel-heading {
