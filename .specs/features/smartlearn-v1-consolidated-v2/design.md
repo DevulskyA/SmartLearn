@@ -1,5 +1,7 @@
 # SmartLearn V1 implementation decisions - V2
 
+**ARCH-01 (2026-09-11, canonical, externally decided):** §5's "Production clients share central authority; local stores are migration sources/cache only" is SUPERSEDED for Desktop — Windows/Tauri becomes the complete local-first product (material stays local, no requirement to upload full PDFs to the cloud), while the Companion Web/PWA stays a deliberately smaller, read-only surface built against this same server. Full decision text lives in `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01" section. This is a recorded decision, not redesigned here: the technical solution for `LOCAL-01` (restoring Desktop as its own local-first authority) is deferred to be supplied externally before implementation. §5 below is left intact as historical record of the server-central design it supersedes.
+
 ## 1. Repository and delivery model
 
 Use `claude/smartlearn-v1-complete` as the sole current execution branch, preserving its local descendants. Reconcile it with the inspected main snapshot before implementation. Merge the reviewed main ancestry normally only when the source trees/conflicts have been examined; no reset/rebase/wholesale historical cherry-pick. Stage named files only. Newer unrelated commits require delta inspection, not rollback.

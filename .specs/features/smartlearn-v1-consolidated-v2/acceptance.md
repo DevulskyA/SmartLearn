@@ -87,7 +87,7 @@ Select faults proportional to the touched behavior during each task. The final m
 8. A performs an actual exercise with a hint/solution; item version/help remain attached. Unknown metadata or duplicates do not improve the independent profile.
 9. Source PDF -> attributable text -> draft -> inspect/accept -> practice -> review -> understandable progress. Fake and live provider results are separately labelled.
 10. Previously synced PWA starts cold offline with the known future agenda and lastSyncedAt; offline writes fail; account switch purges private state.
-11. Windows and Android prove their actual shared UI/authority, online and offline, and consent-based reminder behavior. A browser resize is not native UAT.
+11. Windows and Android prove their actual shared UI/authority, online and offline, and consent-based reminder behavior. A browser resize is not native UAT. **SUPERSEDED for Windows/Desktop by ARCH-01 (2026-09-11):** Desktop is no longer required to share authority with the server — see `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01"; this journey stands as originally written only for the Companion.
 12. Keyboard/200% zoom/narrow viewport completes core flows; translated messages and input errors stay usable.
 13. Candidate production package starts with approved config, no dev seed/debug authority and no broad remote native commands.
 

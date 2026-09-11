@@ -10,11 +10,11 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=5990ea4
+CURRENT_HEAD=a922999 (CI-01 fix; this ARCH-01 docs commit lands one ahead of it)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=07 (IN_PROGRESS) — Phase 06 CLOSED
 LAST_COMPLETED_TASK=T42
-NEXT_TASK=T43
+NEXT_TASK=LOCAL-01
 NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
@@ -27,21 +27,89 @@ RECENT_COMMITS=
   33798c9 docs(state): add compact machine-scannable checkpoint block for context handoff
   b0e6d9b feat(t40): PWA shell and private cache lifecycle
 
-SERVER_GATE=340/340 (last proven at T42; T42 does not change server code)
+SERVER_GATE=343/343 (was 340; +3 migration checksum tests, CI-01)
 ROOT_GATE=267/267
-E2E_GATE=43/43 (was 42, +1: AC-24 discriminating regression — dead API server, navigator.onLine left true, never inferred from setOffline)
+E2E_GATE=43/43 (unchanged by CI-01/ARCH-01; not re-run this session — no client/e2e-relevant file touched)
 TEST_INVENTORY=62 test files (PASS via scripts/check-test-inventory.mjs)
 RUST_GATE=15/15
-WINDOWS_BUILD=PASS (release exe + MSI + NSIS rebuilt from this clean T42 candidate)
+WINDOWS_BUILD=PASS (unchanged by CI-01/ARCH-01; last recorded at T42 stands)
 T42_NATIVE_UAT=PASS — real per-user NSIS install (Start Menu/registry-registered, no UAC), online login+sync verified, then only the SmartLearn server process killed (Windows network/Wi-Fi left up) and the installed app reopened: offline banner + real cached snapshot shown, no white screen, no connection-refused dialog. Verified against a from-scratch WebView2 profile (EBWebView cache wiped) to rule out a stale cached shell.
 
 PHASE_06_STATUS=CLOSED (T34-T38 proven + post-hoc history-integrity audit A1-A5 closed)
-PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 DONE)
+PHASE_07_STATUS=IN_PROGRESS (T39 DONE, T40 DONE, T41 DONE, T42 DONE) — T43/T44 DEFERRED/SUPERSEDED by ARCH-01, see below
 
 QUALITY_STANDARD_ID=SMARTLEARN_QUALITY_V1
 QUALITY_STANDARD_VERSION=1.0.0
 QUALITY_STANDARD_PATH=.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md
 QUALITY_STANDARD_STATUS=CANONICAL
+
+ARCHITECTURE_PIVOT_ID=ARCH-01
+ARCHITECTURE_PIVOT_DATE=2026-09-11
+ARCHITECTURE_PIVOT_STATUS=CANONICAL — see "ARCHITECTURE SUPERSESSION" section below
+T43_STATUS=DEFERRED_SUPERSEDED (full Android product wrapper, as originally scoped against server-central-as-universal-authority, is not the current target)
+T44_STATUS=DEFERRED
+PRODUCT_PRIORITY=Desktop local-first journey first (material -> estudar -> praticar -> evidência -> próxima ação); Companion Web/PWA comes after that journey is validated
+```
+
+## ARCHITECTURE SUPERSESSION — ARCH-01 (2026-09-11, canonical, externally decided)
+
+This is a recorded architecture decision, not a proposal open for re-discussion in future sessions. Full rationale lives in this same commit's `docs(architecture)` message; this block is the durable pointer.
+
+```
+DECISION:
+  SmartLearn Desktop (Windows/Tauri) = the complete product, local-first.
+    Material (PDFs/books/images/extracted pages) stays on the user's machine.
+    Source-material processing avoids uploading the full artifact to the cloud.
+    Full loop preserved: material -> unit -> Resumo Mestre -> questões -> estudo -> evidência -> revisões -> prioridade.
+  Companion (Web/PWA) = deliberately smaller, mobile, READ-ONLY in its first version.
+    Answers only: "O que eu preciso estudar/fazer agora?" (hoje, atrasados, próximas revisões, estado da unidade, desempenho resumido, próxima ação).
+    No functional-parity requirement with Desktop.
+  Cloud = not a PDF/book repository. Minimal data for account + Companion only.
+    Future sync transports light projections, not the full heavy domain.
+    Full material is never uploaded merely to enable the Companion.
+  AI = may receive only the necessary excerpt externally when a function genuinely requires it. This pivot does NOT implement local AI.
+
+SUPERSEDED (server-central-as-universal-authority, where it conflicts with the above):
+  - design.md §5 ("Production clients share central authority; local stores are migration sources/cache only") —
+    SUPERSEDED for Desktop by this decision. Desktop must be able to run its full study experience without depending
+    on the cloud server as the authority for its own study data. Not yet re-architected — LOCAL-01 is the first step.
+  - spec.md V1-12 ("Production clients share central authority; local stores are migration sources/cache only") —
+    same supersession, same scope (Desktop only; do not silently extend to Companion, which stays a thin server-backed
+    read surface by design).
+  - spec.md/acceptance.md AC-24 ("Windows/Android starts online and offline: same domain data/one UI; neither Tauri
+    nor a local broker becomes authority") — the "neither Tauri... becomes authority" clause is SUPERSEDED for
+    Windows/Desktop: Tauri/local storage becomes the study-data authority for Desktop under LOCAL-01. Android-as-a-
+    full-parity-wrapper (the reading that made T43 literally required) is also superseded — see T43_STATUS.
+  - heritage.md H-12 ("The server-central architecture supersedes local-file authority") — that specific sentence is
+    reversed by this decision for Desktop. The properties it was protecting (ownership, recoverability,
+    exportability, NO_DATA_LOSS) remain in force; only the "server-central wins" mechanism is superseded.
+  - Windows already built at T42 (trusted-origin remote WebView, no local SQL/authority) is PRESERVED as working
+    code, not deleted — it becomes the base LOCAL-01 evolves from, not a wrong turn to revert.
+  - Server code is NOT deleted now. It stays, serving the account/Companion surface and as the base for whatever
+    thin sync projection is designed later.
+
+ROADMAP IMPACT:
+  T43 (Deliver the Android wrapper without a second product UI) = DEFERRED_SUPERSEDED in its current form (tasks.md).
+  T44 (Add consent-based reminders from the synchronized agenda) = DEFERRED (tasks.md).
+  Windows/Web/Android functional parity is no longer a V1 requirement.
+  16 fixed reviews, House Simulator's separateness, and MII as a canonical capability are UNCHANGED by this pivot.
+
+NEXT_TASK=LOCAL-01
+  Restore the Desktop Windows surface as the complete local-first product, preserving as much existing code/domain
+  as possible, WITHOUT yet implementing the Companion.
+  OBJECTIVE: the Windows app must run the complete experience without depending on the cloud server as the authority
+  for its own study data.
+  CRITERIA (decided; do not invent beyond these — the technical solution is supplied externally before implementation):
+    - full UI runs on Windows;
+    - core data persisted locally;
+    - no requirement to upload full PDFs to the cloud;
+    - reuse existing infrastructure wherever possible;
+    - no Companion implemented yet;
+    - no new parallel architecture;
+    - preserving existing data is mandatory.
+
+PRODUCT_PRIORITY: make the Desktop journey (material -> estudar -> praticar -> evidência -> próxima ação) excellent
+  first. The Companion comes after that journey is validated.
 ```
 
 ### PHASE 06 audit result — proven; do NOT re-audit without new concrete regression evidence
@@ -65,7 +133,7 @@ CONFIRMED_P0_P1_OPEN=0
 
 ### Invariants a new session must not lose (index only — design.md/heritage.md/acceptance.md remain the source of truth)
 
-- Central server is the sole authority for owned domain data (T20-T24); no client ever wins a conflict over it.
+- Central server is the sole authority for owned domain data (T20-T24); no client ever wins a conflict over it. **SUPERSEDED for Desktop by ARCH-01 (2026-09-11)** — Desktop is being restored as its own local-first authority for its study data (LOCAL-01); this invariant still holds for the Companion, which stays a thin server-backed read surface.
 - Offline (V1) is READ-ONLY. T39 (server snapshot) + T40 (client PWA/cache) built the read path; T41 (DONE) closes every mutation entrypoint offline via a single choke-point guard in api-client.js; T42 (DONE) proved the read path natively — the offline/live branch decision must never rest solely on `navigator.onLine` (it only reflects the network adapter, not server reachability), always fall back to the cached snapshot on a genuine `NetworkError`.
 - No authoritative offline write queue/outbox exists or is planned for V1 — a failed offline mutation attempt fails visibly; it is never queued for later replay or shown as a fake success.
 - `review_tasks` = scheduling projection (recalculable), NEVER the historical record of what happened.
@@ -78,6 +146,79 @@ CONFIRMED_P0_P1_OPEN=0
 - House Simulator (see heritage.md) stays a separate, distinct concept from the real learning domain — never conflated.
 - Low administrative friction for the student is a product requirement (heritage.md's "no spreadsheet-like manual administration" contract, re-affirmed at T49), not a nice-to-have.
 - MII (mnemonic/infographic pedagogical artifacts) is a canonical, recurring capability of SmartLearn, confirmed by the user 2026-09-10 — not yet reflected in tasks.md/acceptance.md. Sequence: MII-1 (mnemonic architecture) DONE; MII-2 (infographic blueprint) is the active stage; MII-3 (production/render/refinement) is next. Do not invent a detailed SmartLearn-integration architecture before MII-2/MII-3 produce their actual contract — when they do, the integration point is additive to the existing pipeline (source → accepted content → exercises → MII when pedagogically material → practice → evidence), not a parallel path that bypasses T20-T24's provenance/versioning guarantees.
+
+---
+
+## CHECKPOINT — 2026-09-11 (session 16, CI-01 + ARCH-01)
+
+Reconciled first: expected `claude/smartlearn-v1-complete` @ `404c9a7`,
+worktree clean — the initial prompt's target was actually `main`
+(uncommitted changes there, unrelated to this work), so this session
+explicitly stopped and asked before touching anything; redirected to this
+worktree, confirmed `BRANCH=claude/smartlearn-v1-complete`,
+`HEAD=404c9a7`, `git status --short` empty, then proceeded.
+
+**CI-01** (`server/src/migrations.js`, `server/migrations/manifest.json`,
+`server/test/migrations.test.js`): root-caused and fixed the diagnosed
+Linux-CI migration-checksum failure. `core.autocrlf=true` locally (no
+`.gitattributes`) means this Windows checkout has CRLF working-tree files
+while a Linux checkout of the same git-stored (LF) blobs gets LF —
+confirmed directly: only `001-bootstrap.sql` actually differs in line
+ending on disk right now (raw sha256 of the other 19 files already
+equalled their LF-normalized hash; only file 1's stored manifest checksum
+was the CRLF variant). Added `canonicalChecksum`/`normalizeLineEndings`
+(CRLF/CR -> LF before SHA-256) plus a `legacyCRLFChecksum` compatibility
+path so a database that already recorded the historical CRLF-checksum for
+a migration stays valid without touching its `schema_migrations` row; an
+actual SQL content change still mismatches under both checksums. Manifest
+regenerated with canonical checksums (only version 1's value changed).
+Fixed the pre-existing test that claimed to validate manifest checksums
+but only compared file counts — it now asserts every manifest entry's
+checksum against the real file's canonical checksum. Directly simulated
+a Linux-style LF-only checkout of the real migrations directory and
+proved `runMigrations` + `validateMigrations` both pass against it (this
+is exactly what CI does that this Windows session otherwise can't
+exercise natively).
+
+`server/test/migrations.test.js` (+3, 15/15 in that file): LF/CRLF/CR
+canonical-checksum equality, a real content change still changing the
+checksum, and a database holding the historical CRLF checksum staying
+valid post-fix with no row duplication. Full gate: server 343/343 (was
+340, +3), root 267/267 unchanged, build PASS, test:inventory PASS (62
+files unchanged). E2E/Rust/Windows-build not re-run — untouched
+(server-migrations-only change, no client/native file touched); Rust
+15/15 re-confirmed anyway per this task's explicit gate list, e2e 43/43
+last recorded stands (not re-run — no e2e-relevant file touched).
+
+Commit: `fix(ci): make migration checksums line-ending independent`.
+
+**ARCH-01** (`.specs/STATE.md`, `.specs/features/smartlearn-v1-consolidated-v2/{GOAL.txt,spec.md,design.md,acceptance.md,tasks.md}`,
+`.specs/features/smartlearn-v1-consolidated-v2/heritage.md`): canonized an
+externally-decided architecture pivot — this session did not design or
+discuss it, only recorded it precisely and marked the conflicting prior
+decisions SUPERSEDED in place (never deleted/rewritten as if they never
+existed). See "ARCHITECTURE SUPERSESSION — ARCH-01" above for the full
+decision text. Summary: Desktop (Windows/Tauri) becomes the complete
+local-first product (material stays local, no requirement to upload full
+PDFs to the cloud); Companion (Web/PWA) becomes a deliberately smaller,
+read-only "what do I need to do now" surface; Cloud stops being a
+PDF/book repository and carries only account + Companion-projection data;
+server-central-as-universal-authority (design.md §5, spec.md V1-12,
+AC-24's "neither Tauri... becomes authority" clause, heritage.md H-12) is
+SUPERSEDED for Desktop specifically, not for the Companion. T43 (Android
+full wrapper) -> DEFERRED_SUPERSEDED, T44 (native reminders) ->
+DEFERRED, both marked in tasks.md without deleting their original spec
+text. No code was touched by this half of the session — pure canonical-
+record update, per explicit instruction not to start LOCAL-01, not to
+touch T43/T44 implementation, and not to design the Companion.
+
+Commit: `docs(architecture): adopt local-first desktop and minimal companion`.
+
+NEXT_TASK: `LOCAL-01` — see the ARCHITECTURE SUPERSESSION block above for
+its objective/criteria exactly as decided; its technical solution is
+explicitly deferred to be supplied externally before implementation, per
+this session's own instruction. Do not start it, do not invent its
+design, from this checkpoint alone.
 
 ---
 

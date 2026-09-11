@@ -604,7 +604,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 - [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
 - [x] Gate passes: Rust tests/build, capability security checks and real Windows runtime UAT in isolated app data.
 
-### T43: Deliver the Android wrapper without a second product UI
+### T43: Deliver the Android wrapper without a second product UI — **DEFERRED_SUPERSEDED by ARCH-01 (2026-09-11)**
+**ARCH-01 note:** this task's premise (Android as a full server-central-authority parity wrapper) is superseded — see `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01". `NEXT_TASK` is now `LOCAL-01` (Desktop local-first), not this task. Original spec preserved below unchanged, as historical record, not as the current target.
+
 **Difficulty / risk:** 4/5 / 5/5.
 **Depends on:** T41.
 **Requirement:** V1-20. **Acceptance:** AC-13, AC-24.
@@ -617,7 +619,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 - [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
 - [ ] Gate passes: Android build plus isolated install/runtime/offline UAT; results cannot be inferred from browser tests.
 
-### T44: Add consent-based reminders from the synchronized agenda
+### T44: Add consent-based reminders from the synchronized agenda — **DEFERRED by ARCH-01 (2026-09-11)**
+**ARCH-01 note:** deferred pending the Companion's own design (not yet built) — see `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01". `NEXT_TASK` is now `LOCAL-01`. Original spec preserved below unchanged, as historical record, not as the current target.
+
 **Difficulty / risk:** 3/5 / 4/5.
 **Depends on:** T39, T41.
 **Requirement:** V1-21. **Acceptance:** AC-25.

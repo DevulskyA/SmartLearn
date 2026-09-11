@@ -275,7 +275,7 @@ H-12 — BACKUP / PORTABILITY REMAINS A PRODUCT PROPERTY
 The original SmartLearn design treated export/import as mandatory because
 the learner's study history is valuable.
 
-The server-central architecture supersedes local-file authority, but:
+The server-central architecture supersedes local-file authority, but: **[SUPERSEDED for Desktop by ARCH-01, 2026-09-11 — see `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01": Desktop is being restored as its own local-first authority for its study data (LOCAL-01); the properties this sentence protects are unaffected and remain in force below]**
 
 ownership
 recoverability

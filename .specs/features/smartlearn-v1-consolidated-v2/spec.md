@@ -2,6 +2,8 @@
 
 Status: execution proposal authored by ChatGPT at the user's request; active when the user sends the accompanying adoption instruction and goal. It supersedes conflicting earlier execution instructions for this delivery. It does not grant scientific validation to recovered heuristics or authority to historical research files.
 
+**ARCH-01 (2026-09-11, canonical, externally decided):** this document's server-central-as-universal-authority framing (below and in V1-12/AC-24) is SUPERSEDED for Desktop — Windows/Tauri becomes the complete local-first product; the Companion Web/PWA stays a deliberately smaller, read-only surface. Full decision text lives in `.specs/STATE.md`'s "ARCHITECTURE SUPERSESSION — ARCH-01" section; conflicting passages below are annotated in place, not deleted.
+
 ## Observable product outcome
 
 A medical student can sign in, organize source-grounded learning units, practise, record results, see an accurate review agenda and understandable progress, and find the same server-owned data on Web, Windows and Android. A previously synchronized device opens the last-known agenda offline. PDF-derived and AI-assisted material is attributable and explicitly accepted before becoming study material. Existing user records survive migration without silent omission or fabricated evidence.
@@ -23,7 +25,7 @@ One product, one responsive web UI, one central server authority, small native w
 | V1-09 | One fixed schedule definition, preserved historical dates/results and explicit date semantics | Baseline + user deferral of adaptive scheduling |
 | V1-10 | Review completion and actual results remain consistent, idempotent and audit-preserving | Source behavior; integration corrections here |
 | V1-11 | Current subjects, units, exercises, settings, tracking and statistics remain usable | Product continuity |
-| V1-12 | Production clients share central authority; local stores are migration sources/cache only | Explicit user decision |
+| V1-12 | Production clients share central authority; local stores are migration sources/cache only | Explicit user decision — **SUPERSEDED for Desktop by ARCH-01 (2026-09-11)**: Desktop becomes its own local-first authority for its study data; this requirement still holds for the Companion |
 | V1-13 | Backup/export and fixture migration preserve complete owned data and provenance | NO_DATA_LOSS |
 | V1-14 | Item-level evidence preserves observed assistance, assessment method, item version, time and identity | Recovered branch intent, corrected design |
 | V1-15 | Unknown observations stay unknown; imported aggregate scores do not become invented attempts | Reconstruction decision |
@@ -64,7 +66,7 @@ One product, one responsive web UI, one central server authority, small native w
 | AC-21 | A valid draft is accepted twice by retry | One accepted unit/exercise set is produced with versioned provenance and 16 reviews, without duplicated evidence |
 | AC-22 | A previously synced client starts without network | App opens to last-known agenda with truthful sync time; all mutations are disabled or denied without an outbox |
 | AC-23 | User logs out or switches account | Old private cache and native reminders are cleared; next account cannot read the previous snapshot |
-| AC-24 | Windows/Android starts online and offline | Same domain data/one UI; neither Tauri nor a local broker becomes authority |
+| AC-24 | Windows/Android starts online and offline | Same domain data/one UI; neither Tauri nor a local broker becomes authority — **the "neither Tauri... becomes authority" clause is SUPERSEDED for Windows/Desktop by ARCH-01 (2026-09-11)**: Tauri/local storage becomes the study-data authority for Desktop under LOCAL-01 |
 | AC-25 | A reminder is scheduled/replaced/cancelled | Stable IDs avoid duplicates; missing permission is visible and non-blocking to study; no exact delivery claim without runtime proof |
 | AC-26 | UI is used by keyboard at 200% zoom and narrow viewport | Main workflows remain operable, focus/errors visible, labels meaningful and pt-BR complete |
 | AC-27 | The complete product is evaluated | Software, integration, source fidelity, pedagogical claims and release operation have separate evidence-backed verdicts |
