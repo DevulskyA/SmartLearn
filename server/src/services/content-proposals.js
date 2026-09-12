@@ -85,6 +85,28 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
     throw new ProposalError('NOT_EXTRACTED', 'A fonte não tem páginas extraídas.');
   }
 
+  // P1_PRODUCT B (found during PRODUCT-REAL-01): re-chunking a source
+  // always deleted its prior content_proposals rows wholesale (see the
+  // transaction below) -- if one of those proposals already had an
+  // ACCEPTED draft pointing at it, that DELETE hit generated_drafts'
+  // (user_id, proposal_id) foreign key and crashed with an unhandled
+  // 500 "INTERNAL". Fail closed with an explicit, orientable error
+  // instead -- re-chunking a source with no accepted content yet is
+  // completely unaffected (proven by the existing "re-chunking a source
+  // replaces its prior proposals wholesale" test).
+  const hasAcceptedDraft = db.prepare(`
+    SELECT 1 FROM generated_drafts
+    WHERE user_id = ? AND status = 'ACCEPTED'
+      AND proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
+    LIMIT 1
+  `).get(userId, userId, sourceId);
+  if (hasAcceptedDraft) {
+    throw new ProposalError(
+      'HAS_ACCEPTED_CONTENT',
+      'Esta fonte já tem conteúdo aceito a partir de uma proposta anterior. Reprocessar substituiria essa proposta. Envie o PDF novamente como uma fonte separada se quiser gerar propostas diferentes.',
+    );
+  }
+
   const chunks = [];
   for (let i = 0; i < pages.length; i += maxPagesPerChunk) {
     const slice = pages.slice(i, i + maxPagesPerChunk);

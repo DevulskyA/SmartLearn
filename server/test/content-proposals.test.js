@@ -215,3 +215,94 @@ test('HTTP: full pipeline over real HTTP — upload, extract, chunk, list, inspe
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+// P1_PRODUCT B (found during PRODUCT-REAL-01): re-chunking a source that
+// already has an ACCEPTED draft used to crash with an unhandled 500
+// "INTERNAL" -- chunkSource's wholesale DELETE of content_proposals hit
+// generated_drafts' (user_id, proposal_id) foreign key, which has no
+// cascade. Discrimination: reproduce the exact real sequence (upload ->
+// extract -> chunk -> generate draft -> accept -> re-chunk) over real
+// HTTP, assert a clean domain error, never a bare 500.
+test('HTTP: re-chunking a source with an already-ACCEPTED draft fails closed with an explicit error, never a raw 500', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-proposals-rechunk-'));
+  const path = join(dir, 'test.db');
+  const sourcesDir = join(dir, 'sources');
+  const db = openDb(path);
+  runMigrations(db, MIGRATIONS_DIR);
+  const app = await buildApp(db, MIGRATIONS_DIR, {
+    isProduction: false, allowedOrigins: [TEST_ORIGIN],
+    sources: { sourcesDir, ...UPLOAD_DEFAULTS },
+  });
+  try {
+    const email = 'rechunk@example.com';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password: 'a genuinely long test password 1' } });
+    const loginRes = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password: 'a genuinely long test password 1' } });
+    const cookie = loginRes.headers['set-cookie'].split(';')[0];
+    const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
+    const csrfToken = JSON.parse(me.body).csrfToken;
+
+    const boundary = 'sl-rechunk-boundary';
+    const body = buildMultipartBody(boundary, { fieldName: 'file', filename: 'aula.pdf', contentType: 'application/pdf', buffer: buildFixturePdf(['conteudo real']) });
+    const uploadRes = await app.inject({
+      method: 'POST', url: '/v1/sources',
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+    const sourceId = JSON.parse(uploadRes.body).source.id;
+    await app.inject({ method: 'POST', url: `/v1/sources/${sourceId}/extract`, headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken } });
+
+    const firstChunkRes = await app.inject({
+      method: 'POST', url: `/v1/sources/${sourceId}/proposals`,
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
+      payload: {},
+    });
+    const proposalId = JSON.parse(firstChunkRes.body).proposals[0].id;
+
+    const draftRes = await app.inject({
+      method: 'POST', url: `/v1/proposals/${proposalId}/drafts`,
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
+      payload: {},
+    });
+    const draft = JSON.parse(draftRes.body).draft;
+
+    const acceptRes = await app.inject({
+      method: 'POST', url: `/v1/drafts/${draft.id}/accept`,
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
+      payload: { newSubjectName: 'Rechunk Test', studyDate: '2026-01-01', expectedRevision: draft.revision },
+    });
+    assert.equal(acceptRes.statusCode, 200);
+
+    // The real reproduction: re-chunk the SAME source, which now has an
+    // accepted draft hanging off one of its proposals.
+    const secondChunkRes = await app.inject({
+      method: 'POST', url: `/v1/sources/${sourceId}/proposals`,
+      headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' },
+      payload: {},
+    });
+    assert.equal(secondChunkRes.statusCode, 409, `expected a clean domain error, got ${secondChunkRes.statusCode}: ${secondChunkRes.body}`);
+    const errBody = JSON.parse(secondChunkRes.body);
+    assert.equal(errBody.error.code, 'HAS_ACCEPTED_CONTENT');
+    assert.ok(errBody.error.message?.length > 0, 'error must carry an orientable message, not just a bare code');
+
+    // The accepted content itself must be completely untouched by the
+    // refused re-chunk attempt.
+    const unitsAfter = await app.inject({ method: 'GET', url: '/v1/learning-units', headers: { cookie } });
+    assert.equal(JSON.parse(unitsAfter.body).units.length, 1);
+  } finally {
+    await app.close();
+    db.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test('chunking a source with no accepted draft yet still replaces proposals wholesale, unaffected by the P1_PRODUCT B guard', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'rechunk-safe@example.com');
+    const source = await extractedSource(db, userId, sourcesDir, ['page one', 'page two']);
+    const first = proposals.chunkSource(db, userId, source.id, { maxPagesPerChunk: 1 });
+    assert.equal(first.length, 2);
+    const second = proposals.chunkSource(db, userId, source.id, { maxPagesPerChunk: 2 });
+    assert.equal(second.length, 1);
+  } finally { cleanup(); }
+});

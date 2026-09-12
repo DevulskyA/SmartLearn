@@ -2,7 +2,7 @@ import * as proposals from '../services/content-proposals.js';
 
 function handleError(err, reply) {
   if (err instanceof proposals.ProposalError) {
-    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, NOT_EXTRACTED: 409 };
+    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, NOT_EXTRACTED: 409, HAS_ACCEPTED_CONTENT: 409 };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
   }
