@@ -980,6 +980,20 @@ h1 {
   transition: outline-color 200ms ease;
 }
 
+/* SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5 (PRODUCT-REAL-01): found using a
+   real study session with real content — the hint reused `.field-message`,
+   whose default color is `--status-overdue-text` (an alert/warning red),
+   making a helpful hint read as if something were wrong. Neutral,
+   informative styling instead. */
+.study-now-hint {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
 .study-now-errors-list {
   list-style: none;
   margin: 0.75rem 0 0;
