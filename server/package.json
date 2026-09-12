@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "node ../scripts/require-work-branch.mjs",
     "start": "node src/main.js",
     "test": "node --test"
   },

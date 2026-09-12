@@ -5,12 +5,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/require-work-branch.mjs",
     "dev": "vite",
+    "dev:remote": "node scripts/dev-remote.mjs",
+    "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",
     "test:e2e": "playwright test",
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "package:standalone": "node scripts/package-standalone.mjs",
+    "prepreview": "node scripts/require-work-branch.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
