@@ -2372,7 +2372,15 @@ function createSourceProposalItem(proposal) {
 // T38: renders one generated draft for inspection/acceptance. Every
 // rendering carries the same explicit caveat — this is unverified AI
 // output, not a medical/scientific claim (design.md/T37/T38).
-function renderDraftPanel(draftPanel, draft) {
+// PRODUCT-REAL-01 P1_PRODUCT A: before this, accepting a draft could only
+// ever create a NEW subject (free-text name) — a returning student adding
+// more material to a discipline they already created had no way to pick
+// it, and typing the existing name outright failed ("Já existe uma
+// disciplina com esse nome."). The server already supports accepting
+// with either `subjectId` (existing) or `newSubjectName` (create) — see
+// accept-draft.js — this was a client-only gap. Mirrors the exact same
+// existing-vs-new pattern Plano's own new-unit form already uses.
+function renderDraftPanel(draftPanel, draft, subjects = []) {
   draftPanel.dataset.draftId = String(draft.id);
   draftPanel.dataset.revision = String(draft.revision);
   draftPanel.replaceChildren();
@@ -2395,11 +2403,31 @@ function renderDraftPanel(draftPanel, draft) {
     questionsList.append(item);
   }
 
+  const subjectSelect = document.createElement("select");
+  subjectSelect.className = "source-draft-subject-select";
+  subjectSelect.setAttribute("aria-label", "Disciplina existente");
+  const newSubjectOption = document.createElement("option");
+  newSubjectOption.value = "";
+  newSubjectOption.textContent = "+ Nova disciplina (usar campo abaixo)";
+  subjectSelect.append(newSubjectOption);
+  for (const subject of subjects) {
+    const opt = document.createElement("option");
+    opt.value = String(subject.id);
+    opt.textContent = subject.name;
+    subjectSelect.append(opt);
+  }
+
   const subjectInput = document.createElement("input");
   subjectInput.type = "text";
   subjectInput.className = "source-draft-subject-input";
   subjectInput.placeholder = "Nome da disciplina";
   subjectInput.setAttribute("aria-label", "Nome da disciplina");
+
+  subjectSelect.addEventListener("change", () => {
+    const pickedExisting = subjectSelect.value !== "";
+    subjectInput.disabled = pickedExisting;
+    if (pickedExisting) subjectInput.value = "";
+  });
 
   const dateInput = document.createElement("input");
   dateInput.type = "date";
@@ -2415,7 +2443,7 @@ function renderDraftPanel(draftPanel, draft) {
 
   const resultMessage = createTextElement("p", "source-draft-result", "");
 
-  draftPanel.append(caveat, summary, questionsList, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.append(caveat, summary, questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
   draftPanel.hidden = false;
 }
 
@@ -2531,7 +2559,10 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
         setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
         return;
       }
-      renderDraftPanel(draftPanel, result.draft);
+      // P1_PRODUCT A: existing subjects, so the accept form can offer
+      // reusing one instead of only ever creating a new one.
+      const existingSubjects = await DB.subjects.getActive().catch(() => []);
+      renderDraftPanel(draftPanel, result.draft, existingSubjects);
       setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
     } finally {
       generateDraftBtn.disabled = false;
@@ -2544,14 +2575,22 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
     const draftPanel = item.querySelector(".source-draft-panel");
     if (!draftPanel) return;
     const draftId = draftPanel.dataset.draftId;
+    const subjectSelect = draftPanel.querySelector(".source-draft-subject-select");
     const subjectInput = draftPanel.querySelector(".source-draft-subject-input");
     const dateInput = draftPanel.querySelector(".source-draft-date-input");
     const resultMessage = draftPanel.querySelector(".source-draft-result");
 
+    // P1_PRODUCT A: an existing subject picked in the select wins over the
+    // free-text field — the server's own contract already distinguishes
+    // subjectId (reuse) from newSubjectName (create); this was only ever
+    // a client gap.
+    const pickedSubjectId = subjectSelect?.value ? Number(subjectSelect.value) : null;
+
     acceptDraftBtn.disabled = true;
     try {
       const result = await DraftReviewUI.acceptDraft(draftId, {
-        newSubjectName: subjectInput?.value,
+        subjectId: pickedSubjectId ?? undefined,
+        newSubjectName: pickedSubjectId ? undefined : subjectInput?.value,
         studyDate: dateInput?.value,
         expectedRevision: Number(draftPanel.dataset.revision),
       });

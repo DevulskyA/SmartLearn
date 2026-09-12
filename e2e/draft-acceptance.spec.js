@@ -132,3 +132,63 @@ test('generating and accepting a draft through the real UI creates a real unit w
   }, API_BASE);
   expect(unitsAfter.units.length).toBe(1);
 });
+
+test('P1_PRODUCT A: accepting a second draft can reuse an existing subject instead of only creating a new one', async ({ page }) => {
+  // First material creates "Fisiologia A".
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', {
+    name: 'materia-a.pdf', mimeType: 'application/pdf',
+    buffer: buildFixturePdf(['Conteudo da primeira materia']),
+  });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  const firstItem = page.locator('.source-proposal-item').first();
+  await firstItem.locator('[data-action="generate-draft"]').click();
+  const firstPanel = firstItem.locator('.source-draft-panel');
+  await expect(firstPanel).toBeVisible();
+  await firstPanel.locator('.source-draft-subject-input').fill('Fisiologia A');
+  await firstPanel.locator('[data-action="accept-draft"]').click();
+  await expect(firstPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  // Second material: the accept form must offer "Fisiologia A" as an
+  // existing option, and picking it must NOT create a second subject.
+  await page.setInputFiles('#sources-file-input', {
+    name: 'materia-b.pdf', mimeType: 'application/pdf',
+    buffer: buildFixturePdf(['Conteudo da segunda materia']),
+  });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  // renderSourceProposals replaces the list wholesale per upload (it shows
+  // this source's own proposals, not an accumulating history) — the only
+  // item visible now is this second material's own proposal.
+  const secondItem = page.locator('.source-proposal-item').first();
+  await secondItem.locator('[data-action="generate-draft"]').click();
+  const secondPanel = secondItem.locator('.source-draft-panel');
+  await expect(secondPanel).toBeVisible();
+
+  const subjectSelect = secondPanel.locator('.source-draft-subject-select');
+  await expect(subjectSelect).toBeVisible();
+  await expect(subjectSelect.locator('option', { hasText: 'Fisiologia A' })).toHaveCount(1);
+  await subjectSelect.selectOption({ label: 'Fisiologia A' });
+
+  // Picking an existing subject must disable (and not require) the
+  // free-text new-subject field.
+  await expect(secondPanel.locator('.source-draft-subject-input')).toBeDisabled();
+
+  await secondPanel.locator('[data-action="accept-draft"]').click();
+  await expect(secondPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(secondPanel.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+
+  const subjectsAfter = await page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/subjects`, { credentials: 'include' });
+    return res.json();
+  }, API_BASE);
+  expect(subjectsAfter.subjects.length).toBe(1);
+  expect(subjectsAfter.subjects[0].name).toBe('Fisiologia A');
+
+  const unitsAfter = await page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });
+    return res.json();
+  }, API_BASE);
+  expect(unitsAfter.units.length).toBe(2);
+  expect(unitsAfter.units.every((u) => u.subjectId === subjectsAfter.subjects[0].id)).toBe(true);
+});
