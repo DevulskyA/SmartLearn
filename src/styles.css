@@ -1074,8 +1074,45 @@ h1 {
   text-align: right;
 }
 
-.stats-table td[data-cell="avg"] {
-  text-align: right;
+.stats-table td[data-cell="performance"],
+.stats-table td[data-cell="volume"] {
+  text-align: left;
+  min-width: 9rem;
+}
+
+/* SLICE 2: performance vs volume comparison — two independent bars, never
+   sharing a color scale. subject-compare-bar-fill's background is set
+   inline per row (performanceColor() for performance, --color-primary for
+   volume) so the same track/sizing rules serve both without conflating
+   what they mean. */
+.subject-compare-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+.subject-compare-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.subject-compare-bar {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+  min-width: 6rem;
+}
+
+.subject-compare-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.subject-compare-bar-fill.is-no-evidence {
+  opacity: 0.35;
 }
 
 .performance-badge {

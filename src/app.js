@@ -11,7 +11,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
@@ -936,6 +936,59 @@ export async function renderToday() {
   }
 }
 
+// SLICE 2 (Stats Visual Intelligence): performance and volume are two
+// different questions ("how well" vs "how much") and must never share a
+// bar or a color scale — a short green bar (little practice, good score)
+// must never look like a short red one (lots of practice, bad score).
+function createComparisonBar(fillPercent, background, extraClass) {
+  const bar = document.createElement("div");
+  bar.className = "subject-compare-bar";
+  const fill = document.createElement("div");
+  fill.className = ["subject-compare-bar-fill", extraClass].filter(Boolean).join(" ");
+  fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
+  fill.style.background = background;
+  bar.append(fill);
+  return bar;
+}
+
+function createComparisonCell(valueText, bar) {
+  const cell = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "subject-compare-cell";
+  const value = document.createElement("span");
+  value.className = "subject-compare-value";
+  value.textContent = valueText;
+  wrap.append(value, bar);
+  cell.append(wrap);
+  return cell;
+}
+
+function createSubjectComparisonRow(result, maxVolume) {
+  const row = document.createElement("tr");
+
+  const name = document.createElement("th");
+  name.scope = "row";
+  name.textContent = result.subjectName;
+
+  const hasEvidence = result.weightedAccuracy != null;
+  const perfValueText = hasEvidence ? `${result.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+  const perfWidth = hasEvidence ? result.weightedAccuracy : 100;
+  const perfBar = createComparisonBar(perfWidth, performanceColor(result.weightedAccuracy, result.totalQuestions), !hasEvidence ? "is-no-evidence" : undefined);
+  const perfCell = createComparisonCell(perfValueText, perfBar);
+  perfCell.dataset.cell = "performance";
+
+  // Volume scale is relative to the largest volume CURRENTLY shown, and
+  // deliberately never uses performanceColor — a long bar here means
+  // "practiced a lot", not "doing well".
+  const volumeValueText = `${result.totalQuestions} ${result.totalQuestions === 1 ? "questão" : "questões"}`;
+  const volumeBar = createComparisonBar(volumeBarWidth(result.totalQuestions, maxVolume), "var(--color-primary)");
+  const volumeCell = createComparisonCell(volumeValueText, volumeBar);
+  volumeCell.dataset.cell = "volume";
+
+  row.append(name, perfCell, volumeCell);
+  return row;
+}
+
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
     DB.reviewTasks.getAll(),
@@ -957,20 +1010,17 @@ export async function renderStats() {
     exerciseNotesBody.append(createExerciseRow(exercise));
   }
 
+  // Reuses Analytics.bySubject (same data as the "Desempenho por
+  // disciplina" cards above) instead of stats.avgBySubject, so every
+  // subject appears here — including ones with zero evidence — and
+  // weightedAccuracy/performanceColor stay the single source of truth.
+  const comparisonResults = Analytics.bySubject(evidence, learningUnits, subjects);
+  const maxVolume = Math.max(0, ...comparisonResults.map((r) => r.totalQuestions));
+
   subjectAveragesBody.replaceChildren();
-  subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
-  for (const subject of stats.avgBySubject) {
-    const row = document.createElement("tr");
-    const name = document.createElement("th");
-    name.scope = "row";
-    name.textContent = subject.subjectName;
-    const average = document.createElement("td");
-    average.dataset.cell = "avg";
-    average.append(createPerformanceBadge(subject.avgScore));
-    const questions = document.createElement("td");
-    questions.textContent = String(subject.totalQuestions);
-    row.append(name, average, questions);
-    subjectAveragesBody.append(row);
+  subjectAveragesEmpty.hidden = comparisonResults.length > 0;
+  for (const result of comparisonResults) {
+    subjectAveragesBody.append(createSubjectComparisonRow(result, maxVolume));
   }
 
   const dataPoints = evidence

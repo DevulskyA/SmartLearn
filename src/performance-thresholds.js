@@ -79,3 +79,11 @@ export function performanceColor(weightedAccuracy, totalQuestions) {
   const [r, g, b] = [0, 1, 2].map((i) => lerp(lo.rgb[i], hi.rgb[i], t));
   return `rgb(${r}, ${g}, ${b})`;
 }
+
+// VOLUME != PERFORMANCE: how much a subject was practiced, scaled relative
+// to the largest volume in the currently displayed set — never mapped
+// through performanceColor, and never a factor in it either.
+export function volumeBarWidth(totalQuestions, maxVolume) {
+  if (!maxVolume) return 0;
+  return Math.min(100, Math.max(0, (Number(totalQuestions) || 0) / maxVolume * 100));
+}

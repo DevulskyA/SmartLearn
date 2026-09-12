@@ -10,6 +10,7 @@ import {
   colorVarForKey,
   performanceColor,
   PERFORMANCE_COLOR_NEUTRAL,
+  volumeBarWidth,
 } from "../src/performance-thresholds.js";
 
 import { subjectTrend, unitTrend, Analytics } from "../src/analytics.js";
@@ -194,4 +195,79 @@ test("performanceColor: subjectColor não altera performanceColor (mesma accurac
   const [colorA, colorB] = results.map((r) => performanceColor(r.weightedAccuracy, r.totalQuestions));
   assert.equal(colorA, colorB);
   assert.notEqual(results[0].color, results[1].color);
+});
+
+// --- SLICE 2: performance x volume independence (fixture A..G, heterogeneous volume) ---
+
+test("volumeBarWidth: escala relativa ao maior volume exibido, fixture A..G", () => {
+  const maxVolume = 200; // A's volume
+  assert.equal(volumeBarWidth(200, maxVolume), 100); // A
+  assert.equal(volumeBarWidth(20, maxVolume), 10);   // B
+  assert.equal(volumeBarWidth(100, maxVolume), 50);  // C
+  assert.equal(volumeBarWidth(50, maxVolume), 25);   // D
+  assert.equal(volumeBarWidth(10, maxVolume), 5);    // E
+  assert.equal(volumeBarWidth(5, maxVolume), 2.5);   // F
+  assert.equal(volumeBarWidth(0, maxVolume), 0);     // G
+});
+
+test("volumeBarWidth: com maxVolume zero (nenhuma disciplina praticada) não divide por zero", () => {
+  assert.equal(volumeBarWidth(0, 0), 0);
+});
+
+test("performanceColor não muda com o volume: 20% com 200 questões é igual a 20% com 5 questões", () => {
+  assert.equal(performanceColor(20, 200), performanceColor(20, 5));
+});
+
+test("performanceColor não muda com o volume: 60% é amarelo puro com 1, 100 ou 100000 questões", () => {
+  const expected = performanceColor(60, 100);
+  assert.equal(performanceColor(60, 1), expected);
+  assert.equal(performanceColor(60, 100000), expected);
+});
+
+test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (95%/5q) é melhor desempenho e menor volume", () => {
+  const today = '2026-06-01';
+  const fixture = [
+    { name: 'A', pct: 20, q: 200 },
+    { name: 'B', pct: 49, q: 20 },
+    { name: 'C', pct: 60, q: 100 },
+    { name: 'D', pct: 70, q: 50 },
+    { name: 'E', pct: 80, q: 10 },
+    { name: 'F', pct: 95, q: 5 },
+    { name: 'G', pct: null, q: 0 },
+  ];
+  const subjects = fixture.map((f, i) => ({ id: i + 1, name: f.name, color: 'DISC-BLUE' }));
+  const units = fixture.map((f, i) => ({ id: i + 1, subjectId: i + 1 }));
+  const evidence = fixture
+    .filter((f) => f.q > 0)
+    .map((f, i) => ({
+      unitId: fixture.indexOf(f) + 1,
+      questionsCount: f.q,
+      correctCount: Math.round((f.pct / 100) * f.q),
+      evidenceDate: today,
+    }));
+
+  const results = Analytics.bySubject(evidence, units, subjects, today);
+  const byName = Object.fromEntries(results.map((r) => [r.subjectName, r]));
+  const maxVolume = Math.max(...results.map((r) => r.totalQuestions));
+
+  // A: pior desempenho, maior volume.
+  assert.equal(byName.A.totalQuestions, 200);
+  assert.ok(byName.A.weightedAccuracy < byName.F.weightedAccuracy);
+  assert.ok(volumeBarWidth(byName.A.totalQuestions, maxVolume) > volumeBarWidth(byName.F.totalQuestions, maxVolume));
+
+  // F: melhor desempenho, menor volume (exceto G, que não tem evidência).
+  const withEvidence = results.filter((r) => r.totalQuestions > 0);
+  const minVolume = Math.min(...withEvidence.map((r) => r.totalQuestions));
+  assert.equal(byName.F.totalQuestions, minVolume);
+  assert.equal(volumeBarWidth(byName.A.totalQuestions, maxVolume), 100);
+  assert.equal(volumeBarWidth(byName.F.totalQuestions, maxVolume), 2.5);
+
+  // C: amarelo em performance, independentemente de ter 100 questões.
+  assert.equal(performanceColor(byName.C.weightedAccuracy, byName.C.totalQuestions), 'rgb(234, 179, 8)');
+
+  // G: sem evidência, nunca "0% vermelho".
+  assert.equal(byName.G.weightedAccuracy, null);
+  assert.equal(byName.G.totalQuestions, 0);
+  assert.equal(performanceColor(byName.G.weightedAccuracy, byName.G.totalQuestions), PERFORMANCE_COLOR_NEUTRAL);
+  assert.equal(volumeBarWidth(byName.G.totalQuestions, maxVolume), 0);
 });
