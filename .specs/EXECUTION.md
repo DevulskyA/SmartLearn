@@ -5,11 +5,42 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=69e2f1675590e0aceb1f20cccf5a0baa714c9280
-CURRENT_TASK=SMARTLEARN_STATS_VISUAL_INTELLIGENCE_V1
+CURRENT_HEAD=a8273acdb2bb83b6ed461b83661e18291f2e49ca
+WORKTREE_CLEAN=YES
+REMOTE_MATCH=YES
+PR=6
+CURRENT_TASK=UX_UI_DESIGN_AUDIT
 ENV_NORMALIZED=YES
 
-NEXT_PRODUCT_TASK=SMARTLEARN_STATS_VISUAL_INTELLIGENCE_V1
+STATS_SLICE_1=DONE
+STATS_SLICE_2=DONE
+EVIDENCE_FIX=DONE
+TARGETED_TESTS=48/48 PASS
+
+NEXT_PRODUCT_TASK=UX_UI_DESIGN_AUDIT
+
+DESIGN_DECISION (2026-09-12):
+- parar novas features visuais temporariamente;
+- resolver agora UX, arquitetura de informação, hierarquia, navegação,
+  progressive disclosure e uso semântico de cores;
+- NÃO fazer polish final agora;
+- Estatísticas está funcional, porém visualmente carregada;
+- próxima etapa é auditoria UX/UI especializada antes de qualquer Slice 3;
+- preservar matemática/analytics atuais (weightedAccuracy, performanceColor,
+  volumeBarWidth, thresholds, trend — nada disso é o problema);
+- designer primeiro propõe, não implementa;
+- depois comparar proposta com interface atual e implementar somente
+  mudanças de alto impacto.
+
+DESIGN_GOAL: "Qual é a menor interface que permite ao aluno entender
+imediatamente o que precisa fazer e como está aprendendo?"
+
+EXECUTION_POLICY:
+- produto > processo; contexto mínimo; vertical slice;
+- não reinventar arquitetura; não tocar main;
+- nenhuma ação externa irreversível sem autorização;
+- TLC V3=PAUSED_BUGGED;
+- desenvolvimento normal=Desenvolvimento Ágil Agentico.
 
 CANONICAL_DECISIONS:
 - local-first desktop (app funciona standalone sem servidor)
