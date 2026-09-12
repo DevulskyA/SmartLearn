@@ -224,16 +224,20 @@ test("performanceColor não muda com o volume: 60% é amarelo puro com 1, 100 ou
   assert.equal(performanceColor(60, 100000), expected);
 });
 
-test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (95%/5q) é melhor desempenho e menor volume", () => {
+test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (95%/20q) é melhor desempenho e menor volume", () => {
+  // Fixture com questionsCount/correctCount inteiros e REALIZÁVEIS — a
+  // versão anterior derivava correctCount de um percentual via
+  // Math.round (ex.: 49% de 20 = 9,8 → arredondava para 10 = 50% real,
+  // não 49% como o nome afirmava). Aqui cada linha já é o par exato.
   const today = '2026-06-01';
   const fixture = [
-    { name: 'A', pct: 20, q: 200 },
-    { name: 'B', pct: 49, q: 20 },
-    { name: 'C', pct: 60, q: 100 },
-    { name: 'D', pct: 70, q: 50 },
-    { name: 'E', pct: 80, q: 10 },
-    { name: 'F', pct: 95, q: 5 },
-    { name: 'G', pct: null, q: 0 },
+    { name: 'A', q: 200, correct: 40, pct: 20 },
+    { name: 'B', q: 100, correct: 49, pct: 49 },
+    { name: 'C', q: 80, correct: 48, pct: 60 },
+    { name: 'D', q: 60, correct: 42, pct: 70 },
+    { name: 'E', q: 40, correct: 32, pct: 80 },
+    { name: 'F', q: 20, correct: 19, pct: 95 },
+    { name: 'G', q: 0, correct: 0, pct: null },
   ];
   const subjects = fixture.map((f, i) => ({ id: i + 1, name: f.name, color: 'DISC-BLUE' }));
   const units = fixture.map((f, i) => ({ id: i + 1, subjectId: i + 1 }));
@@ -242,13 +246,20 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
     .map((f, i) => ({
       unitId: fixture.indexOf(f) + 1,
       questionsCount: f.q,
-      correctCount: Math.round((f.pct / 100) * f.q),
+      correctCount: f.correct,
       evidenceDate: today,
     }));
 
   const results = Analytics.bySubject(evidence, units, subjects, today);
   const byName = Object.fromEntries(results.map((r) => [r.subjectName, r]));
   const maxVolume = Math.max(...results.map((r) => r.totalQuestions));
+
+  // Fidelidade: o percentual calculado bate exatamente com o que o
+  // fixture afirma para cada disciplina com evidência.
+  for (const f of fixture) {
+    if (f.pct == null) continue;
+    assert.equal(byName[f.name].weightedAccuracy, f.pct, `${f.name} deveria ter exatamente ${f.pct}%`);
+  }
 
   // A: pior desempenho, maior volume.
   assert.equal(byName.A.totalQuestions, 200);
@@ -260,9 +271,9 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
   const minVolume = Math.min(...withEvidence.map((r) => r.totalQuestions));
   assert.equal(byName.F.totalQuestions, minVolume);
   assert.equal(volumeBarWidth(byName.A.totalQuestions, maxVolume), 100);
-  assert.equal(volumeBarWidth(byName.F.totalQuestions, maxVolume), 2.5);
+  assert.equal(volumeBarWidth(byName.F.totalQuestions, maxVolume), 10);
 
-  // C: amarelo em performance, independentemente de ter 100 questões.
+  // C: amarelo em performance, independentemente de ter 80 questões.
   assert.equal(performanceColor(byName.C.weightedAccuracy, byName.C.totalQuestions), 'rgb(234, 179, 8)');
 
   // G: sem evidência, nunca "0% vermelho".
@@ -270,4 +281,10 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
   assert.equal(byName.G.totalQuestions, 0);
   assert.equal(performanceColor(byName.G.weightedAccuracy, byName.G.totalQuestions), PERFORMANCE_COLOR_NEUTRAL);
   assert.equal(volumeBarWidth(byName.G.totalQuestions, maxVolume), 0);
+
+  // Volume não altera performanceColor: mesma accuracy de C, volumes bem
+  // diferentes, cor idêntica. performanceColor nem recebe correctCount, e
+  // volumeBarWidth nem recebe accuracy — a independência é estrutural, não
+  // só observada neste fixture.
+  assert.equal(performanceColor(60, 80), performanceColor(60, 5));
 });
