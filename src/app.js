@@ -11,7 +11,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
@@ -1425,7 +1425,22 @@ export async function renderStatsBySubject() {
     recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
 
     metrics.append(accEl, qEl, recentEl);
-    card.append(header, metrics);
+
+    // Continuous visual performance signal (0%=vermelho, 60%=amarelo,
+    // 100%=verde) — additive to the numeric/label/volume/trend above, never
+    // a replacement for them, and independent from the subject's own color.
+    const perfBar = document.createElement("div");
+    perfBar.className = "subject-kpi-perfbar";
+    perfBar.setAttribute("role", "presentation");
+    const perfBarFill = document.createElement("div");
+    perfBarFill.className = "subject-kpi-perfbar-fill";
+    const hasEvidence = r.weightedAccuracy != null;
+    perfBarFill.style.width = hasEvidence ? `${Math.min(100, Math.max(0, r.weightedAccuracy))}%` : "100%";
+    perfBarFill.style.background = performanceColor(r.weightedAccuracy, r.totalQuestions);
+    perfBarFill.classList.toggle("is-no-evidence", !hasEvidence);
+    perfBar.append(perfBarFill);
+
+    card.append(header, metrics, perfBar);
     subjectKpiList.append(card);
   }
 }

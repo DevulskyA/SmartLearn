@@ -50,3 +50,32 @@ export function colorVarForKey(colorKey) {
   const key = SUBJECT_COLORS[colorKey] ? colorKey : DEFAULT_SUBJECT_COLOR;
   return `--disc-color-${SUBJECT_COLORS[key].css}`;
 }
+
+// PERFORMANCE_COLOR != SUBJECT_COLOR. This is a continuous visual signal for
+// how well a subject/unit is doing (0%=red, 60%=yellow, 100%=green); it does
+// not identify or replace the subject's own color (colorVarForKey above).
+export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-text-muted)';
+const PERFORMANCE_COLOR_STOPS = [
+  { pct: 0, rgb: [220, 38, 38] },   // red-600
+  { pct: 60, rgb: [234, 179, 8] },  // yellow-500
+  { pct: 100, rgb: [22, 163, 74] }, // green-600
+];
+
+function lerp(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+export function performanceColor(weightedAccuracy, totalQuestions) {
+  if (totalQuestions == null || totalQuestions === 0) return PERFORMANCE_COLOR_NEUTRAL;
+  const pct = Number(weightedAccuracy);
+  if (!Number.isFinite(pct)) return PERFORMANCE_COLOR_NEUTRAL;
+  const clamped = Math.min(100, Math.max(0, pct));
+
+  const [lo, hi] = clamped <= 60
+    ? [PERFORMANCE_COLOR_STOPS[0], PERFORMANCE_COLOR_STOPS[1]]
+    : [PERFORMANCE_COLOR_STOPS[1], PERFORMANCE_COLOR_STOPS[2]];
+  const t = (clamped - lo.pct) / (hi.pct - lo.pct);
+
+  const [r, g, b] = [0, 1, 2].map((i) => lerp(lo.rgb[i], hi.rgb[i], t));
+  return `rgb(${r}, ${g}, ${b})`;
+}

@@ -2386,6 +2386,28 @@ h1 {
   margin-top: 0.125rem;
 }
 
+/* PERFORMANCE_COLOR signal: continuous red->yellow->green fill, distinct
+   from subject-chip's --subject-color identity. Additive to the numeric
+   percentage/label/volume/trend already rendered above — never the only
+   signal of how a subject is doing. */
+.subject-kpi-perfbar {
+  margin-top: 0.625rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.subject-kpi-perfbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.subject-kpi-perfbar-fill.is-no-evidence {
+  opacity: 0.35;
+}
+
 .stats-panel-heading {
   display: flex;
   justify-content: space-between;
