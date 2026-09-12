@@ -14,9 +14,10 @@ CURRENT_HEAD=9ddc4c3
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=PRODUCT-REAL-01 PARTIAL — real-chapter benchmark, not yet exhaustive
 LAST_COMPLETED_TASK=P1_PRODUCT B fixed (9ddc4c3) — both A and B now DONE
-NEXT_TASK=none recorded — awaiting user's next decision (a new model/reasoning-effort
-  settings policy was also handed down this session; not yet acted on — see below)
-NEXT_TASK_STATUS=N/A
+NEXT_TASK=implement "Luna Alto" as the default AI provider for study
+  generation (see AI_PROVIDER_DECISION + LUNA_ALTO_TASK_SPEC below) —
+  human decision already made, not a HUMAN_GATE anymore.
+NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
 
@@ -29,10 +30,54 @@ AI_AS_PRODUCT_SPEC (2026-09-12, user policy, durable): "usar IA" is never
   to test UI/pipeline must be labeled CURATED_CONTENT_TEST, never treated
   as AI_GENERATION_QUALITY evidence (retroactively applies to this whole
   PRODUCT-REAL-01 pass — all its content was curated by the assistant, no
-  live provider was ever called). User's stated default going forward:
-  model/reasoning-effort should become a configurable setting; stated
-  default value "LUNA ALTO" (as given — not yet implemented, no AI-config
-  UI/infra was built this session per the explicit "not now" scope).
+  live provider was ever called).
+
+AI_PROVIDER_DECISION (2026-09-12, human decision, CANONICAL — no longer
+  a HUMAN_GATE):
+  SMARTLEARN_AI_PROVIDER=OPENAI
+  SMARTLEARN_AI_MODEL=gpt-5.6-luna
+  SMARTLEARN_AI_REASONING_EFFORT=high
+  SMARTLEARN_AI_DEFAULT=YES
+  AI_SILENT_FALLBACK=FORBIDDEN
+  "LUNA ALTO" = model gpt-5.6-luna + reasoning_effort=high. This is now
+  SmartLearn's default AI configuration (not yet implemented in code as
+  of HEAD cf4c00a — see LUNA_ALTO_TASK_SPEC below for the exact task).
+
+LUNA_ALTO_TASK_SPEC (assigned 2026-09-12, not started):
+  Goal: smallest implementation making the real pipeline (PDF -> proposal
+  -> AI draft -> Resumo Mestre -> questions/answers/hints) call OpenAI
+  gpt-5.6-luna at reasoning_effort=high, via the Responses API.
+  Reuse server/src/ai/anthropic-provider.js's existing adapter CONTRACT
+  (generateDraft({segments,promptVersion}, {apiKey,model,...}) -> raw
+  draft object, validated afterward by the same draft-schema.js every
+  provider goes through) — add a new server/src/ai/openai-provider.js
+  sibling adapter, do not build a new abstraction layer, no migration,
+  no schema change, no Settings UI, no multi-model picker, no router.
+  Credential via env (mirrors existing SMARTLEARN_AI_* config.js
+  pattern) — never in frontend/bundle. Missing key -> explicit
+  provider/config error, no silent fallback to Anthropic/fake/manual
+  content. Fake provider stays fine for its existing tests only.
+  Test first (smallest discriminating): (1) provider is invoked with
+  exactly model=gpt-5.6-luna + reasoning effort=high, (2) a valid mocked
+  response still validates through the current draft schema, (3) missing
+  credential fails explicitly, (4) no silent fallback exists. Then run
+  only directly related tests, commit atomically if green — no general
+  audit.
+  Real proof (conditional): if OPENAI_API_KEY is present in the
+  environment, run ONE real generation against the same representative
+  Costanzo excerpt already used (do not hand-edit the output), and
+  assess SOURCE_FIDELITY/SUMMARY_QUALITY/QUESTION_QUALITY/ANSWER_QUALITY/
+  HINT_QUALITY/PEDAGOGICAL_USEFULNESS against the real source. If the key
+  is absent: report LIVE_AI=BLOCKED_EXTERNAL_OPENAI_API_KEY and stop only
+  that proof — do not invent a substitute and do not declare
+  AI_GENERATION_QUALITY from it.
+  Always record alongside any generation-quality claim: PROVIDER, MODEL,
+  REASONING_EFFORT, PROMPT_VERSION, SOURCE, TEST_MODE (LIVE_AI or
+  FAKE_PROVIDER) — never classify fake/curated output as LIVE_AI.
+  PRODUCT-REAL-01 stays PARTIAL until a real LIVE_AI generation has
+  actually been evaluated this way.
+  Suggested commit message: "feat(ai): use Luna high for study
+  generation". Do not push/merge.
 
 PRODUCT-REAL-01_STATUS=PARTIAL (not DONE). Reason:
   - real pipeline with Costanzo proven;
