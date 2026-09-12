@@ -10,16 +10,47 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=9ddc4c3
+CURRENT_HEAD=69e2f16
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=PRODUCT-REAL-01 PARTIAL — real-chapter benchmark, not yet exhaustive
-LAST_COMPLETED_TASK=P1_PRODUCT B fixed (9ddc4c3) — both A and B now DONE
-NEXT_TASK=implement "Luna Alto" as the default AI provider for study
-  generation (see AI_PROVIDER_DECISION + LUNA_ALTO_TASK_SPEC below) —
-  human decision already made, not a HUMAN_GATE anymore.
+LAST_COMPLETED_TASK=ENV-NORMALIZE-01 (69e2f16) — see checkpoint note below
+NEXT_TASK=SMARTLEARN_STATS_VISUAL_INTELLIGENCE_V1 (see .specs/EXECUTION.md).
+  Luna Alto (AI_PROVIDER_DECISION + LUNA_ALTO_TASK_SPEC below) remains the
+  canonical decision and NOT_STARTED, but is not next-in-line — do not
+  pick it up without checking .specs/EXECUTION.md CURRENT_TASK first.
 NEXT_TASK_STATUS=NOT_STARTED
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
+
+ENV-NORMALIZE-01 CHECKPOINT (2026-09-12, commit 69e2f16):
+  A prior session in this conversation ran Rust/Tauri AI scaffolding
+  directly on `main` by mistake (wrong worktree), and separately hit
+  WORKTREE_LAUNCH_ROOT_RESOLUTION: the Browser-pane preview tool launched
+  Vite from main's node_modules while believing it served this worktree.
+  Rescued/inventoried the misplaced main-branch work (nothing worth
+  porting — this worktree already has the equivalent, differently-shaped
+  capability: server/src/ai/*, server/src/pdf/extract-worker.js) into
+  C:\Temp\smartlearn-main-rescue\ and C:\Temp\smartlearn-preexisting-rescue\
+  (local machine, outside git), then reverted `main`'s working tree to
+  exactly match origin (f645a073, git status clean — verify with
+  `git -C <main-repo-root> status --short`).
+  Added here: scripts/require-work-branch.mjs (predev/prebuild/
+  prepreview/prestart guard — refuses to launch unless branch is
+  claude/smartlearn-v1-complete, prints SMARTLEARN_ROOT/SMARTLEARN_BRANCH),
+  scripts/dev-remote.mjs (`npm run dev:remote` — single command for
+  server+frontend with VITE_REMOTE_MODE + origins already correct),
+  .specs/EXECUTION.md (small recovery cockpit), CLAUDE.md recovery note.
+  Also added (outside this repo, this machine only): a Claude Code
+  PreToolUse hook at ~/.claude/hooks/smartlearn-guard.mjs, registered in
+  ~/.claude/settings.json, blocking Edit/Write/MultiEdit and mutating
+  git/npm Bash commands whenever they resolve to this repo's `main`
+  branch — scoped to repos whose origin remote matches DevulskyA/SmartLearn,
+  no-op for every other project. Full smoke evidence (login/register on
+  remote mode, local-mode standalone, 267 frontend + 345 server tests
+  green) lives in this session's transcript, not duplicated here.
+  One operator mistake during cleanup: a process-kill step targeted all
+  `node.exe` on the machine instead of specific PIDs — flagged to the
+  user in-session; no other work is known to have been running.
 
 AI_AS_PRODUCT_SPEC (2026-09-12, user policy, durable): "usar IA" is never
   a sufficient spec. When a function's quality depends materially on the
