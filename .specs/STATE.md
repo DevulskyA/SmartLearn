@@ -10,14 +10,51 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=07585a4
+CURRENT_HEAD=7506a47
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
-CURRENT_PHASE=SMARTLEARN_PRODUCT_FIRST_V1 (5/5 slices DONE, all committed)
-LAST_COMPLETED_TASK=SMARTLEARN_PRODUCT_FIRST_V1 Slice 5 (Pareto pass)
-NEXT_TASK=awaiting external planning
-NEXT_TASK_STATUS=N/A
+CURRENT_PHASE=PRODUCT-REAL-01 PARTIAL — real-chapter benchmark, not yet exhaustive
+LAST_COMPLETED_TASK=hint-color fix (7506a47); PRODUCT-REAL-01 itself is PARTIAL, not DONE
+NEXT_TASK=P1_PRODUCT A — let accept reuse an existing subject (see below)
+NEXT_TASK_STATUS=IN_PROGRESS
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
+
+PRODUCT-REAL-01_STATUS=PARTIAL (not DONE). Reason:
+  - real pipeline with Costanzo proven;
+  - real experience proven on a representative slice;
+  - content used in the assessment was manually curated (not live AI);
+  - live AI was not evaluated;
+  - the whole chapter was not pedagogically evaluated (only 2 of 7
+    real proposals got hand-authored content: proposal 3 pages 21-30/8
+    questions, a mini 2-page GFR excerpt/3 questions, a mini 2-page
+    glucose excerpt/2 questions — the other proposals were never
+    drafted at all).
+
+Material: Costanzo Physiology 7th ed. (8th not found locally, user
+  supplied 7e — registered, not silently substituted), Chapter 6 Renal
+  Physiology, real 66-page extract uploaded/extracted/chunked via the
+  real pipeline (7 real proposals produced).
+
+P1_PRODUCT (found, NOT fixed yet — registered, no general audit done):
+  A. Acceptance não permite escolher disciplina existente — draft-accept
+     form only has a free-text "new subject" input, no picker for an
+     EXISTING subject. Impact: a normal returning-student flow (adding
+     more material to a subject they already created) hits a dead end.
+  B. Rechunk/reprocess of a source that already has an ACCEPTED draft
+     can produce HTTP 500 and expose "INTERNAL" to the user (chunkSource's
+     wholesale DELETE of content_proposals hits a still-referenced FK
+     row from the accepted generated_drafts row). Real error, not
+     actionable/orientable for the user as shown.
+
+Fixed this pass: hint text read as a validation error (commit 7506a47,
+  "fix(study): present exercise hints as guidance").
+
+NEXT_TASK: P1_PRODUCT A (existing-subject reuse at accept) — priority
+per user: normal product behavior, real blocker hit during the actual
+journey. Then, context permitting, P1_PRODUCT B (rechunk 500 -> explicit
+domain error).
+
+Full verdict text delivered to user in chat (not duplicated here).
 
 GOVERNING PHILOSOPHY (2026-09-11): SMARTLEARN_PRODUCT_FIRST_V1 is now the
 canonical operating philosophy for this project (full text given by the
