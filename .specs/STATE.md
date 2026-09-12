@@ -10,14 +10,29 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=7506a47
+CURRENT_HEAD=9ddc4c3
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=PRODUCT-REAL-01 PARTIAL — real-chapter benchmark, not yet exhaustive
-LAST_COMPLETED_TASK=hint-color fix (7506a47); PRODUCT-REAL-01 itself is PARTIAL, not DONE
-NEXT_TASK=P1_PRODUCT A — let accept reuse an existing subject (see below)
-NEXT_TASK_STATUS=IN_PROGRESS
+LAST_COMPLETED_TASK=P1_PRODUCT B fixed (9ddc4c3) — both A and B now DONE
+NEXT_TASK=none recorded — awaiting user's next decision (a new model/reasoning-effort
+  settings policy was also handed down this session; not yet acted on — see below)
+NEXT_TASK_STATUS=N/A
 WORKTREE_STATUS=CLEAN
 BLOCKERS=none
+
+AI_AS_PRODUCT_SPEC (2026-09-12, user policy, durable): "usar IA" is never
+  a sufficient spec. When a function's quality depends materially on the
+  model, PROVIDER/MODEL/REASONING_EFFORT/PROMPT_VERSION/context-strategy/
+  fallback-policy must be recorded before evaluation; model/effort are
+  product variables the assistant must never silently choose, downgrade,
+  or upgrade — HUMAN_GATE when undecided. Manually-authored content used
+  to test UI/pipeline must be labeled CURATED_CONTENT_TEST, never treated
+  as AI_GENERATION_QUALITY evidence (retroactively applies to this whole
+  PRODUCT-REAL-01 pass — all its content was curated by the assistant, no
+  live provider was ever called). User's stated default going forward:
+  model/reasoning-effort should become a configurable setting; stated
+  default value "LUNA ALTO" (as given — not yet implemented, no AI-config
+  UI/infra was built this session per the explicit "not now" scope).
 
 PRODUCT-REAL-01_STATUS=PARTIAL (not DONE). Reason:
   - real pipeline with Costanzo proven;
@@ -35,24 +50,26 @@ Material: Costanzo Physiology 7th ed. (8th not found locally, user
   Physiology, real 66-page extract uploaded/extracted/chunked via the
   real pipeline (7 real proposals produced).
 
-P1_PRODUCT (found, NOT fixed yet — registered, no general audit done):
-  A. Acceptance não permite escolher disciplina existente — draft-accept
-     form only has a free-text "new subject" input, no picker for an
-     EXISTING subject. Impact: a normal returning-student flow (adding
-     more material to a subject they already created) hits a dead end.
-  B. Rechunk/reprocess of a source that already has an ACCEPTED draft
-     can produce HTTP 500 and expose "INTERNAL" to the user (chunkSource's
-     wholesale DELETE of content_proposals hits a still-referenced FK
-     row from the accepted generated_drafts row). Real error, not
-     actionable/orientable for the user as shown.
+P1_PRODUCT (both found AND fixed this session):
+  A. FIXED (17365ef) — draft-accept form had no picker for an existing
+     subject, only free-text "new subject"; typing an existing name
+     dead-ended ("Já existe uma disciplina com esse nome."). Added a
+     select of active subjects (same pattern as Plano's own new-unit
+     form), reusing the server's existing subjectId/newSubjectName
+     contract — no server change needed for this one.
+  B. FIXED (9ddc4c3) — re-chunking a source with an already-ACCEPTED
+     draft crashed with an unhandled 500 "INTERNAL" (chunkSource's
+     wholesale DELETE hit generated_drafts' FK). Now fails closed with
+     a 409 HAS_ACCEPTED_CONTENT + plain-language message; the
+     no-accepted-draft case is unaffected.
 
-Fixed this pass: hint text read as a validation error (commit 7506a47,
-  "fix(study): present exercise hints as guidance").
+Fixed this pass: hint text read as a validation error (7506a47), P1_PRODUCT
+  A (17365ef), P1_PRODUCT B (9ddc4c3).
 
-NEXT_TASK: P1_PRODUCT A (existing-subject reuse at accept) — priority
-per user: normal product behavior, real blocker hit during the actual
-journey. Then, context permitting, P1_PRODUCT B (rechunk 500 -> explicit
-domain error).
+NEXT_TASK: none chosen by this session — both flagged P1_PRODUCT items
+are closed. Next priority is the user's call (per their own explicit
+"escolha somente o próximo defeito de maior valor percebido" — with no
+further defect flagged, this session stops rather than inventing scope).
 
 Full verdict text delivered to user in chat (not duplicated here).
 
