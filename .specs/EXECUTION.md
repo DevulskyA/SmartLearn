@@ -5,7 +5,7 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=5460f46
+CURRENT_HEAD=cf6dcb7
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
@@ -66,14 +66,63 @@ SEQUENCE_F_DISCIPLINAS=PARTIAL (2026-09-14, commit 5460f46) — added the
   called out for "identidade cromática forte"). Rest of the screen (create
   form, edit/archive/delete flow) not yet re-audited.
 
-NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence E (Estatísticas re-audit as its
-  own pass — STATS_VISUAL_PORT covered the two-tab port but not a full §26-33
-  pass) or finish F (Disciplinas create/edit forms) or G (Configurações+
-  Conta) — see MASTER_BUILD_PLAN_PATH §50. Sequence H (whole-product pass:
-  responsiveness/accessibility/states/continuity) not started. Whole-product
-  design rollout is IN PROGRESS under an explicit user autonomy override
-  (2026-09-14): local/reversible/visual decisions are made without stopping
-  to ask; only functional/schema/architecture-level changes are HUMAN_GATE.
+SEQUENCE_E_ESTATISTICAS_INCIDENT (2026-09-14): mid-session, an attempt to
+  redesign Estatísticas' top metric summary + swap Por conteúdo's whole
+  markup in one large edit caused a real regression (half-wired DOM, stale
+  Vite dev-server cache compounding the confusion) — user caught it, work
+  was reverted to commit 4357c36 (`git revert` of the two offending commits,
+  verified index.html byte-identical to baseline again), and a corrective
+  method was set: LOCKED (already-approved) composition must be reproduced
+  faithfully from C:\Projetos\SmartLearn-Stats-Prototype, never
+  reinterpreted; OPEN areas get full design autonomy; every slice must be
+  small, fully wired (HTML+CSS+JS together, never markup-only), rendered,
+  and tested before the next one. Recurring trap hit twice: Vite's dev
+  server can keep serving a stale cached bundle after a file change (or a
+  git revert) — symptom is a page that LOOKS broken/unstyled even though
+  the source is correct; fix is killing the server, `rm -rf node_modules/
+  .vite`, and restarting, not editing more code. Do this proactively before
+  trusting a "broken" render.
+
+SEQUENCE_E_ESTATISTICAS_PROGRESS (2026-09-14, commits 5c4b909, d565e5f,
+  cf6dcb7 — all on top of the restored 4357c36 baseline, each its own
+  small verified slice):
+  1. Por conteúdo discipline context switcher (trigger = current subject,
+     menu = only alternatives), ported from the approved prototype's
+     .content-context/.discipline-switch-list, replacing the "Todas as
+     disciplinas" filter. Reuses Analytics.bySubject (no new calc).
+  2. Header-click sorting (Desempenho/Prática/Tendência columns, arrow
+     shows direction) on BOTH Por disciplina and Por conteúdo, replacing
+     both "Ordenar por" dropdowns and the "Todas as tendências" filter —
+     one shared sortMatrixRows/wireSortableHeaders implementation.
+     Deliberate capability drop: the old dropdown's "Disciplina"/"Última
+     atividade" sort modes have no column to attach to and aren't in the
+     approved prototype's own sort set either — not carried forward.
+  3. Period filter relocated from inside Por conteúdo's toolbar to the
+     page-level .screen-heading (global position, per explicit
+     instruction). Still only functionally filters Por conteúdo (its
+     existing behavior, unchanged) — extending it to also scope Por
+     disciplina needs Analytics.bySubject's rows to carry lastEvidence
+     (they don't yet); flagged as the next increment, not done silently.
+  Seeded 9 realistic subjects (Anatomia..Pediatria, two evidence windows
+  each for real trend variety) directly via DB.* in the running dev
+  session for visual verification — session-local, not a migration/fixture
+  file, nothing committed.
+  Still open on Estatísticas: period -> also scope Por disciplina; the top
+  metric-grid (6 identical cards, DESIGN.md-banned pattern) — explicitly
+  reverted tonight and left alone, a separate decision from tonight's
+  Por-conteúdo-focused correction; Exercícios resolvidos table and the
+  evolution/analysis side panels not yet re-audited against the prototype.
+
+NEXT_PRODUCT_TASK=finish Estatísticas per SEQUENCE_E_ESTATISTICAS_PROGRESS
+  above (period->Por disciplina next), then F (Disciplinas create/edit
+  forms) or G (Configurações+Conta) — see MASTER_BUILD_PLAN_PATH §50.
+  Sequence H (whole-product pass) not started. Whole-product design rollout
+  is IN PROGRESS under an explicit user autonomy override (2026-09-14):
+  local/reversible/visual decisions made without stopping to ask; LOCKED
+  (already-approved) composition reproduced faithfully, never reinterpreted;
+  OPEN areas get full design autonomy; functional/schema/architecture-level
+  changes are HUMAN_GATE. Small verified slices only — see the incident note
+  above for why.
 
 DESIGN_DECISION (2026-09-12):
 - parar novas features visuais temporariamente;
