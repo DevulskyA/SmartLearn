@@ -479,6 +479,13 @@
           </div>
 
           <div id="view-stats-unit" class="view-panel is-hidden" role="tabpanel" aria-labelledby="tab-stats-unit">
+            <div class="content-context" id="content-context">
+              <div class="discipline-switch" id="discipline-switch">
+                <button type="button" class="subject-cell content-context-plate" id="content-context-plate" aria-haspopup="listbox" aria-expanded="false" aria-controls="discipline-switch-list"></button>
+                <ul class="discipline-switch-list" id="discipline-switch-list" role="listbox" aria-label="Trocar disciplina" tabindex="-1" hidden></ul>
+              </div>
+              <p class="content-context-meta" id="content-context-meta"></p>
+            </div>
             <div class="workspace-grid">
               <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
                 <div class="stats-panel-heading wrap">
@@ -487,12 +494,6 @@
                     <h2 id="unit-stats-title">Desempenho por conteúdo</h2>
                   </div>
                   <div class="panel-heading-actions">
-                    <label class="select-control sort-control">
-                      <span class="visually-hidden">Filtrar por disciplina</span>
-                      <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
-                        <option value="">Todas as disciplinas</option>
-                      </select>
-                    </label>
                     <label class="select-control sort-control">
                       <span class="visually-hidden">Filtrar por tendência</span>
                       <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">

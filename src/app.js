@@ -220,7 +220,9 @@ const unitStatsEmpty = document.querySelector("#unit-stats-empty");
 const unitDetailPanel = document.querySelector("#unit-detail-panel");
 const unitDetailEmpty = document.querySelector("#unit-detail-empty");
 const unitDetailBody = document.querySelector("#unit-detail-body");
-const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
+const contentContextPlate = document.querySelector("#content-context-plate");
+const disciplineSwitchList = document.querySelector("#discipline-switch-list");
+const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
 const statsUnitSort = document.querySelector("#stats-unit-sort");
@@ -1863,6 +1865,43 @@ function buildSparkline(scores, width = 60, height = 24) {
   return svg;
 }
 
+let selectedUnitSubjectId = null;
+
+function formatContentContextMeta(row) {
+  if (!row || row.totalQuestions <= 0) return "Sem evidência ainda";
+  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return `${pct}% desempenho · ${row.totalQuestions} questões`;
+}
+
+// Context switcher aprovado: trigger mostra a disciplina atual; o menu que
+// ele abre nunca repete essa disciplina, só mostra as alternativas.
+function renderContentContext(activeSubjectRows, currentSubjectId) {
+  if (!contentContextPlate || !disciplineSwitchList) return;
+  const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
+
+  contentContextPlate.textContent = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.style.setProperty(
+    "--subject-fill",
+    `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
+  );
+  if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
+
+  disciplineSwitchList.replaceChildren();
+  for (const row of activeSubjectRows) {
+    if (row.subjectId === currentSubjectId) continue;
+    const item = document.createElement("li");
+    item.setAttribute("role", "option");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "subject-cell";
+    btn.textContent = row.subjectName;
+    btn.dataset.subjectId = String(row.subjectId);
+    btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
+    item.append(btn);
+    disciplineSwitchList.append(item);
+  }
+}
+
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
   const today = getLocalDateValue();
@@ -1874,21 +1913,23 @@ export async function renderStatsByUnit() {
   let results = Analytics.byUnit(evidence, units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
-  // Populate subject filter
-  if (statsUnitFilterSubject && statsUnitFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      statsUnitFilterSubject.append(opt);
-    }
+  // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
+  // trigger = disciplina atual, menu = só as alternativas) em vez de um
+  // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
+  // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
+  // reaproveitado aqui, não recalculado.
+  const activeSubjectRows = Analytics.bySubject(evidence, units, subjects, today).filter(
+    (r) => subjectsById.get(r.subjectId)?.isActive,
+  );
+  if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
+    selectedUnitSubjectId = activeSubjectRows[0]?.subjectId ?? null;
   }
+  renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const subjFilter = statsUnitFilterSubject?.value ?? "";
   const trendFilter = statsUnitFilterTrend?.value ?? "";
   const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
-  if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
+  if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
   if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
   if (unitPeriodFilter) {
     const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
@@ -4405,8 +4446,24 @@ for (const { tab } of statsViewTabs) {
 statsSubjectSort?.addEventListener("change", () => {
   if (databaseAvailable) renderStatsBySubject().catch(console.error);
 });
-statsUnitFilterSubject?.addEventListener("change", () => {
+contentContextPlate?.addEventListener("click", () => {
+  const expanded = contentContextPlate.getAttribute("aria-expanded") === "true";
+  contentContextPlate.setAttribute("aria-expanded", String(!expanded));
+  disciplineSwitchList.hidden = expanded;
+});
+disciplineSwitchList?.addEventListener("click", (event) => {
+  const btn = event.target.closest("button[data-subject-id]");
+  if (!btn) return;
+  selectedUnitSubjectId = Number(btn.dataset.subjectId);
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
+});
+document.addEventListener("click", (event) => {
+  if (!contentContextPlate || disciplineSwitchList?.hidden !== false) return;
+  if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
 });
 statsUnitFilterTrend?.addEventListener("change", () => {
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
