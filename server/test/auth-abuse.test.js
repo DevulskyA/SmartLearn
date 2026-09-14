@@ -195,8 +195,26 @@ test('SECURITY FIX round 2 (found by second independent verifier): /auth/passwor
         timings.push(Date.now() - start);
         assert.equal(res.statusCode, 401);
       }
-      const lastTiming = timings[timings.length - 1];
-      assert.ok(lastTiming < 100, `expected the rate-limited request to be fast (no scrypt), got ${lastTiming}ms`);
+      // DEFAULT_PASSWORD_CHANGE_MAX_ATTEMPTS is 10, so requests 0..9 pay a
+      // real verifyPassword/scrypt cost and requests 10..12 must be blocked
+      // by the rate limiter BEFORE reaching verifyPassword — those must be
+      // dramatically cheaper than a real scrypt call.
+      //
+      // A fixed absolute millisecond ceiling here is inherently flaky on
+      // shared/loaded CI runners (scrypt itself can take anywhere from
+      // ~150ms to 700+ms depending on machine load — see the timings
+      // logged by the password-hashing tests elsewhere in this suite).
+      // Instead, compare the blocked requests against the real scrypt cost
+      // measured in THIS run, so the assertion self-calibrates to whatever
+      // machine is executing it.
+      const unblockedTimings = timings.slice(0, 10);
+      const blockedTimings = timings.slice(10);
+      const avgUnblocked = unblockedTimings.reduce((a, b) => a + b, 0) / unblockedTimings.length;
+      const maxBlocked = Math.max(...blockedTimings);
+      assert.ok(
+        maxBlocked < avgUnblocked / 2,
+        `expected rate-limited requests (no scrypt) to be well under half the real scrypt cost measured in this run — avg unblocked ${avgUnblocked}ms, slowest blocked ${maxBlocked}ms (all blocked: ${blockedTimings.join(', ')}ms)`,
+      );
     } finally { await app.close(); }
   } finally { cleanup(); }
 });

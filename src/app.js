@@ -1413,10 +1413,35 @@ function sortMatrixRows(results, { key, dir }) {
     if (bv == null) return -1;
     return dir === "asc" ? av - bv : bv - av;
   };
+  // String comparator for the two functionally-restored sort modes
+  // (P0-3: "Disciplina" alphabetical + "Última atividade" recency, both
+  // previously available via a now-removed dropdown). Nulls sort last
+  // regardless of direction, matching the numeric comparator's own
+  // established no-evidence-last convention above.
+  const cmpString = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const result = av.localeCompare(bv, "pt-BR", { sensitivity: "base" });
+    return dir === "asc" ? result : -result;
+  };
   if (key === "practice") return [...results].sort(cmp((r) => r.totalQuestions));
   if (key === "trend") {
     const order = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
     return [...results].sort(cmp((r) => order[r.trend.direction] ?? 1));
+  }
+  // Alphabetical identity: subjectName alone for Por disciplina rows;
+  // subjectName + unitTitle for Por conteúdo rows (unitTitle is undefined
+  // on subject rows, so this degrades to subjectName-only there).
+  if (key === "identity") {
+    return [...results].sort(cmpString((r) => `${r.subjectName ?? ""} ${r.unitTitle ?? ""}`.trim()));
+  }
+  // Recency: most/least recent real evidence date, ISO strings sort
+  // lexicographically the same as chronologically.
+  if (key === "recency") {
+    return [...results].sort(cmpString((r) => r.lastEvidence?.evidenceDate ?? null));
   }
   return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
 }
@@ -1424,12 +1449,19 @@ function sortMatrixRows(results, { key, dir }) {
 function updateSortHeaderUI(theadRow, state) {
   if (!theadRow) return;
   for (const th of theadRow.querySelectorAll("th")) {
-    const btn = th.querySelector(".th-sort-btn");
-    if (!btn) continue;
-    const isActive = btn.dataset.sortKey === state.key;
-    th.setAttribute("aria-sort", isActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
-    btn.classList.toggle("is-active", isActive);
-    btn.dataset.dir = isActive ? state.dir : "";
+    const buttons = th.querySelectorAll(".th-sort-btn");
+    if (buttons.length === 0) continue;
+    let anyActive = false;
+    for (const btn of buttons) {
+      const isActive = btn.dataset.sortKey === state.key;
+      if (isActive) anyActive = true;
+      btn.classList.toggle("is-active", isActive);
+      btn.dataset.dir = isActive ? state.dir : "";
+    }
+    // A <th> can hold two independent sort buttons (Prática/Última
+    // atividade share one column to avoid a new column); aria-sort
+    // reflects whichever of them is the active key.
+    th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
   }
 }
 
@@ -1482,6 +1514,11 @@ export async function renderStatsBySubject() {
     const chip = document.createElement("span");
     chip.className = "subject-cell";
     chip.textContent = r.subjectName;
+    // P1-2: at narrower table widths this chip can be visually truncated
+    // (ellipsis) to keep the table from silently overflowing — the native
+    // title tooltip keeps the full name one hover/long-press away instead
+    // of losing it outright.
+    chip.title = r.subjectName;
     chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     identityCell.append(chip);
 
@@ -1508,11 +1545,11 @@ export async function renderStatsBySubject() {
     trendCell.append(createTrendBadge(r.trend.direction));
 
     row.append(identityCell, perfCell, practiceCell, trendCell);
-    row.addEventListener("click", () => selectSubjectForEvolution(r.subjectId));
+    row.addEventListener("click", () => openSubjectContents(r.subjectId));
     row.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        selectSubjectForEvolution(r.subjectId);
+        openSubjectContents(r.subjectId);
       }
     });
     subjectKpiList.append(row);
@@ -1528,6 +1565,31 @@ function selectSubjectForEvolution(subjectId) {
   for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
     tr.classList.toggle("is-selected", tr.dataset.subjectId === String(subjectId));
   }
+}
+
+// Single semantic action for "activate a discipline row in Por disciplina":
+// used identically by click, Enter and Space so mouse and keyboard never
+// diverge. Restores the pre-regression behavior (row activation used to
+// switch to Por conteúdo) while keeping the newer evolution-chart sync,
+// which is still legitimate/useful on its own.
+function openSubjectContents(subjectId) {
+  // 1) keep discipline selection in sync — same mechanism the evolution
+  // chart already used (dropdown value + row highlight in Por disciplina).
+  selectSubjectForEvolution(subjectId);
+  // 2) drive Por conteúdo to the same discipline.
+  selectedUnitSubjectId = subjectId;
+  // 3) activate the Por conteúdo tab (shared setStatsView, same path a real
+  // tab click uses — no parallel tab-activation logic).
+  const unitTab = document.querySelector("#tab-stats-unit");
+  if (unitTab) setStatsView(unitTab);
+  // 4) re-render Por conteúdo (updates the matrix rows AND, via
+  // renderContentContext inside it, the context-switcher trigger/menu).
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  // 5) focus/ARIA coherence: move focus to the now-selected tab, matching
+  // the tablist's own roving-tabindex state (setStatsView already put
+  // tabindex=0 only on this tab) instead of leaving focus stranded on a
+  // row that just disappeared into the other, now-hidden panel.
+  unitTab?.focus();
 }
 
 function createTrackingStateBadge(state) {
@@ -2013,10 +2075,12 @@ export async function renderStatsByUnit() {
     const chip = document.createElement("span");
     chip.className = "subject-cell subject-cell--compact";
     chip.textContent = r.subjectName;
+    chip.title = r.subjectName;
     chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     const title = document.createElement("span");
     title.className = "unit-title";
     title.textContent = r.unitTitle;
+    title.title = r.unitTitle;
     identityCell.append(chip, title);
 
     const hasEvidence = r.weightedAccuracy != null;

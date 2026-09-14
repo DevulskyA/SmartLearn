@@ -14,10 +14,25 @@ const WORK_BRANCH = 'claude/smartlearn-v1-complete';
 // (WORKTREE_LAUNCH_ROOT_RESOLUTION). A CI runner has no such ambiguity — it
 // always checks out exactly the ref under test, fresh, in detached HEAD (no
 // local branch name at all) — so the check has nothing to protect against
-// there and would otherwise fail every PR build unconditionally. `CI` is
-// set by GitHub Actions (and effectively every other CI provider) by
-// convention.
-if (process.env.CI) process.exit(0);
+// there and would otherwise fail every PR build unconditionally.
+//
+// Recognize CI explicitly: GitHub Actions sets both `GITHUB_ACTIONS=true`
+// and the generic `CI=true` (a convention most other CI providers also
+// follow). Check the specific flag first, fall back to the generic one, and
+// log the run context when we skip so a CI log makes the decision obvious.
+const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
+const isCi = isGithubActions || Boolean(process.env.CI);
+if (isCi) {
+  if (isGithubActions) {
+    console.log('SMARTLEARN_CI=github-actions');
+    console.log(`SMARTLEARN_GITHUB_REF=${process.env.GITHUB_REF || '(unset)'}`);
+    console.log(`SMARTLEARN_GITHUB_HEAD_REF=${process.env.GITHUB_HEAD_REF || '(unset, not a pull_request event)'}`);
+    console.log(`SMARTLEARN_GITHUB_SHA=${process.env.GITHUB_SHA || '(unset)'}`);
+  } else {
+    console.log('SMARTLEARN_CI=generic (CI env var set, not GitHub Actions)');
+  }
+  process.exit(0);
+}
 
 function git(args) {
   return execFileSync('git', args, { cwd: process.cwd(), encoding: 'utf8' }).trim();

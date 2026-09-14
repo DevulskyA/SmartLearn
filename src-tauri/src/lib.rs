@@ -1911,8 +1911,12 @@ mod tests {
             .spawn()
             .expect("spawn a real node process holding the port");
 
-        // Give it a moment to actually bind before we probe.
-        let bound_before_drop = (0..20).any(|_| {
+        // Give it a moment to actually bind before we probe. Loaded/shared CI
+        // runners can take noticeably longer than a local machine to spawn
+        // and JIT-warm a fresh node process, so this budget is generous
+        // (10s) rather than the tighter local-only window this used to have
+        // — a slow bind is not the thing this test is trying to catch.
+        let bound_before_drop = (0..100).any(|_| {
             std::thread::sleep(Duration::from_millis(100));
             TcpListener::bind((LOCAL_BACKEND_HOST, port)).is_err()
         });
@@ -1927,7 +1931,7 @@ mod tests {
             };
         } // <- LocalBackend dropped here: must kill the child synchronously
 
-        let port_released = (0..20).any(|_| {
+        let port_released = (0..50).any(|_| {
             if TcpListener::bind((LOCAL_BACKEND_HOST, port)).is_ok() {
                 true
             } else {

@@ -1113,6 +1113,39 @@ h1 {
   margin-top: -0.05rem;
 }
 
+/* P0-3: restores "Recência" (last-activity) sorting without adding a new
+   column — it shares the Prática <th> as a second, visually subordinate
+   sort control (stacked below the primary one) instead of a heavier
+   toolbar/dropdown. Only Prática's own <th> carries a second button; every
+   other sortable header still has exactly one.
+   IMPORTANT: the flex stacking lives on this inner wrapper, NOT on the
+   <th> itself. table-layout:fixed column widths are only honored reliably
+   when the <th> keeps its default table-cell display — setting
+   display:flex directly on the <th> (tried first, verified live) made
+   Chromium ignore this column's specified width entirely, collapsing it
+   to ~5% of the table and truncating both labels to a single illegible
+   letter at the 768-900px width this same file's P1-2 fix targets. */
+.th-sort-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.th-sort-btn-secondary {
+  font-size: 0.68rem;
+  opacity: 0.75;
+}
+
+.th-sort-btn-secondary.is-active {
+  opacity: 1;
+}
+
+.th-sort-btn-secondary .sort-arrow {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
 .stats-table td:last-child,
 .stats-table thead th:last-child {
   text-align: right;
@@ -2177,6 +2210,71 @@ h1 {
 .matrix-table th:first-child { width: 30%; }
 .matrix-table th:nth-child(2) { width: 26%; }
 .matrix-table th:nth-child(3) { width: 24%; }
+
+/* P1-2: the phone-width fix above (table-layout:fixed + overflow/ellipsis,
+   under the 47.99rem breakpoint) never covered the 768–900px range — past
+   the phone breakpoint but still narrow, because the app's sidebar layout
+   starts exactly at 48rem/768px and eats real horizontal space from the
+   table's own available width even though workspace-grid is already
+   single-column there (see the 900px workspace-grid rule above). Same
+   root cause (auto table-layout lets content dictate width instead of
+   honoring the width hints above), same fix — reapplied here on purpose,
+   WITHOUT the phone-only font-size/padding compaction: at 768-900px there
+   is materially more room than on a phone, and shrinking type/touch
+   targets that much here would trade one problem for a worse one.
+   MUST come after the unconditional width rules just above: equal
+   selector specificity means source order decides, and this needs to win
+   only inside its own range. Verified at 768/800/900px: no more silent
+   horizontal scroll, headers stay legible, every metric (including the
+   focal performance percentage) stays on-screen without scrolling, row
+   height/touch target unchanged. */
+@media (min-width: 48rem) and (max-width: 900px) {
+  .matrix-table {
+    table-layout: fixed;
+  }
+  /* Slightly rebalanced vs. the unconditional 30/26/24/(~20%) split above:
+     at this width (0.75rem header font, no phone-only shrink) the plain
+     "Tendência" header needs a bit more than the default ~20% remainder
+     to stay fully legible instead of losing its last letter — reclaimed
+     from Disciplina/Desempenho, whose own cell content (a subject chip,
+     a percentage) already tolerates truncation by design. */
+  .matrix-table th:first-child { width: 26%; }
+  .matrix-table th:nth-child(2) { width: 24%; }
+  .matrix-table th:nth-child(3) { width: 24%; }
+  .matrix-table th,
+  .matrix-table td {
+    overflow: hidden;
+  }
+  /* Trim the header cells' own padding and the sort-arrow icon's footprint
+     a little (not the phone-level shrink — just enough that a plain
+     10-letter label like "Desempenho" isn't fighting its own sort icon for
+     the last few pixels of a already-narrow column). */
+  .matrix-table th {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+  .matrix-table .th-sort-btn {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    gap: 0.15rem;
+  }
+  .matrix-table .th-sort-btn .sort-arrow {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+  .matrix-table .practice-compact,
+  .matrix-table .practice-recent,
+  .matrix-table .subject-compare-value,
+  .matrix-table .trend-badge {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}
 .matrix-table tr.matrix-row {
   cursor: pointer;
   transition: background 140ms ease, box-shadow 140ms ease;

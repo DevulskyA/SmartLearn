@@ -13,11 +13,29 @@
 // menu lists alternatives only — the current value is never duplicated as a
 // row inside its own menu.
 //
-// Mechanics follow the WAI-ARIA APG "Select-Only Combobox" pattern by hand
-// (no new dependency): roving focus in the menu, typeahead, Home/End,
-// Escape-cancels, focus returns to the trigger on close.
+// Mechanics follow the WAI-ARIA APG "Listbox Button" (a.k.a. "Collapsible
+// Dropdown Listbox") pattern by hand (no new dependency) — NOT the
+// "Select-Only Combobox" pattern this file used to claim in its comment.
+// The two are easy to conflate (both look like a themed native <select>)
+// but they are structurally different, and this file's actual interaction
+// is the Listbox Button one: activating the trigger button MOVES FOCUS
+// INTO the popup listbox (menu.focus() below), which then owns
+// aria-activedescendant and all arrow/typeahead/Home/End navigation.
+// A true combobox instead keeps DOM focus ON the combobox element itself
+// (never moving it into the popup) and puts aria-activedescendant there —
+// that pattern was never actually implemented here, only claimed in a
+// comment. Full Listbox Button contract, all pieces present below:
+// trigger<->popup relationship via matching id + aria-controls,
+// aria-expanded on the trigger, aria-haspopup="listbox", roving
+// aria-activedescendant + focus management inside the popup, a real
+// disabled state, outside-click close, Escape-to-close, focus returning to
+// the trigger on close, and accessible-name labeling on both trigger and
+// popup — plus the native <select> kept live underneath as a fallback
+// (see mount() below) for screen readers/automation that operate on it
+// directly.
 
 const registry = new WeakMap();
+let uidCounter = 0;
 
 function optionsOf(select) {
   return Array.from(select.options);
@@ -50,6 +68,12 @@ function labelFor(select) {
 }
 
 function mount(select) {
+  // A stable unique id per mounted instance — independent of whether the
+  // underlying <select> itself has an id (many consumers don't) — so
+  // aria-controls always resolves to a real element and two selects
+  // without their own ids never collide on the same generated option ids.
+  const uid = `ui-select-${++uidCounter}`;
+
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "ui-select-trigger select-control";
@@ -63,10 +87,16 @@ function mount(select) {
   trigger.append(triggerText, svgChevron());
 
   const menu = document.createElement("ul");
+  menu.id = `${uid}-listbox`;
   menu.setAttribute("role", "listbox");
   menu.className = "ui-select-menu";
   menu.hidden = true;
   if (accessibleLabel) menu.setAttribute("aria-label", accessibleLabel);
+  // Listbox Button pattern requires the trigger to formally reference the
+  // popup it opens/controls — this was missing before (comment claimed a
+  // pattern that isn't what the code actually implements; this is part of
+  // implementing the real one fully, not just relabeling the comment).
+  trigger.setAttribute("aria-controls", menu.id);
 
   const wrap = document.createElement("div");
   wrap.className = "ui-select";
@@ -113,7 +143,7 @@ function mount(select) {
         li.className = "ui-select-item";
         li.textContent = opt.text;
         li.dataset.index = String(opt.index);
-        li.id = `${select.id || "ui-select"}-opt-${opt.index}`;
+        li.id = `${uid}-opt-${opt.index}`;
         if (opt.disabled) {
           li.setAttribute("aria-disabled", "true");
           li.classList.add("is-disabled");
