@@ -424,24 +424,15 @@
                     <p class="eyebrow">Por disciplina</p>
                     <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
                   </div>
-                  <label class="select-control sort-control">
-                    <span class="visually-hidden">Ordenar disciplinas</span>
-                    <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
-                      <option value="worst-first">Pior → melhor</option>
-                      <option value="best-first">Melhor → pior</option>
-                      <option value="volume">Volume de questões</option>
-                      <option value="trend">Tendência</option>
-                    </select>
-                  </label>
                 </div>
                 <div class="table-scroll">
                   <table class="stats-table matrix-table">
                     <thead>
-                      <tr>
+                      <tr id="subject-kpi-head">
                         <th scope="col">Disciplina</th>
-                        <th scope="col">Desempenho</th>
-                        <th scope="col">Prática</th>
-                        <th scope="col">Tendência</th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
                     <tbody id="subject-kpi-list"></tbody>
@@ -495,16 +486,6 @@
                   </div>
                   <div class="panel-heading-actions">
                     <label class="select-control sort-control">
-                      <span class="visually-hidden">Filtrar por tendência</span>
-                      <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
-                        <option value="">Todas as tendências</option>
-                        <option value="IMPROVING">Melhorando</option>
-                        <option value="DECLINING">Caindo</option>
-                        <option value="STABLE">Estável</option>
-                        <option value="INSUFFICIENT">Insuficiente</option>
-                      </select>
-                    </label>
-                    <label class="select-control sort-control">
                       <span class="visually-hidden">Filtrar por período</span>
                       <select id="stats-unit-filter-period" aria-label="Filtrar por período">
                         <option value="">Qualquer período</option>
@@ -513,26 +494,16 @@
                         <option value="last-365">Último ano</option>
                       </select>
                     </label>
-                    <label class="select-control sort-control">
-                      <span class="visually-hidden">Ordenar por</span>
-                      <select id="stats-unit-sort" aria-label="Ordenar por">
-                        <option value="worst-first">Pior score (padrão)</option>
-                        <option value="trend">Tendência</option>
-                        <option value="volume">Volume</option>
-                        <option value="subject">Disciplina</option>
-                        <option value="last-activity">Última atividade</option>
-                      </select>
-                    </label>
                   </div>
                 </div>
                 <div class="table-scroll">
                   <table class="stats-table matrix-table">
                     <thead>
-                      <tr>
+                      <tr id="unit-stats-head">
                         <th scope="col">Conteúdo</th>
-                        <th scope="col">Desempenho</th>
-                        <th scope="col">Prática</th>
-                        <th scope="col">Tendência</th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
                     <tbody id="unit-stats-list"></tbody>

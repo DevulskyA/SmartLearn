@@ -214,7 +214,6 @@ const metricElements = {
 };
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
-const statsSubjectSort = document.querySelector("#stats-subject-sort");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
 const unitDetailPanel = document.querySelector("#unit-detail-panel");
@@ -223,9 +222,7 @@ const unitDetailBody = document.querySelector("#unit-detail-body");
 const contentContextPlate = document.querySelector("#content-context-plate");
 const disciplineSwitchList = document.querySelector("#discipline-switch-list");
 const contentContextMeta = document.querySelector("#content-context-meta");
-const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
-const statsUnitSort = document.querySelector("#stats-unit-sort");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
 const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
@@ -1387,6 +1384,56 @@ function createTrendBadge(direction) {
   return span;
 }
 
+// Header-click sorting (approved pattern — no separate sort dropdown when a
+// table column can sort itself). One {key,dir} state per table; ascending
+// "performance" is the existing worst-first default in both tables.
+const subjectSortState = { key: "performance", dir: "asc" };
+const unitSortState = { key: "performance", dir: "asc" };
+
+function sortMatrixRows(results, { key, dir }) {
+  const cmp = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return dir === "asc" ? av - bv : bv - av;
+  };
+  if (key === "practice") return [...results].sort(cmp((r) => r.totalQuestions));
+  if (key === "trend") {
+    const order = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
+    return [...results].sort(cmp((r) => order[r.trend.direction] ?? 1));
+  }
+  return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
+}
+
+function updateSortHeaderUI(theadRow, state) {
+  if (!theadRow) return;
+  for (const th of theadRow.querySelectorAll("th")) {
+    const btn = th.querySelector(".th-sort-btn");
+    if (!btn) continue;
+    const isActive = btn.dataset.sortKey === state.key;
+    th.setAttribute("aria-sort", isActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
+    btn.classList.toggle("is-active", isActive);
+    btn.dataset.dir = isActive ? state.dir : "";
+  }
+}
+
+function wireSortableHeaders(rowId, state, onChange) {
+  const row = document.querySelector(`#${rowId}`);
+  if (!row || row.dataset.sortWired) return;
+  row.dataset.sortWired = "true";
+  row.addEventListener("click", (event) => {
+    const btn = event.target.closest(".th-sort-btn");
+    if (!btn) return;
+    const key = btn.dataset.sortKey;
+    state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
+    state.key = key;
+    updateSortHeaderUI(row, state);
+    onChange();
+  });
+}
+
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const today = getLocalDateValue();
@@ -1396,22 +1443,9 @@ export async function renderStatsBySubject() {
     DB.subjects.getAll(),
   ]);
   let results = Analytics.bySubject(evidence, units, subjects, today);
-
-  const sortValue = statsSubjectSort?.value ?? "worst-first";
-  if (sortValue === "best-first") {
-    results = [...results].sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return b.weightedAccuracy - a.weightedAccuracy;
-    });
-  } else if (sortValue === "volume") {
-    results = [...results].sort((a, b) => b.totalQuestions - a.totalQuestions);
-  } else if (sortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = [...results].sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  }
-  // "worst-first" is default from Analytics.bySubject sort
+  results = sortMatrixRows(results, subjectSortState);
+  wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
+  updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
 
   const hasAny = results.some((r) => r.totalQuestions > 0);
   subjectKpiEmpty.hidden = hasAny || results.length > 0;
@@ -1927,43 +1961,18 @@ export async function renderStatsByUnit() {
   renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const trendFilter = statsUnitFilterTrend?.value ?? "";
   const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
   if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
-  if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
   if (unitPeriodFilter) {
     const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
     const cutoff = subtractDays(today, days);
     results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
   }
 
-  // Sort (AC-EST2-05)
-  const unitSortValue = statsUnitSort?.value ?? "worst-first";
-  if (unitSortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = results.sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  } else if (unitSortValue === "volume") {
-    results = results.sort((a, b) => b.evidenceCount - a.evidenceCount);
-  } else if (unitSortValue === "subject") {
-    results = results.sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? "") || (a.unitTitle ?? "").localeCompare(b.unitTitle ?? ""));
-  } else if (unitSortValue === "last-activity") {
-    results = results.sort((a, b) => {
-      const da = a.lastEvidence?.evidenceDate;
-      const db = b.lastEvidence?.evidenceDate;
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return db.localeCompare(da);
-    });
-  } else {
-    // worst-first (default): worst recent score → best
-    results = results.sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return a.weightedAccuracy - b.weightedAccuracy;
-    });
-  }
+  // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
+  results = sortMatrixRows(results, unitSortState);
+  wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
+  updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
 
   const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
@@ -4443,9 +4452,6 @@ for (const { tab } of statsViewTabs) {
   tab?.addEventListener("click", () => setStatsView(tab));
 }
 
-statsSubjectSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsBySubject().catch(console.error);
-});
 contentContextPlate?.addEventListener("click", () => {
   const expanded = contentContextPlate.getAttribute("aria-expanded") === "true";
   contentContextPlate.setAttribute("aria-expanded", String(!expanded));
@@ -4464,9 +4470,6 @@ document.addEventListener("click", (event) => {
   if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
   disciplineSwitchList.hidden = true;
   contentContextPlate.setAttribute("aria-expanded", "false");
-});
-statsUnitFilterTrend?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
@@ -4502,9 +4505,6 @@ trackingFilterPeriod?.addEventListener("change", () => {
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-});
-statsUnitSort?.addEventListener("change", () => {
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
 });
 
