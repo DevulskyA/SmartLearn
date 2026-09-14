@@ -5,7 +5,7 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=edeeb6b
+CURRENT_HEAD=86e0c36
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
@@ -265,7 +265,32 @@ SEQUENCE_H_PROGRESS (2026-09-14, this stretch — commits 92316e7, ff7dec2,
   intentionally unreachable under plain `npm run dev` (LOCAL_AUTHORITY
   gate, not a CSS/attribute-only hide — forcing the nav button open did
   not switch the screen), matches e2e/product-value.spec.js; not a defect.
+  Keyboard focus verified real (not a screenshot artifact): Tab-focused
+  nav item matched(':focus-visible') with a real computed outline; no
+  positive tabindex anywhere in the DOM.
+
+  5. Acompanhar fix re-scope (commit 86e0c36): checking the sidebar layout
+     itself at 768px (not just the 375px phone-nav breakpoint) found the
+     SAME title-overflow bug item 3 had just fixed, still present — the
+     47.99rem scoping assumed anything past the phone-nav breakpoint had
+     enough room, which is false for the sidebar's own narrow content
+     column. Moved to its own `max-width: 60rem` block; verified broken at
+     768px→fixed, and unaffected at 1024px→still single-line as before.
+     Estatísticas' matrix-table still overflows in that same 768–900px
+     sidebar range, deliberately left as-is: unlike the title case it has
+     a visible scrollbar affordance (arrows shown) and the critical
+     performance value stays on-screen without scrolling — lower severity,
+     flagged below as a second-lap item rather than fixed reflexively.
   Full e2e regression run after every slice: 48/48 green throughout.
+
+SEQUENCE_H_SECOND_LAP_OPEN (not yet done, lower priority than the above):
+  Estatísticas matrix-table (both tabs) still horizontally scrolls in the
+  ~768–900px sidebar range (has a real scrollbar affordance, not silent —
+  judged acceptable for now, not a hard defect). Loading-state races,
+  long-content stress beyond what was seeded, and a systematic tablet-
+  width pass on Materiais/Disciplinas/Configurações/Conta (only Hoje/
+  Estatísticas/Acompanhar were explicitly checked at 768/1024px this
+  stretch) remain open.
 
 SEED_DATA_NOTE: tonight's 9 realistic subjects (Anatomia..Pediatria, two
   evidence windows each) were created directly via DB.* in the running dev
