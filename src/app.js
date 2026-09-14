@@ -1003,7 +1003,14 @@ export async function renderStats() {
   const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
   metricElements.totalQuestions.textContent = String(stats.totalQuestions);
   metricElements.totalCorrect.textContent = String(stats.totalCorrect);
-  metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
+  // Sem evidência != 0% (master plan §9-20): avgScore is numerically 0 with
+  // no questions answered, but rendering it as "0,0%" reads as a measured
+  // failing average rather than "nothing recorded yet".
+  const hasScoreData = stats.totalQuestions > 0;
+  metricElements.avgScore.textContent = hasScoreData
+    ? `${stats.avgScore.toFixed(1).replace(".", ",")}%`
+    : "—";
+  metricElements.avgScore.classList.toggle("is-empty", !hasScoreData);
   metricElements.reviewsDone.textContent = String(stats.reviewsDone);
   metricElements.reviewsPending.textContent = String(stats.reviewsPending);
   metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);
