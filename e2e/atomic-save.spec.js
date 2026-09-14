@@ -176,14 +176,20 @@ test('response lost after the server already committed: a same-key retry replays
   });
 
   await page.locator('#plan-unit-save-btn').click();
-  await expect(page.locator('#plan-unit-form-message')).toContainText(/não foi possível/i, { timeout: 5000 });
+  // Generous timeout: this test's own first request does a REAL round trip
+  // to the server (route.fetch()) on top of the usual page/network work
+  // every other test in this file does — under a loaded/shared CI runner
+  // that occasionally makes it the single slowest assertion in the file
+  // (observed failing at the default 5000ms budget shared by its siblings
+  // on GitHub Actions, unrelated to any product behavior change).
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/não foi possível/i, { timeout: 15000 });
   // Draft must survive an uncertain-outcome failure — nothing to resubmit
   // means the user would have to retype it from scratch.
   await expect(page.locator('#plan-study-title')).toHaveValue(title);
 
   await page.unroute('**/v1/learning-units');
   await page.locator('#plan-unit-save-btn').click();
-  await expect(page.locator('#plan-unit-form-message')).toContainText(/aula salva/i, { timeout: 5000 });
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/aula salva/i, { timeout: 15000 });
 
   await page.reload();
   await page.waitForLoadState('networkidle');
