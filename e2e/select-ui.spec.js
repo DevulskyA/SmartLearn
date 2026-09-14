@@ -193,6 +193,77 @@ test.describe('local BrowserStore consumers', () => {
     await page.keyboard.press('Escape');
     await auditSelectConsumer(page, '#tracking-filter-subject');
   });
+
+  // Closing the inventory loop: every remaining real <select> consumer
+  // gets the exact same full checklist, not just a DOM/enhancement audit —
+  // "full inventory + migration of every remaining native-popup select
+  // consumer, not just the ones already covered" (global standardization
+  // follow-up). All of these were already confirmed enhanced via a DOM
+  // audit (every <select> in the app carries .ui-select-native + a
+  // .ui-select wrapper + tabIndex -1), but had no dedicated live
+  // keyboard/mouse/no-duplicate/value-change proof of their own yet.
+
+  test('Plano — status filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-filter-state');
+  });
+
+  test('Plano — "Ordenar por" sort select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-sort');
+  });
+
+  test('Cadastro rápido (legacy screen) — discipline select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, null);
+    await page.evaluate(() => { window.location.hash = '#register'; });
+    await expect(page.locator('#screen-register')).toBeVisible({ timeout: 5000 });
+    await auditSelectConsumer(page, '#subject-select');
+  });
+
+  test('Estatísticas — global period select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#stats-unit-filter-period');
+  });
+
+  test('Estatísticas — evolution chart discipline filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#evolution-filter-subject');
+  });
+
+  test('Estatísticas — evolution chart period filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#evolution-filter-period');
+  });
+
+  test('menu width is never narrower than its trigger', async ({ page }) => {
+    await seedUatAndGoto(page, 'tracking');
+    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    const triggerBox = await trigger.boundingBox();
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect(menuBox.width).toBeGreaterThanOrEqual(triggerBox.width - 1); // -1 for sub-pixel rounding
+    await page.keyboard.press('Escape');
+  });
+
+  test('viewport-collision handling: a select near the bottom edge opens its menu upward instead of overflowing the viewport', async ({ page }) => {
+    // A short viewport guarantees the trigger sits close enough to the
+    // bottom edge that the menu (several options tall) cannot fit below it.
+    await page.setViewportSize({ width: 800, height: 320 });
+    await seedUatAndGoto(page, 'tracking');
+    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await trigger.scrollIntoViewIfNeeded();
+    const triggerBox = await trigger.boundingBox();
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    // Opened upward: the menu's bottom edge sits at/above the trigger's top.
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(triggerBox.y + 1);
+    // Never escapes the viewport on either edge.
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(320 + 1);
+    await page.keyboard.press('Escape');
+  });
 });
 
 test.describe('source-draft-subject-select (Materiais) — the one flagged as "not re-tested live"', () => {
