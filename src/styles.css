@@ -1830,9 +1830,16 @@ h1 {
 .select-control select:focus-visible { outline: 0; }
 .sort-control { min-width: 0; }
 
-.matrix-table th:first-child { width: 30%; }
+/* table-layout:fixed makes the column widths below (and .unit-title's own
+   ellipsis) actually binding — without it, auto layout treats percentages
+   as hints only and grows the table past its container on long titles
+   ("Por conteúdo" crosses subjects, so titles run longer than "Por
+   disciplina"'s short subject names, which is why only that tab showed it). */
+.matrix-table { table-layout: fixed; }
+.matrix-table th:first-child { width: 34%; }
 .matrix-table th:nth-child(2) { width: 26%; }
-.matrix-table th:nth-child(3) { width: 24%; }
+.matrix-table th:nth-child(3) { width: 22%; }
+.matrix-table th:nth-child(4) { width: 18%; }
 .matrix-table tr.matrix-row {
   cursor: pointer;
   transition: background 140ms ease, box-shadow 140ms ease;
@@ -1844,7 +1851,8 @@ h1 {
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
-.unit-identity-cell { display: flex; align-items: center; gap: 0.5rem; }
+.unit-identity-cell { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.unit-identity-cell .subject-cell--compact { flex-shrink: 0; }
 .unit-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); font-size: 0.88rem; font-weight: 600; }
 
 .practice-cell { font-size: 0.82rem; }
