@@ -5,29 +5,71 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=b18bb67
+CURRENT_HEAD=a63a35a
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
-REMOTE_MATCH=YES — pushed this session, origin/claude/smartlearn-v1-complete = b18bb67
-PR=6 (https://github.com/DevulskyA/SmartLearn/pull/6, still DRAFT) — this
-  stretch's work (9 commits, d56604e..b18bb67) is on it, not a new PR; title
-  bumped to "@ 6c65d29", full audit summary posted as a PR comment
-  (10-section report the user asked for: root cause, files touched, data
-  proof, selection-system spec, surfaces migrated, tests, desktop/mobile/
-  a11y evidence, known risks). NO_MERGE, NO_DEPLOY — user is auditing.
-CI_STATUS=was RED before b18bb67 (test job) — pre-existing, unrelated to
-  this session (confirmed same failure on the Sep-12 run too, before this
-  session started): scripts/require-work-branch.mjs exits 1 on every CI
-  checkout because CI is always detached-HEAD, never the named branch the
-  guard checks for. Fixed in b18bb67 (skip the guard when `CI` env var is
-  set — GitHub Actions' own convention — leave local-dev protection
-  unchanged) and pushed. Re-run not yet confirmed green as of this
-  checkpoint — check `gh run list --branch claude/smartlearn-v1-complete
-  --limit 1` on resume; if still red it's a NEW issue, not this same one.
-CURRENT_TASK=Sequence H (mobile/tablet/a11y first lap) DONE + select-ui
-  system DONE, both on PR #6 awaiting user audit — see SELECT_UI_ROLLOUT
-  and SEQUENCE_H_PROGRESS below. Confirm CI green on resume, then
-  MASTER_BUILD_PLAN_ROLLOUT / SEQUENCE_H second lap can continue (see
-  SEQUENCE_H_SECOND_LAP_OPEN below) unless the user has redirected.
+REMOTE_MATCH=YES — pushed this session, origin/claude/smartlearn-v1-complete = a63a35a
+PR=6 (https://github.com/DevulskyA/SmartLearn/pull/6, still DRAFT) — an
+  external audit rejected the prior state of this PR; this stretch (one
+  commit, a63a35a on top of b5cad7a) responds to that audit's punch list.
+  NO_MERGE, NO_DEPLOY — user is auditing.
+
+CI_AUDIT_RESPONSE_CHECKPOINT (2026-09-14, commit a63a35a): external audit
+  rejected PR #6. Investigated CI fresh rather than assuming the prior
+  b18bb67 guard fix was still the cause (it wasn't — verified via
+  `gh run view 34852132812 --log-failed`): CI was red on two independently
+  flaky, timing-sensitive tests, not the guard. Fixed both (widened the
+  Rust bind-wait budget in dropping_local_backend_actually_kills_the_
+  child_process; made auth-abuse.test.js's rate-limit timing assertion
+  self-calibrating against real scrypt cost measured in the same run
+  instead of an absolute CI-load-sensitive ms ceiling) — see the commit
+  message for full detail. Also fixed the real product regressions the
+  audit flagged:
+  - P0-1: discipline row click/keyboard in Estatísticas/Por disciplina
+    opens Por conteúdo again (one semantic action, openSubjectContents(),
+    src/app.js).
+  - P0-2: the 9-discipline rich dataset this file's own SEED_DATA_NOTE
+    below documented as lost-on-restart is now a real, versioned,
+    rebuildable fixture (src/fixtures/uat-medical-dataset.js, same
+    window.__seedUatMedical DEV-only path, never touches production data).
+    SEED_DATA_NOTE below is now SUPERSEDED by this — kept for history.
+  - P0-3: restored "Disciplina"/"Conteúdo" alphabetical sort and "Última
+    atividade" recency sort, dropped without authorization per
+    SEQUENCE_E_ESTATISTICAS_PROGRESS item 2 below (same header-click
+    mechanism, recency shares the Prática <th> as a second button).
+  - P0-4/P1-1: select-ui.js's ARIA pattern comment was wrong ("Select-Only
+    Combobox" claimed, "Listbox Button" actually implemented) — comment
+    fixed, trigger<->popup aria-controls relationship completed (was
+    missing). Verified live across period/discipline/status/form selects,
+    a disabled option, a long label, mobile, and specifically
+    source-draft-subject-select (Materiais) — the SELECT_UI_ROLLOUT note
+    below flagged this one as "not visually verified live"; now it has
+    been, with a real spawned-server E2E test (e2e/select-ui.spec.js).
+  - P1-2: Estatísticas' matrix tables no longer horizontal-scroll at
+    768-900px (SEQUENCE_H_SECOND_LAP_OPEN below flagged this as accepted-
+    but-not-really-attempted) — same table-layout:fixed fix as the phone
+    breakpoint, extended to this range; a real regression found live while
+    verifying it (display:flex on a <th> silently broke table-layout:fixed
+    column-width distribution in Chromium, collapsing two header labels to
+    single illegible letters) was caught and fixed before commit, not
+    shipped.
+  New tests: test/uat-medical-dataset.test.js (14), e2e/stats-discipline-
+  drilldown.spec.js (4), e2e/stats-sorting.spec.js (5), e2e/select-ui.spec.js
+  (7) — all green. Full gate: root 297/297, server 345/345, Rust 29/29,
+  e2e 64/64, production build PASS. GitHub Actions CI confirmed GREEN on
+  the pushed commit (both `rust` and `test` jobs, E2E included) — run
+  https://github.com/DevulskyA/SmartLearn/actions/runs/34860161682.
+  RESIDUAL_RISKS: the 9-subject fixture's calendar anchor is "today" at
+  generation time (dynamic, not a fixed historical date) — this is
+  intentional (states never go stale) but means review-task due-date
+  fixtures shift slightly relative to real-world testing done on a
+  different day; not a defect. Full native Windows/Tauri UAT was not
+  re-run this stretch (no code path touched that LOCAL01A/LOCAL01B's own
+  proofs didn't already cover — only Rust lib.rs's test-timing constant
+  changed, not the local-backend launch/kill logic itself).
+
+CURRENT_TASK=CI_AUDIT_RESPONSE_CHECKPOINT above is the latest work. Prior
+  CURRENT_TASK text (Sequence H / select-ui rollout, kept below for
+  history) is superseded by this checkpoint's own itemized fixes.
 
 P0_DATA_INCIDENT (this stretch): user reported the dataset had disappeared.
   Investigated before touching anything — the real Tauri desktop DB
