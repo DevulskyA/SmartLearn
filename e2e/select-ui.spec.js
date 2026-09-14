@@ -6,15 +6,17 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 
-// P0-4 / P1-1: proves the shared select/listbox primitive (src/select-ui.js)
-// live, across representative real consumers, instead of trusting the code
-// alone. Canonical rule under test: TRIGGER shows the current value, MENU
-// shows only the other alternatives (never duplicating the current value).
-// Also exercises the "Listbox Button" ARIA contract described in P1-1's
-// fix: trigger<->popup relationship via aria-controls, aria-expanded,
-// activedescendant-driven focus inside the popup, Escape-to-close, and
-// focus returning to the trigger — see src/select-ui.js's own header
-// comment for why this is "Listbox Button", not "Select-Only Combobox".
+// Proves the shared select/combobox primitive (src/select-ui.js) live,
+// across representative real consumers, instead of trusting the code
+// alone. Canonical rule under test for an ORDINARY select (WAI-ARIA APG
+// "Select-Only Combobox" — see DESIGN.md "Select / combobox / context-
+// switcher"): the popup lists EVERY real option, including the current
+// one (aria-selected="true" on it), DOM focus never leaves the combobox
+// element while the popup is open, aria-activedescendant lives on the
+// combobox (not the popup), arrow/Home/End/typeahead only PREVIEW a
+// value, and only Enter/Space/click COMMIT it. This intentionally does
+// NOT apply to the subject context-switcher (a different, LOCKED pattern
+// — see e2e/context-switcher-keyboard.spec.js for its own contract).
 
 // A <select>'s own textContent concatenates EVERY option's text, not just
 // the selected one — toHaveText() on the native element itself is not a
@@ -39,63 +41,97 @@ async function locateSelectUi(page, nativeSelector) {
   return { nativeEl, trigger, menu };
 }
 
-// Full checklist for one consumer: trigger-shows-value, no duplicate in
-// menu, keyboard open (Enter), arrow-key movement, Escape close + focus
-// return, then a real value change via keyboard and via mouse click.
+// Full checklist for one ORDINARY select consumer, per the corrected
+// Select-Only Combobox contract (see file header / DESIGN.md): semantic
+// roles, current value present+selected in the popup, focus-stays-on-
+// trigger the whole time, preview-vs-commit separation on every input
+// method, Escape/Tab cancel without committing, Home/End/typeahead, and
+// a real value change via both keyboard and mouse.
 async function auditSelectConsumer(page, nativeSelector) {
   const { nativeEl, trigger, menu } = await locateSelectUi(page, nativeSelector);
+
+  await expect(trigger).toHaveAttribute('role', 'combobox');
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
 
   const currentText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
   await expect(trigger).toHaveText(currentText);
 
-  // Keyboard open: Enter.
+  // Keyboard open: Enter. Focus stays ON the trigger — it never moves
+  // into the popup (the defining difference from a Menu Button popup).
   await trigger.focus();
   await page.keyboard.press('Enter');
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   await expect(menu).toBeVisible();
   await expect(menu).toHaveAttribute('role', 'listbox');
-
-  // The current value is never duplicated as a row inside its own open menu.
-  if (currentText) {
-    const dup = await menu.locator('li[role="option"]', { hasText: currentText }).count();
-    expect(dup, `current value "${currentText}" must not be duplicated inside its own open menu`).toBe(0);
-  }
+  await expect(trigger).toBeFocused();
 
   const optionCount = await menu.locator('li[role="option"]').count();
-  expect(optionCount, `${nativeSelector}: expected at least one alternative in the menu`).toBeGreaterThan(0);
+  expect(optionCount, `${nativeSelector}: expected at least one option in the menu`).toBeGreaterThan(0);
 
-  // Arrow keys move aria-activedescendant (roving focus inside the popup —
-  // the "Listbox Button" pattern's actual mechanics, see file header).
-  const activeBefore = await menu.getAttribute('aria-activedescendant');
-  expect(activeBefore).toBeTruthy();
+  // The current value MUST be present in its own open menu (never
+  // filtered out) and correctly marked aria-selected="true" — the
+  // opposite of the context-switcher's own locked "alternatives only"
+  // rule, which does not apply to ordinary selects.
+  if (currentText) {
+    const currentOption = menu.locator('li[role="option"]', { hasText: currentText });
+    await expect(currentOption, `current value "${currentText}" must be present in its own open menu`).toHaveCount(1);
+    await expect(currentOption).toHaveAttribute('aria-selected', 'true');
+  }
+  const selectedCount = await menu.locator('li[role="option"][aria-selected="true"]').count();
+  expect(selectedCount, 'exactly one option is aria-selected=true').toBe(1);
+
+  // aria-activedescendant lives on the TRIGGER (not the popup) and
+  // previews the currently-selected option on open.
+  const activeBefore = await trigger.getAttribute('aria-activedescendant');
+  expect(activeBefore, 'trigger must own aria-activedescendant while open').toBeTruthy();
+  await expect(menu).not.toHaveAttribute('aria-activedescendant', /.+/);
+
+  // Arrow keys PREVIEW only — the underlying value must not change yet.
   if (optionCount > 1) {
     await page.keyboard.press('ArrowDown');
-    const activeAfter = await menu.getAttribute('aria-activedescendant');
+    const activeAfter = await trigger.getAttribute('aria-activedescendant');
     expect(activeAfter).not.toBe(activeBefore);
+    await expectSelectedText(nativeEl, currentText); // still unchanged — preview, not commit
+    await expect(trigger).toHaveText(currentText); // trigger text unchanged until commit too
   }
 
-  // Escape cancels: closes, focus returns to trigger, value unchanged.
+  // Home/End jump within the list without committing.
+  await page.keyboard.press('End');
+  const activeAtEnd = await trigger.getAttribute('aria-activedescendant');
+  await page.keyboard.press('Home');
+  const activeAtHome = await trigger.getAttribute('aria-activedescendant');
+  if (optionCount > 1) expect(activeAtHome).not.toBe(activeAtEnd);
+  await expectSelectedText(nativeEl, currentText); // Home/End never commits either
+
+  // Escape cancels: closes, does NOT commit, focus never left the trigger.
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await expect(trigger).toBeFocused();
   await expectSelectedText(nativeEl, currentText);
+  await expect(trigger).toHaveText(currentText);
 
-  // Real value change via keyboard: open, move to the first alternative,
-  // select with Enter — this is the actual first item in the ALTERNATIVES
-  // list (never the current value, since it's excluded).
+  // Real value change via keyboard: open, deterministically navigate to a
+  // genuinely different option (Home always lands on the first option
+  // regardless of where the current value sits; if that happens to BE the
+  // current value, one ArrowDown guarantees a real move since
+  // optionCount > 1), commit with Enter.
   await trigger.focus();
   await page.keyboard.press('Enter');
   await expect(menu).toBeVisible();
-  const targetText = await menu.locator('li[role="option"]').first().textContent();
+  await page.keyboard.press('Home');
+  const firstOptionText = (await menu.locator('li[role="option"]').first().textContent()).trim();
+  if (firstOptionText === currentText && optionCount > 1) {
+    await page.keyboard.press('ArrowDown');
+  }
   await page.keyboard.press('Enter');
   await expect(menu).toBeHidden();
-  await expect(trigger).toBeFocused(); // focus returns to trigger after commit too
-  await expect(trigger).toHaveText(targetText.trim());
-  await expectSelectedText(nativeEl, targetText.trim());
+  await expect(trigger).toBeFocused(); // focus returns to (never left) the trigger after commit too
+  const committedText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+  if (optionCount > 1) expect(committedText, 'keyboard commit must produce a real value change').not.toBe(currentText);
+  await expect(trigger).toHaveText(committedText);
 
-  // Real value change via mouse click on a menu item (a different one, or
-  // the same available alternative if there's only one/two options).
+  // Real value change via mouse click on a menu item.
   await trigger.click();
   await expect(menu).toBeVisible();
   const items = menu.locator('li[role="option"]:not(.is-disabled)');
@@ -105,6 +141,20 @@ async function auditSelectConsumer(page, nativeSelector) {
   await expect(menu).toBeHidden();
   await expect(trigger).toHaveText(clickTargetText);
   await expectSelectedText(nativeEl, clickTargetText);
+
+  // Tab closes the popup without committing and does not trap focus —
+  // re-open, preview a different value, then Tab away.
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeVisible();
+  const beforeTabText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Tab');
+  await expect(menu).toBeHidden();
+  await expect(trigger).not.toBeFocused(); // focus moved on, as Tab should
+  await expectSelectedText(nativeEl, beforeTabText); // Tab never committed the preview
+  // Return focus to the trigger for whichever assertions run next.
+  await trigger.focus();
 }
 
 async function seedUatAndGoto(page, screenId) {
@@ -366,24 +416,28 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
     expect(menuId, 'source-draft-subject-select trigger must have aria-controls').toBeTruthy();
     const menu = page.locator(`#${menuId}`);
 
-    // Trigger shows the current (placeholder) value; menu lists the real
-    // alternative ("Nefrologia Select UI") without duplicating the
-    // placeholder if it's also a real option, and without ever showing the
-    // current value twice.
+    // Trigger shows the current (placeholder) value; menu lists EVERY real
+    // option, including the current/placeholder one (correctly
+    // aria-selected="true" — the Select-Only Combobox contract, not the
+    // context-switcher's own "alternatives only" rule) plus the real
+    // alternative ("Nefrologia Select UI").
     const currentText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
     await expect(trigger).toHaveText(currentText);
     await trigger.click();
     await expect(menu).toBeVisible();
     await expect(menu.locator('li[role="option"]', { hasText: 'Nefrologia Select UI' })).toHaveCount(1);
     if (currentText) {
-      await expect(menu.locator('li[role="option"]', { hasText: currentText })).toHaveCount(0);
+      const currentOption = menu.locator('li[role="option"]', { hasText: currentText });
+      await expect(currentOption).toHaveCount(1);
+      await expect(currentOption).toHaveAttribute('aria-selected', 'true');
     }
 
-    // Keyboard select it, focus returns to trigger, value/state update —
-    // and the existing-subject side effect (disabling the free-text input)
-    // still fires exactly like the mouse-driven selectOption() path already
-    // covered by e2e/draft-acceptance.spec.js.
-    await page.keyboard.press('ArrowDown');
+    // Keyboard select it (typeahead — deterministic regardless of where it
+    // sits in the list), focus returns to (never left) the trigger,
+    // value/state update — and the existing-subject side effect (disabling
+    // the free-text input) still fires exactly like the mouse-driven
+    // selectOption() path already covered by e2e/draft-acceptance.spec.js.
+    await page.keyboard.press('n');
     await page.keyboard.press('Enter');
     await expect(menu).toBeHidden();
     await expect(trigger).toBeFocused();

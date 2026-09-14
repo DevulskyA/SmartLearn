@@ -1,59 +1,73 @@
-// Shared select/listbox primitive. Progressively enhances a native <select>:
-// the native element stays in the DOM (visually hidden, not display:none —
-// see mount()) as the single source of truth for value/options/disabled/
-// change-events, so every existing consumer that reads `.value` or listens
-// for `change` keeps working unchanged, and it remains directly operable by
-// screen readers and test automation. All visible interaction goes through
-// a themed button trigger + a portalled `role="listbox"` menu, so the
-// browser/OS never paints its own popup (the defect this replaces: trigger
-// themed correctly, but the open menu fell back to native white/OS chrome).
+// Shared select/combobox primitives. THREE distinct ARIA patterns live
+// here on purpose — see DESIGN.md "Select / combobox / context-switcher —
+// three distinct patterns, not one" for the full rationale. A prior
+// version of this file generalized the subject context-switcher's own
+// grammar ("current value never appears in its own open menu") into the
+// shared primitive and applied it to every ordinary select in the app.
+// That was a real defect: an ordinary select's open popup is required
+// (current, non-deprecated WAI-ARIA APG semantics) to list every real
+// option including whichever one is currently selected. The three
+// widgets below share only genuinely semantic-neutral pieces (visual
+// tokens, popup positioning/collision math, the typeahead string-match
+// helper) — their actual interaction models are different on purpose:
 //
-// Selection grammar matches the approved subject context-switcher (see
-// DESIGN.md "Single select"): the trigger shows the current value, the open
-// menu lists alternatives only — the current value is never duplicated as a
-// row inside its own menu.
+// A. mount()/enhanceSelect() — every real <select> in the app. WAI-ARIA
+//    APG "Select-Only Combobox": the visible control is `role="combobox"`;
+//    DOM focus stays ON it the entire time the popup is open (never moves
+//    into the popup) — navigation only previews a value via
+//    aria-activedescendant; only Enter/Space/click COMMITS; Escape/Tab/
+//    outside-click cancel without committing. The popup lists every real
+//    option, including the current one, correctly `aria-selected`.
 //
-// Mechanics follow the WAI-ARIA APG "Listbox Button" (a.k.a. "Collapsible
-// Dropdown Listbox") pattern by hand (no new dependency) — NOT the
-// "Select-Only Combobox" pattern this file used to claim in its comment.
-// The two are easy to conflate (both look like a themed native <select>)
-// but they are structurally different, and this file's actual interaction
-// is the Listbox Button one: activating the trigger button MOVES FOCUS
-// INTO the popup listbox (menu.focus() below), which then owns
-// aria-activedescendant and all arrow/typeahead/Home/End navigation.
-// A true combobox instead keeps DOM focus ON the combobox element itself
-// (never moving it into the popup) and puts aria-activedescendant there —
-// that pattern was never actually implemented here, only claimed in a
-// comment. Full Listbox Button contract, all pieces present below:
-// trigger<->popup relationship via matching id + aria-controls,
-// aria-expanded on the trigger, aria-haspopup="listbox", roving
-// aria-activedescendant + focus management inside the popup, a real
-// disabled state, outside-click close, Escape-to-close, focus returning to
-// the trigger on close, and accessible-name labeling on both trigger and
-// popup — plus the native <select> kept live underneath as a fallback
-// (see mount() below) for screen readers/automation that operate on it
-// directly.
+// B. Searchable combobox — not implemented; no current consumer's option
+//    count justifies it. Do not add speculatively.
+//
+// C. wireListboxKeyboard() — used by the subject context-switcher
+//    (src/app.js), a WAI-ARIA APG "Menu Button" (its real semantic is
+//    "perform an action to switch context," not "pick a value from a set
+//    that includes the current one"). Real DOM focus DOES move into the
+//    popup on open (roving via aria-activedescendant), matching how a
+//    menu's own keyboard model actually works — the opposite of pattern
+//    A's focus-stays-on-trigger model. Never reuse this for an ordinary
+//    select just to save code.
+//
+// The native <select> backing every pattern-A instance is never deleted
+// (compatibility: `.value`/`.options`/`disabled`/`change` event, exactly
+// as every existing consumer already reads it) but is `aria-hidden` and
+// out of the tab order — assistive tech is exposed to exactly ONE control
+// per selection (the custom combobox), never both at once.
 
 const registry = new WeakMap();
 let uidCounter = 0;
 
-// Shared roving-focus keyboard mechanics for a role="listbox" popup — one
-// implementation used by every select-ui.js instance AND the approved
-// discipline context-switcher (src/app.js's #discipline-switch-list),
-// which used to only have a hand-rolled subset (click + Escape, no arrow
-// keys/Home/End/typeahead). Callers own opening/closing/rendering; this
-// only owns "given a focused, open listbox <ul>, make ArrowUp/Down/Home/
-// End/typeahead/Enter/Space/Escape work against whatever <li role=option>
-// items getItems() currently returns" — the exact mechanics this file's
-// own Listbox Button pattern already required, now reusable instead of
-// duplicated.
+// Pure, DOM-shape-agnostic: given a list of item elements (each exposing
+// .textContent and whatever isDisabled(item) checks), find the first one
+// at or after startIndex (wrapping) whose text starts with buffer. Shared
+// by both keyboard controllers below — genuinely semantic-neutral, since
+// "does this option's label start with what was typed" means the same
+// thing regardless of whether the calling widget is a combobox or a menu.
+function findTypeaheadMatch(items, startIndex, buffer, isDisabled) {
+  if (!items.length || !buffer) return -1;
+  for (let step = 0; step < items.length; step++) {
+    const idx = (startIndex + step) % items.length;
+    if (isDisabled(items[idx])) continue;
+    if (items[idx].textContent.toLowerCase().startsWith(buffer)) return idx;
+  }
+  return -1;
+}
+
+function isItemDisabled(item) {
+  return item.classList.contains("is-disabled");
+}
+
+// ---------------------------------------------------------------------
+// Pattern C mechanics: WAI-ARIA "Menu" roving focus — real DOM focus
+// lives on the popup itself while it's open; aria-activedescendant marks
+// the active menuitem within it. Used only by the context-switcher.
+// ---------------------------------------------------------------------
 export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabAway }) {
   let typeaheadBuffer = "";
   let typeaheadTimer = null;
-
-  function isDisabled(item) {
-    return item.classList.contains("is-disabled");
-  }
 
   function focusedIndex(items) {
     const current = items.findIndex((it) => it.classList.contains("is-focused"));
@@ -74,7 +88,7 @@ export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabA
     let next = focusedIndex(items);
     for (let step = 0; step < items.length; step++) {
       next = (next + delta + items.length) % items.length;
-      if (!isDisabled(items[next])) break;
+      if (!isItemDisabled(items[next])) break;
     }
     setActive(items, next);
   }
@@ -83,11 +97,11 @@ export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabA
     const items = getItems();
     if (!items.length) return;
     if (!toEnd) {
-      const first = items.findIndex((it) => !isDisabled(it));
+      const first = items.findIndex((it) => !isItemDisabled(it));
       if (first >= 0) setActive(items, first);
     } else {
       for (let i = items.length - 1; i >= 0; i--) {
-        if (!isDisabled(items[i])) {
+        if (!isItemDisabled(items[i])) {
           setActive(items, i);
           break;
         }
@@ -101,15 +115,8 @@ export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabA
     clearTimeout(typeaheadTimer);
     typeaheadBuffer += char.toLowerCase();
     typeaheadTimer = setTimeout(() => (typeaheadBuffer = ""), 500);
-    const start = (focusedIndex(items) + 1) % items.length;
-    for (let step = 0; step < items.length; step++) {
-      const idx = (start + step) % items.length;
-      if (isDisabled(items[idx])) continue;
-      if (items[idx].textContent.toLowerCase().startsWith(typeaheadBuffer)) {
-        setActive(items, idx);
-        return;
-      }
-    }
+    const match = findTypeaheadMatch(items, (focusedIndex(items) + 1) % items.length, typeaheadBuffer, isItemDisabled);
+    if (match >= 0) setActive(items, match);
   }
 
   menu.addEventListener("keydown", (event) => {
@@ -160,6 +167,116 @@ export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabA
   };
 }
 
+// ---------------------------------------------------------------------
+// Pattern A mechanics: WAI-ARIA "Select-Only Combobox" — real DOM focus
+// NEVER leaves the combobox/trigger element while the popup is open;
+// aria-activedescendant on the OWNER marks the previewed option.
+// Arrow/Home/End/typeahead only preview; Enter/Space commit; Escape/
+// Tab/outside-click cancel the preview without committing. Arrow keys do
+// NOT wrap (matching a native <select>'s own open-dropdown behavior),
+// unlike the Menu pattern above.
+// ---------------------------------------------------------------------
+function wireComboboxKeyboard(owner, { isOpen, getItems, getActiveIndex, onPreview, onCommit, onCancel, onOpen }) {
+  let typeaheadBuffer = "";
+  let typeaheadTimer = null;
+
+  function moveActive(delta) {
+    const items = getItems();
+    if (!items.length) return;
+    let next = getActiveIndex();
+    // Clamp, don't wrap: stepping past either end simply stays put,
+    // mirroring how a native <select>'s own open dropdown behaves.
+    while (true) {
+      next += delta;
+      if (next < 0 || next >= items.length) return;
+      if (!isItemDisabled(items[next])) break;
+    }
+    onPreview(next);
+  }
+
+  function jumpTo(toEnd) {
+    const items = getItems();
+    if (!items.length) return;
+    if (!toEnd) {
+      const first = items.findIndex((it) => !isItemDisabled(it));
+      if (first >= 0) onPreview(first);
+    } else {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (!isItemDisabled(items[i])) {
+          onPreview(i);
+          break;
+        }
+      }
+    }
+  }
+
+  function typeahead(char) {
+    const items = getItems();
+    if (!items.length) return;
+    clearTimeout(typeaheadTimer);
+    typeaheadBuffer += char.toLowerCase();
+    typeaheadTimer = setTimeout(() => (typeaheadBuffer = ""), 500);
+    const match = findTypeaheadMatch(items, (getActiveIndex() + 1) % items.length, typeaheadBuffer, isItemDisabled);
+    if (match >= 0) onPreview(match);
+  }
+
+  owner.addEventListener("keydown", (event) => {
+    // Closed state: ArrowDown/ArrowUp/Enter/Space open the popup (without
+    // previewing/committing anything yet) — every other key is a no-op
+    // here. This single handler owns both states so there is exactly one
+    // source of truth for "is the popup open" at keydown time, instead of
+    // two independent listeners racing on the same keypress.
+    if (!isOpen()) {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        onOpen();
+      }
+      return;
+    }
+    switch (event.key) {
+      case "Escape":
+        event.preventDefault();
+        onCancel();
+        return;
+      case "ArrowDown":
+        event.preventDefault();
+        moveActive(1);
+        return;
+      case "ArrowUp":
+        event.preventDefault();
+        moveActive(-1);
+        return;
+      case "Home":
+        event.preventDefault();
+        jumpTo(false);
+        return;
+      case "End":
+        event.preventDefault();
+        jumpTo(true);
+        return;
+      case "Enter":
+      case " ": {
+        event.preventDefault();
+        const items = getItems();
+        const item = items[getActiveIndex()];
+        if (item) onCommit(item);
+        return;
+      }
+      case "Tab":
+        // No preventDefault: let the browser move focus to the next
+        // control in the natural sequence exactly as it would for a
+        // native <select> — the popup just needs to close first, without
+        // committing whatever was only being previewed.
+        onCancel();
+        return;
+      default:
+        if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+          typeahead(event.key);
+        }
+    }
+  });
+}
+
 function optionsOf(select) {
   return Array.from(select.options);
 }
@@ -197,9 +314,16 @@ function mount(select) {
   // without their own ids never collide on the same generated option ids.
   const uid = `ui-select-${++uidCounter}`;
 
-  const trigger = document.createElement("button");
-  trigger.type = "button";
+  // WAI-ARIA-in-HTML restricts which roles a native <button> may take,
+  // and "combobox" is not one of them — the current APG Select-Only
+  // Combobox example itself uses a plain element with an explicit
+  // tabindex, not a <button>. Using <div role="combobox"> here keeps this
+  // spec-conformant; keyboard activation (Enter/Space/Arrow to open) is
+  // wired by hand below exactly like every other interaction this widget
+  // needs anyway.
+  const trigger = document.createElement("div");
   trigger.className = "ui-select-trigger select-control";
+  trigger.setAttribute("role", "combobox");
   trigger.setAttribute("aria-haspopup", "listbox");
   trigger.setAttribute("aria-expanded", "false");
   const accessibleLabel = labelFor(select);
@@ -215,10 +339,6 @@ function mount(select) {
   menu.className = "ui-select-menu";
   menu.hidden = true;
   if (accessibleLabel) menu.setAttribute("aria-label", accessibleLabel);
-  // Listbox Button pattern requires the trigger to formally reference the
-  // popup it opens/controls — this was missing before (comment claimed a
-  // pattern that isn't what the code actually implements; this is part of
-  // implementing the real one fully, not just relabeling the comment).
   trigger.setAttribute("aria-controls", menu.id);
 
   const wrap = document.createElement("div");
@@ -227,52 +347,69 @@ function mount(select) {
   wrap.append(trigger, select);
   document.body.append(menu);
 
-  // Visually hidden, not `hidden`/`display:none`: the native select stays a
-  // real, "visible" element (zero-opacity, 1px, pointer-events:none) so it
-  // keeps working as the accessible/automatable fallback path — screen
-  // readers and Playwright's selectOption() (which requires an actionable,
-  // non-display:none element) both keep operating on it directly. Real
-  // pointer/keyboard users only ever reach the custom trigger (tabIndex -1
-  // takes it out of Tab order); its own `change` event re-syncs the custom
-  // UI no matter which path changed the value.
+  // Out of the accessible tree entirely (aria-hidden) and out of the tab
+  // order (tabIndex -1) — assistive tech must see exactly ONE control
+  // representing this choice (the custom combobox above), never this
+  // native element too. It still exists, visually "present" (zero-
+  // opacity 1px, pointer-events:none) purely as backing state: every
+  // existing consumer's `.value`/`.options`/`disabled` reads and `change`
+  // listeners keep working unchanged, and its own `change` event re-syncs
+  // the custom UI no matter which path changed the value.
   select.classList.add("ui-select-native");
   select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
   select.addEventListener("change", () => api.sync());
 
   let items = [];
+  // The previewed (not yet committed) option's real index in select.options
+  // while the popup is open — separate from select.selectedIndex, which
+  // only changes on an actual commit (Enter/Space/click).
+  let previewRealIndex = -1;
 
   function syncTrigger() {
     const opt = select.options[select.selectedIndex];
     triggerText.textContent = opt ? opt.text : "";
-    trigger.disabled = select.disabled;
     trigger.classList.toggle("is-disabled", select.disabled);
+    trigger.setAttribute("aria-disabled", String(select.disabled));
+    trigger.tabIndex = select.disabled ? -1 : 0;
   }
 
-  // Canonical single-select grammar (same rule as the approved discipline
-  // context switcher): TRIGGER = current value, MENU = alternatives only.
-  // The current value never appears a second time inside its own open menu
-  // — no highlighted "selected" row, no checkmark, nothing to skip past.
+  // Select-Only Combobox: the popup lists EVERY real option, including
+  // whichever one is currently selected — that option is marked
+  // aria-selected="true", nothing is filtered out. (This governs ordinary
+  // selects only — the context-switcher's own "alternatives only" grammar
+  // is a different, LOCKED widget, see DESIGN.md.)
   function buildItems() {
     menu.replaceChildren();
     const currentIndex = select.selectedIndex;
-    items = optionsOf(select)
-      .filter((opt) => opt.index !== currentIndex)
-      .map((opt) => {
-        const li = document.createElement("li");
-        li.setAttribute("role", "option");
-        li.setAttribute("aria-selected", "false");
-        li.className = "ui-select-item";
-        li.textContent = opt.text;
-        li.dataset.index = String(opt.index);
-        li.id = `${uid}-opt-${opt.index}`;
-        if (opt.disabled) {
-          li.setAttribute("aria-disabled", "true");
-          li.classList.add("is-disabled");
-        }
-        li.tabIndex = -1;
-        menu.append(li);
-        return li;
-      });
+    items = optionsOf(select).map((opt) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(opt.index === currentIndex));
+      li.className = "ui-select-item";
+      li.textContent = opt.text;
+      li.dataset.index = String(opt.index);
+      li.id = `${uid}-opt-${opt.index}`;
+      if (opt.disabled) {
+        li.setAttribute("aria-disabled", "true");
+        li.classList.add("is-disabled");
+      }
+      menu.append(li);
+      return li;
+    });
+  }
+
+  function itemForRealIndex(realIndex) {
+    return items.find((it) => Number(it.dataset.index) === realIndex) ?? null;
+  }
+
+  function previewIndex(index) {
+    const item = items[index];
+    if (!item) return;
+    previewRealIndex = Number(item.dataset.index);
+    trigger.setAttribute("aria-activedescendant", item.id);
+    for (const it of items) it.classList.toggle("is-focused", it === item);
+    item.scrollIntoView({ block: "nearest" });
   }
 
   function positionMenu() {
@@ -304,49 +441,57 @@ function mount(select) {
     trigger.setAttribute("aria-expanded", "true");
     trigger.classList.add("is-open");
     positionMenu();
-    listboxKeyboard.setActiveFirst();
-    menu.tabIndex = 0;
-    menu.focus({ preventScroll: true });
+    // Per the Select-Only Combobox pattern, opening previews the CURRENTLY
+    // SELECTED option (not always the first) — it's in the list now, so
+    // there's always a real item to point activedescendant at.
+    const currentItem = itemForRealIndex(select.selectedIndex) ?? items[0];
+    if (currentItem) previewIndex(items.indexOf(currentItem));
     window.addEventListener("resize", positionMenu);
     window.addEventListener("scroll", positionMenu, true);
   }
 
-  function closeMenu(returnFocus) {
+  // Closing WITHOUT committing (Escape, Tab, outside-click): the value
+  // stays exactly what it was before the popup opened. Focus never left
+  // the trigger, so there's nothing to "return" — closeMenu never needs a
+  // returnFocus flag the way the Menu pattern does.
+  function closeMenu() {
     if (!isOpen()) return;
     menu.hidden = true;
     trigger.setAttribute("aria-expanded", "false");
     trigger.classList.remove("is-open");
+    trigger.removeAttribute("aria-activedescendant");
+    previewRealIndex = -1;
     window.removeEventListener("resize", positionMenu);
     window.removeEventListener("scroll", positionMenu, true);
-    if (returnFocus) trigger.focus();
   }
 
-  // `realIndex` is the target option's own index in select.options (stored
-  // as each <li>'s data-index) — distinct from its position in `items`,
-  // since `items` is the filtered (current value excluded) list.
   function commitRealIndex(realIndex) {
     const opt = select.options[realIndex];
     if (!opt || opt.disabled) return;
     const changed = select.selectedIndex !== realIndex;
     select.selectedIndex = realIndex;
     syncTrigger();
-    closeMenu(true);
+    closeMenu();
+    trigger.focus();
     if (changed) select.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  const listboxKeyboard = wireListboxKeyboard(menu, {
+  wireComboboxKeyboard(trigger, {
+    isOpen,
     getItems: () => items,
+    getActiveIndex: () => {
+      const idx = items.findIndex((it) => Number(it.dataset.index) === previewRealIndex);
+      return idx >= 0 ? idx : 0;
+    },
+    onPreview: (index) => previewIndex(index),
     onCommit: (item) => commitRealIndex(Number(item.dataset.index)),
-    onEscape: () => closeMenu(true),
-    onTabAway: () => closeMenu(false),
+    onCancel: () => closeMenu(),
+    onOpen: () => { if (!select.disabled) openMenu(); },
   });
 
-  trigger.addEventListener("click", () => (isOpen() ? closeMenu(true) : openMenu()));
-  trigger.addEventListener("keydown", (event) => {
-    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
-      event.preventDefault();
-      openMenu();
-    }
+  trigger.addEventListener("click", () => {
+    if (select.disabled) return;
+    isOpen() ? closeMenu() : openMenu();
   });
 
   menu.addEventListener("click", (event) => {
@@ -357,8 +502,20 @@ function mount(select) {
 
   document.addEventListener("click", (event) => {
     if (!isOpen()) return;
-    if (trigger.contains(event.target) || menu.contains(event.target)) return;
-    closeMenu(false);
+    // Some consumers wrap their <select> in a real <label> (for its
+    // visually-hidden caption text). A <button> trigger used to absorb
+    // the label's native "forward a click to my associated control"
+    // behavior for free (browsers suppress that forwarding when the
+    // click's real target already has its own activation behavior); a
+    // <div role="combobox"> does not, per HTML's own label-activation
+    // rules — so clicking the trigger inside such a label ALSO fires a
+    // real, separately-targeted click on the (aria-hidden, pointer-
+    // events:none) native <select> itself, which bubbles to this same
+    // document listener. That forwarded click must never count as
+    // "outside" the widget; the native select is as much a part of this
+    // widget as the trigger/menu are.
+    if (trigger.contains(event.target) || menu.contains(event.target) || select.contains(event.target)) return;
+    closeMenu();
   });
 
   buildItems();

@@ -2004,11 +2004,13 @@ function renderContentContext(activeSubjectRows, currentSubjectId) {
   for (const row of activeSubjectRows) {
     if (row.subjectId === currentSubjectId) continue;
     const item = document.createElement("li");
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", "false");
+    // Menu Button pattern (DESIGN.md): this widget performs an action
+    // ("switch to this discipline"), it is not a value picker with a
+    // selection state — menuitem, never option/aria-selected.
+    item.setAttribute("role", "menuitem");
     // Stable per-render id + tabIndex=-1: same roving-focus contract as
-    // select-ui.js's own <li role="option"> items (see wireListboxKeyboard
-    // in src/select-ui.js) — real DOM focus stays on the list itself,
+    // select-ui.js's own Menu popup (see wireListboxKeyboard in
+    // src/select-ui.js) — real DOM focus stays on the list itself,
     // individual items are only ever visually marked via .is-focused.
     item.id = `discipline-switch-opt-${optionIndex++}`;
     item.tabIndex = -1;
@@ -4572,7 +4574,7 @@ function commitContentContextItem(item) {
 }
 const contentContextListKeyboard = disciplineSwitchList
   ? wireListboxKeyboard(disciplineSwitchList, {
-      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=option]")),
+      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=menuitem]")),
       onCommit: commitContentContextItem,
       onEscape: () => closeContentContextMenu(true),
       onTabAway: () => closeContentContextMenu(false),
@@ -4590,7 +4592,7 @@ contentContextPlate?.addEventListener("keydown", (event) => {
   }
 });
 disciplineSwitchList?.addEventListener("click", (event) => {
-  const item = event.target.closest("li[role=option]");
+  const item = event.target.closest("li[role=menuitem]");
   if (!item) return;
   commitContentContextItem(item);
 });

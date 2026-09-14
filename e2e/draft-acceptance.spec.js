@@ -165,10 +165,21 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
   const secondPanel = secondItem.locator('.source-draft-panel');
   await expect(secondPanel).toBeVisible();
 
+  // Drives the real accessible combobox UI, not the backing native
+  // <select> directly — select-ui.js now marks that native element
+  // aria-hidden (ACCESSIBLE_CONTROLS_PER_SELECTION=1: exactly one control
+  // per choice is exposed to assistive tech, the custom combobox, never
+  // both at once), so a real user/screen-reader path is what this test
+  // must exercise, not Playwright's .selectOption() shortcut.
   const subjectSelect = secondPanel.locator('.source-draft-subject-select');
   await expect(subjectSelect).toBeVisible();
   await expect(subjectSelect.locator('option', { hasText: 'Fisiologia A' })).toHaveCount(1);
-  await subjectSelect.selectOption({ label: 'Fisiologia A' });
+  const subjectTrigger = subjectSelect.locator('xpath=..').locator('.ui-select-trigger');
+  await subjectTrigger.click();
+  const subjectMenuId = await subjectTrigger.getAttribute('aria-controls');
+  const subjectMenu = page.locator(`#${subjectMenuId}`);
+  await subjectMenu.locator('li[role="option"]', { hasText: 'Fisiologia A' }).click();
+  await expect(subjectTrigger).toHaveText('Fisiologia A');
 
   // Picking an existing subject must disable (and not require) the
   // free-text new-subject field.

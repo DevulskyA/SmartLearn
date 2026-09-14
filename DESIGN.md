@@ -51,13 +51,67 @@ Review state is shown by a leading round review-number token tinted by urgency a
 ## Subject identity
 A subject/discipline is identified by a neutral chip (`.subject-cell`): a neutral surface fill, a hairline border, and a solid left stripe in the subject's own color (`subjectColor`) running the full height of the chip. This stripe is a structural identity marker, not decoration — it is the one place in the app where `subjectColor` appears, and it never carries performance or status meaning. Reused as-is anywhere a subject/discipline needs to be identified: matrix rows, the subject-switch trigger, and the subject-switch list (each open option is the same `.subject-cell` chip, not a dot, bullet, or fully-colored row). Do not substitute a colored dot, a fully-tinted surface, or any other marker for this chip. Do not extend the left-stripe treatment to other components (cards, list rows unrelated to subject identity, status indicators) without a separate, explicit decision — it is scoped to subject identity only.
 
-## Single select
-Every finite-option select/listbox (period, state, sort, subject pickers) shares one primitive (`select-ui.js`): a themed button trigger plus an app-owned `role="listbox"` popup, never the browser/OS's native `<option>` menu. The grammar is the same one already approved for the subject context-switcher:
-- **Trigger communicates the current value.** The open menu contains actionable alternatives only — the current value is never repeated as a row inside its own menu.
-- Selecting an alternative promotes it to the trigger; the value it replaced returns to the alternatives list.
-- No redundant selected-row highlight, checkmark, disabled current-option, "Selecionado" label, or radio dot inside the menu — the trigger already carries that information; repeating it is noise, not capability.
-- A true placeholder (e.g. "Selecione...", meaning nothing chosen yet) follows this same rule — it is simply the current value until something real is picked, not a special case.
-- This governs single-selects only. A searchable combobox (only introduced if a list is genuinely long enough to need text filtering — none currently qualify) and the subject context-switcher's own locked mechanics are separate, unaffected by this rule beyond sharing its trigger/menu visual tokens.
+## Select / combobox / context-switcher — three distinct patterns, not one
+
+A prior version of this section generalized the subject context-switcher's
+own grammar ("current value never repeated inside its own menu") into the
+shared primitive and applied it to every finite-option select in the app.
+That was a real defect, not a simplification: an ordinary select's open
+popup is required (current, non-deprecated WAI-ARIA APG semantics) to list
+every real option, including whichever one is currently selected, marked
+`aria-selected="true"` — omitting it misrepresents the control to
+assistive tech and sighted keyboard users alike. The three widgets below
+share only genuinely semantic-neutral pieces (visual tokens: dark surface,
+border/radius/elevation, chevron, item spacing; popup positioning/
+viewport-collision math; the typeahead string-matching helper). Their
+actual interaction models are different on purpose and must never be
+collapsed into one to save code.
+
+**A. Ordinary single select** (period, state, sort, subject filters, form
+subject pickers) — every real `<select>` in the app, enhanced by
+`select-ui.js`. Follows the current WAI-ARIA APG "Select-Only Combobox"
+pattern: the visible control carries `role="combobox"`,
+`aria-haspopup="listbox"`, `aria-expanded`, `aria-controls` pointing at
+the popup; the popup is `role="listbox"` with `role="option"` items. DOM
+focus stays on the combobox the entire time the popup is open —
+navigation only moves `aria-activedescendant` (a preview), never real
+focus into the popup. The popup lists every real option, including the
+current one, correctly marked `aria-selected="true"`; a true placeholder
+("Selecione...") is simply the current value like any other and is not a
+special case. Arrow/Home/End/typeahead only preview a value; committing
+(Enter, Space, or a click) is the only thing that changes the trigger and
+the underlying value. Escape cancels without committing. Tab moves to the
+next control in the natural sequence (and closes the popup on the way,
+without committing). The backing native `<select>` still exists (value/
+options/disabled/`change`-event compatibility) but is `aria-hidden` and
+out of the tab order — assistive tech is exposed to exactly one control
+per selection, never the native element and the custom one at once.
+
+**B. Searchable combobox** — only introduced where option count genuinely
+justifies text search. None of the app's current selects qualify; do not
+add this pattern speculatively.
+
+**C. Subject context-switcher** ("Por conteúdo") — its own approved,
+LOCKED visual and functional grammar, unchanged by the above:
+- **Trigger communicates the current discipline.** The open menu lists
+  the OTHER disciplines only — the current one is never repeated as a row
+  inside its own menu, because this widget's real semantic is "perform an
+  action to switch to a different context you are not currently in," not
+  "pick a value from a set that includes your current one."
+- Selecting an alternative switches Por conteúdo to it; the discipline it
+  replaced returns to the alternatives list.
+- No redundant selected-row highlight, checkmark, disabled current-row,
+  "Selecionado" label, or radio dot inside the menu.
+- Each row keeps the approved `.subject-cell` chip identity (color stripe
+  + name) — never a dot, bullet, or fully-tinted row.
+- ARIA-wise this is a **Menu Button** (current APG pattern for "activating
+  a control performs one of several possible actions," which switching
+  context is), not a select: the trigger is a real `<button
+  aria-haspopup="menu">`, the popup is `role="menu"` with `role="menuitem"`
+  items (no `aria-selected` — a menu has no selection state). Real DOM
+  focus moves into the menu on open (roving via `aria-activedescendant`),
+  matching how a menu's own keyboard model actually works, unlike pattern
+  A above where focus never leaves the trigger.
 
 ## Theme delivery
 - Theme choice is exposed in Settings and persisted locally on the device.

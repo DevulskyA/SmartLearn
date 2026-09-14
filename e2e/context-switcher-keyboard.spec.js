@@ -67,7 +67,7 @@ test('Home/End jump to the first/last item', async ({ page }) => {
   await expect(menu).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Home');
-  const items = menu.locator('li[role="option"]');
+  const items = menu.locator('li[role="menuitem"]');
   const firstId = await items.first().getAttribute('id');
   expect(await menu.getAttribute('aria-activedescendant')).toBe(firstId);
   await page.keyboard.press('End');
@@ -81,7 +81,7 @@ test('Enter commits the active item, closes the menu, updates Por conteúdo, and
   const before = await trigger.textContent();
   await trigger.click();
   await expect(menu).toBeVisible();
-  const items = menu.locator('li[role="option"]');
+  const items = menu.locator('li[role="menuitem"]');
   const targetLabel = (await items.first().textContent()).trim();
   await page.keyboard.press('Enter');
   await expect(menu).toBeHidden();
@@ -126,6 +126,6 @@ test('the current discipline is never duplicated inside its own open menu (canon
   const currentLabel = (await trigger.textContent()).trim();
   await trigger.click();
   await expect(menu).toBeVisible();
-  await expect(menu.locator('li[role="option"]', { hasText: currentLabel })).toHaveCount(0);
+  await expect(menu.locator('li[role="menuitem"]', { hasText: currentLabel })).toHaveCount(0);
   await page.keyboard.press('Escape');
 });
