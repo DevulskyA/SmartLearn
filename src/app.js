@@ -217,6 +217,9 @@ const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
 const statsSubjectSort = document.querySelector("#stats-subject-sort");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
+const unitDetailPanel = document.querySelector("#unit-detail-panel");
+const unitDetailEmpty = document.querySelector("#unit-detail-empty");
+const unitDetailBody = document.querySelector("#unit-detail-body");
 const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
 const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
@@ -226,8 +229,6 @@ const evolutionFilterSubject = document.querySelector("#evolution-filter-subject
 const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
-const subjectAveragesBody = document.querySelector("#subject-averages-body");
-const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
@@ -963,31 +964,6 @@ function createComparisonCell(valueText, bar) {
   return cell;
 }
 
-function createSubjectComparisonRow(result, maxVolume) {
-  const row = document.createElement("tr");
-
-  const name = document.createElement("th");
-  name.scope = "row";
-  name.textContent = result.subjectName;
-
-  const hasEvidence = result.weightedAccuracy != null;
-  const perfValueText = hasEvidence ? `${result.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
-  const perfWidth = hasEvidence ? result.weightedAccuracy : 100;
-  const perfBar = createComparisonBar(perfWidth, performanceColor(result.weightedAccuracy, result.totalQuestions), !hasEvidence ? "is-no-evidence" : undefined);
-  const perfCell = createComparisonCell(perfValueText, perfBar);
-  perfCell.dataset.cell = "performance";
-
-  // Volume scale is relative to the largest volume CURRENTLY shown, and
-  // deliberately never uses performanceColor — a long bar here means
-  // "practiced a lot", not "doing well".
-  const volumeValueText = `${result.totalQuestions} ${result.totalQuestions === 1 ? "questão" : "questões"}`;
-  const volumeBar = createComparisonBar(volumeBarWidth(result.totalQuestions, maxVolume), "var(--color-primary)");
-  const volumeCell = createComparisonCell(volumeValueText, volumeBar);
-  volumeCell.dataset.cell = "volume";
-
-  row.append(name, perfCell, volumeCell);
-  return row;
-}
 
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
@@ -1008,19 +984,6 @@ export async function renderStats() {
   exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
   for (const exercise of stats.completedExercises) {
     exerciseNotesBody.append(createExerciseRow(exercise));
-  }
-
-  // Reuses Analytics.bySubject (same data as the "Desempenho por
-  // disciplina" cards above) instead of stats.avgBySubject, so every
-  // subject appears here — including ones with zero evidence — and
-  // weightedAccuracy/performanceColor stay the single source of truth.
-  const comparisonResults = Analytics.bySubject(evidence, learningUnits, subjects);
-  const maxVolume = Math.max(0, ...comparisonResults.map((r) => r.totalQuestions));
-
-  subjectAveragesBody.replaceChildren();
-  subjectAveragesEmpty.hidden = comparisonResults.length > 0;
-  for (const result of comparisonResults) {
-    subjectAveragesBody.append(createSubjectComparisonRow(result, maxVolume));
   }
 
   const dataPoints = evidence
@@ -1394,15 +1357,6 @@ function createTrendBadge(direction) {
   return span;
 }
 
-function createStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "performance-state-badge";
-  span.dataset.state = state;
-  const labels = { NO_EVIDENCE: "Sem evidência", CRITICAL: "Crítico", ATTENTION: "Atenção", ADEQUATE: "Adequado", STRONG: "Forte" };
-  span.textContent = labels[state] ?? state;
-  return span;
-}
-
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const today = getLocalDateValue();
@@ -1433,65 +1387,66 @@ export async function renderStatsBySubject() {
   subjectKpiEmpty.hidden = hasAny || results.length > 0;
   subjectKpiList.replaceChildren();
 
+  // Matrix row: identidade (subject-cell) | desempenho (% + barra, nunca
+  // texto quando sem evidência) | prática (volume, independente de
+  // desempenho) | tendência (seta, neutra em relação à cor de performance).
+  // Selecionar uma linha também dirige o gráfico de evolução ao lado — evita
+  // duas formas redundantes de escolher a mesma disciplina (linha + dropdown
+  // do gráfico ficam em sincronia, nenhuma delas é removida).
   for (const r of results) {
-    const card = document.createElement("article");
-    card.className = "subject-kpi";
-    card.dataset.state = r.state;
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.subjectId = String(r.subjectId);
 
-    const header = document.createElement("div");
-    header.className = "subject-kpi-header";
-
+    const identityCell = document.createElement("td");
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+    identityCell.append(chip);
 
-    const badges = document.createElement("div");
-    badges.className = "subject-kpi-badges";
-    badges.append(createStateBadge(r.state), createTrendBadge(r.trend.direction));
-
-    header.append(chip, badges);
-
-    const metrics = document.createElement("div");
-    metrics.className = "subject-kpi-metrics";
-
-    const accEl = document.createElement("div");
-    accEl.className = "subject-kpi-acc";
-    // AC-EST1-05: sem evidência ≠ 0% — show neutral, never red
-    // AC-EST1-07: always show % + n questões
-    if (r.weightedAccuracy == null) {
-      accEl.textContent = "Sem evidência";
-      accEl.classList.add("is-no-evidence");
-    } else {
-      accEl.textContent = `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%`;
-    }
-
-    const qEl = document.createElement("div");
-    qEl.className = "subject-kpi-questions";
-    qEl.textContent = `${r.totalQuestions} questões · ${r.totalCorrect} acertos`;
-
-    const recentEl = document.createElement("div");
-    recentEl.className = "subject-kpi-recent";
-    recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
-
-    metrics.append(accEl, qEl, recentEl);
-
-    // Continuous visual performance signal (0%=vermelho, 60%=amarelo,
-    // 100%=verde) — additive to the numeric/label/volume/trend above, never
-    // a replacement for them, and independent from the subject's own color.
-    const perfBar = document.createElement("div");
-    perfBar.className = "subject-kpi-perfbar";
-    perfBar.setAttribute("role", "presentation");
-    const perfBarFill = document.createElement("div");
-    perfBarFill.className = "subject-kpi-perfbar-fill";
     const hasEvidence = r.weightedAccuracy != null;
-    perfBarFill.style.width = hasEvidence ? `${Math.min(100, Math.max(0, r.weightedAccuracy))}%` : "100%";
-    perfBarFill.style.background = performanceColor(r.weightedAccuracy, r.totalQuestions);
-    perfBarFill.classList.toggle("is-no-evidence", !hasEvidence);
-    perfBar.append(perfBarFill);
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    card.append(header, metrics, perfBar);
-    subjectKpiList.append(card);
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = `${r.totalQuestions} q · ${r.totalCorrect} acertos`;
+    const practiceRecent = document.createElement("div");
+    practiceRecent.className = "practice-recent";
+    practiceRecent.textContent = `Últimos 30d: ${r.recentQuestions} q`;
+    practiceCell.append(practiceMain, practiceRecent);
+
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
+
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => selectSubjectForEvolution(r.subjectId));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectSubjectForEvolution(r.subjectId);
+      }
+    });
+    subjectKpiList.append(row);
+  }
+}
+
+function selectSubjectForEvolution(subjectId) {
+  if (evolutionFilterSubject) {
+    evolutionFilterSubject.value = String(subjectId);
+    evolutionFilterSubject.dispatchEvent(new Event("change"));
+  }
+  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.subjectId === String(subjectId));
   }
 }
 
@@ -1881,6 +1836,7 @@ function buildSparkline(scores, width = 60, height = 24) {
 
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
+  const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
@@ -1942,51 +1898,117 @@ export async function renderStatsByUnit() {
   const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
   unitStatsList.replaceChildren();
+  if (unitDetailEmpty && unitDetailBody) {
+    unitDetailEmpty.hidden = false;
+    unitDetailBody.hidden = true;
+    unitDetailBody.replaceChildren();
+  }
 
+  // Matriz por conteúdo — mesma gramática da matriz por disciplina (mesmas
+  // 4 colunas), só a entidade muda. Identidade aqui é chip da disciplina
+  // (compacto) + título do conteúdo, porque esta lista cruza disciplinas
+  // (é filtro, não um drill-down já dentro de uma disciplina) — sem a cor
+  // a varredura visual entre disciplinas se perde. Sparkline/data completos
+  // ficam no painel de detalhe ao selecionar a linha, não espremidos na
+  // matriz.
   for (const r of results) {
-    const subject = subjectsById.get(r.subjectId);
-    const row = document.createElement("article");
-    row.className = "unit-stats-row";
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.unitId = String(r.unitId ?? r.id ?? "");
 
-    const header = document.createElement("div");
-    header.className = "unit-stats-header";
-
+    const identityCell = document.createElement("td");
+    identityCell.className = "unit-identity-cell";
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell subject-cell--compact";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
-
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     const title = document.createElement("span");
-    title.className = "unit-stats-title";
+    title.className = "unit-title";
     title.textContent = r.unitTitle;
+    identityCell.append(chip, title);
 
-    header.append(chip, title);
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    const body = document.createElement("div");
-    body.className = "unit-stats-body";
-
-    const sparkEl = buildSparkline(r.scoresSequence);
-    if (sparkEl) body.append(sparkEl);
-
-    const meta = document.createElement("div");
-    meta.className = "unit-stats-meta";
-
-    const accText = r.weightedAccuracy != null
-      ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} q`
-      : "Sem evidência";
-    meta.textContent = accText;
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = hasEvidence ? `${r.totalQuestions} q` : "Sem prática";
+    practiceCell.append(practiceMain);
     if (r.lastEvidence) {
-      const lastDate = document.createElement("span");
-      lastDate.className = "unit-stats-last";
-      lastDate.textContent = ` · ${formatDate(r.lastEvidence.evidenceDate)}`;
-      meta.append(lastDate);
+      const lastDate = document.createElement("div");
+      lastDate.className = "practice-recent";
+      lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
+      practiceCell.append(lastDate);
     }
 
-    const trendBadge = createTrendBadge(r.trend.direction);
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
 
-    body.append(meta, trendBadge);
-    row.append(header, body);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => showUnitDetail(r));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showUnitDetail(r);
+      }
+    });
     unitStatsList.append(row);
+  }
+}
+
+// Painel de detalhe do conteúdo selecionado — reaproveita exatamente os
+// mesmos campos que a linha da matriz já carregava (nada novo é calculado
+// aqui), só muda a representação: sparkline completa + data por extenso.
+function showUnitDetail(r) {
+  if (!unitDetailPanel) return;
+  for (const tr of unitStatsList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.unitId === String(r.unitId ?? r.id ?? ""));
+  }
+  unitDetailEmpty.hidden = true;
+  unitDetailBody.hidden = false;
+  unitDetailBody.replaceChildren();
+
+  const heading = document.createElement("div");
+  heading.className = "unit-detail-heading";
+  const chip = document.createElement("span");
+  chip.className = "subject-cell";
+  chip.textContent = r.subjectName;
+  chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+  const title = document.createElement("h3");
+  title.className = "unit-detail-title";
+  title.textContent = r.unitTitle;
+  heading.append(chip, title);
+
+  const score = document.createElement("div");
+  score.className = "unit-detail-score";
+  score.textContent = r.weightedAccuracy != null
+    ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} questões`
+    : "Sem evidência registrada";
+
+  const trend = createTrendBadge(r.trend.direction);
+
+  unitDetailBody.append(heading, score, trend);
+
+  if (r.lastEvidence) {
+    const last = document.createElement("p");
+    last.className = "unit-detail-last";
+    last.textContent = `Última prática: ${formatDate(r.lastEvidence.evidenceDate)}`;
+    unitDetailBody.append(last);
+  }
+
+  const sparkEl = buildSparkline(r.scoresSequence, 260, 64);
+  if (sparkEl) {
+    sparkEl.classList.add("unit-detail-spark");
+    unitDetailBody.append(sparkEl);
   }
 }
 
@@ -4305,6 +4327,26 @@ await dbInit;
 if (databaseAvailable && authenticated) {
   await renderSubjects();
   await renderToday();
+}
+
+// Estatísticas: duas profundidades do mesmo instrumento, não duas telas —
+// alternar não recarrega dados, só troca qual workspace-grid fica visível.
+const statsViewTabs = [
+  { tab: document.querySelector("#tab-stats-subject"), panel: document.querySelector("#view-stats-subject") },
+  { tab: document.querySelector("#tab-stats-unit"), panel: document.querySelector("#view-stats-unit") },
+];
+function setStatsView(activeTab) {
+  for (const { tab, panel } of statsViewTabs) {
+    if (!tab || !panel) continue;
+    const isActive = tab === activeTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    panel.classList.toggle("is-hidden", !isActive);
+  }
+}
+for (const { tab } of statsViewTabs) {
+  tab?.addEventListener("click", () => setStatsView(tab));
 }
 
 statsSubjectSort?.addEventListener("change", () => {

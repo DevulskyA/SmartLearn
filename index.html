@@ -411,22 +411,141 @@
             <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
 
-          <section class="stats-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Por disciplina</p>
-                <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
-              </div>
-              <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
-                <option value="worst-first">Pior → melhor</option>
-                <option value="best-first">Melhor → pior</option>
-                <option value="volume">Volume de questões</option>
-                <option value="trend">Tendência</option>
-              </select>
+          <div class="view-tabs" role="tablist" aria-label="Profundidade da análise">
+            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0">Por disciplina</button>
+            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1">Por conteúdo</button>
+          </div>
+
+          <div id="view-stats-subject" class="view-panel" role="tabpanel" aria-labelledby="tab-stats-subject">
+            <div class="workspace-grid">
+              <section class="stats-panel table-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
+                <div class="stats-panel-heading wrap">
+                  <div>
+                    <p class="eyebrow">Por disciplina</p>
+                    <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
+                  </div>
+                  <label class="select-control sort-control">
+                    <span class="visually-hidden">Ordenar disciplinas</span>
+                    <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
+                      <option value="worst-first">Pior → melhor</option>
+                      <option value="best-first">Melhor → pior</option>
+                      <option value="volume">Volume de questões</option>
+                      <option value="trend">Tendência</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="table-scroll">
+                  <table class="stats-table matrix-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Disciplina</th>
+                        <th scope="col">Desempenho</th>
+                        <th scope="col">Prática</th>
+                        <th scope="col">Tendência</th>
+                      </tr>
+                    </thead>
+                    <tbody id="subject-kpi-list"></tbody>
+                  </table>
+                </div>
+                <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
+              </section>
+
+              <aside class="stats-panel analysis-panel chart-panel" aria-labelledby="evolution-title">
+                <div class="stats-panel-heading">
+                  <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
+                </div>
+                <div class="panel-heading-actions analysis-filters">
+                  <label class="select-control sort-control">
+                    <span class="visually-hidden">Filtrar disciplina no gráfico</span>
+                    <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
+                      <option value="">Todas as disciplinas</option>
+                    </select>
+                  </label>
+                  <label class="select-control sort-control">
+                    <span class="visually-hidden">Período do gráfico</span>
+                    <select id="evolution-filter-period" aria-label="Período do gráfico">
+                      <option value="3">3 meses</option>
+                      <option value="6">6 meses</option>
+                      <option value="12">12 meses</option>
+                      <option value="0">Tudo</option>
+                    </select>
+                  </label>
+                </div>
+                <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
+                <canvas id="evolution-chart" hidden></canvas>
+                <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
+              </aside>
             </div>
-            <div class="subject-kpi-list" id="subject-kpi-list" aria-live="polite"></div>
-            <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
-          </section>
+          </div>
+
+          <div id="view-stats-unit" class="view-panel is-hidden" role="tabpanel" aria-labelledby="tab-stats-unit">
+            <div class="workspace-grid">
+              <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
+                <div class="stats-panel-heading wrap">
+                  <div>
+                    <p class="eyebrow">Por conteúdo</p>
+                    <h2 id="unit-stats-title">Desempenho por conteúdo</h2>
+                  </div>
+                  <div class="panel-heading-actions">
+                    <label class="select-control sort-control">
+                      <span class="visually-hidden">Filtrar por disciplina</span>
+                      <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
+                        <option value="">Todas as disciplinas</option>
+                      </select>
+                    </label>
+                    <label class="select-control sort-control">
+                      <span class="visually-hidden">Filtrar por tendência</span>
+                      <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
+                        <option value="">Todas as tendências</option>
+                        <option value="IMPROVING">Melhorando</option>
+                        <option value="DECLINING">Caindo</option>
+                        <option value="STABLE">Estável</option>
+                        <option value="INSUFFICIENT">Insuficiente</option>
+                      </select>
+                    </label>
+                    <label class="select-control sort-control">
+                      <span class="visually-hidden">Filtrar por período</span>
+                      <select id="stats-unit-filter-period" aria-label="Filtrar por período">
+                        <option value="">Qualquer período</option>
+                        <option value="last-30">Últimos 30 dias</option>
+                        <option value="last-90">Últimos 90 dias</option>
+                        <option value="last-365">Último ano</option>
+                      </select>
+                    </label>
+                    <label class="select-control sort-control">
+                      <span class="visually-hidden">Ordenar por</span>
+                      <select id="stats-unit-sort" aria-label="Ordenar por">
+                        <option value="worst-first">Pior score (padrão)</option>
+                        <option value="trend">Tendência</option>
+                        <option value="volume">Volume</option>
+                        <option value="subject">Disciplina</option>
+                        <option value="last-activity">Última atividade</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div class="table-scroll">
+                  <table class="stats-table matrix-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Conteúdo</th>
+                        <th scope="col">Desempenho</th>
+                        <th scope="col">Prática</th>
+                        <th scope="col">Tendência</th>
+                      </tr>
+                    </thead>
+                    <tbody id="unit-stats-list"></tbody>
+                  </table>
+                </div>
+                <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
+              </section>
+
+              <aside class="stats-panel analysis-panel" aria-label="Detalhe do conteúdo selecionado" id="unit-detail-panel">
+                <p class="panel-empty" id="unit-detail-empty">Selecione um conteúdo na lista para ver detalhes.</p>
+                <div id="unit-detail-body" hidden></div>
+              </aside>
+            </div>
+          </div>
 
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
@@ -450,78 +569,6 @@
               </table>
             </div>
             <p class="panel-empty" id="exercise-notes-empty">Registre exercícios concluídos para ver a lista.</p>
-          </section>
-
-          <section class="stats-panel" aria-labelledby="subject-averages-title">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Comparativo</p>
-                <h2 id="subject-averages-title">Nota média por disciplina</h2>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <table class="stats-table">
-                <thead><tr><th scope="col">Disciplina</th><th scope="col">Desempenho</th><th scope="col">Volume</th></tr></thead>
-                <tbody id="subject-averages-body"></tbody>
-              </table>
-            </div>
-            <p class="panel-empty" id="subject-averages-empty">Registre questões concluídas para ver as médias.</p>
-          </section>
-
-          <section class="stats-panel" aria-labelledby="unit-stats-title">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Por conteúdo</p>
-                <h2 id="unit-stats-title">Desempenho por aula</h2>
-              </div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-                <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
-                  <option value="">Todas as disciplinas</option>
-                </select>
-                <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
-                  <option value="">Todas as tendências</option>
-                  <option value="IMPROVING">Melhorando</option>
-                  <option value="DECLINING">Caindo</option>
-                  <option value="STABLE">Estável</option>
-                  <option value="INSUFFICIENT">Insuficiente</option>
-                </select>
-                <select id="stats-unit-filter-period" aria-label="Filtrar por período">
-                  <option value="">Qualquer período</option>
-                  <option value="last-30">Últimos 30 dias</option>
-                  <option value="last-90">Últimos 90 dias</option>
-                  <option value="last-365">Último ano</option>
-                </select>
-                <select id="stats-unit-sort" aria-label="Ordenar por">
-                  <option value="worst-first">Pior score (padrão)</option>
-                  <option value="trend">Tendência</option>
-                  <option value="volume">Volume</option>
-                  <option value="subject">Disciplina</option>
-                  <option value="last-activity">Última atividade</option>
-                </select>
-              </div>
-            </div>
-            <div class="unit-stats-list" id="unit-stats-list" aria-live="polite"></div>
-            <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
-          </section>
-
-          <section class="stats-panel chart-panel" aria-labelledby="evolution-title">
-            <div class="stats-panel-heading">
-              <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-                <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
-                  <option value="">Todas as disciplinas</option>
-                </select>
-                <select id="evolution-filter-period" aria-label="Período do gráfico">
-                  <option value="3">3 meses</option>
-                  <option value="6">6 meses</option>
-                  <option value="12">12 meses</option>
-                  <option value="0">Tudo</option>
-                </select>
-              </div>
-            </div>
-            <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
-            <canvas id="evolution-chart" hidden></canvas>
-            <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
           </section>
         </section>
 
