@@ -400,6 +400,15 @@
               <p class="eyebrow">Seu desempenho</p>
               <h1 id="title-stats">Estatísticas</h1>
             </div>
+            <label class="select-control sort-control">
+              <span class="visually-hidden">Período</span>
+              <select id="stats-unit-filter-period" aria-label="Período">
+                <option value="">Qualquer período</option>
+                <option value="last-30">Últimos 30 dias</option>
+                <option value="last-90">Últimos 90 dias</option>
+                <option value="last-365">Último ano</option>
+              </select>
+            </label>
           </div>
 
           <div class="metric-grid" aria-label="Resumo de desempenho">
@@ -483,17 +492,6 @@
                   <div>
                     <p class="eyebrow">Por conteúdo</p>
                     <h2 id="unit-stats-title">Desempenho por conteúdo</h2>
-                  </div>
-                  <div class="panel-heading-actions">
-                    <label class="select-control sort-control">
-                      <span class="visually-hidden">Filtrar por período</span>
-                      <select id="stats-unit-filter-period" aria-label="Filtrar por período">
-                        <option value="">Qualquer período</option>
-                        <option value="last-30">Últimos 30 dias</option>
-                        <option value="last-90">Últimos 90 dias</option>
-                        <option value="last-365">Último ano</option>
-                      </select>
-                    </label>
                   </div>
                 </div>
                 <div class="table-scroll">
