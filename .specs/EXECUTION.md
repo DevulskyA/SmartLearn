@@ -5,7 +5,7 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=1c91020
+CURRENT_HEAD=5460f46
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
@@ -48,14 +48,32 @@ SEQUENCE_C_HOJE=DONE (2026-09-14, commit 1c91020) — biggest real defect found
   server-authority.spec.js all green (10/10 — practice.spec.js specifically
   exercises the now-collapsed review-exercise-item flow).
 
-NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence D (Plano + Acompanhar) — see
-  phase list in MASTER_BUILD_PLAN_PATH §50. Phases E-H (Estatísticas per-
-  disciplina/conteúdo already visually ported at STATS_VISUAL_PORT but not
-  re-audited as its own sequence pass, Disciplinas, Configurações+Conta,
-  whole-product pass) not started. Whole-product design rollout is IN
-  PROGRESS under an explicit user autonomy override (2026-09-14): local/
-  reversible/visual decisions are made without stopping to ask; only
-  functional/schema/architecture-level changes are HUMAN_GATE.
+SEQUENCE_D_PLANO_ACOMPANHAR=DONE (2026-09-14, commit 5460f46) — Plano's
+  compact row was truncating title/source mid-word on one nowrap line at
+  this app's real content width ("Farmacocinética...", "Goodman &...");
+  fixed with CSS `order` only (identity+status on line 1, title/meta each
+  full-width on their own line). Acompanhar inspected live, already legible/
+  functional (title/meta wrap naturally, 3 distinct actions per row) — no
+  defect found, left untouched. Also fixed two undefined CSS custom
+  properties (--color-text-muted, --color-text-secondary; real token is
+  --color-muted) that were silently breaking muted-text hierarchy in Plano's
+  detail panel, Disciplinas, and the shared .trend-badge/.sparkline.
+  e2e/smartlearn-plan-flow.spec.js 12/12 green.
+
+SEQUENCE_F_DISCIPLINAS=PARTIAL (2026-09-14, commit 5460f46) — added the
+  master-plan-specified subject-color left-edge stripe to each discipline
+  card (was plain, no color identity at all, on the one screen explicitly
+  called out for "identidade cromática forte"). Rest of the screen (create
+  form, edit/archive/delete flow) not yet re-audited.
+
+NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence E (Estatísticas re-audit as its
+  own pass — STATS_VISUAL_PORT covered the two-tab port but not a full §26-33
+  pass) or finish F (Disciplinas create/edit forms) or G (Configurações+
+  Conta) — see MASTER_BUILD_PLAN_PATH §50. Sequence H (whole-product pass:
+  responsiveness/accessibility/states/continuity) not started. Whole-product
+  design rollout is IN PROGRESS under an explicit user autonomy override
+  (2026-09-14): local/reversible/visual decisions are made without stopping
+  to ask; only functional/schema/architecture-level changes are HUMAN_GATE.
 
 DESIGN_DECISION (2026-09-12):
 - parar novas features visuais temporariamente;
