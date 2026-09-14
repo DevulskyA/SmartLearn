@@ -95,6 +95,9 @@ P0_DATA_INCIDENT (this stretch): user reported the dataset had disappeared.
 ENV_NORMALIZED=YES
 PRODUCT_CONSTITUTION_PATH=.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md
 MASTER_BUILD_PLAN_PATH=.specs/governance/SMARTLEARN_MASTER_BUILD_PLAN_V1.md
+NON_REGRESSION_STANDARD_PATH=.specs/governance/NON_REGRESSION_PRINCIPLES_V1.md (adopted 2026-09-14,
+  outranks earlier task-specific instructions on conflict; applies to
+  Estatísticas restore-then-rebuild in progress and everything queued after)
 
 STATS_SLICE_1=DONE
 STATS_SLICE_2=DONE
