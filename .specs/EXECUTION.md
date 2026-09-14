@@ -5,11 +5,11 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=a8273acdb2bb83b6ed461b83661e18291f2e49ca
-WORKTREE_CLEAN=YES
-REMOTE_MATCH=YES
+CURRENT_HEAD=4357c3609beba8b535acc76472f7af1ea3de9ee4
+WORKTREE_CLEAN=YES (.impeccable/hook.cache.json untracked, local hook cache, not product code)
+REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
-CURRENT_TASK=UX_UI_DESIGN_AUDIT
+CURRENT_TASK=MASTER_BUILD_PLAN_ROLLOUT (see MASTER_BUILD_PLAN_PATH — supersedes UX_UI_DESIGN_AUDIT, which is DONE: see STATS_VISUAL_PORT below)
 ENV_NORMALIZED=YES
 PRODUCT_CONSTITUTION_PATH=.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md
 MASTER_BUILD_PLAN_PATH=.specs/governance/SMARTLEARN_MASTER_BUILD_PLAN_V1.md
@@ -19,7 +19,20 @@ STATS_SLICE_2=DONE
 EVIDENCE_FIX=DONE
 TARGETED_TESTS=48/48 PASS
 
-NEXT_PRODUCT_TASK=UX_UI_DESIGN_AUDIT
+STATS_VISUAL_PORT=DONE (2026-09-14, commit 4357c36) — real #screen-stats now uses
+  the approved two-tab workspace-grid (Por disciplina/Por conteúdo), .subject-cell
+  chips, shared matrix row grammar; verified live with seeded data (no console
+  errors, row-select -> detail panel, row-select -> evolution filter sync, period
+  filter no longer throws — was a real `today` ReferenceError, fixed). Deleted the
+  duplicate "Nota média por disciplina" panel + its dead-code (createSubjectCompa-
+  risonRow, createStateBadge, .subject-kpi*/.unit-stats-row* CSS). Exercícios
+  resolvidos + metric-grid KPIs left untouched (different granularity/domain).
+  DESIGN.md corrected first (commit a00e3ce): side-stripe ban now scoped to
+  review-urgency status, subject-identity stripe explicitly documented/allowed.
+
+NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence C (Hoje) — see phase list in
+  MASTER_BUILD_PLAN_PATH §50. Phases D-H (Plano+Acompanhar, Disciplinas,
+  Configurações+Conta, whole-product pass) not started.
 
 DESIGN_DECISION (2026-09-12):
 - parar novas features visuais temporariamente;
@@ -61,6 +74,19 @@ RECOVERY (se perdeu contexto):
 NUNCA ao perder contexto: inspecionar/editar `main`, replanejar produto,
 reabrir decisão humana já fechada, ou perguntar ao usuário "o que você
 quer continuar" antes de rodar os passos 1-6 acima.
+
+ARMADILHA CONHECIDA — preview_start({name:"dev"}) pode servir `main`, não este
+worktree (mesmo bug do WORKTREE_LAUNCH_ROOT_RESOLUTION do checkpoint
+ENV-NORMALIZE-01). Sintoma: a página carrega sem erro mas mostra HTML/JS
+antigo (classes/elementos que você acabou de adicionar não existem no DOM).
+Confirmar SEMPRE antes de investigar "por que não funcionou": no browser,
+`fetch('/index.html', {cache:'no-store'}).then(r=>r.text())` e procurar uma
+string que só existe na sua edição. Se sumir: parar o preview
+(`preview_stop`), rodar `npm run dev -- --port <outra>` via Bash com
+`run_in_background:true` a partir DESTE diretório (confirmar no log que
+`predev` imprimiu `SMARTLEARN_ROOT=...smartlearn-v1-complete`), e apontar o
+Browser pane pro `http://localhost:<porta>` real via
+`preview_start({url:...})` (não `{name:...}`).
 
 DEV LOCAL (modo padrão, sem servidor): `npm run dev`
 DEV REMOTO (testar login/Conta/SERVIDOR CENTRAL): `npm run dev:remote`
