@@ -5,11 +5,33 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=86e0c36
+CURRENT_HEAD=cc6a8f7
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
-PR=6
-CURRENT_TASK=SEQUENCE_H_RESPONSIVE_A11Y_STATES_PASS (see SEQUENCE_H_PROGRESS below — first pass across all 8 real screens at 375px done; MASTER_BUILD_PLAN_ROLLOUT resumes after)
+PR=6, plus a new PR opened this stretch for the select-ui system (see SELECT_UI_ROLLOUT below for number/URL once opened)
+CURRENT_TASK=SELECT_UI_ROLLOUT done, PR pending open — see SELECT_UI_ROLLOUT below. SEQUENCE_H_RESPONSIVE_A11Y_STATES_PASS first lap remains DONE (see SEQUENCE_H_PROGRESS); MASTER_BUILD_PLAN_ROLLOUT resumes after.
+
+P0_DATA_INCIDENT (this stretch): user reported the dataset had disappeared.
+  Investigated before touching anything — the real Tauri desktop DB
+  (C:/Users/Ariel/AppData/Roaming/com.devulsky.smartlearn/smartlearn.db) was
+  untouched all session (mtime 2026-09-05, this session never ran the Tauri
+  binary until asked to prove it), read-only inspected via better-sqlite3
+  (server/node_modules): 4 subjects (Biologia Celular, Farmacologia,
+  Semiologia Médica, Neurologia), 4 learning_units, 64 review_tasks, 0
+  orphan rows, `PRAGMA integrity_check` = ok. REAL_DATA_LOSS=0 — nothing was
+  restored because nothing was actually lost. What the user saw "missing"
+  was almost certainly this session's own throwaway dev-mode preview
+  (BrowserStore, port 5183, only the 2-subject smoke fixture — see
+  SEED_DATA_NOTE below, unrelated storage backend from the real SQLite
+  file) and/or the installed C:/Users/Ariel/AppData/Local/SmartLearn/
+  smartlearn.exe, which is a stale `tauri dev`-mode build requiring a vite
+  dev server on the exact port in its devUrl (5173) — found it erroring
+  ERR_CONNECTION_REFUSED because nothing was listening there, then found a
+  second real bug while fixing it: `vite --port 5173` alone binds only
+  `[::1]` (IPv6 loopback) on this machine, not `127.0.0.1`, which is what
+  the Tauri webview actually requests — fixed by adding `--host 127.0.0.1`
+  when relaunching. Real product data was never at risk; this exe is a dev
+  artifact, not the shippable app (that requires `npm run tauri build`).
 ENV_NORMALIZED=YES
 PRODUCT_CONSTITUTION_PATH=.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md
 MASTER_BUILD_PLAN_PATH=.specs/governance/SMARTLEARN_MASTER_BUILD_PLAN_V1.md
@@ -282,6 +304,41 @@ SEQUENCE_H_PROGRESS (2026-09-14, this stretch — commits 92316e7, ff7dec2,
      performance value stays on-screen without scrolling — lower severity,
      flagged below as a second-lap item rather than fixed reflexively.
   Full e2e regression run after every slice: 48/48 green throughout.
+
+SELECT_UI_ROLLOUT (this stretch, commit cc6a8f7): systemic fix — every
+  native <select>'s trigger was already themed, but the open menu fell back
+  to the browser/OS's own native popup (white bg, platform chrome, no dark-
+  theme). One shared primitive, src/select-ui.js, now covers all 12 real
+  <select> consumers (Hoje/Plano/Estatísticas/Acompanhar/Materiais/
+  Disciplinas filters+forms) plus verified the approved subject context-
+  switcher's own separate mechanics untouched. Native select kept as the
+  value/change-event source of truth (progressive enhancement, not a
+  rewrite) so zero product-logic call sites changed — ~10 one-line
+  enhanceSelect()/syncSelect() calls added at the points that populate
+  options or set .value programmatically. Full WAI-ARIA "Select-Only
+  Combobox" keyboard behavior hand-built (arrows, typeahead, Home/End,
+  Escape-cancel, focus-return), menu portalled to <body> and positioned
+  from the trigger's real rect so no ancestor can clip it.
+  Mid-build correction (user caught it live): first version duplicated the
+  current value as a highlighted row inside its own open menu. Fixed to
+  match the already-approved context-switcher grammar — TRIGGER = current
+  value, MENU = alternatives only, documented as the new canonical rule in
+  DESIGN.md "Single select". Also hit and fixed a real regression during
+  build: hiding the native <select> with the `hidden` attribute broke two
+  e2e specs' Playwright `selectOption()` calls (non-actionable element) —
+  fixed by keeping it visually hidden but not `display:none` (opacity:0,
+  1px, pointer-events:none) instead of touching the tests.
+  Verified live: period selector (mouse+keyboard+Escape+focus-return),
+  dynamically-populated subject filters, a true placeholder ("Selecione..."),
+  mobile viewport (no clipping/h-scroll), both directions of the
+  evolution-chart subject sync (select→trigger and row-click→select).
+  Full regression: 48/48 e2e, 283/283 unit — both green after every slice.
+  NOT visually verified live: source-draft-subject-select (Materiais'
+  source-review flow) — Materiais is LOCAL_AUTHORITY-gated and unreachable
+  under plain `npm run dev` in this environment (confirmed intentional,
+  not a bug, earlier this session). Same shared primitive, same code path
+  as every other select — low risk, but flag before calling this 100%
+  browser-proven end to end.
 
 SEQUENCE_H_SECOND_LAP_OPEN (not yet done, lower priority than the above):
   Estatísticas matrix-table (both tabs) still horizontally scrolls in the
