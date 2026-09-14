@@ -5,11 +5,11 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=4cefb57
+CURRENT_HEAD=edeeb6b
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
-CURRENT_TASK=MASTER_BUILD_PLAN_ROLLOUT (see MASTER_BUILD_PLAN_PATH — supersedes UX_UI_DESIGN_AUDIT, which is DONE: see STATS_VISUAL_PORT below)
+CURRENT_TASK=SEQUENCE_H_RESPONSIVE_A11Y_STATES_PASS (see SEQUENCE_H_PROGRESS below — first pass across all 8 real screens at 375px done; MASTER_BUILD_PLAN_ROLLOUT resumes after)
 ENV_NORMALIZED=YES
 PRODUCT_CONSTITUTION_PATH=.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md
 MASTER_BUILD_PLAN_PATH=.specs/governance/SMARTLEARN_MASTER_BUILD_PLAN_V1.md
@@ -209,13 +209,63 @@ ACTIVE_GOAL (verbatim, set via /goal 2026-09-14 — re-set with /goal if this
   swap. See SEQUENCE_E_ESTATISTICAS_INCIDENT for exactly what went wrong
   the one time this was violated tonight, and how it was recovered.
 
-NEXT_PRODUCT_TASK=Sequence H (whole-product responsividade/acessibilidade/
-  estados pass) is the clear next target — see STATUS_AT_SESSION_END above.
-  Secondary, smaller items still open: Estatísticas evolution/analysis
-  panels re-audit, the two duplicate period selectors, formally re-
-  verifying F/G. Do NOT touch the Estatísticas metric-grid without new
-  explicit user direction. See MASTER_BUILD_PLAN_PATH §50 for the full
-  surface list/sequence lettering this all maps to.
+NEXT_PRODUCT_TASK=Sequence H continues. First pass (375px mobile, one lap
+  across all 8 real screens: Hoje, Plano, Estatísticas, Acompanhar,
+  Materiais, Disciplinas, Configurações, Conta) is DONE — see
+  SEQUENCE_H_PROGRESS below for the 4 real defects found+fixed+verified.
+  NOT yet done: a second, deeper lap (tablet-width a11y specifics, full
+  keyboard-only walkthrough beyond the spot-checks already done, loading-
+  state races, long-content stress beyond what was seeded). Do NOT touch
+  the Estatísticas metric-grid without new explicit user direction. See
+  MASTER_BUILD_PLAN_PATH §50 for the full surface list/sequence lettering.
+
+SEQUENCE_H_PROGRESS (2026-09-14, this stretch — commits 92316e7, ff7dec2,
+  05fd87f, edeeb6b, all on top of the 637003c checkpoint, each its own
+  verified+tested slice):
+  1. Bottom nav (all 8 screens, commit 92316e7): CSS grid was hardcoded to
+     6 columns (`repeat(6, 1fr)`) but the product has 7 real nav
+     destinations (Materiais stays intentionally `hidden`, confirmed by
+     e2e/product-value.spec.js's REMOTE_AUTHORITY assertion — not touched).
+     The 7th item, Conta, silently wrapped to an invisible second grid row
+     positioned exactly below the viewport — completely unreachable on any
+     real phone. Fixed the column count to 7 + gave labels room to wrap at
+     a natural syllable break (soft hyphen) instead of overflowing past the
+     viewport edge. This one bug affected every screen at once.
+  2. Estatísticas Por conteúdo matrix table (commit ff7dec2): auto table
+     layout let the identity column's content (subject chip + unit title,
+     unlike Por disciplina's chip-only identity) dictate the whole table's
+     width — 588px inside a 293px container, silent horizontal scroll, no
+     affordance, the actual score value invisible by default. Scoped
+     table-layout:fixed to the existing mobile breakpoint + overflow:hidden
+     + ellipsis everywhere truncatable so it reads as intentional, not a
+     hard cut. Took 3 iterations live (table-layout:fixed alone caused
+     header overlap; a flex max-width on the identity cell alone didn't
+     bound the column under auto layout) before landing on fixed layout +
+     overflow:hidden together, which is the actual complete fix.
+  3. Acompanhar card header (commit 05fd87f): same failure mode already
+     fixed once on Plano (commit 5460f46, not touched again) — title had
+     min-width:0+ellipsis inside a wrapping flex row, so it shrank to a
+     sliver next to the subject chip/status badge instead of the row
+     wrapping. Real titles ("Farmacocinética — Absorção e Distribuição")
+     were unreadable. Same fix: reorder via flex `order`, title gets its
+     own full-width line. (First attempt used a same-specificity selector
+     that lost to the unconditional base rule later in the file — fixed by
+     bumping selector specificity, not !important.)
+  4. Conta register password hint (commit edeeb6b): reused `.field-message`
+     (alert-red by default) for a static "Mínimo de 15 caracteres."
+     requirement — the exact anti-pattern already documented in this same
+     stylesheet for `.study-now-hint` (SMARTLEARN_PRODUCT_FIRST_V1 Slice
+     4/5), just not caught here yet. New neutral `.field-hint` class,
+     no JS referenced the old class so safe to swap.
+  Spot-checked and found clean, no fix needed: Plano (mobile detail
+  expand, aria-expanded correct), Disciplinas (new/edit form, color grid,
+  destructive-action styling), Configurações (theme picker, backup,
+  destructive "Apagar banco todo"), Conta login error state (role="status"
+  aria-live="polite", correctly accessible). Materiais confirmed
+  intentionally unreachable under plain `npm run dev` (LOCAL_AUTHORITY
+  gate, not a CSS/attribute-only hide — forcing the nav button open did
+  not switch the screen), matches e2e/product-value.spec.js; not a defect.
+  Full e2e regression run after every slice: 48/48 green throughout.
 
 SEED_DATA_NOTE: tonight's 9 realistic subjects (Anatomia..Pediatria, two
   evidence windows each) were created directly via DB.* in the running dev
