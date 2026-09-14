@@ -9,6 +9,16 @@ import { execFileSync } from 'node:child_process';
 
 const WORK_BRANCH = 'claude/smartlearn-v1-complete';
 
+// The guard's whole purpose is catching an *interactive* session that
+// believes it's in the worktree but is actually running elsewhere
+// (WORKTREE_LAUNCH_ROOT_RESOLUTION). A CI runner has no such ambiguity — it
+// always checks out exactly the ref under test, fresh, in detached HEAD (no
+// local branch name at all) — so the check has nothing to protect against
+// there and would otherwise fail every PR build unconditionally. `CI` is
+// set by GitHub Actions (and effectively every other CI provider) by
+// convention.
+if (process.env.CI) process.exit(0);
+
 function git(args) {
   return execFileSync('git', args, { cwd: process.cwd(), encoding: 'utf8' }).trim();
 }
