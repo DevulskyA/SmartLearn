@@ -74,7 +74,10 @@ export const Analytics = {
 
     const results = [];
     for (const subject of subjects) {
-      const subjectEvidence = evidenceBySubject.get(subject.id) ?? [];
+      const subjectEvidenceSorted = (evidenceBySubject.get(subject.id) ?? [])
+        .slice()
+        .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id);
+      const subjectEvidence = subjectEvidenceSorted;
       const totalQ = sumField(subjectEvidence, 'questionsCount');
       const totalC = sumField(subjectEvidence, 'correctCount');
       const acc = totalQ > 0 ? (totalC / totalQ) * 100 : null;
@@ -85,6 +88,9 @@ export const Analytics = {
       const recentEv = windowEvidence(subjectEvidence, recentFrom, today);
       const prevEv = windowEvidence(subjectEvidence, prevFrom, prevTo);
       const trend = subjectTrend(recentEv, prevEv);
+      const lastEvidence = subjectEvidenceSorted.length > 0
+        ? subjectEvidenceSorted[subjectEvidenceSorted.length - 1]
+        : null;
 
       results.push({
         subjectId: subject.id,
@@ -97,6 +103,7 @@ export const Analytics = {
         trend,
         recentQuestions: sumField(recentEv, 'questionsCount'),
         evidenceCount: subjectEvidence.length,
+        lastEvidence,
       });
     }
     return results.sort((a, b) => {

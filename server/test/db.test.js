@@ -32,11 +32,11 @@ test('foreign_keys enabled after open', () => {
   }
 });
 
-test('synchronous = NORMAL after open', () => {
+test('synchronous = FULL after open (T08: strengthened for authoritative user data)', () => {
   const { path, cleanup } = tmpDb();
   try {
     const db = openDb(path);
-    assert.equal(db.pragma('synchronous', { simple: true }), 1); // 1 = NORMAL
+    assert.equal(db.pragma('synchronous', { simple: true }), 2); // 2 = FULL (design.md §2)
     db.close();
   } finally {
     cleanup();

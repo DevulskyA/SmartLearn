@@ -1,5 +1,7 @@
 ﻿import "./styles.css";
-import { DB } from "./db.js";
+import { DB as LocalDB } from "./db.js";
+import { DB as RemoteDB } from "./remote-store.js";
+import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks } from "./scheduler.js";
@@ -9,10 +11,17 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
 import { Analytics, subtractDays } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
+import * as AuthUI from "./auth-ui.js";
+import * as MigrationUI from "./migration-ui.js";
+import * as SourceProposalsUI from "./source-proposals-ui.js";
+import * as DraftReviewUI from "./draft-review-ui.js";
+import * as OfflineStore from "./offline-store.js";
+import * as OfflineUI from "./offline-ui.js";
+import { enhanceAllSelects, enhanceSelect, syncSelect, wireListboxKeyboard } from "./select-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -45,10 +54,73 @@ function showConfirm(message) {
   });
 }
 
+// T21: explicit, configuration-controlled authority switch — never an
+// automatic/implicit fallback. Default is the existing local BrowserStore/
+// SQLite path (db.js), completely unchanged; the real server-authoritative
+// path (remote-store.js) is opt-in via this runtime flag so it can be
+// staged and tested (e.g. e2e/server-authority.spec.js sets it via
+// page.addInitScript, the same mechanism already used for
+// window.__SMARTLEARN_API_BASE__) without touching the many existing
+// screens/tests that still assume the local store. Flipping this default
+// once every screen has real server parity is T22-T24's job, not this one's.
+const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
+const DB = REMOTE_MODE ? RemoteDB : LocalDB;
+
+// LOCAL-01A / ARCH-01: Desktop still uses REMOTE_MODE=true (same
+// remote-store.js/API-HTTP pipeline as before — see .specs/STATE.md's
+// "ARCHITECTURE SUPERSESSION" section), but the "remote" it talks to is a
+// backend running on THIS computer (127.0.0.1 loopback), started by the
+// Tauri wrapper, not a cloud server. Set once by src-tauri/src/lib.rs's
+// window init script, never by remote/web content. api-client.js and
+// offline-ui.js each read this same flag independently for their own
+// LOCAL_DESKTOP_AUTHORITY branches — this module's copy is for renderToday.
+const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+
+// PV1-01: Materiais (the PDF -> proposal -> draft -> accept pipeline,
+// relocated from Configurações to its own primary screen) is exclusive to
+// LOCAL_DESKTOP_AUTHORITY — Companion (not implemented yet) stays a
+// read-only surface, and REMOTE_AUTHORITY-without-local-authority keeps
+// the existing server endpoints reachable (nothing removed server-side)
+// but never surfaces this as a product screen. This flag is stable for
+// the whole session (set once by the window init script before this
+// module loads), so it's safe to apply it once here rather than on every
+// navigation.
+const materialsNavItem = document.querySelector('[data-screen="materials"]');
+if (materialsNavItem) materialsNavItem.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+
 let databaseAvailable = false;
+// In remote mode, "available" also requires a logged-in session — there is
+// no local schema to fail to open, but every domain call needs an
+// authenticated actor. This is the "distinguish unavailable server from
+// empty data" seam: a reachable-but-unauthenticated server is a distinct,
+// visible state (redirect to login), never rendered as an empty agenda.
+let authenticated = !REMOTE_MODE;
 const dbInit = DB.init()
-  .then(() => {
+  .then(async () => {
     databaseAvailable = true;
+    if (REMOTE_MODE) {
+      const user = await AuthUI.bootstrap();
+      // T40: best-effort — a registration/sync failure here never blocks
+      // boot, same "failure only logs" contract as T30's client wiring.
+      OfflineStore.registerServiceWorker().catch(() => {});
+      // T41: app-wide connectivity indicator + reconnect handling (session
+      // revalidation + resync), mounted once regardless of auth outcome so
+      // it can show "offline" state even for a not-yet-authenticated tab.
+      OfflineUI.mount({ onReconnect: () => { if (authenticated) return renderToday(); } });
+      if (user) {
+        authenticated = true;
+        OfflineStore.syncSnapshot(user.id).catch(() => {});
+      } else if (AuthUI.wasLastBootstrapNetworkError() && OfflineStore.getLastAccountId()) {
+        // Cold offline reopen: the server can't confirm a session, but a
+        // previously-synced account exists on this device — presume it for
+        // read-only offline display. The server remains the sole real
+        // session authority the moment it's reachable again; nothing here
+        // grants any write capability (T41's job to keep it that way).
+        authenticated = true;
+      } else {
+        authenticated = false;
+      }
+    }
     return true;
   })
   .catch((error) => {
@@ -57,7 +129,9 @@ const dbInit = DB.init()
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
-    banner.textContent = 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
+    banner.textContent = REMOTE_MODE
+      ? 'Erro: não foi possível conectar ao servidor. Tente novamente em instantes.'
+      : 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
     document.body.prepend(banner);
     return false;
   });
@@ -119,6 +193,9 @@ const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
 const reviewDashboard = document.querySelector("#review-dashboard");
+const todayPrimaryAction = document.querySelector("#today-primary-action");
+const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
+const todayPrimaryActionBtn = document.querySelector("#today-primary-action-btn");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
@@ -138,20 +215,20 @@ const metricElements = {
 };
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
-const statsSubjectSort = document.querySelector("#stats-subject-sort");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
-const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
-const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
+const unitDetailPanel = document.querySelector("#unit-detail-panel");
+const unitDetailEmpty = document.querySelector("#unit-detail-empty");
+const unitDetailBody = document.querySelector("#unit-detail-body");
+const contentContextPlate = document.querySelector("#content-context-plate");
+const disciplineSwitchList = document.querySelector("#discipline-switch-list");
+const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
-const statsUnitSort = document.querySelector("#stats-unit-sort");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
 const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
-const subjectAveragesBody = document.querySelector("#subject-averages-body");
-const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
@@ -199,6 +276,45 @@ const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
 const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
+const migrationCard = document.querySelector("#migration-card");
+const migrationChooseFileButton = document.querySelector("#migration-choose-file");
+const migrationFileInput = document.querySelector("#migration-file-input");
+const migrationMessage = document.querySelector("#migration-message");
+const migrationPreviewPanel = document.querySelector("#migration-preview-panel");
+const migrationCounts = document.querySelector("#migration-counts");
+const migrationWarnings = document.querySelector("#migration-warnings");
+const migrationConflicts = document.querySelector("#migration-conflicts");
+const migrationConfirmBtn = document.querySelector("#migration-confirm-btn");
+const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
+const migrationResultPanel = document.querySelector("#migration-result-panel");
+const migrationResultSummary = document.querySelector("#migration-result-summary");
+const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
+const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
+const sourcesFileInput = document.querySelector("#sources-file-input");
+const sourcesMessage = document.querySelector("#sources-message");
+const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
+const sourcesProposalsList = document.querySelector("#sources-proposals-list");
+const studyNowSubjectEl = document.querySelector("#study-now-subject");
+const studyNowTitleEl = document.querySelector("#title-study-now");
+const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
+const studyNowSummaryBody = document.querySelector("#study-now-summary-body");
+const studyNowProgress = document.querySelector("#study-now-progress");
+const studyNowQuestionArea = document.querySelector("#study-now-question-area");
+const studyNowQuestionText = document.querySelector("#study-now-question-text");
+const studyNowHintText = document.querySelector("#study-now-hint-text");
+const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
+const studyNowAnswerText = document.querySelector("#study-now-answer-text");
+const studyNowJudgment = document.querySelector("#study-now-judgment");
+const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
+const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
+const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
+const studyNowResultCard = document.querySelector("#study-now-result-card");
+const studyNowResultText = document.querySelector("#study-now-result-text");
+const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
+const studyNowReviewErrorsBtn = document.querySelector("#study-now-review-errors-btn");
+const studyNowErrorsList = document.querySelector("#study-now-errors-list");
+let migrationActivePreview = null;
+let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
 const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -390,12 +506,68 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     task.correctCount != null ||
     (task.comment ?? "") !== "";
 
-  const expandButton = document.createElement("button");
-  expandButton.type = "button";
-  expandButton.className = "review-expand";
-  expandButton.dataset.action = "expand";
-  expandButton.setAttribute("aria-expanded", String(hasScoreData));
-  expandButton.textContent = "Ver desempenho";
+  // Collapsible detail: questions-done toggle, free-form score inputs,
+  // comment. None of these have a server-mode equivalent (T20/heritage.md:
+  // the new model records evidence atomically via the exercises Q&A flow
+  // or the external-exercises form below, never a free-standing manual
+  // patch of questionsDone/score/comment) — showing controls that would
+  // fail on every use is worse than not showing them, so remote mode
+  // simply omits this panel rather than rendering a broken one.
+  const detail = document.createElement("div");
+  detail.className = "review-row-detail";
+  detail.hidden = true;
+
+  let expandButton = null;
+  if (!REMOTE_MODE) {
+    expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "review-expand";
+    expandButton.dataset.action = "expand";
+    expandButton.setAttribute("aria-expanded", String(hasScoreData));
+    expandButton.textContent = "Ver desempenho";
+    detail.hidden = !hasScoreData;
+
+    const questionsDoneLabel = document.createElement("label");
+    questionsDoneLabel.className = "check-control review-toggle";
+    const questionsDoneInput = document.createElement("input");
+    questionsDoneInput.type = "checkbox";
+    questionsDoneInput.checked = task.questionsDone;
+    questionsDoneInput.dataset.action = "questions-done";
+    questionsDoneInput.dataset.reviewId = String(task.id);
+    questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
+    questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+
+    const scoreInputs = document.createElement("div");
+    scoreInputs.className = "review-score-inputs";
+    const live = document.createElement("div");
+    live.className = "review-score-live";
+    live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
+    const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
+    score.dataset.scoreFor = String(task.id);
+    score.setAttribute("aria-label", "Percentual de acertos");
+    live.append(score);
+    scoreInputs.append(
+      createScoreInput(task, "questionsCount", "Questões"),
+      createScoreInput(task, "correctCount", "Acertos"),
+      live,
+    );
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "comment-control review-note";
+    commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
+    const commentInput = document.createElement("textarea");
+    commentInput.rows = 2;
+    commentInput.maxLength = 500;
+    commentInput.value = task.comment ?? "";
+    commentInput.placeholder = "Anote uma dúvida ou ponto importante";
+    commentInput.dataset.action = "comment";
+    commentInput.dataset.reviewId = String(task.id);
+    commentInput.dataset.committedValue = task.comment ?? "";
+    commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
+    commentLabel.append(commentInput);
+
+    detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  }
 
   const externalBtn = document.createElement("button");
   externalBtn.type = "button";
@@ -404,53 +576,26 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   externalBtn.setAttribute("aria-expanded", "false");
   externalBtn.textContent = "Exercícios externos";
 
-  primary.append(reviewDoneLabel, expandButton, externalBtn);
+  // Progressive disclosure (Hoje = ação, não dashboard — master build plan
+  // §21): a collapsed row shows only what's needed to decide/act (identity,
+  // status, score-at-a-glance, mark-done). Resumo/exercícios/detalhe/
+  // externos open on demand instead of every card rendering fully expanded.
+  const toggleRowBtn = document.createElement("button");
+  toggleRowBtn.type = "button";
+  toggleRowBtn.className = "review-row-toggle";
+  toggleRowBtn.dataset.action = "toggle-row";
+  toggleRowBtn.setAttribute("aria-expanded", "false");
+  toggleRowBtn.textContent = "Ver conteúdo";
 
-  // Collapsible detail: questions, score, comment
-  const detail = document.createElement("div");
-  detail.className = "review-row-detail";
-  detail.hidden = !hasScoreData;
+  primary.append(reviewDoneLabel, toggleRowBtn);
 
-  const questionsDoneLabel = document.createElement("label");
-  questionsDoneLabel.className = "check-control review-toggle";
-  const questionsDoneInput = document.createElement("input");
-  questionsDoneInput.type = "checkbox";
-  questionsDoneInput.checked = task.questionsDone;
-  questionsDoneInput.dataset.action = "questions-done";
-  questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+  const secondaryControls = document.createElement("div");
+  secondaryControls.className = "review-row-secondary-controls";
+  secondaryControls.append(...(expandButton ? [expandButton] : []), externalBtn);
 
-  const scoreInputs = document.createElement("div");
-  scoreInputs.className = "review-score-inputs";
-  const live = document.createElement("div");
-  live.className = "review-score-live";
-  live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
-  const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
-  score.dataset.scoreFor = String(task.id);
-  score.setAttribute("aria-label", "Percentual de acertos");
-  live.append(score);
-  scoreInputs.append(
-    createScoreInput(task, "questionsCount", "Questões"),
-    createScoreInput(task, "correctCount", "Acertos"),
-    live,
-  );
-
-  const commentLabel = document.createElement("label");
-  commentLabel.className = "comment-control review-note";
-  commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
-  const commentInput = document.createElement("textarea");
-  commentInput.rows = 2;
-  commentInput.maxLength = 500;
-  commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
-  commentInput.dataset.action = "comment";
-  commentInput.dataset.reviewId = String(task.id);
-  commentInput.dataset.committedValue = task.comment ?? "";
-  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
-  commentLabel.append(commentInput);
-
-  detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  const body = document.createElement("div");
+  body.className = "review-row-body";
+  body.hidden = true;
 
   // External exercises section
   const externalSection = document.createElement("div");
@@ -506,9 +651,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   const summarySection = document.createElement("div");
   summarySection.className = "review-row-summary";
 
-  const summaryDisplayText = unit?.summaryBody ?? unit?.title ?? "";
-  const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
+  const summaryHasBody = Boolean(unit?.summaryBody);
+  const summaryDisplay = createTextElement("p", "review-summary-text", unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
+  summaryDisplay.hidden = !summaryHasBody;
+
+  const summaryPlaceholder = createTextElement(
+    "p",
+    "review-summary-placeholder",
+    "Sem resumo salvo. Toque em Editar Resumo para adicionar.",
+  );
+  summaryPlaceholder.hidden = summaryHasBody;
 
   const editSummaryButton = document.createElement("button");
   editSummaryButton.type = "button";
@@ -538,7 +691,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   summaryMessage.setAttribute("aria-live", "polite");
 
   summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
-  summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
+  summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
   if (exercises.length > 0) {
@@ -555,6 +708,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
       exItem.dataset.exerciseAnswered = "false";
+      exItem.dataset.exerciseId = String(exercise.id);
+      exItem.dataset.reviewTaskId = String(task.id);
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -596,25 +751,118 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       exercisesReviewSection.append(exItem);
     }
 
-    row.append(header, summarySection, exercisesReviewSection, primary, detail, externalSection);
+    body.append(summarySection, exercisesReviewSection, secondaryControls, detail, externalSection);
   } else {
-    row.append(header, summarySection, primary, detail, externalSection);
+    body.append(summarySection, secondaryControls, detail, externalSection);
   }
+  row.append(header, primary, body);
   return row;
 }
 
+// T40: read-only fallback for "cold offline reopen after prior sync
+// displays the app/agenda". Deliberately renders plain text rows, not
+// createReviewRow's interactive complete/reveal actions — those require a
+// live server round-trip that offline-by-definition cannot make (T41
+// disables mutation UI explicitly; this predates that, so it just never
+// offers the action at all rather than offering one that would silently
+// fail). Only overdue/today buckets are shown: T39's snapshot excludes
+// already-completed tasks, so "done today" has no offline equivalent.
+async function renderOfflineToday(accountId) {
+  const snapshot = await OfflineStore.loadSnapshot(accountId);
+  const today = getLocalDateValue();
+
+  let banner = document.querySelector("#offline-banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "offline-banner";
+    banner.setAttribute("role", "status");
+    banner.style.cssText = "position:sticky;top:0;z-index:100;background:#92400e;color:#fff;padding:.5rem 1rem;font-size:.8125rem;text-align:center;";
+    mainContent?.prepend(banner);
+  }
+  banner.hidden = false;
+  banner.textContent = snapshot
+    ? `Modo offline — última sincronização: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(snapshot.syncedAt))}.`
+    : "Modo offline — nenhuma agenda sincronizada anteriormente.";
+
+  const overdue = (snapshot?.items ?? []).filter((i) => i.dueDate < today);
+  const dueToday = (snapshot?.items ?? []).filter((i) => i.dueDate === today);
+  const groups = { overdue, today: dueToday, doneToday: [] };
+
+  for (const [groupName, tasks] of Object.entries(groups)) {
+    const block = reviewGroups[groupName];
+    const list = block.querySelector(`[data-review-list="${groupName}"]`);
+    const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    list.replaceChildren();
+    count.textContent = String(tasks.length);
+    block.hidden = tasks.length === 0;
+    for (const item of tasks) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+  }
+
+  todayEmptyState.hidden = true;
+  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0);
+  todayTomorrow.hidden = true;
+  if (todayLoadSummary) {
+    const parts = [];
+    if (overdue.length > 0) parts.push(`${overdue.length} vencida${overdue.length !== 1 ? "s" : ""}`);
+    if (dueToday.length > 0) parts.push(`${dueToday.length} hoje`);
+    todayLoadSummary.hidden = parts.length === 0;
+    todayLoadSummary.textContent = parts.join(" · ");
+  }
+  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+}
+
 export async function renderToday() {
+  const existingOfflineBanner = document.querySelector("#offline-banner");
+  // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
+  // nothing about a loopback backend's reachability — Desktop must not
+  // treat "no Wi-Fi/internet" as "no authority" (STATE.md's ARCHITECTURE
+  // SUPERSESSION §3). This read-only snapshot fallback stays REMOTE_MODE
+  // (non-local) territory only.
+  if (REMOTE_MODE && !LOCAL_AUTHORITY && !navigator.onLine) {
+    const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+    return renderOfflineToday(accountId);
+  }
+
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
-    await Promise.all([
-      DB.reviewTasks.getForToday(today),
-      DB.reviewTasks.getOverdue(today),
-      DB.reviewTasks.getCompletedToday(today),
-      DB.reviewTasks.getTomorrow(tomorrow),
-      DB.learningUnits.getAll(),
-      DB.subjects.getAll(),
-    ]);
+  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects;
+  try {
+    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
+      await Promise.all([
+        DB.reviewTasks.getForToday(today),
+        DB.reviewTasks.getOverdue(today),
+        DB.reviewTasks.getCompletedToday(today),
+        DB.reviewTasks.getTomorrow(tomorrow),
+        DB.learningUnits.getAll(),
+        DB.subjects.getAll(),
+      ]);
+  } catch (error) {
+    // T42 fix (AC-24): navigator.onLine only reflects the OS network
+    // adapter's link state, not whether the SmartLearn server itself is
+    // reachable — a dead/restarting/firewalled server with Wi-Fi otherwise
+    // up never flips navigator.onLine, so the check above alone can't catch
+    // it. A NetworkError here means fetch() itself never got a response
+    // (api-client.js's own distinction) — route it through the same
+    // read-only snapshot path as a known-offline cold start. Any other
+    // error (a real HTTP response, auth, etc.) is a different failure and
+    // must keep propagating, not get silently reinterpreted as "offline".
+    // LOCAL-01A: a local backend that's down is a real, explicit failure
+    // (item E of LOCAL-01A's discriminating tests) — it must surface as an
+    // error, never get silently reinterpreted as "offline, show the last
+    // snapshot" the way a genuinely unreachable REMOTE cloud server does.
+    if (REMOTE_MODE && !LOCAL_AUTHORITY && error instanceof NetworkError) {
+      const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+      return renderOfflineToday(accountId);
+    }
+    throw error;
+  }
+  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
@@ -653,6 +901,25 @@ export async function renderToday() {
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
       list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
+    }
+  }
+
+  // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
+  // with data already fetched above — no new scheduler, no change to the
+  // 16-review schedule. Priority: overdue (oldest first, already the
+  // server's own sort order) > today > (tomorrow/none handled by the
+  // existing todayTomorrow/todaySuccessState elements below, which
+  // already communicate those two cases adequately).
+  if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
+    const primaryTask = overdueReviews[0] ?? pendingToday[0] ?? null;
+    if (primaryTask) {
+      todayPrimaryActionText.textContent = overdueReviews.length > 0
+        ? (overdueReviews.length === 1 ? "Você tem 1 revisão vencida." : `Você tem ${overdueReviews.length} revisões vencidas.`)
+        : (pendingToday.length === 1 ? "Você tem 1 revisão para hoje." : `Você tem ${pendingToday.length} revisões para hoje.`);
+      todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
+      todayPrimaryAction.hidden = false;
+    } else {
+      todayPrimaryAction.hidden = true;
     }
   }
 
@@ -698,6 +965,34 @@ export async function renderToday() {
   }
 }
 
+// SLICE 2 (Stats Visual Intelligence): performance and volume are two
+// different questions ("how well" vs "how much") and must never share a
+// bar or a color scale — a short green bar (little practice, good score)
+// must never look like a short red one (lots of practice, bad score).
+function createComparisonBar(fillPercent, background, extraClass) {
+  const bar = document.createElement("div");
+  bar.className = "subject-compare-bar";
+  const fill = document.createElement("div");
+  fill.className = ["subject-compare-bar-fill", extraClass].filter(Boolean).join(" ");
+  fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
+  fill.style.background = background;
+  bar.append(fill);
+  return bar;
+}
+
+function createComparisonCell(valueText, bar) {
+  const cell = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "subject-compare-cell";
+  const value = document.createElement("span");
+  value.className = "subject-compare-value";
+  value.textContent = valueText;
+  wrap.append(value, bar);
+  cell.append(wrap);
+  return cell;
+}
+
+
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
     DB.reviewTasks.getAll(),
@@ -717,22 +1012,6 @@ export async function renderStats() {
   exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
   for (const exercise of stats.completedExercises) {
     exerciseNotesBody.append(createExerciseRow(exercise));
-  }
-
-  subjectAveragesBody.replaceChildren();
-  subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
-  for (const subject of stats.avgBySubject) {
-    const row = document.createElement("tr");
-    const name = document.createElement("th");
-    name.scope = "row";
-    name.textContent = subject.subjectName;
-    const average = document.createElement("td");
-    average.dataset.cell = "avg";
-    average.append(createPerformanceBadge(subject.avgScore));
-    const questions = document.createElement("td");
-    questions.textContent = String(subject.totalQuestions);
-    row.append(name, average, questions);
-    subjectAveragesBody.append(row);
   }
 
   const dataPoints = evidence
@@ -764,6 +1043,7 @@ export async function renderStats() {
       opt.textContent = s.name;
       evolutionFilterSubject.append(opt);
     }
+    syncSelect(evolutionFilterSubject);
   }
   const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
   chartEmpty.hidden = svgRendered;
@@ -851,6 +1131,7 @@ export async function renderPlan() {
       select.append(opt);
     }
     if (currentValue) select.value = currentValue;
+    syncSelect(select);
   }
   syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
   syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
@@ -1106,13 +1387,134 @@ function createTrendBadge(direction) {
   return span;
 }
 
-function createStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "performance-state-badge";
-  span.dataset.state = state;
-  const labels = { NO_EVIDENCE: "Sem evidência", CRITICAL: "Crítico", ATTENTION: "Atenção", ADEQUATE: "Adequado", STRONG: "Forte" };
-  span.textContent = labels[state] ?? state;
-  return span;
+// Header-click sorting (approved pattern — no separate sort dropdown when a
+// table column can sort itself). One {key,dir} state per table; ascending
+// "performance" is the existing worst-first default in both tables.
+const subjectSortState = { key: "performance", dir: "asc" };
+const unitSortState = { key: "performance", dir: "asc" };
+
+// Global período control (screen-heading): now shared by both Por
+// disciplina and Por conteúdo, same cutoff rule either table already used.
+// Rows without a lastEvidence date are excluded by a period filter (there's
+// nothing recent to include), never shown as if they matched.
+function filterByPeriod(results, periodValue, today) {
+  if (!periodValue) return results;
+  const days = periodValue === "last-30" ? 30 : periodValue === "last-90" ? 90 : 365;
+  const cutoff = subtractDays(today, days);
+  return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
+}
+
+function sortMatrixRows(results, { key, dir }) {
+  const cmp = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return dir === "asc" ? av - bv : bv - av;
+  };
+  // String comparator for the two functionally-restored sort modes
+  // (P0-3: "Disciplina" alphabetical + "Última atividade" recency, both
+  // previously available via a now-removed dropdown). Nulls sort last
+  // regardless of direction, matching the numeric comparator's own
+  // established no-evidence-last convention above.
+  const cmpString = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const result = av.localeCompare(bv, "pt-BR", { sensitivity: "base" });
+    return dir === "asc" ? result : -result;
+  };
+  if (key === "practice") return [...results].sort(cmp((r) => r.totalQuestions));
+  if (key === "trend") {
+    const order = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
+    return [...results].sort(cmp((r) => order[r.trend.direction] ?? 1));
+  }
+  // Alphabetical identity: subjectName alone for Por disciplina rows;
+  // subjectName + unitTitle for Por conteúdo rows (unitTitle is undefined
+  // on subject rows, so this degrades to subjectName-only there).
+  if (key === "identity") {
+    return [...results].sort(cmpString((r) => `${r.subjectName ?? ""} ${r.unitTitle ?? ""}`.trim()));
+  }
+  // Recency: most/least recent real evidence date, ISO strings sort
+  // lexicographically the same as chronologically.
+  if (key === "recency") {
+    return [...results].sort(cmpString((r) => r.lastEvidence?.evidenceDate ?? null));
+  }
+  return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
+}
+
+// P0-3 (revised): Recência shares the exact same single Prática button
+// instead of a second stacked button — a visually-stacked version briefly
+// existed and was reverted (it changed the header cell's content shape at
+// every width, including the phone breakpoint commit ff7dec2 had already
+// fixed and locked, silently re-breaking it). One button, one line, zero
+// header-geometry change at any width: clicking it steps through this
+// fixed cycle instead.
+const PRACTICE_RECENCY_CYCLE = [
+  { key: "practice", dir: "asc" },
+  { key: "practice", dir: "desc" },
+  { key: "recency", dir: "asc" },
+  { key: "recency", dir: "desc" },
+];
+
+function updateSortHeaderUI(theadRow, state) {
+  if (!theadRow) return;
+  for (const th of theadRow.querySelectorAll("th")) {
+    const buttons = th.querySelectorAll(".th-sort-btn");
+    if (buttons.length === 0) continue;
+    let anyActive = false;
+    for (const btn of buttons) {
+      if (btn.classList.contains("th-sort-btn-practice-recency")) {
+        // This one button represents two sort dimensions; its label and
+        // data-sort-key follow whichever is currently engaged, defaulting
+        // back to its original "Prática" identity when neither is active
+        // (some other header is the current sort) — same idle appearance
+        // this button always had before Recência existed.
+        const engaged = state.key === "practice" || state.key === "recency";
+        const effectiveKey = engaged ? state.key : "practice";
+        btn.dataset.sortKey = effectiveKey;
+        const label = effectiveKey === "recency" ? "Recência" : "Prática";
+        if (btn.firstChild && btn.firstChild.nodeType === Node.TEXT_NODE) {
+          btn.firstChild.textContent = label;
+        }
+        btn.setAttribute("aria-label", `Ordenar por ${label.toLowerCase()}`);
+        if (engaged) anyActive = true;
+        btn.classList.toggle("is-active", engaged);
+        btn.dataset.dir = engaged ? state.dir : "";
+        continue;
+      }
+      const isActive = btn.dataset.sortKey === state.key;
+      if (isActive) anyActive = true;
+      btn.classList.toggle("is-active", isActive);
+      btn.dataset.dir = isActive ? state.dir : "";
+    }
+    th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
+  }
+}
+
+function wireSortableHeaders(rowId, state, onChange) {
+  const row = document.querySelector(`#${rowId}`);
+  if (!row || row.dataset.sortWired) return;
+  row.dataset.sortWired = "true";
+  row.addEventListener("click", (event) => {
+    const btn = event.target.closest(".th-sort-btn");
+    if (!btn) return;
+    if (btn.classList.contains("th-sort-btn-practice-recency")) {
+      const currentIndex = PRACTICE_RECENCY_CYCLE.findIndex((s) => s.key === state.key && s.dir === state.dir);
+      const next = PRACTICE_RECENCY_CYCLE[(currentIndex + 1 + PRACTICE_RECENCY_CYCLE.length) % PRACTICE_RECENCY_CYCLE.length];
+      state.key = next.key;
+      state.dir = next.dir;
+    } else {
+      const key = btn.dataset.sortKey;
+      state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
+      state.key = key;
+    }
+    updateSortHeaderUI(row, state);
+    onChange();
+  });
 }
 
 export async function renderStatsBySubject() {
@@ -1124,72 +1526,107 @@ export async function renderStatsBySubject() {
     DB.subjects.getAll(),
   ]);
   let results = Analytics.bySubject(evidence, units, subjects, today);
-
-  const sortValue = statsSubjectSort?.value ?? "worst-first";
-  if (sortValue === "best-first") {
-    results = [...results].sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return b.weightedAccuracy - a.weightedAccuracy;
-    });
-  } else if (sortValue === "volume") {
-    results = [...results].sort((a, b) => b.totalQuestions - a.totalQuestions);
-  } else if (sortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = [...results].sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  }
-  // "worst-first" is default from Analytics.bySubject sort
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  results = sortMatrixRows(results, subjectSortState);
+  wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
+  updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
 
   const hasAny = results.some((r) => r.totalQuestions > 0);
   subjectKpiEmpty.hidden = hasAny || results.length > 0;
   subjectKpiList.replaceChildren();
 
+  // Matrix row: identidade (subject-cell) | desempenho (% + barra, nunca
+  // texto quando sem evidência) | prática (volume, independente de
+  // desempenho) | tendência (seta, neutra em relação à cor de performance).
+  // Selecionar uma linha também dirige o gráfico de evolução ao lado — evita
+  // duas formas redundantes de escolher a mesma disciplina (linha + dropdown
+  // do gráfico ficam em sincronia, nenhuma delas é removida).
   for (const r of results) {
-    const card = document.createElement("article");
-    card.className = "subject-kpi";
-    card.dataset.state = r.state;
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.subjectId = String(r.subjectId);
 
-    const header = document.createElement("div");
-    header.className = "subject-kpi-header";
-
+    const identityCell = document.createElement("td");
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+    // P1-2: at narrower table widths this chip can be visually truncated
+    // (ellipsis) to keep the table from silently overflowing — the native
+    // title tooltip keeps the full name one hover/long-press away instead
+    // of losing it outright.
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+    identityCell.append(chip);
 
-    const badges = document.createElement("div");
-    badges.className = "subject-kpi-badges";
-    badges.append(createStateBadge(r.state), createTrendBadge(r.trend.direction));
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    header.append(chip, badges);
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = `${r.totalQuestions} q · ${r.totalCorrect} acertos`;
+    const practiceRecent = document.createElement("div");
+    practiceRecent.className = "practice-recent";
+    practiceRecent.textContent = `Últimos 30d: ${r.recentQuestions} q`;
+    practiceCell.append(practiceMain, practiceRecent);
 
-    const metrics = document.createElement("div");
-    metrics.className = "subject-kpi-metrics";
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
 
-    const accEl = document.createElement("div");
-    accEl.className = "subject-kpi-acc";
-    // AC-EST1-05: sem evidência ≠ 0% — show neutral, never red
-    // AC-EST1-07: always show % + n questões
-    if (r.weightedAccuracy == null) {
-      accEl.textContent = "Sem evidência";
-      accEl.classList.add("is-no-evidence");
-    } else {
-      accEl.textContent = `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%`;
-    }
-
-    const qEl = document.createElement("div");
-    qEl.className = "subject-kpi-questions";
-    qEl.textContent = `${r.totalQuestions} questões · ${r.totalCorrect} acertos`;
-
-    const recentEl = document.createElement("div");
-    recentEl.className = "subject-kpi-recent";
-    recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
-
-    metrics.append(accEl, qEl, recentEl);
-    card.append(header, metrics);
-    subjectKpiList.append(card);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => openSubjectContents(r.subjectId));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openSubjectContents(r.subjectId);
+      }
+    });
+    subjectKpiList.append(row);
   }
+}
+
+function selectSubjectForEvolution(subjectId) {
+  if (evolutionFilterSubject) {
+    evolutionFilterSubject.value = String(subjectId);
+    syncSelect(evolutionFilterSubject);
+    evolutionFilterSubject.dispatchEvent(new Event("change"));
+  }
+  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.subjectId === String(subjectId));
+  }
+}
+
+// Single semantic action for "activate a discipline row in Por disciplina":
+// used identically by click, Enter and Space so mouse and keyboard never
+// diverge. Restores the pre-regression behavior (row activation used to
+// switch to Por conteúdo) while keeping the newer evolution-chart sync,
+// which is still legitimate/useful on its own.
+function openSubjectContents(subjectId) {
+  // 1) keep discipline selection in sync — same mechanism the evolution
+  // chart already used (dropdown value + row highlight in Por disciplina).
+  selectSubjectForEvolution(subjectId);
+  // 2) drive Por conteúdo to the same discipline.
+  selectedUnitSubjectId = subjectId;
+  // 3) activate the Por conteúdo tab (shared setStatsView, same path a real
+  // tab click uses — no parallel tab-activation logic).
+  const unitTab = document.querySelector("#tab-stats-unit");
+  if (unitTab) setStatsView(unitTab);
+  // 4) re-render Por conteúdo (updates the matrix rows AND, via
+  // renderContentContext inside it, the context-switcher trigger/menu).
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  // 5) focus/ARIA coherence: move focus to the now-selected tab, matching
+  // the tablist's own roving-tabindex state (setStatsView already put
+  // tabindex=0 only on this tab) instead of leaving focus stranded on a
+  // row that just disappeared into the other, now-hidden panel.
+  unitTab?.focus();
 }
 
 function createTrackingStateBadge(state) {
@@ -1224,6 +1661,7 @@ export async function renderTracking() {
       opt.textContent = s.name;
       trackingFilterSubject.append(opt);
     }
+    syncSelect(trackingFilterSubject);
   }
 
   const subjFilter = trackingFilterSubject?.value ?? "";
@@ -1418,6 +1856,7 @@ export async function renderDisciplinas() {
     const card = document.createElement("article");
     card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;
     card.dataset.subjectId = String(subj.id);
+    card.style.setProperty("--subject-color", `var(${colorVarForKey(subj.color ?? "DISC-BLUE")})`);
 
     const chipRow = document.createElement("div");
     chipRow.className = "subject-catalog-chip-row";
@@ -1576,8 +2015,58 @@ function buildSparkline(scores, width = 60, height = 24) {
   return svg;
 }
 
+let selectedUnitSubjectId = null;
+
+function formatContentContextMeta(row) {
+  if (!row || row.totalQuestions <= 0) return "Sem evidência ainda";
+  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return `${pct}% desempenho · ${row.totalQuestions} questões`;
+}
+
+// Context switcher aprovado: trigger mostra a disciplina atual; o menu que
+// ele abre nunca repete essa disciplina, só mostra as alternativas.
+function renderContentContext(activeSubjectRows, currentSubjectId) {
+  if (!contentContextPlate || !disciplineSwitchList) return;
+  const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
+
+  contentContextPlate.textContent = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.title = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.style.setProperty(
+    "--subject-fill",
+    `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
+  );
+  if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
+
+  disciplineSwitchList.replaceChildren();
+  let optionIndex = 0;
+  for (const row of activeSubjectRows) {
+    if (row.subjectId === currentSubjectId) continue;
+    const item = document.createElement("li");
+    // Menu Button pattern (DESIGN.md): this widget performs an action
+    // ("switch to this discipline"), it is not a value picker with a
+    // selection state — menuitem, never option/aria-selected.
+    item.setAttribute("role", "menuitem");
+    // Stable per-render id + tabIndex=-1: same roving-focus contract as
+    // select-ui.js's own Menu popup (see wireListboxKeyboard in
+    // src/select-ui.js) — real DOM focus stays on the list itself,
+    // individual items are only ever visually marked via .is-focused.
+    item.id = `discipline-switch-opt-${optionIndex++}`;
+    item.tabIndex = -1;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "subject-cell";
+    btn.textContent = row.subjectName;
+    btn.title = row.subjectName;
+    btn.dataset.subjectId = String(row.subjectId);
+    btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
+    item.append(btn);
+    disciplineSwitchList.append(item);
+  }
+}
+
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
+  const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
@@ -1586,104 +2075,146 @@ export async function renderStatsByUnit() {
   let results = Analytics.byUnit(evidence, units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
-  // Populate subject filter
-  if (statsUnitFilterSubject && statsUnitFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      statsUnitFilterSubject.append(opt);
-    }
+  // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
+  // trigger = disciplina atual, menu = só as alternativas) em vez de um
+  // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
+  // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
+  // reaproveitado aqui, não recalculado.
+  const activeSubjectRows = Analytics.bySubject(evidence, units, subjects, today).filter(
+    (r) => subjectsById.get(r.subjectId)?.isActive,
+  );
+  if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
+    selectedUnitSubjectId = activeSubjectRows[0]?.subjectId ?? null;
   }
+  renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const subjFilter = statsUnitFilterSubject?.value ?? "";
-  const trendFilter = statsUnitFilterTrend?.value ?? "";
-  const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
-  if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
-  if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
-  if (unitPeriodFilter) {
-    const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
-    const cutoff = subtractDays(today, days);
-    results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
-  }
+  if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
 
-  // Sort (AC-EST2-05)
-  const unitSortValue = statsUnitSort?.value ?? "worst-first";
-  if (unitSortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = results.sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  } else if (unitSortValue === "volume") {
-    results = results.sort((a, b) => b.evidenceCount - a.evidenceCount);
-  } else if (unitSortValue === "subject") {
-    results = results.sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? "") || (a.unitTitle ?? "").localeCompare(b.unitTitle ?? ""));
-  } else if (unitSortValue === "last-activity") {
-    results = results.sort((a, b) => {
-      const da = a.lastEvidence?.evidenceDate;
-      const db = b.lastEvidence?.evidenceDate;
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return db.localeCompare(da);
-    });
-  } else {
-    // worst-first (default): worst recent score → best
-    results = results.sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return a.weightedAccuracy - b.weightedAccuracy;
-    });
-  }
+  // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
+  results = sortMatrixRows(results, unitSortState);
+  wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
+  updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
 
   const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
   unitStatsList.replaceChildren();
+  if (unitDetailEmpty && unitDetailBody) {
+    unitDetailEmpty.hidden = false;
+    unitDetailBody.hidden = true;
+    unitDetailBody.replaceChildren();
+  }
 
+  // Matriz por conteúdo — mesma gramática da matriz por disciplina (mesmas
+  // 4 colunas), só a entidade muda. Identidade aqui é chip da disciplina
+  // (compacto) + título do conteúdo, porque esta lista cruza disciplinas
+  // (é filtro, não um drill-down já dentro de uma disciplina) — sem a cor
+  // a varredura visual entre disciplinas se perde. Sparkline/data completos
+  // ficam no painel de detalhe ao selecionar a linha, não espremidos na
+  // matriz.
   for (const r of results) {
-    const subject = subjectsById.get(r.subjectId);
-    const row = document.createElement("article");
-    row.className = "unit-stats-row";
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.unitId = String(r.unitId ?? r.id ?? "");
 
-    const header = document.createElement("div");
-    header.className = "unit-stats-header";
-
+    const identityCell = document.createElement("td");
+    identityCell.className = "unit-identity-cell";
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell subject-cell--compact";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
-
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     const title = document.createElement("span");
-    title.className = "unit-stats-title";
+    title.className = "unit-title";
     title.textContent = r.unitTitle;
+    title.title = r.unitTitle;
+    identityCell.append(chip, title);
 
-    header.append(chip, title);
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    const body = document.createElement("div");
-    body.className = "unit-stats-body";
-
-    const sparkEl = buildSparkline(r.scoresSequence);
-    if (sparkEl) body.append(sparkEl);
-
-    const meta = document.createElement("div");
-    meta.className = "unit-stats-meta";
-
-    const accText = r.weightedAccuracy != null
-      ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} q`
-      : "Sem evidência";
-    meta.textContent = accText;
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = hasEvidence ? `${r.totalQuestions} q` : "Sem prática";
+    practiceCell.append(practiceMain);
     if (r.lastEvidence) {
-      const lastDate = document.createElement("span");
-      lastDate.className = "unit-stats-last";
-      lastDate.textContent = ` · ${formatDate(r.lastEvidence.evidenceDate)}`;
-      meta.append(lastDate);
+      const lastDate = document.createElement("div");
+      lastDate.className = "practice-recent";
+      lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
+      lastDate.title = formatDate(r.lastEvidence.evidenceDate);
+      practiceCell.append(lastDate);
     }
 
-    const trendBadge = createTrendBadge(r.trend.direction);
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
 
-    body.append(meta, trendBadge);
-    row.append(header, body);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => showUnitDetail(r));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showUnitDetail(r);
+      }
+    });
     unitStatsList.append(row);
+  }
+}
+
+// Painel de detalhe do conteúdo selecionado — reaproveita exatamente os
+// mesmos campos que a linha da matriz já carregava (nada novo é calculado
+// aqui), só muda a representação: sparkline completa + data por extenso.
+function showUnitDetail(r) {
+  if (!unitDetailPanel) return;
+  for (const tr of unitStatsList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.unitId === String(r.unitId ?? r.id ?? ""));
+  }
+  unitDetailEmpty.hidden = true;
+  unitDetailBody.hidden = false;
+  unitDetailBody.replaceChildren();
+
+  const heading = document.createElement("div");
+  heading.className = "unit-detail-heading";
+  const chip = document.createElement("span");
+  chip.className = "subject-cell";
+  chip.textContent = r.subjectName;
+  chip.title = r.subjectName;
+  chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+  const title = document.createElement("h3");
+  title.className = "unit-detail-title";
+  title.textContent = r.unitTitle;
+  heading.append(chip, title);
+
+  const score = document.createElement("div");
+  score.className = "unit-detail-score";
+  score.textContent = r.weightedAccuracy != null
+    ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} questões`
+    : "Sem evidência registrada";
+
+  const trend = createTrendBadge(r.trend.direction);
+
+  unitDetailBody.append(heading, score, trend);
+
+  if (r.lastEvidence) {
+    const last = document.createElement("p");
+    last.className = "unit-detail-last";
+    last.textContent = `Última prática: ${formatDate(r.lastEvidence.evidenceDate)}`;
+    unitDetailBody.append(last);
+  }
+
+  const sparkEl = buildSparkline(r.scoresSequence, 260, 64);
+  if (sparkEl) {
+    sparkEl.classList.add("unit-detail-spark");
+    unitDetailBody.append(sparkEl);
   }
 }
 
@@ -1841,17 +2372,36 @@ export async function renderSettings() {
   lastBackupLabel.textContent = settings?.lastBackupAt
     ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
     : "Nenhum backup exportado.";
+
+  // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
+  // mode (T20) — restoring a snapshot into the server, and a full-account
+  // wipe, are real operations the migration phase (T25+) and an explicit
+  // future owned-reset endpoint must define deliberately, not something a
+  // client-only local-DB affordance can honestly offer against someone
+  // else's data authority. Rather than leave buttons that fail every
+  // click, this is the "safe explanatory state" tasks.md T22 asks for:
+  // hidden buttons, a plain-language reason in their place.
+  if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
+  if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
+  if (REMOTE_MODE) {
+    setResetMessage("Apagar todos os dados ainda não é uma operação suportada no modo servidor.");
+  }
+  // T28: legacy-import migration only exists against the real server
+  // (T25-T27) — no local-only equivalent, so it's REMOTE_MODE-only,
+  // mirroring how import/reset are REMOTE_MODE-only in the opposite
+  // direction above.
+  if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
 }
 
-// Salva o JSON em disco. No runtime Tauri (desktop/Android) usa o diálogo
-// nativo + fs; o WebView do Android ignora <a download>, então o caminho
-// nativo é obrigatório lá. No navegador (modo dev) cai no <a download>.
+// Salva o JSON em disco. O wrapper remoto não recebe diálogo/FS nativos:
+// nele, exportar permanece um download do próprio WebView. O caminho nativo
+// fica restrito ao legado local, onde as permissões correspondentes existem.
 async function saveBackupFile(filename, contents) {
-  if (hasTauriRuntime()) {
+  if (hasTauriRuntime() && !REMOTE_MODE) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({
@@ -1890,7 +2440,15 @@ export async function exportBackup() {
       return; // exportação cancelada pelo usuário
     }
 
-    await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    // Best-effort bookkeeping only — the export itself already succeeded
+    // and was saved, so a failure here (e.g. remote mode doesn't track
+    // lastBackupAt at all, per T18's settings contract) must never turn
+    // an already-successful export into a reported failure.
+    try {
+      await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    } catch (metaError) {
+      console.warn("Não foi possível registrar a data do último backup.", metaError);
+    }
     await renderSettings();
     backupMessage.textContent = "Backup exportado com sucesso.";
   } catch (error) {
@@ -1915,6 +2473,661 @@ function setResetMessage(message = "", isError = false) {
   resetMessage.classList.toggle("is-error", isError);
   resetMessage.textContent = message;
 }
+
+function setMigrationMessage(message = "", isError = false) {
+  if (!migrationMessage) return;
+  migrationMessage.classList.toggle("is-error", isError);
+  migrationMessage.textContent = message;
+}
+
+function resetMigrationPanels() {
+  migrationActivePreview = null;
+  migrationLastReport = null;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  if (migrationCounts) migrationCounts.replaceChildren();
+  if (migrationWarnings) migrationWarnings.replaceChildren();
+  if (migrationConflicts) migrationConflicts.replaceChildren();
+}
+
+function renderMigrationPreview(preview) {
+  migrationActivePreview = preview;
+  if (migrationCounts) {
+    migrationCounts.replaceChildren();
+    for (const [key, value] of Object.entries(preview.counts ?? {})) {
+      const dt = document.createElement("dt");
+      dt.textContent = MigrationUI.entityLabel(key);
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      migrationCounts.append(dt, dd);
+    }
+  }
+  if (migrationWarnings) {
+    migrationWarnings.replaceChildren();
+    for (const warning of preview.warnings ?? []) {
+      const li = document.createElement("li");
+      li.textContent = warning.message ?? warning.code ?? String(warning);
+      migrationWarnings.append(li);
+    }
+  }
+  const hasConflicts = (preview.conflicts ?? []).length > 0;
+  if (migrationConflicts) {
+    migrationConflicts.replaceChildren();
+    for (const conflict of preview.conflicts ?? []) {
+      const li = document.createElement("li");
+      li.textContent = conflict.reason === 'ARCHIVED_HOMONYM'
+        ? `"${conflict.name}" já existe nesta conta como disciplina arquivada — reative-a nas Disciplinas ou renomeie a de origem e envie o arquivo novamente.`
+        : `"${conflict.name}" já existe nesta conta — renomeie a disciplina de origem e envie o arquivo novamente para importar este item.`;
+      migrationConflicts.append(li);
+    }
+  }
+  if (migrationConfirmBtn) migrationConfirmBtn.disabled = hasConflicts;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = false;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  setMigrationMessage(hasConflicts
+    ? "Há conflitos de nome — resolva-os antes de confirmar (veja a lista abaixo)."
+    : "Revise os itens acima. Confirmar grava esses dados nesta conta.");
+}
+
+migrationChooseFileButton?.addEventListener("click", () => {
+  migrationFileInput?.click();
+});
+
+migrationFileInput?.addEventListener("change", async () => {
+  const [file] = migrationFileInput.files ?? [];
+  if (!file) return;
+  resetMigrationPanels();
+  setMigrationMessage("Lendo e validando o arquivo...");
+  try {
+    const rawSource = JSON.parse(await readFileText(file));
+    const result = await MigrationUI.previewImport(rawSource);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível gerar a prévia desta importação.", true);
+      return;
+    }
+    renderMigrationPreview(result.preview);
+  } catch (error) {
+    setMigrationMessage(
+      error instanceof SyntaxError
+        ? "O arquivo selecionado não contém JSON válido."
+        : "Não foi possível ler o arquivo selecionado.",
+      true,
+    );
+    console.error("Falha ao gerar prévia de migração.", error);
+  } finally {
+    migrationFileInput.value = "";
+  }
+});
+
+migrationCancelBtn?.addEventListener("click", () => {
+  resetMigrationPanels();
+  setMigrationMessage("Importação cancelada. Nenhum dado foi alterado.");
+});
+
+migrationConfirmBtn?.addEventListener("click", async () => {
+  if (!migrationActivePreview) return;
+  const confirmed = await showConfirm(
+    "Confirmar grava estes dados de forma real e definitiva nesta conta. Continuar?",
+  );
+  if (!confirmed) return;
+
+  migrationConfirmBtn.disabled = true;
+  setMigrationMessage("Confirmando importação...");
+  try {
+    const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível confirmar a importação.", true);
+      migrationConfirmBtn.disabled = false; // still on the preview panel — must stay clickable to retry
+      return;
+    }
+    migrationLastReport = MigrationUI.buildMigrationReport({ preview: migrationActivePreview, commit: result.commit });
+    if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+    if (migrationResultPanel) migrationResultPanel.hidden = false;
+    if (migrationResultSummary) {
+      const parts = Object.entries(result.commit.counts ?? {})
+        .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
+      migrationResultSummary.textContent = `Importação concluída — ${parts.join(", ")}.`;
+    }
+    setMigrationMessage("");
+    // Deliberately NOT re-enabling migrationConfirmBtn here: the preview
+    // panel is now hidden, so its own enabled/disabled state is moot until
+    // the next previewImport() explicitly sets it — resetting it here on a
+    // delay (after these renders) could otherwise race a fresh preview the
+    // user already started uploading and silently re-enable a
+    // conflict-blocked confirm underneath them.
+    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
+  } catch (error) {
+    setMigrationMessage("Não foi possível confirmar a importação.", true);
+    migrationConfirmBtn.disabled = false;
+    console.error("Falha ao confirmar migração.", error);
+  }
+});
+
+migrationDownloadReportBtn?.addEventListener("click", async () => {
+  if (!migrationLastReport) return;
+  await saveBackupFile(
+    `smartlearn-migracao-${getLocalDateValue()}.json`,
+    JSON.stringify(migrationLastReport, null, 2),
+  );
+});
+
+function setSourcesMessage(message = "", isError = false) {
+  if (!sourcesMessage) return;
+  sourcesMessage.classList.toggle("is-error", isError);
+  sourcesMessage.textContent = message;
+}
+
+function createSourceProposalItem(proposal) {
+  const li = document.createElement("li");
+  li.className = "source-proposal-item";
+  li.dataset.proposalId = String(proposal.id);
+
+  const range = createTextElement(
+    "p",
+    "source-proposal-range",
+    proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`,
+  );
+
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.className = "source-proposal-title-input";
+  titleInput.value = proposal.title;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "small-button";
+  saveBtn.dataset.action = "save-proposal-title";
+  saveBtn.textContent = "Salvar título";
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "text-button";
+  toggleBtn.dataset.action = "toggle-proposal-excerpt";
+  toggleBtn.textContent = "Ver trecho da fonte";
+
+  const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
+  excerpt.hidden = true;
+
+  const generateDraftBtn = document.createElement("button");
+  generateDraftBtn.type = "button";
+  generateDraftBtn.className = "small-button";
+  generateDraftBtn.dataset.action = "generate-draft";
+  generateDraftBtn.textContent = "Gerar rascunho com IA";
+
+  const draftPanel = document.createElement("div");
+  draftPanel.className = "source-draft-panel";
+  draftPanel.hidden = true;
+
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
+  return li;
+}
+
+// T38: renders one generated draft for inspection/acceptance. Every
+// rendering carries the same explicit caveat — this is unverified AI
+// output, not a medical/scientific claim (design.md/T37/T38).
+// PRODUCT-REAL-01 P1_PRODUCT A: before this, accepting a draft could only
+// ever create a NEW subject (free-text name) — a returning student adding
+// more material to a discipline they already created had no way to pick
+// it, and typing the existing name outright failed ("Já existe uma
+// disciplina com esse nome."). The server already supports accepting
+// with either `subjectId` (existing) or `newSubjectName` (create) — see
+// accept-draft.js — this was a client-only gap. Mirrors the exact same
+// existing-vs-new pattern Plano's own new-unit form already uses.
+function renderDraftPanel(draftPanel, draft, subjects = []) {
+  draftPanel.dataset.draftId = String(draft.id);
+  draftPanel.dataset.revision = String(draft.revision);
+  draftPanel.replaceChildren();
+
+  const caveat = createTextElement(
+    "p",
+    "source-draft-caveat",
+    "Rascunho gerado por IA — não verificado. Revise cada questão antes de aceitar; isto não é uma validação científica ou médica do conteúdo.",
+  );
+  const summary = createTextElement("p", "source-draft-summary", draft.summary);
+
+  const questionsList = document.createElement("ul");
+  questionsList.className = "source-draft-questions";
+  for (const question of draft.questions ?? []) {
+    const item = document.createElement("li");
+    item.append(
+      createTextElement("p", "source-draft-question", question.question),
+      createTextElement("p", "source-draft-answer", question.answer),
+    );
+    questionsList.append(item);
+  }
+
+  const subjectSelect = document.createElement("select");
+  subjectSelect.className = "source-draft-subject-select";
+  subjectSelect.setAttribute("aria-label", "Disciplina existente");
+  const newSubjectOption = document.createElement("option");
+  newSubjectOption.value = "";
+  newSubjectOption.textContent = "+ Nova disciplina (usar campo abaixo)";
+  subjectSelect.append(newSubjectOption);
+  for (const subject of subjects) {
+    const opt = document.createElement("option");
+    opt.value = String(subject.id);
+    opt.textContent = subject.name;
+    subjectSelect.append(opt);
+  }
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.className = "source-draft-subject-input";
+  subjectInput.placeholder = "Nome da disciplina";
+  subjectInput.setAttribute("aria-label", "Nome da disciplina");
+
+  subjectSelect.addEventListener("change", () => {
+    const pickedExisting = subjectSelect.value !== "";
+    subjectInput.disabled = pickedExisting;
+    if (pickedExisting) subjectInput.value = "";
+  });
+
+  const dateInput = document.createElement("input");
+  dateInput.type = "date";
+  dateInput.className = "source-draft-date-input";
+  dateInput.value = getLocalDateValue();
+  dateInput.setAttribute("aria-label", "Data da aula");
+
+  const acceptBtn = document.createElement("button");
+  acceptBtn.type = "button";
+  acceptBtn.className = "primary-button";
+  acceptBtn.dataset.action = "accept-draft";
+  acceptBtn.textContent = "Aceitar e criar aula";
+
+  const resultMessage = createTextElement("p", "source-draft-result", "");
+
+  draftPanel.append(caveat, summary, questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.hidden = false;
+  enhanceSelect(subjectSelect);
+}
+
+function renderSourceProposals(proposals) {
+  if (!sourcesProposalsList) return;
+  sourcesProposalsList.replaceChildren();
+  for (const proposal of proposals) {
+    sourcesProposalsList.append(createSourceProposalItem(proposal));
+  }
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+}
+
+sourcesChooseFileButton?.addEventListener("click", () => {
+  sourcesFileInput?.click();
+});
+
+sourcesFileInput?.addEventListener("change", async () => {
+  const [file] = sourcesFileInput.files ?? [];
+  if (!file) return;
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
+  if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+
+  try {
+    setSourcesMessage("Enviando PDF...");
+    const uploadResult = await SourceProposalsUI.uploadSource(file);
+    if (!uploadResult.ok) {
+      setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
+      return;
+    }
+
+    setSourcesMessage("Extraindo texto do PDF...");
+    const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
+    if (!extractResult.ok) {
+      setSourcesMessage(extractResult.message || "Não foi possível extrair o texto do PDF.", true);
+      return;
+    }
+    if (extractResult.extraction.status !== "EXTRACTED") {
+      const reasons = {
+        ENCRYPTED: "Este PDF está criptografado e não pode ser lido.",
+        TIMEOUT: "A extração excedeu o tempo limite.",
+        IMAGE_ONLY_OR_UNREADABLE: "Este PDF parece ser apenas imagem (sem texto extraível).",
+        EXTRACTION_FAILED: "Não foi possível extrair o texto deste PDF.",
+      };
+      setSourcesMessage(reasons[extractResult.extraction.status] || "Não foi possível extrair o texto deste PDF.", true);
+      return;
+    }
+
+    setSourcesMessage("Gerando trechos propostos...");
+    const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
+    if (!chunkResult.ok) {
+      setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
+      return;
+    }
+
+    renderSourceProposals(chunkResult.proposals);
+    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.`);
+  } catch (error) {
+    setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
+    console.error("Falha ao processar fonte enviada.", error);
+  } finally {
+    sourcesFileInput.value = "";
+  }
+});
+
+sourcesProposalsList?.addEventListener("click", async (event) => {
+  const item = event.target.closest(".source-proposal-item");
+  if (!item) return;
+  const proposalId = item.dataset.proposalId;
+
+  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
+  if (toggleBtn) {
+    const excerptEl = item.querySelector(".source-proposal-excerpt");
+    if (!excerptEl) return;
+    if (excerptEl.hidden) {
+      const result = await SourceProposalsUI.getProposal(proposalId);
+      if (result.ok) excerptEl.textContent = result.proposal.excerpt;
+      excerptEl.hidden = false;
+      toggleBtn.textContent = "Ocultar trecho da fonte";
+    } else {
+      excerptEl.hidden = true;
+      toggleBtn.textContent = "Ver trecho da fonte";
+    }
+    return;
+  }
+
+  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
+  if (saveBtn) {
+    const input = item.querySelector(".source-proposal-title-input");
+    if (!input) return;
+    saveBtn.disabled = true;
+    try {
+      const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
+      if (result.ok) {
+        setSourcesMessage("Título atualizado.");
+      } else {
+        setSourcesMessage(result.message || "Não foi possível salvar o título.", true);
+      }
+    } finally {
+      saveBtn.disabled = false;
+    }
+    return;
+  }
+
+  const generateDraftBtn = event.target.closest('[data-action="generate-draft"]');
+  if (generateDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    generateDraftBtn.disabled = true;
+    setSourcesMessage("Gerando rascunho com IA...");
+    try {
+      const result = await DraftReviewUI.generateDraft(proposalId);
+      if (!result.ok) {
+        setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
+        return;
+      }
+      // P1_PRODUCT A: existing subjects, so the accept form can offer
+      // reusing one instead of only ever creating a new one.
+      const existingSubjects = await DB.subjects.getActive().catch(() => []);
+      renderDraftPanel(draftPanel, result.draft, existingSubjects);
+      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+    } finally {
+      generateDraftBtn.disabled = false;
+    }
+    return;
+  }
+
+  const acceptDraftBtn = event.target.closest('[data-action="accept-draft"]');
+  if (acceptDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    const draftId = draftPanel.dataset.draftId;
+    const subjectSelect = draftPanel.querySelector(".source-draft-subject-select");
+    const subjectInput = draftPanel.querySelector(".source-draft-subject-input");
+    const dateInput = draftPanel.querySelector(".source-draft-date-input");
+    const resultMessage = draftPanel.querySelector(".source-draft-result");
+
+    // P1_PRODUCT A: an existing subject picked in the select wins over the
+    // free-text field — the server's own contract already distinguishes
+    // subjectId (reuse) from newSubjectName (create); this was only ever
+    // a client gap.
+    const pickedSubjectId = subjectSelect?.value ? Number(subjectSelect.value) : null;
+
+    acceptDraftBtn.disabled = true;
+    try {
+      const result = await DraftReviewUI.acceptDraft(draftId, {
+        subjectId: pickedSubjectId ?? undefined,
+        newSubjectName: pickedSubjectId ? undefined : subjectInput?.value,
+        studyDate: dateInput?.value,
+        expectedRevision: Number(draftPanel.dataset.revision),
+      });
+      if (!result.ok) {
+        if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
+        acceptDraftBtn.disabled = false;
+        return;
+      }
+      if (resultMessage) {
+        resultMessage.classList.remove("is-error");
+        resultMessage.textContent = `Aula criada: ${result.acceptance.exerciseCount} exercício(s), ${result.acceptance.reviewCount} revisões agendadas.`;
+      }
+      acceptDraftBtn.textContent = "Aceito";
+      // PV1-01: continuity after accept — the acceptance response already
+      // carries the created unit (real contract field: `acceptance.unit`,
+      // confirmed in server/src/services/accept-draft.js's `unitDto`), so
+      // "Estudar agora" needs no extra fetch. The user should never have
+      // to go find the just-created unit in Plano/Hoje themselves.
+      if (!draftPanel.querySelector('[data-action="study-now"]')) {
+        const studyNowBtn = document.createElement("button");
+        studyNowBtn.type = "button";
+        studyNowBtn.className = "primary-button";
+        studyNowBtn.dataset.action = "study-now";
+        studyNowBtn.textContent = "Estudar agora";
+        studyNowBtn.addEventListener("click", () => {
+          startStudyNow(result.acceptance.unit, result.acceptance.subject?.name);
+        });
+        draftPanel.append(studyNowBtn);
+      }
+      await Promise.all([renderSubjects(), renderStudies(), renderToday()]);
+    } catch (error) {
+      if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
+      console.error("Falha ao aceitar rascunho.", error);
+      acceptDraftBtn.disabled = false;
+    }
+  }
+});
+
+// PV1-01: the first learning journey's focused study surface — reachable
+// via "Estudar agora" right after accepting a draft, not necessarily a
+// permanent nav item (task's own wording). Reuses the existing
+// DB.attempts/DB.exercises/DB.learningEvidence contracts exactly as the
+// Hoje review UI does (see ensureAttemptStarted above) — the one real
+// difference is deliberate: no reviewTaskId is ever passed (this is
+// INITIAL_PRACTICE, not a scheduled review), and no review_task is ever
+// created or completed by this flow. One question at a time, per spec.
+let studyNowState = null;
+
+async function startStudyNow(unit, subjectName) {
+  if (!unit) return;
+  studyNowSubjectEl.textContent = subjectName ?? "";
+  studyNowTitleEl.textContent = unit.title ?? "";
+  if (unit.summaryBody) {
+    studyNowSummaryCard.hidden = false;
+    studyNowSummaryBody.textContent = unit.summaryBody;
+  } else {
+    studyNowSummaryCard.hidden = true;
+    studyNowSummaryBody.textContent = "";
+  }
+  studyNowResultCard.hidden = true;
+  studyNowResultText.textContent = "";
+  studyNowNextReviewText.textContent = "";
+  studyNowReviewErrorsBtn.hidden = true;
+  studyNowErrorsList.hidden = true;
+  studyNowErrorsList.replaceChildren();
+  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, correctCount: 0, answeredCount: 0, wrongExercises: [] };
+  showScreen("study-now", { focus: true });
+
+  try {
+    studyNowState.exercises = await DB.exercises.getAll(unit.id);
+  } catch (error) {
+    console.error("Falha ao carregar exercícios da unidade.", error);
+    studyNowState.exercises = [];
+  }
+  renderStudyNowQuestion();
+}
+
+function renderStudyNowQuestion() {
+  const state = studyNowState;
+  if (!state) return;
+
+  if (state.exercises.length === 0) {
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = false;
+    studyNowProgress.textContent = "";
+    return;
+  }
+
+  if (state.index >= state.exercises.length) {
+    finishStudyNowSession();
+    return;
+  }
+
+  studyNowNoExercises.hidden = true;
+  studyNowQuestionArea.hidden = false;
+
+  const exercise = state.exercises[state.index];
+  studyNowQuestionText.textContent = exercise.questionText;
+  studyNowAnswerText.textContent = exercise.answerText;
+  studyNowAnswerText.hidden = true;
+  if (exercise.hintText) {
+    // Honest reuse, not invention: shown unconditionally exactly like the
+    // Hoje review UI already does (a hint the learner can already see is
+    // truthfully "available", not a fabricated NONE for it).
+    studyNowHintText.textContent = exercise.hintText;
+    studyNowHintText.hidden = false;
+  } else {
+    studyNowHintText.hidden = true;
+    studyNowHintText.textContent = "";
+  }
+  studyNowJudgment.hidden = true;
+  studyNowRevealBtn.hidden = false;
+  studyNowRevealBtn.textContent = "Ver resposta";
+  studyNowProgress.textContent = `Questão ${state.index + 1} de ${state.exercises.length}`;
+  state.attemptId = null;
+  delete studyNowQuestionArea.dataset.attemptId;
+}
+
+async function finishStudyNowSession() {
+  const state = studyNowState;
+  if (!state) return;
+  studyNowQuestionArea.hidden = true;
+  studyNowProgress.textContent = "";
+
+  const { unitId, answeredCount, correctCount } = state;
+  if (answeredCount > 0) {
+    try {
+      await DB.learningEvidence.create({
+        unitId,
+        context: "INITIAL_PRACTICE",
+        questionsCount: answeredCount,
+        correctCount,
+        evidenceDate: getLocalDateValue(),
+      });
+    } catch (error) {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+    }
+  }
+
+  const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+  studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+
+  try {
+    const tasks = await DB.reviewTasks.getByUnit(unitId);
+    const next = getNextReview(unitId, tasks);
+    studyNowNextReviewText.textContent = next ? `Próxima revisão: ${formatDate(next)}` : "Nenhuma revisão pendente.";
+  } catch (error) {
+    console.error("Falha ao buscar próxima revisão.", error);
+    studyNowNextReviewText.textContent = "";
+  }
+
+  // Slice 2: the session must not end on a bare score alone — the wrong
+  // answers are the most valuable part of it. Reuses exactly the
+  // question/answer this same session already showed; no new quiz
+  // mechanism, no new analytics, no schema change.
+  if (state.wrongExercises.length > 0) {
+    studyNowReviewErrorsBtn.hidden = false;
+    studyNowReviewErrorsBtn.textContent = `Revisar meus erros (${state.wrongExercises.length})`;
+    studyNowErrorsList.replaceChildren();
+    for (const wrong of state.wrongExercises) {
+      const li = document.createElement("li");
+      li.className = "study-now-error-item";
+      li.append(
+        createTextElement("p", "study-now-error-question", wrong.questionText),
+        createTextElement("p", "study-now-error-answer", wrong.answerText),
+      );
+      studyNowErrorsList.append(li);
+    }
+  } else {
+    studyNowReviewErrorsBtn.hidden = true;
+    studyNowErrorsList.hidden = true;
+  }
+
+  studyNowResultCard.hidden = false;
+  studyNowState = null;
+  renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+  renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+}
+
+studyNowReviewErrorsBtn?.addEventListener("click", () => {
+  studyNowErrorsList.hidden = !studyNowErrorsList.hidden;
+  studyNowReviewErrorsBtn.setAttribute("aria-expanded", String(!studyNowErrorsList.hidden));
+});
+
+studyNowRevealBtn?.addEventListener("click", async () => {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+  const exercise = state.exercises[state.index];
+
+  studyNowAnswerText.hidden = false;
+  studyNowJudgment.hidden = false;
+  studyNowRevealBtn.hidden = true;
+
+  if (REMOTE_MODE && DB.attempts) {
+    try {
+      // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
+      const attempt = await DB.attempts.start(exercise.id);
+      state.attemptId = attempt.id;
+      // Real, observable signal (same idiom as ensureAttemptStarted's
+      // exItem.dataset.attemptId above) — lets tests confirm a real
+      // server-owned attempt exists without a dedicated listing endpoint.
+      studyNowQuestionArea.dataset.attemptId = String(attempt.id);
+      if (exercise.hintText) {
+        try { await DB.attempts.useHint(attempt.id); }
+        catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
+      }
+      await DB.attempts.revealSolution(attempt.id);
+    } catch (error) {
+      console.error("Falha ao iniciar tentativa (prática inicial).", error);
+    }
+  }
+});
+
+async function judgeStudyNow(isCorrect) {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+
+  state.answeredCount += 1;
+  if (isCorrect) {
+    state.correctCount += 1;
+  } else {
+    // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): keep the exact question/answer
+    // this session already has in memory — no new fetch, no new quiz
+    // mechanism, just remembering what was already shown so the result
+    // screen can offer "Revisar meus erros" instead of ending on a bare score.
+    const exercise = state.exercises[state.index];
+    state.wrongExercises.push({ questionText: exercise.questionText, answerText: exercise.answerText });
+  }
+
+  if (REMOTE_MODE && DB.attempts && state.attemptId) {
+    try {
+      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+    } catch (error) {
+      console.error("Falha ao registrar resultado (prática inicial).", error);
+    }
+  }
+
+  state.index += 1;
+  renderStudyNowQuestion();
+}
+
+studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
+studyNowIncorrectBtn?.addEventListener("click", () => judgeStudyNow(false));
 
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
@@ -2214,6 +3427,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
       subjectSelect.value = remembered;
     }
   }
+  syncSelect(subjectSelect);
 
   renderSubjectList(allSubjects);
 }
@@ -2302,12 +3516,54 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
+const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now"]);
+
+// T22: "register" (#screen-register, "Cadastro") was removed from the NAV
+// in a prior decision (P1-2), but is NOT dead — it is the only UI in the
+// app that manages exercises (add/edit/delete), a real product capability
+// with no other entry point today (confirmed by hands-on verification:
+// Plano's own unit rows have no exercise-authoring section at all). An
+// earlier version of this comment/redirect wrongly assumed it was a
+// redundant duplicate of Plano's create-unit flow and redirected #register
+// away, which would have made exercise management completely
+// unreachable — reverted before landing. Preserving required entry
+// behavior (per tasks.md T22) means leaving #register reachable exactly
+// as P1-2 left it: nav-hidden, but a direct/bookmarked hash still works.
+// A real fix (surfacing exercise management from Plano/Hoje instead of
+// this legacy screen) is future UI work, not a T22 redirect decision.
+
 export function showScreen(screenId, { focus = false } = {}) {
-  const nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+  let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+
+  // Remote mode: a data screen with no authenticated session is a login
+  // requirement, not empty data — redirect to Conta rather than attempting
+  // (and failing 401 on) a render.
+  if (REMOTE_MODE && databaseAvailable && !authenticated && DATA_SCREENS.has(nextScreen)) {
+    nextScreen = "account";
+  }
+
+  // PV1-01: Materiais is exclusive to LOCAL_DESKTOP_AUTHORITY — a direct/
+  // bookmarked #materials hash must not expose the screen under plain
+  // REMOTE_AUTHORITY (no local backend), even though the nav item is
+  // already hidden for that case (hiding the nav button alone doesn't
+  // stop a direct hash navigation).
+  if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
+    nextScreen = DEFAULT_SCREEN;
+  }
 
   for (const panel of screenPanels) {
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
   }
+
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey
+  // — the scrollable container (.app-main) kept whatever scroll offset the
+  // PREVIOUS screen had, so switching screens after scrolling down landed
+  // mid-content on the new screen instead of at its top (observed
+  // navigating a scrolled Conta into Materiais — arrived mid-paragraph,
+  // not at the "Materiais" heading). showScreen() is the one place every
+  // real screen switch goes through; a same-screen re-click scrolling
+  // back to top is reasonable, not a regression.
+  if (mainContent) mainContent.scrollTop = 0;
 
   for (const item of navigationItems) {
     const isActive = item.dataset.screen === nextScreen;
@@ -2341,6 +3597,21 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
   if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+  }
+  // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
+  // list populated on plain navigation — renderStudies() only ran after a
+  // submission through this same form, leaving units created elsewhere
+  // (e.g. Plano) invisible here even though the underlying data is the
+  // same. Exercise management lives exclusively on this screen (no other
+  // entry point exists), so a unit not appearing here means its
+  // exercises are unmanageable — a real, previously-silent gap, fixed by
+  // wiring this screen's list to the same on-navigate pattern every
+  // other screen already uses.
+  if (nextScreen === "register" && databaseAvailable) {
+    renderStudies().catch((error) => console.error("Falha ao carregar estudos.", error));
+  }
+  if (nextScreen === "account") {
+    renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));
   }
 }
 
@@ -2762,6 +4033,37 @@ studyList.addEventListener("click", async (event) => {
   }
 });
 
+todayPrimaryActionBtn?.addEventListener("click", () => {
+  const reviewId = todayPrimaryActionBtn.dataset.reviewId;
+  if (!reviewId) return;
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  if (!row) return;
+  const body = row.querySelector(".review-row-body");
+  const toggle = row.querySelector('[data-action="toggle-row"]');
+  if (body && body.hidden) {
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggle?.setAttribute("aria-expanded", "true");
+    if (toggle) toggle.textContent = "Recolher";
+  }
+  row.scrollIntoView({ behavior: "smooth", block: "start" });
+  row.classList.add("is-highlighted");
+  setTimeout(() => row.classList.remove("is-highlighted"), 2000);
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="toggle-row"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const body = row?.querySelector(".review-row-body");
+  if (!body) return;
+  const expanded = body.hidden;
+  body.hidden = !expanded;
+  row.classList.toggle("is-open", expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "Recolher" : "Ver conteúdo";
+});
+
 reviewDashboard.addEventListener("click", (event) => {
   const button = event.target.closest('[data-action="toggle-external"]');
   if (!button) return;
@@ -2830,21 +4132,59 @@ reviewDashboard.addEventListener("click", (event) => {
   detail.hidden = !expanded;
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+// T30: lazily starts a server-owned attempt the first time an exercise's
+// answer is revealed in this review, then records the reveal itself as an
+// attributable action. REMOTE_MODE-only (no local equivalent, same pattern
+// as migration-ui.js) and best-effort: a failure here never blocks the
+// existing reveal/judge UI or the aggregate evidence this review already
+// saves — item-level tracking is additive, not a dependency of the save path.
+async function ensureAttemptStarted(exItem) {
+  if (!REMOTE_MODE || !DB.attempts || !exItem) return null;
+  if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
+  const exerciseId = Number(exItem.dataset.exerciseId);
+  if (!Number.isInteger(exerciseId)) return null;
+  const reviewTaskId = Number(exItem.dataset.reviewTaskId);
+  try {
+    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
+    exItem.dataset.attemptId = String(attempt.id);
+    // The hint (when this exercise has one) is already visible in the DOM
+    // unconditionally, not gated behind its own action — so the truthful
+    // observation is that assistance was available from the start, not a
+    // fabricated NONE for a hint the learner could already see.
+    if (exItem.querySelector(".review-exercise-hint")) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (hintError) { console.error("Falha ao registrar uso de dica (item-level tracking).", hintError); }
+    }
+    return exItem.dataset.attemptId;
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa de exercício (item-level tracking).", error);
+    return null;
+  }
+}
+
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
   const answerEl = button.nextElementSibling;
   if (!answerEl) return;
+  const wasHidden = answerEl.hidden;
   answerEl.hidden = !answerEl.hidden;
   button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
   if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
     const judgment = exItem.querySelector(".exercise-judgment");
     if (judgment) judgment.hidden = false;
   }
+  if (wasHidden && !answerEl.hidden) {
+    const attemptId = await ensureAttemptStarted(exItem);
+    if (attemptId) {
+      try { await DB.attempts.revealSolution(attemptId); }
+      catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
+    }
+  }
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
@@ -2853,6 +4193,14 @@ reviewDashboard.addEventListener("click", (event) => {
   const isCorrect = button.dataset.action === "exercise-acertei";
   exItem.dataset.exerciseAnswered = "true";
   exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
+
+  if (REMOTE_MODE && DB.attempts && exItem.dataset.attemptId) {
+    try {
+      await DB.attempts.submit(exItem.dataset.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+    } catch (error) {
+      console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
+    }
+  }
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
   }
@@ -2902,6 +4250,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   const textarea = row.querySelector(".review-summary-edit textarea");
   const messageEl = row.querySelector(".review-summary-message");
   const displayEl = row.querySelector(".review-summary-text");
+  const placeholderEl = row.querySelector(".review-summary-placeholder");
   if (!textarea) return;
 
   const newSummaryBody = textarea.value.trim() || null;
@@ -2909,7 +4258,9 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? updated.title ?? "";
+      displayEl.textContent = updated.summaryBody ?? "";
+      displayEl.hidden = !updated.summaryBody;
+      if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
@@ -3186,7 +4537,9 @@ studyForm.addEventListener("submit", async (event) => {
       studyDate,
       title: content,
       summaryBody,
+      operationKey: studySaveOperation.key,
     });
+    studySaveOperation.renew();
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     await renderStudies();
     studyContentInput.value = "";
@@ -3194,7 +4547,8 @@ studyForm.addEventListener("submit", async (event) => {
     if (studySourceTextInput) studySourceTextInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof NetworkError)) studySaveOperation.renew();
     studyMessage.classList.add("is-error");
     studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
   }
@@ -3202,19 +4556,91 @@ studyForm.addEventListener("submit", async (event) => {
 
 studyDateInput.value = getLocalDateValue();
 await dbInit;
-if (databaseAvailable) {
+if (databaseAvailable && authenticated) {
   await renderSubjects();
   await renderToday();
 }
 
-statsSubjectSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsBySubject().catch(console.error);
-});
-statsUnitFilterSubject?.addEventListener("change", () => {
+// Estatísticas: duas profundidades do mesmo instrumento, não duas telas —
+// alternar não recarrega dados, só troca qual workspace-grid fica visível.
+const statsViewTabs = [
+  { tab: document.querySelector("#tab-stats-subject"), panel: document.querySelector("#view-stats-subject") },
+  { tab: document.querySelector("#tab-stats-unit"), panel: document.querySelector("#view-stats-unit") },
+];
+function setStatsView(activeTab) {
+  for (const { tab, panel } of statsViewTabs) {
+    if (!tab || !panel) continue;
+    const isActive = tab === activeTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    panel.classList.toggle("is-hidden", !isActive);
+  }
+}
+for (const { tab } of statsViewTabs) {
+  tab?.addEventListener("click", () => setStatsView(tab));
+}
+
+// Global select/combobox standardization: the discipline context switcher
+// is a LOCKED, already-approved pattern (trigger = current discipline,
+// menu = alternatives only, subject-cell chip identity preserved) — never
+// redesigned here — but it used to only support click + Escape, missing
+// the arrow-key/Home-End/typeahead roving focus every select-ui.js
+// consumer already has. It now shares the exact same keyboard mechanics
+// (wireListboxKeyboard, src/select-ui.js) as every other select in the
+// app, instead of a hand-rolled subset.
+function isContentContextOpen() {
+  return disciplineSwitchList?.hidden === false;
+}
+function openContentContextMenu() {
+  if (!contentContextPlate || !disciplineSwitchList || isContentContextOpen()) return;
+  contentContextPlate.setAttribute("aria-expanded", "true");
+  disciplineSwitchList.hidden = false;
+  contentContextListKeyboard.setActiveFirst();
+  disciplineSwitchList.tabIndex = 0;
+  disciplineSwitchList.focus({ preventScroll: true });
+}
+function closeContentContextMenu(returnFocus) {
+  if (!contentContextPlate || !disciplineSwitchList || !isContentContextOpen()) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
+  if (returnFocus) contentContextPlate.focus();
+}
+function commitContentContextItem(item) {
+  const btn = item?.querySelector("button[data-subject-id]");
+  if (!btn) return;
+  selectedUnitSubjectId = Number(btn.dataset.subjectId);
+  closeContentContextMenu(true);
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
+}
+const contentContextListKeyboard = disciplineSwitchList
+  ? wireListboxKeyboard(disciplineSwitchList, {
+      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=menuitem]")),
+      onCommit: commitContentContextItem,
+      onEscape: () => closeContentContextMenu(true),
+      onTabAway: () => closeContentContextMenu(false),
+    })
+  : null;
+
+contentContextPlate?.addEventListener("click", () => {
+  if (isContentContextOpen()) closeContentContextMenu(true);
+  else openContentContextMenu();
 });
-statsUnitFilterTrend?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+contentContextPlate?.addEventListener("keydown", (event) => {
+  if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openContentContextMenu();
+  }
+});
+disciplineSwitchList?.addEventListener("click", (event) => {
+  const item = event.target.closest("li[role=menuitem]");
+  if (!item) return;
+  commitContentContextItem(item);
+});
+document.addEventListener("click", (event) => {
+  if (!contentContextPlate || !isContentContextOpen()) return;
+  if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
+  closeContentContextMenu(false);
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
@@ -3250,10 +4676,9 @@ trackingFilterPeriod?.addEventListener("change", () => {
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-});
-statsUnitSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  if (!databaseAvailable) return;
+  renderStatsBySubject().catch(console.error);
+  renderStatsByUnit().catch(console.error);
 });
 
 let newSubjectColor = "DISC-BLUE";
@@ -3308,6 +4733,23 @@ function setPlanFormMessage(msg = "", isError = false) {
   planUnitFormMessage.classList.toggle("is-error", isError);
 }
 
+// T23: one operation key per save INTENT, not per click/request. A
+// double-click or a retry after a lost response reuses the same key, so
+// the server's idempotency guard (T15) returns the original result
+// instead of creating a second unit. Only renew() on an actual new
+// intent (a prior save succeeded, or the user explicitly cancels) — never
+// on a failed attempt, since a retry of the same typed data IS the same
+// intent.
+function createOperationKeyTracker() {
+  let key = crypto.randomUUID();
+  return {
+    get key() { return key; },
+    renew() { key = crypto.randomUUID(); },
+  };
+}
+const planSaveOperation = createOperationKeyTracker();
+const studySaveOperation = createOperationKeyTracker();
+
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
 });
@@ -3317,6 +4759,7 @@ planUnitCancelBtn?.addEventListener("click", () => {
   setPlanSubjectSubformVisible(false);
   setPlanFormMessage();
   if (planNewSubjectInput) planNewSubjectInput.value = "";
+  planSaveOperation.renew();
 });
 
 planShowSubjectForm?.addEventListener("click", () => {
@@ -3331,7 +4774,7 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
   try {
     const newSubject = await DB.subjects.create(name, "DISC-BLUE");
     await renderPlan();
-    if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
+    if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
     setPlanSubjectSubformVisible(false);
     planNewSubjectInput.value = "";
     planStudyTitle.focus();
@@ -3378,10 +4821,13 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
-      : { subjectId, sourceText, studyDate, title, summaryBody };
+      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
-    // Save succeeded — clear draft immediately; render failures below must NOT re-submit
+    // Save succeeded (or an idempotent retry returned the original result)
+    // — this intent is done, the next save is a genuinely new one.
+    planSaveOperation.renew();
+    // Clear draft immediately; render failures below must NOT re-submit
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
@@ -3390,7 +4836,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     setPlanFormMessage("Aula salva. 16 revisões criadas.");
     try {
       await renderPlan();
-      if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      if (planSubjectSelect) { planSubjectSelect.value = String(saved.subjectId); syncSelect(planSubjectSelect); }
       // AC-014: clear subject filter if it would hide the newly saved unit
       if (planFilterSubject && planFilterSubject.value && planFilterSubject.value !== String(saved.subjectId)) {
         planFilterSubject.value = '';
@@ -3402,7 +4848,15 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     } catch {
       setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
     }
-  } catch {
+  } catch (error) {
+    // Only a NetworkError (we genuinely don't know whether the server
+    // committed) keeps the same key, so a retry of the same draft
+    // resolves as an idempotent replay rather than a duplicate. A
+    // definitive rejection (validation, subject conflict) renews it —
+    // the user is expected to change something before retrying, and
+    // reusing the key there would misreport an edited resubmission as an
+    // idempotency conflict instead of validating it fresh.
+    if (!(error instanceof NetworkError)) planSaveOperation.renew();
     setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
   } finally {
     planUnitSaveBtn.disabled = false;
@@ -3421,4 +4875,122 @@ if (import.meta.env?.DEV) {
   };
 }
 
+// T11: minimal account experience. Independent of the BrowserStore-backed
+// learning screens above — see auth-ui.js header comment. Session expiry
+// here never clears any of the learning-form drafts managed elsewhere.
+const accountLoggedOutView = document.querySelector("#account-logged-out-view");
+const accountLoggedInView = document.querySelector("#account-logged-in-view");
+const accountLoginForm = document.querySelector("#account-login-form");
+const accountRegisterForm = document.querySelector("#account-register-form");
+const accountPasswordForm = document.querySelector("#account-password-form");
+const accountLogoutBtn = document.querySelector("#account-logout-btn");
+const accountLoggedInAs = document.querySelector("#account-logged-in-as");
+
+function setAccountMessage(formId, text = "", isError = false) {
+  const el = document.querySelector(`#${formId}-message`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
+
+async function renderAccount() {
+  const user = await AuthUI.bootstrap();
+  const loggedIn = !!user;
+  if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
+  if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
+  if (loggedIn && accountLoggedInAs) {
+    accountLoggedInAs.textContent = `Conectado como ${user.emailDisplay}`;
+  }
+}
+
+document.querySelector("#account-show-register")?.addEventListener("click", () => {
+  accountLoginForm.hidden = true;
+  accountRegisterForm.hidden = false;
+});
+document.querySelector("#account-show-login")?.addEventListener("click", () => {
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountLoginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-login");
+  const email = accountLoginForm.email.value.trim();
+  const password = accountLoginForm.password.value;
+  const result = await AuthUI.login(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-login", result.message, true);
+    return; // draft (email/password fields) stays as typed on failure
+  }
+  accountLoginForm.reset();
+  await renderAccount();
+  // Stays on Conta (matches the existing T11 login UX: "Conectado como X")
+  // rather than auto-navigating — only the auth-gate state changes, so a
+  // manual click on any data screen now works instead of bouncing back here.
+  if (REMOTE_MODE) {
+    authenticated = true;
+    const user = AuthUI.getCurrentUser();
+    if (user) OfflineStore.syncSnapshot(user.id).catch(() => {});
+  }
+});
+
+accountRegisterForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-register");
+  const email = accountRegisterForm.email.value.trim();
+  const password = accountRegisterForm.password.value;
+  const result = await AuthUI.register(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-register", result.message, true);
+    return;
+  }
+  setAccountMessage("account-register", "Conta criada com sucesso. Entre com suas credenciais.");
+  accountRegisterForm.reset();
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountPasswordForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-password");
+  const currentPassword = accountPasswordForm.currentPassword.value;
+  const newPassword = accountPasswordForm.newPassword.value;
+  const result = await AuthUI.changePassword(currentPassword, newPassword);
+  if (!result.ok) {
+    setAccountMessage("account-password", result.message, true);
+    return;
+  }
+  setAccountMessage("account-password", "Senha alterada com sucesso.");
+  accountPasswordForm.reset();
+});
+
+accountLogoutBtn?.addEventListener("click", async () => {
+  await AuthUI.logout();
+  if (REMOTE_MODE) {
+    authenticated = false;
+    // AC-23: the next account to log in on this device must never be able
+    // to read this account's cached agenda snapshot.
+    await OfflineStore.purgeAllAccounts();
+  }
+  await renderAccount();
+});
+
+// T41: a 401 mid-session (server-side expiry/revocation — see
+// api-client.js's handleResponse) locks protected operations and clears
+// stale identity. NOT a logout: the cached offline snapshot legitimately
+// still belongs to this same account, so it is deliberately NOT purged —
+// only OfflineStore.purgeAllAccounts() (an explicit logout/account-switch)
+// does that. Re-confirms with the server (rather than trusting the
+// dispatched event alone) before actually clearing local state.
+if (REMOTE_MODE) {
+  OfflineUI.onUnauthenticated(async () => {
+    const user = await AuthUI.bootstrap();
+    if (user) return; // a stray/transient 401 — the session is actually still valid
+    authenticated = false;
+    await renderAccount();
+    if (DATA_SCREENS.has(window.location.hash.slice(1))) showScreen("account");
+  });
+}
+
+enhanceAllSelects();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);
