@@ -1541,6 +1541,49 @@ h1 {
     min-height: calc(100dvh - 10.5rem);
   }
 
+  /* Matrix tables (Por disciplina/Por conteúdo): auto layout let the
+     identity column's content dictate the whole table's width, forcing
+     silent horizontal scroll with no affordance once a row also carries a
+     unit title (Por conteúdo). Fixed layout + the existing column-width
+     hints make every column honor its share; header labels wrap instead of
+     overflowing since data cells (percentages/counts/badges) are short. */
+  .matrix-table {
+    table-layout: fixed;
+  }
+
+  .matrix-table th,
+  .matrix-table td {
+    overflow: hidden;
+  }
+
+  .matrix-table .th-sort-btn {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .stats-table thead th {
+    font-size: 0.64rem;
+    padding: 0.6rem 0.3rem;
+  }
+
+  .matrix-table td {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+
+  .matrix-table .practice-compact,
+  .matrix-table .practice-recent,
+  .matrix-table .subject-compare-value,
+  .matrix-table .trend-badge {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
   h1 {
     font-size: 2rem;
   }
@@ -1990,8 +2033,9 @@ h1 {
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
-.unit-identity-cell { display: flex; align-items: center; gap: 0.5rem; }
-.unit-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); font-size: 0.88rem; font-weight: 600; }
+.unit-identity-cell { display: flex; align-items: center; gap: 0.4rem; overflow: hidden; }
+.unit-identity-cell .subject-cell--compact { flex: 0 1 auto; min-width: 0; max-width: 6rem; }
+.unit-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); font-size: 0.88rem; font-weight: 600; }
 
 .practice-cell { font-size: 0.82rem; }
 .practice-compact { color: var(--color-text); font-weight: 600; }
