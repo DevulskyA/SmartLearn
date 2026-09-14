@@ -5,8 +5,8 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=4357c3609beba8b535acc76472f7af1ea3de9ee4
-WORKTREE_CLEAN=YES (.impeccable/hook.cache.json untracked, local hook cache, not product code)
+CURRENT_HEAD=1c91020
+WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
 CURRENT_TASK=MASTER_BUILD_PLAN_ROLLOUT (see MASTER_BUILD_PLAN_PATH — supersedes UX_UI_DESIGN_AUDIT, which is DONE: see STATS_VISUAL_PORT below)
@@ -30,9 +30,32 @@ STATS_VISUAL_PORT=DONE (2026-09-14, commit 4357c36) — real #screen-stats now u
   DESIGN.md corrected first (commit a00e3ce): side-stripe ban now scoped to
   review-urgency status, subject-identity stripe explicitly documented/allowed.
 
-NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence C (Hoje) — see phase list in
-  MASTER_BUILD_PLAN_PATH §50. Phases D-H (Plano+Acompanhar, Disciplinas,
-  Configurações+Conta, whole-product pass) not started.
+SEQUENCE_C_HOJE=DONE (2026-09-14, commit 1c91020) — biggest real defect found
+  live (not from reading code alone): every review row rendered fully
+  expanded (resumo + all exercises + detail + external form) for every
+  overdue/today item, contradicting Hoje's own documented intent (master
+  plan §21 "ação, não dashboard"; STATE.md Slice 3 "one primary action, not
+  a wall of fully-expanded rows"). Fixed with progressive disclosure: rows
+  collapse to identity+status+score+mark-done by default, "Ver conteúdo"
+  opens resumo/exercícios/detalhe/externos on demand; "Começar agora" opens
+  the target row's body before scroll+highlight (extends the existing
+  primary-action code path, doesn't replace it). Also fixed Resumo Mestre
+  display duplicating the unit title when no summary exists yet (now a
+  distinct muted placeholder, same pattern already used in Plano's unit
+  detail). Zero data/scoring/schedule changes. Verified live in the real
+  #screen-today (collapse/expand, primary-action auto-open, no console
+  errors on a fresh module load) + e2e/practice.spec.js, offline.spec.js,
+  server-authority.spec.js all green (10/10 — practice.spec.js specifically
+  exercises the now-collapsed review-exercise-item flow).
+
+NEXT_PRODUCT_TASK=MASTER_BUILD_PLAN sequence D (Plano + Acompanhar) — see
+  phase list in MASTER_BUILD_PLAN_PATH §50. Phases E-H (Estatísticas per-
+  disciplina/conteúdo already visually ported at STATS_VISUAL_PORT but not
+  re-audited as its own sequence pass, Disciplinas, Configurações+Conta,
+  whole-product pass) not started. Whole-product design rollout is IN
+  PROGRESS under an explicit user autonomy override (2026-09-14): local/
+  reversible/visual decisions are made without stopping to ask; only
+  functional/schema/architecture-level changes are HUMAN_GATE.
 
 DESIGN_DECISION (2026-09-12):
 - parar novas features visuais temporariamente;
