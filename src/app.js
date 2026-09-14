@@ -1390,6 +1390,17 @@ function createTrendBadge(direction) {
 const subjectSortState = { key: "performance", dir: "asc" };
 const unitSortState = { key: "performance", dir: "asc" };
 
+// Global período control (screen-heading): now shared by both Por
+// disciplina and Por conteúdo, same cutoff rule either table already used.
+// Rows without a lastEvidence date are excluded by a period filter (there's
+// nothing recent to include), never shown as if they matched.
+function filterByPeriod(results, periodValue, today) {
+  if (!periodValue) return results;
+  const days = periodValue === "last-30" ? 30 : periodValue === "last-90" ? 90 : 365;
+  const cutoff = subtractDays(today, days);
+  return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
+}
+
 function sortMatrixRows(results, { key, dir }) {
   const cmp = (get) => (a, b) => {
     const av = get(a);
@@ -1443,6 +1454,7 @@ export async function renderStatsBySubject() {
     DB.subjects.getAll(),
   ]);
   let results = Analytics.bySubject(evidence, units, subjects, today);
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
   results = sortMatrixRows(results, subjectSortState);
   wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
   updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
@@ -1961,13 +1973,8 @@ export async function renderStatsByUnit() {
   renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
   if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
-  if (unitPeriodFilter) {
-    const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
-    const cutoff = subtractDays(today, days);
-    results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
-  }
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
 
   // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
   results = sortMatrixRows(results, unitSortState);
@@ -4505,7 +4512,9 @@ trackingFilterPeriod?.addEventListener("change", () => {
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  if (!databaseAvailable) return;
+  renderStatsBySubject().catch(console.error);
+  renderStatsByUnit().catch(console.error);
 });
 
 let newSubjectColor = "DISC-BLUE";
