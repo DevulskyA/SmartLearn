@@ -5,7 +5,7 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=cf6dcb7
+CURRENT_HEAD=b94c627
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
@@ -107,11 +107,34 @@ SEQUENCE_E_ESTATISTICAS_PROGRESS (2026-09-14, commits 5c4b909, d565e5f,
   each for real trend variety) directly via DB.* in the running dev
   session for visual verification — session-local, not a migration/fixture
   file, nothing committed.
-  Still open on Estatísticas: period -> also scope Por disciplina; the top
-  metric-grid (6 identical cards, DESIGN.md-banned pattern) — explicitly
-  reverted tonight and left alone, a separate decision from tonight's
-  Por-conteúdo-focused correction; Exercícios resolvidos table and the
-  evolution/analysis side panels not yet re-audited against the prototype.
+  4. Period now also scopes Por disciplina (commit 896a8c2):
+     Analytics.bySubject rows gained lastEvidence (additive, same
+     computation Analytics.byUnit already used — no change to
+     weightedAccuracy/totalQuestions/trend/state), both render functions'
+     duplicated cutoff logic extracted into one filterByPeriod() helper.
+  5. /impeccable typeset audit + fix (commit b94c627): mechanical scan
+     clean, but computed-style inspection of a real row found the
+     performance percentage (.subject-compare-value, the one number each
+     row exists to show) at 0.8rem/600 — smaller than its own row's subject
+     label (0.94rem) and practice text (0.82rem). Bumped to 1.05rem/750
+     (DESIGN.md's "focal line" role, an exact fit). createComparisonCell()
+     is shared by both tables, one fix covers both.
+  Audited and left alone (no real defect found, not touched): "Exercícios
+  resolvidos" — looked legacy/card-stacked in a screenshot but is a real
+  <table> with an already deliberate, well-built responsive card treatment
+  for narrow widths (styles.css ~2321+, ::before labels) — not neglected,
+  just easy to misjudge from a screenshot alone.
+  Still open on Estatísticas: the top metric-grid (6 identical cards,
+  DESIGN.md-banned pattern) — explicitly reverted tonight per direct user
+  instruction and left alone; do not re-touch without new explicit
+  direction, it's the one area with real friction tonight. The evolution/
+  analysis side panels (both tabs) not fully re-audited against the
+  prototype's richer version (trend-delta headline, practice-pacing text) —
+  what exists today is a plainer but functional SVG chart, real gap not a
+  regression. One flagged-not-fixed duplication: the evolution chart's own
+  local period selector (3/6/12 months / Tudo) is conceptually different
+  from tonight's new global row-cutoff period control (chart time-range vs.
+  row inclusion) — merging them needs a product decision, not a reflex fix.
 
 NEXT_PRODUCT_TASK=finish Estatísticas per SEQUENCE_E_ESTATISTICAS_PROGRESS
   above (period->Por disciplina next), then F (Disciplinas create/edit
