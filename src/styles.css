@@ -1382,6 +1382,19 @@ h1 {
   line-height: 1.4;
 }
 
+/* Same anti-pattern already documented above for .study-now-hint: a static
+   requirement/instruction is not an error and shouldn't read as one via
+   .field-message's alert-red default (e.g. the register password's
+   "Mínimo de 15 caracteres." hint, always visible, not a validation
+   failure). Neutral styling for informative-only field text. */
+.field-hint {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .study-form {
   margin-top: 2rem;
   padding-top: 2rem;
