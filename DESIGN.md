@@ -51,6 +51,14 @@ Review state is shown by a leading round review-number token tinted by urgency a
 ## Subject identity
 A subject/discipline is identified by a neutral chip (`.subject-cell`): a neutral surface fill, a hairline border, and a solid left stripe in the subject's own color (`subjectColor`) running the full height of the chip. This stripe is a structural identity marker, not decoration — it is the one place in the app where `subjectColor` appears, and it never carries performance or status meaning. Reused as-is anywhere a subject/discipline needs to be identified: matrix rows, the subject-switch trigger, and the subject-switch list (each open option is the same `.subject-cell` chip, not a dot, bullet, or fully-colored row). Do not substitute a colored dot, a fully-tinted surface, or any other marker for this chip. Do not extend the left-stripe treatment to other components (cards, list rows unrelated to subject identity, status indicators) without a separate, explicit decision — it is scoped to subject identity only.
 
+## Single select
+Every finite-option select/listbox (period, state, sort, subject pickers) shares one primitive (`select-ui.js`): a themed button trigger plus an app-owned `role="listbox"` popup, never the browser/OS's native `<option>` menu. The grammar is the same one already approved for the subject context-switcher:
+- **Trigger communicates the current value.** The open menu contains actionable alternatives only — the current value is never repeated as a row inside its own menu.
+- Selecting an alternative promotes it to the trigger; the value it replaced returns to the alternatives list.
+- No redundant selected-row highlight, checkmark, disabled current-option, "Selecionado" label, or radio dot inside the menu — the trigger already carries that information; repeating it is noise, not capability.
+- A true placeholder (e.g. "Selecione...", meaning nothing chosen yet) follows this same rule — it is simply the current value until something real is picked, not a special case.
+- This governs single-selects only. A searchable combobox (only introduced if a list is genuinely long enough to need text filtering — none currently qualify) and the subject context-switcher's own locked mechanics are separate, unaffected by this rule beyond sharing its trigger/menu visual tokens.
+
 ## Theme delivery
 - Theme choice is exposed in Settings and persisted locally on the device.
 - The app applies the theme before the shell paints, so there is no flash of the wrong palette on startup.

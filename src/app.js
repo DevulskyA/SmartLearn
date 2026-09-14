@@ -21,6 +21,7 @@ import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
+import { enhanceAllSelects, enhanceSelect, syncSelect } from "./select-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -1042,6 +1043,7 @@ export async function renderStats() {
       opt.textContent = s.name;
       evolutionFilterSubject.append(opt);
     }
+    syncSelect(evolutionFilterSubject);
   }
   const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
   chartEmpty.hidden = svgRendered;
@@ -1129,6 +1131,7 @@ export async function renderPlan() {
       select.append(opt);
     }
     if (currentValue) select.value = currentValue;
+    syncSelect(select);
   }
   syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
   syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
@@ -1519,6 +1522,7 @@ export async function renderStatsBySubject() {
 function selectSubjectForEvolution(subjectId) {
   if (evolutionFilterSubject) {
     evolutionFilterSubject.value = String(subjectId);
+    syncSelect(evolutionFilterSubject);
     evolutionFilterSubject.dispatchEvent(new Event("change"));
   }
   for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
@@ -1558,6 +1562,7 @@ export async function renderTracking() {
       opt.textContent = s.name;
       trackingFilterSubject.append(opt);
     }
+    syncSelect(trackingFilterSubject);
   }
 
   const subjFilter = trackingFilterSubject?.value ?? "";
@@ -2618,6 +2623,7 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
 
   draftPanel.append(caveat, summary, questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
   draftPanel.hidden = false;
+  enhanceSelect(subjectSelect);
 }
 
 function renderSourceProposals(proposals) {
@@ -3306,6 +3312,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
       subjectSelect.value = remembered;
     }
   }
+  syncSelect(subjectSelect);
 
   renderSubjectList(allSubjects);
 }
@@ -4617,7 +4624,7 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
   try {
     const newSubject = await DB.subjects.create(name, "DISC-BLUE");
     await renderPlan();
-    if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
+    if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
     setPlanSubjectSubformVisible(false);
     planNewSubjectInput.value = "";
     planStudyTitle.focus();
@@ -4679,7 +4686,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     setPlanFormMessage("Aula salva. 16 revisões criadas.");
     try {
       await renderPlan();
-      if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      if (planSubjectSelect) { planSubjectSelect.value = String(saved.subjectId); syncSelect(planSubjectSelect); }
       // AC-014: clear subject filter if it would hide the newly saved unit
       if (planFilterSubject && planFilterSubject.value && planFilterSubject.value !== String(saved.subjectId)) {
         planFilterSubject.value = '';
@@ -4835,4 +4842,5 @@ if (REMOTE_MODE) {
   });
 }
 
+enhanceAllSelects();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

@@ -2056,6 +2056,122 @@ h1 {
   cursor: pointer;
 }
 .select-control select:focus-visible { outline: 0; }
+
+/* Shared select/listbox primitive (select-ui.js). Replaces every native
+   <select>'s open menu — themed trigger already matched the app (this class
+   is reused verbatim), but the popup fell back to the browser/OS's own
+   white/native chrome once opened. The menu is appended to <body> and
+   positioned with fixed coordinates (not nested in-flow) so no scrollable
+   or overflow:hidden ancestor (table cells, card panels) can clip it, and
+   so it can flip above the trigger near the viewport's bottom edge. */
+.ui-select {
+  display: inline-flex;
+  position: relative;
+}
+
+/* Kept "visible" on purpose (not display:none/hidden): screen readers and
+   test automation (Playwright's selectOption) can still operate on the real
+   <select> directly. Sighted/pointer/keyboard users never reach it — 1px,
+   fully transparent, non-interactive to the pointer, and out of Tab order. */
+.ui-select-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ui-select-trigger {
+  appearance: none;
+  width: 100%;
+  min-width: 8rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ui-select-trigger.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-select-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.ui-select-trigger.is-open {
+  border-color: var(--color-primary);
+}
+
+.ui-select-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  transition: transform 140ms ease;
+}
+
+.ui-select-trigger.is-open .ui-select-chevron {
+  transform: rotate(180deg);
+}
+
+.ui-select-menu {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.ui-select-menu:focus-visible {
+  outline: none;
+}
+
+.ui-select-item {
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  line-height: 1.35;
+  cursor: pointer;
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.ui-select-item.is-focused {
+  background: var(--color-surface-sunken);
+}
+
+.ui-select-item.is-disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 47.99rem) {
+  .ui-select-item {
+    min-height: 2.6rem;
+  }
+}
 .sort-control { min-width: 0; }
 
 .matrix-table th:first-child { width: 30%; }
