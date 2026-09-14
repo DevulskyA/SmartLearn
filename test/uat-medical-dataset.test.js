@@ -159,17 +159,15 @@ test('getUatMedicalDataset: produz desempenho baixo, médio e alto entre discipl
   assert.ok(rows.some((r) => r.weightedAccuracy == null), 'esperado ao menos uma disciplina sem evidência (NO_EVIDENCE)');
 });
 
-test('getUatMedicalDataset é reproduzível: duas chamadas produzem a mesma estrutura (mesmas contagens/relacionamentos)', () => {
+test('getUatMedicalDataset é reproduzível: duas chamadas produzem o MESMO objeto, byte a byte, ids inclusive', () => {
+  // A real deepEqual, not just lengths/names — the id counters
+  // (nextUnitId/nextTaskId/nextExerciseId/nextEvidenceId) are module-level
+  // state shared across calls specifically so this must be exercised: an
+  // independent review caught an earlier version of this test passing
+  // while the ids themselves silently continued across calls (unit id 1
+  // vs 14, task id 1 vs 209, evidence id 1 vs 43) because it only compared
+  // lengths and [subjectId, title] tuples, never ids.
   const a = getUatMedicalDataset();
   const b = getUatMedicalDataset();
-  assert.equal(a.subjects.length, b.subjects.length);
-  assert.equal(a.learningUnits.length, b.learningUnits.length);
-  assert.equal(a.reviewTasks.length, b.reviewTasks.length);
-  assert.equal(a.exercises.length, b.exercises.length);
-  assert.equal(a.learningEvidence.length, b.learningEvidence.length);
-  assert.deepEqual(a.subjects.map((s) => s.name), b.subjects.map((s) => s.name));
-  assert.deepEqual(
-    a.learningUnits.map((u) => [u.subjectId, u.title]),
-    b.learningUnits.map((u) => [u.subjectId, u.title]),
-  );
+  assert.deepEqual(a, b, 'two calls in the same process must produce a byte-identical dataset, including every id');
 });

@@ -8,6 +8,7 @@
     "predev": "node scripts/require-work-branch.mjs",
     "dev": "vite",
     "dev:remote": "node scripts/dev-remote.mjs",
+    "dev:uat": "node scripts/dev-uat.mjs",
     "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",

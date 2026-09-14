@@ -1951,7 +1951,10 @@ h1 {
 }
 
 .content-context-plate:focus-visible {
-  outline: 3px solid var(--color-primary-soft);
+  /* Shared focus-visible token with .ui-select-trigger (src/styles.css)
+     instead of a one-off outline width/color — part of "share the same
+     underlying tokens as the rest" (global select standardization). */
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
@@ -1973,12 +1976,22 @@ h1 {
   list-style: none;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 0.7rem;
-  box-shadow: 0 18px 40px oklch(0 0 0 / 0.28);
+  /* Shared elevation/radius tokens with .ui-select-menu instead of
+     one-off hardcoded values (global select standardization) — this
+     popup's own position/z-index stay different on purpose (absolutely
+     positioned within its own relative parent, not portalled to <body>
+     like select-ui.js's menu, so it doesn't need document-level
+     stacking). */
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
 }
 
 .discipline-switch-list[hidden] {
   display: none;
+}
+
+.discipline-switch-list:focus-visible {
+  outline: none;
 }
 
 .discipline-switch-list li {
@@ -1996,7 +2009,20 @@ h1 {
   transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), background 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.discipline-switch-list button.subject-cell:hover,
+.discipline-switch-list button.subject-cell:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Roving-focus indicator (wireListboxKeyboard, src/select-ui.js): real DOM
+   focus stays on the <ul> itself, so keyboard navigation marks the active
+   <li> via this class instead of :focus-visible on its button — mouse
+   hover above still uses :hover/:focus-visible directly for pointer
+   users. Kept as its own approved chip treatment (border+soft background)
+   rather than switching to .ui-select-item's plain sunken-background
+   style, since these rows carry the locked subject-cell color identity a
+   plain text option doesn't have. */
+.discipline-switch-list li.is-focused button.subject-cell,
 .discipline-switch-list button.subject-cell:focus-visible {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);

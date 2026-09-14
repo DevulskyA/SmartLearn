@@ -154,6 +154,20 @@ function buildEvidence(unitId, entries) {
 }
 
 export function getUatMedicalDataset() {
+  // Reset every id counter on each call — these are module-level `let`s
+  // (shared by buildUnit/buildExercises/buildEvidence below) purely so
+  // those helpers don't need an id-generator object threaded through every
+  // call; without this reset, a second call in the same process would
+  // silently continue from wherever the first call left off instead of
+  // reproducing the exact same dataset (found by an independent review:
+  // unit id 1 vs 14, task id 1 vs 209, evidence id 1 vs 43 across two
+  // calls) — directly contradicting this file's own "rebuilds the exact
+  // same shape deterministically any time" claim above.
+  nextUnitId = 1;
+  nextTaskId = 1;
+  nextExerciseId = 1;
+  nextEvidenceId = 1;
+
   const subjects = [
     { id: 1, name: 'Anatomia', color: 'DISC-GREEN', isActive: true, sortOrder: 0 },
     { id: 2, name: 'Fisiologia', color: 'DISC-BLUE', isActive: true, sortOrder: 1 },

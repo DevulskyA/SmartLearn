@@ -21,7 +21,7 @@ import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
-import { enhanceAllSelects, enhanceSelect, syncSelect } from "./select-ui.js";
+import { enhanceAllSelects, enhanceSelect, syncSelect, wireListboxKeyboard } from "./select-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -2000,10 +2000,18 @@ function renderContentContext(activeSubjectRows, currentSubjectId) {
   if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
 
   disciplineSwitchList.replaceChildren();
+  let optionIndex = 0;
   for (const row of activeSubjectRows) {
     if (row.subjectId === currentSubjectId) continue;
     const item = document.createElement("li");
     item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", "false");
+    // Stable per-render id + tabIndex=-1: same roving-focus contract as
+    // select-ui.js's own <li role="option"> items (see wireListboxKeyboard
+    // in src/select-ui.js) — real DOM focus stays on the list itself,
+    // individual items are only ever visually marked via .is-focused.
+    item.id = `discipline-switch-opt-${optionIndex++}`;
+    item.tabIndex = -1;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "subject-cell";
@@ -4530,31 +4538,66 @@ for (const { tab } of statsViewTabs) {
   tab?.addEventListener("click", () => setStatsView(tab));
 }
 
-contentContextPlate?.addEventListener("click", () => {
-  const expanded = contentContextPlate.getAttribute("aria-expanded") === "true";
-  contentContextPlate.setAttribute("aria-expanded", String(!expanded));
-  disciplineSwitchList.hidden = expanded;
-});
-disciplineSwitchList?.addEventListener("click", (event) => {
-  const btn = event.target.closest("button[data-subject-id]");
+// Global select/combobox standardization: the discipline context switcher
+// is a LOCKED, already-approved pattern (trigger = current discipline,
+// menu = alternatives only, subject-cell chip identity preserved) — never
+// redesigned here — but it used to only support click + Escape, missing
+// the arrow-key/Home-End/typeahead roving focus every select-ui.js
+// consumer already has. It now shares the exact same keyboard mechanics
+// (wireListboxKeyboard, src/select-ui.js) as every other select in the
+// app, instead of a hand-rolled subset.
+function isContentContextOpen() {
+  return disciplineSwitchList?.hidden === false;
+}
+function openContentContextMenu() {
+  if (!contentContextPlate || !disciplineSwitchList || isContentContextOpen()) return;
+  contentContextPlate.setAttribute("aria-expanded", "true");
+  disciplineSwitchList.hidden = false;
+  contentContextListKeyboard.setActiveFirst();
+  disciplineSwitchList.tabIndex = 0;
+  disciplineSwitchList.focus({ preventScroll: true });
+}
+function closeContentContextMenu(returnFocus) {
+  if (!contentContextPlate || !disciplineSwitchList || !isContentContextOpen()) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
+  if (returnFocus) contentContextPlate.focus();
+}
+function commitContentContextItem(item) {
+  const btn = item?.querySelector("button[data-subject-id]");
   if (!btn) return;
   selectedUnitSubjectId = Number(btn.dataset.subjectId);
-  disciplineSwitchList.hidden = true;
-  contentContextPlate.setAttribute("aria-expanded", "false");
+  closeContentContextMenu(true);
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
+}
+const contentContextListKeyboard = disciplineSwitchList
+  ? wireListboxKeyboard(disciplineSwitchList, {
+      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=option]")),
+      onCommit: commitContentContextItem,
+      onEscape: () => closeContentContextMenu(true),
+      onTabAway: () => closeContentContextMenu(false),
+    })
+  : null;
+
+contentContextPlate?.addEventListener("click", () => {
+  if (isContentContextOpen()) closeContentContextMenu(true);
+  else openContentContextMenu();
+});
+contentContextPlate?.addEventListener("keydown", (event) => {
+  if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openContentContextMenu();
+  }
+});
+disciplineSwitchList?.addEventListener("click", (event) => {
+  const item = event.target.closest("li[role=option]");
+  if (!item) return;
+  commitContentContextItem(item);
 });
 document.addEventListener("click", (event) => {
-  if (!contentContextPlate || disciplineSwitchList?.hidden !== false) return;
+  if (!contentContextPlate || !isContentContextOpen()) return;
   if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
-  disciplineSwitchList.hidden = true;
-  contentContextPlate.setAttribute("aria-expanded", "false");
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  if (!contentContextPlate || disciplineSwitchList?.hidden !== false) return;
-  disciplineSwitchList.hidden = true;
-  contentContextPlate.setAttribute("aria-expanded", "false");
-  contentContextPlate.focus();
+  closeContentContextMenu(false);
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;

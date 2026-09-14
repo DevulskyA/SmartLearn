@@ -37,6 +37,129 @@
 const registry = new WeakMap();
 let uidCounter = 0;
 
+// Shared roving-focus keyboard mechanics for a role="listbox" popup — one
+// implementation used by every select-ui.js instance AND the approved
+// discipline context-switcher (src/app.js's #discipline-switch-list),
+// which used to only have a hand-rolled subset (click + Escape, no arrow
+// keys/Home/End/typeahead). Callers own opening/closing/rendering; this
+// only owns "given a focused, open listbox <ul>, make ArrowUp/Down/Home/
+// End/typeahead/Enter/Space/Escape work against whatever <li role=option>
+// items getItems() currently returns" — the exact mechanics this file's
+// own Listbox Button pattern already required, now reusable instead of
+// duplicated.
+export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabAway }) {
+  let typeaheadBuffer = "";
+  let typeaheadTimer = null;
+
+  function isDisabled(item) {
+    return item.classList.contains("is-disabled");
+  }
+
+  function focusedIndex(items) {
+    const current = items.findIndex((it) => it.classList.contains("is-focused"));
+    return current >= 0 ? current : 0;
+  }
+
+  function setActive(items, index) {
+    const item = items[index];
+    if (!item) return;
+    menu.setAttribute("aria-activedescendant", item.id);
+    for (const it of items) it.classList.toggle("is-focused", it === item);
+    item.scrollIntoView({ block: "nearest" });
+  }
+
+  function moveFocus(delta) {
+    const items = getItems();
+    if (!items.length) return;
+    let next = focusedIndex(items);
+    for (let step = 0; step < items.length; step++) {
+      next = (next + delta + items.length) % items.length;
+      if (!isDisabled(items[next])) break;
+    }
+    setActive(items, next);
+  }
+
+  function jumpFocus(toEnd) {
+    const items = getItems();
+    if (!items.length) return;
+    if (!toEnd) {
+      const first = items.findIndex((it) => !isDisabled(it));
+      if (first >= 0) setActive(items, first);
+    } else {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (!isDisabled(items[i])) {
+          setActive(items, i);
+          break;
+        }
+      }
+    }
+  }
+
+  function typeahead(char) {
+    const items = getItems();
+    if (!items.length) return;
+    clearTimeout(typeaheadTimer);
+    typeaheadBuffer += char.toLowerCase();
+    typeaheadTimer = setTimeout(() => (typeaheadBuffer = ""), 500);
+    const start = (focusedIndex(items) + 1) % items.length;
+    for (let step = 0; step < items.length; step++) {
+      const idx = (start + step) % items.length;
+      if (isDisabled(items[idx])) continue;
+      if (items[idx].textContent.toLowerCase().startsWith(typeaheadBuffer)) {
+        setActive(items, idx);
+        return;
+      }
+    }
+  }
+
+  menu.addEventListener("keydown", (event) => {
+    switch (event.key) {
+      case "Escape":
+        event.preventDefault();
+        onEscape();
+        return;
+      case "ArrowDown":
+        event.preventDefault();
+        moveFocus(1);
+        return;
+      case "ArrowUp":
+        event.preventDefault();
+        moveFocus(-1);
+        return;
+      case "Home":
+        event.preventDefault();
+        jumpFocus(false);
+        return;
+      case "End":
+        event.preventDefault();
+        jumpFocus(true);
+        return;
+      case "Enter":
+      case " ": {
+        event.preventDefault();
+        const items = getItems();
+        const item = items[focusedIndex(items)];
+        if (item) onCommit(item);
+        return;
+      }
+      case "Tab":
+        onTabAway?.();
+        return;
+      default:
+        if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+          typeahead(event.key);
+        }
+    }
+  });
+
+  return {
+    setActiveFirst() {
+      const items = getItems();
+      if (items.length) setActive(items, 0);
+    },
+  };
+}
+
 function optionsOf(select) {
   return Array.from(select.options);
 }
@@ -117,8 +240,6 @@ function mount(select) {
   select.addEventListener("change", () => api.sync());
 
   let items = [];
-  let typeaheadBuffer = "";
-  let typeaheadTimer = null;
 
   function syncTrigger() {
     const opt = select.options[select.selectedIndex];
@@ -154,14 +275,6 @@ function mount(select) {
       });
   }
 
-  function setActiveDescendant(index) {
-    const item = items[index];
-    if (!item) return;
-    menu.setAttribute("aria-activedescendant", item.id);
-    for (const it of items) it.classList.toggle("is-focused", it === item);
-    item.scrollIntoView({ block: "nearest" });
-  }
-
   function positionMenu() {
     const rect = trigger.getBoundingClientRect();
     const menuHeight = Math.min(menu.scrollHeight, 320);
@@ -191,7 +304,7 @@ function mount(select) {
     trigger.setAttribute("aria-expanded", "true");
     trigger.classList.add("is-open");
     positionMenu();
-    setActiveDescendant(0);
+    listboxKeyboard.setActiveFirst();
     menu.tabIndex = 0;
     menu.focus({ preventScroll: true });
     window.addEventListener("resize", positionMenu);
@@ -221,93 +334,18 @@ function mount(select) {
     if (changed) select.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  function focusedIndex() {
-    const current = items.findIndex((it) => it.classList.contains("is-focused"));
-    return current >= 0 ? current : 0;
-  }
-
-  function moveFocus(delta) {
-    if (!items.length) return;
-    let next = focusedIndex();
-    for (let step = 0; step < items.length; step++) {
-      next = (next + delta + items.length) % items.length;
-      if (!items[next].classList.contains("is-disabled")) break;
-    }
-    setActiveDescendant(next);
-  }
-
-  function jumpFocus(toEnd) {
-    if (!items.length) return;
-    if (!toEnd) {
-      const first = items.findIndex((it) => !it.classList.contains("is-disabled"));
-      if (first >= 0) setActiveDescendant(first);
-    } else {
-      for (let i = items.length - 1; i >= 0; i--) {
-        if (!items[i].classList.contains("is-disabled")) {
-          setActiveDescendant(i);
-          break;
-        }
-      }
-    }
-  }
-
-  function typeahead(char) {
-    clearTimeout(typeaheadTimer);
-    typeaheadBuffer += char.toLowerCase();
-    typeaheadTimer = setTimeout(() => (typeaheadBuffer = ""), 500);
-    const start = (focusedIndex() + 1) % items.length;
-    for (let step = 0; step < items.length; step++) {
-      const idx = (start + step) % items.length;
-      if (items[idx].classList.contains("is-disabled")) continue;
-      if (items[idx].textContent.toLowerCase().startsWith(typeaheadBuffer)) {
-        setActiveDescendant(idx);
-        return;
-      }
-    }
-  }
+  const listboxKeyboard = wireListboxKeyboard(menu, {
+    getItems: () => items,
+    onCommit: (item) => commitRealIndex(Number(item.dataset.index)),
+    onEscape: () => closeMenu(true),
+    onTabAway: () => closeMenu(false),
+  });
 
   trigger.addEventListener("click", () => (isOpen() ? closeMenu(true) : openMenu()));
   trigger.addEventListener("keydown", (event) => {
     if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
       event.preventDefault();
       openMenu();
-    }
-  });
-
-  menu.addEventListener("keydown", (event) => {
-    switch (event.key) {
-      case "Escape":
-        event.preventDefault();
-        closeMenu(true);
-        return;
-      case "ArrowDown":
-        event.preventDefault();
-        moveFocus(1);
-        return;
-      case "ArrowUp":
-        event.preventDefault();
-        moveFocus(-1);
-        return;
-      case "Home":
-        event.preventDefault();
-        jumpFocus(false);
-        return;
-      case "End":
-        event.preventDefault();
-        jumpFocus(true);
-        return;
-      case "Enter":
-      case " ":
-        event.preventDefault();
-        if (items[focusedIndex()]) commitRealIndex(Number(items[focusedIndex()].dataset.index));
-        return;
-      case "Tab":
-        closeMenu(false);
-        return;
-      default:
-        if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
-          typeahead(event.key);
-        }
     }
   });
 
