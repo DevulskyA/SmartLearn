@@ -1704,6 +1704,7 @@ export async function renderDisciplinas() {
     const card = document.createElement("article");
     card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;
     card.dataset.subjectId = String(subj.id);
+    card.style.setProperty("--subject-color", `var(${colorVarForKey(subj.color ?? "DISC-BLUE")})`);
 
     const chipRow = document.createElement("div");
     chipRow.className = "subject-catalog-chip-row";
