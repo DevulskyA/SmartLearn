@@ -1597,26 +1597,6 @@ h1 {
     max-width: 100%;
   }
 
-  /* Acompanhar card header: title had min-width:0 + ellipsis, so it just
-     shrank to a sliver next to the subject chip and status badge instead
-     of the row wrapping — real unit titles ("Farmacocinética — Absorção e
-     Distribuição") were unreadable. Same fix already applied to Plano's
-     compact row (commit 5460f46): reorder via flex `order`, no HTML/JS
-     change — chip+badge share line 1, title gets its own full-width line. */
-  .tracking-card-header .subject-chip {
-    order: 1;
-  }
-  .tracking-card-header .tracking-state-badge {
-    order: 2;
-  }
-  .tracking-card-header .tracking-unit-title {
-    order: 3;
-    flex: 1 1 100%;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
-
   h1 {
     font-size: 2rem;
   }
@@ -1672,6 +1652,32 @@ h1 {
   .subject-actions .small-button,
   .study-actions .small-button {
     flex: 1 1 6rem;
+  }
+}
+
+/* Acompanhar card header: title had min-width:0 + ellipsis, so it just
+   shrank to a sliver next to the subject chip and status badge instead of
+   the row wrapping — real unit titles ("Farmacocinética — Absorção e
+   Distribuição") were unreadable. Same fix already applied to Plano's
+   compact row (commit 5460f46): reorder via flex `order`, no HTML/JS
+   change — chip+badge share line 1, title gets its own full-width line.
+   Wider threshold than the 47.99rem nav/bottom-nav breakpoint above: the
+   sidebar layout (768–~900px) leaves the content column narrow enough for
+   this same overflow to happen even though it isn't the phone-nav case —
+   verified live, a real title still overflowed at exactly 768px. */
+@media (max-width: 60rem) {
+  .tracking-card-header .subject-chip {
+    order: 1;
+  }
+  .tracking-card-header .tracking-state-badge {
+    order: 2;
+  }
+  .tracking-card-header .tracking-unit-title {
+    order: 3;
+    flex: 1 1 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 }
 
