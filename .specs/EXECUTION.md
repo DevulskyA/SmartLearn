@@ -5,7 +5,7 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=b94c627
+CURRENT_HEAD=01d9bdf
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=UNKNOWN (not pushed this session)
 PR=6
@@ -135,6 +135,20 @@ SEQUENCE_E_ESTATISTICAS_PROGRESS (2026-09-14, commits 5c4b909, d565e5f,
   local period selector (3/6/12 months / Tudo) is conceptually different
   from tonight's new global row-cutoff period control (chart time-range vs.
   row inclusion) — merging them needs a product decision, not a reflex fix.
+  6. Accessibility check on the new context-switcher (commit 01d9bdf):
+     Escape had no handler at all (click-outside-to-close existed, Escape
+     didn't) — real gap, fixed, closes + returns focus to the trigger.
+     Verified live with real keyboard focus. (Enter-to-open tested
+     inconclusive in the Browser-pane's key simulation — native button
+     keyboard activation is HTML-spec-guaranteed and nothing in the code
+     blocks it; treated as a tooling artifact, not chased further.)
+
+FULL_REGRESSION_CHECK (2026-09-14, end of this stretch): full `npx
+  playwright test` — 48/48 green, including e2e/production-build.spec.js
+  (real vite build + served single-origin, no dev server) — zero
+  regressions across everything touched tonight (Hoje, Plano, Disciplinas,
+  Estatísticas) plus everything untouched. test/*.test.js 283/283 (last run
+  after the Escape fix).
 
 NEXT_PRODUCT_TASK=finish Estatísticas per SEQUENCE_E_ESTATISTICAS_PROGRESS
   above (period->Por disciplina next), then F (Disciplinas create/edit
