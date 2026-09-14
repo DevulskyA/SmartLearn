@@ -4478,6 +4478,13 @@ document.addEventListener("click", (event) => {
   disciplineSwitchList.hidden = true;
   contentContextPlate.setAttribute("aria-expanded", "false");
 });
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!contentContextPlate || disciplineSwitchList?.hidden !== false) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
+  contentContextPlate.focus();
+});
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
   const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
