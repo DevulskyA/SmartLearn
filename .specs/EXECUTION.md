@@ -5,11 +5,29 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=cc6a8f7
+CURRENT_HEAD=b18bb67
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
-REMOTE_MATCH=UNKNOWN (not pushed this session)
-PR=6, plus a new PR opened this stretch for the select-ui system (see SELECT_UI_ROLLOUT below for number/URL once opened)
-CURRENT_TASK=SELECT_UI_ROLLOUT done, PR pending open — see SELECT_UI_ROLLOUT below. SEQUENCE_H_RESPONSIVE_A11Y_STATES_PASS first lap remains DONE (see SEQUENCE_H_PROGRESS); MASTER_BUILD_PLAN_ROLLOUT resumes after.
+REMOTE_MATCH=YES — pushed this session, origin/claude/smartlearn-v1-complete = b18bb67
+PR=6 (https://github.com/DevulskyA/SmartLearn/pull/6, still DRAFT) — this
+  stretch's work (9 commits, d56604e..b18bb67) is on it, not a new PR; title
+  bumped to "@ 6c65d29", full audit summary posted as a PR comment
+  (10-section report the user asked for: root cause, files touched, data
+  proof, selection-system spec, surfaces migrated, tests, desktop/mobile/
+  a11y evidence, known risks). NO_MERGE, NO_DEPLOY — user is auditing.
+CI_STATUS=was RED before b18bb67 (test job) — pre-existing, unrelated to
+  this session (confirmed same failure on the Sep-12 run too, before this
+  session started): scripts/require-work-branch.mjs exits 1 on every CI
+  checkout because CI is always detached-HEAD, never the named branch the
+  guard checks for. Fixed in b18bb67 (skip the guard when `CI` env var is
+  set — GitHub Actions' own convention — leave local-dev protection
+  unchanged) and pushed. Re-run not yet confirmed green as of this
+  checkpoint — check `gh run list --branch claude/smartlearn-v1-complete
+  --limit 1` on resume; if still red it's a NEW issue, not this same one.
+CURRENT_TASK=Sequence H (mobile/tablet/a11y first lap) DONE + select-ui
+  system DONE, both on PR #6 awaiting user audit — see SELECT_UI_ROLLOUT
+  and SEQUENCE_H_PROGRESS below. Confirm CI green on resume, then
+  MASTER_BUILD_PLAN_ROLLOUT / SEQUENCE_H second lap can continue (see
+  SEQUENCE_H_SECOND_LAP_OPEN below) unless the user has redirected.
 
 P0_DATA_INCIDENT (this stretch): user reported the dataset had disappeared.
   Investigated before touching anything — the real Tauri desktop DB
