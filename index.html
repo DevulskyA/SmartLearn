@@ -402,31 +402,13 @@
             </div>
           </div>
 
-          <div class="stats-overview" aria-label="Resumo de desempenho">
-            <article class="stats-overview-panel">
-              <p class="eyebrow">Revisões</p>
-              <div class="stats-overview-row">
-                <div class="stats-stat stats-stat--alert">
-                  <strong id="metric-reviews-overdue">0</strong>
-                  <span>Vencidas</span>
-                </div>
-                <div class="stats-stat">
-                  <strong id="metric-reviews-pending">0</strong>
-                  <span>Não feitas hoje</span>
-                </div>
-                <div class="stats-stat">
-                  <strong id="metric-reviews-done">0</strong>
-                  <span>Feitas</span>
-                </div>
-              </div>
-            </article>
-            <article class="stats-overview-panel stats-overview-panel--hero">
-              <p class="eyebrow">Desempenho</p>
-              <div class="stats-overview-hero-row">
-                <strong id="metric-average" class="stats-overview-hero-value">0,0%</strong>
-                <p class="stats-overview-hero-detail"><span id="metric-questions">0</span> questões · <span id="metric-correct">0</span> acertos</p>
-              </div>
-            </article>
+          <div class="metric-grid" aria-label="Resumo de desempenho">
+            <article class="metric-card metric-card--alert"><span>Vencidas</span><strong id="metric-reviews-overdue">0</strong></article>
+            <article class="metric-card"><span>Não feitas hoje</span><strong id="metric-reviews-pending">0</strong></article>
+            <article class="metric-card"><span>Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
+            <article class="metric-card"><span>Média geral</span><strong id="metric-average">0,0%</strong></article>
+            <article class="metric-card"><span>Questões</span><strong id="metric-questions">0</strong></article>
+            <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
 
           <div class="view-tabs" role="tablist" aria-label="Profundidade da análise">
