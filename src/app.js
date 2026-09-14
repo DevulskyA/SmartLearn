@@ -576,7 +576,26 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   externalBtn.setAttribute("aria-expanded", "false");
   externalBtn.textContent = "Exercícios externos";
 
-  primary.append(reviewDoneLabel, ...(expandButton ? [expandButton] : []), externalBtn);
+  // Progressive disclosure (Hoje = ação, não dashboard — master build plan
+  // §21): a collapsed row shows only what's needed to decide/act (identity,
+  // status, score-at-a-glance, mark-done). Resumo/exercícios/detalhe/
+  // externos open on demand instead of every card rendering fully expanded.
+  const toggleRowBtn = document.createElement("button");
+  toggleRowBtn.type = "button";
+  toggleRowBtn.className = "review-row-toggle";
+  toggleRowBtn.dataset.action = "toggle-row";
+  toggleRowBtn.setAttribute("aria-expanded", "false");
+  toggleRowBtn.textContent = "Ver conteúdo";
+
+  primary.append(reviewDoneLabel, toggleRowBtn);
+
+  const secondaryControls = document.createElement("div");
+  secondaryControls.className = "review-row-secondary-controls";
+  secondaryControls.append(...(expandButton ? [expandButton] : []), externalBtn);
+
+  const body = document.createElement("div");
+  body.className = "review-row-body";
+  body.hidden = true;
 
   // External exercises section
   const externalSection = document.createElement("div");
@@ -632,9 +651,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   const summarySection = document.createElement("div");
   summarySection.className = "review-row-summary";
 
-  const summaryDisplayText = unit?.summaryBody ?? unit?.title ?? "";
-  const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
+  const summaryHasBody = Boolean(unit?.summaryBody);
+  const summaryDisplay = createTextElement("p", "review-summary-text", unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
+  summaryDisplay.hidden = !summaryHasBody;
+
+  const summaryPlaceholder = createTextElement(
+    "p",
+    "review-summary-placeholder",
+    "Sem resumo salvo. Toque em Editar Resumo para adicionar.",
+  );
+  summaryPlaceholder.hidden = summaryHasBody;
 
   const editSummaryButton = document.createElement("button");
   editSummaryButton.type = "button";
@@ -664,7 +691,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   summaryMessage.setAttribute("aria-live", "polite");
 
   summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
-  summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
+  summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
   if (exercises.length > 0) {
@@ -724,10 +751,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       exercisesReviewSection.append(exItem);
     }
 
-    row.append(header, summarySection, exercisesReviewSection, primary, detail, externalSection);
+    body.append(summarySection, exercisesReviewSection, secondaryControls, detail, externalSection);
   } else {
-    row.append(header, summarySection, primary, detail, externalSection);
+    body.append(summarySection, secondaryControls, detail, externalSection);
   }
+  row.append(header, primary, body);
   return row;
 }
 
@@ -3830,9 +3858,30 @@ todayPrimaryActionBtn?.addEventListener("click", () => {
   if (!reviewId) return;
   const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
   if (!row) return;
+  const body = row.querySelector(".review-row-body");
+  const toggle = row.querySelector('[data-action="toggle-row"]');
+  if (body && body.hidden) {
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggle?.setAttribute("aria-expanded", "true");
+    if (toggle) toggle.textContent = "Recolher";
+  }
   row.scrollIntoView({ behavior: "smooth", block: "start" });
   row.classList.add("is-highlighted");
   setTimeout(() => row.classList.remove("is-highlighted"), 2000);
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="toggle-row"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const body = row?.querySelector(".review-row-body");
+  if (!body) return;
+  const expanded = body.hidden;
+  body.hidden = !expanded;
+  row.classList.toggle("is-open", expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "Recolher" : "Ver conteúdo";
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -4021,6 +4070,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   const textarea = row.querySelector(".review-summary-edit textarea");
   const messageEl = row.querySelector(".review-summary-message");
   const displayEl = row.querySelector(".review-summary-text");
+  const placeholderEl = row.querySelector(".review-summary-placeholder");
   if (!textarea) return;
 
   const newSummaryBody = textarea.value.trim() || null;
@@ -4028,7 +4078,9 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? updated.title ?? "";
+      displayEl.textContent = updated.summaryBody ?? "";
+      displayEl.hidden = !updated.summaryBody;
+      if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
