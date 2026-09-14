@@ -1113,38 +1113,20 @@ h1 {
   margin-top: -0.05rem;
 }
 
-/* P0-3: restores "Recência" (last-activity) sorting without adding a new
-   column — it shares the Prática <th> as a second, visually subordinate
-   sort control (stacked below the primary one) instead of a heavier
-   toolbar/dropdown. Only Prática's own <th> carries a second button; every
-   other sortable header still has exactly one.
-   IMPORTANT: the flex stacking lives on this inner wrapper, NOT on the
-   <th> itself. table-layout:fixed column widths are only honored reliably
-   when the <th> keeps its default table-cell display — setting
-   display:flex directly on the <th> (tried first, verified live) made
-   Chromium ignore this column's specified width entirely, collapsing it
-   to ~5% of the table and truncating both labels to a single illegible
-   letter at the 768-900px width this same file's P1-2 fix targets. */
-.th-sort-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-}
-
-.th-sort-btn-secondary {
-  font-size: 0.68rem;
-  opacity: 0.75;
-}
-
-.th-sort-btn-secondary.is-active {
-  opacity: 1;
-}
-
-.th-sort-btn-secondary .sort-arrow {
-  width: 0.5rem;
-  height: 0.5rem;
-}
+/* P0-3 (revised): restores "Recência" (last-activity) sorting without
+   adding a new column OR changing header geometry at all, at any width —
+   an earlier version shared the Prática <th> as a visually-stacked second
+   button, which changed that header cell's content shape at every
+   breakpoint including the phone width commit ff7dec2 had already fixed
+   and locked, silently re-breaking it (a confirmed regression). Recência
+   is now a second CYCLE STATE on the exact same single Prática button
+   (see wireSortableHeaders in src/app.js): clicking it steps through
+   practice-asc -> practice-desc -> recency-asc -> recency-desc -> back to
+   practice-asc, with the button's own label swapping between "Prática"
+   and "Recência" to name whichever dimension is currently active — one
+   button, one line, the same column, identical geometry to before this
+   capability existed. See .th-sort-btn-practice-recency below only for
+   the JS hook selector; it carries no layout rules of its own. */
 
 .stats-table td:last-child,
 .stats-table thead th:last-child {
@@ -1630,6 +1612,34 @@ h1 {
     max-width: 100%;
   }
 
+  /* Por conteúdo's identity cell packs a subject chip AND a unit title
+     side by side (unlike Por disciplina's chip-only identity) — at phone
+     width the ~30%-wide identity column doesn't have room for both on one
+     line without truncating each to an illegible 1-3 character fragment
+     ("S…", "Aus…" — a real regression found live, not caught by the
+     original ff7dec2 mobile fix because the two-line "Prática"/"Recência"
+     sort header added later shares no layout with this cell but the
+     underlying tightness was always marginal). Stack them instead: each
+     gets the column's FULL width on its own line, which comfortably fits
+     real content instead of splitting an already-narrow column in half. */
+  .unit-identity-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+  .unit-identity-cell .subject-cell--compact {
+    max-width: 100%;
+  }
+  /* .unit-title's own `flex: 1 1 auto` is a main-axis rule that stops
+     doing anything useful once the flex container above switches to a
+     column direction — cross-axis (width) sizing then defaults to the
+     text's natural content width, silently disabling the ellipsis rule
+     already on .unit-title (which needs a real bounded box to have
+     anything to truncate against). A real max-width restores it. */
+  .unit-title {
+    max-width: 100%;
+  }
+
   h1 {
     font-size: 2rem;
   }
@@ -1932,6 +1942,15 @@ h1 {
 }
 
 .content-context-plate {
+  /* .subject-cell already sets white-space:nowrap + text-overflow:ellipsis
+     but as an inline-block-sized element with no width cap it just grows
+     to fit any content instead of ever truncating — a long discipline
+     name ("Patologia Geral, Especial e Correlações Anatomoclínicas
+     Multissistêmicas") made this trigger balloon to its full text width.
+     A real max-width is what actually makes the existing ellipsis rule
+     engage; the full name stays available via the title attribute
+     (renderContentContext, src/app.js). */
+  max-width: min(16rem, 60vw);
   padding-right: 1.9rem;
   cursor: pointer;
   border: none;
@@ -1969,6 +1988,10 @@ h1 {
   top: calc(100% + 0.4rem);
   left: 0;
   min-width: 13rem;
+  /* Same reasoning as .content-context-plate above: without a cap, one
+     long discipline name grows the whole popup (shrink-to-fit sizing on
+     an absolutely positioned box) instead of that one row truncating. */
+  max-width: min(20rem, 80vw);
   max-height: 20rem;
   overflow-y: auto;
   margin: 0;
@@ -2238,23 +2261,31 @@ h1 {
 .matrix-table th:nth-child(3) { width: 24%; }
 
 /* P1-2: the phone-width fix above (table-layout:fixed + overflow/ellipsis,
-   under the 47.99rem breakpoint) never covered the 768–900px range — past
-   the phone breakpoint but still narrow, because the app's sidebar layout
-   starts exactly at 48rem/768px and eats real horizontal space from the
-   table's own available width even though workspace-grid is already
-   single-column there (see the 900px workspace-grid rule above). Same
-   root cause (auto table-layout lets content dictate width instead of
-   honoring the width hints above), same fix — reapplied here on purpose,
-   WITHOUT the phone-only font-size/padding compaction: at 768-900px there
-   is materially more room than on a phone, and shrinking type/touch
-   targets that much here would trade one problem for a worse one.
+   under the 47.99rem breakpoint) never covered widths at or above 768px —
+   past the phone breakpoint, because the app's sidebar layout starts
+   exactly at 48rem/768px and eats real horizontal space from the table's
+   own available width even though workspace-grid is already single-column
+   there (see the 900px workspace-grid rule above). Same root cause (auto
+   table-layout lets content dictate width instead of honoring the width
+   hints above), same fix — reapplied here on purpose, WITHOUT the
+   phone-only font-size/padding compaction: at these widths there is
+   materially more room than on a phone, and shrinking type/touch targets
+   that much here would trade one problem for a worse one.
+   Originally scoped to 768-900px only (the range a prior session's report
+   flagged); a permanent regression test using the UAT fixture's
+   deliberately long discipline name (e2e/matrix-table-responsive.spec.js)
+   found the same overflow at 1200px too — an ordinary desktop width still
+   isn't infinitely wide, and there is no reason to make this protection
+   width-dependent when it costs nothing for the common case (a name that
+   already fits renders identically whether table-layout is fixed or
+   auto). Uncapped from 48rem upward for that reason.
    MUST come after the unconditional width rules just above: equal
    selector specificity means source order decides, and this needs to win
-   only inside its own range. Verified at 768/800/900px: no more silent
-   horizontal scroll, headers stay legible, every metric (including the
-   focal performance percentage) stays on-screen without scrolling, row
-   height/touch target unchanged. */
-@media (min-width: 48rem) and (max-width: 900px) {
+   at every width it covers. Verified at 768/800/900/1200px: no more
+   silent horizontal scroll, headers stay legible, every metric (including
+   the focal performance percentage) stays on-screen without scrolling,
+   row height/touch target unchanged. */
+@media (min-width: 48rem) {
   .matrix-table {
     table-layout: fixed;
   }

@@ -1446,6 +1446,20 @@ function sortMatrixRows(results, { key, dir }) {
   return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
 }
 
+// P0-3 (revised): Recência shares the exact same single Prática button
+// instead of a second stacked button — a visually-stacked version briefly
+// existed and was reverted (it changed the header cell's content shape at
+// every width, including the phone breakpoint commit ff7dec2 had already
+// fixed and locked, silently re-breaking it). One button, one line, zero
+// header-geometry change at any width: clicking it steps through this
+// fixed cycle instead.
+const PRACTICE_RECENCY_CYCLE = [
+  { key: "practice", dir: "asc" },
+  { key: "practice", dir: "desc" },
+  { key: "recency", dir: "asc" },
+  { key: "recency", dir: "desc" },
+];
+
 function updateSortHeaderUI(theadRow, state) {
   if (!theadRow) return;
   for (const th of theadRow.querySelectorAll("th")) {
@@ -1453,14 +1467,30 @@ function updateSortHeaderUI(theadRow, state) {
     if (buttons.length === 0) continue;
     let anyActive = false;
     for (const btn of buttons) {
+      if (btn.classList.contains("th-sort-btn-practice-recency")) {
+        // This one button represents two sort dimensions; its label and
+        // data-sort-key follow whichever is currently engaged, defaulting
+        // back to its original "Prática" identity when neither is active
+        // (some other header is the current sort) — same idle appearance
+        // this button always had before Recência existed.
+        const engaged = state.key === "practice" || state.key === "recency";
+        const effectiveKey = engaged ? state.key : "practice";
+        btn.dataset.sortKey = effectiveKey;
+        const label = effectiveKey === "recency" ? "Recência" : "Prática";
+        if (btn.firstChild && btn.firstChild.nodeType === Node.TEXT_NODE) {
+          btn.firstChild.textContent = label;
+        }
+        btn.setAttribute("aria-label", `Ordenar por ${label.toLowerCase()}`);
+        if (engaged) anyActive = true;
+        btn.classList.toggle("is-active", engaged);
+        btn.dataset.dir = engaged ? state.dir : "";
+        continue;
+      }
       const isActive = btn.dataset.sortKey === state.key;
       if (isActive) anyActive = true;
       btn.classList.toggle("is-active", isActive);
       btn.dataset.dir = isActive ? state.dir : "";
     }
-    // A <th> can hold two independent sort buttons (Prática/Última
-    // atividade share one column to avoid a new column); aria-sort
-    // reflects whichever of them is the active key.
     th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
   }
 }
@@ -1472,9 +1502,16 @@ function wireSortableHeaders(rowId, state, onChange) {
   row.addEventListener("click", (event) => {
     const btn = event.target.closest(".th-sort-btn");
     if (!btn) return;
-    const key = btn.dataset.sortKey;
-    state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
-    state.key = key;
+    if (btn.classList.contains("th-sort-btn-practice-recency")) {
+      const currentIndex = PRACTICE_RECENCY_CYCLE.findIndex((s) => s.key === state.key && s.dir === state.dir);
+      const next = PRACTICE_RECENCY_CYCLE[(currentIndex + 1 + PRACTICE_RECENCY_CYCLE.length) % PRACTICE_RECENCY_CYCLE.length];
+      state.key = next.key;
+      state.dir = next.dir;
+    } else {
+      const key = btn.dataset.sortKey;
+      state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
+      state.key = key;
+    }
     updateSortHeaderUI(row, state);
     onChange();
   });
@@ -1993,6 +2030,7 @@ function renderContentContext(activeSubjectRows, currentSubjectId) {
   const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
 
   contentContextPlate.textContent = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.title = current?.subjectName ?? "Sem disciplina";
   contentContextPlate.style.setProperty(
     "--subject-fill",
     `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
@@ -2018,6 +2056,7 @@ function renderContentContext(activeSubjectRows, currentSubjectId) {
     btn.type = "button";
     btn.className = "subject-cell";
     btn.textContent = row.subjectName;
+    btn.title = row.subjectName;
     btn.dataset.subjectId = String(row.subjectId);
     btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
     item.append(btn);
@@ -2112,6 +2151,7 @@ export async function renderStatsByUnit() {
       const lastDate = document.createElement("div");
       lastDate.className = "practice-recent";
       lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
+      lastDate.title = formatDate(r.lastEvidence.evidenceDate);
       practiceCell.append(lastDate);
     }
 
@@ -2147,6 +2187,7 @@ function showUnitDetail(r) {
   const chip = document.createElement("span");
   chip.className = "subject-cell";
   chip.textContent = r.subjectName;
+  chip.title = r.subjectName;
   chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
   const title = document.createElement("h3");
   title.className = "unit-detail-title";
