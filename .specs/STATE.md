@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=66da074 (about to advance — see MUTATION_PROOF_2026-09-15 below)
+CURRENT_HEAD=f575d46 (about to advance — see EXTRACTION_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -48,22 +48,36 @@ VERIFICATION_2026-09-15=e2e/study-now-flow.spec.js run for real for the
   since — idempotency.js, theme.js, subjects.js mutation-test, this e2e
   draft — touch src-tauri/). TEST_COVERAGE_MATRIX.md updated: gap #4 marked
   DONE, app.js's e2e list now includes study-now-flow.
-UNVERIFIED_WORK=none — the one item this pause left open is now verified
-  (see VERIFICATION_2026-09-15 above).
+EXTRACTION_2026-09-15=item 2 first slice: extracted `filterByPeriod` and
+  `sortMatrixRows` (pure, previously DOM-file-local logic driving both
+  Estatísticas matrix tables' period cutoff and 4 sort keys) out of app.js
+  into analytics.js, next to `subtractDays` which they already depended
+  on. CHARACTERIZE → EXTRACT → TEST → REGRESSION → VERIFY: behavior copied
+  verbatim, app.js now imports instead of declaring locally, no public
+  contract change. 10 new characterization tests in test/analytics.test.js
+  (period-cutoff boundary inclusivity, null-handling per sort key,
+  non-mutation, pt-BR locale sort) — one test's initial boundary
+  assumption was wrong and was corrected to match the code's real,
+  unchanged behavior. Full regression: root 316/316 (306+10 new), e2e
+  102/102 — zero fixes needed anywhere else, proving the move changed
+  nothing observable. Still open: ~40 other app.js functions not yet
+  triaged for extractable pure cores (see TEST_COVERAGE_MATRIX.md gap #1).
+UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
   attempt-review feature (abf55b5), idempotency.js bug+fix (ea20e38),
   theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b),
-  Study Now e2e verification (VERIFICATION_2026-09-15 above).
+  Study Now e2e verification (VERIFICATION_2026-09-15), select/context-
+  switcher mutation proof (MUTATION_PROOF_2026-09-15), app.js extraction
+  slice 1 (EXTRACTION_2026-09-15, both above).
 NEXT_TASK=per /goal's explicit ordering: item 1 (ordinary-select vs
-  context-switcher separation) DONE — see MUTATION_PROOF_2026-09-15 above.
-  Item 2 next: app.js small internal extractions for testability
-  (CHARACTERIZE → EXTRACT → TEST → REGRESSION → VERIFY, behavior/contracts/
-  schema invariant, no broad rearchitecture). Item 3 after: FASE 8 risk-
-  prioritized mutation/discrimination testing on critical properties (not
-  a blind project-wide sweep) — FASE 8 so far is one data point
-  (subjects.js ownership isolation, 6ad3b5b) plus this session's select-ui
-  separation proof.
+  context-switcher separation) DONE. Item 2 (app.js extractions): first
+  slice DONE (see EXTRACTION_2026-09-15 above) — continue picking further
+  extractable pure cores by risk if any stand out, otherwise move to item
+  3. Item 3: FASE 8 risk-prioritized mutation/discrimination testing on
+  critical properties (not a blind project-wide sweep) — so far one data
+  point (subjects.js ownership isolation, 6ad3b5b) plus this session's
+  select-ui separation proof.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression

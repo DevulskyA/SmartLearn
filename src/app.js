@@ -12,7 +12,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
-import { Analytics, subtractDays } from "./analytics.js";
+import { Analytics, subtractDays, filterByPeriod, sortMatrixRows } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
@@ -1496,58 +1496,11 @@ function createTrendBadge(direction) {
 const subjectSortState = { key: "performance", dir: "asc" };
 const unitSortState = { key: "performance", dir: "asc" };
 
-// Global período control (screen-heading): now shared by both Por
-// disciplina and Por conteúdo, same cutoff rule either table already used.
-// Rows without a lastEvidence date are excluded by a period filter (there's
-// nothing recent to include), never shown as if they matched.
-function filterByPeriod(results, periodValue, today) {
-  if (!periodValue) return results;
-  const days = periodValue === "last-30" ? 30 : periodValue === "last-90" ? 90 : 365;
-  const cutoff = subtractDays(today, days);
-  return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
-}
-
-function sortMatrixRows(results, { key, dir }) {
-  const cmp = (get) => (a, b) => {
-    const av = get(a);
-    const bv = get(b);
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
-    return dir === "asc" ? av - bv : bv - av;
-  };
-  // String comparator for the two functionally-restored sort modes
-  // (P0-3: "Disciplina" alphabetical + "Última atividade" recency, both
-  // previously available via a now-removed dropdown). Nulls sort last
-  // regardless of direction, matching the numeric comparator's own
-  // established no-evidence-last convention above.
-  const cmpString = (get) => (a, b) => {
-    const av = get(a);
-    const bv = get(b);
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
-    const result = av.localeCompare(bv, "pt-BR", { sensitivity: "base" });
-    return dir === "asc" ? result : -result;
-  };
-  if (key === "practice") return [...results].sort(cmp((r) => r.totalQuestions));
-  if (key === "trend") {
-    const order = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    return [...results].sort(cmp((r) => order[r.trend.direction] ?? 1));
-  }
-  // Alphabetical identity: subjectName alone for Por disciplina rows;
-  // subjectName + unitTitle for Por conteúdo rows (unitTitle is undefined
-  // on subject rows, so this degrades to subjectName-only there).
-  if (key === "identity") {
-    return [...results].sort(cmpString((r) => `${r.subjectName ?? ""} ${r.unitTitle ?? ""}`.trim()));
-  }
-  // Recency: most/least recent real evidence date, ISO strings sort
-  // lexicographically the same as chronologically.
-  if (key === "recency") {
-    return [...results].sort(cmpString((r) => r.lastEvidence?.evidenceDate ?? null));
-  }
-  return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
-}
+// Global período control (screen-heading): shared by both Por disciplina
+// and Por conteúdo, same cutoff rule either table already used.
+// filterByPeriod/sortMatrixRows themselves live in analytics.js (pure,
+// unit-tested there — see test/analytics.test.js) since they're plain row
+// transforms with no DOM dependency; this file only wires them to the UI.
 
 // P0-3 (revised): Recência shares the exact same single Prática button
 // instead of a second stacked button — a visually-stacked version briefly
