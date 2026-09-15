@@ -19,12 +19,22 @@ The governing principle is evidence reconstruction:
 
 For this project, `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` is a canonical, inherited layer above every phase contract and task acceptance criterion — see that file's own "Status and inheritance" section for the exact hierarchy and the rule that task-local requirements may only add to it, never silently weaken it.
 
+## Safe Software Evolution Principles (SmartLearn)
+
+`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` sits directly below the Quality Standard in the inheritance chain (supersedes the earlier `NON_REGRESSION_PRINCIPLES_V1.md`, kept for history). It is the principles layer this standard's mechanisms exist to serve:
+
+1. Those principles govern the WHY; this document's lifecycle, artifacts, and gates govern the HOW.
+2. Procedural compliance with this document does not substitute for conformance with those principles.
+3. A completed checklist does not authorize a result the real product contradicts.
+
 Session preflight, every task:
 
 ```text
 BOOTSTRAP
    ↓
 QUALITY STANDARD loaded  (.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md)
+   ↓
+SAFE EVOLUTION PRINCIPLES loaded  (.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md)
    ↓
 STATE reconciled  (.specs/STATE.md against Git)
    ↓

@@ -1,8 +1,9 @@
 # SmartLearn — project instructions
 
-Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` in full.
-It is the canonical inherited quality contract for all SmartLearn tasks.
-Task-local requirements add to it; they do not silently weaken it.
+Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` and
+`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` in full.
+Together they are the canonical inherited quality-and-evolution contract for all SmartLearn tasks.
+Task-local requirements add to them; they do not silently weaken either.
 
 For everything else — active feature location, current checkpoint, dependency-ready task — reconcile from Git plus `.specs/STATE.md`, not from this file.
 

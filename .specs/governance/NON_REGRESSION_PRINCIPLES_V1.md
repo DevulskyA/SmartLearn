@@ -1,11 +1,20 @@
-# Non-Regression Principles — Canonical, Inherited
+# Non-Regression Principles — SUPERSEDED
 
 ```
 NON_REGRESSION_STANDARD_ID=SMARTLEARN_NON_REGRESSION_V1
 NON_REGRESSION_STANDARD_VERSION=1.0.0
-NON_REGRESSION_STANDARD_STATUS=CANONICAL
+NON_REGRESSION_STANDARD_STATUS=SUPERSEDED
+SUPERSEDED_BY=SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md
+SUPERSEDED_ON=2026-09-14
 ADOPTED=2026-09-14
 ```
+
+**This file is retained for history only.** It is superseded by
+`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md`, which generalizes
+"non-regression" into "safe evolution," carries forward every principle below
+without weakening any of them (see that file's §8 reconciliation table), and
+adds explicit AI-agent epistemic-safety principles. Read the V2 file for
+current governance; the text below is preserved verbatim as adopted.
 
 ## Status and inheritance
 

@@ -21,6 +21,8 @@ This standard is **inherited by every current and future task** of `smartlearn-v
 
 A task-local spec, an ADR, or an acceptance criterion may **add** precision or an additional requirement on top of this standard. None of them may **silently reduce** it. If a genuine conflict is found between an approved functional contract and this standard, preserve the approved functional contract, and flag the incompatibility explicitly (as a DEBT item or a note in the relevant task's validation.md row) rather than silently changing behavior to satisfy this document.
 
+`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` sits directly below this standard in the inheritance chain: it governs *how* the product can change without losing the quality this document defines. The two are not duplicates — apply both.
+
 This document is edited only as a deliberate, explicit governance change (see "Changing this standard" at the end) — never incidentally while a normal task is in flight, and never merely to make a task pass.
 
 ## Task closure rule
