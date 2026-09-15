@@ -4,7 +4,7 @@ import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks, getNextReview } from "./scheduler.js";
+import { generateInitialTasks, getNextReview, getDaysBetween, getReviewStatusLabel } from "./scheduler.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -509,18 +509,9 @@ async function openExerciseDetail(exercise) {
 document.getElementById("exercise-detail-close")?.addEventListener("click", () => {
   document.getElementById("exercise-detail-dialog")?.close();
 });
-function getDaysBetween(fromDate, toDate) {
-  const from = new Date(`${fromDate}T00:00:00.000Z`);
-  const to = new Date(`${toDate}T00:00:00.000Z`);
-  return Math.round((to - from) / 86400000);
-}
-
-function getReviewStatusLabel(groupName, task, today) {
-  if (groupName === "doneToday") return "Concluída";
-  if (groupName === "today") return "Vence hoje";
-  const days = getDaysBetween(task.dueDate, today);
-  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
-}
+// getDaysBetween/getReviewStatusLabel now live in scheduler.js (pure,
+// unit-tested there — see test/scheduler.test.js) since they have no DOM
+// dependency.
 
 function createScoreInput(task, field, label) {
   const wrapper = document.createElement("label");

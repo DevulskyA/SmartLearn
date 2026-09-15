@@ -32,3 +32,26 @@ export function getNextReview(unitId, allTasks) {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return pending.length > 0 ? pending[0].dueDate : null;
 }
+
+// Whole calendar days between two YYYY-MM-DD dates (UTC midnight, matching
+// generateReviewDates' own date arithmetic) — positive when toDate is after
+// fromDate.
+export function getDaysBetween(fromDate, toDate) {
+  const from = new Date(`${fromDate}T00:00:00.000Z`);
+  const to = new Date(`${toDate}T00:00:00.000Z`);
+  return Math.round((to - from) / 86400000);
+}
+
+// Hoje's own overdue/due-today status label for one review row. groupName is
+// the row's pre-computed bucket (doneToday/today/overdue — see renderToday
+// in app.js); for an overdue row, the day count is derived from the task's
+// own dueDate vs today. "Atrasada 1 dia" also covers the 0-or-negative-days
+// case (a task whose dueDate is today or later but sorted into the overdue
+// group by a caller bug would still read as "at least 1 day late" rather
+// than a confusing "0 dias" or negative count) — deliberate floor, not a bug.
+export function getReviewStatusLabel(groupName, task, today) {
+  if (groupName === "doneToday") return "Concluída";
+  if (groupName === "today") return "Vence hoje";
+  const days = getDaysBetween(task.dueDate, today);
+  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
+}
