@@ -11,7 +11,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
@@ -362,13 +362,27 @@ function formatPerformanceScore(value) {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
 }
 
+const PERFORMANCE_BAND_CLASS = {
+  CRITICAL: "performance-badge--critical",
+  ATTENTION: "performance-badge--attention",
+  ADEQUATE: "performance-badge--good",
+  STRONG: "performance-badge--strong",
+};
+
+// Delegates the actual threshold comparison to getState (performance-
+// thresholds.js, already unit-tested) instead of a second independent
+// >= THRESHOLDS.X chain — this file previously had three copies of the
+// exact same 3-cutoff banding logic (this function, getPlanPerfBadge
+// below, and getState itself), a real drift risk if THRESHOLDS ever
+// changed and only some copies were updated. totalQuestions=1 is a
+// sentinel (any truthy value works): this function only ever receives a
+// raw percent, with no question-count context of its own, and the
+// !Number.isFinite guard above already covers the "no real value" case
+// getState's own totalQuestions===0 check exists for.
 function getPerformanceBandClass(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  if (number < THRESHOLDS.ATTENTION) return "performance-badge--critical";
-  if (number < THRESHOLDS.ADEQUATE) return "performance-badge--attention";
-  if (number < THRESHOLDS.STRONG) return "performance-badge--good";
-  return "performance-badge--strong";
+  return PERFORMANCE_BAND_CLASS[getState(number, 1)];
 }
 
 function createPerformanceBadge(value) {
@@ -1168,10 +1182,10 @@ function getPlanPerfBadge(evidence) {
   const pct = (correct / total) * 100;
   const span = document.createElement("span");
   span.className = "performance-badge";
-  if (pct >= THRESHOLDS.STRONG) span.dataset.perf = "strong";
-  else if (pct >= THRESHOLDS.ADEQUATE) span.dataset.perf = "adequate";
-  else if (pct >= THRESHOLDS.ATTENTION) span.dataset.perf = "attention";
-  else span.dataset.perf = "critical";
+  // getState's states (STRONG/ADEQUATE/ATTENTION/CRITICAL) match dataset.perf's
+  // own lowercase vocabulary exactly — see getPerformanceBandClass above for
+  // why this delegates to getState instead of an independent threshold chain.
+  span.dataset.perf = getState(pct, total).toLowerCase();
   span.textContent = `${pct.toFixed(0)}%`;
   return span;
 }

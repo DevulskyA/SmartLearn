@@ -478,6 +478,17 @@ string que só existe na sua edição. Se sumir: parar o preview
 Browser pane pro `http://localhost:<porta>` real via
 `preview_start({url:...})` (não `{name:...}`).
 
+ARMADILHA CONHECIDA #2 (2026-09-15) — variante espelhada da acima: depois de
+um `preview_stop`+`preview_start` do MESMO servidor (não um novo processo em
+outra porta), a ABA do browser já aberta pode continuar com o registro de
+módulos ES antigo em memória, mesmo após `navigate` recarregar a página.
+Sintoma: `SyntaxError: Identifier '...' has already been declared` no
+console para símbolos que só existem uma vez no código-fonte real (confirme
+com `fetch('/src/arquivo.js', {cache:'no-store'})` — se o conteúdo servido
+está correto e único, o servidor não é o problema). Fix: `tabs_close` na aba
++ `preview_start` de novo (abre aba nova) — `navigate`/reload sozinho NÃO
+limpa esse cache de módulos do lado do browser.
+
 DEV LOCAL (modo padrão, sem servidor): `npm run dev`
 DEV REMOTO (testar login/Conta/SERVIDOR CENTRAL): `npm run dev:remote`
   (sobe server + vite juntos, já com VITE_REMOTE_MODE=1 e origins corretas)

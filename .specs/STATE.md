@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=c2891aa (about to advance — see EXTRACTION3_2026-09-15 below)
+CURRENT_HEAD=28c24a3 (about to advance — see SIMPLIFY_PERFBAND_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -158,6 +158,22 @@ EXTRACTION3_2026-09-15=item 2, slice 3: extracted getDaysBetween/
   test/scheduler.test.js. Full regression: root 328/328 (324+4 new), e2e
   102/102 in normal ~7min timing (confirming the earlier stall was
   environmental, not a regression).
+SIMPLIFY_PERFBAND_2026-09-15=found real duplication while triaging
+  further app.js extraction candidates: getPerformanceBandClass and
+  getPlanPerfBadge each independently reimplemented getState()'s exact
+  3-cutoff classification (performance-thresholds.js, already tested) —
+  three sources of truth for one classification. Consolidated both to
+  call getState() directly. Verified boundary-equivalence analytically
+  and live in the running dev app (import + getState() across the full
+  boundary set, matched exactly). Full regression: root 328/328
+  (unchanged count — pure consolidation), e2e 102/102.
+  PROCESS NOTE: hit a second variant of the known stale-cache trap —
+  after preview_stop+preview_start of the SAME server, the already-open
+  browser tab kept an old ES-module registry even after navigate/reload;
+  fetch() of the served source proved the server was serving correct
+  code throughout. Fix: tabs_close + preview_start (fresh tab), not
+  navigate. Documented in EXECUTION.md's ARMADILHA CONHECIDA section as
+  #2, for future sessions.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -174,13 +190,14 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   found+fixed (CORRECTCOUNT_GAP_2026-09-15), app.js extraction slice 2
   (EXTRACTION2_2026-09-15), exercises.js ownership kill
   (EXERCISES_KILL_2026-09-15), app.js extraction slice 3
-  (EXTRACTION3_2026-09-15, all above).
+  (EXTRACTION3_2026-09-15), performance-band duplication consolidated
+  (SIMPLIFY_PERFBAND_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): 3 slices DONE (EXTRACTION_2026-09-15,
-  EXTRACTION2_2026-09-15, EXTRACTION3_2026-09-15) — more extractable
-  cores may exist, not yet triaged (getPlanPerfBadge's threshold-banding
-  logic is DOM-mixed but has a pure core worth separating). Item 3
-  (FASE 8): 9 mutation-kill data points plus 3 genuine gaps found+fixed
+  EXTRACTION2_2026-09-15, EXTRACTION3_2026-09-15) + one duplication
+  consolidated (SIMPLIFY_PERFBAND_2026-09-15) — more extractable cores
+  may exist, not yet triaged. Item 3 (FASE 8): 9 mutation-kill data
+  points plus 3 genuine gaps found+fixed
   (SCHEDULE_GAP, WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, all
   2026-09-15) across 6 distinct critical properties (ownership isolation
   x5 services, schedule constant, score arithmetic, duplicate-write
