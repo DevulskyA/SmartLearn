@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=d063f99 (about to advance — see CSRF_KILL_2026-09-15 below)
+CURRENT_HEAD=a6225c0 (about to advance — see ORIGIN_KILL_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -196,6 +196,17 @@ CSRF_KILL_2026-09-15=item 3 follow-up: http-contract.js's CSRF-mismatch
   auth-routes.test.js's dedicated missing/wrong-CSRF-token test failed
   as expected (200 != 403). Real protection confirmed, no gap. Reverted,
   clean.
+ORIGIN_KILL_2026-09-15=item 3 follow-up: http-contract.js's origin-
+  allowlist enforcement. Disabled originIsAllowed's enforcement, ran
+  full server suite: killed both dedicated http-contract.test.js tests
+  (missing-Origin and unexpected-Origin, both expecting 403). Real
+  protection confirmed, no gap. Also checked reset-tokens.js's single-
+  use/expired/unknown-token branches: all three already have direct
+  dedicated unit tests by name in reset-password.test.js — high
+  confidence without mutation, not mutated. Auth/session envelope is now
+  3-for-3 mutation-checked (session-inactivity: gap found+fixed; CSRF-
+  mismatch: real; origin-allowlist: real) — deepest mutation-verified
+  area in the project so far.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -214,24 +225,24 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   (EXERCISES_KILL_2026-09-15), app.js extraction slice 3
   (EXTRACTION3_2026-09-15), performance-band duplication consolidated
   (SIMPLIFY_PERFBAND_2026-09-15), session-inactivity enforcement gap
-  found+fixed (SESSION_GAP_2026-09-15), CSRF-mismatch enforcement
-  confirmed real (CSRF_KILL_2026-09-15, all above).
+  found+fixed (SESSION_GAP_2026-09-15), CSRF-mismatch and origin-
+  allowlist enforcement confirmed real (CSRF_KILL_2026-09-15,
+  ORIGIN_KILL_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): 3 slices DONE (EXTRACTION_2026-09-15,
   EXTRACTION2_2026-09-15, EXTRACTION3_2026-09-15) + one duplication
   consolidated (SIMPLIFY_PERFBAND_2026-09-15) — more extractable cores
-  may exist, not yet triaged. Item 3 (FASE 8): 11 mutation-kill data
+  may exist, not yet triaged. Item 3 (FASE 8): 12 mutation-kill data
   points plus 4 genuine gaps found+fixed (SCHEDULE_GAP,
   WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, SESSION_GAP, all 2026-09-15)
-  across 7 distinct critical properties. Strong, diverse evidence base —
-  auth/session-security area now has 2 real data points (session-
-  inactivity: gap found+fixed; CSRF-mismatch: confirmed real). Next
-  session should reconcile Git/STATE/matrix first (per this file's own
-  RECOVERY section), then either continue FASE 8 (candidates: same
+  across 7 distinct critical properties. Auth/session envelope now
+  3-for-3 (see ORIGIN_KILL_2026-09-15 above) — this area is well-covered,
+  lower priority to continue further here. Next session should
+  reconcile Git/STATE/matrix first (per this file's own RECOVERY
+  section), then either continue FASE 8 (candidates: same
   "user_id = ? scoping" pattern in imports.js/content-proposals.js/
-  backup.js, unswept but lower priority — pattern proven 5/5; the
-  origin-check branch in the same http-contract.js hook, untested by
-  mutation yet; reset-tokens.js's own token-matching/expiry logic) or
+  backup.js, unswept but lower priority — pattern proven 5/5; backup/
+  restore round-trip fidelity via backup-contract.test.js, unswept) or
   return to item 2 (triage remaining app.js functions) per risk.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
