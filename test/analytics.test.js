@@ -15,6 +15,37 @@ function makeEvidence(evidenceDate, questionsCount = 10, correctCount = 8) {
 const units = [{ id: 1, subjectId: 7, title: "Cap 1" }];
 const subjects = [{ id: 7, name: "Fisiologia", color: "DISC-BLUE" }];
 
+// FASE 8 mutation-test finding (2026-09-15): weightedAccuracy's own value
+// (the single number every Estatísticas row exists to show) had NO direct
+// assertion anywhere in the project — mutating byUnit's formula to always
+// produce ~100% (a plausible copy-paste bug, totalC/totalC instead of
+// totalC/totalQ) survived the full 317-test root suite untouched; the
+// server doesn't import this file at all; the only e2e assertion on this
+// value checks the format (`/%/`) via regex, never the actual number. The
+// tests below close that gap for both bySubject and byUnit directly.
+test("bySubject: weightedAccuracy is correctCount/questionsCount * 100, not any other ratio", () => {
+  const today = "2026-09-04";
+  const evidence = [makeEvidence(today, 40, 30)]; // 30/40 = 75%
+  const results = Analytics.bySubject(evidence, units, subjects, today);
+  assert.equal(results[0].weightedAccuracy, 75);
+});
+
+test("bySubject: zero questions yields null weightedAccuracy, never 0 or NaN", () => {
+  const results = Analytics.bySubject([], units, subjects, "2026-09-04");
+  assert.equal(results[0].weightedAccuracy, null);
+});
+
+test("byUnit: weightedAccuracy is correctCount/questionsCount * 100, aggregated across multiple evidence rows", () => {
+  const evidence = [makeEvidence("2026-01-01", 10, 5), makeEvidence("2026-02-01", 10, 9)]; // (5+9)/(10+10) = 70%
+  const results = Analytics.byUnit(evidence, units, subjects);
+  assert.equal(results[0].weightedAccuracy, 70);
+});
+
+test("byUnit: zero evidence yields null weightedAccuracy, never 0 or NaN", () => {
+  const results = Analytics.byUnit([], units, subjects);
+  assert.equal(results[0].weightedAccuracy, null);
+});
+
 test("bySubject: evidence on today is included in recent window", () => {
   const today = "2026-09-04";
   const evidence = [makeEvidence(today)]; // exactly today
