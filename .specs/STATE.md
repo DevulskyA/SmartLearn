@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=509182f (about to advance — see SCHEDULE_GAP_2026-09-15 below)
+CURRENT_HEAD=1cc7319 (about to advance — see LEARNING_UNITS_SWEEP_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -94,6 +94,11 @@ SCHEDULE_GAP_2026-09-15=item 3, pivoted to a new critical property per
   constant is actually imported/re-exported) — re-mutated to confirm it
   now kills client-side alone, reverted, confirmed clean, full regression
   root 317/317 after. No product code changed, one permanent test added.
+LEARNING_UNITS_SWEEP_2026-09-15=item 3 continued: learning-units.js's
+  findOwned() — same user_id-drop mutation, ran create-unit.test.js's T20
+  tests: both killed cleanly (unit-level getById threw nothing instead of
+  NOT_FOUND; HTTP-level got 200 instead of 404). No incidental second
+  gate this time, unlike evidence.js. Mutant reverted, worktree clean.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -103,13 +108,14 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   switcher mutation proof (MUTATION_PROOF_2026-09-15), app.js extraction
   slice 1 (EXTRACTION_2026-09-15), FASE 8 attempts/evidence sweep
   (FASE8_SWEEP_2026-09-15), REVIEW_DAY_OFFSETS single-point-of-failure
-  found+fixed (SCHEDULE_GAP_2026-09-15, all above).
+  found+fixed (SCHEDULE_GAP_2026-09-15), learning-units.js ownership kill
+  (LEARNING_UNITS_SWEEP_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): first slice DONE (EXTRACTION_2026-09-15) — more
-  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 4 real
-  mutation-kill data points so far, one of them a genuine gap found+fixed
-  (SCHEDULE_GAP_2026-09-15) — continue risk-ordered. Remaining candidates:
-  same "user_id = ? scoping" pattern in learning-units.js, exercises.js,
+  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 5 real
+  mutation-kill data points so far, one a genuine gap found+fixed
+  (SCHEDULE_GAP_2026-09-15) — continue risk-ordered. Remaining
+  candidates: same "user_id = ? scoping" pattern in exercises.js,
   imports.js, content-proposals.js, backup.js (unswept); idempotency's
   operationKey collision handling; the score/evidence pipeline's own
   arithmetic (weightedAccuracy, correctCount<=questionsCount invariants)
