@@ -38,7 +38,7 @@ listing `server/test/`. Full suite: **360/360 green** this session.
 | services/exercise-review.js | exercise-review.test.js (new, this task) | PROTECTED |
 | services/exercises.js, routes/exercises.js | exercises.test.js | PROTECTED |
 | services/reviews.js, routes/reviews.js | reviews.test.js, result-reconciliation.test.js | PROTECTED |
-| services/subjects.js, routes/subjects.js | subjects.test.js | PROTECTED |
+| services/subjects.js, routes/subjects.js | subjects.test.js | PROTECTED — mutation-verified 2026-09-15 (see below) |
 | services/learning-units.js, routes/learning-units.js | create-unit.test.js | PROTECTED |
 | services/settings.js, routes/settings.js | evidence-settings.test.js | PARTIAL — name mismatch, not re-verified this pass that it actually targets settings.js and not just evidence's settings-adjacent behavior |
 | services/imports.js, routes/imports.js | import-commit.test.js, import-preview.test.js, import-normalization.test.js, import-fixtures.test.js | PROTECTED |
@@ -85,7 +85,7 @@ these tests discriminating, or just present?), not breadth.
 2. ~~theme.js is genuinely unprotected.~~ **DONE 2026-09-15** — test/theme.test.js (pure logic, including a regression sensor for a hardcoded-dark-id-list duplication hazard found while writing it) + e2e/theme.spec.js (real picker, persistence, OS auto-follow, quick toggle).
 3. ~~idempotency.js is cross-cutting and only indirectly tested.~~ **DONE 2026-09-15** — idempotency.test.js added, found and fixed a real latent bug (LESSON-008).
 4. **This task's own known gap** ([[project_smartlearn]] session 2026-09-15): Study Now's client-side attemptIds collection (`app.js` judgeStudyNow/finishStudyNowSession) has no automated test — "Estudar agora" is unreachable in any current e2e without driving the full Materiais/draft-acceptance pipeline. Pre-existing UI-reachability limitation, not introduced by this task, but this task's new code now lives inside it.
-5. **FASE 8 (test-quality audit) has not been run on any existing test.** "File exists and is green" is this matrix's bar, not "would catch a plausible wrong implementation." The server's own idempotency/ownership tests read as high-quality on inspection so far (see evidence.test.js's own Cardboard-Test-driven cross-contamination addition, added specifically because the first draft's tests would have passed a subtly wrong join) but this has not been swept project-wide.
+5. **FASE 8 (test-quality audit): first real mutation-test run, 2026-09-15.** Picked the single highest-consequence property in a multi-tenant app — cross-user ownership isolation — and mutated `services/subjects.js`'s `findOwned()` to drop its `AND id = ?`→`user_id`-scoping (`WHERE id = ?` only, no owner check). Ran the real, pre-existing `subjects.test.js` against the mutant (not a hypothetical — actually edited the file, ran the suite, reverted via `git checkout`, confirmed clean). Result: killed. `a user cannot rename, archive, reorder, or delete a subject owned by another user` failed exactly as expected (expected 404, got 200) — this test is real protection, not decoration. Still not swept project-wide; this is one data point, not a blanket "PROTECTED means mutation-tested" claim for every row above.
 
 ## Explicitly out of scope for this pass
 
