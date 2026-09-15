@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=f759dd6
+CURRENT_HEAD=e2782ce
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — /goal active (2026-09-15), Stop hook armed,
   method=tlc-spec-driven-strict, do not clear until Verifier can show
@@ -19,7 +19,8 @@ CURRENT_PHASE=TEST_SHIELD_BUILDOUT — /goal active (2026-09-15), Stop hook arme
   reset conversation context — per feedback_explicit_stop_overrides_goal
   memory, an explicit user stop always outranks an active /goal Stop hook.
   Session halted mid-task, NOT mid-file-write: see UNVERIFIED_WORK below.
-UNVERIFIED_WORK=e2e/study-now-flow.spec.js — WRITTEN, UNCOMMITTED, NEVER RUN.
+UNVERIFIED_WORK=e2e/study-now-flow.spec.js — WRITTEN, COMMITTED as WIP
+  (e2782ce, message says UNVERIFIED explicitly), NEVER RUN.
   Closes the goal-mandated Study Now -> attempt -> evidence -> reload ->
   Exercícios resolvidos -> tentativa correta flow, reusing draft-acceptance
   .spec.js's real pipeline setup (own server, port 13969) since "Estudar
