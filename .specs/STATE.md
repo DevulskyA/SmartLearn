@@ -2304,4 +2304,58 @@ COMMITS:
 - 104e158 fix(p1-6): canonical migration JSON + db.js + Rust load_migration_plan
 - 8d63cc6 fix(p1-6): ensureColumns hardcoded SQL replaced with migrationPlan indices
 - 4f50d5f fix(audit): P1-A+P2-A+P2-B — tracking real module, canonical schema, exercises migration
+
+## CHECKPOINT — 2026-09-15 (Exercícios resolvidos attempt-review + tlc-spec-driven-strict FASE 0-2)
+
+HEAD at close: `abf55b5` on `claude/smartlearn-v1-complete`. Reconciled
+before starting (branch/HEAD/status confirmed clean each step); nothing
+pushed/merged.
+
+**What shipped** (3 atomic commits, `e3381b5` → `7a8e363` → `abf55b5`):
+1. `e3381b5` — Estatísticas metric-card mobile sizing fix (phone breakpoint
+   scroll overflow), verified live at 375×812.
+2. `7a8e363` — "Exercícios resolvidos" rows are now whole-row clickable and
+   open a real per-attempt review dialog (question/gabarito/self-reported
+   outcome) when the data exists. Required a small persistence extension:
+   `021-practice-evidence-attempt-link.sql` gives INITIAL_PRACTICE evidence
+   the same `evidence_id`/attempt link REVIEW evidence already had via
+   `review_task_id` (010-attempt-review-link.sql). New endpoint
+   `GET /v1/learning-evidence/:id/attempts`. EXTERNAL evidence and old data
+   honestly show "detalhe indisponível" — never fabricated. Product never
+   captures a free-text student answer (self-report flashcard model) — the
+   dialog shows gabarito + self-judged outcome, not an answer that doesn't
+   exist to show.
+3. `abf55b5` — added a Cardboard-Test-driven cross-contamination test the
+   first draft's suite would NOT have caught (two evidence rows on one
+   unit; a wrong `unit_id`-based join would've passed every prior test).
+
+**Evidence**: server suite 360/360, client suite 297/297, e2e stats
+regression suite 24/24, `practice.spec.js` 1/1, all green after the change
+— no calculation/aggregate/existing-surface regression. Two new e2e tests
+(`exercise-attempt-review.spec.js`) prove the real click→dialog path against
+a real server. 15 new server unit tests prove the linking transaction's
+accept/reject paths and all three read sources (REVIEW/PRACTICE/NONE).
+
+**Known gap, carried forward, not hidden**: Study Now's client-side
+attemptIds collection (`src/app.js` judgeStudyNow/finishStudyNowSession) has
+no automated test — "Estudar agora" is reachable only through the full
+Materiais/draft-acceptance pipeline, which no test drives for this purpose.
+Pre-existing UI-reachability gap; the server-side contract it calls is fully
+tested.
+
+**FASE 2 (coverage inventory)**: first-pass module-level matrix persisted at
+`.specs/TEST_COVERAGE_MATRIX.md`. Server is near-total file-level coverage
+already (360 tests); client relies heavily on e2e for UI-layer modules.
+Named gaps, priority order: (1) `app.js` (5105 lines) has no fast unit-speed
+gate, only e2e; (2) `theme.js` has zero test evidence found; (3)
+`idempotency.js` is cross-cutting and only indirectly tested despite being
+depended on by every mutating endpoint; (4) the Study Now gap above; (5)
+FASE 8 (test-quality/discrimination audit) has not been run project-wide —
+this matrix only confirms tests exist and passed, not that they'd catch a
+plausible wrong implementation.
+
+**Next**: FASE 3 (domain-core depth) or FASE 8 (test-quality audit) on
+items 1-3 above, per the risk ranking in TEST_COVERAGE_MATRIX.md. Not
+started this session — building it further without a fresh scoping pass
+would risk shallow, low-value test padding rather than real protection.
 - b80fc35 fix(test): rename buggy discrimination fixture (no local getTrackingState* name)

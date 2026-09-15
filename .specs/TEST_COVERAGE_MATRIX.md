@@ -1,0 +1,97 @@
+# SmartLearn — Test Coverage Matrix (FASE 2, first pass)
+
+```
+COVERAGE_MATRIX_STATUS=FIRST_PASS_MODULE_LEVEL
+CREATED=2026-09-15
+METHOD=tlc-spec-driven-strict FASE 2
+```
+
+## What this is, and what it is not
+
+This is a **module-level inventory**: for each source module, which test
+artifacts (unit/contract/e2e) exist that exercise it, by name and by having
+been run green this session. It is the map for prioritizing FASE 3+, not a
+finished behavior-by-behavior audit.
+
+`PROTECTED` here means: a named test file targeting this module exists AND
+was run green this session. It does **not** yet mean every test in it passed
+a Cardboard Test ("what wrong implementation would still pass this?") —
+that discriminating-power audit is FASE 8, not done yet for most of what is
+marked PROTECTED below. Per doctrine, `PROTECTED` in this matrix should be
+read as "has real automated evidence," not "provably bug-proof."
+
+`UNKNOWN` means: no test artifact obviously targets this module by name,
+verified by directory listing, not by reading the module or its likely
+consumers deeply. A module marked UNKNOWN may in fact be indirectly
+exercised by an e2e spec that happens to click through it — this pass did
+not trace that.
+
+## Server (`server/src/`)
+
+Every service and route file has a directly-named test file, confirmed by
+listing `server/test/`. Full suite: **360/360 green** this session.
+
+| Module | Test evidence | Status |
+|---|---|---|
+| services/attempts.js, routes/attempts.js | attempts.test.js | PROTECTED |
+| services/evidence.js, routes/evidence.js | evidence.test.js (new, this task) | PROTECTED |
+| services/exercise-review.js | exercise-review.test.js (new, this task) | PROTECTED |
+| services/exercises.js, routes/exercises.js | exercises.test.js | PROTECTED |
+| services/reviews.js, routes/reviews.js | reviews.test.js, result-reconciliation.test.js | PROTECTED |
+| services/subjects.js, routes/subjects.js | subjects.test.js | PROTECTED |
+| services/learning-units.js, routes/learning-units.js | create-unit.test.js | PROTECTED |
+| services/settings.js, routes/settings.js | evidence-settings.test.js | PARTIAL — name mismatch, not re-verified this pass that it actually targets settings.js and not just evidence's settings-adjacent behavior |
+| services/imports.js, routes/imports.js | import-commit.test.js, import-preview.test.js, import-normalization.test.js, import-fixtures.test.js | PROTECTED |
+| services/content-proposals.js, routes/content-proposals.js | content-proposals.test.js | PROTECTED |
+| services/generated-drafts.js, routes/generated-drafts.js | ai-drafts.test.js | PARTIAL — name mismatch, not re-verified |
+| services/accept-draft.js | accept-draft.test.js | PROTECTED |
+| services/agenda-snapshot.js, routes/agenda-snapshot.js | agenda-snapshot.test.js | PROTECTED |
+| services/source-extraction.js | pdf-extraction.test.js, pdf-fixtures/ | PROTECTED |
+| services/source-storage.js | uploads.test.js | PARTIAL — name mismatch, not re-verified |
+| services/idempotency.js | no dedicated file; exercised indirectly via every service that takes `operationKey` (reviews.test.js, learning-units create-unit.test.js) | PARTIAL — cross-cutting concern, never tested as its own unit |
+| domain/learning-event.js, domain/evidence-profile.js | learning-events-schema.test.js, evidence-profile.test.js | PROTECTED |
+| auth/* (csrf, passwords, rate-limit, session-tokens, reset-tokens) | session-security.test.js, passwords.test.js, auth-abuse.test.js, reset-password.test.js, auth-routes.test.js | PROTECTED |
+| migrations.js, manifest.json | migrations.test.js, identity-schema.test.js, domain-schema.test.js | PROTECTED — includes the manifest-checksum self-check that caught nothing wrong with this task's own new migration |
+| backup.js, routes/backup.js | backup-contract.test.js | PROTECTED |
+| app.js (server wiring), db.js (server) | http-contract.test.js, health.test.js, static-serving.test.js, db.test.js, process-smoke.test.js | PROTECTED |
+
+**Server-side conclusion:** mature, disciplined, near-total file-level
+coverage already. The real remaining server risk is depth (FASE 8: are
+these tests discriminating, or just present?), not breadth.
+
+## Client (`src/`)
+
+| Module | Lines | Test evidence | Status |
+|---|---|---|---|
+| app.js | 5105 | No dedicated unit test (expected — DOM orchestrator). Exercised across ~20 e2e specs (practice, exercise-attempt-review, stats-*, atomic-save, offline*, migration, local-authority, feature-parity, smartlearn-plan-flow, select-ui, context-switcher-keyboard, source-proposals, draft-acceptance) | PARTIAL — huge surface, e2e-only, no isolated logic extraction; a change deep in one screen's handler has no fast focused gate, only the full e2e suite |
+| db.js (LocalDB, 2047 lines) | 2047 | learning-evidence.test.js, learning-units.test.js, exercises.test.js, subjects.test.js, dev-dataset.test.js (by domain concept, not filename) | PROTECTED for the domain operations tested; import/export and backup-format migration logic not independently confirmed this pass |
+| remote-store.js | 395 | remote-store.test.js (includes a real-server round-trip test) | PROTECTED |
+| api-client.js | — | No dedicated unit test; exercised transitively through remote-store.test.js and every REMOTE_MODE e2e | PARTIAL |
+| stats.js | 149 | stats.test.js | PROTECTED |
+| analytics.js | 164 | analytics.test.js | PROTECTED |
+| scheduler.js, review-schedule.js, review-score.js | — | scheduler.test.js, review-schedule.test.js, review-score.test.js | PROTECTED |
+| performance-thresholds.js, tracking-state.js, naming-validation.js | — | matching .test.js files | PROTECTED |
+| auth-ui.js | — | auth-ui.test.js + e2e/auth.spec.js | PROTECTED |
+| select-ui.js | — | e2e/select-ui.spec.js, e2e/context-switcher-keyboard.spec.js | PROTECTED (e2e-only) |
+| draft-review-ui.js | — | e2e/draft-acceptance.spec.js | PROTECTED (e2e-only) |
+| source-proposals-ui.js | — | e2e/source-proposals.spec.js | PROTECTED (e2e-only) |
+| migration-ui.js | — | e2e/migration.spec.js | PROTECTED (e2e-only) |
+| offline-store.js, offline-ui.js | — | e2e/offline.spec.js, e2e/offline-writes.spec.js | PROTECTED (e2e-only) |
+| theme.js | — | none found by name | **UNPROTECTED** — no unit test, no e2e spec named for it; dark/light rendering is presumably eyeballed inside other specs' screenshots at best |
+
+## Named gaps worth carrying into FASE 3+ (priority order, RISK ≈ IMPACT × REACH × UNCERTAINTY × REGRESSION_HISTORY)
+
+1. **app.js's non-DOM logic has no fast focused gate.** 5105 lines, one file, only e2e as a sensor. A future change deep inside (e.g. another Study Now edit) has no unit-speed feedback loop — everything routes through the full e2e suite. Not fixed here (would mean extracting pure functions out of a DOM-coupled file — a real refactor, out of this task's authorized scope).
+2. **theme.js is genuinely unprotected.** Small surface, but a regression here is exactly the "silent visual regression nobody notices" class of bug this project's own doctrine (§17/§18 responsive/accessibility rules) worries about most.
+3. **idempotency.js is cross-cutting and only indirectly tested.** Every mutating endpoint depends on it; a bug here has the highest REACH of anything in the server. Worth a dedicated unit test suite of its own rather than relying on it being incidentally exercised by each service's own tests.
+4. **This task's own known gap** ([[project_smartlearn]] session 2026-09-15): Study Now's client-side attemptIds collection (`app.js` judgeStudyNow/finishStudyNowSession) has no automated test — "Estudar agora" is unreachable in any current e2e without driving the full Materiais/draft-acceptance pipeline. Pre-existing UI-reachability limitation, not introduced by this task, but this task's new code now lives inside it.
+5. **FASE 8 (test-quality audit) has not been run on any existing test.** "File exists and is green" is this matrix's bar, not "would catch a plausible wrong implementation." The server's own idempotency/ownership tests read as high-quality on inspection so far (see evidence.test.js's own Cardboard-Test-driven cross-contamination addition, added specifically because the first draft's tests would have passed a subtly wrong join) but this has not been swept project-wide.
+
+## Explicitly out of scope for this pass
+
+Full per-behavior traceability (every acceptance criterion × every test
+assertion), mutation testing, and a11y-specific audit were not attempted —
+this matrix is FASE 2's module map, sized to fit one session without
+degrading into shallow, low-value padding. FASE 3 (domain-core depth) and
+FASE 8 (test-quality audit) are the natural next increments, targeted at
+items 1–3 above first per the risk ranking.
