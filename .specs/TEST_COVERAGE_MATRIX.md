@@ -48,7 +48,7 @@ listing `server/test/`. Full suite: **360/360 green** this session.
 | services/agenda-snapshot.js, routes/agenda-snapshot.js | agenda-snapshot.test.js | PROTECTED |
 | services/source-extraction.js | pdf-extraction.test.js, pdf-fixtures/ | PROTECTED |
 | services/source-storage.js | uploads.test.js | PARTIAL — name mismatch, not re-verified |
-| services/idempotency.js | no dedicated file; exercised indirectly via every service that takes `operationKey` (reviews.test.js, learning-units create-unit.test.js) | PARTIAL — cross-cutting concern, never tested as its own unit |
+| services/idempotency.js | idempotency.test.js (2026-09-15) | PROTECTED — found and fixed a real bug while writing it (LESSON-008: canonicalHash dropped nested-object contents) |
 | domain/learning-event.js, domain/evidence-profile.js | learning-events-schema.test.js, evidence-profile.test.js | PROTECTED |
 | auth/* (csrf, passwords, rate-limit, session-tokens, reset-tokens) | session-security.test.js, passwords.test.js, auth-abuse.test.js, reset-password.test.js, auth-routes.test.js | PROTECTED |
 | migrations.js, manifest.json | migrations.test.js, identity-schema.test.js, domain-schema.test.js | PROTECTED — includes the manifest-checksum self-check that caught nothing wrong with this task's own new migration |
@@ -83,7 +83,7 @@ these tests discriminating, or just present?), not breadth.
 
 1. **app.js's non-DOM logic has no fast focused gate.** 5105 lines, one file, only e2e as a sensor. A future change deep inside (e.g. another Study Now edit) has no unit-speed feedback loop — everything routes through the full e2e suite. Not fixed here (would mean extracting pure functions out of a DOM-coupled file — a real refactor, out of this task's authorized scope).
 2. **theme.js is genuinely unprotected.** Small surface, but a regression here is exactly the "silent visual regression nobody notices" class of bug this project's own doctrine (§17/§18 responsive/accessibility rules) worries about most.
-3. **idempotency.js is cross-cutting and only indirectly tested.** Every mutating endpoint depends on it; a bug here has the highest REACH of anything in the server. Worth a dedicated unit test suite of its own rather than relying on it being incidentally exercised by each service's own tests.
+3. ~~idempotency.js is cross-cutting and only indirectly tested.~~ **DONE 2026-09-15** — idempotency.test.js added, found and fixed a real latent bug (LESSON-008).
 4. **This task's own known gap** ([[project_smartlearn]] session 2026-09-15): Study Now's client-side attemptIds collection (`app.js` judgeStudyNow/finishStudyNowSession) has no automated test — "Estudar agora" is unreachable in any current e2e without driving the full Materiais/draft-acceptance pipeline. Pre-existing UI-reachability limitation, not introduced by this task, but this task's new code now lives inside it.
 5. **FASE 8 (test-quality audit) has not been run on any existing test.** "File exists and is green" is this matrix's bar, not "would catch a plausible wrong implementation." The server's own idempotency/ownership tests read as high-quality on inspection so far (see evidence.test.js's own Cardboard-Test-driven cross-contamination addition, added specifically because the first draft's tests would have passed a subtly wrong join) but this has not been swept project-wide.
 
