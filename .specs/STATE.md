@@ -10,48 +10,51 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=e2782ce
+CURRENT_HEAD=e2782ce (about to advance — see VERIFICATION_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
-CURRENT_PHASE=TEST_SHIELD_BUILDOUT — /goal active (2026-09-15), Stop hook armed,
-  method=tlc-spec-driven-strict, do not clear until Verifier can show
-  SmartLearn has real discriminating sensors, not just green tests.
-  PAUSED 2026-09-15 by explicit user stop order ("Isso é uma ordem") to
-  reset conversation context — per feedback_explicit_stop_overrides_goal
-  memory, an explicit user stop always outranks an active /goal Stop hook.
-  Session halted mid-task, NOT mid-file-write: see UNVERIFIED_WORK below.
-UNVERIFIED_WORK=e2e/study-now-flow.spec.js — WRITTEN, COMMITTED as WIP
-  (e2782ce, message says UNVERIFIED explicitly), NEVER RUN.
-  Closes the goal-mandated Study Now -> attempt -> evidence -> reload ->
-  Exercícios resolvidos -> tentativa correta flow, reusing draft-acceptance
-  .spec.js's real pipeline setup (own server, port 13969) since "Estudar
-  agora" has no other reachable entry point. Two tests: CORRECT-outcome and
-  INCORRECT-outcome round trips. NEXT SESSION MUST: run
-  `npx playwright test e2e/study-now-flow.spec.js --reporter=list` before
-  trusting it — selectors were written from reading app.js, not yet proven
-  against the real DOM. If it fails, fix the test (or the selector
-  assumption), do not weaken the assertions. If it passes, run the full
-  client+server+e2e suites for regression, update TEST_COVERAGE_MATRIX.md,
-  and commit as its own atomic change.
+CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
+  "continue" after the pause below. method=tlc-spec-driven-strict, do not
+  clear until Verifier can show SmartLearn has real discriminating sensors,
+  not just green tests.
+  (history: PAUSED 2026-09-15 by explicit user stop order ("Isso é uma
+  ordem") to reset conversation context — per
+  feedback_explicit_stop_overrides_goal memory, an explicit user stop always
+  outranks an active /goal Stop hook. Session had halted mid-task, not
+  mid-file-write.)
+VERIFICATION_2026-09-15=e2e/study-now-flow.spec.js run for real for the
+  first time (per NEXT SESSION MUST below, now done): both specs
+  (CORRECT-outcome and INCORRECT-outcome) passed on first execution,
+  selectors matched the live DOM as written, no fix needed. Full regression
+  after: root `npm test` 306/306, `server/` `npm test` 372/372, full
+  `npx playwright test` suite 102/102 (includes the 2 new specs) — all
+  green. Rust suite not re-run this pass (no Rust file touched since the
+  last confirmed-green Rust run at commit a63a35a; none of the 5 commits
+  since — idempotency.js, theme.js, subjects.js mutation-test, this e2e
+  draft — touch src-tauri/). TEST_COVERAGE_MATRIX.md updated: gap #4 marked
+  DONE, app.js's e2e list now includes study-now-flow.
+UNVERIFIED_WORK=none — the one item this pause left open is now verified
+  (see VERIFICATION_2026-09-15 above).
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
   attempt-review feature (abf55b5), idempotency.js bug+fix (ea20e38),
-  theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b).
+  theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b),
+  Study Now e2e verification (VERIFICATION_2026-09-15 above).
 NEXT_TASK=continue TEST SHIELD build-out per `.specs/TEST_COVERAGE_MATRIX.md`
   — pick next by HIGHEST_REMAINING_RISK × WEAKEST_PROTECTION, do not stop
   between items, do not re-verify what the matrix already marks closed.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression
-  (e2e/stats-responsive-regression.spec.js). Still open: app.js has no fast
-  unit-speed gate (5105 lines, e2e-only — goal text pre-authorizes small
-  internal extractions for testability without asking, as long as behavior/
-  contract/data-meaning stay invariant and it's reversible+test-proven);
-  Study Now's attemptIds wiring: e2e/study-now-flow.spec.js drafted 2026-09-15
-  but UNVERIFIED (see UNVERIFIED_WORK above) — run it before trusting it;
-  ordinary-select vs context-switcher semantic separation (partially covered
-  by select-ui.spec.js/context-switcher-keyboard.spec.js — not yet verified
-  against the matrix's "existing test != proof" bar); FASE 8 mutation-audit
-  is one data point (subjects.js only), not swept project-wide.
+  (e2e/stats-responsive-regression.spec.js). Study Now's attemptIds wiring
+  is now verified (see VERIFICATION_2026-09-15 above) — no longer open.
+  Still open: app.js has no fast unit-speed gate (5105 lines, e2e-only —
+  goal text pre-authorizes small internal extractions for testability
+  without asking, as long as behavior/contract/data-meaning stay invariant
+  and it's reversible+test-proven); ordinary-select vs context-switcher
+  semantic separation (partially covered by select-ui.spec.js/context-
+  switcher-keyboard.spec.js — not yet verified against the matrix's
+  "existing test != proof" bar); FASE 8 mutation-audit is one data point
+  (subjects.js only), not swept project-wide.
 NEXT_TASK_STATUS=IN_PROGRESS (autonomous, /goal-driven — see above)
 WORKTREE_STATUS=CLEAN (only untracked, pre-existing, not-mine .impeccable/)
 BLOCKERS=none
