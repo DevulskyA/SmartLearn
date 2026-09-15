@@ -10,21 +10,41 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=69e2f16
+CURRENT_HEAD=6ad3b5b
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
-CURRENT_PHASE=PRODUCT-REAL-01 PARTIAL — real-chapter benchmark, not yet exhaustive
-LAST_COMPLETED_TASK=ENV-NORMALIZE-01 (69e2f16) — see checkpoint note below
-NEXT_TASK=SMARTLEARN_STATS_VISUAL_INTELLIGENCE_V1 (see .specs/EXECUTION.md).
-  Luna Alto (AI_PROVIDER_DECISION + LUNA_ALTO_TASK_SPEC below) remains the
-  canonical decision and NOT_STARTED, but is not next-in-line — do not
-  pick it up without checking .specs/EXECUTION.md CURRENT_TASK first.
-NEXT_TASK_STATUS=NOT_STARTED
-WORKTREE_STATUS=CLEAN
+CURRENT_PHASE=TEST_SHIELD_BUILDOUT — /goal active (2026-09-15), Stop hook armed,
+  method=tlc-spec-driven-strict, do not clear until Verifier can show
+  SmartLearn has real discriminating sensors, not just green tests.
+LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
+  file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
+  attempt-review feature (abf55b5), idempotency.js bug+fix (ea20e38),
+  theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b).
+NEXT_TASK=continue TEST SHIELD build-out per `.specs/TEST_COVERAGE_MATRIX.md`
+  — pick next by HIGHEST_REMAINING_RISK × WEAKEST_PROTECTION, do not stop
+  between items, do not re-verify what the matrix already marks closed.
+  Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
+  != 0% (tracking-state.test.js), subjectColor != performanceColor
+  (performance-thresholds.test.js), 375/768/1280 responsive regression
+  (e2e/stats-responsive-regression.spec.js). Still open: app.js has no fast
+  unit-speed gate (5105 lines, e2e-only — goal text pre-authorizes small
+  internal extractions for testability without asking, as long as behavior/
+  contract/data-meaning stay invariant and it's reversible+test-proven);
+  Study Now's attemptIds wiring has no automated test (needs new e2e infra,
+  "Estudar agora" only reachable via full draft-acceptance pipeline today);
+  ordinary-select vs context-switcher semantic separation (partially covered
+  by select-ui.spec.js/context-switcher-keyboard.spec.js — not yet verified
+  against the matrix's "existing test != proof" bar); FASE 8 mutation-audit
+  is one data point (subjects.js only), not swept project-wide.
+NEXT_TASK_STATUS=IN_PROGRESS (autonomous, /goal-driven — see above)
+WORKTREE_STATUS=CLEAN (only untracked, pre-existing, not-mine .impeccable/)
 BLOCKERS=none
 PRODUCT_CONSTITUTION_PATH=.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md
 QUALITY_STANDARD_PATH=.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md
 SAFE_EVOLUTION_STANDARD_PATH=.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md
   (supersedes NON_REGRESSION_PRINCIPLES_V1.md, adopted 2026-09-14)
+TEST_COVERAGE_MATRIX_PATH=.specs/TEST_COVERAGE_MATRIX.md (persistent ledger,
+  update in place as items close — do not treat "file exists" as proof,
+  see FASE 8 mutation-test methodology already demonstrated there)
 
 ENV-NORMALIZE-01 CHECKPOINT (2026-09-12, commit 69e2f16):
   A prior session in this conversation ran Rust/Tauri AI scaffolding
