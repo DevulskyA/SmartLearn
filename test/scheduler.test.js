@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ALGORITHMS, SCHEDULE_OFFSETS, generateInitialTasks } from "../src/scheduler.js";
+import { ALGORITHMS, SCHEDULE_OFFSETS, generateInitialTasks, getNextReview } from "../src/scheduler.js";
 import { REVIEW_DAY_OFFSETS, generateReviewDates } from "../src/review-schedule.js";
 
 test("ALGORITHMS.LEGACY é 'legacy'", () => {
@@ -36,4 +36,36 @@ test("generateInitialTasks algoritmo desconhecido lança erro explícito", () =>
 
 test("generateInitialTasks data inválida lança erro (mesmo comportamento que generateReviewDates)", () => {
   assert.throws(() => generateInitialTasks("nao-e-data"), /inválida/i);
+});
+
+// getNextReview, extracted from app.js (TEST SHIELD item 2, 2026-09-15):
+// drives both Plano's list and Study Now's question selection, previously
+// only exercised indirectly via e2e/smartlearn-plan-flow.spec.js.
+
+function task(overrides = {}) {
+  return { unitId: 1, dueDate: "2026-06-01", reviewDone: false, ...overrides };
+}
+
+test("getNextReview: picks the earliest pending dueDate for that unit, ignoring other units", () => {
+  const tasks = [
+    task({ dueDate: "2026-06-10" }),
+    task({ dueDate: "2026-06-01" }),
+    task({ dueDate: "2026-06-05" }),
+    task({ unitId: 2, dueDate: "2026-01-01" }), // different unit, must be ignored
+  ];
+  assert.equal(getNextReview(1, tasks), "2026-06-01");
+});
+
+test("getNextReview: a completed task (reviewDone) is never picked, even if it's the earliest date", () => {
+  const tasks = [
+    task({ dueDate: "2026-06-01", reviewDone: true }),
+    task({ dueDate: "2026-06-05", reviewDone: false }),
+  ];
+  assert.equal(getNextReview(1, tasks), "2026-06-05");
+});
+
+test("getNextReview: a unit with no pending tasks (none scheduled, or all done) returns null, not undefined or a stale date", () => {
+  assert.equal(getNextReview(1, []), null);
+  assert.equal(getNextReview(1, [task({ reviewDone: true })]), null);
+  assert.equal(getNextReview(999, [task()]), null); // unit not present at all
 });

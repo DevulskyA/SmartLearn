@@ -21,3 +21,14 @@ export function generateInitialTasks(studyDate, algorithm = ALGORITHMS.LEGACY) {
     dueDate,
   }));
 }
+
+// The earliest still-pending review task for a given unit, by dueDate — the
+// answer to "when does this unit next need review?", used by both Plano's
+// list and Study Now's own question selection. A unit with no pending tasks
+// (all reviewDone, or none scheduled) has no next review: null.
+export function getNextReview(unitId, allTasks) {
+  const pending = allTasks
+    .filter((t) => t.unitId === unitId && !t.reviewDone)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return pending.length > 0 ? pending[0].dueDate : null;
+}

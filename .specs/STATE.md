@@ -10,10 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=df0aab0 — FULL SUITE CONFIRMED GREEN 2026-09-15 end of
-  stretch: root 321/321, server 373/373, e2e 102/102, worktree clean
-  (only pre-existing untracked .impeccable/). This is the trusted
-  resume point for the next session.
+CURRENT_HEAD=2ce344a (about to advance — see EXTRACTION2_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -134,6 +131,22 @@ CORRECTCOUNT_GAP_2026-09-15=item 3: evidence.js's create() correctCount>
   Fixed: added a direct unit test to evidence.test.js asserting the clean
   typed rejection. Re-mutated to confirm the kill with the exact
   distinction it targets, reverted, full regression server 373/373.
+EXTRACTION2_2026-09-15=item 2, slice 2: extracted getNextReview(unitId,
+  allTasks) (earliest-pending-review lookup, drives both Plano's list
+  and Study Now's question selection) from app.js into scheduler.js,
+  next to generateInitialTasks. Same CHARACTERIZE->EXTRACT->TEST->
+  REGRESSION->VERIFY discipline as slice 1. 3 new tests in
+  test/scheduler.test.js. Full regression: root 324/324 (321+3 new),
+  e2e 102/102.
+  PROCESS NOTE (not a code finding): the e2e run for this slice stalled
+  37+ min with zero output (normal ~7 min) — diagnosed as OS resource
+  contention from orphaned vite/npm-run-dev processes (ports 5174/5180/
+  5183) left by earlier preview_start/preview_stop cycles this session,
+  untracked by the preview registry. Killed them (left the one tracked
+  preview, port 5175, alone), re-ran: 102/102 green in ~7 min normally.
+  If a future session sees a long-silent background e2e task, check for
+  orphaned dev-server processes (`Get-CimInstance Win32_Process -Filter
+  "Name='node.exe'"`) before assuming the suite itself is broken.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -147,23 +160,25 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   (LEARNING_UNITS_SWEEP_2026-09-15), weightedAccuracy value gap
   found+fixed (WEIGHTED_ACCURACY_GAP_2026-09-15), idempotency conflict-
   check kill (IDEMPOTENCY_KILL_2026-09-15), correctCount overflow gap
-  found+fixed (CORRECTCOUNT_GAP_2026-09-15, all above).
+  found+fixed (CORRECTCOUNT_GAP_2026-09-15), app.js extraction slice 2
+  (EXTRACTION2_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
-  extractions): first slice DONE (EXTRACTION_2026-09-15) — more
-  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 7
-  mutation-kill data points plus 3 genuine gaps found+fixed
-  (SCHEDULE_GAP, WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, all
-  2026-09-15) across 5 distinct critical properties (ownership isolation,
-  schedule constant, score arithmetic, duplicate-write prevention,
-  input-validation error quality). This is a strong, diverse evidence
-  base — reasonable to consider FASE 8 well-started, not necessarily
-  requiring more mutation targets before other TEST SHIELD work. Next
-  session should reconcile Git/STATE/matrix first (per this file's own
-  RECOVERY section), then either continue FASE 8 (candidates: same
-  "user_id = ? scoping" pattern in exercises.js/imports.js/content-
-  proposals.js/backup.js, unswept but lower priority; auth/session
-  security, heavily tested but unswept by mutation) or return to item 2
-  (more app.js extraction candidates, not yet triaged) per risk.
+  extractions): 2 slices DONE (EXTRACTION_2026-09-15,
+  EXTRACTION2_2026-09-15) — more extractable cores may exist, not yet
+  triaged (getPlanPerfBadge's threshold-banding logic is DOM-mixed but
+  has a pure core; getReviewStatusLabel/getDaysBetween not yet
+  inspected). Item 3 (FASE 8): 7 mutation-kill data points plus 3
+  genuine gaps found+fixed (SCHEDULE_GAP, WEIGHTED_ACCURACY_GAP,
+  CORRECTCOUNT_GAP, all 2026-09-15) across 5 distinct critical
+  properties (ownership isolation, schedule constant, score arithmetic,
+  duplicate-write prevention, input-validation error quality). This is a
+  strong, diverse evidence base. Next session should reconcile Git/
+  STATE/matrix first (per this file's own RECOVERY section), then
+  either continue FASE 8 (candidates: same "user_id = ? scoping" pattern
+  in exercises.js/imports.js/content-proposals.js/backup.js, unswept but
+  lower priority; auth/session security, heavily tested but unswept by
+  mutation) or return to item 2 (more app.js extraction candidates, not
+  yet triaged) per risk.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression

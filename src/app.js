@@ -4,7 +4,7 @@ import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks } from "./scheduler.js";
+import { generateInitialTasks, getNextReview } from "./scheduler.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -1167,12 +1167,8 @@ function getPlanStateBadge(state) {
   return span;
 }
 
-function getNextReview(unitId, allTasks) {
-  const pending = allTasks
-    .filter((t) => t.unitId === unitId && !t.reviewDone)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  return pending.length > 0 ? pending[0].dueDate : null;
-}
+// getNextReview itself now lives in scheduler.js (pure, unit-tested there —
+// see test/scheduler.test.js) since it has no DOM dependency.
 
 function getPlanPerfBadge(evidence) {
   const total = evidence.reduce((s, e) => s + e.questionsCount, 0);
