@@ -381,6 +381,11 @@ function createPerformanceBadge(value) {
 function createExerciseRow(exercise) {
   const row = document.createElement("tr");
   row.className = "exercise-row";
+  // Same activate-a-row idiom as unit-stats-list's .matrix-row below
+  // (tabIndex + click/keydown, no role override — a table row's default
+  // `row` role stays correct for a screen reader; this only adds a second
+  // way to activate it, same as a normal clickable table row does).
+  row.tabIndex = 0;
 
   const subjectCell = document.createElement("th");
   subjectCell.scope = "row";
@@ -404,8 +409,106 @@ function createExerciseRow(exercise) {
   scoreCell.append(createPerformanceBadge(exercise.scorePercent));
 
   row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
+  row.addEventListener("click", () => openExerciseDetail(exercise));
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openExerciseDetail(exercise);
+    }
+  });
   return row;
 }
+
+const OUTCOME_LABEL = { CORRECT: "Acertou", INCORRECT: "Errou", UNKNOWN: "Resultado não registrado" };
+const ASSISTANCE_LABEL = { NONE: "Sem ajuda", HINT: "Usou dica", PARTIAL_SOLUTION: "Viu parte da resposta", SOLUTION: "Viu a resposta" };
+
+function createAttemptItem(attempt) {
+  const li = document.createElement("li");
+  const outcomeClass = attempt.outcome === "CORRECT" ? "is-correct" : attempt.outcome === "INCORRECT" ? "is-incorrect" : "is-unknown";
+  li.className = `exercise-attempt-item ${outcomeClass}`;
+
+  li.append(createTextElement("p", "exercise-attempt-question", attempt.question ?? "—"));
+  if (attempt.answer) {
+    li.append(createTextElement("p", "exercise-attempt-answer", `Gabarito: ${attempt.answer}`));
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "exercise-attempt-meta";
+  const outcomeBadge = document.createElement("span");
+  outcomeBadge.className = `exercise-attempt-outcome ${outcomeClass}`;
+  outcomeBadge.textContent = OUTCOME_LABEL[attempt.outcome ?? "UNKNOWN"] ?? OUTCOME_LABEL.UNKNOWN;
+  meta.append(outcomeBadge);
+  const assistance = ASSISTANCE_LABEL[attempt.assistanceUsed];
+  if (assistance) meta.append(createTextElement("span", "exercise-attempt-assistance", assistance));
+  li.append(meta);
+
+  return li;
+}
+
+// Whole-row click (per product request: the natural target of tapping a
+// solved-exercise row is opening that attempt, not a small separate
+// button) opens this dialog. `exercise` is one completedExercises item
+// (src/stats.js) — id is the learning_evidence row id, context is
+// REVIEW/INITIAL_PRACTICE/EXTERNAL.
+async function openExerciseDetail(exercise) {
+  const dialog = document.getElementById("exercise-detail-dialog");
+  const eyebrow = document.getElementById("exercise-detail-eyebrow");
+  const title = document.getElementById("exercise-detail-title");
+  const body = document.getElementById("exercise-detail-body");
+  if (!dialog || !body) return;
+
+  eyebrow.textContent = exercise.subjectName ?? "";
+  title.textContent = exercise.title ?? "";
+  body.replaceChildren();
+
+  // EXTERNAL evidence never has an in-app attempt to link — answered
+  // outside the app, by definition — so this is answered locally, honestly,
+  // with no network round-trip and no chance of it ever resolving otherwise.
+  if (exercise.context === "EXTERNAL") {
+    body.append(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Este resultado foi registrado como feito fora do app — não há como mostrar as perguntas desta tentativa.",
+    ));
+    dialog.showModal();
+    return;
+  }
+
+  body.append(createTextElement("p", "exercise-detail-unavailable", "Carregando…"));
+  dialog.showModal();
+
+  let result;
+  try {
+    result = await DB.learningEvidence.getAttempts(exercise.id);
+  } catch (error) {
+    console.error("Falha ao buscar detalhe da tentativa.", error);
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Não foi possível carregar o detalhe desta tentativa agora.",
+    ));
+    return;
+  }
+
+  const attempts = result?.attempts ?? [];
+  if (attempts.length === 0) {
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Detalhe da tentativa indisponível — este resultado foi registrado antes do detalhe por questão existir, ou o registro individual não chegou a ser salvo.",
+    ));
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "exercise-attempt-list";
+  for (const attempt of attempts) list.append(createAttemptItem(attempt));
+  body.replaceChildren(list);
+}
+
+document.getElementById("exercise-detail-close")?.addEventListener("click", () => {
+  document.getElementById("exercise-detail-dialog")?.close();
+});
 function getDaysBetween(fromDate, toDate) {
   const from = new Date(`${fromDate}T00:00:00.000Z`);
   const to = new Date(`${toDate}T00:00:00.000Z`);
@@ -2950,7 +3053,7 @@ async function startStudyNow(unit, subjectName) {
   studyNowReviewErrorsBtn.hidden = true;
   studyNowErrorsList.hidden = true;
   studyNowErrorsList.replaceChildren();
-  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, correctCount: 0, answeredCount: 0, wrongExercises: [] };
+  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, attemptIds: [], correctCount: 0, answeredCount: 0, wrongExercises: [] };
   showScreen("study-now", { focus: true });
 
   try {
@@ -3009,7 +3112,7 @@ async function finishStudyNowSession() {
   studyNowQuestionArea.hidden = true;
   studyNowProgress.textContent = "";
 
-  const { unitId, answeredCount, correctCount } = state;
+  const { unitId, answeredCount, correctCount, attemptIds } = state;
   if (answeredCount > 0) {
     try {
       await DB.learningEvidence.create({
@@ -3018,6 +3121,7 @@ async function finishStudyNowSession() {
         questionsCount: answeredCount,
         correctCount,
         evidenceDate: getLocalDateValue(),
+        attemptIds,
       });
     } catch (error) {
       console.error("Falha ao registrar evidência de prática inicial.", error);
@@ -3117,6 +3221,11 @@ async function judgeStudyNow(isCorrect) {
   if (REMOTE_MODE && DB.attempts && state.attemptId) {
     try {
       await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+      // Collected here, only after a successful submit — an attempt that
+      // never reached SUBMITTED (start/submit failure) must never be handed
+      // to learningEvidence.create's attemptIds (the server rejects any id
+      // that isn't already SUBMITTED).
+      state.attemptIds.push(Number(state.attemptId));
     } catch (error) {
       console.error("Falha ao registrar resultado (prática inicial).", error);
     }

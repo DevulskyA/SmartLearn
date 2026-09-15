@@ -1,7 +1,8 @@
 import * as evidence from '../services/evidence.js';
+import * as exerciseReview from '../services/exercise-review.js';
 
 function handleError(err, reply) {
-  if (err instanceof evidence.EvidenceError) {
+  if (err instanceof evidence.EvidenceError || err instanceof exerciseReview.ExerciseReviewError) {
     const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404 };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
@@ -21,6 +22,7 @@ export function registerEvidenceRoutes(app, db) {
           questionsCount: { type: 'integer' },
           correctCount: { type: 'integer' },
           evidenceDate: { type: 'string' },
+          attemptIds: { type: 'array', items: { type: 'integer' } },
         },
       },
     },
@@ -28,6 +30,16 @@ export function registerEvidenceRoutes(app, db) {
     try {
       reply.status(201);
       return { evidence: evidence.create(db, request.actor.userId, request.body) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.get('/learning-evidence/:id/attempts', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return exerciseReview.getAttemptDetails(db, request.actor.userId, id);
     } catch (err) { return handleError(err, reply); }
   });
 

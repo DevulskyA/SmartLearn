@@ -998,6 +998,14 @@ function createBrowserStore() {
         writeState(state);
         return evidence;
       },
+      // Local/browser store has no exercises/attempts tables at all (see the
+      // BOUNDARY note above) — there is no item-level data to ever return
+      // here, by construction, not because of a missing link. Parity method
+      // so app.js can call DB.learningEvidence.getAttempts(id) unconditionally
+      // regardless of which store is active.
+      async getAttempts() {
+        return { source: "NONE", attempts: [] };
+      },
       async getAll() {
         return [...readState().learningEvidence].sort(
           (a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id,

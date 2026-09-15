@@ -2874,6 +2874,112 @@ h1 {
   gap: 0.75rem;
 }
 
+.exercise-detail-dialog {
+  border: none;
+  border-radius: 0.9rem;
+  padding: 1.5rem;
+  width: min(90vw, 34rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.exercise-detail-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.exercise-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.exercise-detail-heading h2 {
+  margin: 0.15rem 0 0;
+}
+#exercise-detail-close {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  color: var(--color-text);
+  width: 2rem;
+  height: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.exercise-detail-unavailable {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+.exercise-attempt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.exercise-attempt-item {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+.exercise-attempt-item.is-correct {
+  border-color: color-mix(in oklch, var(--status-done-text) 30%, var(--color-border));
+}
+.exercise-attempt-item.is-incorrect {
+  border-color: color-mix(in oklch, var(--status-overdue-text) 30%, var(--color-border));
+}
+.exercise-attempt-question {
+  font-weight: 650;
+  margin: 0 0 0.4rem;
+}
+.exercise-attempt-answer {
+  color: var(--color-muted);
+  margin: 0 0 0.5rem;
+}
+.exercise-attempt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.84rem;
+}
+.exercise-attempt-outcome {
+  font-weight: 650;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+}
+.exercise-attempt-outcome.is-correct {
+  color: var(--status-done-text);
+  background: var(--status-done-fill);
+}
+.exercise-attempt-outcome.is-incorrect {
+  color: var(--status-overdue-text);
+  background: var(--status-overdue-fill);
+}
+.exercise-attempt-outcome.is-unknown {
+  color: var(--color-muted);
+  background: color-mix(in oklch, var(--color-muted) 16%, transparent);
+}
+.exercise-attempt-assistance {
+  color: var(--color-muted);
+}
+
+.exercise-row {
+  cursor: pointer;
+}
+.exercise-row:hover,
+.exercise-row:focus-visible {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+.exercise-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 /* ── Plan screen ─────────────────────────────────────────────────────────── */
 
 .plan-filters {

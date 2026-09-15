@@ -314,15 +314,22 @@ const learningEvidence = {
     const { evidence } = await apiRequest(`/v1/learning-evidence?unitId=${encodeURIComponent(unitId)}`);
     return evidence.map(mapEvidence);
   },
-  async create({ unitId, context, questionsCount, correctCount, evidenceDate }) {
+  async create({ unitId, context, questionsCount, correctCount, evidenceDate, attemptIds }) {
     if (context === 'REVIEW') {
       throw new RemoteStoreError('UNSUPPORTED_DIRECT_REVIEW_EVIDENCE', 'Evidência de tipo REVIEW só pode ser criada concluindo uma revisão.');
     }
-    const { evidence } = await apiRequest('/v1/learning-evidence', {
-      method: 'POST',
-      body: { unitId, type: context, questionsCount, correctCount, evidenceDate },
-    });
+    const body = { unitId, type: context, questionsCount, correctCount, evidenceDate };
+    if (Array.isArray(attemptIds) && attemptIds.length > 0) body.attemptIds = attemptIds;
+    const { evidence } = await apiRequest('/v1/learning-evidence', { method: 'POST', body });
     return mapEvidence(evidence);
+  },
+  // Per-attempt detail behind one evidence row (021-practice-evidence-
+  // attempt-link.sql / T31's review_task_id link) — 'source' tells the
+  // caller whether this is real item-level data (REVIEW/PRACTICE) or
+  // genuinely unavailable (NONE: EXTERNAL evidence, old data predating the
+  // link, or a best-effort item-level write that never landed).
+  async getAttempts(evidenceId) {
+    return apiRequest(`/v1/learning-evidence/${encodeURIComponent(evidenceId)}/attempts`);
   },
 };
 
