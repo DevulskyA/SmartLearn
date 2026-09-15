@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=4f9b18c (about to advance — see WEIGHTED_ACCURACY_GAP_2026-09-15)
+CURRENT_HEAD=372fb09 (about to advance — see IDEMPOTENCY_KILL_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -113,6 +113,13 @@ WEIGHTED_ACCURACY_GAP_2026-09-15=item 3, pivoted deliberately away from
   direct-value tests added to test/analytics.test.js — re-mutated to
   confirm the kill (100 !== 70), reverted, confirmed clean. Full
   regression: root 321/321. No product code changed.
+IDEMPOTENCY_KILL_2026-09-15=item 3, a different critical property again
+  (duplicate-write prevention). Mutated checkIdempotency() to drop the
+  payload_hash mismatch conflict check entirely — a repeated
+  operationKey with a genuinely different payload would silently replay
+  the old cached result instead of throwing IdempotencyConflictError.
+  idempotency.test.js killed it cleanly (Missing expected exception).
+  Real protection, no gap. Mutant reverted, worktree confirmed clean.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -124,21 +131,25 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   (FASE8_SWEEP_2026-09-15), REVIEW_DAY_OFFSETS single-point-of-failure
   found+fixed (SCHEDULE_GAP_2026-09-15), learning-units.js ownership kill
   (LEARNING_UNITS_SWEEP_2026-09-15), weightedAccuracy value gap
-  found+fixed (WEIGHTED_ACCURACY_GAP_2026-09-15, all above).
+  found+fixed (WEIGHTED_ACCURACY_GAP_2026-09-15), idempotency conflict-
+  check kill (IDEMPOTENCY_KILL_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): first slice DONE (EXTRACTION_2026-09-15) — more
-  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 5
+  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 6
   mutation-kill data points plus 2 genuine gaps found+fixed
-  (SCHEDULE_GAP_2026-09-15, WEIGHTED_ACCURACY_GAP_2026-09-15) — continue
-  risk-ordered. Remaining candidates: same "user_id = ? scoping" pattern
-  in exercises.js, imports.js, content-proposals.js, backup.js
-  (unswept, lower priority now — pattern well-established); idempotency's
-  operationKey collision handling; correctCount<=questionsCount write-
-  time invariant enforcement (validated at evidence.js's boundary but not
-  mutation-proven); review-score.js's isOverflow/scorePercent logic (UI
-  input parsing, lower consequence than the already-fixed schedule/
-  accuracy gaps). Continue depth-first per /goal's standing instruction —
-  do not stop to ask which target next.
+  (SCHEDULE_GAP_2026-09-15, WEIGHTED_ACCURACY_GAP_2026-09-15) across 4
+  distinct critical properties (ownership isolation, schedule constant,
+  score arithmetic, duplicate-write prevention) — continue risk-ordered,
+  favor breadth across distinct properties over repeating the same
+  pattern. Remaining candidates: same "user_id = ? scoping" pattern in
+  exercises.js, imports.js, content-proposals.js, backup.js (unswept,
+  lower priority — pattern well-established, 4/4 real kills already);
+  correctCount<=questionsCount write-time invariant (validated at
+  evidence.js's boundary but not mutation-proven); backup/restore round-
+  trip fidelity (backup-contract.test.js exists, unswept); auth/session
+  security (heavily tested already, unswept by mutation). Continue
+  depth-first per /goal's standing instruction — do not stop to ask which
+  target next.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression
