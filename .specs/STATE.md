@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=372fb09 (about to advance — see IDEMPOTENCY_KILL_2026-09-15)
+CURRENT_HEAD=db43bf7 (about to advance — see CORRECTCOUNT_GAP_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -120,6 +120,17 @@ IDEMPOTENCY_KILL_2026-09-15=item 3, a different critical property again
   the old cached result instead of throwing IdempotencyConflictError.
   idempotency.test.js killed it cleanly (Missing expected exception).
   Real protection, no gap. Mutant reverted, worktree confirmed clean.
+CORRECTCOUNT_GAP_2026-09-15=item 3: evidence.js's create() correctCount>
+  questionsCount rejection had zero unit-level tests. Mutated it away
+  (dropped `|| correctCount > questionsCount`) and ran the full server
+  suite: 371/372 still passed — the sole catch (evidence-settings.test.js,
+  incidental) surfaced a raw SqliteError from the DB's CHECK constraint,
+  not the intended EvidenceError('VALIDATION_FAILED') — a real error-
+  quality gap (would likely 500 instead of 400 at the route layer), even
+  though the DB itself refuses the bad row so nothing corrupts silently.
+  Fixed: added a direct unit test to evidence.test.js asserting the clean
+  typed rejection. Re-mutated to confirm the kill with the exact
+  distinction it targets, reverted, full regression server 373/373.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -132,24 +143,24 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   found+fixed (SCHEDULE_GAP_2026-09-15), learning-units.js ownership kill
   (LEARNING_UNITS_SWEEP_2026-09-15), weightedAccuracy value gap
   found+fixed (WEIGHTED_ACCURACY_GAP_2026-09-15), idempotency conflict-
-  check kill (IDEMPOTENCY_KILL_2026-09-15, all above).
+  check kill (IDEMPOTENCY_KILL_2026-09-15), correctCount overflow gap
+  found+fixed (CORRECTCOUNT_GAP_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): first slice DONE (EXTRACTION_2026-09-15) — more
-  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 6
-  mutation-kill data points plus 2 genuine gaps found+fixed
-  (SCHEDULE_GAP_2026-09-15, WEIGHTED_ACCURACY_GAP_2026-09-15) across 4
-  distinct critical properties (ownership isolation, schedule constant,
-  score arithmetic, duplicate-write prevention) — continue risk-ordered,
-  favor breadth across distinct properties over repeating the same
-  pattern. Remaining candidates: same "user_id = ? scoping" pattern in
-  exercises.js, imports.js, content-proposals.js, backup.js (unswept,
-  lower priority — pattern well-established, 4/4 real kills already);
-  correctCount<=questionsCount write-time invariant (validated at
-  evidence.js's boundary but not mutation-proven); backup/restore round-
-  trip fidelity (backup-contract.test.js exists, unswept); auth/session
-  security (heavily tested already, unswept by mutation). Continue
-  depth-first per /goal's standing instruction — do not stop to ask which
-  target next.
+  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 7
+  mutation-kill data points plus 3 genuine gaps found+fixed
+  (SCHEDULE_GAP, WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, all
+  2026-09-15) across 5 distinct critical properties (ownership isolation,
+  schedule constant, score arithmetic, duplicate-write prevention,
+  input-validation error quality). This is a strong, diverse evidence
+  base — reasonable to consider FASE 8 well-started, not necessarily
+  requiring more mutation targets before other TEST SHIELD work. Next
+  session should reconcile Git/STATE/matrix first (per this file's own
+  RECOVERY section), then either continue FASE 8 (candidates: same
+  "user_id = ? scoping" pattern in exercises.js/imports.js/content-
+  proposals.js/backup.js, unswept but lower priority; auth/session
+  security, heavily tested but unswept by mutation) or return to item 2
+  (more app.js extraction candidates, not yet triaged) per risk.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression

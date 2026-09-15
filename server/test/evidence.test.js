@@ -53,6 +53,27 @@ test('create() with no attemptIds behaves exactly as before (baseline, unaffecte
   } finally { cleanup(); }
 });
 
+// FASE 8 mutation-test finding (2026-09-15): create()'s own
+// correctCount > questionsCount rejection had no unit-level test in this
+// file. Mutating it away survived the entire server suite except one
+// incidental hit — evidence-settings.test.js's create() call happened to
+// trip the DB's CHECK constraint instead, surfacing a raw SqliteError
+// (not the intended EvidenceError('VALIDATION_FAILED')) since that
+// wasn't the assertion the test was written to make. This test protects
+// the actual contract directly: a clean, typed rejection, not an opaque
+// DB-layer error a route handler would turn into a 500 instead of a 400.
+test('create() rejects correctCount greater than questionsCount with a clean VALIDATION_FAILED, not a raw DB error', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'overflow@example.com');
+    const unit = makeUnit(db, userId);
+    assert.throws(
+      () => evidence.create(db, userId, { unitId: unit.id, type: 'INITIAL_PRACTICE', questionsCount: 5, correctCount: 6, evidenceDate: '2026-01-02' }),
+      (err) => err.code === 'VALIDATION_FAILED' && err.field === 'correctCount',
+    );
+  } finally { cleanup(); }
+});
+
 test('create() links every given submitted attempt to the new evidence row via evidence_id', () => {
   const { db, cleanup } = tmpDb();
   try {
