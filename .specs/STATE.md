@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=2ce344a (about to advance — see EXTRACTION2_2026-09-15 below)
+CURRENT_HEAD=7c940de (about to advance — see EXERCISES_KILL_2026-09-15)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -147,6 +147,9 @@ EXTRACTION2_2026-09-15=item 2, slice 2: extracted getNextReview(unitId,
   If a future session sees a long-silent background e2e task, check for
   orphaned dev-server processes (`Get-CimInstance Win32_Process -Filter
   "Name='node.exe'"`) before assuming the suite itself is broken.
+EXERCISES_KILL_2026-09-15=item 3, 5th ownership data point:
+  exercises.js's findOwnedExercise() — same user_id-drop mutation, ran
+  exercises.test.js's cross-user test: killed cleanly. Reverted, clean.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -161,7 +164,8 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   found+fixed (WEIGHTED_ACCURACY_GAP_2026-09-15), idempotency conflict-
   check kill (IDEMPOTENCY_KILL_2026-09-15), correctCount overflow gap
   found+fixed (CORRECTCOUNT_GAP_2026-09-15), app.js extraction slice 2
-  (EXTRACTION2_2026-09-15, all above).
+  (EXTRACTION2_2026-09-15), exercises.js ownership kill
+  (EXERCISES_KILL_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): 2 slices DONE (EXTRACTION_2026-09-15,
   EXTRACTION2_2026-09-15) — more extractable cores may exist, not yet
