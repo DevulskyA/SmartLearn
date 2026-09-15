@@ -77,12 +77,12 @@ these tests discriminating, or just present?), not breadth.
 | source-proposals-ui.js | — | e2e/source-proposals.spec.js | PROTECTED (e2e-only) |
 | migration-ui.js | — | e2e/migration.spec.js | PROTECTED (e2e-only) |
 | offline-store.js, offline-ui.js | — | e2e/offline.spec.js, e2e/offline-writes.spec.js | PROTECTED (e2e-only) |
-| theme.js | — | none found by name | **UNPROTECTED** — no unit test, no e2e spec named for it; dark/light rendering is presumably eyeballed inside other specs' screenshots at best |
+| theme.js | — | test/theme.test.js (pure logic) + e2e/theme.spec.js (2026-09-15) | PROTECTED |
 
 ## Named gaps worth carrying into FASE 3+ (priority order, RISK ≈ IMPACT × REACH × UNCERTAINTY × REGRESSION_HISTORY)
 
 1. **app.js's non-DOM logic has no fast focused gate.** 5105 lines, one file, only e2e as a sensor. A future change deep inside (e.g. another Study Now edit) has no unit-speed feedback loop — everything routes through the full e2e suite. Not fixed here (would mean extracting pure functions out of a DOM-coupled file — a real refactor, out of this task's authorized scope).
-2. **theme.js is genuinely unprotected.** Small surface, but a regression here is exactly the "silent visual regression nobody notices" class of bug this project's own doctrine (§17/§18 responsive/accessibility rules) worries about most.
+2. ~~theme.js is genuinely unprotected.~~ **DONE 2026-09-15** — test/theme.test.js (pure logic, including a regression sensor for a hardcoded-dark-id-list duplication hazard found while writing it) + e2e/theme.spec.js (real picker, persistence, OS auto-follow, quick toggle).
 3. ~~idempotency.js is cross-cutting and only indirectly tested.~~ **DONE 2026-09-15** — idempotency.test.js added, found and fixed a real latent bug (LESSON-008).
 4. **This task's own known gap** ([[project_smartlearn]] session 2026-09-15): Study Now's client-side attemptIds collection (`app.js` judgeStudyNow/finishStudyNowSession) has no automated test — "Estudar agora" is unreachable in any current e2e without driving the full Materiais/draft-acceptance pipeline. Pre-existing UI-reachability limitation, not introduced by this task, but this task's new code now lives inside it.
 5. **FASE 8 (test-quality audit) has not been run on any existing test.** "File exists and is green" is this matrix's bar, not "would catch a plausible wrong implementation." The server's own idempotency/ownership tests read as high-quality on inspection so far (see evidence.test.js's own Cardboard-Test-driven cross-contamination addition, added specifically because the first draft's tests would have passed a subtly wrong join) but this has not been swept project-wide.
