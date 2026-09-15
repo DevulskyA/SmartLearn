@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=28c24a3 (about to advance — see SIMPLIFY_PERFBAND_2026-09-15)
+CURRENT_HEAD=ca9fc71 (about to advance — see SESSION_GAP_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -174,6 +174,21 @@ SIMPLIFY_PERFBAND_2026-09-15=found real duplication while triaging
   code throughout. Fix: tabs_close + preview_start (fresh tab), not
   navigate. Documented in EXECUTION.md's ARMADILHA CONHECIDA section as
   #2, for future sessions.
+SESSION_GAP_2026-09-15=item 3, new critical property (session security,
+  not ownership): resolve-actor.js's own inactivity-window enforcement —
+  the server-side gate that revokes+rejects a session past its 7-day
+  inactivity window — had NO test anywhere in the project.
+  isSessionInactive() itself is boundary-tested, but nothing proved
+  createSessionActorResolver actually calls it and honors the result.
+  Deleted the check entirely: full 373-test server suite, ZERO
+  failures. A session past its inactivity window would have kept
+  resolving to a valid actor forever, undetected. Fixed: new file
+  server/test/resolve-actor.test.js (module had zero prior coverage) —
+  4 tests: active-session happy path, inactive-session rejection
+  (returns null AND actually revokes the DB row), a revoked session
+  stays rejected on a later request even with a fresh clock, no-cookie
+  case. Re-mutated to confirm the kill, reverted. Full regression:
+  server 377/377 (373 + 4 new).
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -191,24 +206,27 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   (EXTRACTION2_2026-09-15), exercises.js ownership kill
   (EXERCISES_KILL_2026-09-15), app.js extraction slice 3
   (EXTRACTION3_2026-09-15), performance-band duplication consolidated
-  (SIMPLIFY_PERFBAND_2026-09-15, all above).
+  (SIMPLIFY_PERFBAND_2026-09-15), session-inactivity enforcement gap
+  found+fixed (SESSION_GAP_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): 3 slices DONE (EXTRACTION_2026-09-15,
   EXTRACTION2_2026-09-15, EXTRACTION3_2026-09-15) + one duplication
   consolidated (SIMPLIFY_PERFBAND_2026-09-15) — more extractable cores
-  may exist, not yet triaged. Item 3 (FASE 8): 9 mutation-kill data
-  points plus 3 genuine gaps found+fixed
-  (SCHEDULE_GAP, WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, all
-  2026-09-15) across 6 distinct critical properties (ownership isolation
-  x5 services, schedule constant, score arithmetic, duplicate-write
-  prevention, input-validation error quality). Strong, diverse evidence
-  base. Next session should reconcile Git/STATE/matrix first (per this
-  file's own RECOVERY section), then either continue FASE 8 (candidates:
-  same "user_id = ? scoping" pattern in imports.js/content-proposals.js/
-  backup.js, unswept but lower priority — pattern proven 5/5; auth/
-  session security, heavily tested but unswept by mutation) or return to
-  item 2 (getPlanPerfBadge extraction, or triage remaining app.js
-  functions) per risk.
+  may exist, not yet triaged. Item 3 (FASE 8): 10 mutation-kill data
+  points plus 4 genuine gaps found+fixed (SCHEDULE_GAP,
+  WEIGHTED_ACCURACY_GAP, CORRECTCOUNT_GAP, SESSION_GAP, all 2026-09-15)
+  across 7 distinct critical properties (ownership isolation x5
+  services, schedule constant, score arithmetic, duplicate-write
+  prevention, input-validation error quality, session-inactivity
+  enforcement — the last one security-relevant). Strong, diverse
+  evidence base. Next session should reconcile Git/STATE/matrix first
+  (per this file's own RECOVERY section), then either continue FASE 8
+  (candidates: same "user_id = ? scoping" pattern in imports.js/
+  content-proposals.js/backup.js, unswept but lower priority — pattern
+  proven 5/5; CSRF check enforcement in http-contract.js, same
+  "pure fn tested, integration point not" shape as the session gap just
+  found) or return to item 2 (triage remaining app.js functions) per
+  risk.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression
