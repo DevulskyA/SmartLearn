@@ -10,11 +10,27 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=6ad3b5b
+CURRENT_HEAD=f759dd6
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — /goal active (2026-09-15), Stop hook armed,
   method=tlc-spec-driven-strict, do not clear until Verifier can show
   SmartLearn has real discriminating sensors, not just green tests.
+  PAUSED 2026-09-15 by explicit user stop order ("Isso é uma ordem") to
+  reset conversation context — per feedback_explicit_stop_overrides_goal
+  memory, an explicit user stop always outranks an active /goal Stop hook.
+  Session halted mid-task, NOT mid-file-write: see UNVERIFIED_WORK below.
+UNVERIFIED_WORK=e2e/study-now-flow.spec.js — WRITTEN, UNCOMMITTED, NEVER RUN.
+  Closes the goal-mandated Study Now -> attempt -> evidence -> reload ->
+  Exercícios resolvidos -> tentativa correta flow, reusing draft-acceptance
+  .spec.js's real pipeline setup (own server, port 13969) since "Estudar
+  agora" has no other reachable entry point. Two tests: CORRECT-outcome and
+  INCORRECT-outcome round trips. NEXT SESSION MUST: run
+  `npx playwright test e2e/study-now-flow.spec.js --reporter=list` before
+  trusting it — selectors were written from reading app.js, not yet proven
+  against the real DOM. If it fails, fix the test (or the selector
+  assumption), do not weaken the assertions. If it passes, run the full
+  client+server+e2e suites for regression, update TEST_COVERAGE_MATRIX.md,
+  and commit as its own atomic change.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
   attempt-review feature (abf55b5), idempotency.js bug+fix (ea20e38),
@@ -29,8 +45,8 @@ NEXT_TASK=continue TEST SHIELD build-out per `.specs/TEST_COVERAGE_MATRIX.md`
   unit-speed gate (5105 lines, e2e-only — goal text pre-authorizes small
   internal extractions for testability without asking, as long as behavior/
   contract/data-meaning stay invariant and it's reversible+test-proven);
-  Study Now's attemptIds wiring has no automated test (needs new e2e infra,
-  "Estudar agora" only reachable via full draft-acceptance pipeline today);
+  Study Now's attemptIds wiring: e2e/study-now-flow.spec.js drafted 2026-09-15
+  but UNVERIFIED (see UNVERIFIED_WORK above) — run it before trusting it;
   ordinary-select vs context-switcher semantic separation (partially covered
   by select-ui.spec.js/context-switcher-keyboard.spec.js — not yet verified
   against the matrix's "existing test != proof" bar); FASE 8 mutation-audit
