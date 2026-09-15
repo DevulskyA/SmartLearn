@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=c8e1eed (about to advance — see FASE8_SWEEP_2026-09-15 below)
+CURRENT_HEAD=509182f (about to advance — see SCHEDULE_GAP_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -79,6 +79,21 @@ FASE8_SWEEP_2026-09-15=item 3: extended the cross-user ownership-isolation
   Both mutants reverted via `git checkout --`, worktree confirmed clean.
   FASE 8 is now 3 real data points on the same property (subjects,
   attempts, evidence-linking) — still not a project-wide sweep.
+SCHEDULE_GAP_2026-09-15=item 3, pivoted to a new critical property per
+  the risk formula (silently wrong spaced-repetition dates are
+  undetectable by a user — high pedagogical consequence). Mutated an
+  INTERIOR value of REVIEW_DAY_OFFSETS (shared/review-schedule.js, the
+  single canonical 16-day schedule shared by client+server): index 7,
+  150 -> 145. Root suite: 316/316 still passed (existing client test only
+  characterized dates[0]/dates[1]/dates.at(-1)/length, none interior-
+  dependent). Full server suite: exactly 1/372 caught it
+  (evidence-settings.test.js's deepStrictEqual, incidental to a
+  settings-named test). Real single-point-of-failure, project-wide, for a
+  product-critical constant. Fixed: added a dedicated full-array
+  deepEqual test to test/review-schedule.test.js (client side, where the
+  constant is actually imported/re-exported) — re-mutated to confirm it
+  now kills client-side alone, reverted, confirmed clean, full regression
+  root 317/317 after. No product code changed, one permanent test added.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -87,17 +102,20 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   Study Now e2e verification (VERIFICATION_2026-09-15), select/context-
   switcher mutation proof (MUTATION_PROOF_2026-09-15), app.js extraction
   slice 1 (EXTRACTION_2026-09-15), FASE 8 attempts/evidence sweep
-  (FASE8_SWEEP_2026-09-15, all above).
+  (FASE8_SWEEP_2026-09-15), REVIEW_DAY_OFFSETS single-point-of-failure
+  found+fixed (SCHEDULE_GAP_2026-09-15, all above).
 NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
   extractions): first slice DONE (EXTRACTION_2026-09-15) — more
-  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 3 real
-  mutation-kill data points so far (FASE8_SWEEP_2026-09-15) — continue
-  risk-ordered, next candidates by the same "user_id = ? scoping" pattern:
-  learning-units.js, exercises.js, imports.js, content-proposals.js,
-  backup.js, or pivot to a different critical property entirely (e.g.
-  idempotency's operationKey collision handling, review scheduling
-  correctness in scheduler.js/review-score.js). Continue depth-first per
-  /goal's standing instruction — do not stop to ask which target next.
+  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 4 real
+  mutation-kill data points so far, one of them a genuine gap found+fixed
+  (SCHEDULE_GAP_2026-09-15) — continue risk-ordered. Remaining candidates:
+  same "user_id = ? scoping" pattern in learning-units.js, exercises.js,
+  imports.js, content-proposals.js, backup.js (unswept); idempotency's
+  operationKey collision handling; the score/evidence pipeline's own
+  arithmetic (weightedAccuracy, correctCount<=questionsCount invariants)
+  beyond what bySubject's boundary tests already cover. Continue
+  depth-first per /goal's standing instruction — do not stop to ask which
+  target next.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression

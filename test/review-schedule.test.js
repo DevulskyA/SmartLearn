@@ -3,6 +3,21 @@ import assert from "node:assert/strict";
 
 import { REVIEW_DAY_OFFSETS, generateReviewDates } from "../src/review-schedule.js";
 
+// FASE 8 mutation-test finding (2026-09-15): mutating an INTERIOR offset
+// (e.g. index 7: 150 -> 145) survives this whole client suite — the test
+// below only ever characterized dates[0], dates[1], dates.at(-1), and the
+// array length, none of which depend on any interior value. The only
+// sensor in the entire project that caught it was server/test/
+// evidence-settings.test.js's deepStrictEqual over the full array — a
+// single point of failure, on the server side, for a client-importable
+// canonical constant. This test closes that gap directly on the client.
+test("REVIEW_DAY_OFFSETS matches the design.md-specified contract exactly, every element (T15/heritage.md H-01)", () => {
+  assert.deepEqual(
+    REVIEW_DAY_OFFSETS,
+    [1, 7, 15, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390],
+  );
+});
+
 test("generateReviewDates cria 16 revisões nas datas esperadas", () => {
   const dates = generateReviewDates("2026-06-27");
 
