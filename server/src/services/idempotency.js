@@ -7,11 +7,29 @@ export class IdempotencyConflictError extends Error {
   }
 }
 
+// Deep, not shallow: JSON.stringify's array-replacer form only whitelists
+// property names at every nesting level against ONE fixed list (the
+// top-level payload's own keys) — a nested object whose keys don't happen
+// to match a top-level key name serializes to `{}`, silently dropping its
+// contents. Found while writing idempotency.test.js: two payloads differing
+// only inside a nested object both collapsed to the same hash. No current
+// caller passes a nested payload (every real operationKey payload today is
+// flat primitives), so this was latent, not yet triggering wrong behavior —
+// fixed here before it does, by sorting keys recursively instead.
+function deepSortedClone(value) {
+  if (Array.isArray(value)) return value.map(deepSortedClone);
+  if (value !== null && typeof value === 'object') {
+    const sorted = {};
+    for (const key of Object.keys(value).sort()) sorted[key] = deepSortedClone(value[key]);
+    return sorted;
+  }
+  return value;
+}
+
 export function canonicalHash(payload) {
-  // Stable stringify: sort keys so the same logical payload always hashes
-  // the same way regardless of property insertion order.
-  const sorted = JSON.stringify(payload, Object.keys(payload).sort());
-  return createHash('sha256').update(sorted).digest('hex');
+  // Stable stringify: sort keys (recursively) so the same logical payload
+  // always hashes the same way regardless of property insertion order.
+  return createHash('sha256').update(JSON.stringify(deepSortedClone(payload))).digest('hex');
 }
 
 /**
