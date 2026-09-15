@@ -10,7 +10,7 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=f575d46 (about to advance — see EXTRACTION_2026-09-15 below)
+CURRENT_HEAD=c8e1eed (about to advance — see FASE8_SWEEP_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
@@ -62,6 +62,23 @@ EXTRACTION_2026-09-15=item 2 first slice: extracted `filterByPeriod` and
   102/102 — zero fixes needed anywhere else, proving the move changed
   nothing observable. Still open: ~40 other app.js functions not yet
   triaged for extractable pure cores (see TEST_COVERAGE_MATRIX.md gap #1).
+FASE8_SWEEP_2026-09-15=item 3: extended the cross-user ownership-isolation
+  mutation proof (previously subjects.js only, 6ad3b5b) to two more real
+  gates, risk-ordered by consequence — attempt/evidence integrity outranks
+  subjects since evidence IS the learning record:
+  - attempts.js's findOwnedAttempt() — dropped user_id scoping, ran
+    attempts.test.js's dedicated cross-user test: killed (getById leaked
+    the foreign row instead of throwing NOT_FOUND). One mutation point
+    gates all of start/getById/useHint/revealSolution/submit.
+  - evidence.js's create() attempt-linking lookup — same mutation, ran
+    evidence.test.js's dedicated test: killed, but via the unit_id
+    mismatch check catching it as a second line of defense (wrong error
+    code, not a clean bypass) — root cause noted: learning_units.id is a
+    global auto-increment PK never shared across owners, so this
+    redundancy is structural, not coincidental. Documented, nothing to fix.
+  Both mutants reverted via `git checkout --`, worktree confirmed clean.
+  FASE 8 is now 3 real data points on the same property (subjects,
+  attempts, evidence-linking) — still not a project-wide sweep.
 UNVERIFIED_WORK=none.
 LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   file, search for TEST_SHIELD) for the full trail: Exercícios resolvidos
@@ -69,15 +86,18 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b),
   Study Now e2e verification (VERIFICATION_2026-09-15), select/context-
   switcher mutation proof (MUTATION_PROOF_2026-09-15), app.js extraction
-  slice 1 (EXTRACTION_2026-09-15, both above).
-NEXT_TASK=per /goal's explicit ordering: item 1 (ordinary-select vs
-  context-switcher separation) DONE. Item 2 (app.js extractions): first
-  slice DONE (see EXTRACTION_2026-09-15 above) — continue picking further
-  extractable pure cores by risk if any stand out, otherwise move to item
-  3. Item 3: FASE 8 risk-prioritized mutation/discrimination testing on
-  critical properties (not a blind project-wide sweep) — so far one data
-  point (subjects.js ownership isolation, 6ad3b5b) plus this session's
-  select-ui separation proof.
+  slice 1 (EXTRACTION_2026-09-15), FASE 8 attempts/evidence sweep
+  (FASE8_SWEEP_2026-09-15, all above).
+NEXT_TASK=per /goal's explicit ordering: item 1 DONE. Item 2 (app.js
+  extractions): first slice DONE (EXTRACTION_2026-09-15) — more
+  extractable cores may exist, not yet triaged. Item 3 (FASE 8): 3 real
+  mutation-kill data points so far (FASE8_SWEEP_2026-09-15) — continue
+  risk-ordered, next candidates by the same "user_id = ? scoping" pattern:
+  learning-units.js, exercises.js, imports.js, content-proposals.js,
+  backup.js, or pivot to a different critical property entirely (e.g.
+  idempotency's operationKey collision handling, review scheduling
+  correctness in scheduler.js/review-score.js). Continue depth-first per
+  /goal's standing instruction — do not stop to ask which target next.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression
