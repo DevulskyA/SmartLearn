@@ -10,17 +10,33 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=e2782ce (about to advance — see VERIFICATION_2026-09-15 below)
+CURRENT_HEAD=66da074 (about to advance — see MUTATION_PROOF_2026-09-15 below)
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
-  "continue" after the pause below. method=tlc-spec-driven-strict, do not
-  clear until Verifier can show SmartLearn has real discriminating sensors,
-  not just green tests.
+  "continue", then formalized via /goal with an explicit ordered plan
+  (item 1: ordinary-select/context-switcher separation, item 2: app.js
+  small extractions, item 3: risk-prioritized mutation testing) and
+  standing autonomy for fixtures/harnesses/tests/small-testability-
+  refactors/bug-fixes without per-step approval, stopping only at a real
+  human gate (materially changing product/data-meaning/schema/public-
+  contract/architecture) or the stated context-limit protocol.
+  method=tlc-spec-driven-strict, do not clear until Verifier can show
+  SmartLearn has real discriminating sensors, not just green tests.
   (history: PAUSED 2026-09-15 by explicit user stop order ("Isso é uma
   ordem") to reset conversation context — per
   feedback_explicit_stop_overrides_goal memory, an explicit user stop always
   outranks an active /goal Stop hook. Session had halted mid-task, not
   mid-file-write.)
+MUTATION_PROOF_2026-09-15=ordinary-select vs context-switcher separation
+  empirically mutation-tested both directions (not just "a test exists"):
+  (a) removed the currentSubjectId filter in app.js's renderContentContext
+  — e2e/context-switcher-keyboard.spec.js's dedup test failed exactly as
+  expected; (b) applied the switcher's exclude-current filter inside
+  select-ui.js's buildItems() — 12/15 e2e/select-ui.spec.js specs failed
+  across every real <select> consumer. Both mutants reverted via
+  `git checkout --`, worktree confirmed clean. See TEST_COVERAGE_MATRIX.md
+  gap #6 for full detail. No product code changed by this item — pure
+  verification, recorded as its own commit.
 VERIFICATION_2026-09-15=e2e/study-now-flow.spec.js run for real for the
   first time (per NEXT SESSION MUST below, now done): both specs
   (CORRECT-outcome and INCORRECT-outcome) passed on first execution,
@@ -39,22 +55,19 @@ LAST_COMPLETED_TASK=see "CHECKPOINT — 2026-09-15" section (bottom of this
   attempt-review feature (abf55b5), idempotency.js bug+fix (ea20e38),
   theme.js coverage (1c8e10f), subjects.js mutation-test proof (6ad3b5b),
   Study Now e2e verification (VERIFICATION_2026-09-15 above).
-NEXT_TASK=continue TEST SHIELD build-out per `.specs/TEST_COVERAGE_MATRIX.md`
-  — pick next by HIGHEST_REMAINING_RISK × WEAKEST_PROTECTION, do not stop
-  between items, do not re-verify what the matrix already marks closed.
+NEXT_TASK=per /goal's explicit ordering: item 1 (ordinary-select vs
+  context-switcher separation) DONE — see MUTATION_PROOF_2026-09-15 above.
+  Item 2 next: app.js small internal extractions for testability
+  (CHARACTERIZE → EXTRACT → TEST → REGRESSION → VERIFY, behavior/contracts/
+  schema invariant, no broad rearchitecture). Item 3 after: FASE 8 risk-
+  prioritized mutation/discrimination testing on critical properties (not
+  a blind project-wide sweep) — FASE 8 so far is one data point
+  (subjects.js ownership isolation, 6ad3b5b) plus this session's select-ui
+  separation proof.
   Already confirmed pre-existing (not gaps, checked 2026-09-15): no-evidence
   != 0% (tracking-state.test.js), subjectColor != performanceColor
   (performance-thresholds.test.js), 375/768/1280 responsive regression
-  (e2e/stats-responsive-regression.spec.js). Study Now's attemptIds wiring
-  is now verified (see VERIFICATION_2026-09-15 above) — no longer open.
-  Still open: app.js has no fast unit-speed gate (5105 lines, e2e-only —
-  goal text pre-authorizes small internal extractions for testability
-  without asking, as long as behavior/contract/data-meaning stay invariant
-  and it's reversible+test-proven); ordinary-select vs context-switcher
-  semantic separation (partially covered by select-ui.spec.js/context-
-  switcher-keyboard.spec.js — not yet verified against the matrix's
-  "existing test != proof" bar); FASE 8 mutation-audit is one data point
-  (subjects.js only), not swept project-wide.
+  (e2e/stats-responsive-regression.spec.js).
 NEXT_TASK_STATUS=IN_PROGRESS (autonomous, /goal-driven — see above)
 WORKTREE_STATUS=CLEAN (only untracked, pre-existing, not-mine .impeccable/)
 BLOCKERS=none
