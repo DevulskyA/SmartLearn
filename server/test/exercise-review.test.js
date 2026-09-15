@@ -109,6 +109,34 @@ test('NONE source: INITIAL_PRACTICE evidence created with no attemptIds (old dat
   } finally { cleanup(); }
 });
 
+test('two separate INITIAL_PRACTICE sessions on the SAME unit never cross-contaminate — each evidence row returns only its own attempt', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'z@example.com');
+    const unit = makeUnit(db, userId);
+
+    const exerciseA = makeExercise(db, userId, unit.id, { question: 'Sessão A: pergunta 1' });
+    const attemptA = attempts.start(db, userId, { exerciseId: exerciseA.id });
+    attempts.submit(db, userId, attemptA.id, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+    const evA = evidence.create(db, userId, { unitId: unit.id, type: 'INITIAL_PRACTICE', questionsCount: 1, correctCount: 1, evidenceDate: '2026-01-02', attemptIds: [attemptA.id] });
+
+    const exerciseB = makeExercise(db, userId, unit.id, { question: 'Sessão B: pergunta 1' });
+    const attemptB = attempts.start(db, userId, { exerciseId: exerciseB.id });
+    attempts.submit(db, userId, attemptB.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+    const evB = evidence.create(db, userId, { unitId: unit.id, type: 'INITIAL_PRACTICE', questionsCount: 1, correctCount: 0, evidenceDate: '2026-01-03', attemptIds: [attemptB.id] });
+
+    const resultA = getAttemptDetails(db, userId, evA.id);
+    assert.equal(resultA.attempts.length, 1);
+    assert.equal(resultA.attempts[0].question, 'Sessão A: pergunta 1');
+    assert.equal(resultA.attempts[0].outcome, 'CORRECT');
+
+    const resultB = getAttemptDetails(db, userId, evB.id);
+    assert.equal(resultB.attempts.length, 1);
+    assert.equal(resultB.attempts[0].question, 'Sessão B: pergunta 1');
+    assert.equal(resultB.attempts[0].outcome, 'INCORRECT');
+  } finally { cleanup(); }
+});
+
 test('a STARTED (never submitted) attempt linked to evidence shows outcome null, never guessed as correct or incorrect', () => {
   const { db, cleanup } = tmpDb();
   try {
