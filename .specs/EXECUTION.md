@@ -5,13 +5,45 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-CURRENT_HEAD=a63a35a
+CURRENT_HEAD=0d26170
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
-REMOTE_MATCH=YES — pushed this session, origin/claude/smartlearn-v1-complete = a63a35a
-PR=6 (https://github.com/DevulskyA/SmartLearn/pull/6, still DRAFT) — an
-  external audit rejected the prior state of this PR; this stretch (one
-  commit, a63a35a on top of b5cad7a) responds to that audit's punch list.
-  NO_MERGE, NO_DEPLOY — user is auditing.
+REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/
+  smartlearn-v1-complete = 175403e, dozens of commits behind); NOT pushed
+  this session, no push requested by the user. Do not push without
+  explicit ask.
+PR=6 (https://github.com/DevulskyA/SmartLearn/pull/6, still DRAFT) — status
+  as of the a63a35a checkpoint below; not re-checked since (out of scope
+  of the 2026-09-15/16 TEST SHIELD stretch that follows). NO_MERGE,
+  NO_DEPLOY — user is auditing.
+
+TEST_SHIELD_CHECKPOINT (2026-09-15/16, commit 0d26170, supersedes
+  CI_AUDIT_RESPONSE_CHECKPOINT below as CURRENT_TASK): full stretch on
+  `/goal`'s 3-item TEST SHIELD plan via tlc-spec-driven-strict. Item 1
+  (ordinary-select vs context-switcher separation) done, mutation-proven
+  both directions. Item 2 (app.js's 5105 lines, e2e-only): 4 slices —
+  filterByPeriod/sortMatrixRows → analytics.js, getNextReview/
+  getDaysBetween/getReviewStatusLabel → scheduler.js, 3 duplicate
+  performance-band classifiers consolidated into getState(). Item 3
+  (FASE 8 mutation testing): 12 real kills across ownership isolation (5
+  services), schedule constant, score arithmetic, duplicate-write
+  prevention, input-validation error quality, session-inactivity, CSRF,
+  origin-allowlist — 4 of those were genuine gaps found and permanently
+  fixed, not just confirmations: REVIEW_DAY_OFFSETS' interior values had
+  1 sensor project-wide; weightedAccuracy's own value had zero direct
+  assertions anywhere; correctCount>questionsCount leaked a raw DB error
+  instead of a clean validation error; and a security-relevant one —
+  the actual server-side gate that revokes a session past its 7-day
+  inactivity window (resolve-actor.js) had NO test anywhere, fixed with
+  a new server/test/resolve-actor.test.js. Full detail + every mutant's
+  exact result: .specs/TEST_COVERAGE_MATRIX.md and .specs/STATE.md's
+  CURRENT STATE block (search PENDING_DECISION_2026-09-16 for the one
+  open item this checkpoint hands off — an unrelated branch-hygiene
+  question, not TEST SHIELD). Full regression at close: root 328/328,
+  server 377/377, e2e 102/102.
+  Context was cleared deliberately by user request right after this
+  checkpoint (not exhaustion) — a `/goal` Stop hook and a dynamic
+  ScheduleWakeup loop may still be armed; reconcile via STATE.md's
+  RECOVERY section before resuming either.
 
 CI_AUDIT_RESPONSE_CHECKPOINT (2026-09-14, commit a63a35a): external audit
   rejected PR #6. Investigated CI fresh rather than assuming the prior
@@ -67,9 +99,11 @@ CI_AUDIT_RESPONSE_CHECKPOINT (2026-09-14, commit a63a35a): external audit
   proofs didn't already cover — only Rust lib.rs's test-timing constant
   changed, not the local-backend launch/kill logic itself).
 
-CURRENT_TASK=CI_AUDIT_RESPONSE_CHECKPOINT above is the latest work. Prior
-  CURRENT_TASK text (Sequence H / select-ui rollout, kept below for
-  history) is superseded by this checkpoint's own itemized fixes.
+CURRENT_TASK=TEST_SHIELD_CHECKPOINT above (2026-09-15/16, commit 0d26170)
+  is the latest work — supersedes CI_AUDIT_RESPONSE_CHECKPOINT below,
+  which is kept for history. Pending: PENDING_DECISION_2026-09-16 in
+  STATE.md (branch-hygiene question, awaiting user reply — unrelated to
+  TEST SHIELD, no git mutation happened from it).
 
 P0_DATA_INCIDENT (this stretch): user reported the dataset had disappeared.
   Investigated before touching anything — the real Tauri desktop DB
