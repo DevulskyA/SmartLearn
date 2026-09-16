@@ -10,7 +10,52 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ```
-CURRENT_HEAD=a6225c0 (about to advance — see ORIGIN_KILL_2026-09-15)
+CURRENT_HEAD=51b021f — CHECKPOINT before a deliberate user-requested
+  context clear (2026-09-16, "prepare para limpeza de contexto" — NOT a
+  context-exhaustion auto-trigger, no shutdown.exe invoked). Worktree
+  confirmed clean (`git status --short` = only pre-existing untracked
+  .impeccable/). See PENDING_DECISION_2026-09-16 below for the one open
+  item this checkpoint hands off. The /goal TEST SHIELD Stop hook and a
+  dynamic ScheduleWakeup loop (~20min cadence) were both still armed at
+  the moment of this checkpoint — they are harness-level state, expected
+  to survive the chat clear; a resumed session should reconcile via this
+  file's own RECOVERY section before continuing either the loop or the
+  goal.
+PENDING_DECISION_2026-09-16=mid-session, user asked (unrelated to
+  TEST SHIELD) for a branch-hygiene report: which of the repo's branches
+  are fully absorbed/safe to delete vs which carry an idea worth
+  salvaging first. Delivered a full executive report (git rev-list
+  ahead/behind + real diff inspection, not just dates) with this
+  verdict:
+  - SAFE TO DELETE NOW, zero salvage needed (unique_to_branch=0 against
+    claude/smartlearn-v1-complete, confirmed via git rev-list, not
+    guessed): claude/com-tlc-replanning-77f844,
+    claude/fix-complete-review-sqlite-593426,
+    claude/server-central-foundation-v1, codex/stats-visual-integration,
+    safety-before-stats-revert-20260914031957.
+  - DELETE BUT SALVAGE FIRST: claude/server-first-v1 (36 unique commits,
+    abandoned Rust/axum local-broker architecture — contradicts the
+    canonical local-first decision, superseded by the real
+    server-central-foundation-v1 path; salvage L-009 safety-copy-
+    migration pattern and L-010 axum-oneshot-test pattern from its
+    LESSONS.md if not already captured elsewhere); origin/codex/
+    pedagogy-kernel-v1 (4 commits, a 237-line 04_PEDAGOGICAL_KERNEL.md
+    doctrine doc, PK-01..PK-12, never adopted — no `04_` slot exists in
+    current governance; worth a re-read before deleting, may deserve
+    formal adoption); origin/feat/evidence-learning-core-v1 (10 commits,
+    src/learning-core.js — a 7-level assistance scale + 10-class error
+    taxonomy, richer than the current 3-level NONE/HINT/SOLUTION model
+    and with no current equivalent; the error taxonomy is the
+    highest-value idea here).
+  USER HAS NOT YET ANSWERED which path to take (delete-now-5 vs review-
+  the-3-first) — this was the open question at the moment "prepare para
+  limpeza de contexto" arrived. NEXT ACTION on resume: ask the user
+  directly whether to proceed with deleting the 5 safe branches now,
+  and/or whether they want the 3 salvage items (2 LESSONS entries + 1
+  doctrine doc + 1 error taxonomy) written somewhere durable
+  (.specs/research/ or memory) before those 3 branches are deleted too.
+  No branches were deleted or modified — this was pure analysis, no git
+  mutation happened, so there is nothing to revert or reconcile from it.
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
