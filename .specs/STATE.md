@@ -9,6 +9,17 @@
 
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
+GOVERNANCE_UPDATE (2026-09-16, docs-only, no product code touched):
+`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` amended to
+2.1.0 with §4.33 + invariant I11 — PROTECTED SURFACES / DESIGN
+NON-REGRESSION, permanent rule (functional-change need != redesign
+authorization on a `KNOWN_GOOD` surface). Recorded as
+`.specs/adr/ADR-0001-protected-surfaces-design-non-regression.md`.
+Estatísticas is the first surface formally designated protected. See the
+ADR for the concrete preserved-details list (geometry, 375/768/1280
+responsive behavior, `.th-sort-stack` must not return, `subjectColor` !=
+`performanceColor`, context-switcher grammar, etc.) — not duplicated here.
+
 ```
 CURRENT_HEAD=51b021f — CHECKPOINT before a deliberate user-requested
   context clear (2026-09-16, "prepare para limpeza de contexto" — NOT a
@@ -21,41 +32,134 @@ CURRENT_HEAD=51b021f — CHECKPOINT before a deliberate user-requested
   to survive the chat clear; a resumed session should reconcile via this
   file's own RECOVERY section before continuing either the loop or the
   goal.
-PENDING_DECISION_2026-09-16=mid-session, user asked (unrelated to
-  TEST SHIELD) for a branch-hygiene report: which of the repo's branches
-  are fully absorbed/safe to delete vs which carry an idea worth
-  salvaging first. Delivered a full executive report (git rev-list
-  ahead/behind + real diff inspection, not just dates) with this
-  verdict:
-  - SAFE TO DELETE NOW, zero salvage needed (unique_to_branch=0 against
-    claude/smartlearn-v1-complete, confirmed via git rev-list, not
-    guessed): claude/com-tlc-replanning-77f844,
-    claude/fix-complete-review-sqlite-593426,
-    claude/server-central-foundation-v1, codex/stats-visual-integration,
-    safety-before-stats-revert-20260914031957.
-  - DELETE BUT SALVAGE FIRST: claude/server-first-v1 (36 unique commits,
-    abandoned Rust/axum local-broker architecture — contradicts the
-    canonical local-first decision, superseded by the real
-    server-central-foundation-v1 path; salvage L-009 safety-copy-
-    migration pattern and L-010 axum-oneshot-test pattern from its
-    LESSONS.md if not already captured elsewhere); origin/codex/
-    pedagogy-kernel-v1 (4 commits, a 237-line 04_PEDAGOGICAL_KERNEL.md
-    doctrine doc, PK-01..PK-12, never adopted — no `04_` slot exists in
-    current governance; worth a re-read before deleting, may deserve
-    formal adoption); origin/feat/evidence-learning-core-v1 (10 commits,
-    src/learning-core.js — a 7-level assistance scale + 10-class error
-    taxonomy, richer than the current 3-level NONE/HINT/SOLUTION model
-    and with no current equivalent; the error taxonomy is the
-    highest-value idea here).
-  USER HAS NOT YET ANSWERED which path to take (delete-now-5 vs review-
-  the-3-first) — this was the open question at the moment "prepare para
-  limpeza de contexto" arrived. NEXT ACTION on resume: ask the user
-  directly whether to proceed with deleting the 5 safe branches now,
-  and/or whether they want the 3 salvage items (2 LESSONS entries + 1
-  doctrine doc + 1 error taxonomy) written somewhere durable
-  (.specs/research/ or memory) before those 3 branches are deleted too.
-  No branches were deleted or modified — this was pure analysis, no git
-  mutation happened, so there is nothing to revert or reconcile from it.
+PENDING_DECISION_2026-09-16=RESOLVED 2026-09-16 (same day, later session)
+  via explicit `/goal`: "audite as 3 branches pendentes exclusivamente
+  contra o estado canônico atual... não resgate ideias por parecerem
+  sofisticadas... classifique cada elemento como ADOTAR, HISTÓRICO ou
+  DESCARTAR, com evidência mínima." Full audit below, each verdict checked
+  against real canonical code/docs, not against the branch's own framing.
+
+  **claude/server-first-v1** (tip fcd599e, local branch + worktree exist):
+  - L-009 safety-copy-before-destructive-localStorage-removeItem pattern
+    (commit 195d7a9, `.specs/project/LESSONS.md` on that branch) →
+    **HISTÓRICO**. Sound general pattern, but its own cited use case
+    (BROWSER_STORE_KEY D-002 migration) does not exist in canonical
+    `src/db.js` — checked, no such migration path found. Canonical's two
+    live `localStorage.removeItem` call sites (`src/app.js:164`,
+    `src/offline-store.js:37`) are non-destructive UI-selection-state
+    clears, not user data. The property this pattern protects is already
+    structurally provided by SQLite transactions where the real data path
+    is concerned. Kept as reference only, for if a genuine destructive
+    localStorage migration reappears.
+  - L-010 axum `Router::oneshot()` testing pattern (commit a6d22a3) →
+    **DESCARTAR**. Checked: canonical stack has no axum anywhere (`server/`
+    = Fastify per `server/package.json`; `src-tauri/Cargo.toml` has no HTTP
+    router crate, only `tauri` + `sqlx`). Dead architecture-specific
+    pattern with no applicable target in the real product.
+  - The branch's own architecture (abandoned Rust/axum local-broker, 36
+    commits) → **DESCARTAR**, confirmed contradicting the canonical
+    local-first decision (`CANONICAL_DECISIONS` in `.specs/EXECUTION.md`).
+  - Local branch `claude/server-first-v1` and its worktree are ready for
+    removal (`git branch -D` + `git worktree remove`) — NOT executed this
+    session (destructive op, needs explicit user go-ahead per Git Safety
+    Protocol, out of this goal's own no-push/no-merge/no-deploy scope too).
+
+  **origin/codex/pedagogy-kernel-v1** (tip 5ac623f, remote-tracking only,
+  no local branch/worktree):
+  - `.specs/governance/04_PEDAGOGICAL_KERNEL.md` as a MANDATORY governance
+    gate (PK-01..PK-12 + "Mandatory Harness gate for learning-affecting
+    changes") → **DESCARTAR** as a governance artifact. Checked against
+    `SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` (adopted 2026-09-14, i.e. 8
+    days AFTER this branch's 2026-09-06 mission-redefinition commits, so
+    it is the later, superseding authority): constitution explicitly
+    excludes FSRS, adaptive scheduler, ML de memória, "mastery score
+    autoritativo" from V1 scope (lines ~409, ~1334, ~1346). Installing a
+    second mandatory gate system would also fragment the already-adopted
+    TLC Strict / `SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` gate. No `04_`
+    slot conflict exists technically, but adoption is not authorized by
+    current governance.
+  - **User override (2026-09-16, later same day):** disagreed with the
+    agent's first-pass HISTÓRICO-bucket verdict above as too coarse;
+    ordered a mechanical clause-by-clause PK-01..12 vs. current-doctrine
+    comparison instead of bucketing the whole document. Result — **zero
+    clauses required new incorporation**, confirming the user's own
+    prediction:
+    | PK | Verdict | Evidence |
+    |----|---------|----------|
+    | PK-01 (learning demonstrated, not inferred from exposure) | ABSORVIDO | `assistanceUsed`/`outcome` kept as separate domain fields (`server/src/domain/learning-event.js`), MX10 invariant already forbids inferring independent success from missing assistance data; North Star's own "assistance!=mastery" |
+    | PK-02 (mastery multidimensional, explicit state) | DESCARTAR | user: excede arquitetura atual, não construir agora |
+    | PK-03 (retrieval precedes re-exposure) | ABSORVIDO | existing exercise/hint ladder (NONE→HINT→PARTIAL_SOLUTION→SOLUTION) already gates the answer behind an attempt |
+    | PK-04 (Feynman-default explanatory engine + fixed reasoning spine) | DESCARTAR | user: não queremos motor explicativo obrigatório fixo |
+    | PK-05 (technique routed by knowledge type) | DESCARTAR (deferred) | requires adaptive routing; Constitution V1 explicitly excludes scheduler adaptativo |
+    | PK-06 (misconception as first-class learner state) | DESCARTAR | user: estado explícito de misconception excede arquitetura atual |
+    | PK-07 (retention distinct from immediate success) | ABSORVIDO (recording) / deferred (algorithm) | `learning_evidence` rows are dated and never mutated (`reviews.js`), so delayed-vs-immediate is already queryable; Constitution §71 correctly defers the predictive/personalized algorithm itself, not the data |
+    | PK-08 (learner effort on learning, not administration) | ABSORVIDO | `.specs/project/INVARIANTS.md` INV-21/22/23 verbatim |
+    | PK-09 (medical fidelity release-critical + traceable to source) | ABSORVIDO | Constitution §12 Proveniência, §50 Fidelidade médica ("fidelidade à fonte/verdade > elegância textual") |
+    | PK-10 (champion-challenger promotion) | ABSORVIDO | `SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` §4.4/A8, same shape generalized beyond learning |
+    | PK-11 (outcome metrics over activity metrics) | HISTÓRICO | no current decision process this would inform yet; Constitution §71 defers the evaluative maturity this presupposes |
+    | PK-12 (append-only evidence ledger) | ABSORVIDO | `learning_evidence` table + `review_tasks != learning_evidence` separation (Constitution line ~332, Master Build Plan line ~68) already exactly this |
+    Net: doctrine document itself contributes nothing new to adopt; branch
+    deleted with only this table (not the document) kept as record of the
+    comparison having been done.
+  - This ref is remote-tracking only (`origin/...`) — "ready for removal"
+    here means deleting it on GitHub (`git push origin --delete`), which
+    is a push-class action and explicitly out of scope for this goal
+    (NO_PUSH). Flagged ready; not executed. Deleting only the local
+    remote-tracking ref (`git branch -dr`) would desync from origin's own
+    branch list without actually removing it — not useful busywork, so
+    also not done.
+
+  **origin/feat/evidence-learning-core-v1** (tip fbfb720, remote-tracking
+  only, no local branch/worktree):
+  - `ASSISTANCE_LEVELS` 7-level scale (`src/learning-core.js`, commit
+    3c6afd1) → **DESCARTAR**. Checked: it has no `UNKNOWN` sentinel
+    (`NONE`=0..`SOLUTION`=6 only), so `isIndependent()` on this branch
+    treats "not recorded" the same as "recorded as no assistance" —
+    exactly the MX10 fault canonical's real `server/src/domain/
+    learning-event.js` (`ASSISTANCE_LEVELS_WITH_UNKNOWN`, T29, mutation-
+    tested) was already built and hardened to make impossible ("absence
+    is UNKNOWN, never NONE" — comment at that file's top). Adopting this
+    enum verbatim would reintroduce an already-fixed defect class.
+  - `ERROR_CLASSES` 10-class taxonomy + `EVIDENCE_TYPES` 6-value enum
+    (same commit) → **User override, harder than the agent's first pass:
+    HISTÓRICO downgraded to "reference only, not even a future adoption
+    candidate as-is."** Reason given: the taxonomy doesn't stop at
+    classification — `learning-core.js`'s own hypothesis engine goes on to
+    infer causal mental state from surface signals (confidence >= 0.8 on
+    an error -> `MISCONCEPTION` hypothesis at high strength; failure after
+    a prior success -> `RETRIEVAL_FAILURE`; no history + error ->
+    `KNOWLEDGE_GAP`; then recommends an intervention; `evaluateMastery()`
+    outputs a bare `mastered: true/false`) — exactly the false-precision
+    pattern the product direction rejects: **registrar o que aconteceu e
+    usar evidência para escolher prática melhor, sem fingir conhecer
+    causalmente o estado mental do estudante.** What's worth preserving
+    conceptually is already the current decision's own field set —
+    resultado + assistência + tipo de questão + conceito + tempo +
+    histórico (`learning_evidence` + `learning-event.js` today) — without
+    the branch's inference/classification engine on top. No code, enum, or
+    taxonomy from this branch becomes a requirement; the branch's git
+    history (commit SHAs above) is the only preserved trace.
+  - The branch's own mission-redefinition commits ("align SmartLearn with
+    adaptive medical learning", 2026-09-06) → **DESCARTAR**, superseded by
+    the later, human-approved `SMARTLEARN_PRODUCT_CONSTITUTION_V1.md`
+    (2026-09-14) — same reasoning and same specific V1-scope exclusions as
+    the pedagogy-kernel branch above.
+  - Same as pedagogy-kernel-v1: remote-tracking only, "ready for removal"
+    = a `git push origin --delete`, out of this goal's NO_PUSH scope, not
+    executed.
+
+  NET RESULT: zero ADOTAR items survived contact with canonical state —
+  every concrete mechanism proposed by the 3 branches either has no live
+  target in the current product or actively contradicts an already-fixed
+  invariant or an already-superseding human decision. What survives is
+  pointer-only (HISTÓRICO, commit SHAs above, retrievable by SHA from Git
+  history even after a ref is deleted — not reproduced as code anywhere in
+  this repo, since none of it is authorized for use yet). All 8 audited/
+  reported branches (5 from the 2026-09-16 earlier report + these 3) are
+  now execution-ready for removal; none deleted this session — deletion
+  itself (all 8, whether local `-D` or remote `--delete`) needs one
+  explicit user go-ahead before any git mutation, per Git Safety Protocol
+  and this goal's own NO_PUSH constraint for the 2 remote-only ones.
 BRANCH_WORKTREE=claude/smartlearn-v1-complete (worktree: C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete)
 CURRENT_PHASE=TEST_SHIELD_BUILDOUT — resumed 2026-09-15 on explicit user
   "continue", then formalized via /goal with an explicit ordered plan
