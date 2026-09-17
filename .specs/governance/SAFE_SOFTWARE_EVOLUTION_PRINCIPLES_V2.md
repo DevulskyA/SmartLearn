@@ -2,10 +2,11 @@
 
 ```
 SAFE_EVOLUTION_STANDARD_ID=SMARTLEARN_SAFE_EVOLUTION_V2
-SAFE_EVOLUTION_STANDARD_VERSION=2.0.0
+SAFE_EVOLUTION_STANDARD_VERSION=2.1.0
 SAFE_EVOLUTION_STANDARD_STATUS=CANONICAL
 SUPERSEDES=SMARTLEARN_NON_REGRESSION_V1
 ADOPTED=2026-09-14
+AMENDED=2026-09-16 (§4.33 + I11, protected-surfaces design non-regression — see ADR-0001)
 ```
 
 ## Status and inheritance
@@ -140,6 +141,8 @@ A qualidade de uma mudança é medida tanto pelo valor que acrescenta quanto pel
 
 **4.32 Encerramento exige reconciliação, não declaração.** Uma unidade de trabalho não termina porque código foi escrito, um commit existe, a suíte passou, ou um revisor disse PASS. Termina quando resultado real ↔ requisitos ↔ baseline ↔ testes ↔ render/UAT ↔ estado registrado convergem. Contradição entre quaisquer dois desses significa `NOT_DONE`.
 
+**4.33 Superfícies com histórico de regressão e aprovação visual são protegidas** (ADR-0001, 2026-09-16). Uma superfície que já passou por regressão, recuperação e aprovação visual explícita é `KNOWN_GOOD` — o mesmo estatuto de §4.4/A8, aplicado especificamente a design/UX, não só a corretude funcional. Sobre uma superfície protegida o agente PODE, autonomamente: corrigir bugs; conectar dados/funcionalidade nova; melhorar acessibilidade; adicionar/fortalecer testes; fazer ajuste visual mínimo estritamente necessário à função. O agente NÃO PODE, autonomamente: redesenhar; mudar composição ou hierarquia visual; reorganizar estruturalmente; substituir padrão já aprovado; "modernizar"/"simplificar"/reinterpretar o design; converter necessidade funcional em oportunidade de redesign. `FUNCTIONAL_CHANGE_NEED != REDESIGN_AUTHORIZATION`. Quanto maior o histórico de regressão de uma superfície, menor a liberdade de reinterpretá-la — autonomia cresce com reversibilidade e evidência (§4.24); liberdade de redesign diminui com o custo já pago para chegar ao estado aprovado. Autoridade: produto real = autoridade funcional; design aprovado/restaurado = autoridade visual (§4.31); testes são sensores, não autorização para redesenhar (§4.15). Se uma feature exigir mudança visual/estrutural material numa superfície protegida: parar essa parte, preservar o resto, apresentar necessidade + alternativas, HUMAN GATE (§4.24) — decisão pertence aos arquitetos do produto (usuário + parceiro de arquitetura), não ao agente. A lista de superfícies protegidas e o detalhe concreto preservado em cada uma (geometria, breakpoints, padrões específicos) vivem em `DESIGN.md` e no ADR — este princípio não os duplica, apenas os autoriza.
+
 ## 4. Princípios comportamentais para agentes de IA
 
 Aplicar quando materialmente relevantes. Não transformar esta seção em ritual obrigatório para tarefas triviais.
@@ -188,6 +191,7 @@ Base mínima do projeto:
 - **I8.** `PRODUCTION_AND_TEST_DATA_SILENTLY_MIXED = 0`
 - **I9.** `LOCAL_DECISION_PROMOTED_TO_GLOBAL_STANDARD_WITHOUT_PROOF = 0`
 - **I10.** `MATERIAL_TRADEOFF_MADE_WITHOUT_PRODUCT_AUTHORITY = 0`
+- **I11.** `KNOWN_GOOD_PROTECTED_SURFACE_REDESIGNED_WITHOUT_HUMAN_GATE = 0` (§4.33, ADR-0001)
 
 Esses invariantes são floor, não checklist cego. Adicionar novos somente quando um incidente ou decisão arquitetural justificar proteção permanente.
 
