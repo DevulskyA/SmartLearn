@@ -123,6 +123,12 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   // Back on Hoje: the ORIGINAL judgment is still what the review recorded.
   await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
   await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+  // ...and the loop is closed: the redo outcome is shown, the original is
+  // not overwritten, and the next action is no longer "redo" but "finish".
+  await expect(blockResult).toContainText('Reteste: 1 de 1 erro corrigido');
+  await expect(item('Pergunta A?')).toContainText('Reteste: corrigido');
+  await expect(blockResult.getByRole('button', { name: /Refazer/ })).toHaveCount(0);
+  await expect(blockResult).toContainText('Marque a revisão como feita');
 
   // Ledger: original attempts untouched; the redo is extra, outside the review.
   const judged = await page.evaluate(async ({ base, id }) => {

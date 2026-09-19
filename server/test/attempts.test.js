@@ -322,3 +322,38 @@ test('listForReviewTask is owner-scoped: another user gets NOT_FOUND for the rev
     assert.throws(() => attempts.listForReviewTask(db, b, review), (e) => e.code === 'NOT_FOUND');
   } finally { cleanup(); }
 });
+
+test('listForReviewTask reports a LATER redo of a wrong item as retest, without replacing the original outcome; never for right answers or older attempts', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'list-retest@example.com');
+    const unit = makeUnit(db, userId);
+    const wrongThenFixed = makeExercise(db, userId, unit.id, { question: 'W1?' });
+    const wrongStill = makeExercise(db, userId, unit.id, { question: 'W2?' });
+    const wrongNoRedo = makeExercise(db, userId, unit.id, { question: 'W3?' });
+    const right = makeExercise(db, userId, unit.id, { question: 'R?' });
+    const review = firstReviewTask(db, userId, unit.id);
+    const judge = (ex, outcome, reviewTaskId) => {
+      const a = attempts.start(db, userId, { exerciseId: ex.id, reviewTaskId });
+      attempts.submit(db, userId, a.id, { outcome, assessmentMethod: 'SELF_REPORT' });
+      return a.id;
+    };
+    // an OLDER redo-like attempt (before the review's own) must not count as a retest
+    judge(wrongNoRedo, 'CORRECT', undefined);
+    judge(wrongThenFixed, 'INCORRECT', review);
+    judge(wrongStill, 'INCORRECT', review);
+    judge(wrongNoRedo, 'INCORRECT', review);
+    judge(right, 'CORRECT', review);
+    judge(wrongThenFixed, 'INCORRECT', undefined);   // first redo: still wrong
+    const fixedRedo = judge(wrongThenFixed, 'CORRECT', undefined); // latest redo: corrected
+    judge(wrongStill, 'INCORRECT', undefined);
+    judge(right, 'INCORRECT', undefined);              // a later attempt on a RIGHT item is not a retest
+
+    const byEx = new Map(attempts.listForReviewTask(db, userId, review).map(x => [x.exerciseId, x]));
+    assert.equal(byEx.get(wrongThenFixed.id).outcome, 'INCORRECT', 'the original judgment is never replaced');
+    assert.deepEqual(byEx.get(wrongThenFixed.id).retest, { attemptId: fixedRedo, outcome: 'CORRECT' });
+    assert.equal(byEx.get(wrongStill.id).retest.outcome, 'INCORRECT');
+    assert.equal(byEx.get(wrongNoRedo.id).retest, null, 'an attempt older than the review judgment is not a retest');
+    assert.equal(byEx.get(right.id).retest, null);
+  } finally { cleanup(); }
+});

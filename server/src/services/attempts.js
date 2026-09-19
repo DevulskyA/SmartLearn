@@ -242,11 +242,28 @@ export function listForReviewTask(db, userId, reviewTaskId) {
   `).all(userId, reviewTaskId);
   const latestByExercise = new Map();
   for (const row of rows) latestByExercise.set(row.exercise_id, row);
-  return [...latestByExercise.values()].map(r => ({
-    attemptId: r.attempt_id,
-    exerciseId: r.exercise_id,
-    outcome: r.outcome ?? 'UNKNOWN',
-    maxAssistance: r.max_assistance,
-    submittedAt: r.submitted_at,
-  }));
+  // A wrong item may have been redone afterwards (Refazer erros): the latest
+  // SUBMITTED attempt on that exercise made OUTSIDE this review and after the
+  // review's own attempt. Reported alongside, never replacing the original.
+  const redoStmt = db.prepare(`
+    SELECT a.id AS attempt_id,
+      (SELECT e.outcome FROM learning_events e
+        WHERE e.user_id = a.user_id AND e.attempt_id = a.id ORDER BY e.sequence DESC LIMIT 1) AS outcome
+    FROM exercise_attempts a
+    JOIN exercise_versions v ON v.user_id = a.user_id AND v.id = a.exercise_version_id
+    WHERE a.user_id = ? AND v.exercise_id = ? AND a.review_task_id IS NULL
+      AND a.status = 'SUBMITTED' AND a.id > ?
+    ORDER BY a.id DESC LIMIT 1
+  `);
+  return [...latestByExercise.values()].map(r => {
+    const redo = r.outcome === 'INCORRECT' ? redoStmt.get(userId, r.exercise_id, r.attempt_id) : null;
+    return {
+      attemptId: r.attempt_id,
+      exerciseId: r.exercise_id,
+      outcome: r.outcome ?? 'UNKNOWN',
+      maxAssistance: r.max_assistance,
+      submittedAt: r.submitted_at,
+      retest: redo ? { attemptId: redo.attempt_id, outcome: redo.outcome ?? 'UNKNOWN' } : null,
+    };
+  });
 }

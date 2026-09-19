@@ -884,6 +884,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
         acerteiBtn.disabled = true;
         erreiBtn.disabled = true;
         (wasCorrect ? acerteiBtn : erreiBtn).classList.add("is-selected");
+        if (restored.retest) {
+          const redoCorrect = restored.retest.outcome === "CORRECT";
+          exItem.dataset.retest = restored.retest.outcome;
+          exItem.append(createTextElement("span", `study-now-chip${redoCorrect ? " is-corrected" : ""}`, redoCorrect ? "Reteste: corrigido" : "Reteste: ainda errou"));
+        }
         restoredAnswered += 1;
         if (wasCorrect) restoredCorrect += 1;
       }
@@ -943,13 +948,21 @@ function updateReviewBlockResult(section) {
   }
   const correct = Number(section.dataset.exercisesCorrect);
   const wrong = total - correct;
-  result.replaceChildren(createTextElement("p", "review-block-score", `Bloco concluído: ${correct}/${total} corretas`));
-  if (wrong > 0) {
+  const redone = section.querySelectorAll(".review-exercise-item.is-wrong[data-retest]").length;
+  const fixed = section.querySelectorAll('.review-exercise-item.is-wrong[data-retest="CORRECT"]').length;
+  const pending = wrong - fixed;
+  const summary = document.createElement("div");
+  summary.className = "review-block-summary";
+  summary.append(createTextElement("p", "review-block-score", `Bloco concluído: ${correct}/${total} corretas`));
+  if (redone > 0) summary.append(createTextElement("p", "review-block-note", `Reteste: ${fixed} de ${wrong} ${wrong === 1 ? "erro corrigido" : "erros corrigidos"}`));
+  if (wrong > 0 && pending === 0) summary.append(createTextElement("p", "review-block-note", "Todos os erros foram corrigidos. Marque a revisão como feita quando terminar."));
+  result.replaceChildren(summary);
+  if (pending > 0) {
     const retest = document.createElement("button");
     retest.type = "button";
     retest.className = "primary-button review-block-retest";
     retest.dataset.action = "retest-block";
-    retest.textContent = `Refazer erros (${wrong})`;
+    retest.textContent = redone > 0 ? `Refazer os que ainda errei (${pending})` : `Refazer erros (${pending})`;
     result.append(retest);
   }
   result.hidden = false;
@@ -4519,7 +4532,7 @@ reviewDashboard.addEventListener("click", (event) => {
   const row = section?.closest(".review-row");
   if (!section || !row) return;
   const wrongIds = new Set(
-    [...section.querySelectorAll(".review-exercise-item.is-wrong")].map((el) => Number(el.dataset.exerciseId)),
+    [...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)),
   );
   const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
   if (wrong.length === 0) return;
