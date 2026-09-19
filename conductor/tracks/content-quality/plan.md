@@ -10,14 +10,14 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: Content quality — Resumo Mestre → questões → respostas → feedback fiéis à fonte
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: CQ-2
+ATIVA AGORA: CQ-3
 ```
 
 ## Tarefas
 
 - [✓] **CQ-1 Caracterizar o pipeline real e provar lacunas** — pipeline lido do código e lacunas PROVADAS executando rascunhos fabricados contra `validateDraft` (evidência abaixo).
 - [>] **CQ-2 Garantir qualidade/proveniência do Resumo Mestre** — auditoria de suporte na fonte, referências do resumo, revisão com fonte visível.
-- [ ] **CQ-3 Garantir qualidade das questões, respostas e feedback** — auditoria de questões, explicação que ensina, tipo de questão, alvo.
+- [>] **CQ-3 Garantir qualidade das questões, respostas e feedback** — auditoria de questões, explicação que ensina, tipo de questão, alvo.
 - [ ] **CQ-4 Validar o fluxo completo sobre material médico** — PDF fixture médico → unidade → resumo → aceite → questões → estudo → feedback → evidência.
 - [ ] **CQ-5 Fechar o marco com regressão e uso real representativo** — full unit/server/e2e com progresso; mobile 375.
 
