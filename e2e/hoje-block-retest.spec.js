@@ -141,6 +141,21 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   await expect(blockResult.getByRole('button', { name: /Refazer/ })).toHaveCount(0);
   await expect(blockResult).toContainText('Marque a revisão como feita');
 
+  // Accessibility sensor (WCAG AA, 4.5:1 for small text) on the new secondary
+  // text: it was 4.26:1 (muted on the sunken surface) before this was fixed.
+  const contrast = (locator) => locator.evaluate((el) => {
+    const parse = (str) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = str; c.fillRect(0, 0, 1, 1); const d = c.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    let bgEl = el; let bg = parse(getComputedStyle(bgEl).backgroundColor);
+    while (bg[3] === 0 && bgEl.parentElement) { bgEl = bgEl.parentElement; bg = parse(getComputedStyle(bgEl).backgroundColor); }
+    const fg = parse(getComputedStyle(el).color);
+    const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  });
+  expect(await contrast(blockResult.locator('.review-block-note').first())).toBeGreaterThanOrEqual(4.5);
+  expect(await contrast(item('Pergunta A?').locator('.study-now-chip'))).toBeGreaterThanOrEqual(4.5);
+
   // Ledger: original attempts untouched; the redo is extra, outside the review.
   const judged = await page.evaluate(async ({ base, id }) => {
     const res = await fetch(`${base}/v1/review-tasks/${id}/attempts`, { credentials: 'include' });
