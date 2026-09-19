@@ -72,7 +72,7 @@ TASKLIST_AUTHORITY: RECONCILED — ledger macro; execução = tlc-spec-driven-st
       em `src/analytics.js`; nunca escreve mastery/retenção/score (teste). Prova: `test/study-verdict.test.js` (11, escrito antes
       do código: vermelho por export ausente), `e2e/study-verdict.spec.js` (4: misto+atenção+navegação, volume baixo/sem dado,
       sem evidência, mobile 375 sem scroll horizontal e alvo ≥44px), subset 43/43 (stats-*, plan-*, product-value, exercise-attempt,
-      hoje-block-retest). Uso real na base viva (1280 e 375, screenshots): "Resultado misto … 1 melhorando · 2 piorando · 1 com
+      hoje-block-retest). REAL_USE_VALIDATED=NO · DEV_REPRESENTATIVE_DATA_VALIDATED=YES: inspeção real da aplicação sobre a base representativa (seed) em 1280 e 375, screenshots — validação funcional forte, NÃO uso longitudinal de aluno real. Saída observada: "Resultado misto … 1 melhorando · 2 piorando · 1 com
       evidência insuficiente · 2 sem evidência. Atenção: Fisiologia renal … de 77% para 56%. 2 exercícios para reforçar. Ver no
       Plano" — abre a unidade no Plano. Respostas ao objetivo macro no produto real: está funcionando? misto; melhorando: Anatomia;
       piorando: Fisiologia e Farmacologia; pouca evidência: Neurologia (e Patologia/Semiologia sem dado); atenção: Fisiologia renal;
@@ -86,6 +86,9 @@ TASKLIST_AUTHORITY: RECONCILED — ledger macro; execução = tlc-spec-driven-st
       seguem a skill (`.specs/features/<f>/tasks.md`, STATE). Sem segunda governança; skill global intacta; tasklist visual preservada
       (o gerador só passou a aceitar track DONE com zero ativas). Menor complexidade que preserva persistência, uma ativa, retomada,
       tasklist visual, checkpoints e continuidade entre sessões.
+- [-] Pendência de PRODUTO (não bug confirmado): o veredito agregado conta DISCIPLINAS com o mesmo peso (uma com 10 questões pesa
+      como uma com 100). Correto para "N disciplinas melhorando, M piorando"; potencialmente enganoso se lido como "seu estudo está
+      melhorando". Decidir a semântica da manchete antes de mexer. NOT_PROVEN: eficácia com histórico longitudinal de aluno real.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
