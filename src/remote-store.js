@@ -286,6 +286,12 @@ const attempts = {
     const { attempt } = await apiRequest(`/v1/attempts/${attemptId}`);
     return attempt;
   },
+  // Judgments already given during one review (latest SUBMITTED attempt per
+  // exercise) -- lets Hoje restore them instead of silently losing them.
+  async listForReview(reviewTaskId) {
+    const { attempts: rows } = await apiRequest(`/v1/review-tasks/${reviewTaskId}/attempts`);
+    return rows;
+  },
 };
 
 // -- learning evidence ----------------------------------------------------------

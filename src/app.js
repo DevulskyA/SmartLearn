@@ -560,7 +560,7 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, unit, subject, groupName, today, exercises = []) {
+function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = []) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -822,6 +822,12 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     const exercisesTitle = createTextElement("p", "review-exercises-title", `Exercícios (${exercises.length})`);
     exercisesReviewSection.append(exercisesTitle);
 
+    const judgmentByExercise = new Map(
+      judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => [j.exerciseId, j]),
+    );
+    let restoredAnswered = 0;
+    let restoredCorrect = 0;
+
     for (const exercise of exercises) {
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
@@ -866,15 +872,87 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      const restored = judgmentByExercise.get(exercise.id);
+      if (restored) {
+        const wasCorrect = restored.outcome === "CORRECT";
+        exItem.dataset.exerciseAnswered = "true";
+        exItem.dataset.attemptId = String(restored.attemptId);
+        exItem.classList.add(wasCorrect ? "is-correct" : "is-wrong");
+        answerEl.hidden = false;
+        revealBtn.textContent = "Ocultar resposta";
+        judgmentRow.hidden = false;
+        acerteiBtn.disabled = true;
+        erreiBtn.disabled = true;
+        (wasCorrect ? acerteiBtn : erreiBtn).classList.add("is-selected");
+        restoredAnswered += 1;
+        if (wasCorrect) restoredCorrect += 1;
+      }
       exercisesReviewSection.append(exItem);
     }
+    exercisesReviewSection.dataset.exercisesAnswered = String(restoredAnswered);
+    exercisesReviewSection.dataset.exercisesCorrect = String(restoredCorrect);
+
+    const blockResult = document.createElement("div");
+    blockResult.className = "review-block-result";
+    blockResult.setAttribute("role", "status");
+    blockResult.hidden = true;
+    exercisesReviewSection.append(blockResult);
+    reviewBlockExercises.set(exercisesReviewSection, exercises);
 
     body.append(summarySection, exercisesReviewSection, secondaryControls, detail, externalSection);
   } else {
     body.append(summarySection, secondaryControls, detail, externalSection);
   }
   row.append(header, primary, body);
+  const restoredSection = row.querySelector("[data-exercises-total]");
+  if (restoredSection && Number(restoredSection.dataset.exercisesAnswered) > 0) {
+    const total = Number(restoredSection.dataset.exercisesTotal);
+    const answered = Number(restoredSection.dataset.exercisesAnswered);
+    if (answered === total) {
+      const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
+      for (const el of row.querySelectorAll("[data-score-for]")) {
+        el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+        el.classList.remove("is-empty");
+      }
+      restoredSection.dataset.allAnswered = "true";
+    }
+    updateReviewBlockResult(restoredSection);
+    // The student already worked this block: come back to it open, with the
+    // result and "Refazer erros" in view, not folded behind "Ver conteúdo".
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggleRowBtn.setAttribute("aria-expanded", "true");
+    toggleRowBtn.textContent = "Recolher";
+  }
   return row;
+}
+
+// Exercises of a Hoje review block, kept out of the DOM so "Refazer erros"
+// can hand the exact wrong items to the shared retest flow.
+const reviewBlockExercises = new WeakMap();
+
+function updateReviewBlockResult(section) {
+  const result = section.querySelector(".review-block-result");
+  if (!result) return;
+  const total = Number(section.dataset.exercisesTotal);
+  const answered = Number(section.dataset.exercisesAnswered);
+  if (answered < total) {
+    result.hidden = true;
+    result.replaceChildren();
+    return;
+  }
+  const correct = Number(section.dataset.exercisesCorrect);
+  const wrong = total - correct;
+  result.replaceChildren(createTextElement("p", "review-block-score", `Bloco concluído: ${correct}/${total} corretas`));
+  if (wrong > 0) {
+    const retest = document.createElement("button");
+    retest.type = "button";
+    retest.className = "primary-button review-block-retest";
+    retest.dataset.action = "retest-block";
+    retest.textContent = `Refazer erros (${wrong})`;
+    result.append(retest);
+  }
+  result.hidden = false;
 }
 
 // T40: read-only fallback for "cold offline reopen after prior sync
@@ -1006,6 +1084,24 @@ export async function renderToday() {
     }),
   );
 
+  // Judgments already given in still-open reviews live on the server (each
+  // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
+  // reloading never silently drops a block the student already answered.
+  const judgmentsByTaskId = new Map();
+  if (REMOTE_MODE && DB.attempts?.listForReview) {
+    await Promise.all(
+      [...overdueReviews, ...pendingToday]
+        .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
+        .map(async (t) => {
+          try {
+            judgmentsByTaskId.set(t.id, await DB.attempts.listForReview(t.id));
+          } catch (error) {
+            console.error("Falha ao restaurar julgamentos da revisão.", error);
+          }
+        }),
+    );
+  }
+
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
@@ -1018,7 +1114,7 @@ export async function renderToday() {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
+      list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? []));
     }
   }
 
@@ -3238,6 +3334,18 @@ studyNowRetestBtn?.addEventListener("click", () => {
 
 studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
 
+// Entry used by a Hoje review block: same retest engine as "Estudar agora",
+// just started from the wrong items of the block the student already judged.
+function startRetestBlock({ unitId, subjectName, unitTitle, exercises }) {
+  resetStudyNowResult();
+  studyNowSubjectEl.textContent = subjectName;
+  studyNowTitleEl.textContent = unitTitle;
+  studyNowState = newStudyNowState("retest", unitId, exercises.slice());
+  showScreen("study-now", { focus: true });
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+}
+
 studyNowRevealBtn?.addEventListener("click", async () => {
   const state = studyNowState;
   if (!state || state.index >= state.exercises.length) return;
@@ -4401,6 +4509,26 @@ reviewDashboard.addEventListener("click", async (event) => {
     }
     section.dataset.allAnswered = "true";
   }
+  updateReviewBlockResult(section);
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="retest-block"]');
+  if (!button) return;
+  const section = button.closest("[data-exercises-total]");
+  const row = section?.closest(".review-row");
+  if (!section || !row) return;
+  const wrongIds = new Set(
+    [...section.querySelectorAll(".review-exercise-item.is-wrong")].map((el) => Number(el.dataset.exerciseId)),
+  );
+  const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
+  if (wrong.length === 0) return;
+  startRetestBlock({
+    unitId: Number(row.dataset.unitId),
+    subjectName: row.querySelector(".subject-chip")?.textContent ?? "",
+    unitTitle: row.querySelector(".review-content")?.textContent ?? "",
+    exercises: wrong,
+  });
 });
 
 reviewDashboard.addEventListener("click", (event) => {

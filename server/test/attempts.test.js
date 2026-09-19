@@ -268,3 +268,57 @@ test('HTTP: full attempt lifecycle over real HTTP with a real session', async ()
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+// Judgments already given during ONE review must be readable so Hoje can
+// restore them instead of silently losing them (and inviting a duplicate
+// re-answer that reconcile() would count twice).
+function firstReviewTask(db, userId, unitId) {
+  return db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY id LIMIT 1').get(userId, unitId).id;
+}
+
+test('listForReviewTask returns the latest SUBMITTED attempt per exercise of THAT review, excluding STARTED, other reviews and redo attempts made without a reviewTaskId', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'list-review@example.com');
+    const unit = makeUnit(db, userId);
+    const e1 = makeExercise(db, userId, unit.id, { question: 'Q1?' });
+    const e2 = makeExercise(db, userId, unit.id, { question: 'Q2?' });
+    const e3 = makeExercise(db, userId, unit.id, { question: 'Q3?' });
+    const review = firstReviewTask(db, userId, unit.id);
+    const otherReview = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? AND id != ? ORDER BY id LIMIT 1').get(userId, unit.id, review).id;
+
+    // e1: wrong first, then a re-answer in the same review that is correct -> latest wins
+    const a1 = attempts.start(db, userId, { exerciseId: e1.id, reviewTaskId: review });
+    attempts.submit(db, userId, a1.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+    const a1b = attempts.start(db, userId, { exerciseId: e1.id, reviewTaskId: review });
+    attempts.submit(db, userId, a1b.id, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+    // e2: still STARTED -> not a judgment yet
+    attempts.start(db, userId, { exerciseId: e2.id, reviewTaskId: review });
+    // e3: judged in ANOTHER review, and a redo (no reviewTaskId) -> neither belongs here
+    const a3 = attempts.start(db, userId, { exerciseId: e3.id, reviewTaskId: otherReview });
+    attempts.submit(db, userId, a3.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+    const redo = attempts.start(db, userId, { exerciseId: e3.id });
+    attempts.submit(db, userId, redo.id, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+
+    const got = attempts.listForReviewTask(db, userId, review);
+    assert.equal(got.length, 1);
+    assert.equal(got[0].exerciseId, e1.id);
+    assert.equal(got[0].attemptId, a1b.id);
+    assert.equal(got[0].outcome, 'CORRECT');
+    assert.deepEqual(attempts.listForReviewTask(db, userId, otherReview).map(x => [x.exerciseId, x.outcome]), [[e3.id, 'INCORRECT']]);
+  } finally { cleanup(); }
+});
+
+test('listForReviewTask is owner-scoped: another user gets NOT_FOUND for the review, never its judgments', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const a = makeUser(db, 'list-a@example.com');
+    const b = makeUser(db, 'list-b@example.com');
+    const unit = makeUnit(db, a);
+    const ex = makeExercise(db, a, unit.id);
+    const review = firstReviewTask(db, a, unit.id);
+    const at = attempts.start(db, a, { exerciseId: ex.id, reviewTaskId: review });
+    attempts.submit(db, a, at.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+    assert.throws(() => attempts.listForReviewTask(db, b, review), (e) => e.code === 'NOT_FOUND');
+  } finally { cleanup(); }
+});

@@ -219,3 +219,34 @@ export function getById(db, userId, attemptId) {
   if (!attempt) throw new AttemptError('NOT_FOUND', 'Tentativa não encontrada.');
   return attemptDto(attempt);
 }
+
+/**
+ * The judgments already given DURING one review: the latest SUBMITTED attempt
+ * per exercise that was started with this reviewTaskId, with its effective
+ * outcome (highest-sequence learning_event, so a later CORRECTION wins while
+ * the original stays on disk). Read-only. Attempts made without a
+ * reviewTaskId (Estudar agora, reteste) are structurally excluded -- a redo
+ * can never look like part of the original review.
+ */
+export function listForReviewTask(db, userId, reviewTaskId) {
+  const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND id = ?').get(userId, reviewTaskId);
+  if (!task) throw new AttemptError('NOT_FOUND', 'Revisão não encontrada.');
+  const rows = db.prepare(`
+    SELECT a.id AS attempt_id, v.exercise_id, a.max_assistance, a.submitted_at,
+      (SELECT e.outcome FROM learning_events e
+        WHERE e.user_id = a.user_id AND e.attempt_id = a.id ORDER BY e.sequence DESC LIMIT 1) AS outcome
+    FROM exercise_attempts a
+    JOIN exercise_versions v ON v.user_id = a.user_id AND v.id = a.exercise_version_id
+    WHERE a.user_id = ? AND a.review_task_id = ? AND a.status = 'SUBMITTED'
+    ORDER BY a.id
+  `).all(userId, reviewTaskId);
+  const latestByExercise = new Map();
+  for (const row of rows) latestByExercise.set(row.exercise_id, row);
+  return [...latestByExercise.values()].map(r => ({
+    attemptId: r.attempt_id,
+    exerciseId: r.exercise_id,
+    outcome: r.outcome ?? 'UNKNOWN',
+    maxAssistance: r.max_assistance,
+    submittedAt: r.submitted_at,
+  }));
+}

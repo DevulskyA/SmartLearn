@@ -24,6 +24,16 @@ export function registerAttemptRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  app.get('/review-tasks/:id/attempts', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { attempts: attempts.listForReviewTask(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.get('/attempts/:id', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   }, async (request, reply) => {
