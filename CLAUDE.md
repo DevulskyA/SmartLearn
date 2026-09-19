@@ -13,6 +13,15 @@ For everything else — active feature location, current checkpoint, dependency-
 
 ## Tasklist e track ativo (obrigatório em trabalho relevante)
 
+> **PROVISÓRIO (STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN, 2026-09-19):** o mecanismo abaixo (Conductor) é artefato provisório.
+> O canônico é o do `tlc-spec-driven-strict` (TLC-ECC modificado com princípios de Conductor incorporados); auditoria pendente
+> (GOV-1/GOV-2 no plan). Não expandir o Conductor nem criar governança nova antes dessa auditoria.
+>
+> **DECISÃO HUMANA (2026-09-19): a TASKLIST VISUAL (`scripts/tasklist.mjs`, `tasklist.html`, painel, estados, detalhes, tarefa ativa)
+> é canônica COMO CAPACIDADE e deve ser preservada; só a fonte interna pode mudar após a auditoria (adaptar o gerador, manter a UI).**
+> Em toda sessão: ao iniciar/retomar reconstruir a lista da fonte persistente, regenerar o painel, abri-lo/expô-lo e mostrar
+> TRACK/MARCO · PROGRESSO · TAREFA ATIVA · PRÓXIMA · BLOCKER (o detalhe fica no painel). Só macro-tarefas.
+
 Ao iniciar/retomar trabalho: ler `conductor/tracks.md` (seção ACTIVE TRACK) e o `plan.md` apontado; mostrar a
 tasklist compacta ao usuário (`[✓]` concluída, `[>]` ativa — exatamente UMA, `[ ]` pendente, `[!]` bloqueada,
 `[-]` adiada) como PROJEÇÃO do plan.md. Ao mudar o estado de uma tarefa: atualizar o plan.md primeiro, depois

@@ -1,15 +1,26 @@
 # TRACK: Persistência de dados e governança de execução
 
-> Fonte persistente ÚNICA da tasklist deste track (`conductor/tracks/ops-dev-data-and-tasklist/plan.md`).
-> Chat/UI = PROJEÇÕES; nenhuma lista independente. Hierarquia: Constitution = intenção · GOAL = resultado
-> atual · Git/testes = estado · Conductor (este plan) = plano/rastreamento · `.specs/STATE.md` = retomada mínima.
-> Não é autoridade de produto. Reconciliar Git antes de confiar (workflow.md regra 12).
+> **STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN** (correção humana 2026-09-19).
+> Este arquivo é um artefato PROVISÓRIO do Conductor, mantido só para não perder o trabalho e a tasklist. NÃO é a fonte
+> canônica definitiva. O workflow histórico do projeto era TLC-ECC MODIFICADO com princípios úteis de Conductor incorporados,
+> depois compactado/importado como `tlc-spec-driven-strict`. O mecanismo canônico de tasklist/checkpoint/smart recovery
+> está PENDENTE de auditoria da skill real (GOV-1). Não expandir o Conductor nem criar governança nova antes dessa auditoria.
+> Tudo já feito em `conductor/...` permanece (nada apagado); só está classificado como provisório.
+> Chat/UI = PROJEÇÕES deste arquivo enquanto a auditoria não decidir outra coisa. Hierarquia: Constitution = intenção ·
+> GOAL = resultado atual · Git/testes = estado · `.specs/STATE.md` = retomada mínima.
+> Reconciliar Git antes de confiar (workflow.md regra 12).
+>
+> DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
+> `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
+> ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a
+> nova fonte; a UI permanece. NÃO autoriza expandir o Conductor. Fonte interna definitiva = pendente da auditoria.
 
 ```
 Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ANALYTICS
+ATIVA AGORA: ANALYTICS-2
+TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict, auditoria GOV-1 pendente)
 ```
 
 ## Tarefas
@@ -29,31 +40,41 @@ ATIVA AGORA: ANALYTICS
       `atomic-save` decidido em "Evidência OPS-4/9" (sensor de persistência, mas a falha intermitente é independente de dados).
 - [✓] **OPS-5 Determinar causa histórica da perda ou registrar UNKNOWN** — **ROOT_CAUSE_DATA_LOSS = UNKNOWN**
       (hipóteses ranqueadas e o que cada evidência exclui em "Evidência OPS-5").
-- [✓] **GOV-1 Reconciliar TLC × Conductor e registrar o track corretamente** — auditoria em "Evidência OPS-6"; reparo LOCAL:
-      `conductor/workflow.md` (relação Conductor envolve TLC, projetor, uma ativa), `tracks.md` (ACTIVE TRACK + IN_PROGRESS),
-      `index.md`, `CLAUDE.md`. Skill global NÃO alterada. Painel mestre (22/54) segue adiado.
-- [✓] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — `git archive HEAD` (checkout limpo = nova sessão)
-      + `node scripts/tasklist.mjs` reproduz a MESMA lista do working tree (diff vazio); painel HTML `conductor/.view/tasklist.html`
-      aberto no app e regenerado a cada transição; `test/tasklist.test.js` guarda "exatamente uma ativa" no plan real.
-- [>] **ANALYTICS Retomar "Meu estudo está funcionando?"** — sobre a base viva `dev@smartlearn.local`.
-      1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências ↓/↑/insuficiente, "Sem evidência"
-      neutro, bloco com erro restaurado na Hoje). Defeito real achado SÓ com dados realistas: o gráfico de evolução usava
-      eixo por ÍNDICE (25 dias = 0 dias) e rótulos repetidos — corrigido (eixo por data, rótulos únicos; commit 5e465cc; bug
-      fix em superfície protegida). Pendente/observado: Estatísticas não diz "o que fazer agora" (protegida → human gate);
-      "Nota %" cortada a 768px e caminho SVG morto (ver adiados) seguem como achados registrados.
-      2ª passada (próxima ação na Hoje): "Começar agora" apontava para a revisão vencida MAIS ANTIGA mesmo sem resumo nem
-      exercícios (beco sem saída). Agora `src/today-priority.js` escolhe (vencidas antes de hoje; mais antiga dentro da faixa):
-      itens a reforçar > exercícios pendentes > já respondida > sem conteúdo, e o texto nomeia a aula e quantos itens reforçar.
-      Prova: 5 testes unitários + e2e com servidor real (falha sem a regra).
-      3ª passada (SERVIDOR FEITO, CLIENTE PENDENTE — parada em ponto seguro): `GET /v1/reinforcement` + `reinforcementByUnit` + teste já commitados;
-      falta `DB.attempts.reinforcement()` em remote-store.js, chip no Plano (linha e detalhe) e e2e.
-      Escopo original: o Plano lista aulas com estado e nota mas
-      NÃO mostra quais têm itens errados pendentes (o "para reforçar" só existe na Hoje). Fatia mínima: leitura por UNIDADE
-      no servidor (`GET /v1/reinforcement` → {unitId:[exerciseIds]}, último attempt INCORRECT, mesma regra de
-      `priorWrongExercises` sem excluir revisão), `DB.attempts.reinforcement()`, chip "N para reforçar" na linha do Plano
-      e por exercício no detalhe; teste de servidor discriminante + e2e (aparece após erro, some após reteste correto).
+- [ ] **GOV-1 Auditar a skill `tlc-spec-driven-strict` real e identificar o mecanismo original de tasklist/checkpoint/smart recovery** —
+      REABERTA (2026-09-19, correção humana). Ler a skill importada e seus arquivos (não pelo nome); descobrir onde ficam
+      tasklist, checkpoint e recuperação; separar o que é TLC-ECC original do que é Conductor incorporado. A leitura parcial em
+      "Evidência OPS-6" NÃO conta como auditoria. Sem alterar a skill global.
+- [ ] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — depende de GOV-1. Só então
+      decidir se este plan.md vira o mecanismo canônico, é migrado ou é aposentado. Até lá: `conductor/...` intacto e provisório.
+- [✓] **ANALYTICS-1 Mostrar sinal "para reforçar" no Plano usando o reinforcement já existente no servidor** — cliente feito:
+      `DB.attempts.reinforcement()` (`src/remote-store.js`), chip "N para reforçar" na linha do Plano e "Errou na última tentativa"
+      por exercício no detalhe (`renderPlan`); só em REMOTE_MODE, falha do endpoint = sem chip (sinal auxiliar, `console.warn`).
+      Prova: e2e "Retention cue" estendido (vermelho antes do código; chip = 1 de 2 exercícios, some após reteste correto);
+      render real na base viva em 1280 e 375 (pior caso Atrasada+nota+"2 para reforçar" cabe, sem overflow horizontal);
+      contraste do chip 6,59 (claro) / 10,45 (escuro); unit 344/344, e2e 108/108 (antes do refactor de paralelização do fetch;
+      depois dele: hoje-block-retest + plan-flow + plan-study-now 15/15). A esquisitice de um `e2e/hoje-block-retest.spec.js`
+      não commitado do handoff anterior NÃO existia mais no disco: o e2e foi reescrito do zero.
+- [>] **ANALYTICS-2 Provar tendência longitudinal** — sobre a base viva `dev@smartlearn.local`; sem inventar dado.
+- [ ] **ANALYTICS-3 Responder "Meu estudo está funcionando?"** — Estatísticas é superfície protegida (ADR-0001): "o que fazer
+      agora" nela é HUMAN GATE (redesign); só bug fix/dados/a11y/testes sem autorização.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
+
+## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é ANALYTICS-1)
+
+```
+1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências, "Sem evidência" neutro, bloco com erro
+  restaurado na Hoje). Defeito real só com dados realistas: gráfico de evolução com eixo por ÍNDICE e rótulos repetidos —
+  corrigido (eixo por data, rótulos únicos; commit 5e465cc; bug fix em superfície protegida). Achados registrados: Estatísticas
+  não diz "o que fazer agora" (protegida → human gate); "Nota %" cortada a 768px; caminho SVG morto do gráfico.
+2ª passada (próxima ação na Hoje): "Começar agora" apontava para a revisão vencida mais antiga mesmo sem conteúdo. Agora
+  `src/today-priority.js` escolhe: itens a reforçar > exercícios pendentes > já respondida > sem conteúdo (vencidas antes de
+  hoje). Prova: 5 unitários + e2e com servidor real (commit 5370ada).
+3ª passada: SERVIDOR FEITO (5ef3b75); CLIENTE FEITO (ANALYTICS-1, Plano: chip na linha + cue por exercício).
+Escopo original da fatia: o Plano lista aulas com estado e nota mas NÃO mostra quais têm itens errados pendentes (o "para
+  reforçar" só existe na Hoje).
+```
+
 
 ## Os 3 tipos de banco (nunca misturar)
 
@@ -143,7 +164,7 @@ AÇÃO CORRETIVA JÁ APLICADA (independe da causa): DB persistente fora de workt
   + guard de teste + servidor que anuncia o DB em uso. Para dados que precisam persistir: `npm run dev:remote` (NÃO `npm run dev`).
 ```
 
-## Evidência OPS-6 — TLC × Conductor (lido do disco, não pelo nome)
+## Evidência OPS-6 — TLC × Conductor (leitura PARCIAL do disco; NÃO é a auditoria GOV-1)
 
 ```
 SKILL_REALMENTE_USADA = tlc-spec-driven-strict

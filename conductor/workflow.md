@@ -75,6 +75,15 @@ tarefa não-provada com dependências satisfeitas
 
 ## Tasklist visível e relação Conductor × TLC (adendo 2026-09-19 — track ops-dev-data-and-tasklist)
 
+> **PROVISÓRIO — STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN.** Este adendo NÃO declara o Conductor como governança
+> independente: o histórico é TLC-ECC modificado com princípios de Conductor incorporados, importado como
+> `tlc-spec-driven-strict`. Auditoria da skill real pendente (GOV-1). Não expandir antes disso.
+>
+> DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
+> `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
+> ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a
+> nova fonte; a UI permanece. NÃO autoriza expandir o Conductor. Fonte interna definitiva = pendente da auditoria.
+
 Estado real verificado no disco (não pelo nome): a skill em uso é `tlc-spec-driven-strict` (integração original, sem versão,
 instalada 2026-09-15); **"TLC-ECC Engineering V3" não existe como skill instalada**. A skill global NÃO é modificada; este
 adendo é a correção LOCAL e reversível (SKILL_CONFLICT registrado em `tracks/ops-dev-data-and-tasklist/plan.md`).

@@ -10,6 +10,16 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ACTIVE_TRACK (2026-09-19): `conductor/tracks/ops-dev-data-and-tasklist/plan.md` — dev data durability + persistent tasklist.
+TASKLIST_GOVERNANCE: STATUS=PROVISIONAL, AUTHORITY=NOT_PROVEN — provisional conductor artifact; canonical mechanism pending
+audit of `tlc-spec-driven-strict` (GOV-1/GOV-2 open, TLC_AUDIT_PENDING=YES); do not expand Conductor or create new governance
+before the audit. Active task: ANALYTICS-2 (tendência longitudinal).
+DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
+`tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
+ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a
+nova fonte; a UI permanece. NÃO autoriza expandir o Conductor. Fonte interna definitiva = pendente da auditoria.
+SESSION_PROTOCOL: on start/resume reconcile Git+STATE+GOAL, rebuild tasklist from the persistent source, regenerate
+`conductor/.view/tasklist.html`, open/expose it, show TRACK/MARCO, PROGRESSO, TAREFA ATIVA, PRÓXIMA, BLOCKER (detail stays in the panel);
+exactly ONE active task; on completion update the persistent source first, then regenerate, then promote the next task. Macro tasks only.
 One active task at a time; project with `node scripts/tasklist.mjs`. Persistent dev DB: `~/SmartLearn-DevData` (`npm run dev:remote`,
 `npm run seed:dev` opt-in). Next milestone after the track: "Meu estudo está funcionando?" (analytics).
 
@@ -44,7 +54,10 @@ judgments from the server (GET /v1/review-task-attempts, batched) and shows
 the redo outcome per item. Plano offers the first "Estudar agora" until the
 unit has INITIAL_PRACTICE evidence. Mobile nav fixed for 8 items. The next
 review flags items whose last attempt was wrong ("Errou na ultima tentativa",
-read from the ledger; a later correct answer clears it).
+read from the ledger; a later correct answer clears it). Plano shows the same
+signal: "N para reforcar" chip on the unit row and "Errou na ultima tentativa"
+per exercise in the detail (REMOTE_MODE only; GET /v1/reinforcement; endpoint
+failure = no cue, never a broken list).
 DEFERRED_EXPLANATION_SCHEMA: no explanation field exists for manual
 exercises and no typed student answer (self-report model) -> "why I was
 wrong" is not built; only the source excerpt is shown. DEFERRED: 8-item nav
