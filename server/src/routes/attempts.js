@@ -29,7 +29,12 @@ export function registerAttemptRoutes(app, db) {
   }, async (request, reply) => {
     const ids = request.query.ids.split(',').filter(Boolean).map(Number);
     try {
-      return { attemptsByReviewTask: attempts.listForReviewTasks(db, request.actor.userId, ids) };
+      const attemptsByReviewTask = attempts.listForReviewTasks(db, request.actor.userId, ids);
+      const priorWrongByReviewTask = {};
+      for (const id of Object.keys(attemptsByReviewTask)) {
+        priorWrongByReviewTask[id] = attempts.priorWrongExercises(db, request.actor.userId, Number(id));
+      }
+      return { attemptsByReviewTask, priorWrongByReviewTask };
     } catch (err) { return handleError(err, reply); }
   });
 

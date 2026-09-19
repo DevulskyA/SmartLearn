@@ -560,7 +560,7 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = []) {
+function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set()) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -872,6 +872,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      // Retention cue from the longitudinal ledger: the last time this item was
+      // answered it was wrong and no correct answer has followed.
+      if (priorWrong.has(exercise.id) && !judgmentByExercise.has(exercise.id)) {
+        exItem.prepend(createTextElement("span", "study-now-chip review-exercise-prior", "Errou na última tentativa"));
+      }
       const restored = judgmentByExercise.get(exercise.id);
       if (restored) {
         const wasCorrect = restored.outcome === "CORRECT";
@@ -1101,13 +1106,15 @@ export async function renderToday() {
   // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
   // reloading never silently drops a block the student already answered.
   const judgmentsByTaskId = new Map();
+  const priorWrongByTaskId = new Map();
   if (REMOTE_MODE && DB.attempts?.listForReviews) {
     const openWithExercises = [...overdueReviews, ...pendingToday]
       .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
       .map((t) => t.id);
     try {
-      const byTask = await DB.attempts.listForReviews(openWithExercises);
-      for (const [taskId, judgments] of Object.entries(byTask)) judgmentsByTaskId.set(Number(taskId), judgments);
+      const { attemptsByReviewTask, priorWrongByReviewTask } = await DB.attempts.listForReviews(openWithExercises);
+      for (const [taskId, judgments] of Object.entries(attemptsByReviewTask)) judgmentsByTaskId.set(Number(taskId), judgments);
+      for (const [taskId, ids] of Object.entries(priorWrongByReviewTask ?? {})) priorWrongByTaskId.set(Number(taskId), new Set(ids));
     } catch (error) {
       console.error("Falha ao restaurar julgamentos das revisões.", error);
     }
@@ -1125,7 +1132,7 @@ export async function renderToday() {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? []));
+      list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set()));
     }
   }
 

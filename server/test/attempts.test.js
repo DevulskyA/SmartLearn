@@ -380,3 +380,37 @@ test('listForReviewTasks batches per review, omits ids the caller does not own, 
     assert.throws(() => attempts.listForReviewTasks(db, a, Array.from({ length: 501 }, (_, i) => i + 1)), (e) => e.code === 'VALIDATION_FAILED');
   } finally { cleanup(); }
 });
+
+test('priorWrongExercises flags items whose latest attempt OUTSIDE this review was wrong, and a later correct answer clears it', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'prior-wrong@example.com');
+    const other = makeUser(db, 'prior-other@example.com');
+    const unit = makeUnit(db, userId);
+    const wrongLast = makeExercise(db, userId, unit.id, { question: 'P1?' });
+    const fixedLater = makeExercise(db, userId, unit.id, { question: 'P2?' });
+    const rightLast = makeExercise(db, userId, unit.id, { question: 'P3?' });
+    const never = makeExercise(db, userId, unit.id, { question: 'P4?' });
+    const onlyHere = makeExercise(db, userId, unit.id, { question: 'P5?' });
+    const archived = makeExercise(db, userId, unit.id, { question: 'P6?' });
+    const [r1, r2] = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY id LIMIT 2').all(userId, unit.id).map(r => r.id);
+    const judge = (ex, outcome, reviewTaskId) => {
+      const a = attempts.start(db, userId, { exerciseId: ex.id, reviewTaskId });
+      attempts.submit(db, userId, a.id, { outcome, assessmentMethod: 'SELF_REPORT' });
+    };
+    judge(wrongLast, 'CORRECT', r1);
+    judge(wrongLast, 'INCORRECT', r1);            // most recent: wrong
+    judge(fixedLater, 'INCORRECT', r1);
+    judge(fixedLater, 'CORRECT', undefined);      // a later redo fixed it
+    judge(rightLast, 'INCORRECT', r1);
+    judge(rightLast, 'CORRECT', r1);
+    judge(onlyHere, 'INCORRECT', r2);             // wrong only INSIDE r2 itself
+    judge(archived, 'INCORRECT', r1);
+    exercises.archive(db, userId, archived.id);
+
+    assert.deepEqual(attempts.priorWrongExercises(db, userId, r2), [wrongLast.id], 'r2 sees only what stayed wrong outside r2; archived items are not flagged');
+    assert.deepEqual(attempts.priorWrongExercises(db, userId, r1).sort(), [onlyHere.id].sort(), "r1 ignores its own judgments; only r2's wrong item counts as prior for it");
+    assert.deepEqual(attempts.priorWrongExercises(db, other, r2), [], 'another user gets nothing');
+    assert.equal(never.id > 0, true);
+  } finally { cleanup(); }
+});

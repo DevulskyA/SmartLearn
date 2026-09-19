@@ -151,3 +151,59 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   expect(review[0].questionsCount).toBe(2);
   expect(review[0].correctCount).toBe(1);
 });
+
+test('Retention cue: an item still wrong at its last attempt is flagged in the next review; a corrected redo clears it', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Cue Subject');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2020-01-01');
+  await page.locator('#study-content').fill('Cue Unit');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  const studyRow = page.locator('.study-row', { hasText: 'Cue Unit' });
+  await studyRow.getByRole('button', { name: 'Exercícios' }).click();
+  for (const [q, a] of [['Cue A?', 'Resp A'], ['Cue B?', 'Resp B']]) {
+    await studyRow.locator('.exercise-question-input').fill(q);
+    await studyRow.locator('.exercise-answer-input').fill(a);
+    await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
+    await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
+  }
+  await page.locator('[data-screen="today"]').click();
+  await page.locator('#today-primary-action-btn').click();
+  const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  const r1 = page.locator(`.review-row[data-review-id="${reviewId}"]`);
+  const judge = async (row, q, name) => {
+    const it = row.locator('.review-exercise-item', { hasText: q });
+    await it.getByRole('button', { name: 'Ver resposta' }).click();
+    await it.getByRole('button', { name: name }).click();
+  };
+  await judge(r1, 'Cue A?', 'Errei');
+  await judge(r1, 'Cue B?', 'Acertei');
+  await expect(r1.locator('.review-block-result')).toBeVisible();
+
+  // Another review of the same unit (R2): A was wrong last time, B was right.
+  const r2 = page.locator('.review-row', { has: page.locator('.review-marker', { hasText: /^R2$/ }) });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  await r2.locator('.review-row-toggle').click();
+  const cue = (q) => r2.locator('.review-exercise-item', { hasText: q }).locator('.review-exercise-prior');
+  await expect(cue('Cue A?')).toHaveText('Errou na última tentativa');
+  await expect(cue('Cue B?')).toHaveCount(0);
+
+  // Redo A correctly (Refazer erros, shared flow) -> the cue is gone next time.
+  await r1.getByRole('button', { name: 'Refazer erros (1)' }).click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
+  await page.locator('#study-now-done-btn').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  await r2.locator('.review-row-toggle').click();
+  await expect(r2.locator('.review-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
+  await expect(r2.locator('.review-exercise-prior')).toHaveCount(0);
+});
+

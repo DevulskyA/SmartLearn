@@ -294,9 +294,8 @@ const attempts = {
   },
   // Batch: one request for every open review Hoje is about to render.
   async listForReviews(reviewTaskIds) {
-    if (reviewTaskIds.length === 0) return {};
-    const { attemptsByReviewTask } = await apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.join(",")}`);
-    return attemptsByReviewTask;
+    if (reviewTaskIds.length === 0) return { attemptsByReviewTask: {}, priorWrongByReviewTask: {} };
+    return apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.join(",")}`);
   },
 };
 

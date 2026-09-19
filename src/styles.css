@@ -1076,6 +1076,10 @@ h1 {
   white-space: nowrap;
 }
 
+.review-exercise-item > .study-now-chip.review-exercise-prior {
+  margin: 0 0 0.5rem;
+}
+
 .review-exercise-item > .study-now-chip {
   justify-self: start;
   align-self: flex-start;

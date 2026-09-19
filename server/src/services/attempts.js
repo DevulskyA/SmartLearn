@@ -288,3 +288,28 @@ export function listForReviewTasks(db, userId, reviewTaskIds) {
   }
   return result;
 }
+
+/**
+ * Exercises of this review's unit whose MOST RECENT submitted attempt --
+ * ignoring this review's own judgments -- was INCORRECT: the student erred and
+ * has not (yet) shown a correct answer since. A later correct redo clears it.
+ * Longitudinal read over the existing ledger; nothing new is stored.
+ */
+export function priorWrongExercises(db, userId, reviewTaskId) {
+  return db.prepare(`
+    SELECT ex.id AS exercise_id
+    FROM review_tasks rt
+    JOIN exercises ex ON ex.user_id = rt.user_id AND ex.unit_id = rt.unit_id AND ex.archived_at IS NULL
+    WHERE rt.user_id = ? AND rt.id = ?
+      AND (
+        SELECT (SELECT e.outcome FROM learning_events e
+                 WHERE e.user_id = a.user_id AND e.attempt_id = a.id ORDER BY e.sequence DESC LIMIT 1)
+        FROM exercise_attempts a
+        JOIN exercise_versions v ON v.user_id = a.user_id AND v.id = a.exercise_version_id
+        WHERE a.user_id = rt.user_id AND v.exercise_id = ex.id AND a.status = 'SUBMITTED'
+          AND (a.review_task_id IS NULL OR a.review_task_id != rt.id)
+        ORDER BY a.id DESC LIMIT 1
+      ) = 'INCORRECT'
+    ORDER BY ex.order_index, ex.id
+  `).all(userId, reviewTaskId).map(r => r.exercise_id);
+}
