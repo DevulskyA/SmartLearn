@@ -8,6 +8,7 @@ Não é autoridade — ver regra fundamental em [workflow.md](workflow.md).
 - [tech-stack.md](tech-stack.md) — stack (pointer)
 - [workflow.md](workflow.md) — Conductor + TLC Bridge Contract
 - [tracks.md](tracks.md) — painel principal (status agregado)
-- [tracks/smartlearn-v1/](tracks/smartlearn-v1/) — track ativa: spec.md, plan.md, metadata.json
+- [tracks/ops-dev-data-and-tasklist/](tracks/ops-dev-data-and-tasklist/plan.md) — TRACK ATIVO (2026-09-19): dados de dev duráveis + tasklist persistente
+- [tracks/smartlearn-v1/](tracks/smartlearn-v1/) — track mestre (painel defasado desde T28; ver `.specs/STATE.md`): spec.md, plan.md, metadata.json
 
 **Resume rápido:** leia `tracks.md` primeiro. Ele reconcilia Git + `.specs/STATE.md` a cada atualização.

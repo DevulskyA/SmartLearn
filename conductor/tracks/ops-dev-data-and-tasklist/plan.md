@@ -9,7 +9,7 @@
 Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: GOV-1
+ATIVA AGORA: GOV-2
 ```
 
 ## Tarefas
@@ -29,9 +29,10 @@ ATIVA AGORA: GOV-1
       `atomic-save` decidido em "Evidência OPS-4/9" (sensor de persistência, mas a falha intermitente é independente de dados).
 - [✓] **OPS-5 Determinar causa histórica da perda ou registrar UNKNOWN** — **ROOT_CAUSE_DATA_LOSS = UNKNOWN**
       (hipóteses ranqueadas e o que cada evidência exclui em "Evidência OPS-5").
-- [>] **GOV-1 Reconciliar TLC × Conductor e registrar o track corretamente** — auditoria feita (ver "Evidência OPS-6");
-      falta fechar o reparo local (CLAUDE.md/tracks.md já apontam; falta painel mestre).
-- [ ] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — retomada em nova sessão reconstrói a mesma lista.
+- [✓] **GOV-1 Reconciliar TLC × Conductor e registrar o track corretamente** — auditoria em "Evidência OPS-6"; reparo LOCAL:
+      `conductor/workflow.md` (relação Conductor envolve TLC, projetor, uma ativa), `tracks.md` (ACTIVE TRACK + IN_PROGRESS),
+      `index.md`, `CLAUDE.md`. Skill global NÃO alterada. Painel mestre (22/54) segue adiado.
+- [>] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — retomada em nova sessão reconstrói a mesma lista.
 - [ ] **ANALYTICS Retomar "Meu estudo está funcionando?"**
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).

@@ -16,7 +16,9 @@ For everything else — active feature location, current checkpoint, dependency-
 Ao iniciar/retomar trabalho: ler `conductor/tracks.md` (seção ACTIVE TRACK) e o `plan.md` apontado; mostrar a
 tasklist compacta ao usuário (`[✓]` concluída, `[>]` ativa — exatamente UMA, `[ ]` pendente, `[!]` bloqueada,
 `[-]` adiada) como PROJEÇÃO do plan.md. Ao mudar o estado de uma tarefa: atualizar o plan.md primeiro, depois
-refletir no chat. Conductor decide QUAL tarefa está ativa; TLC decide a menor implementação correta dela.
+refletir no chat. Projete SEMPRE com `node scripts/tasklist.mjs` (e `--html conductor/.view/tasklist.html` para o painel
+que o usuário abre; o script exige exatamente uma `[>]`). Conductor decide QUAL tarefa está ativa; TLC decide a menor
+implementação correta dela.
 Conductor nunca vira segunda Constitution (intenção = Constitution §0.1; estado = Git/testes).
 
 ## Recuperação de sessão/contexto perdido

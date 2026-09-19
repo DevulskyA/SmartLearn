@@ -72,3 +72,25 @@ Git → conductor/tracks.md → .specs/STATE.md → tasks.md (status formal) →
 evidence → working tree → reconcile discrepâncias → continuar primeira
 tarefa não-provada com dependências satisfeitas
 ```
+
+## Tasklist visível e relação Conductor × TLC (adendo 2026-09-19 — track ops-dev-data-and-tasklist)
+
+Estado real verificado no disco (não pelo nome): a skill em uso é `tlc-spec-driven-strict` (integração original, sem versão,
+instalada 2026-09-15); **"TLC-ECC Engineering V3" não existe como skill instalada**. A skill global NÃO é modificada; este
+adendo é a correção LOCAL e reversível (SKILL_CONFLICT registrado em `tracks/ops-dev-data-and-tasklist/plan.md`).
+
+```
+CONDUCTOR envolve o TLC:
+  track/plan.md → tarefa ATIVA (exatamente uma) → TLC: outcome → guardrails → menor slice → executar → PROVAR →
+  atualizar plan.md (primeiro) → tracks.md (se o status do track mudou) → projetar a lista → próxima tarefa
+Conductor decide QUAL tarefa está ativa. TLC decide a menor implementação correta dela.
+```
+
+- Fonte única: o `plan.md` do track ativo (apontado em `tracks.md`, seção ACTIVE TRACK). Chat/UI/painel = PROJEÇÕES.
+- Projetar sempre com o script (nunca lista escrita à mão): `node scripts/tasklist.mjs` (texto compacto) e
+  `node scripts/tasklist.mjs --html conductor/.view/tasklist.html` (painel para o usuário; atualiza a cada 10 s).
+  O script sai com erro se não houver EXATAMENTE UMA tarefa `[>]`.
+- Símbolos: `[✓]` concluída · `[>]` ativa · `[ ]` pendente · `[!]` bloqueada · `[-]` adiada.
+- Sem UI nativa de checklist no runtime (o painel "tasks" do app mostra só processos em segundo plano): usar o painel HTML +
+  a lista compacta em cada checkpoint.
+- Conductor NÃO cria segunda Constitution: intenção = Product Constitution §0.1; estado = Git/testes.

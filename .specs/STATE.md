@@ -9,6 +9,10 @@
 
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
+ACTIVE_TRACK (2026-09-19): `conductor/tracks/ops-dev-data-and-tasklist/plan.md` — dev data durability + persistent tasklist.
+One active task at a time; project with `node scripts/tasklist.mjs`. Persistent dev DB: `~/SmartLearn-DevData` (`npm run dev:remote`,
+`npm run seed:dev` opt-in). Next milestone after the track: "Meu estudo está funcionando?" (analytics).
+
 GOVERNANCE_UPDATE (2026-09-16, docs-only, no product code touched):
 `.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` amended to
 2.1.0 with §4.33 + invariant I11 — PROTECTED SURFACES / DESIGN
