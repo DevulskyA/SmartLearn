@@ -41,11 +41,13 @@ function comparePeriods(olderEvidence, recentEvidence, minQuestions, minDelta) {
   if (olderQ < minQuestions || recentQ < minQuestions) {
     return { direction: 'INSUFFICIENT', delta: null };
   }
-  const delta = sumField(recentEvidence, 'correctCount') / recentQ - sumField(olderEvidence, 'correctCount') / olderQ;
+  const olderAcc = sumField(olderEvidence, 'correctCount') / olderQ;
+  const recentAcc = sumField(recentEvidence, 'correctCount') / recentQ;
+  const delta = recentAcc - olderAcc;
   const direction = delta > minDelta ? 'IMPROVING'
     : delta < -minDelta ? 'DECLINING'
     : 'STABLE';
-  return { direction, delta };
+  return { direction, delta, olderAccuracy: olderAcc * 100, recentAccuracy: recentAcc * 100 };
 }
 
 // Subject trend: last 30 days vs the 30 before, min 10 questions in each
@@ -70,6 +72,84 @@ export function unitTrend(unitEvidence, minQuestions = 10, threshold = 0.05) {
     minQuestions,
     threshold,
   );
+}
+
+// "Meu estudo está funcionando?" — answered from observable evidence only. No score, no
+// mastery: how many subjects are improving / declining / stable / not comparable / without
+// evidence, plus the ONE unit that most deserves attention and why. Deterministic:
+// a DECLINING unit (largest fall first, then more recent-period questions) beats a unit that
+// merely has items still wrong at their last attempt ("para reforçar", most items first).
+// Subjects with no evidence are counted apart — never as bad performance.
+export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
+  const counts = { improving: 0, declining: 0, stable: 0, insufficient: 0, noEvidence: 0 };
+  let totalQuestions = 0;
+  for (const r of subjectRows) {
+    if (!(r.totalQuestions > 0)) { counts.noEvidence += 1; continue; }
+    totalQuestions += r.totalQuestions;
+    const d = r.trend.direction;
+    if (d === 'IMPROVING') counts.improving += 1;
+    else if (d === 'DECLINING') counts.declining += 1;
+    else if (d === 'STABLE') counts.stable += 1;
+    else counts.insufficient += 1;
+  }
+  const compared = counts.improving + counts.declining + counts.stable;
+  const state = totalQuestions === 0 ? 'NO_EVIDENCE'
+    : compared === 0 ? 'INSUFFICIENT'
+    : counts.improving > 0 && counts.declining > 0 ? 'MIXED'
+    : counts.declining > 0 ? 'DECLINING'
+    : counts.improving > 0 ? 'IMPROVING'
+    : 'STABLE';
+
+  const reinforceOf = (u) => (reinforcementByUnit[u.unitId] ?? []).length;
+  const describe = (u, reason) => ({
+    reason,
+    unitId: u.unitId,
+    unitTitle: u.unitTitle,
+    subjectName: u.subjectName,
+    olderAccuracy: u.trend.olderAccuracy ?? null,
+    recentAccuracy: u.trend.recentAccuracy ?? null,
+    reinforceCount: reinforceOf(u),
+  });
+  const declining = unitRows
+    .filter((u) => u.trend.direction === 'DECLINING')
+    .sort((a, b) => a.trend.delta - b.trend.delta || b.totalQuestions - a.totalQuestions);
+  const reinforce = unitRows
+    .filter((u) => reinforceOf(u) > 0)
+    .sort((a, b) => reinforceOf(b) - reinforceOf(a) || b.totalQuestions - a.totalQuestions);
+  const attention = declining.length > 0 ? describe(declining[0], 'DECLINING')
+    : reinforce.length > 0 ? describe(reinforce[0], 'REINFORCE')
+    : null;
+
+  return { state, counts, totalQuestions, attention };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Plain-language rendering of studyVerdict (pt-BR). Never says mastery/retention/score.
+export function verdictText(v) {
+  const { counts } = v;
+  if (v.state === 'NO_EVIDENCE') {
+    return { headline: 'Ainda não há evidência para dizer se seu estudo está funcionando.', detail: 'Registre questões ou faça revisões para começar a medir.' };
+  }
+  if (v.state === 'INSUFFICIENT') {
+    return {
+      headline: 'Ainda não há histórico suficiente para comparar.',
+      detail: `Há ${plural(v.totalQuestions, 'questão registrada', 'questões registradas')}, mas cada período precisa de pelo menos 10 para indicar uma tendência.`,
+    };
+  }
+  const headline = {
+    IMPROVING: 'Seu desempenho está melhorando.',
+    DECLINING: 'Seu desempenho está piorando.',
+    STABLE: 'Seu desempenho está estável.',
+    MIXED: 'Resultado misto: melhorando em umas áreas e piorando em outras.',
+  }[v.state];
+  const parts = [];
+  if (counts.improving) parts.push(`${counts.improving} melhorando`);
+  if (counts.declining) parts.push(`${counts.declining} piorando`);
+  if (counts.stable) parts.push(`${counts.stable} ${counts.stable === 1 ? 'estável' : 'estáveis'}`);
+  if (counts.insufficient) parts.push(`${counts.insufficient} com evidência insuficiente`);
+  if (counts.noEvidence) parts.push(`${counts.noEvidence} sem evidência`);
+  return { headline, detail: `Disciplinas: ${parts.join(' · ')}.` };
 }
 
 // Rows without a lastEvidence date are excluded by a period filter (there's
@@ -229,4 +309,5 @@ export const Analytics = {
 
   subjectTrend,
   unitTrend,
+  studyVerdict,
 };

@@ -13,7 +13,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
-import { Analytics, subtractDays, filterByPeriod, sortMatrixRows } from "./analytics.js";
+import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
@@ -216,6 +216,12 @@ const metricElements = {
 };
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
+const studyVerdictEl = document.querySelector("#stats-verdict");
+const studyVerdictHeadline = document.querySelector("#stats-verdict-headline");
+const studyVerdictDetail = document.querySelector("#stats-verdict-detail");
+const studyVerdictAttention = document.querySelector("#stats-verdict-attention");
+const studyVerdictAttentionText = document.querySelector("#stats-verdict-attention-text");
+const studyVerdictAttentionBtn = document.querySelector("#stats-verdict-attention-btn");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
 const unitDetailPanel = document.querySelector("#unit-detail-panel");
@@ -1357,27 +1363,31 @@ function getPlanPerfBadge(evidence) {
 let planCurrentSubjectFilter = "";
 let planCurrentStateFilter = "";
 
+// "Para reforçar": exercises still wrong at their last attempt, by unit. Only the server
+// keeps item-level attempts; without it (or if it fails) the callers just show no cue —
+// it is an extra signal, never a reason to fail a whole screen.
+async function loadReinforcementByUnit() {
+  if (!REMOTE_MODE || !DB.attempts?.reinforcement) return {};
+  try {
+    return await DB.attempts.reinforcement();
+  } catch (error) {
+    console.warn("Falha ao carregar itens para reforçar.", error);
+    return {};
+  }
+}
+
+// Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
+let pendingPlanFocusUnitId = null;
+
 export async function renderPlan() {
   if (!planList) return;
   const today = getLocalDateValue();
-  // "Para reforçar": exercises still wrong at their last attempt. Only the server
-  // keeps item-level attempts; without it (or if it fails) the Plano just shows no
-  // cue — it is an extra signal, never a reason to fail the whole list.
-  const loadReinforcement = async () => {
-    if (!REMOTE_MODE || !DB.attempts?.reinforcement) return {};
-    try {
-      return await DB.attempts.reinforcement();
-    } catch (error) {
-      console.warn("Falha ao carregar itens para reforçar.", error);
-      return {};
-    }
-  };
   const [learningUnits, subjects, allTasks, allEvidence, reinforcementByUnit] = await Promise.all([
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
     DB.reviewTasks.getAll(),
     DB.learningEvidence.getAll(),
-    loadReinforcement(),
+    loadReinforcementByUnit(),
   ]);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
   const evidenceByUnitId = new Map();
@@ -1681,6 +1691,15 @@ export async function renderPlan() {
     row.append(compact, detail);
     planList.append(row);
   }
+
+  if (pendingPlanFocusUnitId != null) {
+    const target = planList.querySelector(`.plan-row[data-unit-id="${pendingPlanFocusUnitId}"]`);
+    pendingPlanFocusUnitId = null;
+    if (target) {
+      target.querySelector(".plan-expand-btn")?.click();
+      target.scrollIntoView({ block: "center" });
+    }
+  }
 }
 
 function createTrendBadge(direction) {
@@ -1775,6 +1794,33 @@ function wireSortableHeaders(rowId, state, onChange) {
   });
 }
 
+// "Meu estudo está funcionando?" — plain text from observable evidence (see studyVerdict).
+// It ignores the period filter on purpose: a trend is a comparison over time, not a slice.
+async function renderStudyVerdict(subjectRows, unitRows) {
+  if (!studyVerdictEl) return;
+  const verdict = Analytics.studyVerdict(subjectRows, unitRows, await loadReinforcementByUnit());
+  const text = verdictText(verdict);
+  studyVerdictEl.dataset.state = verdict.state;
+  studyVerdictHeadline.textContent = text.headline;
+  studyVerdictDetail.textContent = text.detail;
+  studyVerdictEl.hidden = false;
+
+  const a = verdict.attention;
+  studyVerdictAttention.hidden = a == null;
+  if (a == null) return;
+  const pct = (n) => `${Math.round(n)}%`;
+  const items = a.reinforceCount > 0
+    ? ` ${a.reinforceCount} ${a.reinforceCount === 1 ? "exercício" : "exercícios"} para reforçar.`
+    : "";
+  studyVerdictAttentionText.textContent = a.reason === "DECLINING"
+    ? `Atenção: “${a.unitTitle}” (${a.subjectName}) está piorando, de ${pct(a.olderAccuracy)} para ${pct(a.recentAccuracy)}.${items}`
+    : `Atenção: “${a.unitTitle}” (${a.subjectName}) tem${items ? "" : " itens para reforçar."}${items}`;
+  studyVerdictAttentionBtn.onclick = () => {
+    pendingPlanFocusUnitId = a.unitId;
+    showScreen("plan");
+  };
+}
+
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const today = getLocalDateValue();
@@ -1784,6 +1830,7 @@ export async function renderStatsBySubject() {
     DB.subjects.getAll(),
   ]);
   let results = Analytics.bySubject(evidence, units, subjects, today);
+  await renderStudyVerdict(results, Analytics.byUnit(evidence, units, subjects));
   results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
   results = sortMatrixRows(results, subjectSortState);
   wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
