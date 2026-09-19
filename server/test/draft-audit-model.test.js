@@ -242,6 +242,29 @@ test('a human edit re-screens the new text (deterministic only) and marks the au
   } finally { cleanup(); }
 });
 
+test('the model endpoint is operator-configurable, defaults to the real API, and a stored draft is labelled with the CURRENT prompt version', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'url@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const urls = [];
+    const prompts = [];
+    const fetchImpl = async (url, init) => {
+      urls.push(url);
+      prompts.push(JSON.parse(init.body).messages[0].content);
+      return { ok: true, json: async () => ({ content: [{ text: JSON.stringify(urls.length === 1 ? good() : { result: 'PASS', findings: [] }) }] }) };
+    };
+    const draft = await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl, apiUrl: 'http://127.0.0.1:9/stub' });
+    assert.deepEqual(urls, ['http://127.0.0.1:9/stub', 'http://127.0.0.1:9/stub']);
+    assert.match(prompts[0], /promptVersion exactly "3"/, 'no explicit promptVersion -> the current one, not a stale default');
+    assert.equal(draft.promptVersion, '3');
+
+    urls.length = 0;
+    await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl });
+    assert.ok(urls.every((u) => u === 'https://api.anthropic.com/v1/messages'), 'default endpoint is the real API');
+  } finally { cleanup(); }
+});
+
 test('parseModelAudit: drops unknown scopes and out-of-range questions, clamps severity, never trusts the model\'s own verdict', () => {
   const raw = {
     result: 'PASS',

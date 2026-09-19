@@ -45,6 +45,8 @@ export const config = {
   aiModel: process.env.SMARTLEARN_AI_MODEL || null,
   aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
   aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,
+  // Operator-controlled endpoint override (e.g. a local stub in tests); the default is the real API.
+  aiApiUrl: process.env.SMARTLEARN_AI_API_URL || null,
   aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
   aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
 };

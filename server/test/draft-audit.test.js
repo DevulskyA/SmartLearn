@@ -73,6 +73,13 @@ test('a token summary over a substantial source is thin (HIGH); a short source m
   assert.ok(!issues(ok, 'summary').includes('SUMMARY_TOO_THIN'));
 });
 
+test('paraphrase phrasing (gerunds, -mente adverbs) is not reported as a term missing from the source; a real new term still is', () => {
+  const phrased = auditDraft(draft({ summary: `${GOOD_SUMMARY} Sustentando a filtração, a eferente atua diretamente sobre a pressão.` }), { segments: SEGMENTS });
+  assert.deepEqual(issues(phrased, 'summary').filter((i) => i === 'SUMMARY_UNSUPPORTED_TERM'), []);
+  const realTerm = auditDraft(draft({ summary: `${GOOD_SUMMARY} A espironolactona atua sobre a pressão.` }), { segments: SEGMENTS });
+  assert.ok(issues(realTerm, 'summary').includes('SUMMARY_UNSUPPORTED_TERM'));
+});
+
 test('the audit never mutates its input and is deterministic', () => {
   const d = draft({ summary: 'Pressão de 999 mmHg.' });
   const before = JSON.stringify(d);

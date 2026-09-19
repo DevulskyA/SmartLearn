@@ -16,6 +16,10 @@ const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
 const stem = (key) => (key.length >= 6 ? key.slice(0, 5) : key);
 
+// Gerunds and -mente adverbs ("sustentando", "diretamente") are how a paraphrase is written, not a
+// specific term; flagging them as "not in the source" only teaches the reviewer to ignore the screen.
+const isPhrasing = (key) => /(?:ando|endo|indo|ondo|mente)$/.test(key);
+
 // Generic connective/academic words a faithful paraphrase may add without adding any fact.
 const GENERIC = new Set([
   'importante', 'importantes', 'principal', 'principais', 'fundamental', 'fundamentais', 'geralmente', 'normalmente',
@@ -101,7 +105,7 @@ function auditSummary(summary, segments) {
   const seen = new Set();
   const unsupportedTerms = [];
   for (const t of tokens(summary)) {
-    if (t.key.length < 8 || GENERIC.has(t.key)) continue;
+    if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
     const s = stem(t.key);
     if (srcStems.has(s) || seen.has(s)) continue;
     seen.add(s);
@@ -220,7 +224,7 @@ function auditQuestions(questions, segments) {
     const seen = new Set();
     const unsupported = [];
     for (const t of tokens(teaching)) {
-      if (t.key.length < 8 || GENERIC.has(t.key)) continue;
+      if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
       const s = stem(t.key);
       if (citedStems.has(s) || questionStems.has(s) || seen.has(s)) continue;
       seen.add(s);

@@ -22,10 +22,10 @@ export class DraftError extends Error {
  * cap"). Pure and side-effect-free so it is directly unit-testable
  * without touching config.js or the network.
  */
-export function selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl }) {
+export function selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl }) {
   const liveAvailable = Boolean(apiKey) && Boolean(model) && consentGranted === true && typeof budgetCapUsd === 'number' && budgetCapUsd > 0;
   if (liveAvailable) {
-    const options = fetchImpl ? { apiKey, model, fetchImpl } : { apiKey, model };
+    const options = { apiKey, model, ...(fetchImpl ? { fetchImpl } : {}), ...(apiUrl ? { apiUrl } : {}) };
     return {
       name: ANTHROPIC_PROVIDER_NAME,
       live: true,
@@ -180,6 +180,7 @@ export async function createDraft(db, userId, proposalId, {
   timeoutMs = 30_000,
   maxInputChars = 50_000,
   fetchImpl = null,
+  apiUrl = null,
   now = () => new Date(),
 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
@@ -191,7 +192,7 @@ export async function createDraft(db, userId, proposalId, {
     throw new DraftError('INPUT_TOO_LARGE', `O texto de origem (${totalChars} caracteres) excede o limite de ${maxInputChars}.`);
   }
 
-  const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl });
+  const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });
 
   let raw;
   try {

@@ -41,7 +41,9 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
       reply.status(201);
       return {
         draft: await drafts.createDraft(db, request.actor.userId, id, {
-          promptVersion: request.body?.promptVersion ?? '1',
+          // undefined -> createDraft's own default (the CURRENT prompt version), so a stored draft is labelled with the prompt that really produced it
+          promptVersion: request.body?.promptVersion,
+          apiUrl: config.aiApiUrl,
           apiKey: config.aiApiKey,
           model: config.aiModel,
           consentGranted: config.aiConsentGranted,

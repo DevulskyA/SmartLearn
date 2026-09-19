@@ -83,7 +83,7 @@ function buildPrompt(segments, promptVersion) {
  * credential check, timeout, error mapping and "nothing is executed from a response" property
  * are identical for all three.
  */
-async function callModel(prompt, { apiKey, model, timeoutMs = 30_000, fetchImpl = fetch, maxTokens = 4096 } = {}) {
+async function callModel(prompt, { apiKey, model, apiUrl = null, timeoutMs = 30_000, fetchImpl = fetch, maxTokens = 4096 } = {}) {
   if (!apiKey || !model) {
     throw new ProviderRequestError('MISSING_CREDENTIALS', 'Nenhuma credencial/modelo configurado para o provedor real.');
   }
@@ -93,7 +93,7 @@ async function callModel(prompt, { apiKey, model, timeoutMs = 30_000, fetchImpl 
 
   let res;
   try {
-    res = await fetchImpl(API_URL, {
+    res = await fetchImpl(apiUrl || API_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
