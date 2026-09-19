@@ -105,3 +105,17 @@ Conductor decide QUAL tarefa está ativa. TLC decide a menor implementação cor
 - Sem UI nativa de checklist no runtime (o painel "tasks" do app mostra só processos em segundo plano): usar o painel HTML +
   a lista compacta em cada checkpoint.
 - Conductor NÃO cria segunda Constitution: intenção = Product Constitution §0.1; estado = Git/testes.
+
+## Autonomia contínua (regra canônica humana, 2026-09-19)
+
+```
+CONTINUOUS_AUTONOMY=REQUIRED
+USER_IS_NOT_AGENT_MANAGER=TRUE
+CONCURRENT_WRITER_ACTION=ISOLATE_AND_CONTINUE
+CURRENT_GOAL_OVERRIDES_STALE_PLAN=TRUE
+```
+
+Outro agente/branch/worktree/arquivo inesperado NÃO é motivo para parar: isolar em worktree/branch próprio, preservar o trabalho alheio
+(sem reset/stash/overwrite), continuar o GOAL vigente e reconciliar depois com estado estável. Tarefa antiga descoberta = histórico/paralela.
+Só interromper por: decisão nova de produto, risco real de dados, operação irreversível, conflito canônico sem resolução pela hierarquia,
+bloqueio técnico sem caminho seguro, ou contexto no limite (após handoff persistido).

@@ -2,10 +2,9 @@
 
 ## ACTIVE TRACK (ler primeiro)
 
-**`conductor/tracks/ops-dev-data-and-tasklist/plan.md`** — dados de dev duráveis + tasklist persistente
-**Status: DONE (fechado 2026-09-19)** · nenhuma tarefa ativa · Analytics longitudinal (ANALYTICS-1/2/3) e GOV-1/GOV-2 concluídos.
+**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY (objetivo aprovado 2026-09-19) · Status: IN_PROGRESS · uma tarefa ativa.
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
-(GOV-2 = opção A, sem segunda governança). NÃO abrir track novo sem objetivo aprovado; ao abrir, apontar esta seção para ele.
+(GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
 A tasklist mostrada ao usuário é uma projeção do plan.md.
 
 > PAINEL MESTRE ABAIXO DEFASADO: snapshot de 2026-09-07 (T28). Os 143 commits seguintes
