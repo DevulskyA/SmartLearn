@@ -28,7 +28,9 @@ A redo = new attempts only (no reviewTaskId, no aggregate evidence, originals
 untouched; the review still records the ORIGINAL result). Hoje now restores
 judgments from the server (GET /v1/review-task-attempts, batched) and shows
 the redo outcome per item. Plano offers the first "Estudar agora" until the
-unit has INITIAL_PRACTICE evidence. Mobile nav fixed for 8 items.
+unit has INITIAL_PRACTICE evidence. Mobile nav fixed for 8 items. The next
+review flags items whose last attempt was wrong ("Errou na ultima tentativa",
+read from the ledger; a later correct answer clears it).
 DEFERRED_EXPLANATION_SCHEMA: no explanation field exists for manual
 exercises and no typed student answer (self-report model) -> "why I was
 wrong" is not built; only the source excerpt is shown. DEFERRED: 8-item nav
