@@ -220,6 +220,8 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
   await page.reload();
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="today"]').click();
+  // Visible WITHOUT opening the row: where the student was wrong, at a glance.
+  await expect(r2.locator('.review-reinforce-chip')).toHaveText('1 para reforçar');
   await r2.locator('.review-row-toggle').click();
   const cue = (q) => r2.locator('.review-exercise-item', { hasText: q }).locator('.review-exercise-prior');
   await expect(cue('Cue A?')).toHaveText('Errou na última tentativa');
@@ -237,5 +239,6 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
   await r2.locator('.review-row-toggle').click();
   await expect(r2.locator('.review-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
   await expect(r2.locator('.review-exercise-prior')).toHaveCount(0);
+  await expect(r2.locator('.review-reinforce-chip')).toHaveCount(0);
 });
 

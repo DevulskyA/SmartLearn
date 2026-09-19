@@ -601,6 +601,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   scorePill.dataset.scoreFor = String(task.id);
   scorePill.setAttribute("aria-hidden", "true");
   tags.append(statusBadge, scorePill);
+  // At-a-glance retention cue (visible while the row is still collapsed): how
+  // many of this review's items were wrong last time and not yet judged here.
+  {
+    const judgedIds = new Set(judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId));
+    const toReinforce = [...priorWrong].filter((id) => !judgedIds.has(id)).length;
+    if (toReinforce > 0) {
+      const reinforce = createTextElement("span", "study-now-chip review-reinforce-chip", `${toReinforce} para reforçar`);
+      reinforce.title = "Itens que você errou na última tentativa";
+      tags.append(reinforce);
+    }
+  }
 
   header.append(marker, heading, tags);
 
