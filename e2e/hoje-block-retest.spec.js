@@ -88,11 +88,13 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   await item('Pergunta A?').getByRole('button', { name: 'Ver resposta' }).click();
   await item('Pergunta A?').getByRole('button', { name: 'Errei' }).click();
   await expect(blockResult).toBeHidden();                      // block not finished yet
+  await expect(item('Pergunta B?').getByRole('button', { name: 'Ver resposta' })).toBeFocused();   // keyboard flow continues
   await item('Pergunta B?').getByRole('button', { name: 'Ver resposta' }).click();
   await item('Pergunta B?').getByRole('button', { name: 'Acertei' }).click();
   await expect(blockResult).toBeVisible();
   await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
   await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeFocused();   // ...and lands on the next action
 
   // Leaving Hoje and coming back must NOT drop the judgments.
   await page.locator('[data-screen="plan"]').click();

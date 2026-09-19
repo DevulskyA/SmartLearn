@@ -4557,6 +4557,12 @@ reviewDashboard.addEventListener("click", async (event) => {
     section.dataset.allAnswered = "true";
   }
   updateReviewBlockResult(section);
+
+  // The judged button was just disabled, which drops keyboard focus to <body>:
+  // hand it to the next actionable control (next question, or the redo action
+  // when the block just ended with errors).
+  const nextOpen = section.querySelector('.review-exercise-item[data-exercise-answered="false"] [data-action="reveal-answer"]');
+  (nextOpen ?? section.querySelector(".review-block-retest"))?.focus();
 });
 
 reviewDashboard.addEventListener("click", (event) => {
