@@ -311,6 +311,7 @@ const studyNowQuestionText = document.querySelector("#study-now-question-text");
 const studyNowHintText = document.querySelector("#study-now-hint-text");
 const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
 const studyNowAnswerText = document.querySelector("#study-now-answer-text");
+const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
 const studyNowJudgment = document.querySelector("#study-now-judgment");
 const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
 const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
@@ -862,6 +863,10 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
       revealBtn.textContent = "Ver resposta";
 
       const answerEl = createTextElement("p", "review-exercise-answer", exercise.answerText);
+      // The WHY (AI-generated exercises): revealed together with the answer it explains; absent otherwise.
+      if (exercise.explanationText) {
+        answerEl.append(createTextElement("span", "review-exercise-explanation", `Por quê: ${exercise.explanationText}`));
+      }
       answerEl.hidden = true;
 
       const judgmentRow = document.createElement("div");
@@ -3024,6 +3029,25 @@ const DRAFT_ISSUE_LABELS = {
   SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
   SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
   SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
+  QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
+  QUESTION_NO_EXPLANATION: "Falta explicar por quê",
+  QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
+  HINT_REVEALS_ANSWER: "A dica entrega a resposta",
+  QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",
+  QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
+  QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
+  QUESTION_DUPLICATE: "Questão repetida",
+  QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
+};
+
+const DRAFT_QUESTION_TYPE_LABELS = {
+  RECALL: "Recordação",
+  CONCEPT: "Conceito",
+  MECHANISM: "Mecanismo",
+  APPLICATION: "Aplicação",
+  DISCRIMINATION: "Discriminação",
+  CLINICAL_REASONING: "Raciocínio clínico",
+  TRANSFER: "Transferência",
 };
 
 function draftFindingScopeLabel(scope) {
@@ -3099,6 +3123,10 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
       createTextElement("p", "source-draft-question", question.question),
       createTextElement("p", "source-draft-answer", question.answer),
     );
+    if (question.explanation) item.append(createTextElement("p", "source-draft-explanation", `Por quê: ${question.explanation}`));
+    if (question.questionType && DRAFT_QUESTION_TYPE_LABELS[question.questionType]) {
+      item.prepend(createTextElement("span", "study-now-chip source-draft-question-type", DRAFT_QUESTION_TYPE_LABELS[question.questionType]));
+    }
     if (question.sourceSpans?.length) {
       item.append(createSourceDetails(
         `Fonte da questão · ${question.sourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(question.sourceSpans.map((s) => s.pageIndex))}`,
@@ -3427,6 +3455,8 @@ function renderStudyNowQuestion() {
   studyNowQuestionText.textContent = exercise.questionText;
   studyNowAnswerText.textContent = exercise.answerText;
   studyNowAnswerText.hidden = true;
+  studyNowExplanationText.textContent = exercise.explanationText ? `Por quê: ${exercise.explanationText}` : "";
+  studyNowExplanationText.hidden = true;
   if (exercise.hintText) {
     // Honest reuse, not invention: shown unconditionally exactly like the
     // Hoje review UI already does (a hint the learner can already see is
@@ -3556,6 +3586,9 @@ function createStudyErrorItem(exercise) {
     createTextElement("p", "study-now-error-answer", exercise.answerText),
   );
   li.append(answer);
+  if (exercise.explanationText) {
+    li.append(createTextElement("p", "study-now-error-label", "Por quê"), createTextElement("p", "study-now-error-why", exercise.explanationText));
+  }
   if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", `Dica: ${exercise.hintText}`));
   const origin = STUDY_PROVENANCE_LABEL[exercise.provenance];
   if (origin) li.append(createTextElement("p", "study-now-error-meta", origin));
@@ -3604,6 +3637,7 @@ studyNowRevealBtn?.addEventListener("click", async () => {
   const exercise = state.exercises[state.index];
 
   studyNowAnswerText.hidden = false;
+  studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
   studyNowJudgment.hidden = false;
   studyNowRevealBtn.hidden = true;
   // The focused button just disappeared: keep keyboard users in the flow.

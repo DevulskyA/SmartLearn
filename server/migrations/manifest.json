@@ -108,5 +108,10 @@
     "version": 22,
     "name": "unit-summary-citations",
     "checksum": "b1e3a8dcf059834d0717aaedd97f8bcb983a7ff11aba0d5cd580acf3c0cee510"
+  },
+  {
+    "version": 23,
+    "name": "exercise-explanation",
+    "checksum": "70dd1b01a73a9346f8a3d99a64ba57441332e8bbdaac99b5a217157b967303e0"
   }
 ]

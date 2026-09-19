@@ -65,6 +65,7 @@ function versionToDto(row) {
     exerciseId: row.exercise_id,
     question: row.question,
     answer: row.answer,
+    explanation: row.explanation ?? null,
     hint: row.hint,
     provenance: row.provenance,
     createdAt: row.created_at,
@@ -108,7 +109,7 @@ export function getById(db, userId, id) {
 }
 
 /** Creates an exercise and its first immutable version in one transaction. */
-export function create(db, userId, { unitId, question, answer, hint, provenance }) {
+export function create(db, userId, { unitId, question, answer, explanation, hint, provenance }) {
   if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', 'Aula não encontrada.');
   validateQuestionAndProvenance({ question, provenance });
 
@@ -122,9 +123,9 @@ export function create(db, userId, { unitId, question, answer, hint, provenance 
     const exerciseId = exerciseResult.lastInsertRowid;
 
     db.prepare(`
-      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, hint, provenance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, exerciseId, question, answer ?? null, hint ?? null, provenance, now);
+      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, exerciseId, question, answer ?? null, explanation ?? null, hint ?? null, provenance, now);
 
     return exerciseId;
   });
@@ -142,7 +143,7 @@ export function create(db, userId, { unitId, question, answer, hint, provenance 
  * caller correcting only a typo in the hint should not have to resend
  * the full question/provenance too.
  */
-export function edit(db, userId, exerciseId, { question, answer, hint, provenance } = {}) {
+export function edit(db, userId, exerciseId, { question, answer, explanation, hint, provenance } = {}) {
   const exercise = findOwnedExercise(db, userId, exerciseId);
   if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
   const current = latestVersionRow(db, userId, exerciseId);
@@ -150,15 +151,17 @@ export function edit(db, userId, exerciseId, { question, answer, hint, provenanc
   const nextQuestion = question !== undefined ? question : current.question;
   const nextAnswer = answer !== undefined ? answer : current.answer;
   const nextHint = hint !== undefined ? hint : current.hint;
+  // carried forward unless the caller sets it: an edit must not silently destroy the teaching text
+  const nextExplanation = explanation !== undefined ? explanation : current.explanation;
   const nextProvenance = provenance !== undefined ? provenance : current.provenance;
   validateQuestionAndProvenance({ question: nextQuestion, provenance: nextProvenance });
 
   db.transaction(() => {
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, hint, provenance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, exerciseId, nextQuestion, nextAnswer ?? null, nextHint ?? null, nextProvenance, now);
+      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, exerciseId, nextQuestion, nextAnswer ?? null, nextExplanation ?? null, nextHint ?? null, nextProvenance, now);
     db.prepare('UPDATE exercises SET updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, exerciseId);
   })();
 

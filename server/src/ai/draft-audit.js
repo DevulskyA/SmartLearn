@@ -163,12 +163,110 @@ function auditSummary(summary, segments) {
   return findings;
 }
 
+// The "core" of an answer: what a student would type to get it right — the text before the first
+// clause break. Used to detect an answer given away in the question or the hint.
+function answerCore(answer) {
+  const core = norm(answer).split(/[,;:.(]| porque /)[0].replace(/\s+/g, ' ').trim();
+  return core.length >= 4 || /\d/.test(core) ? core : '';
+}
+const squash = (s) => norm(s).replace(/\s+/g, ' ');
+
+function auditQuestions(questions, segments) {
+  const findings = [];
+  const seenQuestions = new Map();
+
+  questions.forEach((q, index) => {
+    const scope = `question:${index}`;
+    const add = (issue, severity, generatedClaim, sourceEvidence, repair) =>
+      findings.push({ issue, severity, scope, generatedClaim: clip(generatedClaim, 240), sourceEvidence, repair });
+
+    const cited = segments.filter((s) => (q.sourceSpans ?? []).some((span) => span.pageIndex === s.pageIndex));
+    const citedText = cited.map((s) => s.text).join(' ');
+    const teaching = `${q.answer} ${q.explanation ?? ''}`;
+    const answerWords = tokens(q.answer).length;
+    const explanationWords = tokens(q.explanation ?? '').length;
+
+    // 1) Feedback must teach: "125" or "C" alone corrects nothing.
+    if (answerWords + explanationWords < 4) {
+      add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, 'A resposta não traz explicação suficiente para o aluno entender por quê.',
+        'Dê a resposta e explique em 1–3 frases por que ela está certa, com base na página citada.');
+    } else if (explanationWords === 0 && answerWords < 8) {
+      add('QUESTION_NO_EXPLANATION', 'MEDIUM', q.answer, 'Resposta curta e sem explicação: o feedback só mostra o gabarito.',
+        'Acrescente a explicação (por que está certo) usando apenas o que a página citada diz.');
+    }
+
+    // 2) Answer given away by the question or by the hint.
+    const core = answerCore(q.answer);
+    if (core && squash(q.question).includes(core)) {
+      add('QUESTION_ANSWER_LEAKED', 'HIGH', q.question, `A resposta ("${clip(q.answer, 60)}") já aparece no enunciado.`,
+        'Reescreva o enunciado sem revelar a resposta.');
+    }
+    if (core && q.hint && squash(q.hint).includes(core)) {
+      add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, `A dica repete a resposta ("${clip(q.answer, 60)}").`,
+        'Uma dica é uma pista parcial (categoria, direção, termo relacionado), nunca a resposta.');
+    }
+
+    // 3) Facts the cited page does not hold — values first (the classic invented fact), then terms.
+    const citedNumbers = new Set(numbersIn(citedText).map((n) => n.key));
+    for (const n of numbersIn(teaching)) {
+      if (citedNumbers.has(n.key) || !(n.key.includes('.') || n.key.length >= 2)) continue;
+      const claim = sentenceContaining(teaching, n.index);
+      add('QUESTION_UNSUPPORTED_VALUE', 'HIGH', claim,
+        closestSourceSentence(teaching.slice(Math.max(0, n.index - 60), n.index), cited.length > 0 ? cited : segments),
+        `O valor ${n.raw} não aparece na página citada. Use o valor da fonte, corrija a citação ou remova a afirmação.`);
+    }
+    const citedStems = sourceStemSet(cited.length > 0 ? cited : segments);
+    const questionStems = new Set(tokens(q.question).map((t) => stem(t.key)));
+    const seen = new Set();
+    const unsupported = [];
+    for (const t of tokens(teaching)) {
+      if (t.key.length < 8 || GENERIC.has(t.key)) continue;
+      const s = stem(t.key);
+      if (citedStems.has(s) || questionStems.has(s) || seen.has(s)) continue;
+      seen.add(s);
+      unsupported.push(t.raw);
+    }
+    if (unsupported.length > 0) {
+      add('QUESTION_UNSUPPORTED_TERM', 'MEDIUM', unsupported.slice(0, 5).join(', '),
+        'Nenhuma dessas palavras (nem uma forma próxima) aparece na página citada.',
+        'Confirme na fonte. Se for informação complementar, remova; se a citação estiver na página errada, corrija-a.');
+    }
+
+    // 4) Little lexical footing on the cited page at all.
+    if (cited.length > 0) {
+      const contentStems = [...new Set(tokens(teaching).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key)).map((t) => stem(t.key)))]
+        .filter((s) => !questionStems.has(s));
+      if (contentStems.length >= 4) {
+        const supported = contentStems.filter((s) => citedStems.has(s)).length;
+        if (supported / contentStems.length < 0.4) {
+          add('QUESTION_LOW_SOURCE_SUPPORT', 'MEDIUM', q.answer,
+            `Só ${supported} de ${contentStems.length} termos da resposta/explicação aparecem na(s) página(s) citada(s).`,
+            'Confira se a citação aponta para a página que sustenta a resposta e se a explicação não acrescenta fatos.');
+        }
+      }
+    }
+
+    // 5) Duplicates, and a verbatim copy of the source (advisory: a lacuna, not a question).
+    const key = squash(q.question);
+    if (seenQuestions.has(key)) {
+      add('QUESTION_DUPLICATE', 'MEDIUM', q.question, `Igual à questão ${seenQuestions.get(key) + 1}.`, 'Remova ou reescreva uma das duas.');
+    } else {
+      seenQuestions.set(key, index);
+    }
+    const answerNorm = squash(q.answer);
+    if (answerNorm.length >= 60 && squash(citedText).includes(answerNorm)) {
+      add('QUESTION_LITERAL_COPY', 'LOW', q.answer, 'A resposta é um trecho literal da fonte.', 'Prefira reformular para testar compreensão, não cópia.');
+    }
+  });
+  return findings;
+}
+
 /**
  * @param {{summary:string, questions:object[]}} draft an already schema-validated draft
  * @param {{segments:{pageIndex:number,text:string}[]}} context the exact source pages sent to the provider
  */
 export function auditDraft(draft, { segments }) {
-  const findings = [...auditSummary(draft.summary, segments)];
+  const findings = [...auditSummary(draft.summary, segments), ...auditQuestions(draft.questions ?? [], segments)];
   const blocking = findings.some((f) => f.severity === 'HIGH' || f.severity === 'MEDIUM');
   return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
 }

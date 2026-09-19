@@ -106,6 +106,19 @@ test('the auditor receives the source pages and the draft, and treats both as un
     assert.match(auditPrompt, /ANSWER_CORRECT/);
     assert.match(auditPrompt, /Do NOT give a score/);
     assert.ok(auditPrompt.includes('Qual e a taxa de filtracao glomerular normal?'), 'the draft under audit is in the prompt');
+
+    // CQ-3: the generation prompt asks for what the audit then checks — separate explanation, question type,
+    // one defensible answer, no give-away, the exam targets as editorial orientation (never invented weights).
+    const genPrompt = calls[0];
+    assert.match(genPrompt, /"explanation": string/);
+    assert.match(genPrompt, /"questionType": "RECALL"/);
+    assert.match(genPrompt, /ONLY facts, values and terms present in the cited page/);
+    assert.match(genPrompt, /ONE defensible answer/);
+    assert.match(genPrompt, /REVALIDA/);
+    assert.match(genPrompt, /never invent official exam weights/);
+    assert.match(genPrompt, /Source is the ONLY authority/);
+    assert.match(auditPrompt, /DISTRACTOR_QUALITY does not apply/);
+    assert.match(auditPrompt, /"explanation":null|"explanation":"/, 'the explanation is part of what the auditor sees');
   } finally { cleanup(); }
 });
 

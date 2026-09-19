@@ -97,7 +97,8 @@ test('generating and accepting a draft through the real UI creates a real unit w
   // CQ-2: the reviewer can verify. The automatic check is a screen (never "verified"), and the summary and
   // every question show the source page they came from, with the page text one click away.
   await expect(draftPanel.locator('.source-draft-audit')).toContainText('Conferência automática');
-  await expect(draftPanel.locator('.source-draft-audit')).toContainText('não é validação médica'); // "nothing flagged" is never "verified"
+  // the fake provider gives a bare snippet as the answer and no explanation: the screen says so instead of staying silent
+  await expect(draftPanel.locator('.source-draft-audit')).toContainText('Falta explicar por quê');
   const summaryOrigin = draftPanel.locator('.summary-source', { hasText: 'Fonte do resumo' });
   await expect(summaryOrigin).toContainText('página 1');
   await summaryOrigin.locator('summary').click();

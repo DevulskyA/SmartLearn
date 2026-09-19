@@ -221,6 +221,7 @@ function mapExercise(row) {
     questionText: row.currentVersion?.question ?? null,
     answerText: row.currentVersion?.answer ?? null,
     hintText: row.currentVersion?.hint ?? null,
+    explanationText: row.currentVersion?.explanation ?? null,
     position: row.orderIndex,
     provenance: row.currentVersion?.provenance ?? null,
     citations: row.currentVersion?.citations ?? [],

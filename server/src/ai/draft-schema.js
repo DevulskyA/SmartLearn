@@ -20,7 +20,12 @@ const MAX_QUESTIONS = 50;
 const MAX_QUESTION_LENGTH = 1000;
 const MAX_ANSWER_LENGTH = 2000;
 const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion']);
-const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'hint', 'sourceSpans']);
+const MAX_EXPLANATION_LENGTH = 2000;
+const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'explanation', 'questionType', 'hint', 'sourceSpans']);
+
+// Editorial orientation for the reviewer and the auditor, not a scoring model. A provider that
+// says something outside the menu is not rejected — the label is simply dropped (null).
+export const QUESTION_TYPES = new Set(['RECALL', 'CONCEPT', 'MECHANISM', 'APPLICATION', 'DISCRIMINATION', 'CLINICAL_REASONING', 'TRANSFER']);
 
 function requireString(value, field, maxLength) {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -98,6 +103,19 @@ export function validateDraft(raw, { segments }) {
     if (rawQuestion.hint !== null && rawQuestion.hint !== undefined && typeof rawQuestion.hint !== 'string') {
       throw new DraftValidationError('INVALID_DRAFT', 'hint deve ser uma string ou nulo.', 'hint');
     }
+    // The explanation is WHY the answer is right (teaching feedback). Optional: drafts made before
+    // it existed, and providers that cannot say, simply have none — never an invented one.
+    const rawExplanation = rawQuestion.explanation;
+    if (rawExplanation !== null && rawExplanation !== undefined) {
+      if (typeof rawExplanation !== 'string') {
+        throw new DraftValidationError('INVALID_DRAFT', 'explanation deve ser uma string ou nulo.', 'explanation');
+      }
+      if (rawExplanation.length > MAX_EXPLANATION_LENGTH) {
+        throw new DraftValidationError('INVALID_DRAFT', `explanation excede o tamanho máximo de ${MAX_EXPLANATION_LENGTH}.`, 'explanation');
+      }
+    }
+    const explanation = typeof rawExplanation === 'string' && rawExplanation.trim().length > 0 ? rawExplanation : null;
+    const questionType = QUESTION_TYPES.has(rawQuestion.questionType) ? rawQuestion.questionType : null;
 
     const spans = validSourceSpans(rawQuestion.sourceSpans, validPageIndexes);
     const rawSpanCount = Array.isArray(rawQuestion.sourceSpans) ? rawQuestion.sourceSpans.length : 0;
@@ -113,6 +131,8 @@ export function validateDraft(raw, { segments }) {
     acceptedQuestions.push({
       question: rawQuestion.question,
       answer: rawQuestion.answer,
+      explanation,
+      questionType,
       hint: rawQuestion.hint ?? null,
       sourceSpans: spans,
     });

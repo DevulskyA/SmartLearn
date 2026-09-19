@@ -14,6 +14,7 @@ const EXERCISE_BODY_SCHEMA = {
   properties: {
     question: { type: 'string' },
     answer: { type: ['string', 'null'] },
+    explanation: { type: ['string', 'null'], maxLength: 2000 },
     hint: { type: ['string', 'null'] },
     provenance: { type: 'string', enum: ['MANUAL', 'SOURCE', 'AI_GENERATED'] },
   },

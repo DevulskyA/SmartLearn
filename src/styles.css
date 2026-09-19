@@ -3048,6 +3048,21 @@ h1 {
   font-style: italic;
 }
 
+.review-exercise-explanation {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.study-now-explanation,
+.study-now-error-why {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 .review-exercise-answer {
   margin: 0;
   font-size: 0.92rem;
