@@ -84,6 +84,13 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
   const item = (q) => page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`, { hasText: q });
   const blockResult = page.locator(`.review-row[data-review-id="${reviewId}"] .review-block-result`);
+  // Retrieval first: the questions come before the Resumo Mestre in the review body.
+  const exercisesBeforeSummary = await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-body`).evaluate((el) => {
+    const ex = el.querySelector('.review-row-exercises');
+    const su = el.querySelector('.review-row-summary');
+    return Boolean(ex.compareDocumentPosition(su) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(exercisesBeforeSummary).toBe(true);
 
   await item('Pergunta A?').getByRole('button', { name: 'Ver resposta' }).click();
   await item('Pergunta A?').getByRole('button', { name: 'Errei' }).click();

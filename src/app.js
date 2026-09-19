@@ -909,7 +909,10 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     exercisesReviewSection.append(blockResult);
     reviewBlockExercises.set(exercisesReviewSection, exercises);
 
-    body.append(summarySection, exercisesReviewSection, secondaryControls, detail, externalSection);
+    // Retrieval first (product intent I.4): the questions come BEFORE the Resumo
+    // Mestre, so the student tries to recall, then consults the summary to see
+    // what was missing -- not the other way round.
+    body.append(exercisesReviewSection, summarySection, secondaryControls, detail, externalSection);
   } else {
     body.append(summarySection, secondaryControls, detail, externalSection);
   }
