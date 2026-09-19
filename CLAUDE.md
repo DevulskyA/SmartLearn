@@ -11,6 +11,14 @@ as the tie-breaker. It controls DIRECTION; code, tests and Git control STATE.
 
 For everything else — active feature location, current checkpoint, dependency-ready task — reconcile from Git plus `.specs/STATE.md`, not from this file.
 
+## Tasklist e track ativo (obrigatório em trabalho relevante)
+
+Ao iniciar/retomar trabalho: ler `conductor/tracks.md` (seção ACTIVE TRACK) e o `plan.md` apontado; mostrar a
+tasklist compacta ao usuário (`[✓]` concluída, `[>]` ativa — exatamente UMA, `[ ]` pendente, `[!]` bloqueada,
+`[-]` adiada) como PROJEÇÃO do plan.md. Ao mudar o estado de uma tarefa: atualizar o plan.md primeiro, depois
+refletir no chat. Conductor decide QUAL tarefa está ativa; TLC decide a menor implementação correta dela.
+Conductor nunca vira segunda Constitution (intenção = Constitution §0.1; estado = Git/testes).
+
 ## Recuperação de sessão/contexto perdido
 
 Ao iniciar uma sessão SmartLearn, ou após perder contexto: (1) localizar o

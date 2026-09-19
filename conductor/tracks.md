@@ -1,5 +1,16 @@
 # SMARTLEARN V1 — MASTER TRACK
 
+## ACTIVE TRACK (ler primeiro)
+
+**`conductor/tracks/ops-dev-data-and-tasklist/plan.md`** — dados de dev duráveis + tasklist persistente
+(iniciado 2026-09-19, prioridade humana; próximo marco: "Meu estudo está funcionando?").
+A tasklist mostrada ao usuário é uma projeção desse plan.md.
+
+> PAINEL MESTRE ABAIXO DEFASADO: snapshot de 2026-09-07 (T28). Os 143 commits seguintes
+> (T29–T44, PV1, LOCAL, CI, TEST SHIELD, produto de erro→reteste) estão registrados em
+> `.specs/STATE.md`, que é a referência de continuidade até a reconciliação deste painel
+> (tarefa adiada no plan ativo).
+
 > Reconciliar contra Git + `.specs/STATE.md` antes de confiar neste arquivo
 > (regra 12, `workflow.md`). Snapshot gerado em 2026-09-07 a partir de HEAD
 > `a51725f`, branch `claude/smartlearn-v1-complete`.
