@@ -9,6 +9,7 @@
     "dev": "vite",
     "dev:remote": "node scripts/dev-remote.mjs",
     "dev:uat": "node scripts/dev-uat.mjs",
+    "seed:dev": "node scripts/seed-dev.mjs",
     "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",

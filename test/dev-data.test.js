@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSy
 import { join, resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { devDataDir, devDbPaths, snapshotDevDbIfNeeded } from '../scripts/dev-data.mjs';
+import { devDataDir, devDbPaths, snapshotDevDbIfNeeded, acquireDevLock } from '../scripts/dev-data.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -52,5 +52,23 @@ test('snapshot: a wiped DB never overwrites the last good snapshot, and only the
     assert.equal(snapshotDevDbIfNeeded(dbPath, snaps, { now: new Date('2026-09-10T12:00:00Z'), keep: 7 }), null);
     assert.equal(readFileSync(join(snaps, '2026-09-09', 'smartlearn-dev.db'), 'utf8'), 'GOOD', 'the last good snapshot survives the wipe');
     assert.equal(existsSync(join(snaps, '2026-09-10')), false);
+  } finally { cleanup(); }
+});
+
+test('single writer: a second live holder is refused, a stale lock is taken over, release only removes its own lock', () => {
+  const { dir, cleanup } = setup();
+  try {
+    const release = acquireDevLock(dir, { pid: 1111, root: 'C:/worktree-A', isAlive: () => true });
+    assert.ok(existsSync(join(dir, 'dev.lock')));
+    assert.throws(() => acquireDevLock(dir, { pid: 2222, root: 'C:/worktree-B', isAlive: () => true }), /already in use by pid 1111/);
+    // the holder dies -> the lock is stale and a new worktree may take over
+    const releaseB = acquireDevLock(dir, { pid: 2222, root: 'C:/worktree-B', isAlive: () => false });
+    assert.equal(JSON.parse(readFileSync(join(dir, 'dev.lock'), 'utf8')).pid, 2222);
+    release();   // A releasing must NOT remove B's lock
+    assert.ok(existsSync(join(dir, 'dev.lock')));
+    releaseB();
+    assert.equal(existsSync(join(dir, 'dev.lock')), false);
+    writeFileSync(join(dir, 'dev.lock'), '{not json');
+    assert.doesNotThrow(() => acquireDevLock(dir, { pid: 3333, isAlive: () => true }), 'a corrupt lock is treated as stale');
   } finally { cleanup(); }
 });
