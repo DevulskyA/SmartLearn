@@ -37,3 +37,6 @@ inst_user_settings.tmp
 Thumbs.db
 test-results/
 playwright-report/
+
+# Generated tasklist board (projection of conductor plan.md; regenerate with `node scripts/tasklist.mjs --html`)
+conductor/.view/
