@@ -3135,6 +3135,56 @@ function createDraftAudit(audit) {
   return box;
 }
 
+// The reviewer's own corrections to a flagged draft (CQ-6). One collapsed block: summary plus, per question,
+// the wording, answer, explanation and hint — exactly the fields the screen can flag. Saving re-runs the
+// screen on the server, so a fixed point disappears and a remaining one stays visible.
+function createDraftEditor(draft) {
+  const details = document.createElement("details");
+  details.className = "source-draft-editor";
+  const summaryEl = document.createElement("summary");
+  summaryEl.textContent = "Corrigir o rascunho";
+  details.append(summaryEl);
+
+  const field = (labelText, tag, className, value, rows) => {
+    const label = document.createElement("label");
+    label.className = "source-draft-edit-field";
+    label.append(createTextElement("span", "source-draft-edit-label", labelText));
+    const input = document.createElement(tag);
+    input.className = className;
+    if (tag === "textarea") input.rows = rows ?? 3;
+    else input.type = "text";
+    input.value = value ?? "";
+    label.append(input);
+    return label;
+  };
+
+  details.append(field("Resumo Mestre", "textarea", "source-draft-edit-summary", draft.summary, 7));
+  (draft.questions ?? []).forEach((q, index) => {
+    const group = document.createElement("div");
+    group.className = "source-draft-edit-question";
+    group.dataset.index = String(index);
+    group.append(
+      createTextElement("p", "source-draft-edit-label", `Questão ${index + 1}`),
+      field("Enunciado", "textarea", "source-draft-edit-q", q.question, 2),
+      field("Resposta", "textarea", "source-draft-edit-a", q.answer, 2),
+      field("Por quê (explicação)", "textarea", "source-draft-edit-e", q.explanation, 3),
+      field("Dica (opcional)", "input", "source-draft-edit-h", q.hint),
+    );
+    details.append(group);
+  });
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary-button";
+  save.dataset.action = "save-draft";
+  save.textContent = "Salvar correções";
+  details.append(save, createTextElement("p", "source-draft-edit-message", ""));
+  return details;
+}
+
+// The draft object each panel currently shows (spans, types and pages are not editable, so a save sends them back untouched).
+const draftByPanel = new WeakMap();
+
 // T38: renders one generated draft for inspection/acceptance. Every
 // rendering carries the same explicit caveat — this is unverified AI
 // output, not a medical/scientific claim (design.md/T37/T38).
@@ -3149,6 +3199,7 @@ function createDraftAudit(audit) {
 function renderDraftPanel(draftPanel, draft, subjects = []) {
   draftPanel.dataset.draftId = String(draft.id);
   draftPanel.dataset.revision = String(draft.revision);
+  draftByPanel.set(draftPanel, draft);
   draftPanel.replaceChildren();
 
   const caveat = createTextElement(
@@ -3225,7 +3276,7 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
 
   const resultMessage = createTextElement("p", "source-draft-result", "");
 
-  draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, ...(draft.status === "DRAFT" ? [createDraftEditor(draft)] : []), subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
   draftPanel.hidden = false;
   enhanceSelect(subjectSelect);
 }
@@ -3349,6 +3400,53 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
     } finally {
       generateDraftBtn.disabled = false;
+    }
+    return;
+  }
+
+  const saveDraftBtn = event.target.closest('[data-action="save-draft"]');
+  if (saveDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    const current = draftPanel ? draftByPanel.get(draftPanel) : null;
+    if (!draftPanel || !current) return;
+    const message = draftPanel.querySelector(".source-draft-edit-message");
+    const questions = (current.questions ?? []).map((q, index) => {
+      const group = draftPanel.querySelector(`.source-draft-edit-question[data-index="${index}"]`);
+      const read = (selector) => group?.querySelector(selector)?.value.trim() ?? "";
+      return {
+        question: read(".source-draft-edit-q"),
+        answer: read(".source-draft-edit-a"),
+        explanation: read(".source-draft-edit-e") || null,
+        questionType: q.questionType ?? null,
+        hint: read(".source-draft-edit-h") || null,
+        sourceSpans: q.sourceSpans,
+      };
+    });
+    const summary = draftPanel.querySelector(".source-draft-edit-summary")?.value.trim() ?? "";
+    // keep what the student already typed in the accept form across the re-render
+    const kept = {
+      subjectId: draftPanel.querySelector(".source-draft-subject-select")?.value ?? "",
+      subjectName: draftPanel.querySelector(".source-draft-subject-input")?.value ?? "",
+      date: draftPanel.querySelector(".source-draft-date-input")?.value ?? "",
+    };
+    saveDraftBtn.disabled = true;
+    try {
+      const result = await DraftReviewUI.reviseDraft(draftPanel.dataset.draftId, { summary, questions });
+      if (!result.ok) {
+        if (message) { message.classList.add("is-error"); message.textContent = result.message || "Não foi possível salvar as correções."; }
+        return;
+      }
+      const existingSubjects = await DB.subjects.getActive().catch(() => []);
+      renderDraftPanel(draftPanel, result.draft, existingSubjects);
+      const select = draftPanel.querySelector(".source-draft-subject-select");
+      const nameInput = draftPanel.querySelector(".source-draft-subject-input");
+      const dateInput = draftPanel.querySelector(".source-draft-date-input");
+      if (select && kept.subjectId) { select.value = kept.subjectId; select.dispatchEvent(new Event("change")); }
+      if (nameInput && !kept.subjectId) nameInput.value = kept.subjectName;
+      if (dateInput && kept.date) dateInput.value = kept.date;
+      setSourcesMessage("Correções salvas. A conferência automática foi refeita.");
+    } finally {
+      saveDraftBtn.disabled = false;
     }
     return;
   }

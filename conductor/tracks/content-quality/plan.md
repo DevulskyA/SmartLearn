@@ -6,11 +6,11 @@
 > `smartlearn-v1-complete` (T45, plano antigo = histórico/paralelo, NÃO prioridade). Reconciliar as branches só com estado estável.
 
 ```
-Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: Content quality — sprint CQ-6 (revisor corrige o rascunho antes de aceitar)
+Track:    content-quality                      Status: DONE
+MARCO ATUAL: Content quality — FECHADO (CQ-1..CQ-6; sem tarefa ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: CQ-6
+ATIVA AGORA: nenhuma (track fechado)
 ```
 
 ## Tarefas

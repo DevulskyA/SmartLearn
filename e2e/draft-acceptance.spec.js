@@ -244,3 +244,71 @@ test('a summary that misses the central concept of the page is flagged in the re
   // a flag informs, it does not block: the accept action is still there and is the human's call
   await expect(draftPanel.locator('[data-action="accept-draft"]')).toBeEnabled();
 });
+
+// CQ-6: a flagged draft can be FIXED by the reviewer in place — the screen is re-run on the saved text, and what is
+// accepted is exactly what was saved (revision-checked), not the original flawed draft.
+test('the reviewer corrects a flagged summary in the review, the screen re-runs clean, and the unit gets the corrected text', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  const filler = 'Introducao geral da disciplina e das suas aulas, com informacoes administrativas sobre horarios, salas, avaliacoes e bibliografia recomendada para o semestre letivo inteiro. ';
+  const core = 'A insuficiencia cardiaca reduz o debito cardiaco. A insuficiencia cardiaca ativa o sistema renina angiotensina. O debito cardiaco baixo eleva a pressao venosa.';
+  await page.setInputFiles('#sources-file-input', { name: 'ic2.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([filler + core]) });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  const item = page.locator('.source-proposal-item').first();
+  await item.locator('[data-action="generate-draft"]').click();
+  const panel = item.locator('.source-draft-panel');
+  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'REPAIR', { timeout: 10000 });
+  const revisionBefore = Number(await panel.getAttribute('data-revision'));
+
+  // fill the accept form FIRST: it must survive the re-render
+  await panel.locator('.source-draft-subject-input').fill('Cardiologia CQ6');
+  await panel.locator('.source-draft-date-input').fill('2026-05-01');
+
+  const fixed = 'A insuficiência cardíaca reduz o débito cardíaco e ativa o sistema renina angiotensina; o débito cardíaco baixo eleva a pressão venosa.';
+  await panel.locator('.source-draft-editor > summary').click();
+  await panel.locator('.source-draft-edit-summary').fill(fixed);
+  // mobile: the open editor fits a 375px screen (no horizontal page scroll) and its controls are touch-sized
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect((await panel.locator('.source-draft-editor > summary').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await panel.locator('[data-action="save-draft"]').click();
+
+  await expect(page.locator('#sources-message')).toContainText('Correções salvas', { timeout: 10000 });
+  await expect(panel.locator('.source-draft-summary')).toHaveText(fixed);
+  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'PASS');
+  expect(Number(await panel.getAttribute('data-revision'))).toBe(revisionBefore + 1);
+  await expect(panel.locator('.source-draft-subject-input')).toHaveValue('Cardiologia CQ6');
+  await expect(panel.locator('.source-draft-date-input')).toHaveValue('2026-05-01');
+
+  await panel.locator('[data-action="accept-draft"]').click();
+  await expect(panel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  const unit = await page.evaluate(async (base) => (await (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json()).units[0], API_BASE);
+  expect(unit.summaryBody).toBe(fixed);
+
+  // once accepted the draft is history: the editor is no longer offered on a re-render, and the server refuses edits
+  const refused = await page.evaluate(async ({ base, id }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}/v1/drafts/${id}`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': me.csrfToken }, body: JSON.stringify({ summary: 'tarde demais' }) });
+    return res.status;
+  }, { base: API_BASE, id: await panel.getAttribute('data-draft-id') });
+  expect(refused).toBe(409);
+});
+
+test('a correction the server rejects (empty answer) is reported in place and the draft is left as it was', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await page.setInputFiles('#sources-file-input', { name: 'v.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  const item = page.locator('.source-proposal-item').first();
+  await item.locator('[data-action="generate-draft"]').click();
+  const panel = item.locator('.source-draft-panel');
+  await expect(panel.locator('.source-draft-audit')).toBeVisible({ timeout: 10000 });
+  const revisionBefore = await panel.getAttribute('data-revision');
+
+  await panel.locator('.source-draft-editor > summary').click();
+  await panel.locator('.source-draft-edit-a').first().fill('');
+  await panel.locator('[data-action="save-draft"]').click();
+  await expect(panel.locator('.source-draft-edit-message')).toHaveClass(/is-error/, { timeout: 10000 });
+  await expect(panel.locator('.source-draft-edit-message')).not.toHaveText('');
+  expect(await panel.getAttribute('data-revision')).toBe(revisionBefore);
+});

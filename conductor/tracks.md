@@ -2,7 +2,7 @@
 
 ## ACTIVE TRACK (ler primeiro)
 
-**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY (objetivo aprovado 2026-09-19) · Status: IN_PROGRESS (marco CQ-1..CQ-5 fechado 2026-09-19; sprint CQ-6 ativa) · branch `claude/content-quality`, integrada com `claude/smartlearn-v1-complete`@6f32f4f.
+**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY (objetivo aprovado 2026-09-19) · Status: DONE (CQ-1..CQ-6 fechados 2026-09-19) · nenhuma tarefa ativa · branch `claude/content-quality`, integrada com `claude/smartlearn-v1-complete`@6f32f4f.
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
 A tasklist mostrada ao usuário é uma projeção do plan.md.

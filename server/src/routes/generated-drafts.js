@@ -91,6 +91,8 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
               properties: {
                 question: { type: 'string' },
                 answer: { type: 'string' },
+                explanation: { type: ['string', 'null'] },
+                questionType: { type: ['string', 'null'] },
                 hint: { type: ['string', 'null'] },
                 sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
               },

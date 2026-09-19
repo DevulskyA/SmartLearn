@@ -3094,6 +3094,52 @@ h1 {
   font-weight: 400;
 }
 
+/* Reviewer's corrections to a flagged draft (CQ-6): one collapsed block, native controls. */
+.source-draft-editor {
+  margin: 0.75rem 0;
+  padding: 0.25rem 0.75rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+}
+
+.source-draft-editor > summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  font-weight: 650;
+  color: var(--color-primary);
+}
+
+.source-draft-edit-field {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.source-draft-edit-label {
+  display: block;
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--color-muted);
+}
+
+.source-draft-edit-field textarea,
+.source-draft-edit-field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.source-draft-edit-question {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.source-draft-edit-message.is-error {
+  color: var(--color-danger, #b91c1c);
+}
+
 .study-now-explanation,
 .study-now-error-why {
   margin: 0.35rem 0 0;
