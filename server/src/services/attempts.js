@@ -267,3 +267,24 @@ export function listForReviewTask(db, userId, reviewTaskId) {
     };
   });
 }
+
+const MAX_BATCH_REVIEW_TASKS = 500;
+
+/** Batch form of listForReviewTask for Hoje's render: one round trip instead
+ * of one per open review. Ids the caller does not own (or that do not exist)
+ * are simply absent from the result -- never an error, never another
+ * user's data. */
+export function listForReviewTasks(db, userId, reviewTaskIds) {
+  if (!Array.isArray(reviewTaskIds) || reviewTaskIds.length > MAX_BATCH_REVIEW_TASKS || !reviewTaskIds.every(Number.isInteger)) {
+    throw new AttemptError('VALIDATION_FAILED', `ids deve ser uma lista de até ${MAX_BATCH_REVIEW_TASKS} inteiros.`, 'ids');
+  }
+  const result = {};
+  for (const id of new Set(reviewTaskIds)) {
+    try {
+      result[id] = listForReviewTask(db, userId, id);
+    } catch (err) {
+      if (!(err instanceof AttemptError && err.code === 'NOT_FOUND')) throw err;
+    }
+  }
+  return result;
+}

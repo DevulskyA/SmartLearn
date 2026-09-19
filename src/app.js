@@ -1101,18 +1101,16 @@ export async function renderToday() {
   // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
   // reloading never silently drops a block the student already answered.
   const judgmentsByTaskId = new Map();
-  if (REMOTE_MODE && DB.attempts?.listForReview) {
-    await Promise.all(
-      [...overdueReviews, ...pendingToday]
-        .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
-        .map(async (t) => {
-          try {
-            judgmentsByTaskId.set(t.id, await DB.attempts.listForReview(t.id));
-          } catch (error) {
-            console.error("Falha ao restaurar julgamentos da revisão.", error);
-          }
-        }),
-    );
+  if (REMOTE_MODE && DB.attempts?.listForReviews) {
+    const openWithExercises = [...overdueReviews, ...pendingToday]
+      .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
+      .map((t) => t.id);
+    try {
+      const byTask = await DB.attempts.listForReviews(openWithExercises);
+      for (const [taskId, judgments] of Object.entries(byTask)) judgmentsByTaskId.set(Number(taskId), judgments);
+    } catch (error) {
+      console.error("Falha ao restaurar julgamentos das revisões.", error);
+    }
   }
 
   for (const [groupName, tasks] of Object.entries(groups)) {

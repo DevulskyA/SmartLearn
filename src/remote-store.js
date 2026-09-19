@@ -292,6 +292,12 @@ const attempts = {
     const { attempts: rows } = await apiRequest(`/v1/review-tasks/${reviewTaskId}/attempts`);
     return rows;
   },
+  // Batch: one request for every open review Hoje is about to render.
+  async listForReviews(reviewTaskIds) {
+    if (reviewTaskIds.length === 0) return {};
+    const { attemptsByReviewTask } = await apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.join(",")}`);
+    return attemptsByReviewTask;
+  },
 };
 
 // -- learning evidence ----------------------------------------------------------

@@ -24,6 +24,15 @@ export function registerAttemptRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  app.get('/review-task-attempts', {
+    schema: { querystring: { type: 'object', required: ['ids'], properties: { ids: { type: 'string', maxLength: 4000 } } } },
+  }, async (request, reply) => {
+    const ids = request.query.ids.split(',').filter(Boolean).map(Number);
+    try {
+      return { attemptsByReviewTask: attempts.listForReviewTasks(db, request.actor.userId, ids) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.get('/review-tasks/:id/attempts', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   }, async (request, reply) => {

@@ -357,3 +357,26 @@ test('listForReviewTask reports a LATER redo of a wrong item as retest, without 
     assert.equal(byEx.get(right.id).retest, null);
   } finally { cleanup(); }
 });
+
+test('listForReviewTasks batches per review, omits ids the caller does not own, and rejects malformed/oversized input', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const a = makeUser(db, 'batch-a@example.com');
+    const b = makeUser(db, 'batch-b@example.com');
+    const unitA = makeUnit(db, a);
+    const unitB = makeUnit(db, b);
+    const exA = makeExercise(db, a, unitA.id);
+    makeExercise(db, b, unitB.id);
+    const reviewA = firstReviewTask(db, a, unitA.id);
+    const reviewB = firstReviewTask(db, b, unitB.id);
+    const at = attempts.start(db, a, { exerciseId: exA.id, reviewTaskId: reviewA });
+    attempts.submit(db, a, at.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+
+    const got = attempts.listForReviewTasks(db, a, [reviewA, reviewB, 999999, reviewA]);
+    assert.deepEqual(Object.keys(got), [String(reviewA)], "someone else's and unknown reviews are absent, duplicates collapse");
+    assert.equal(got[reviewA][0].outcome, 'INCORRECT');
+    assert.deepEqual(attempts.listForReviewTasks(db, a, []), {});
+    assert.throws(() => attempts.listForReviewTasks(db, a, [1.5]), (e) => e.code === 'VALIDATION_FAILED');
+    assert.throws(() => attempts.listForReviewTasks(db, a, Array.from({ length: 501 }, (_, i) => i + 1)), (e) => e.code === 'VALIDATION_FAILED');
+  } finally { cleanup(); }
+});
