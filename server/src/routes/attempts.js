@@ -24,6 +24,8 @@ export function registerAttemptRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  app.get('/reinforcement', async (request) => ({ byUnit: attempts.reinforcementByUnit(db, request.actor.userId) }));
+
   app.get('/review-task-attempts', {
     schema: { querystring: { type: 'object', required: ['ids'], properties: { ids: { type: 'string', maxLength: 4000 } } } },
   }, async (request, reply) => {

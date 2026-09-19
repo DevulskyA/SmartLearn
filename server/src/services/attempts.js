@@ -313,3 +313,28 @@ export function priorWrongExercises(db, userId, reviewTaskId) {
     ORDER BY ex.order_index, ex.id
   `).all(userId, reviewTaskId).map(r => r.exercise_id);
 }
+
+/**
+ * Unit-level version of priorWrongExercises: every active exercise whose MOST
+ * RECENT submitted attempt (any review, redo or first pass) was INCORRECT, grouped
+ * by unit. A later correct answer clears it. Read-only over the existing ledger.
+ */
+export function reinforcementByUnit(db, userId) {
+  const rows = db.prepare(`
+    SELECT ex.unit_id, ex.id AS exercise_id
+    FROM exercises ex
+    WHERE ex.user_id = ? AND ex.archived_at IS NULL
+      AND (
+        SELECT (SELECT e.outcome FROM learning_events e
+                 WHERE e.user_id = a.user_id AND e.attempt_id = a.id ORDER BY e.sequence DESC LIMIT 1)
+        FROM exercise_attempts a
+        JOIN exercise_versions v ON v.user_id = a.user_id AND v.id = a.exercise_version_id
+        WHERE a.user_id = ex.user_id AND v.exercise_id = ex.id AND a.status = 'SUBMITTED'
+        ORDER BY a.id DESC LIMIT 1
+      ) = 'INCORRECT'
+    ORDER BY ex.unit_id, ex.order_index, ex.id
+  `).all(userId);
+  const byUnit = {};
+  for (const row of rows) (byUnit[row.unit_id] ??= []).push(row.exercise_id);
+  return byUnit;
+}

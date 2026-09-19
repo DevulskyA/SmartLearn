@@ -45,7 +45,9 @@ ATIVA AGORA: ANALYTICS
       exercícios (beco sem saída). Agora `src/today-priority.js` escolhe (vencidas antes de hoje; mais antiga dentro da faixa):
       itens a reforçar > exercícios pendentes > já respondida > sem conteúdo, e o texto nomeia a aula e quantos itens reforçar.
       Prova: 5 testes unitários + e2e com servidor real (falha sem a regra).
-      3ª passada (PRÓXIMA, não iniciada — sessão encerrada por limite de contexto): o Plano lista aulas com estado e nota mas
+      3ª passada (SERVIDOR FEITO, CLIENTE PENDENTE — parada em ponto seguro): `GET /v1/reinforcement` + `reinforcementByUnit` + teste já commitados;
+      falta `DB.attempts.reinforcement()` em remote-store.js, chip no Plano (linha e detalhe) e e2e.
+      Escopo original: o Plano lista aulas com estado e nota mas
       NÃO mostra quais têm itens errados pendentes (o "para reforçar" só existe na Hoje). Fatia mínima: leitura por UNIDADE
       no servidor (`GET /v1/reinforcement` → {unitId:[exerciseIds]}, último attempt INCORRECT, mesma regra de
       `priorWrongExercises` sem excluir revisão), `DB.attempts.reinforcement()`, chip "N para reforçar" na linha do Plano

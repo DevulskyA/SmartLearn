@@ -414,3 +414,32 @@ test('priorWrongExercises flags items whose latest attempt OUTSIDE this review w
     assert.equal(never.id > 0, true);
   } finally { cleanup(); }
 });
+
+test('reinforcementByUnit lists exercises whose LAST attempt anywhere was wrong, grouped by unit; a later correct answer clears it; owner-scoped', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const a = makeUser(db, 'reinf-a@example.com');
+    const b = makeUser(db, 'reinf-b@example.com');
+    const u1 = makeUnit(db, a);
+    const u2 = learningUnits.create(db, a, { subjectId: u1.subjectId, title: 'Aula 2', studyDate: '2026-02-02' }).unit;
+    const wrong = makeExercise(db, a, u1.id, { question: 'W?' });
+    const fixed = makeExercise(db, a, u1.id, { question: 'F?' });
+    const untouched = makeExercise(db, a, u1.id, { question: 'U?' });
+    const wrong2 = makeExercise(db, a, u2.id, { question: 'W2?' });
+    const archived = makeExercise(db, a, u2.id, { question: 'A?' });
+    const review = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY id LIMIT 1').get(a, u1.id).id;
+    const judge = (ex, outcome, reviewTaskId) => {
+      const at = attempts.start(db, a, { exerciseId: ex.id, reviewTaskId });
+      attempts.submit(db, a, at.id, { outcome, assessmentMethod: 'SELF_REPORT' });
+    };
+    judge(wrong, 'CORRECT'); judge(wrong, 'INCORRECT', review);      // last one wrong (inside a review counts too)
+    judge(fixed, 'INCORRECT', review); judge(fixed, 'CORRECT');      // fixed by a redo
+    judge(wrong2, 'INCORRECT');
+    judge(archived, 'INCORRECT'); exercises.archive(db, a, archived.id);
+
+    const got = attempts.reinforcementByUnit(db, a);
+    assert.deepEqual(got, { [u1.id]: [wrong.id], [u2.id]: [wrong2.id] });
+    assert.ok(!Object.values(got).flat().includes(untouched.id));
+    assert.deepEqual(attempts.reinforcementByUnit(db, b), {}, 'another user sees nothing');
+  } finally { cleanup(); }
+});
