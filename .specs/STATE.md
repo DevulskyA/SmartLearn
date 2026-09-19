@@ -9,6 +9,11 @@
 
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
+CONTENT_QUALITY (2026-09-19, branch claude/content-quality, merged with v1-complete@6f32f4f; NOT yet fast-forwarded into claude/smartlearn-v1-complete): track DONE. Draft pipeline = 1 generation -> deterministic screen
+(+ live provider only: 1 model audit, <=1 targeted repair) -> DRAFT -> human accept; summary provenance frozen (mig 022 unit_summary_citations); exercise explanation (mig 023);
+SMARTLEARN_AI_API_URL endpoint override. Gate ce31b64: unit 378, server 466, e2e 119/120 (1 = production-build spec blocked by the work-branch guard; passes with CI=1). NOT_PROVEN: real-model quality.
+Details: conductor/tracks/content-quality/plan.md. Migrations 022/023 belong to this branch; anything else must use 024+.
+
 ACTIVE_TRACK (2026-09-19): `conductor/tracks/ops-dev-data-and-tasklist/plan.md` — dev data durability + persistent tasklist.
 TRACK CLOSED (2026-09-19, Status DONE, no active task): ANALYTICS-1/2/3 + GOV-1/GOV-2 done. Estatísticas now answers "is my study
 working?" (studyVerdict; unitTrend evidence-weighted). Gate on 876fbda: unit 369, server 393, e2e 112/112.
