@@ -5,6 +5,7 @@ import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getDaysBetween, getReviewStatusLabel } from "./scheduler.js";
+import { pickPrimaryReview } from "./today-priority.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -1161,11 +1162,22 @@ export async function renderToday() {
   // existing todayTomorrow/todaySuccessState elements below, which
   // already communicate those two cases adequately).
   if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
-    const primaryTask = overdueReviews[0] ?? pendingToday[0] ?? null;
+    // Overdue before today (protocol kept), but never a review with nothing to
+    // retrieve while another one has exercises / items to reinforce.
+    const contextOf = (task) => ({
+      exerciseIds: (exercisesByUnitId.get(task.unitId) ?? []).map((e) => e.id),
+      judgedIds: new Set((judgmentsByTaskId.get(task.id) ?? []).filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId)),
+      priorWrongIds: priorWrongByTaskId.get(task.id) ?? new Set(),
+    });
+    const pick = pickPrimaryReview(overdueReviews, pendingToday, contextOf);
+    const primaryTask = pick?.task ?? null;
     if (primaryTask) {
-      todayPrimaryActionText.textContent = overdueReviews.length > 0
+      const lead = overdueReviews.length > 0
         ? (overdueReviews.length === 1 ? "Você tem 1 revisão vencida." : `Você tem ${overdueReviews.length} revisões vencidas.`)
         : (pendingToday.length === 1 ? "Você tem 1 revisão para hoje." : `Você tem ${pendingToday.length} revisões para hoje.`);
+      const unitTitle = unitsById.get(primaryTask.unitId)?.title;
+      const reinforce = pick.reinforce > 0 ? ` — ${pick.reinforce} para reforçar` : "";
+      todayPrimaryActionText.textContent = unitTitle ? `${lead} Comece por “${unitTitle}”${reinforce}.` : lead;
       todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
       todayPrimaryAction.hidden = false;
     } else {

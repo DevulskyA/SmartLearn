@@ -41,6 +41,10 @@ ATIVA AGORA: ANALYTICS
       eixo por ÍNDICE (25 dias = 0 dias) e rótulos repetidos — corrigido (eixo por data, rótulos únicos; commit 5e465cc; bug
       fix em superfície protegida). Pendente/observado: Estatísticas não diz "o que fazer agora" (protegida → human gate);
       "Nota %" cortada a 768px e caminho SVG morto (ver adiados) seguem como achados registrados.
+      2ª passada (próxima ação na Hoje): "Começar agora" apontava para a revisão vencida MAIS ANTIGA mesmo sem resumo nem
+      exercícios (beco sem saída). Agora `src/today-priority.js` escolhe (vencidas antes de hoje; mais antiga dentro da faixa):
+      itens a reforçar > exercícios pendentes > já respondida > sem conteúdo, e o texto nomeia a aula e quantos itens reforçar.
+      Prova: 5 testes unitários + e2e com servidor real (falha sem a regra).
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
