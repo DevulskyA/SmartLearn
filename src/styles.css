@@ -1674,7 +1674,11 @@ h1 {
     z-index: 3;
     height: calc(4.75rem + var(--safe-area-bottom));
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    /* One row, however many destinations are visible (7, or 8 when Materiais
+       is shown): a fixed column count pushed the extra item onto an
+       invisible second row. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 0;
     padding: 0 0 var(--safe-area-bottom);
     border-top: 1px solid var(--color-border);
