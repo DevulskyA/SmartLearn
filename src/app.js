@@ -937,6 +937,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   return row;
 }
 
+let pendingTodayReturnReviewId = null;
+
 // Exercises of a Hoje review block, kept out of the DOM so "Refazer erros"
 // can hand the exact wrong items to the shared retest flow.
 const reviewBlockExercises = new WeakMap();
@@ -1194,6 +1196,16 @@ export async function renderToday() {
   // Close the panel whenever renderToday re-runs (e.g. after completing a review)
   if (dailySummaryPanel) {
     dailySummaryPanel.hidden = true;
+  }
+
+  // Coming back from a redo started inside a review block: land on that block,
+  // not at the top of Hoje. Only consumed once Hoje is actually the visible
+  // screen (the redo's own finish also re-renders while still on Estudar).
+  if (pendingTodayReturnReviewId != null && document.querySelector("#screen-today")?.hidden === false) {
+    const target = reviewDashboard.querySelector(`.review-row[data-review-id="${pendingTodayReturnReviewId}"]`);
+    pendingTodayReturnReviewId = null;
+    const anchor = target?.querySelector(".review-block-result:not([hidden])") ?? target;
+    anchor?.scrollIntoView({ block: "center" });
   }
 }
 
@@ -3366,7 +3378,8 @@ studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: tr
 
 // Entry used by a Hoje review block: same retest engine as "Estudar agora",
 // just started from the wrong items of the block the student already judged.
-function startRetestBlock({ unitId, subjectName, unitTitle, exercises }) {
+function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exercises }) {
+  pendingTodayReturnReviewId = returnReviewId;
   resetStudyNowResult();
   studyNowSubjectEl.textContent = subjectName;
   studyNowTitleEl.textContent = unitTitle;
@@ -3865,6 +3878,10 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
     nextScreen = DEFAULT_SCREEN;
   }
+
+  // A redo's "return to the block" intent only lives until the student is
+  // back on Hoje; wandering elsewhere drops it instead of surprising them later.
+  if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
 
   for (const panel of screenPanels) {
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
@@ -4554,6 +4571,7 @@ reviewDashboard.addEventListener("click", (event) => {
   const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
   if (wrong.length === 0) return;
   startRetestBlock({
+    returnReviewId: Number(row.dataset.reviewId),
     unitId: Number(row.dataset.unitId),
     subjectName: row.querySelector(".subject-chip")?.textContent ?? "",
     unitTitle: row.querySelector(".review-content")?.textContent ?? "",

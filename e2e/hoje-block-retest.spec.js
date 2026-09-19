@@ -119,6 +119,8 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   await page.locator('#study-now-correct-btn').click();
   await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
   await page.locator('#study-now-done-btn').click();
+  // Continuity: the student lands back ON the block being worked, not at the top of Hoje.
+  await expect(blockResult).toBeInViewport({ ratio: 1, timeout: 5000 });
 
   // Back on Hoje: the ORIGINAL judgment is still what the review recorded.
   await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
