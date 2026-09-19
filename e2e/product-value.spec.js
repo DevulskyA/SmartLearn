@@ -190,9 +190,13 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   // Redo round 1: still wrong -> the error persists and stays actionable.
   await retestBtn.click();
   await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+  // Keyboard flow: the button that was pressed disappeared, focus must not
+  // fall to <body> -- it lands on the next actionable control.
+  await expect(page.locator('#study-now-reveal-btn')).toBeFocused();
   // The summary holds the answers: it must not sit above a retrieval question.
   await expect(page.locator('#study-now-summary-card')).toBeHidden();
   await page.locator('#study-now-reveal-btn').click();
+  await expect(page.locator('#study-now-correct-btn')).toBeFocused();
   const retestAttempt1 = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
   expect(retestAttempt1).toBeTruthy();
   expect([firstAttemptId, secondAttemptId]).not.toContain(retestAttempt1);

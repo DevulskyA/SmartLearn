@@ -3221,6 +3221,7 @@ studyNowRetestBtn?.addEventListener("click", () => {
   resetStudyNowResult();
   studyNowState = newStudyNowState("retest", block.unitId, block.wrong.slice());
   renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
 });
 
 studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
@@ -3233,6 +3234,8 @@ studyNowRevealBtn?.addEventListener("click", async () => {
   studyNowAnswerText.hidden = false;
   studyNowJudgment.hidden = false;
   studyNowRevealBtn.hidden = true;
+  // The focused button just disappeared: keep keyboard users in the flow.
+  studyNowCorrectBtn.focus();
 
   if (REMOTE_MODE && DB.attempts) {
     try {
@@ -3285,6 +3288,7 @@ async function judgeStudyNow(isCorrect) {
 
   state.index += 1;
   renderStudyNowQuestion();
+  if (state.index < state.exercises.length) studyNowRevealBtn.focus();
 }
 
 studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
