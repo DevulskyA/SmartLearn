@@ -17,10 +17,10 @@
 
 ```
 Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
-MARCO ATUAL: Analytics longitudinal
+MARCO ATUAL: Analytics longitudinal (FECHADO) → reconciliação de governança
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ANALYTICS-3
+ATIVA AGORA: GOV-2
 TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict, auditoria GOV-1 pendente)
 ```
 
@@ -64,18 +64,30 @@ TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict
       Fisiologia renal 77%→56% PIORANDO · Farmacocinética 72%→60% PIORANDO · Potencial de ação (só 5 perguntas recentes)
       INSUFICIENTE · unidades sem evidência INSUFICIENTE; disciplinas: Anatomia +15pp ↑, Fisiologia −27,5pp ↓, Farmacologia −12,2pp ↓,
       Neurologia/Patologia/Semiologia insuficiente. Sem e2e (domínio puro; a UI só recebe a mesma enum).
-- [>] **ANALYTICS-3 Responder "Meu estudo está funcionando?"** — Estatísticas é superfície protegida (ADR-0001): "o que fazer
-      agora" nela é HUMAN GATE (redesign); só bug fix/dados/a11y/testes sem autorização.
-- [ ] **GOV-1 Auditar a skill `tlc-spec-driven-strict` real e identificar o mecanismo original de tasklist/checkpoint/smart recovery** —
-      REABERTA (2026-09-19, correção humana). Ler a skill importada e seus arquivos (não pelo nome); descobrir onde ficam
-      tasklist, checkpoint e recuperação; separar o que é TLC-ECC original do que é Conductor incorporado. A leitura parcial em
-      "Evidência OPS-6" NÃO conta como auditoria. Sem alterar a skill global.
-- [ ] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — depende de GOV-1. Só então
+- [✓] **ANALYTICS-3 Responder "Meu estudo está funcionando?"** — Estatísticas (protegida, ADR-0001) ganhou SÓ texto dentro do
+      painel "Desempenho por disciplina" (sem componente novo, sem mudança de hierarquia/geometria; sem HUMAN GATE): manchete
+      (melhorando / piorando / misto / estável / sem histórico suficiente / sem evidência), contagem por disciplina (melhorando ·
+      piorando · estáveis · evidência insuficiente · sem evidência — apartadas, nunca como desempenho ruim) e UMA unidade de
+      atenção (maior queda; senão a com mais itens "para reforçar") com "de X% para Y%", "N exercícios para reforçar" e o link
+      "Ver no Plano", que abre a unidade já expandida (ação existente: Estudar agora). Domínio puro `studyVerdict`/`verdictText`
+      em `src/analytics.js`; nunca escreve mastery/retenção/score (teste). Prova: `test/study-verdict.test.js` (11, escrito antes
+      do código: vermelho por export ausente), `e2e/study-verdict.spec.js` (4: misto+atenção+navegação, volume baixo/sem dado,
+      sem evidência, mobile 375 sem scroll horizontal e alvo ≥44px), subset 43/43 (stats-*, plan-*, product-value, exercise-attempt,
+      hoje-block-retest). Uso real na base viva (1280 e 375, screenshots): "Resultado misto … 1 melhorando · 2 piorando · 1 com
+      evidência insuficiente · 2 sem evidência. Atenção: Fisiologia renal … de 77% para 56%. 2 exercícios para reforçar. Ver no
+      Plano" — abre a unidade no Plano. Respostas ao objetivo macro no produto real: está funcionando? misto; melhorando: Anatomia;
+      piorando: Fisiologia e Farmacologia; pouca evidência: Neurologia (e Patologia/Semiologia sem dado); atenção: Fisiologia renal;
+      ação agora: reforçar 2 itens via Plano/Estudar agora. GATE FINAL no snapshot 876fbda: unit 369/369, server 393/393,
+      e2e COMPLETO 112/112 (8,4 min, progresso [n/112]). Residual: vocabulário — o selo da tabela diz "Caindo" (aprovado) e o texto
+      novo diz "piorando"; não alterei o selo (superfície protegida).
+- [✓] **GOV-1 Auditar a skill `tlc-spec-driven-strict` real e identificar o mecanismo original de tasklist/checkpoint/smart recovery** —
+      auditoria feita lendo os arquivos reais (2026-09-19); resultado em "Evidência GOV-1". Skill global NÃO alterada.
+- [>] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — depende de GOV-1. Só então
       decidir se este plan.md vira o mecanismo canônico, é migrado ou é aposentado. Até lá: `conductor/...` intacto e provisório.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
-## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é ANALYTICS-3)
+## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é GOV-2)
 
 ```
 1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências, "Sem evidência" neutro, bloco com erro
@@ -90,6 +102,32 @@ Escopo original da fatia: o Plano lista aulas com estado e nota mas NÃO mostra 
   reforçar" só existe na Hoje).
 ```
 
+
+## Evidência GOV-1 — a skill real (lida do disco)
+
+```
+TLC_SKILL_NAME     = tlc-spec-driven-strict   (SKILL.md, "integração original"; NÃO é o tlc-spec-driven do Tech Lead's Club)
+VERSION            = não declarada (sem campo version)
+LOCATION           = ~/.claude/skills/tlc-spec-driven-strict  (SKILL.md, ATTRIBUTION.md, INSTALL.md, references/{artifacts,principles,
+                     recovery-context,task-checklists,testing}.md, scripts/{validate_tasks,validate_state,validate_spec,check_commit}.py)
+                     Antecessora preservada: ~/.claude/skills/tlc-spec-driven.superseded-20260915-011011 (fases discuss/specify/design/implement/validate).
+TASK_PLANNING      = SIM, persistente e formal: `.specs/features/<feature>/tasks.md`, uma tarefa causal por `## TNN - resultado`,
+                     Status `[ ] PENDING | [~] IN_PROGRESS | [x] DONE | [!] BLOCKED`, com objetivo, escopo, invariantes, superfície de
+                     regressão, sensores, gate, done-when, checklist PRE/RED/GREEN/REGRESSION/VERIFY/CLOSE, evidência e BASE/IMPLEMENTATION/
+                     CHECKPOINT_SHA. Tarefas de reparo `REPAIR-NN`. `validate_tasks.py` valida esse formato.
+CHECKPOINT         = SIM: checklist de FASE ("phase checkpoint") + CHECKPOINT_SHA por tarefa/fase.
+SMART_RECOVERY     = SIM: recovery-context.md — KNOWN_GOOD→RESTORE→PROVE→REAPPLY, metadados de revert lógico, regra de parar patch-stack,
+                     autoridade da verdade (Git/executável > evidência > decisão humana > spec > STATE > plano/tasks > chat).
+HANDOFF            = SIM: "Session Memento" em `.specs/STATE.md` (Repo/Branch/HEAD/Feature/Task/Last proven/In progress/Evidence/Blockers/Next).
+VISUAL_TASKLIST    = NÃO. Nada de painel/projeção; só markdown por feature.
+CONDUCTOR_DERIVATION = só CONCEITOS (ATTRIBUTION.md): checklists persistentes de tarefa/fase, Red-Green-Refactor, checkpoints de fase,
+                     rastreio de review-fix, recuperação lógica ciente de Git. Não há `conductor/`, tracks, plan.md nem "ACTIVE TRACK" na skill.
+TLC-ECC "V3"       = não existe como skill (nem no ~/.claude nem no ~/.codex); "TLC Strict + ECC Engineering" é rótulo do STATE do repo.
+MISSING_BEHAVIOR   = (1) tasklist VISUAL/projeção; (2) ponteiro "track ativo" e visão MACRO de marcos (a skill só tem o nível feature→tarefa);
+                     (3) regra de UMA tarefa ativa (a skill permite [~] em várias); (4) disparo automático da retomada (depende do agente).
+                     O que o repo do SmartLearn tem e a skill não: `conductor/` (tracks.md/plan.md/workflow.md) + `scripts/tasklist.mjs`.
+NÃO PERDIDO NA COMPACTAÇÃO: task planning, checkpoint, recovery e handoff estão na skill. O que "sumiu" (visual + macro + uma ativa) NUNCA esteve nela.
+```
 
 ## Os 3 tipos de banco (nunca misturar)
 
