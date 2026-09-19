@@ -17,6 +17,7 @@
 
 ```
 Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
+MARCO ATUAL: Analytics longitudinal
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
 ATIVA AGORA: ANALYTICS-2
@@ -40,27 +41,39 @@ TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict
       `atomic-save` decidido em "Evidência OPS-4/9" (sensor de persistência, mas a falha intermitente é independente de dados).
 - [✓] **OPS-5 Determinar causa histórica da perda ou registrar UNKNOWN** — **ROOT_CAUSE_DATA_LOSS = UNKNOWN**
       (hipóteses ranqueadas e o que cada evidência exclui em "Evidência OPS-5").
+- [✓] **ANALYTICS-1 Mostrar sinal "para reforçar" no Plano usando o reinforcement já existente no servidor** — cliente feito:
+      `DB.attempts.reinforcement()` (`src/remote-store.js`), chip "N para reforçar" na linha do Plano e "Errou na última tentativa"
+      por exercício no detalhe (`renderPlan`); só em REMOTE_MODE, falha do endpoint = sem chip (sinal auxiliar, `console.warn`).
+      Prova: e2e "Retention cue" estendido (vermelho antes do código; chip = 1 de 2 exercícios, some após reteste correto);
+      render real na base viva em 1280 e 375 (pior caso Atrasada+nota+"2 para reforçar" cabe, sem overflow horizontal);
+      contraste do chip 6,59 (claro) / 10,45 (escuro). SUÍTES NO SNAPSHOT FINAL (HEAD de35bf9; `src/` inalterado desde 16:00:40 e
+      a rodada começou depois): e2e COMPLETO 108/108 (7,3 min, `--reporter=line` com progresso [n/108]), unit 344/344, server 392/392.
+      O 108/108 anterior era STALE (antes do refactor de paralelização do fetch) e foi substituído por este. O e2e
+      `hoje-block-retest.spec.js` não commitado do handoff anterior foi reescrito do zero (não existia mais no disco).
+- [>] **ANALYTICS-2 Provar tendência longitudinal** — sobre a base viva `dev@smartlearn.local`; sem inventar dado.
+      DONE-WHEN: cada disciplina/aula com histórico observável é classificada em exatamente uma de MELHORANDO / PIORANDO /
+      ESTÁVEL / EVIDÊNCIA INSUFICIENTE, e a classificação é PROVADA (não só exibida). Regras: (1) usar SOMENTE histórico
+      observável (evidência/attempts datados no servidor) — sem mastery, sem estado inferido; (2) reteste imediato
+      (tentativas sem `reviewTaskId`, sem evidência agregada) NUNCA conta como evidência agregada de desempenho;
+      (3) sem média simples de percentuais com volumes diferentes: agregar por numeradores/denominadores (ou ponderar por n)
+      e provar com um caso em que a média simples inverteria a classe; (4) UNKNOWN/sem dado = EVIDÊNCIA INSUFICIENTE, nunca 0%.
+      ORDEM: testes DISCRIMINANTES primeiro (vermelhos contra o código atual onde a regra for violada, verdes depois) cobrindo
+      as 4 classes, a fronteira do mínimo de volume, a exclusão do reteste e o caso da média simples; SÓ DEPOIS qualquer UI.
+      PONTO DE PARTIDA: `subjectTrend`/`unitTrend` já existem em `src/analytics.js` (INSUFFICIENT/IMPROVING/DECLINING/STABLE) —
+      AUDITAR contra estas regras antes de assumir que estão corretas. Estatísticas é superfície protegida (ADR-0001): só bug
+      fix/dados/testes, sem redesign.
+- [ ] **ANALYTICS-3 Responder "Meu estudo está funcionando?"** — Estatísticas é superfície protegida (ADR-0001): "o que fazer
+      agora" nela é HUMAN GATE (redesign); só bug fix/dados/a11y/testes sem autorização.
 - [ ] **GOV-1 Auditar a skill `tlc-spec-driven-strict` real e identificar o mecanismo original de tasklist/checkpoint/smart recovery** —
       REABERTA (2026-09-19, correção humana). Ler a skill importada e seus arquivos (não pelo nome); descobrir onde ficam
       tasklist, checkpoint e recuperação; separar o que é TLC-ECC original do que é Conductor incorporado. A leitura parcial em
       "Evidência OPS-6" NÃO conta como auditoria. Sem alterar a skill global.
 - [ ] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — depende de GOV-1. Só então
       decidir se este plan.md vira o mecanismo canônico, é migrado ou é aposentado. Até lá: `conductor/...` intacto e provisório.
-- [✓] **ANALYTICS-1 Mostrar sinal "para reforçar" no Plano usando o reinforcement já existente no servidor** — cliente feito:
-      `DB.attempts.reinforcement()` (`src/remote-store.js`), chip "N para reforçar" na linha do Plano e "Errou na última tentativa"
-      por exercício no detalhe (`renderPlan`); só em REMOTE_MODE, falha do endpoint = sem chip (sinal auxiliar, `console.warn`).
-      Prova: e2e "Retention cue" estendido (vermelho antes do código; chip = 1 de 2 exercícios, some após reteste correto);
-      render real na base viva em 1280 e 375 (pior caso Atrasada+nota+"2 para reforçar" cabe, sem overflow horizontal);
-      contraste do chip 6,59 (claro) / 10,45 (escuro); unit 344/344, e2e 108/108 (antes do refactor de paralelização do fetch;
-      depois dele: hoje-block-retest + plan-flow + plan-study-now 15/15). A esquisitice de um `e2e/hoje-block-retest.spec.js`
-      não commitado do handoff anterior NÃO existia mais no disco: o e2e foi reescrito do zero.
-- [>] **ANALYTICS-2 Provar tendência longitudinal** — sobre a base viva `dev@smartlearn.local`; sem inventar dado.
-- [ ] **ANALYTICS-3 Responder "Meu estudo está funcionando?"** — Estatísticas é superfície protegida (ADR-0001): "o que fazer
-      agora" nela é HUMAN GATE (redesign); só bug fix/dados/a11y/testes sem autorização.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
-## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é ANALYTICS-1)
+## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é ANALYTICS-2)
 
 ```
 1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências, "Sem evidência" neutro, bloco com erro
