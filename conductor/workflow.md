@@ -119,3 +119,17 @@ Outro agente/branch/worktree/arquivo inesperado NÃO é motivo para parar: isola
 (sem reset/stash/overwrite), continuar o GOAL vigente e reconciliar depois com estado estável. Tarefa antiga descoberta = histórico/paralela.
 Só interromper por: decisão nova de produto, risco real de dados, operação irreversível, conflito canônico sem resolução pela hierarquia,
 bloqueio técnico sem caminho seguro, ou contexto no limite (após handoff persistido).
+
+## Sprint produtiva (regra canônica humana, 2026-09-19)
+
+```
+PRODUCTIVITY_WITH_QUALITY=REQUIRED
+TASK_COMPLETION_IS_NOT_PRODUCT_SUCCESS=TRUE
+PROVABLE_PRODUCT_DELTA_REQUIRED=TRUE
+```
+
+Antes de executar uma sprint, registrar: `SPRINT_GOAL` (comportamento/valor OBSERVÁVEL, nunca atividade), `BEFORE`, `AFTER`, `PROOF`, `DONE_WHEN`.
+Proibido como objetivo final: implementar módulo, refatorar, criar arquitetura, adicionar testes, atualizar documentação, investigar, melhorar código
+(são meios). Fechamento exige `PRODUCT_DELTA`, `PROOF_OBSERVED`, `USER_VALUE`, `NOT_PROVEN` e a resposta concreta e comprovada a
+"O que o SmartLearn consegue fazer melhor agora que não conseguia antes?". Sem resposta: `SPRINT_NOT_PRODUCTIVE=TRUE` e a sprint NÃO está concluída.
+Infra/segurança/testes/dívida só justificam sprint própria se produzem ou protegem valor material demonstrável. Preferir a menor mudança com maior ganho comprovável.
