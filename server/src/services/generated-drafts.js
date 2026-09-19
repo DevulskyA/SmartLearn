@@ -1,6 +1,10 @@
 import { generateDraft as fakeGenerateDraft, FAKE_PROVIDER_NAME } from '../ai/fake-provider.js';
-import { generateDraft as anthropicGenerateDraft, ANTHROPIC_PROVIDER_NAME, ProviderRequestError } from '../ai/anthropic-provider.js';
+import {
+  generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
+  ANTHROPIC_PROVIDER_NAME, ProviderRequestError,
+} from '../ai/anthropic-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
+import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -18,10 +22,19 @@ export class DraftError extends Error {
  * cap"). Pure and side-effect-free so it is directly unit-testable
  * without touching config.js or the network.
  */
-export function selectProvider({ apiKey, model, consentGranted, budgetCapUsd }) {
+export function selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl }) {
   const liveAvailable = Boolean(apiKey) && Boolean(model) && consentGranted === true && typeof budgetCapUsd === 'number' && budgetCapUsd > 0;
   if (liveAvailable) {
-    return { name: ANTHROPIC_PROVIDER_NAME, live: true, generate: (input) => anthropicGenerateDraft(input, { apiKey, model }) };
+    const options = fetchImpl ? { apiKey, model, fetchImpl } : { apiKey, model };
+    return {
+      name: ANTHROPIC_PROVIDER_NAME,
+      live: true,
+      generate: (input) => anthropicGenerateDraft(input, options),
+      // Production-time quality gate: an independent audit and one targeted repair. Same
+      // credentials, consent and budget as generation — never a runtime call for the student.
+      audit: (input) => auditDraftWithModel(input, options),
+      repair: (input) => repairDraftWithModel(input, options),
+    };
   }
   return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
 }
@@ -32,6 +45,70 @@ function withTimeout(promise, timeoutMs, onTimeoutCode) {
     timer = setTimeout(() => reject(new DraftError(onTimeoutCode, 'Tempo limite excedido.')), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+const isBlocking = (f) => f.severity === 'HIGH' || f.severity === 'MEDIUM';
+const withSource = (findings, source) => findings.map((f) => ({ ...f, source }));
+
+/**
+ * Production-time quality gate. 1 generation -> deterministic screen (+ 1 independent model audit
+ * when the live provider is active) -> if anything blocking, ONE targeted repair -> re-validate ->
+ * screen again. Bounded on purpose: never a generate/audit loop. The result never promotes
+ * anything — the draft stays DRAFT for a human either way; `audit` only tells the reviewer where
+ * to look. A model failure at any step degrades to the deterministic screen, never to a failed draft.
+ */
+async function auditAndRepair(provider, validated, segments, { promptVersion, timeoutMs }) {
+  let draft = validated;
+  let findings = withSource(auditDraft(draft, { segments }).findings, 'DETERMINISTIC');
+  const auditedBy = ['DETERMINISTIC'];
+  let modelAudit = 'NOT_RUN';
+
+  if (provider.live && provider.audit) {
+    try {
+      const r = await withTimeout(provider.audit({ draft, segments }), timeoutMs, 'TIMEOUT');
+      if (r.malformed) {
+        modelAudit = 'MALFORMED';
+      } else {
+        modelAudit = 'OK';
+        auditedBy.push('MODEL');
+        findings = [...findings, ...r.findings];
+      }
+    } catch {
+      modelAudit = 'UNAVAILABLE';
+    }
+  }
+
+  let repaired = false;
+  let repairRejected = false;
+  let addressed = [];
+  const blocking = findings.filter(isBlocking);
+  if (provider.live && provider.repair && blocking.length > 0) {
+    try {
+      const rawRepair = await withTimeout(
+        provider.repair({ draft, findings: blocking, segments, promptVersion: draft.promptVersion }), timeoutMs, 'TIMEOUT',
+      );
+      // provider-owned metadata is not the model's to rewrite
+      const revalidated = validateDraft({ ...rawRepair, modelVersion: draft.modelVersion, promptVersion: draft.promptVersion }, { segments });
+      addressed = blocking.map((f) => ({ issue: f.issue, scope: f.scope }));
+      draft = revalidated;
+      repaired = true;
+      // the model's own findings were about the text that no longer exists; re-screen what is there now
+      findings = withSource(auditDraft(draft, { segments }).findings, 'DETERMINISTIC');
+    } catch {
+      repairRejected = true;
+    }
+  }
+
+  const audit = {
+    result: findings.some(isBlocking) ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS,
+    findings,
+    auditedBy,
+    modelAudit,
+    repaired,
+    repairRejected,
+    addressed,
+  };
+  return { draft, audit };
 }
 
 function findOwnedProposalWithSegments(db, userId, proposalId) {
@@ -45,7 +122,23 @@ function findOwnedProposalWithSegments(db, userId, proposalId) {
   return { proposal, segments };
 }
 
-function toDraftDto(row) {
+const CITED_PAGE_TEXT_CAP = 1500;
+
+/** The source pages this draft cites (summary + questions), so a reviewer can verify each claim
+ * next to the draft. Read live from the proposal's own pages; capped per page. */
+function citedPagesFor(db, userId, row, draft) {
+  const cited = new Set((draft.summarySourceSpans ?? []).map((s) => s.pageIndex));
+  for (const q of draft.questions ?? []) for (const s of q.sourceSpans ?? []) cited.add(s.pageIndex);
+  if (cited.size === 0) return [];
+  const proposal = db.prepare('SELECT source_id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, row.proposal_id);
+  if (!proposal) return [];
+  return db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
+    .all(userId, proposal.source_id)
+    .filter((p) => cited.has(p.page_index))
+    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP) }));
+}
+
+function toDraftDto(row, { db, userId } = {}) {
   const draft = JSON.parse(row.draft_json);
   return {
     id: row.id,
@@ -60,6 +153,7 @@ function toDraftDto(row) {
     acceptedAt: row.accepted_at ?? null,
     acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
+    pages: db ? citedPagesFor(db, userId, row, draft) : [],
   };
 }
 
@@ -78,13 +172,14 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
-  promptVersion = '2',
+  promptVersion = '3',
   apiKey = null,
   model = null,
   consentGranted = false,
   budgetCapUsd = null,
   timeoutMs = 30_000,
   maxInputChars = 50_000,
+  fetchImpl = null,
   now = () => new Date(),
 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
@@ -96,7 +191,7 @@ export async function createDraft(db, userId, proposalId, {
     throw new DraftError('INPUT_TOO_LARGE', `O texto de origem (${totalChars} caracteres) excede o limite de ${maxInputChars}.`);
   }
 
-  const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd });
+  const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl });
 
   let raw;
   try {
@@ -115,8 +210,17 @@ export async function createDraft(db, userId, proposalId, {
     throw err;
   }
 
+  const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs });
+  validated = audited.draft;
+
   const nowIso = now().toISOString();
-  const draftContent = { summary: validated.summary, questions: validated.questions, quarantinedCount: validated.quarantinedCount };
+  const draftContent = {
+    summary: validated.summary,
+    summarySourceSpans: validated.summarySourceSpans,
+    questions: validated.questions,
+    quarantinedCount: validated.quarantinedCount,
+    audit: audited.audit,
+  };
   const result = db.prepare(`
     INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at)
     VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?)
@@ -124,7 +228,7 @@ export async function createDraft(db, userId, proposalId, {
     userId, proposalId, provider.name, validated.modelVersion, validated.promptVersion, JSON.stringify(draftContent), nowIso
   );
 
-  return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid)), live: provider.live };
+  return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid), { db, userId }), live: provider.live };
 }
 
 /**
@@ -154,6 +258,7 @@ export function reviseDraft(db, userId, draftId, { summary, questions } = {}, no
   const current = JSON.parse(draftRow.draft_json);
   const candidate = {
     summary: summary !== undefined ? summary : current.summary,
+    summarySourceSpans: current.summarySourceSpans,
     questions: questions !== undefined ? questions : current.questions,
     modelVersion: draftRow.model_version,
     promptVersion: draftRow.prompt_version,
@@ -167,22 +272,42 @@ export function reviseDraft(db, userId, draftId, { summary, questions } = {}, no
     throw err;
   }
 
+  // A human edit changes the text, so the previous findings describe text that is gone: re-screen
+  // deterministically (no model call for an edit) and say so.
+  const rescreen = auditDraft(validated, { segments: found.segments });
+  const audit = {
+    result: rescreen.result,
+    findings: withSource(rescreen.findings, 'DETERMINISTIC'),
+    auditedBy: ['DETERMINISTIC'],
+    modelAudit: 'NOT_RUN',
+    repaired: false,
+    repairRejected: false,
+    addressed: [],
+    editedByHuman: true,
+  };
+
   const nowIso = now().toISOString();
-  const draftContent = { summary: validated.summary, questions: validated.questions, quarantinedCount: validated.quarantinedCount };
+  const draftContent = {
+    summary: validated.summary,
+    summarySourceSpans: validated.summarySourceSpans,
+    questions: validated.questions,
+    quarantinedCount: validated.quarantinedCount,
+    audit,
+  };
   db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
     .run(JSON.stringify(draftContent), nowIso, userId, draftId);
 
-  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId));
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
 }
 
 export function getDraft(db, userId, draftId) {
   const row = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!row) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
-  return toDraftDto(row);
+  return toDraftDto(row, { db, userId });
 }
 
 export function listDrafts(db, userId, proposalId) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
   if (!proposal) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
-  return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId).map(toDraftDto);
+  return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId).map((row) => toDraftDto(row, { db, userId }));
 }

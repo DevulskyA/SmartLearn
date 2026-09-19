@@ -94,6 +94,16 @@ test('generating and accepting a draft through the real UI creates a real unit w
   // The drafted answer is attributable to the exact real source text.
   await expect(draftPanel.locator('.source-draft-answer')).toContainText('Farmacocinética');
 
+  // CQ-2: the reviewer can verify. The automatic check is a screen (never "verified"), and the summary and
+  // every question show the source page they came from, with the page text one click away.
+  await expect(draftPanel.locator('.source-draft-audit')).toContainText('Conferência automática');
+  await expect(draftPanel.locator('.source-draft-audit')).toContainText('não é validação médica'); // "nothing flagged" is never "verified"
+  const summaryOrigin = draftPanel.locator('.summary-source', { hasText: 'Fonte do resumo' });
+  await expect(summaryOrigin).toContainText('página 1');
+  await summaryOrigin.locator('summary').click();
+  await expect(summaryOrigin.locator('.study-now-source-text')).toContainText('Farmacocinética: absorção e distribuição');
+  await expect(draftPanel.locator('.summary-source', { hasText: 'Fonte da questão' })).toContainText('página 1');
+
   await draftPanel.locator('.source-draft-subject-input').fill('Farmacologia E2E');
   await draftPanel.locator('.source-draft-date-input').fill('2026-04-01');
   await draftPanel.locator('[data-action="accept-draft"]').click();
@@ -104,6 +114,14 @@ test('generating and accepting a draft through the real UI creates a real unit w
   // The unit is real: it shows up on Plano.
   await page.locator('[data-screen="plan"]').click();
   await expect(page.locator('#screen-plan .plan-row-compact .subject-chip', { hasText: 'Farmacologia E2E' })).toBeVisible({ timeout: 5000 });
+
+  // CQ-2: the accepted unit keeps its summary provenance, frozen, visible where the student reads the summary.
+  const planRow = page.locator('.plan-row', { hasText: 'Farmacologia E2E' });
+  await planRow.locator('.plan-expand-btn').click();
+  const planOrigin = planRow.locator('.summary-source');
+  await expect(planOrigin).toContainText('Origem do resumo · farmaco.pdf, página 1', { timeout: 5000 });
+  await planOrigin.locator('summary').click();
+  await expect(planOrigin.locator('.study-now-source-text')).toContainText('Farmacocinética: absorção e distribuição');
 
   const draftId = await draftPanel.getAttribute('data-draft-id');
   const firstAcceptance = await page.evaluate(async ({ base, id }) => {
@@ -202,4 +220,26 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
   }, API_BASE);
   expect(unitsAfter.units.length).toBe(2);
   expect(unitsAfter.units.every((u) => u.subjectId === subjectsAfter.subjects[0].id)).toBe(true);
+});
+
+// CQ-2: a draft that drops the central concept is FLAGGED where the reviewer decides. The fake provider's summary is the
+// first 150 characters of the page, so a page that opens with filler and only later reaches the concept exposes exactly that.
+test('a summary that misses the central concept of the page is flagged in the review, with the source terms it dropped, and acceptance stays a human decision', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  const filler = 'Introducao geral da disciplina e das suas aulas, com informacoes administrativas sobre horarios, salas, avaliacoes e bibliografia recomendada para o semestre letivo inteiro. ';
+  const core = 'A insuficiencia cardiaca reduz o debito cardiaco. A insuficiencia cardiaca ativa o sistema renina angiotensina. O debito cardiaco baixo eleva a pressao venosa.';
+  await page.setInputFiles('#sources-file-input', { name: 'ic.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([filler + core]) });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+
+  const item = page.locator('.source-proposal-item').first();
+  await item.locator('[data-action="generate-draft"]').click();
+  const draftPanel = item.locator('.source-draft-panel');
+  const audit = draftPanel.locator('.source-draft-audit');
+  await expect(audit).toBeVisible({ timeout: 10000 });
+  await expect(audit).toHaveAttribute('data-result', 'REPAIR');
+  await expect(audit).toContainText('para verificar antes de aceitar');
+  await expect(audit.locator('.source-draft-audit-issue')).toContainText('Resumo · Pode omitir um conceito central');
+  await expect(audit.locator('.source-draft-audit-evidence')).toContainText(/insuficiencia/i);
+  // a flag informs, it does not block: the accept action is still there and is the human's call
+  await expect(draftPanel.locator('[data-action="accept-draft"]')).toBeEnabled();
 });

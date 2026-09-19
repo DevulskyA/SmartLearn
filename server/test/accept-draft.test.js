@@ -13,6 +13,7 @@ import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import * as exercisesService from '../src/services/exercises.js';
 import { acceptDraft, AcceptDraftError } from '../src/services/accept-draft.js';
+import * as learningUnitsService from '../src/services/learning-units.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -323,4 +324,48 @@ test('HTTP: full pipeline over real HTTP — upload, extract, chunk, draft, and 
     db.close();
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
+});
+
+// CONTENT-QUALITY CQ-2: the Resumo Mestre's own provenance survives acceptance, frozen.
+test('an accepted unit exposes the source pages its Resumo Mestre came from, frozen at acceptance and owner-scoped; manual units have none', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'summ-src@example.com');
+    const otherId = makeUser(db, 'summ-src-other@example.com');
+    const { source, draft } = await makeDraft(db, userId, sourcesDir, ['Texto original da página um', 'Texto original da página dois']);
+    assert.deepEqual(draft.summarySourceSpans.map((s) => s.pageIndex), [1, 2], 'a provider that does not say gets the whole range, never an empty origin');
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Renal', studyDate: '2026-03-01', expectedRevision: draft.revision });
+
+    const sources = learningUnitsService.summarySources(db, userId, result.unit.id);
+    assert.deepEqual(sources.map((s) => [s.sourceName, s.pageIndex, s.pageText]), [
+      ['aula.pdf', 1, 'Texto original da página um'],
+      ['aula.pdf', 2, 'Texto original da página dois'],
+    ]);
+
+    // frozen: a later re-extraction of the same page must not change what the summary points to
+    db.prepare('UPDATE source_pages SET text = ? WHERE user_id = ? AND source_id = ? AND page_index = 1').run('OUTRO TEXTO', userId, source.id);
+    assert.equal(learningUnitsService.summarySources(db, userId, result.unit.id)[0].pageText, 'Texto original da página um');
+
+    // owner-scoped
+    assert.throws(() => learningUnitsService.summarySources(db, otherId, result.unit.id), (e) => e.code === 'NOT_FOUND');
+
+    // a manually created unit has no summary provenance (and nothing is invented for it)
+    const manual = learningUnitsService.create(db, userId, { newSubjectName: 'Manual', title: 'Aula manual', summaryBody: 'Resumo digitado', studyDate: '2026-03-02' });
+    assert.deepEqual(learningUnitsService.summarySources(db, userId, manual.unit.id), []);
+  } finally { cleanup(); }
+});
+
+test('a draft whose summary cites only some pages freezes exactly those pages, not the whole proposal', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'summ-part@example.com');
+    const { draft } = await makeDraft(db, userId, sourcesDir, ['Página um', 'Página dois', 'Página três']);
+    drafts.reviseDraft(db, userId, draft.id, {});
+    const row = db.prepare('SELECT draft_json, revision FROM generated_drafts WHERE id = ?').get(draft.id);
+    const content = JSON.parse(row.draft_json);
+    content.summarySourceSpans = [{ pageIndex: 2 }];
+    db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), draft.id);
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Parcial', studyDate: '2026-03-01', expectedRevision: row.revision });
+    assert.deepEqual(learningUnitsService.summarySources(db, userId, result.unit.id).map((s) => s.pageIndex), [2]);
+  } finally { cleanup(); }
 });

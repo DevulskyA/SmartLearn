@@ -19,7 +19,7 @@ const MAX_SUMMARY_LENGTH = 2000;
 const MAX_QUESTIONS = 50;
 const MAX_QUESTION_LENGTH = 1000;
 const MAX_ANSWER_LENGTH = 2000;
-const ALLOWED_DRAFT_KEYS = new Set(['summary', 'questions', 'modelVersion', 'promptVersion']);
+const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion']);
 const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'hint', 'sourceSpans']);
 
 function requireString(value, field, maxLength) {
@@ -72,6 +72,16 @@ export function validateDraft(raw, { segments }) {
 
   const validPageIndexes = new Set(segments.map((s) => s.pageIndex));
   let quarantinedCount = 0;
+
+  // The summary's own provenance: the real pages it drew from. Optional in the provider's output
+  // (a provider that cannot say gets the whole proposal range — the honest default, never a guess),
+  // quarantined exactly like a question citation when it points at a page that was never sent.
+  const rawSummarySpans = Array.isArray(raw.summarySourceSpans) ? raw.summarySourceSpans : [];
+  const summarySpans = validSourceSpans(rawSummarySpans, validPageIndexes);
+  quarantinedCount += rawSummarySpans.length - summarySpans.length;
+  const summarySourceSpans = summarySpans.length > 0
+    ? summarySpans
+    : segments.map((seg) => ({ pageIndex: seg.pageIndex }));
   const acceptedQuestions = [];
 
   for (const rawQuestion of raw.questions) {
@@ -114,6 +124,7 @@ export function validateDraft(raw, { segments }) {
 
   return {
     summary: raw.summary,
+    summarySourceSpans,
     questions: acceptedQuestions,
     modelVersion: raw.modelVersion,
     promptVersion: raw.promptVersion,

@@ -19,6 +19,16 @@ export function registerLearningUnitRoutes(app, db) {
     return { units: learningUnits.list(db, request.actor.userId) };
   });
 
+  app.get('/learning-units/:id/summary-sources', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { sources: learningUnits.summarySources(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.get('/learning-units/:id', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   }, async (request, reply) => {

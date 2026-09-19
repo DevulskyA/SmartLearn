@@ -1540,6 +1540,7 @@ export async function renderPlan() {
         const summaryHeading = document.createElement("h3");
         summaryHeading.textContent = "Resumo Mestre";
         summarySection.append(summaryHeading);
+        appendSummarySources(summarySection, unit.id);
 
         let currentSummary = unit.summaryBody ?? "";
 
@@ -2967,6 +2968,100 @@ function createSourceProposalItem(proposal) {
   return li;
 }
 
+// "3", "1–3", "1, 3–4": a compact page list for provenance labels.
+function formatPageList(pageIndexes) {
+  const pages = [...new Set(pageIndexes)].sort((a, b) => a - b);
+  const parts = [];
+  for (let i = 0; i < pages.length;) {
+    let j = i;
+    while (j + 1 < pages.length && pages[j + 1] === pages[j] + 1) j += 1;
+    parts.push(j > i ? `${pages[i]}–${pages[j]}` : String(pages[i]));
+    i = j + 1;
+  }
+  return parts.join(", ");
+}
+
+// A collapsed "origin" block: which source pages a piece of content came from, with the page text
+// itself so the student can check the claim. `pages` = [{pageIndex, text}] (text may be missing).
+function createSourceDetails(label, pages) {
+  const details = document.createElement("details");
+  details.className = "study-now-source summary-source";
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  details.append(summary);
+  for (const page of pages) {
+    if (!page.text) continue;
+    details.append(
+      createTextElement("p", "study-now-error-label", `Página ${page.pageIndex}`),
+      createTextElement("p", "study-now-source-text", page.text),
+    );
+  }
+  return details;
+}
+
+// Where an AI-generated unit's Resumo Mestre came from (frozen at acceptance). Manual units, units
+// accepted before this existed, and the offline store have nothing to show — and show nothing.
+async function appendSummarySources(container, unitId) {
+  if (!REMOTE_MODE || !DB.learningUnits?.summarySources || !container) return;
+  let sources;
+  try {
+    sources = await DB.learningUnits.summarySources(unitId);
+  } catch {
+    return;
+  }
+  container.querySelector(":scope > .summary-source")?.remove();
+  if (!sources.length) return;
+  const name = sources[0].sourceName;
+  const pages = sources.map((s) => s.pageIndex);
+  container.append(createSourceDetails(
+    `Origem do resumo · ${name}, ${pages.length > 1 ? "páginas" : "página"} ${formatPageList(pages)}`,
+    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
+  ));
+}
+
+const DRAFT_ISSUE_LABELS = {
+  SUMMARY_UNSUPPORTED_VALUE: "Valor que a fonte não traz",
+  SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
+  SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
+  SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
+};
+
+function draftFindingScopeLabel(scope) {
+  if (scope === "summary") return "Resumo";
+  const m = /^question:(\d+)$/.exec(scope ?? "");
+  return m ? `Questão ${Number(m[1]) + 1}` : "Rascunho";
+}
+
+// The automatic check is a screen, not a verdict: it says where to look. "No flags" is never "verified".
+function createDraftAudit(audit) {
+  const box = document.createElement("div");
+  box.className = "source-draft-audit";
+  const flagged = (audit.findings ?? []).filter((f) => f.severity !== "LOW");
+  box.dataset.result = flagged.length > 0 ? "REPAIR" : "PASS";
+  const head = flagged.length > 0
+    ? `Conferência automática: ${flagged.length} ${flagged.length === 1 ? "ponto" : "pontos"} para verificar antes de aceitar`
+    : "Conferência automática: nada sinalizado. Isso não é validação médica — confira a fonte.";
+  box.append(createTextElement("p", "source-draft-audit-head", head));
+  if (audit.repaired) {
+    box.append(createTextElement("p", "source-draft-audit-note", "O rascunho foi corrigido uma vez automaticamente a partir dos pontos apontados."));
+  }
+  if (audit.modelAudit === "UNAVAILABLE" || audit.modelAudit === "MALFORMED") {
+    box.append(createTextElement("p", "source-draft-audit-note", "A auditoria por modelo não pôde ser concluída; só a conferência automática básica foi feita."));
+  }
+  const list = document.createElement("ul");
+  list.className = "source-draft-audit-list";
+  for (const f of flagged) {
+    const item = document.createElement("li");
+    item.append(createTextElement("p", "source-draft-audit-issue", `${draftFindingScopeLabel(f.scope)} · ${DRAFT_ISSUE_LABELS[f.issue] ?? f.issue}`));
+    if (f.generatedClaim) item.append(createTextElement("p", "source-draft-audit-claim", `No rascunho: ${f.generatedClaim}`));
+    if (f.sourceEvidence) item.append(createTextElement("p", "source-draft-audit-evidence", `Na fonte: ${f.sourceEvidence}`));
+    if (f.repair) item.append(createTextElement("p", "source-draft-audit-repair", f.repair));
+    list.append(item);
+  }
+  if (flagged.length > 0) box.append(list);
+  return box;
+}
+
 // T38: renders one generated draft for inspection/acceptance. Every
 // rendering carries the same explicit caveat — this is unverified AI
 // output, not a medical/scientific claim (design.md/T37/T38).
@@ -2989,6 +3084,12 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
     "Rascunho gerado por IA — não verificado. Revise cada questão antes de aceitar; isto não é uma validação científica ou médica do conteúdo.",
   );
   const summary = createTextElement("p", "source-draft-summary", draft.summary);
+  const pagesByIndex = new Map((draft.pages ?? []).map((p) => [p.pageIndex, p]));
+  const pagesFor = (spans) => (spans ?? []).map((s) => pagesByIndex.get(s.pageIndex) ?? { pageIndex: s.pageIndex, text: null });
+  const summaryOrigin = draft.summarySourceSpans?.length
+    ? createSourceDetails(`Fonte do resumo · ${draft.summarySourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(draft.summarySourceSpans.map((s) => s.pageIndex))}`, pagesFor(draft.summarySourceSpans))
+    : null;
+  const auditBox = draft.audit ? createDraftAudit(draft.audit) : null;
 
   const questionsList = document.createElement("ul");
   questionsList.className = "source-draft-questions";
@@ -2998,6 +3099,12 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
       createTextElement("p", "source-draft-question", question.question),
       createTextElement("p", "source-draft-answer", question.answer),
     );
+    if (question.sourceSpans?.length) {
+      item.append(createSourceDetails(
+        `Fonte da questão · ${question.sourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(question.sourceSpans.map((s) => s.pageIndex))}`,
+        pagesFor(question.sourceSpans),
+      ));
+    }
     questionsList.append(item);
   }
 
@@ -3041,7 +3148,7 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
 
   const resultMessage = createTextElement("p", "source-draft-result", "");
 
-  draftPanel.append(caveat, summary, questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
   draftPanel.hidden = false;
   enhanceSelect(subjectSelect);
 }
@@ -3278,6 +3385,8 @@ async function startStudyNow(unit, subjectName) {
   if (unit.summaryBody) {
     studyNowSummaryCard.hidden = false;
     studyNowSummaryBody.textContent = unit.summaryBody;
+    studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
+    appendSummarySources(studyNowSummaryCard, unit.id);
   } else {
     studyNowSummaryCard.hidden = true;
     studyNowSummaryBody.textContent = "";

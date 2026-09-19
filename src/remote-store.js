@@ -92,6 +92,11 @@ const learningUnits = {
   async createWithReviews(data) {
     return apiRequest('/v1/learning-units', { method: 'POST', body: data });
   },
+  // Pages an AI-generated unit's summary was drafted from (frozen at acceptance); [] otherwise.
+  async summarySources(id) {
+    const { sources } = await apiRequest(`/v1/learning-units/${id}/summary-sources`);
+    return sources;
+  },
 };
 
 // -- review tasks -------------------------------------------------------------

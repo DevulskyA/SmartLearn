@@ -135,6 +135,26 @@ export function list(db, userId) {
   return db.prepare('SELECT * FROM learning_units WHERE user_id = ? ORDER BY study_date DESC, id DESC').all(userId).map(unitDto);
 }
 
+const SUMMARY_SOURCE_TEXT_CAP = 2000;
+
+/** The source pages an AI-generated unit's Resumo Mestre was drafted from (frozen at acceptance).
+ * [] for manual units and for units accepted before summary provenance existed — nothing invented. */
+export function summarySources(db, userId, id) {
+  if (!findOwned(db, userId, id)) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+  return db.prepare(`
+    SELECT c.source_id, c.page_index, c.page_text_snapshot, s.original_name
+    FROM unit_summary_citations c
+    JOIN sources s ON s.user_id = c.user_id AND s.id = c.source_id
+    WHERE c.user_id = ? AND c.unit_id = ?
+    ORDER BY c.page_index, c.id
+  `).all(userId, id).map((r) => ({
+    sourceId: r.source_id,
+    sourceName: r.original_name,
+    pageIndex: r.page_index,
+    pageText: r.page_text_snapshot == null ? null : r.page_text_snapshot.slice(0, SUMMARY_SOURCE_TEXT_CAP),
+  }));
+}
+
 export function getById(db, userId, id) {
   const unit = findOwned(db, userId, id);
   if (!unit) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');

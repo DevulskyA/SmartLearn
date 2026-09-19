@@ -16,6 +16,8 @@
 // credentials, or touch the filesystem regardless of what a response
 // contains, because nothing here ever executes anything from a response
 // beyond passing its text through JSON.parse.
+import { buildAuditPrompt, buildRepairPrompt, parseModelAudit } from './draft-audit-model.js';
+
 export const ANTHROPIC_PROVIDER_NAME = 'ANTHROPIC';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
@@ -50,6 +52,9 @@ function buildPrompt(segments, promptVersion) {
     '- Include the mechanism/causality (why/how, not just what) whenever the source actually supports it — do not fabricate a mechanism the source does not state.',
     '- Preserve exact medical terminology from the source (do not simplify a specific term into a vaguer everyday word).',
     '- No filler, no restating the same point twice, no generic padding to reach a length.',
+    '- Teach, do not just compress: organise the concepts, keep causal relations, separate structures students commonly confuse, and explain a piece of jargon the first time it appears when the source itself explains it.',
+    '- Source is the ONLY authority. Never complete a gap with general knowledge; if the source does not say it, leave it out.',
+    '- summarySourceSpans lists the real pageIndex values the summary actually draws on (never a page that is not in the source).',
     '',
     'QUESTIONS: produce as many as the source material genuinely supports (do not pad with trivial or repetitive questions to hit a count). Where the source supports it, vary the question TYPE across this menu — never force a type the source cannot honestly support:',
     '  - recall: a specific fact/definition/value stated in the source.',
@@ -63,7 +68,7 @@ function buildPrompt(segments, promptVersion) {
     'HINT requirements: a hint must help the student retrieve the answer themselves without stating it — a partial cue (e.g. category, direction, a related term), never a paraphrase of the answer. Set hint to null (not an empty string) when no genuinely useful partial cue exists — never invent a weak or misleading hint just to fill the field.',
     '',
     'Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly this shape:',
-    '{"summary": string, "questions": [{"question": string, "answer": string, "hint": string|null, "sourceSpans": [{"pageIndex": number}]}], "modelVersion": string, "promptVersion": string}',
+    '{"summary": string, "summarySourceSpans": [{"pageIndex": number}], "questions": [{"question": string, "answer": string, "hint": string|null, "sourceSpans": [{"pageIndex": number}]}], "modelVersion": string, "promptVersion": string}',
     `Use promptVersion exactly "${promptVersion}". Every question must cite at least one real pageIndex from the source text above — never invent a page number.`,
     '',
     sourceBlock,
@@ -71,12 +76,11 @@ function buildPrompt(segments, promptVersion) {
 }
 
 /**
- * @param {{segments: {pageIndex:number, text:string}[], promptVersion: string}} input
- * @param {{apiKey: string, model: string, timeoutMs?: number, fetchImpl?: typeof fetch}} options
- * @returns {Promise<object>} the provider's RAW parsed JSON — NOT yet
- *   validated (see draft-schema.js, applied identically to every provider).
+ * One model call: prompt in, parsed JSON out. Shared by generation, audit and repair so the
+ * credential check, timeout, error mapping and "nothing is executed from a response" property
+ * are identical for all three.
  */
-export async function generateDraft({ segments, promptVersion }, { apiKey, model, timeoutMs = 30_000, fetchImpl = fetch } = {}) {
+async function callModel(prompt, { apiKey, model, timeoutMs = 30_000, fetchImpl = fetch, maxTokens = 4096 } = {}) {
   if (!apiKey || !model) {
     throw new ProviderRequestError('MISSING_CREDENTIALS', 'Nenhuma credencial/modelo configurado para o provedor real.');
   }
@@ -95,8 +99,8 @@ export async function generateDraft({ segments, promptVersion }, { apiKey, model
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: buildPrompt(segments, promptVersion) }],
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
       }),
       signal: controller.signal,
     });
@@ -122,4 +126,28 @@ export async function generateDraft({ segments, promptVersion }, { apiKey, model
   } catch {
     throw new ProviderRequestError('PROVIDER_ERROR', 'Resposta do provedor não é um JSON válido.');
   }
+}
+
+/**
+ * @param {{segments: {pageIndex:number, text:string}[], promptVersion: string}} input
+ * @param {{apiKey: string, model: string, timeoutMs?: number, fetchImpl?: typeof fetch}} options
+ * @returns {Promise<object>} the provider's RAW parsed JSON — NOT yet
+ *   validated (see draft-schema.js, applied identically to every provider).
+ */
+export function generateDraft({ segments, promptVersion }, options = {}) {
+  return callModel(buildPrompt(segments, promptVersion), options);
+}
+
+/**
+ * Independent audit of an already-validated draft against the same source pages. Returns sanitized
+ * findings (see draft-audit-model.js); a malformed reply is reported, never guessed at.
+ */
+export async function auditDraftWithModel({ draft, segments }, options = {}) {
+  const raw = await callModel(buildAuditPrompt(draft, segments), { ...options, maxTokens: 2048 });
+  return parseModelAudit(raw, { questionCount: draft.questions.length });
+}
+
+/** One targeted repair: returns the RAW repaired draft (the caller re-validates it like any draft). */
+export function repairDraftWithModel({ draft, findings, segments, promptVersion }, options = {}) {
+  return callModel(buildRepairPrompt(draft, findings, segments, promptVersion), options);
 }

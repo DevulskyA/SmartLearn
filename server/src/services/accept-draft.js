@@ -100,6 +100,19 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     `).run(userId, subject.id, proposal.title, draftContent.summary, studyDate, nowIso, nowIso);
     const unit = db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unitResult.lastInsertRowid);
 
+    // The summary's own provenance, frozen like a question citation. A draft created before summary
+    // spans existed falls back to the proposal's whole page range — never to an empty/unknown origin.
+    const summaryPages = (draftContent.summarySourceSpans?.length
+      ? draftContent.summarySourceSpans.map((span) => span.pageIndex)
+      : [...pageTextByIndex.keys()].filter((i) => i >= proposal.page_start && i <= proposal.page_end));
+    const insertSummaryCitation = db.prepare(`
+      INSERT INTO unit_summary_citations (user_id, unit_id, source_id, page_index, page_text_snapshot, parser_version_snapshot, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const pageIndex of [...new Set(summaryPages)].sort((a, b) => a - b)) {
+      insertSummaryCitation.run(userId, unit.id, proposal.source_id, pageIndex, pageTextByIndex.get(pageIndex) ?? null, sourceRow?.parser_version ?? null, nowIso);
+    }
+
     const insertReview = db.prepare('INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, created_at) VALUES (?, ?, ?, ?, ?)');
     dueDates.forEach((dueDate, i) => insertReview.run(userId, unit.id, REVIEW_DAY_OFFSETS[i], dueDate, nowIso));
 
