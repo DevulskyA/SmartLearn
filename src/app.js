@@ -1113,7 +1113,9 @@ export async function renderToday() {
   const judgmentsByTaskId = new Map();
   const priorWrongByTaskId = new Map();
   if (REMOTE_MODE && DB.attempts?.listForReviews) {
-    const openWithExercises = [...overdueReviews, ...pendingToday]
+    // Completed-today reviews too: marking a review done must not wipe its
+    // errors (and "Refazer erros") from view by re-rendering fresh exercises.
+    const openWithExercises = [...overdueReviews, ...pendingToday, ...completedToday]
       .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
       .map((t) => t.id);
     try {

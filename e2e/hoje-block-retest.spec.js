@@ -158,6 +158,12 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
     return evidence.evidence.filter((e) => e.type === 'REVIEW');
   };
   await expect.poll(async () => (await fetchReviewEvidence()).length, { timeout: 5000 }).toBe(1);
+  // Marking the review done must not wipe the block: the completed row keeps
+  // its judgments, the error, and the redo/closure state.
+  const doneRow = page.locator(`[data-review-list="doneToday"] .review-row[data-review-id="${reviewId}"]`);
+  await expect(doneRow).toBeVisible({ timeout: 5000 });
+  await expect(doneRow.locator('.review-exercise-item', { hasText: 'Pergunta A?' })).toHaveClass(/is-wrong/);
+  await expect(doneRow.locator('.review-block-result')).toContainText('Bloco concluído: 1/2 corretas');
   const review = await fetchReviewEvidence();
   expect(review[0].questionsCount).toBe(2);
   expect(review[0].correctCount).toBe(1);
