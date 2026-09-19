@@ -35,7 +35,12 @@ ATIVA AGORA: ANALYTICS
 - [✓] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — `git archive HEAD` (checkout limpo = nova sessão)
       + `node scripts/tasklist.mjs` reproduz a MESMA lista do working tree (diff vazio); painel HTML `conductor/.view/tasklist.html`
       aberto no app e regenerado a cada transição; `test/tasklist.test.js` guarda "exatamente uma ativa" no plan real.
-- [>] **ANALYTICS Retomar "Meu estudo está funcionando?"** — próximo marco, agora sobre a base viva `dev@smartlearn.local`.
+- [>] **ANALYTICS Retomar "Meu estudo está funcionando?"** — sobre a base viva `dev@smartlearn.local`.
+      1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências ↓/↑/insuficiente, "Sem evidência"
+      neutro, bloco com erro restaurado na Hoje). Defeito real achado SÓ com dados realistas: o gráfico de evolução usava
+      eixo por ÍNDICE (25 dias = 0 dias) e rótulos repetidos — corrigido (eixo por data, rótulos únicos; commit 5e465cc; bug
+      fix em superfície protegida). Pendente/observado: Estatísticas não diz "o que fazer agora" (protegida → human gate);
+      "Nota %" cortada a 768px e caminho SVG morto (ver adiados) seguem como achados registrados.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
