@@ -306,6 +306,15 @@ const attempts = {
   },
 };
 
+// -- priorities (T45) -----------------------------------------------------------
+// Read-only, explainable view: due work order + weak-practice suggestions with
+// reason codes and sample sizes. It never reschedules or writes anything.
+const priorities = {
+  async get(date) {
+    return apiRequest(`/v1/priorities?date=${encodeURIComponent(date)}`);
+  },
+};
+
 // -- learning evidence ----------------------------------------------------------
 // Field-name/scale bridge only: old `context` -> new `type`, old
 // `scorePercent` (0-100) -> new `score` (0-1 fraction, or null for unknown
@@ -403,6 +412,7 @@ export const DB = {
   reviewTasks,
   exercises,
   attempts,
+  priorities,
   learningEvidence,
   completeReviewWithEvidence,
   settings,

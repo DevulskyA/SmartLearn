@@ -6,6 +6,7 @@ import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getDaysBetween, getReviewStatusLabel } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
+import { weakPracticeReason } from "./priorities-text.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -193,6 +194,9 @@ const todayEmptyState = document.querySelector("#today-empty-state");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
+const weakBlock = document.querySelector("#block-weak");
+const weakList = document.querySelector("#weak-list");
+const weakCount = document.querySelector("#weak-count");
 const reviewDashboard = document.querySelector("#review-dashboard");
 const todayPrimaryAction = document.querySelector("#today-primary-action");
 const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
@@ -1041,6 +1045,9 @@ async function renderOfflineToday(accountId) {
     }
   }
 
+  // Suggestions come from the live server; never show stale ones from the last online render.
+  weakRenderSeq += 1; // also cancels an online render still in flight
+  if (weakBlock) weakBlock.hidden = true;
   todayEmptyState.hidden = true;
   todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0);
   todayTomorrow.hidden = true;
@@ -1052,6 +1059,46 @@ async function renderOfflineToday(accountId) {
     todayLoadSummary.textContent = parts.join(" · ");
   }
   todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+}
+
+// "Vale reforçar": optional suggestions from the server's explainable priorities
+// (units NOT already due, weak by observed recent evidence and/or with items still
+// wrong). Extra signal only — a failure or local mode just hides the block.
+let weakRenderSeq = 0;
+async function renderWeakPractice(today) {
+  if (!weakBlock) return;
+  const seq = ++weakRenderSeq;
+  let suggestions = [];
+  if (REMOTE_MODE && DB.priorities?.get) {
+    try {
+      suggestions = (await DB.priorities.get(today)).weakPractice ?? [];
+    } catch (error) {
+      console.warn("Falha ao carregar sugestões de reforço.", error);
+    }
+  }
+  if (seq !== weakRenderSeq) return; // a newer render already owns the block
+  weakList.replaceChildren();
+  weakCount.textContent = String(suggestions.length);
+  weakBlock.hidden = suggestions.length === 0;
+  for (const item of suggestions) {
+    const row = document.createElement("article");
+    row.className = "weak-practice-row";
+    row.dataset.unitId = String(item.unitId);
+    const text = document.createElement("div");
+    text.className = "weak-practice-text";
+    text.append(
+      createTextElement("span", "weak-practice-title", item.unitTitle),
+      createTextElement("span", "weak-practice-meta", `${item.subjectName} · ${weakPracticeReason(item)}`),
+    );
+    const open = createTextElement("button", "small-button", "Ver no Plano");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      pendingPlanFocusUnitId = item.unitId;
+      showScreen("plan");
+    });
+    row.append(text, open);
+    weakList.append(row);
+  }
 }
 
 export async function renderToday() {
@@ -1160,6 +1207,8 @@ export async function renderToday() {
       list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set()));
     }
   }
+
+  renderWeakPractice(today).catch(console.error); // not awaited: suggestions must never delay Hoje
 
   // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
   // with data already fetched above — no new scheduler, no change to the
