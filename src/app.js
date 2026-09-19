@@ -1360,11 +1360,24 @@ let planCurrentStateFilter = "";
 export async function renderPlan() {
   if (!planList) return;
   const today = getLocalDateValue();
-  const [learningUnits, subjects, allTasks, allEvidence] = await Promise.all([
+  // "Para reforçar": exercises still wrong at their last attempt. Only the server
+  // keeps item-level attempts; without it (or if it fails) the Plano just shows no
+  // cue — it is an extra signal, never a reason to fail the whole list.
+  const loadReinforcement = async () => {
+    if (!REMOTE_MODE || !DB.attempts?.reinforcement) return {};
+    try {
+      return await DB.attempts.reinforcement();
+    } catch (error) {
+      console.warn("Falha ao carregar itens para reforçar.", error);
+      return {};
+    }
+  };
+  const [learningUnits, subjects, allTasks, allEvidence, reinforcementByUnit] = await Promise.all([
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
     DB.reviewTasks.getAll(),
     DB.learningEvidence.getAll(),
+    loadReinforcement(),
   ]);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
   const evidenceByUnitId = new Map();
@@ -1482,6 +1495,10 @@ export async function renderPlan() {
     badges.append(getPlanStateBadge(state));
     const perfBadge = getPlanPerfBadge(evidence);
     if (perfBadge) badges.append(perfBadge);
+    const reinforceIds = new Set(reinforcementByUnit[unit.id] ?? []);
+    if (reinforceIds.size > 0) {
+      badges.append(createTextElement("span", "study-now-chip plan-reinforce-chip", `${reinforceIds.size} para reforçar`));
+    }
 
     const expandBtn = document.createElement("button");
     expandBtn.className = "plan-expand-btn";
@@ -1606,7 +1623,15 @@ export async function renderPlan() {
           for (const ex of exs) {
             const item = document.createElement("div");
             item.className = "plan-exercise-item";
-            item.textContent = ex.questionText;
+            if (reinforceIds.has(ex.id)) {
+              item.classList.add("is-reinforce");
+              item.append(
+                createTextElement("span", "plan-exercise-text", ex.questionText),
+                createTextElement("span", "study-now-chip plan-exercise-prior", "Errou na última tentativa"),
+              );
+            } else {
+              item.textContent = ex.questionText;
+            }
             exSection.append(item);
           }
           // First active-recall pass on demand. Offered only until the unit has

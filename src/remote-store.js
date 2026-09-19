@@ -297,6 +297,13 @@ const attempts = {
     if (reviewTaskIds.length === 0) return { attemptsByReviewTask: {}, priorWrongByReviewTask: {} };
     return apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.join(",")}`);
   },
+  // Exercises whose most recent submitted attempt was INCORRECT, grouped by
+  // unit: { [unitId]: [exerciseId, ...] }. Read-only; a later correct answer
+  // (first pass or redo) clears the item.
+  async reinforcement() {
+    const { byUnit } = await apiRequest('/v1/reinforcement');
+    return byUnit;
+  },
 };
 
 // -- learning evidence ----------------------------------------------------------

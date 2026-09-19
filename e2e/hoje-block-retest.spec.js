@@ -227,6 +227,17 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
   await expect(cue('Cue A?')).toHaveText('Errou na última tentativa');
   await expect(cue('Cue B?')).toHaveCount(0);
 
+  // Plano: the same signal at unit level, visible on the collapsed row, and per
+  // item once the row is opened. Same source as Hoje (last submitted attempt).
+  await page.locator('[data-screen="plan"]').click();
+  const planRow = page.locator('.plan-row', { hasText: 'Cue Unit' });
+  await expect(planRow.locator('.plan-reinforce-chip')).toHaveText('1 para reforçar', { timeout: 5000 });
+  await planRow.locator('.plan-expand-btn').click();
+  const planCue = (q) => planRow.locator('.plan-exercise-item', { hasText: q }).locator('.plan-exercise-prior');
+  await expect(planCue('Cue A?')).toHaveText('Errou na última tentativa');
+  await expect(planCue('Cue B?')).toHaveCount(0);
+  await page.locator('[data-screen="today"]').click();
+
   // Redo A correctly (Refazer erros, shared flow) -> the cue is gone next time.
   await r1.getByRole('button', { name: 'Refazer erros (1)' }).click();
   await page.locator('#study-now-reveal-btn').click();
@@ -240,5 +251,13 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
   await expect(r2.locator('.review-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
   await expect(r2.locator('.review-exercise-prior')).toHaveCount(0);
   await expect(r2.locator('.review-reinforce-chip')).toHaveCount(0);
+
+  // ...and the Plano stops flagging the unit too (a corrected redo clears it there as well).
+  await page.locator('[data-screen="plan"]').click();
+  await expect(planRow.locator('.plan-state-badge')).toBeVisible({ timeout: 5000 });
+  await expect(planRow.locator('.plan-reinforce-chip')).toHaveCount(0);
+  await planRow.locator('.plan-expand-btn').click();
+  await expect(planRow.locator('.plan-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
+  await expect(planRow.locator('.plan-exercise-prior')).toHaveCount(0);
 });
 

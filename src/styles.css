@@ -3403,6 +3403,14 @@ h1 {
   border-bottom: none;
 }
 
+/* Question + "Errou na última tentativa": side by side when it fits, chip on its own line when not. */
+.plan-exercise-item.is-reinforce {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
 .plan-evidence-list {
   list-style: none;
   margin: 0;
