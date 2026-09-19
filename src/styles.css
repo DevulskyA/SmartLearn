@@ -438,6 +438,44 @@ h1 {
   gap: 0.85rem;
 }
 
+.weak-practice-note {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.weak-practice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--color-surface);
+}
+
+.weak-practice-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.weak-practice-title {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.weak-practice-meta {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.weak-practice-row .small-button {
+  min-height: 2.75rem;
+}
+
 .review-table-head {
   display: none;
 }

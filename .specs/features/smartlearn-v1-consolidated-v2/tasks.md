@@ -647,9 +647,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** Known fixture events produce exact denominators/date windows and explainable ordering; no record yields invented zero performance/mastery; cached offline priorities reflect snapshot age.
 **Recovery / rollback:** Priorities/analytics are recalculable views; disable challenger scoring while keeping raw facts and baseline statistics.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Analytics/timezone/denominator tests and deterministic priority mutations.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Analytics/timezone/denominator tests and deterministic priority mutations.
 
 ### T46: Complete presentation internationalization
 **Difficulty / risk:** 3/5 / 3/5.
@@ -716,9 +716,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A fresh temporary restore can open units/questions and resolve their citations/assets; missing/corrupt source file is detected. Auth/session export handling is explicit and protected.
 **Recovery / rollback:** Original environment untouched; all destructive rehearsal paths are temporary and logged.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Full backup/restore rehearsal and missing-asset/data-corruption discriminators.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Full backup/restore rehearsal and missing-asset/data-corruption discriminators.
 
 ### T51: Prepare deployment configuration and release permissions
 **Difficulty / risk:** 4/5 / 5/5.

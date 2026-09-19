@@ -5,6 +5,19 @@ import { buildApp } from './app.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { assertTestDbIsDisposable } from './db-safety.js';
+import { validateProductionConfig } from './production-config.js';
+
+// T51: a production launch must have made every deployment decision explicitly
+// (absolute data paths, HTTPS origins, proxy trust, ...) — fail closed, before
+// any database is opened or created.
+if (config.isProduction) {
+  const problems = validateProductionConfig(process.env);
+  if (problems.length > 0) {
+    console.error('SmartLearn refuses to start: invalid production configuration.');
+    for (const p of problems) console.error(`  ${p.code}: ${p.detail}`);
+    process.exit(1);
+  }
+}
 
 try {
   assertTestDbIsDisposable(process.env.NODE_ENV, config.dbPath);
