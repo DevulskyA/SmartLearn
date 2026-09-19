@@ -9,7 +9,7 @@
 Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: GOV-2
+ATIVA AGORA: ANALYTICS
 ```
 
 ## Tarefas
@@ -32,8 +32,10 @@ ATIVA AGORA: GOV-2
 - [✓] **GOV-1 Reconciliar TLC × Conductor e registrar o track corretamente** — auditoria em "Evidência OPS-6"; reparo LOCAL:
       `conductor/workflow.md` (relação Conductor envolve TLC, projetor, uma ativa), `tracks.md` (ACTIVE TRACK + IN_PROGRESS),
       `index.md`, `CLAUDE.md`. Skill global NÃO alterada. Painel mestre (22/54) segue adiado.
-- [>] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — retomada em nova sessão reconstrói a mesma lista.
-- [ ] **ANALYTICS Retomar "Meu estudo está funcionando?"**
+- [✓] **GOV-2 Provar tasklist persistente + projeção visível ao usuário** — `git archive HEAD` (checkout limpo = nova sessão)
+      + `node scripts/tasklist.mjs` reproduz a MESMA lista do working tree (diff vazio); painel HTML `conductor/.view/tasklist.html`
+      aberto no app e regenerado a cada transição; `test/tasklist.test.js` guarda "exatamente uma ativa" no plan real.
+- [>] **ANALYTICS Retomar "Meu estudo está funcionando?"** — próximo marco, agora sobre a base viva `dev@smartlearn.local`.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
