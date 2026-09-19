@@ -2620,6 +2620,7 @@ h1 {
    label's font-size and follows its color — never a text glyph. */
 .review-expand::after,
 .review-row-toggle::after,
+.plan-expand-btn::after,
 .study-now-source > summary::after {
   content: "";
   flex: 0 0 auto;
@@ -3322,6 +3323,11 @@ h1 {
 }
 
 .plan-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
   background: none;
   border: none;
   color: var(--color-muted);
@@ -3332,8 +3338,28 @@ h1 {
   line-height: 1;
 }
 
+/* Disclosure chevron (shared mask above): points right when collapsed, down
+   when expanded, like the "▸/▾" glyphs it replaces. */
+.plan-expand-btn::after {
+  transform: rotate(-90deg);
+}
+
+.plan-expand-btn[aria-expanded="true"]::after {
+  transform: none;
+}
+
 .plan-expand-btn:hover {
   color: var(--color-text);
+}
+
+.plan-expand-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.4rem;
+}
+
+.plan-study-now {
+  margin-top: 0.75rem;
 }
 
 .plan-row-detail {

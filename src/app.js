@@ -1443,7 +1443,6 @@ export async function renderPlan() {
     expandBtn.type = "button";
     expandBtn.setAttribute("aria-expanded", "false");
     expandBtn.setAttribute("aria-label", "Expandir detalhes");
-    expandBtn.textContent = "▸";
 
     compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
 
@@ -1455,7 +1454,7 @@ export async function renderPlan() {
     expandBtn.addEventListener("click", async () => {
       const isExpanded = expandBtn.getAttribute("aria-expanded") === "true";
       expandBtn.setAttribute("aria-expanded", String(!isExpanded));
-      expandBtn.textContent = isExpanded ? "▸" : "▾";
+      expandBtn.setAttribute("aria-label", isExpanded ? "Expandir detalhes" : "Recolher detalhes");
       detail.hidden = isExpanded;
 
       if (!isExpanded && !detail.dataset.loaded) {
@@ -1564,6 +1563,19 @@ export async function renderPlan() {
             item.className = "plan-exercise-item";
             item.textContent = ex.questionText;
             exSection.append(item);
+          }
+          // First active-recall pass on demand. Offered only until the unit has
+          // its INITIAL_PRACTICE evidence: that is exactly what this flow
+          // records, so a second on-demand pass would be mislabeled (later
+          // retrieval belongs to the scheduled reviews, not to massed repeats).
+          if (!evidence.some((ev) => ev.context === "INITIAL_PRACTICE")) {
+            const startBtn = document.createElement("button");
+            startBtn.type = "button";
+            startBtn.className = "primary-button plan-study-now";
+            startBtn.dataset.action = "plan-study-now";
+            startBtn.textContent = "Estudar agora";
+            startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
+            exSection.append(startBtn);
           }
           detail.append(exSection);
         }
