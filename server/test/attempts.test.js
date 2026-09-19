@@ -443,3 +443,32 @@ test('reinforcementByUnit lists exercises whose LAST attempt anywhere was wrong,
     assert.deepEqual(attempts.reinforcementByUnit(db, b), {}, 'another user sees nothing');
   } finally { cleanup(); }
 });
+
+// ANALYTICS-2 (case G): the longitudinal trend reads ONLY learning_evidence. A correct answer
+// right after seeing the answer (a redo, no reviewTaskId) is recovery, not performance, so it
+// must never create an evidence row — and it must not touch the original INCORRECT attempt.
+test('a redo answered CORRECT right after the error writes no learning_evidence and leaves the original attempt INCORRECT', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'redo-no-evidence@example.com');
+    const unit = makeUnit(db, userId);
+    const ex = makeExercise(db, userId, unit.id, { question: 'Redo?' });
+    const review = firstReviewTask(db, userId, unit.id);
+    const evidenceCount = () => db.prepare('SELECT COUNT(*) AS n FROM learning_evidence WHERE user_id = ?').get(userId).n;
+
+    const original = attempts.start(db, userId, { exerciseId: ex.id, reviewTaskId: review });
+    attempts.submit(db, userId, original.id, { outcome: 'INCORRECT', assessmentMethod: 'SELF_REPORT' });
+    const before = evidenceCount();
+
+    const redo = attempts.start(db, userId, { exerciseId: ex.id });
+    attempts.submit(db, userId, redo.id, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+
+    assert.equal(evidenceCount(), before, 'a redo must not add any evidence row');
+    const outcomeOf = (id) => db.prepare('SELECT outcome FROM learning_events WHERE attempt_id = ? ORDER BY sequence DESC LIMIT 1').get(id).outcome;
+    assert.equal(outcomeOf(original.id), 'INCORRECT');
+    assert.equal(outcomeOf(redo.id), 'CORRECT');
+    const rd = db.prepare('SELECT evidence_id, review_task_id FROM exercise_attempts WHERE id = ?').get(redo.id);
+    assert.equal(rd.evidence_id, null);
+    assert.equal(rd.review_task_id, null);
+  } finally { cleanup(); }
+});

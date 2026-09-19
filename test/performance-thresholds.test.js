@@ -96,31 +96,33 @@ test("subjectTrend retorna STABLE quando delta pequeno", () => {
 });
 
 // --- unitTrend ---
+// unitTrend takes the unit's evidence rows (ANALYTICS-2): older half of the distinct days vs
+// newer half, pooled correct/questions, min 10 questions per half. Full contract (weighting,
+// order, outliers, same-day rows): test/longitudinal-trend.test.js.
+const evRow = (evidenceDate, questionsCount, correctCount) => ({ evidenceDate, questionsCount, correctCount });
 
-test("unitTrend retorna INSUFFICIENT quando menos de minN scores", () => {
-  const result = unitTrend([70, 80], 3);
-  assert.equal(result.direction, 'INSUFFICIENT');
+test("unitTrend retorna INSUFFICIENT sem histórico comparável (< 2 dias ou metade com < minQuestions)", () => {
+  assert.equal(unitTrend([]).direction, 'INSUFFICIENT');
+  assert.equal(unitTrend([evRow('2026-01-01', 30, 20)]).direction, 'INSUFFICIENT');
+  assert.equal(unitTrend([evRow('2026-01-01', 30, 20), evRow('2026-02-01', 5, 5)]).direction, 'INSUFFICIENT');
 });
 
-test("unitTrend retorna IMPROVING quando último > primeiro em > threshold", () => {
-  const result = unitTrend([50, 60, 80], 3);
-  assert.equal(result.direction, 'IMPROVING');
+test("unitTrend retorna IMPROVING quando a metade recente supera a antiga além do threshold", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 10, 5), evRow('2026-02-01', 10, 8)]).direction, 'IMPROVING');
 });
 
-test("unitTrend retorna DECLINING quando último < primeiro em > threshold", () => {
-  const result = unitTrend([80, 70, 50], 3);
-  assert.equal(result.direction, 'DECLINING');
+test("unitTrend retorna DECLINING quando a metade recente fica abaixo da antiga além do threshold", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 10, 8), evRow('2026-02-01', 10, 5)]).direction, 'DECLINING');
 });
 
-test("unitTrend retorna STABLE quando diferença pequena", () => {
-  const result = unitTrend([70, 72, 71], 3);
-  assert.equal(result.direction, 'STABLE');
+test("unitTrend retorna STABLE quando a diferença agregada é pequena", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 40, 28), evRow('2026-02-01', 40, 29)]).direction, 'STABLE');
 });
 
-test("unitTrend usa últimos N da sequência quando há mais que minN", () => {
-  // Primeiro muito baixo, mas últimos 3 crescendo
-  const result = unitTrend([10, 10, 10, 50, 80], 3);
-  assert.equal(result.direction, 'IMPROVING');
+test("unitTrend usa TODO o histórico (metade antiga vs metade recente), não só os últimos pontos", () => {
+  // início muito baixo e depois alto: a metade antiga (1ª e 2ª datas) puxa a média para baixo
+  const rows = [evRow('2026-01-01', 10, 1), evRow('2026-01-10', 10, 1), evRow('2026-02-01', 10, 5), evRow('2026-03-01', 10, 8)];
+  assert.equal(unitTrend(rows).direction, 'IMPROVING'); // 10% -> 65%
 });
 
 // --- performanceColor (SLICE 1 — discriminant fixture A..G) ---

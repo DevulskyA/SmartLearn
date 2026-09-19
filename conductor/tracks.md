@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 **`conductor/tracks/ops-dev-data-and-tasklist/plan.md`** — dados de dev duráveis + tasklist persistente
-**Status: IN_PROGRESS** · **STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN** · tarefa ativa: **ANALYTICS-2** (uma só) ·
+**Status: IN_PROGRESS** · **STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN** · tarefa ativa: **ANALYTICS-3** (uma só) ·
 iniciado 2026-09-19, prioridade humana. Artefato provisório do Conductor, mantido só para não perder trabalho: o mecanismo
 canônico de tasklist/checkpoint/recovery é o do `tlc-spec-driven-strict` (TLC-ECC modificado com princípios de Conductor
 incorporados) e a auditoria dele (GOV-1) está PENDENTE. Não expandir o Conductor nem criar governança nova antes disso.

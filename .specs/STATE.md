@@ -12,7 +12,7 @@
 ACTIVE_TRACK (2026-09-19): `conductor/tracks/ops-dev-data-and-tasklist/plan.md` — dev data durability + persistent tasklist.
 TASKLIST_GOVERNANCE: STATUS=PROVISIONAL, AUTHORITY=NOT_PROVEN — provisional conductor artifact; canonical mechanism pending
 audit of `tlc-spec-driven-strict` (GOV-1/GOV-2 open, TLC_AUDIT_PENDING=YES); do not expand Conductor or create new governance
-before the audit. Active task: ANALYTICS-2 (tendência longitudinal).
+before the audit. Active task: ANALYTICS-3 ("Meu estudo está funcionando?"); ANALYTICS-2 done (unitTrend now evidence-weighted).
 DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
 `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
 ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a

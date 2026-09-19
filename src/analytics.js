@@ -28,33 +28,48 @@ export function subtractDays(isoDate, days) {
   return d.toISOString().slice(0, 10);
 }
 
-// Subject trend: delta of two 30-day windows (recent vs previous), min 10 questions each
-export function subjectTrend(recentEvidence, previousEvidence, minQuestions = 10) {
+// TREND CONTRACT (operational rule, not a cognitive law). Only observable history counts
+// (learning_evidence rows: date + questions + correct; a retest right after feedback writes
+// none, so it cannot inflate a trend). A trend compares an OLDER period with a RECENT one,
+// each POOLED as total_correct / total_questions — never a mean of per-row percentages, so
+// a 1/1 row weighs 1 question and a 50/100 row weighs 100. When the comparison is not
+// honest (a period under `minQuestions`, or nothing to compare) the answer is INSUFFICIENT:
+// "I don't know", never 0%, never "stable".
+function comparePeriods(olderEvidence, recentEvidence, minQuestions, minDelta) {
+  const olderQ = sumField(olderEvidence, 'questionsCount');
   const recentQ = sumField(recentEvidence, 'questionsCount');
-  const prevQ = sumField(previousEvidence, 'questionsCount');
-  if (recentQ < minQuestions || prevQ < minQuestions) {
+  if (olderQ < minQuestions || recentQ < minQuestions) {
     return { direction: 'INSUFFICIENT', delta: null };
   }
-  const recentAcc = sumField(recentEvidence, 'correctCount') / recentQ;
-  const prevAcc = sumField(previousEvidence, 'correctCount') / prevQ;
-  const delta = recentAcc - prevAcc;
-  const direction = delta > TREND_DELTA_MIN ? 'IMPROVING'
-    : delta < -TREND_DELTA_MIN ? 'DECLINING'
+  const delta = sumField(recentEvidence, 'correctCount') / recentQ - sumField(olderEvidence, 'correctCount') / olderQ;
+  const direction = delta > minDelta ? 'IMPROVING'
+    : delta < -minDelta ? 'DECLINING'
     : 'STABLE';
   return { direction, delta };
 }
 
-// Unit trend: compare endpoints of last-N scores sequence (N >= 3)
-export function unitTrend(scoresSequence, minN = 3, threshold = 0.05) {
-  if (!scoresSequence || scoresSequence.length < minN) {
-    return { direction: 'INSUFFICIENT' };
-  }
-  const window = scoresSequence.slice(-minN);
-  const delta = window[window.length - 1] - window[0];
-  const direction = delta > threshold * 100 ? 'IMPROVING'
-    : delta < -threshold * 100 ? 'DECLINING'
-    : 'STABLE';
-  return { direction, delta };
+// Subject trend: last 30 days vs the 30 before, min 10 questions in each
+export function subjectTrend(recentEvidence, previousEvidence, minQuestions = 10) {
+  return comparePeriods(previousEvidence, recentEvidence, minQuestions, TREND_DELTA_MIN);
+}
+
+// Unit trend: a unit's evidence is sparse, so instead of calendar windows its own history is
+// split by DATE — the older half of the distinct evidence days vs the newer half (rows on the
+// same day are one moment and never straddle the split) — min 10 questions in each half.
+export function unitTrend(unitEvidence, minQuestions = 10, threshold = 0.05) {
+  const rows = (unitEvidence ?? [])
+    .filter((e) => e.evidenceDate != null && Number(e.questionsCount) > 0)
+    .slice()
+    .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || (a.id ?? 0) - (b.id ?? 0));
+  const dates = [...new Set(rows.map((e) => e.evidenceDate))];
+  if (dates.length < 2) return { direction: 'INSUFFICIENT', delta: null };
+  const firstRecentDate = dates[Math.floor(dates.length / 2)];
+  return comparePeriods(
+    rows.filter((e) => e.evidenceDate < firstRecentDate),
+    rows.filter((e) => e.evidenceDate >= firstRecentDate),
+    minQuestions,
+    threshold,
+  );
 }
 
 // Rows without a lastEvidence date are excluded by a period filter (there's
@@ -187,7 +202,7 @@ export const Analytics = {
       const scoresSequence = unitEvidence
         .filter((e) => e.questionsCount > 0)
         .map((e) => (e.correctCount / e.questionsCount) * 100);
-      const trend = unitTrend(scoresSequence);
+      const trend = unitTrend(unitEvidence);
       const lastEvidence = unitEvidence.length > 0 ? unitEvidence[unitEvidence.length - 1] : null;
       const subject = subjectsById.get(unit.subjectId);
 
