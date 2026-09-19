@@ -2,6 +2,20 @@ import { config } from './config.js';
 import { openDb } from './db.js';
 import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { assertTestDbIsDisposable } from './db-safety.js';
+
+try {
+  assertTestDbIsDisposable(process.env.NODE_ENV, config.dbPath);
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
+// A relative default silently creates an EMPTY database per working directory
+// (per git worktree, in dev): always say which file this process is using.
+const dbExisted = existsSync(config.dbPath);
+console.log(`SmartLearn database: ${resolve(config.dbPath)} (${dbExisted ? 'existing' : 'NEW, empty'})`);
 
 const db = openDb(config.dbPath);
 runMigrations(db);

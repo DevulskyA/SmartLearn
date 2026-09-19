@@ -8,6 +8,8 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { devDbPaths, snapshotDevDbIfNeeded } from './dev-data.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SERVER_DIR = path.join(ROOT, 'server');
@@ -47,8 +49,21 @@ function spawnChild(name, command, args, cwd, extraEnv = {}) {
   return child;
 }
 
+// Durable dev data: one stable directory OUTSIDE any worktree (override with
+// SMARTLEARN_DB_PATH / SMARTLEARN_SOURCES_DIR). Persist by default; a daily
+// snapshot means an accidental wipe/import/seed is always recoverable.
+const dev = devDbPaths();
+const dbPath = process.env.SMARTLEARN_DB_PATH || dev.dbPath;
+const sourcesDir = process.env.SMARTLEARN_SOURCES_DIR || dev.sourcesDir;
+mkdirSync(dev.dir, { recursive: true });
+const snap = snapshotDevDbIfNeeded(dbPath, dev.snapshotsDir);
+console.log(`SMARTLEARN_DEV_DB=${dbPath}`);
+if (snap) console.log(`SMARTLEARN_DEV_SNAPSHOT=${snap}`);
+
 spawnChild('server', process.execPath, ['src/main.js'], SERVER_DIR, {
   SMARTLEARN_ALLOWED_ORIGINS: DEV_ORIGINS,
+  SMARTLEARN_DB_PATH: dbPath,
+  SMARTLEARN_SOURCES_DIR: sourcesDir,
 });
 spawnChild('vite', process.execPath, [VITE_ENTRY], ROOT, {
   VITE_REMOTE_MODE: '1',

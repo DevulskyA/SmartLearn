@@ -17,10 +17,12 @@ Próximo marco após este track: "MEU ESTUDO ESTÁ FUNCIONANDO?" (analytics long
 - [✓] **OPS-0 Fechar a rodada anterior** — HEAD 5157aa3; e2e 106/107 (1 falha intermitente em
       `atomic-save` "response lost", ~22% no atual vs 0/5 na base — NÃO corrigida, ver OPS-9); server 385/385; unit 328/328.
 - [✓] **OPS-1 Auditoria de perda de dados (somente leitura)** — resultado abaixo em "Evidência OPS-1".
-- [>] **OPS-2 Impedir novas perdas** — (a) DB de dev `dev:remote` em caminho estável FORA do worktree;
-      (b) servidor recusa `NODE_ENV=test` com DB fora de `os.tmpdir()`; (c) snapshot diário do DB de dev ao iniciar.
-      Prova: teste que falha sem a proteção.
-- [ ] **OPS-3 Base representativa via API real** — "paciente vivo" sintético (disciplinas, aulas, resumos,
+- [✓] **OPS-2 Impedir novas perdas** — (a) `dev:remote` usa `~/SmartLearn-DevData/smartlearn-dev.db` (FORA de qualquer
+      worktree; `SMARTLEARN_DEV_DATA_DIR`/`SMARTLEARN_DB_PATH` sobrescrevem); (b) servidor com `NODE_ENV=test` recusa DB fora
+      de `os.tmpdir()` (exit 1, nada criado) — `server/src/db-safety.js`; (c) snapshot diário db+wal em `snapshots/<data>/`
+      (7 dias, nunca sobrescreve com DB vazio); o servidor sempre imprime qual DB usa e se é NOVO/vazio.
+      Prova: 6 testes novos; o guard, desligado, faz o teste de processo real falhar. server 388/388, unit 331/331.
+- [>] **OPS-3 Base representativa via API real** — "paciente vivo" sintético (disciplinas, aulas, resumos,
       exercícios, acertos/erros, retestes, evidência datada, revisões vencidas/abertas/futuras, tendências).
 - [ ] **OPS-4 Seed DEV opt-in** — `npm run seed:dev`; determinístico, idempotente, nunca no startup,
       recusa host não-loopback e banco já povoado.
