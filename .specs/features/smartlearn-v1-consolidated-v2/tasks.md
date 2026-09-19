@@ -716,9 +716,9 @@ Phase entry: listed task dependencies satisfied. Phase exit: acceptance coverage
 **Tests and discriminating evidence:** A fresh temporary restore can open units/questions and resolve their citations/assets; missing/corrupt source file is detected. Auth/session export handling is explicit and protected.
 **Recovery / rollback:** Original environment untouched; all destructive rehearsal paths are temporary and logged.
 **Done when:**
-- [ ] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
-- [ ] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
-- [ ] Gate passes: Full backup/restore rehearsal and missing-asset/data-corruption discriminators.
+- [x] The specified behavior and its negative paths are implemented or an existing implementation is proven equivalent.
+- [x] Required evidence above is recorded against the real candidate; unrelated work/data are preserved.
+- [x] Gate passes: Full backup/restore rehearsal and missing-asset/data-corruption discriminators.
 
 ### T51: Prepare deployment configuration and release permissions
 **Difficulty / risk:** 4/5 / 5/5.

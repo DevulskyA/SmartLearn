@@ -19,6 +19,7 @@ recuperação). O `plan.md` do track é só o LEDGER MACRO de marcos que aliment
 projeção). Mapa de símbolos: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada (extensão local).
 Não criar track novo sem objetivo aprovado; não expandir o Conductor; skill global NÃO alterada.
 T45 DONE (2026-09-19, 15dfa3e + bcb8859): explainable priorities (GET /v1/priorities) + Hoje "Vale reforçar"; gate unit 375, server 413, e2e 117/117. Next dependency-ready master-plan task: T46 (pt-BR i18n completion).
+T50 DONE (2026-09-19, AGENT_CLI): operational backup/restore rehearsal (server/src/operational-backup.js, server/scripts/backup.mjs --package|--verify|--rehearse, operational-backup-runbook.md); server 423/423. T46 (i18n) deliberately NOT started here: it would touch index.html/src/app.js broadly while AGENT_GUI edits src/app.js on claude/content-quality; a draft is parked outside the repo.
 NEXT: open a new track only for an approved objective (candidates in plan.md "Adiados"; the next product milestone is a human choice).
 DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
 `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
