@@ -75,9 +75,11 @@ tarefa não-provada com dependências satisfeitas
 
 ## Tasklist visível e relação Conductor × TLC (adendo 2026-09-19 — track ops-dev-data-and-tasklist)
 
-> **PROVISÓRIO — STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN.** Este adendo NÃO declara o Conductor como governança
-> independente: o histórico é TLC-ECC modificado com princípios de Conductor incorporados, importado como
-> `tlc-spec-driven-strict`. Auditoria da skill real pendente (GOV-1). Não expandir antes disso.
+> **GOV-2 (2026-09-19): RECONCILIADO SEM SEGUNDA GOVERNANÇA (opção A). Execução de tarefa = mecanismo canônico da skill
+> `tlc-spec-driven-strict` (tarefa causal por feature em `.specs/features/<f>/tasks.md`, checkpoint de fase, Memento em `.specs/STATE.md`,
+> recuperação). O `plan.md` do track é só o LEDGER MACRO de marcos que alimenta a tasklist visual (a skill não tem visão macro nem
+> projeção). Mapa de símbolos: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada (extensão local).
+> Não criar track novo sem objetivo aprovado; não expandir o Conductor; skill global NÃO alterada.
 >
 > DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
 > `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode

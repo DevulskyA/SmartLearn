@@ -29,10 +29,16 @@ export function parsePlan(markdown) {
   return { title, status, tasks };
 }
 
-export function checkInvariants({ tasks }) {
+export function checkInvariants({ tasks, status }) {
   const errors = [];
   const active = tasks.filter((t) => t.state === '>');
-  if (active.length !== 1) errors.push(`exactly ONE active task ([>]) is required, found ${active.length}`);
+  // An open track has exactly one active task; a CLOSED (DONE) track has none.
+  const expected = status === 'DONE' ? 0 : 1;
+  if (active.length !== expected) {
+    errors.push(status === 'DONE'
+      ? `a DONE track must have no active task ([>]), found ${active.length}`
+      : `exactly ONE active task ([>]) is required, found ${active.length}`);
+  }
   if (tasks.length === 0) errors.push('no tasks parsed from the plan');
   return errors;
 }

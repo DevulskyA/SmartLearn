@@ -10,9 +10,15 @@
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
 ACTIVE_TRACK (2026-09-19): `conductor/tracks/ops-dev-data-and-tasklist/plan.md` — dev data durability + persistent tasklist.
-TASKLIST_GOVERNANCE: STATUS=PROVISIONAL, AUTHORITY=NOT_PROVEN — provisional conductor artifact; canonical mechanism pending
-audit of `tlc-spec-driven-strict` (GOV-1/GOV-2 open, TLC_AUDIT_PENDING=YES); do not expand Conductor or create new governance
-before the audit. Active task: ANALYTICS-3 ("Meu estudo está funcionando?"); ANALYTICS-2 done (unitTrend now evidence-weighted).
+TRACK CLOSED (2026-09-19, Status DONE, no active task): ANALYTICS-1/2/3 + GOV-1/GOV-2 done. Estatísticas now answers "is my study
+working?" (studyVerdict; unitTrend evidence-weighted). Gate on 876fbda: unit 369, server 393, e2e 112/112.
+TLC_AUDIT_PENDING=NO — audited `tlc-spec-driven-strict` (evidence in plan.md "Evidência GOV-1").
+GOV-2 (2026-09-19): RECONCILIADO SEM SEGUNDA GOVERNANÇA (opção A). Execução de tarefa = mecanismo canônico da skill
+`tlc-spec-driven-strict` (tarefa causal por feature em `.specs/features/<f>/tasks.md`, checkpoint de fase, Memento em `.specs/STATE.md`,
+recuperação). O `plan.md` do track é só o LEDGER MACRO de marcos que alimenta a tasklist visual (a skill não tem visão macro nem
+projeção). Mapa de símbolos: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada (extensão local).
+Não criar track novo sem objetivo aprovado; não expandir o Conductor; skill global NÃO alterada.
+NEXT: open a new track only for an approved objective (candidates in plan.md "Adiados"; the next product milestone is a human choice).
 DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
 `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
 ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a

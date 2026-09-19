@@ -3,11 +3,10 @@
 ## ACTIVE TRACK (ler primeiro)
 
 **`conductor/tracks/ops-dev-data-and-tasklist/plan.md`** — dados de dev duráveis + tasklist persistente
-**Status: IN_PROGRESS** · **STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN** · tarefa ativa: **ANALYTICS-3** (uma só) ·
-iniciado 2026-09-19, prioridade humana. Artefato provisório do Conductor, mantido só para não perder trabalho: o mecanismo
-canônico de tasklist/checkpoint/recovery é o do `tlc-spec-driven-strict` (TLC-ECC modificado com princípios de Conductor
-incorporados) e a auditoria dele (GOV-1) está PENDENTE. Não expandir o Conductor nem criar governança nova antes disso.
-A tasklist mostrada ao usuário é uma projeção desse plan.md.
+**Status: DONE (fechado 2026-09-19)** · nenhuma tarefa ativa · Analytics longitudinal (ANALYTICS-1/2/3) e GOV-1/GOV-2 concluídos.
+Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
+(GOV-2 = opção A, sem segunda governança). NÃO abrir track novo sem objetivo aprovado; ao abrir, apontar esta seção para ele.
+A tasklist mostrada ao usuário é uma projeção do plan.md.
 
 > PAINEL MESTRE ABAIXO DEFASADO: snapshot de 2026-09-07 (T28). Os 143 commits seguintes
 > (T29–T44, PV1, LOCAL, CI, TEST SHIELD, produto de erro→reteste) estão registrados em

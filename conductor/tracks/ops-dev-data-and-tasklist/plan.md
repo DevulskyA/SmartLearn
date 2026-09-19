@@ -1,12 +1,11 @@
 # TRACK: Persistência de dados e governança de execução
 
-> **STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN** (correção humana 2026-09-19).
-> Este arquivo é um artefato PROVISÓRIO do Conductor, mantido só para não perder o trabalho e a tasklist. NÃO é a fonte
-> canônica definitiva. O workflow histórico do projeto era TLC-ECC MODIFICADO com princípios úteis de Conductor incorporados,
-> depois compactado/importado como `tlc-spec-driven-strict`. O mecanismo canônico de tasklist/checkpoint/smart recovery
-> está PENDENTE de auditoria da skill real (GOV-1). Não expandir o Conductor nem criar governança nova antes dessa auditoria.
-> Tudo já feito em `conductor/...` permanece (nada apagado); só está classificado como provisório.
-> Chat/UI = PROJEÇÕES deste arquivo enquanto a auditoria não decidir outra coisa. Hierarquia: Constitution = intenção ·
+> **STATUS=RECONCILED (GOV-2, 2026-09-19).** Este arquivo é o ledger MACRO de marcos que alimenta a tasklist visual. O mecanismo
+> canônico de execução de tarefa é o da skill `tlc-spec-driven-strict` (TLC-ECC modificado com princípios de Conductor incorporados;
+> auditoria real em "Evidência GOV-1"). Decisão GOV-2 (opção A): este plan.md permanece como visão macro; a skill cuida de tarefa causal,
+> checkpoint, Memento e recuperação. Mapa: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada
+> (extensão local). NÃO é segunda governança; skill global NÃO alterada; não abrir track novo sem objetivo aprovado.
+> Chat/UI = PROJEÇÕES deste arquivo. Hierarquia: Constitution = intenção ·
 > GOAL = resultado atual · Git/testes = estado · `.specs/STATE.md` = retomada mínima.
 > Reconciliar Git antes de confiar (workflow.md regra 12).
 >
@@ -16,12 +15,12 @@
 > nova fonte; a UI permanece. NÃO autoriza expandir o Conductor. Fonte interna definitiva = pendente da auditoria.
 
 ```
-Track:    ops-dev-data-and-tasklist            Status: IN_PROGRESS
-MARCO ATUAL: Analytics longitudinal (FECHADO) → reconciliação de governança
+Track:    ops-dev-data-and-tasklist            Status: DONE
+MARCO ATUAL: Analytics longitudinal — FECHADO (track concluído; sem tarefa ativa)
 Iniciado: 2026-09-19 (prioridade humana; interrompe o marco de analytics)
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: GOV-2
-TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict, auditoria GOV-1 pendente)
+ATIVA AGORA: nenhuma (track fechado)
+TASKLIST_AUTHORITY: RECONCILED — ledger macro; execução = tlc-spec-driven-strict (GOV-1/GOV-2)
 ```
 
 ## Tarefas
@@ -82,12 +81,15 @@ TASKLIST_AUTHORITY: PROVISIONAL (canônico = mecanismo do tlc-spec-driven-strict
       novo diz "piorando"; não alterei o selo (superfície protegida).
 - [✓] **GOV-1 Auditar a skill `tlc-spec-driven-strict` real e identificar o mecanismo original de tasklist/checkpoint/smart recovery** —
       auditoria feita lendo os arquivos reais (2026-09-19); resultado em "Evidência GOV-1". Skill global NÃO alterada.
-- [>] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — depende de GOV-1. Só então
-      decidir se este plan.md vira o mecanismo canônico, é migrado ou é aposentado. Até lá: `conductor/...` intacto e provisório.
+- [✓] **GOV-2 Reconciliar a tasklist atual com esse mecanismo sem criar uma segunda governança** — DECISÃO A: `plan.md` permanece como
+      ledger MACRO de marcos (a skill não tem visão macro, projeção visual nem "uma ativa"); tarefa causal/checkpoint/Memento/recuperação
+      seguem a skill (`.specs/features/<f>/tasks.md`, STATE). Sem segunda governança; skill global intacta; tasklist visual preservada
+      (o gerador só passou a aceitar track DONE com zero ativas). Menor complexidade que preserva persistência, uma ativa, retomada,
+      tasklist visual, checkpoints e continuidade entre sessões.
 - [-] Adiado: reconciliar o painel mestre `conductor/tracks.md` (22/54 de 07/09) com T29+ do STATE; campo de explicação
       por exercício; seed no backend local do desktop (porta em runtime).
 
-## Notas do marco ANALYTICS (histórico das passadas já feitas; a tarefa ativa é GOV-2)
+## Notas do marco ANALYTICS (histórico das passadas já feitas; track fechado; sem tarefa ativa)
 
 ```
 1ª passada (Hoje/Plano/Estatísticas, 1280 e 375): a base conta a história (tendências, "Sem evidência" neutro, bloco com erro

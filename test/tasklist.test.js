@@ -35,6 +35,13 @@ test('exactly ONE active task is enforced (zero or two both fail)', () => {
   assert.match(checkInvariants(parsePlan(SAMPLE.replace('- [ ] **OPS-3', '- [>] **OPS-3')))[0], /found 2/);
 });
 
+test('a DONE (closed) track has zero active tasks; an open track with zero still fails', () => {
+  const done = SAMPLE.replace('Status: IN_PROGRESS', 'Status: DONE').replace('[>]', '[✓]');
+  assert.deepEqual(checkInvariants(parsePlan(done)), []);
+  assert.match(checkInvariants(parsePlan(SAMPLE.replace('Status: IN_PROGRESS', 'Status: DONE')))[0], /DONE track must have no active/);
+  assert.match(checkInvariants(parsePlan(SAMPLE.replace('[>]', '[ ]')))[0], /exactly ONE/);
+});
+
 test('the compact projection marks the single active task; the HTML board escapes content and shows progress', () => {
   const compact = renderCompact(parsePlan(SAMPLE));
   assert.match(compact, /\[>\] OPS-2 — Segunda {3}← ATIVA/);

@@ -13,9 +13,11 @@ For everything else — active feature location, current checkpoint, dependency-
 
 ## Tasklist e track ativo (obrigatório em trabalho relevante)
 
-> **PROVISÓRIO (STATUS=PROVISIONAL · AUTHORITY=NOT_PROVEN, 2026-09-19):** o mecanismo abaixo (Conductor) é artefato provisório.
-> O canônico é o do `tlc-spec-driven-strict` (TLC-ECC modificado com princípios de Conductor incorporados); auditoria pendente
-> (GOV-1/GOV-2 no plan). Não expandir o Conductor nem criar governança nova antes dessa auditoria.
+> **GOV-2 (2026-09-19): RECONCILIADO SEM SEGUNDA GOVERNANÇA (opção A). Execução de tarefa = mecanismo canônico da skill
+> `tlc-spec-driven-strict` (tarefa causal por feature em `.specs/features/<f>/tasks.md`, checkpoint de fase, Memento em `.specs/STATE.md`,
+> recuperação). O `plan.md` do track é só o LEDGER MACRO de marcos que alimenta a tasklist visual (a skill não tem visão macro nem
+> projeção). Mapa de símbolos: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada (extensão local).
+> Não criar track novo sem objetivo aprovado; não expandir o Conductor; skill global NÃO alterada.
 >
 > **DECISÃO HUMANA (2026-09-19): a TASKLIST VISUAL (`scripts/tasklist.mjs`, `tasklist.html`, painel, estados, detalhes, tarefa ativa)
 > é canônica COMO CAPACIDADE e deve ser preservada; só a fonte interna pode mudar após a auditoria (adaptar o gerador, manter a UI).**
