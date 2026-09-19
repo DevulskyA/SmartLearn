@@ -5,6 +5,10 @@ Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_
 Together they are the canonical inherited quality-and-evolution contract for all SmartLearn tasks.
 Task-local requirements add to them; they do not silently weaken either.
 
+For product-intent and prioritization doubts (what the product is for, which feature first, whether an
+implementation drifts from its purpose), use `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` §0.1
+as the tie-breaker. It controls DIRECTION; code, tests and Git control STATE.
+
 For everything else — active feature location, current checkpoint, dependency-ready task — reconcile from Git plus `.specs/STATE.md`, not from this file.
 
 ## Recuperação de sessão/contexto perdido

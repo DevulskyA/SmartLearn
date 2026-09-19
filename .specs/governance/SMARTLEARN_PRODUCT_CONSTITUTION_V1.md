@@ -1,7 +1,7 @@
 # SmartLearn — Product Constitution & Canonical Functional Specification
 
 ```
-VERSION=1.0
+VERSION=1.1
 STATUS=CANONICAL_PRODUCT_INTENT
 SCOPE=SMARTLEARN
 AUDIENCE=ALL_DESIGN_ENGINEERING_AI_PRODUCT_AGENTS
@@ -10,6 +10,175 @@ AUDIENCE=ALL_DESIGN_ENGINEERING_AI_PRODUCT_AGENTS
 ## 0. Goal
 
 /goal Construir o SmartLearn como um sistema de execução e otimização da aprendizagem médica em que o aluno fornece o material e estuda, enquanto o sistema prepara o ambiente de aprendizagem, observa a execução, preserva evidência longitudinal e transforma resultados em revisão, diagnóstico e próxima ação, com mínima carga administrativa e qualidade top 0,1% como piso.
+
+## 0.1 Intenção canônica de alto nível (referência de desempate)
+
+```
+INTENT_REFERENCE_ADDED=2026-09-19 (human-provided, registered verbatim in substance; VERSION 1.1)
+ROLE=TIE_BREAKER_FOR_PRODUCT_INTENT_AND_PRIORITY
+CONTROLS=DIRECTION   (evidence controls STATE)
+```
+
+Esta seção define PARA QUE o SmartLearn existe e PARA ONDE deve evoluir. Use-a como critério de desempate sempre que houver dúvida sobre o que o sistema deve ser, qual feature priorizar, como desenhar uma experiência ou se uma implementação está desviando da finalidade original.
+
+Não é justificativa para reescrever o que já funciona. Antes de qualquer mudança, confronte intenção com código, testes, Git, validações e estado real: evidência observável continua superior a documentação para dizer o que ESTÁ implementado. As seções 1 em diante deste documento seguem sendo a especificação funcional; em caso de tensão entre esta seção e uma decisão explícita de escopo V1 abaixo (por exemplo, as exclusões da §21), NÃO resolva silenciosamente: registre o conflito e leve à decisão humana.
+
+### I.1 O que é o SmartLearn
+
+O SmartLearn nasceu como uma ferramenta pessoal de CONTROLE E OTIMIZAÇÃO DA APRENDIZAGEM.
+
+Sua origem não é um leitor de PDF, um banco de questões, um chatbot, um calendário ou uma plataforma genérica de educação.
+
+A ideia original era retirar do aluno todo o trabalho administrativo repetitivo necessário para estudar em alto nível:
+
+- registrar o que estudou;
+- saber quando revisar;
+- manter os resumos organizados;
+- recuperar conteúdos antigos;
+- registrar exercícios e resultados;
+- gerar estatísticas;
+- descobrir matérias, temas e conceitos fracos;
+- acompanhar se está melhorando ou piorando;
+- indicar onde concentrar esforço.
+
+Pense no aluno como um atleta de alta performance. Um atleta olímpico mede, corrige e otimiza continuamente cada componente relevante do treinamento. Pequenas deficiências acumuladas impedem desempenho máximo.
+
+O SmartLearn deve fazer isso com a aprendizagem:
+
+OBSERVAR → REGISTRAR → ORGANIZAR → MEDIR → IDENTIFICAR FRAQUEZAS → PROGRAMAR NOVO TREINO → VERIFICAR SE HOUVE MELHORA.
+
+Princípio central: O ALUNO ESTUDA. O SMARTLEARN CONTROLA, MEDE E OTIMIZA O PROCESSO.
+
+### I.2 O núcleo que precisa funcionar antes da sofisticação
+
+Antes de adicionar grande quantidade de recursos avançados, o SmartLearn precisa executar extraordinariamente bem o ciclo:
+
+material do aluno → unidade de aprendizagem → Resumo Mestre → questões → estudo → evidência real → revisão futura → nova recuperação → estatística longitudinal → identificação de fraqueza → próxima ação.
+
+Se não conseguimos dizer com evidência se o aluno está melhorando, piorando ou permanecendo fraco, ainda não temos base suficiente para construir uma grande camada adaptativa sobre o sistema.
+
+MEDIR ANTES DE SOFISTICAR. OBSERVAR ANTES DE INFERIR. CONTROLAR ANTES DE ADAPTAR.
+
+### I.3 O conteúdo do aluno é parte do núcleo
+
+O aluno precisa poder inserir o material que está estudando. Esse material não deve apenas ser armazenado: o SmartLearn deve transformá-lo em artefatos reutilizáveis de aprendizagem. O principal deles é o RESUMO MESTRE.
+
+Historicamente, o resumo seria produzido manualmente uma única vez e reutilizado nas revisões futuras. Com IA, esse processo pode melhorar radicalmente:
+
+material confiável → extração estruturada → Resumo Mestre → mnemônicos quando realmente úteis → explicações adequadas → auditoria factual → auditoria médica → auditoria didática → verificação contra a fonte → correção → conteúdo aprovado.
+
+Conteúdo produzido por IA não deve ser considerado bom apenas porque está fluente.
+
+RESUMO RUIM = FEATURE RUIM. Qualidade pedagógica e fidelidade médica são funcionalidades do produto.
+
+### I.4 Para que serve o resumo
+
+O Resumo Mestre é uma representação compacta e permanente do conhecimento que o aluno já estudou. Ele existe para permitir que, semanas ou meses depois, o estudante reconstrua rapidamente uma estrutura mental que demoraria muito mais para reaprender a partir do material original. Mnemônicos podem funcionar como ganchos de recuperação quando forem adequados ao conteúdo.
+
+Mas revisão não deve ser confundida com releitura passiva. Quando possível, a sequência preferida é:
+
+TENTAR RECUPERAR → CONSULTAR O RESUMO → IDENTIFICAR O QUE FALTOU → CORRIGIR → RESPONDER QUESTÕES → REGISTRAR NOVA EVIDÊNCIA.
+
+O resumo ajuda a reconstruir. A tentativa antes de olhar revela o que ainda pode ser recuperado sem ajuda.
+
+### I.5 Revisão não é apenas uma data
+
+O sistema deve retirar do aluno o trabalho de administrar revisões. O estudante não deveria precisar lembrar: "o que tenho de revisar hoje?", "há quanto tempo não vejo este conteúdo?", "qual foi meu desempenho anterior?", "onde estava errando?". Isso é responsabilidade do software.
+
+Entretanto, não afirmar que uma determinada data representa exatamente o momento em que o aluno "esqueceu". O calendário de revisão é um protocolo de treinamento. A memória real deve ser inferida com cautela a partir de EVIDÊNCIA OBSERVÁVEL de desempenho ao longo do tempo.
+
+REVIEW_TASK ≠ LEARNING_EVIDENCE. Realizar uma revisão não prova aprendizagem.
+
+### I.6 As questões são instrumento de aprendizagem e medição
+
+O sistema deve transformar conteúdo estudado em oportunidades de recuperação e aplicação. As questões devem permitir observar: acertos; erros; conceitos envolvidos; momento da tentativa; evolução posterior; desempenho em novas formulações.
+
+Uma questão respondida corretamente uma vez não significa domínio. Erro não deve desaparecer dentro de uma porcentagem.
+
+ERRO → IDENTIFICAR → EXPLICAR → CORRIGIR → RETESTAR. O erro é uma das matérias-primas mais valiosas do sistema.
+
+### I.7 Estatística precisa produzir decisão
+
+Não criar dashboards por estética. Toda estatística deve ajudar a responder perguntas reais: Estou melhorando? Estou piorando? Em qual disciplina? Em qual tema ou conceito? O problema persiste ao longo do tempo? Estou retendo depois das revisões? O que merece minha atenção agora? O que devo estudar ou revisar em seguida?
+
+O objetivo não é medir tudo; é medir o suficiente para otimizar treinamento.
+
+ATIVIDADE ≠ APRENDIZAGEM. QUANTIDADE DE QUESTÕES ≠ COMPETÊNCIA. REVISÃO REALIZADA ≠ RETENÇÃO.
+
+### I.8 Automação correta
+
+Automatize tudo que não precisa consumir capacidade cognitiva do aluno: agenda; cálculo de datas; registro; agregação; histórico; estatísticas; identificação de pendências; seleção de próxima ação; organização de conteúdo.
+
+Preserve para o aluno aquilo que produz aprendizagem: recordar; explicar; relacionar; discriminar; prever; decidir; corrigir; aplicar.
+
+AUTOMATIZE A LOGÍSTICA. NÃO AUTOMATIZE O RACIOCÍNIO NO LUGAR DO ALUNO.
+
+### I.9 Simplicidade e elegância são requisitos
+
+A planilha original era simples porque tornava visível o estado do estudo sem exigir grande esforço. A aplicação deve superar essa experiência, não torná-la mais burocrática. Se algo que antes exigia uma ação simples agora exige cinco telas, houve regressão de produto.
+
+A complexidade interna pode ser grande. A experiência do aluno deve parecer simples: ABRIR → ENTENDER O QUE PRECISA DE ATENÇÃO → AGIR.
+
+A interface não é decoração. Clareza, continuidade, hierarquia visual, baixa fricção, próxima ação evidente e qualidade estética fazem parte da funcionalidade. Não aceitar uma interface medíocre apenas porque backend e testes estão corretos.
+
+### I.10 Ciência da aprendizagem melhora o SmartLearn; não redefine sua identidade
+
+Princípios extraídos de educação médica, ciência cognitiva e livros estudados devem ser incorporados quando melhorarem esse ciclo. Exemplos: retrieval practice; espaçamento; feedback; integração; scaffolding; casos clínicos; variação de contexto; transferência; whole-task learning; princípios de Mayer; CBL; simulações.
+
+Mas não transformar cada método descoberto em uma nova feature obrigatória. Primeiro pergunte: "Qual problema real do SmartLearn este princípio resolve?" Se não houver resposta clara, não aumente complexidade.
+
+### I.11 Recursos avançados continuam desejáveis — mas em ordem
+
+Não interpretar o foco atual como proibição de evolução. O SmartLearn pode futuramente incluir experiências muito mais sofisticadas: casos progressivos; revelação gradual de informação; raciocínio clínico; integração entre disciplinas; transferência; redução progressiva de suporte; simulações; treinamento de decisão; personalização baseada em evidência; outras metodologias comprovadamente úteis.
+
+A lógica pode se aproximar de progressão de um jogo: mais orientação no início → prática → desempenho consistente → menos suporte → maior variabilidade → maior incerteza → tarefas mais próximas da realidade.
+
+Mas essas camadas devem crescer SOBRE um sistema capaz de medir resultados. Não adicionar complexidade adaptativa antes de possuir evidência suficiente para orientá-la.
+
+### I.12 Não inventar "domínio"
+
+O SmartLearn não deve afirmar que conhece exatamente o estado mental do aluno. Não declarar "domínio = 94%", "o aluno sabe 87%", "esqueceu este conceito" sem base adequada.
+
+Preferir afirmações observáveis: "acertou 18/20 nas últimas tentativas"; "desempenho melhorou em três sessões"; "houve queda recente neste conceito"; "não há evidência suficiente"; "desempenho permaneceu alto em diferentes questões e momentos".
+
+Quanto mais longitudinal, variada e independente for a evidência, maior pode ser a confiança. Mas EVIDÊNCIA DE DESEMPENHO ≠ DOMÍNIO ABSOLUTO.
+
+### I.13 Economicidade
+
+Buscar máximo benefício educacional por unidade de: tempo do aluno; esforço; dinheiro; complexidade de software; custo operacional.
+
+Não criar dependência estrutural de livros caros, bancos comerciais ou IA cara em runtime quando alternativas confiáveis e econômicas puderem produzir o mesmo resultado. IA pode ser extremamente valiosa na produção e auditoria de conteúdo. O runtime deve permanecer determinístico e econômico sempre que isso não prejudicar a aprendizagem.
+
+### I.14 Regra contra deriva de escopo
+
+Antes de implementar qualquer nova feature, responda:
+
+1. Que problema observável do aluno isto resolve?
+2. Como isso fortalece controle, aprendizagem ou otimização?
+3. Qual evidência mostrará que melhorou?
+4. É necessário agora?
+5. Existe maneira mais simples de obter o mesmo benefício?
+6. Estamos melhorando o produto ou apenas aumentando o projeto?
+
+Se não houver resposta forte, adie.
+
+### I.15 Função-objetivo
+
+O SmartLearn deve maximizar APRENDIZAGEM MÉDICA DURÁVEL E OBSERVÁVEL POR UNIDADE DE TEMPO, ESFORÇO E CUSTO, reduzindo ao mínimo o trabalho administrativo do estudante. Toda arquitetura, interface, IA, conteúdo, questão, estatística, revisão e futura simulação deve servir essa função.
+
+### I.16 Frase de controle
+
+Quando houver qualquer dúvida sobre o SmartLearn, volte a isto:
+
+"O aluno deve gastar energia aprendendo Medicina. O SmartLearn deve gastar sua inteligência organizando, medindo e otimizando esse aprendizado — e transformar o que observa na melhor próxima ação possível."
+
+### I.17 Como usar esta referência
+
+Use esta seção para resolver dúvidas de produto e prioridade. Não a use para alegar que algo já está implementado. Para estado real, siga: artefato/teste/Git → validação → decisão registrada → especificação → STATE → plano → chat.
+
+Se implementação e esta intenção divergirem: (1) não esconda o conflito; (2) identifique exatamente onde divergem; (3) preserve o que já funciona; (4) proponha a menor correção que realinhe o produto; (5) prove no fluxo real que a experiência ficou melhor.
+
+Não reescreva módulos estáveis apenas para obter pureza conceitual. A intenção canônica controla DIREÇÃO. A evidência controla ESTADO.
 
 ## 1. Instrução de persistência
 

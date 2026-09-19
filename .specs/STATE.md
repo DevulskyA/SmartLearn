@@ -20,6 +20,17 @@ ADR for the concrete preserved-details list (geometry, 375/768/1280
 responsive behavior, `.th-sort-stack` must not return, `subjectColor` !=
 `performanceColor`, context-switcher grammar, etc.) — not duplicated here.
 
+INTENT_REFERENCE (2026-09-19, docs-only): high-level product intent registered
+INSIDE the Constitution as §0.1 (VERSION 1.1; tie-breaker for direction, evidence
+still controls state; no second document, per its own "one canonical doc" rule).
+Reconciliation vs real state, divergences only: (1) retrieval-first (I.4/I.6):
+Hoje's review body renders Resumo Mestre BEFORE the exercises
+(createReviewRow body.append order) -- smallest realign: exercises first or
+summary folded until an attempt; (2) I.1/I.7 weakness is visible per discipline
+and per content, not per concept (not V1); (3) I.3 AI audit chain (factual/
+medical/didactic) not found in the draft pipeline, only human review: NOT_PROVEN.
+Checked OK: experimental mastery policy is unwired and disabled (I.12).
+
 PRODUCT_SLICE (2026-09-19, commits e9477b7..9bd5395; no schema change):
 Error->understanding->retest is live in "Estudar agora" AND in Hoje review
 blocks. Block end lists every wrong item (correct answer, hint, origin, and
