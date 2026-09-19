@@ -20,6 +20,15 @@ ADR for the concrete preserved-details list (geometry, 375/768/1280
 responsive behavior, `.th-sort-stack` must not return, `subjectColor` !=
 `performanceColor`, context-switcher grammar, etc.) — not duplicated here.
 
+PRODUCT_SLICE (2026-09-19, commits e9477b7, 68e6fef; client-only, no schema):
+"Estudar agora" now ends a block with all wrong items shown at once + "Refazer
+erros"; a retest = new server attempts only (original attempts and the
+INITIAL_PRACTICE evidence row untouched, NO aggregate evidence written for a
+redo, by design). Not built, needs product decision/data: "why my answer was
+wrong / why the correct is correct" (no student answer or explanation field
+exists — self-report model), and the same retest for the Hoje review block
+(leaving Hoje re-renders it and would drop unsaved inline judgments).
+
 ```
 CURRENT_HEAD=51b021f — CHECKPOINT before a deliberate user-requested
   context clear (2026-09-16, "prepare para limpeza de contexto" — NOT a
