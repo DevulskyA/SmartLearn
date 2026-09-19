@@ -24,7 +24,30 @@ function latestVersionRow(db, userId, exerciseId) {
   `).get(userId, exerciseId);
 }
 
-function toDto(exerciseRow, versionRow) {
+const CITATION_TEXT_CAP = 2000;
+
+/** The source page(s) this exact exercise VERSION was drafted from (the
+ * frozen snapshot taken at draft acceptance, never the mutable
+ * source_pages). Read-only and additive: this is the only "why is the
+ * gabarito right" evidence the product actually holds, so it is exposed
+ * as-is instead of inventing an explanation. Manual exercises, and
+ * versions created by an edit (no citation row of their own), get []. */
+function citationsForVersion(db, userId, versionId) {
+  return db.prepare(`
+    SELECT c.source_id, c.page_index, c.page_text_snapshot, s.original_name
+    FROM exercise_source_citations c
+    JOIN sources s ON s.user_id = c.user_id AND s.id = c.source_id
+    WHERE c.user_id = ? AND c.exercise_version_id = ?
+    ORDER BY c.page_index, c.id
+  `).all(userId, versionId).map(r => ({
+    sourceId: r.source_id,
+    sourceName: r.original_name,
+    pageIndex: r.page_index,
+    pageText: r.page_text_snapshot == null ? null : r.page_text_snapshot.slice(0, CITATION_TEXT_CAP),
+  }));
+}
+
+function toDto(exerciseRow, versionRow, citations = []) {
   return {
     id: exerciseRow.id,
     unitId: exerciseRow.unit_id,
@@ -32,7 +55,7 @@ function toDto(exerciseRow, versionRow) {
     archivedAt: exerciseRow.archived_at,
     createdAt: exerciseRow.created_at,
     updatedAt: exerciseRow.updated_at,
-    currentVersion: versionRow ? versionToDto(versionRow) : null,
+    currentVersion: versionRow ? { ...versionToDto(versionRow), citations } : null,
   };
 }
 
@@ -71,13 +94,17 @@ export function list(db, userId, unitId, { includeArchived = false } = {}) {
     SELECT * FROM exercises WHERE user_id = ? AND unit_id = ? ${includeArchived ? '' : 'AND archived_at IS NULL'}
     ORDER BY order_index, id
   `).all(userId, unitId);
-  return rows.map(row => toDto(row, latestVersionRow(db, userId, row.id)));
+  return rows.map(row => {
+    const version = latestVersionRow(db, userId, row.id);
+    return toDto(row, version, version ? citationsForVersion(db, userId, version.id) : []);
+  });
 }
 
 export function getById(db, userId, id) {
   const exercise = findOwnedExercise(db, userId, id);
   if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
-  return toDto(exercise, latestVersionRow(db, userId, id));
+  const version = latestVersionRow(db, userId, id);
+  return toDto(exercise, version, version ? citationsForVersion(db, userId, version.id) : []);
 }
 
 /** Creates an exercise and its first immutable version in one transaction. */

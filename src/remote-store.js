@@ -218,6 +218,7 @@ function mapExercise(row) {
     hintText: row.currentVersion?.hint ?? null,
     position: row.orderIndex,
     provenance: row.currentVersion?.provenance ?? null,
+    citations: row.currentVersion?.citations ?? [],
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

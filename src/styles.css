@@ -1111,6 +1111,44 @@ h1 {
   line-height: 1.4;
 }
 
+.study-now-source {
+  width: 100%;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.6rem;
+}
+
+.study-now-source > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  list-style: none;
+  cursor: pointer;
+  color: var(--color-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.study-now-source > summary::-webkit-details-marker {
+  display: none;
+}
+
+.study-now-source > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 0.3rem;
+}
+
+.study-now-source-text {
+  margin: 0.6rem 0 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .study-now-corrected-item {
   display: flex;
   align-items: baseline;
@@ -2571,7 +2609,8 @@ h1 {
    stroke 2, round caps), drawn as a currentColor mask so it scales with the
    label's font-size and follows its color — never a text glyph. */
 .review-expand::after,
-.review-row-toggle::after {
+.review-row-toggle::after,
+.study-now-source > summary::after {
   content: "";
   flex: 0 0 auto;
   width: 1.15em;
@@ -2583,7 +2622,8 @@ h1 {
 }
 
 .review-expand[aria-expanded="true"]::after,
-.review-row-toggle[aria-expanded="true"]::after {
+.review-row-toggle[aria-expanded="true"]::after,
+.study-now-source[open] > summary::after {
   transform: rotate(180deg);
 }
 

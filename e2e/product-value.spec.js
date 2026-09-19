@@ -186,6 +186,13 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await expect(page.locator('.study-now-error-answer')).not.toHaveText('');
   await expect(page.locator('.study-now-error-item')).toContainText('Você marcou: errei');
   await expect(page.locator('.study-now-error-item')).toContainText('Origem:');
+  // Explanation grounded in the material: the exact source page this
+  // question was drafted from, expandable, never invented.
+  const source = page.locator('.study-now-error-item details.study-now-source');
+  await expect(source).toHaveCount(1);
+  await expect(source.locator('summary')).toContainText('página 2');
+  await source.locator('summary').click();
+  await expect(source.locator('.study-now-source-text')).toContainText(/filtra/i);
 
   // Redo round 1: still wrong -> the error persists and stays actionable.
   await retestBtn.click();

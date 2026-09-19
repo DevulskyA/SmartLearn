@@ -236,3 +236,72 @@ test('HTTP: full owned CRUD/order lifecycle over real HTTP with a real session',
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+// Explanation evidence: the only "why is the gabarito right" data the product
+// holds is the frozen source-page snapshot behind a drafted exercise. It must
+// be read per exact VERSION and per owner -- never invented, never leaked.
+function addSource(db, userId, name, checksum) {
+  return db.prepare(`
+    INSERT INTO sources (user_id, filename, original_name, content_type, byte_size, checksum, status, created_at)
+    VALUES (?, ?, ?, 'application/pdf', 10, ?, 'EXTRACTED', ?)
+  `).run(userId, `${checksum}.pdf`, name, checksum, new Date().toISOString()).lastInsertRowid;
+}
+
+function addCitation(db, userId, versionId, sourceId, pageIndex, text) {
+  db.prepare(`
+    INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at, page_text_snapshot, parser_version_snapshot)
+    VALUES (?, ?, ?, ?, ?, ?, 'test-1')
+  `).run(userId, versionId, sourceId, pageIndex, new Date().toISOString(), text);
+}
+
+test('list exposes the frozen source-page citation of the CURRENT version, ordered by page; manual exercises get []', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'cite@example.com');
+    const unit = makeUnit(db, userId);
+    const drafted = exercises.create(db, userId, { unitId: unit.id, question: 'Q1?', answer: 'A1', provenance: 'AI_GENERATED' });
+    const manual = exercises.create(db, userId, { unitId: unit.id, question: 'Q2?', answer: 'A2', provenance: 'MANUAL' });
+    const src = addSource(db, userId, 'nefrologia.pdf', 'c1');
+    addCitation(db, userId, drafted.currentVersion.id, src, 3, 'Texto da página três.');
+    addCitation(db, userId, drafted.currentVersion.id, src, 2, 'Texto da página dois.');
+
+    const listed = exercises.list(db, userId, unit.id);
+    const d = listed.find(e => e.id === drafted.id).currentVersion.citations;
+    assert.deepEqual(d.map(c => [c.pageIndex, c.pageText, c.sourceName]), [
+      [2, 'Texto da página dois.', 'nefrologia.pdf'],
+      [3, 'Texto da página três.', 'nefrologia.pdf'],
+    ]);
+    assert.deepEqual(listed.find(e => e.id === manual.id).currentVersion.citations, []);
+    assert.equal(exercises.getById(db, userId, drafted.id).currentVersion.citations.length, 2);
+  } finally { cleanup(); }
+});
+
+test('an edit creates a new version with NO inherited citation: the old page never explains an answer it was not drafted for', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'cite-edit@example.com');
+    const unit = makeUnit(db, userId);
+    const ex = exercises.create(db, userId, { unitId: unit.id, question: 'Q?', answer: 'A', provenance: 'AI_GENERATED' });
+    addCitation(db, userId, ex.currentVersion.id, addSource(db, userId, 's.pdf', 'c2'), 1, 'Página original.');
+    exercises.edit(db, userId, ex.id, { answer: 'A corrigida' });
+    const after = exercises.list(db, userId, unit.id)[0];
+    assert.equal(after.currentVersion.answer, 'A corrigida');
+    assert.deepEqual(after.currentVersion.citations, []);
+  } finally { cleanup(); }
+});
+
+test('citation text is capped and one user never sees the source text of another user', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const a = makeUser(db, 'cite-a@example.com');
+    const b = makeUser(db, 'cite-b@example.com');
+    const unitA = makeUnit(db, a);
+    const unitB = makeUnit(db, b);
+    const exA = exercises.create(db, a, { unitId: unitA.id, question: 'QA?', answer: 'AA', provenance: 'AI_GENERATED' });
+    exercises.create(db, b, { unitId: unitB.id, question: 'QB?', answer: 'AB', provenance: 'AI_GENERATED' });
+    addCitation(db, a, exA.currentVersion.id, addSource(db, a, 'a.pdf', 'ca'), 1, 'x'.repeat(5000));
+    const own = exercises.list(db, a, unitA.id)[0].currentVersion.citations[0];
+    assert.equal(own.pageText.length, 2000);
+    assert.deepEqual(exercises.list(db, b, unitB.id)[0].currentVersion.citations, []);
+  } finally { cleanup(); }
+});

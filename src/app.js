@@ -3212,6 +3212,18 @@ function createStudyErrorItem(exercise) {
   if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", `Dica: ${exercise.hintText}`));
   const origin = STUDY_PROVENANCE_LABEL[exercise.provenance];
   if (origin) li.append(createTextElement("p", "study-now-error-meta", origin));
+  // The only explanation the product really holds: the exact source page the
+  // question was drafted from (frozen at acceptance). Shown as evidence, not
+  // paraphrased -- and absent (nothing invented) for manual exercises.
+  for (const citation of exercise.citations ?? []) {
+    if (!citation.pageText) continue;
+    const details = document.createElement("details");
+    details.className = "study-now-source";
+    const summary = document.createElement("summary");
+    summary.textContent = `Trecho do material · ${citation.sourceName}, página ${citation.pageIndex}`;
+    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
+    li.append(details);
+  }
   return li;
 }
 
