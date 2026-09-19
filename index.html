@@ -665,16 +665,25 @@
             <p class="panel-empty" id="study-now-no-exercises" hidden>Esta aula ainda não tem exercícios.</p>
           </section>
 
-          <section class="settings-card" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
+          <section class="settings-card study-result" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
             <div class="section-heading compact-heading">
-              <h2 id="study-now-result-title">Resultado</h2>
+              <h2 id="study-now-result-title" tabindex="-1">Resultado</h2>
             </div>
-            <p id="study-now-result-text"></p>
-            <p id="study-now-next-review-text"></p>
-            <div class="settings-actions">
-              <button class="primary-button" id="study-now-review-errors-btn" type="button" hidden>Revisar meus erros</button>
+            <p id="study-now-result-text" class="study-result-score"></p>
+            <p id="study-now-result-note" class="study-result-note" hidden></p>
+            <p id="study-now-next-review-text" class="study-result-next"></p>
+            <div class="settings-actions study-result-actions">
+              <button class="primary-button" id="study-now-retest-btn" type="button" hidden>Refazer erros</button>
+              <button class="secondary-button" id="study-now-done-btn" type="button">Voltar para Hoje</button>
             </div>
-            <ul id="study-now-errors-list" class="study-now-errors-list" hidden></ul>
+            <section class="study-result-section" id="study-now-errors-section" aria-labelledby="study-now-errors-title" hidden>
+              <h3 id="study-now-errors-title"></h3>
+              <ul id="study-now-errors-list" class="study-now-errors-list"></ul>
+            </section>
+            <section class="study-result-section" id="study-now-corrected-section" aria-labelledby="study-now-corrected-title" hidden>
+              <h3 id="study-now-corrected-title"></h3>
+              <ul id="study-now-corrected-list" class="study-now-corrected-list"></ul>
+            </section>
           </section>
         </section>
 

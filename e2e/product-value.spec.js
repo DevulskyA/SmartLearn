@@ -174,19 +174,63 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#study-now-result-text')).toHaveText('1/2 corretas — 50,0%');
 
-  // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): the session never ends on a
-  // bare score alone when there was at least one wrong answer.
-  const reviewErrorsBtn = page.locator('#study-now-review-errors-btn');
-  await expect(reviewErrorsBtn).toBeVisible();
-  await expect(reviewErrorsBtn).toContainText('Revisar meus erros (1)');
-  await expect(page.locator('#study-now-errors-list')).toBeHidden();
-  await reviewErrorsBtn.click();
+  // ERRO -> COMPREENSAO -> RETESTE: the block never ends on a bare score.
+  // Every wrong item is shown immediately (no toggle to hunt for), with the
+  // correct answer and its origin, and "Refazer erros" is the obvious action.
+  const retestBtn = page.locator('#study-now-retest-btn');
+  await expect(retestBtn).toBeVisible();
+  await expect(retestBtn).toHaveText('Refazer erros (1)');
   await expect(page.locator('#study-now-errors-list')).toBeVisible();
   await expect(page.locator('.study-now-error-item')).toHaveCount(1);
   await expect(page.locator('.study-now-error-question')).toContainText('página 2');
   await expect(page.locator('.study-now-error-answer')).not.toHaveText('');
+  await expect(page.locator('.study-now-error-item')).toContainText('Você marcou: errei');
+  await expect(page.locator('.study-now-error-item')).toContainText('Origem:');
 
-  // 14. Exactly one INITIAL_PRACTICE evidence row, correct counts.
+  // Redo round 1: still wrong -> the error persists and stays actionable.
+  await retestBtn.click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+  // The summary holds the answers: it must not sit above a retrieval question.
+  await expect(page.locator('#study-now-summary-card')).toBeHidden();
+  await page.locator('#study-now-reveal-btn').click();
+  const retestAttempt1 = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
+  expect(retestAttempt1).toBeTruthy();
+  expect([firstAttemptId, secondAttemptId]).not.toContain(retestAttempt1);
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-result-title')).toHaveText('Resultado do reteste');
+  await expect(page.locator('#study-now-result-text')).toHaveText('0/1 erros corrigidos');
+  await expect(page.locator('#study-now-summary-card')).toBeVisible();
+  await expect(page.locator('#study-now-errors-title')).toHaveText('Ainda para fixar (1)');
+  await expect(page.locator('#study-now-corrected-section')).toBeHidden();
+  await expect(retestBtn).toHaveText('Refazer os que ainda errei (1)');
+
+  // Redo round 2: corrected.
+  await retestBtn.click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+  await page.locator('#study-now-reveal-btn').click();
+  const retestAttempt2 = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
+  expect([firstAttemptId, secondAttemptId, retestAttempt1]).not.toContain(retestAttempt2);
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
+  await expect(page.locator('#study-now-corrected-section')).toBeVisible();
+  await expect(page.locator('.study-now-corrected-item')).toHaveCount(1);
+  await expect(page.locator('#study-now-errors-section')).toBeHidden();
+  await expect(retestBtn).toBeHidden();
+  await expect(page.locator('#study-now-done-btn')).toBeVisible();
+
+  // The original attempts are untouched and every redo is its own real,
+  // closed server attempt -- history is added to, never rewritten.
+  for (const id of [firstAttemptId, secondAttemptId, retestAttempt1, retestAttempt2]) {
+    const attempt = await page.evaluate(async ({ base, id: attemptId }) => {
+      const res = await fetch(`${base}/v1/attempts/${attemptId}`, { credentials: 'include' });
+      return res.json();
+    }, { base: API_BASE, id });
+    expect(attempt.attempt.status).toBe('SUBMITTED');
+  }
+
+  // 14. Exactly one INITIAL_PRACTICE evidence row, correct counts -- the
+  // two redo rounds above must NOT have inflated the aggregate (recovery
+  // right after seeing the answer is not performance).
   const unitsAfter = await page.evaluate(async (base) => {
     const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });
     return res.json();

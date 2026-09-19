@@ -311,8 +311,18 @@ const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
 const studyNowResultCard = document.querySelector("#study-now-result-card");
 const studyNowResultText = document.querySelector("#study-now-result-text");
 const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
-const studyNowReviewErrorsBtn = document.querySelector("#study-now-review-errors-btn");
+const studyNowResultTitle = document.querySelector("#study-now-result-title");
+const studyNowResultNote = document.querySelector("#study-now-result-note");
+const studyNowErrorsSection = document.querySelector("#study-now-errors-section");
+const studyNowErrorsTitle = document.querySelector("#study-now-errors-title");
 const studyNowErrorsList = document.querySelector("#study-now-errors-list");
+const studyNowCorrectedSection = document.querySelector("#study-now-corrected-section");
+const studyNowCorrectedTitle = document.querySelector("#study-now-corrected-title");
+const studyNowCorrectedList = document.querySelector("#study-now-corrected-list");
+const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
+const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
+const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
+const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
 let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
@@ -2989,6 +2999,39 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
 // INITIAL_PRACTICE, not a scheduled review), and no review_task is ever
 // created or completed by this flow. One question at a time, per spec.
 let studyNowState = null;
+let studyNowLastBlock = null;
+
+// "initial" = the block the student just practiced (writes the aggregate
+// INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
+// questions that block got wrong: each redo is a NEW server attempt (the
+// original attempts stay untouched), but deliberately writes NO aggregate
+// learning_evidence row -- a correct answer given right after reading the
+// gabarito shows recovery, not performance, and must not inflate the
+// unit's accuracy or volume in Estatisticas.
+function newStudyNowState(mode, unitId, exercises) {
+  return { mode, unitId, exercises, index: 0, attemptId: null, attemptIds: [], correctCount: 0, answeredCount: 0, wrongExercises: [], correctedExercises: [] };
+}
+
+function resetStudyNowResult() {
+  studyNowResultCard.hidden = true;
+  studyNowResultTitle.textContent = "Resultado";
+  studyNowResultText.textContent = "";
+  studyNowResultNote.hidden = true;
+  studyNowResultNote.textContent = "";
+  studyNowNextReviewText.textContent = "";
+  studyNowErrorsSection.hidden = true;
+  studyNowErrorsList.replaceChildren();
+  studyNowCorrectedSection.hidden = true;
+  studyNowCorrectedList.replaceChildren();
+  studyNowRetestBtn.hidden = true;
+  studyNowPracticeCard.hidden = false;
+}
+
+const STUDY_PROVENANCE_LABEL = {
+  MANUAL: "Origem: escrita por você",
+  SOURCE: "Origem: material enviado",
+  AI_GENERATED: "Origem: gerada por IA a partir do material",
+};
 
 async function startStudyNow(unit, subjectName) {
   if (!unit) return;
@@ -3001,13 +3044,8 @@ async function startStudyNow(unit, subjectName) {
     studyNowSummaryCard.hidden = true;
     studyNowSummaryBody.textContent = "";
   }
-  studyNowResultCard.hidden = true;
-  studyNowResultText.textContent = "";
-  studyNowNextReviewText.textContent = "";
-  studyNowReviewErrorsBtn.hidden = true;
-  studyNowErrorsList.hidden = true;
-  studyNowErrorsList.replaceChildren();
-  studyNowState = { unitId: unit.id, exercises: [], index: 0, attemptId: null, attemptIds: [], correctCount: 0, answeredCount: 0, wrongExercises: [] };
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("initial", unit.id, []);
   showScreen("study-now", { focus: true });
 
   try {
@@ -3055,7 +3093,11 @@ function renderStudyNowQuestion() {
   studyNowJudgment.hidden = true;
   studyNowRevealBtn.hidden = false;
   studyNowRevealBtn.textContent = "Ver resposta";
-  studyNowProgress.textContent = `Questão ${state.index + 1} de ${state.exercises.length}`;
+  studyNowProgress.textContent = `${state.mode === "retest" ? "Erro" : "Questão"} ${state.index + 1} de ${state.exercises.length}`;
+  studyNowPracticeTitle.textContent = state.mode === "retest" ? "Refazendo seus erros" : "Praticar";
+  // The Resumo Mestre contains the very answers being retrieved: showing it
+  // above a redo question would turn retrieval practice into reading.
+  if (state.mode === "retest") studyNowSummaryCard.hidden = true;
   state.attemptId = null;
   delete studyNowQuestionArea.dataset.attemptId;
 }
@@ -3063,11 +3105,12 @@ function renderStudyNowQuestion() {
 async function finishStudyNowSession() {
   const state = studyNowState;
   if (!state) return;
+  const isRetest = state.mode === "retest";
   studyNowQuestionArea.hidden = true;
   studyNowProgress.textContent = "";
 
   const { unitId, answeredCount, correctCount, attemptIds } = state;
-  if (answeredCount > 0) {
+  if (answeredCount > 0 && !isRetest) {
     try {
       await DB.learningEvidence.create({
         unitId,
@@ -3082,8 +3125,18 @@ async function finishStudyNowSession() {
     }
   }
 
-  const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
-  studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+  if (isRetest) {
+    studyNowResultTitle.textContent = "Resultado do reteste";
+    studyNowResultText.textContent = `${correctCount}/${answeredCount} erros corrigidos`;
+    studyNowResultNote.hidden = false;
+    studyNowResultNote.textContent = state.wrongExercises.length === 0
+      ? "Você corrigiu todos os erros deste bloco. Acertar logo depois de ver a resposta mostra que você recuperou o conteúdo; a próxima revisão confirma se ficou."
+      : "Acertar logo depois de ver a resposta mostra recuperação, não domínio. O que ainda errou fica abaixo para você fixar.";
+  } else {
+    const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+    studyNowResultTitle.textContent = "Resultado";
+    studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+  }
 
   try {
     const tasks = await DB.reviewTasks.getByUnit(unitId);
@@ -3094,38 +3147,83 @@ async function finishStudyNowSession() {
     studyNowNextReviewText.textContent = "";
   }
 
-  // Slice 2: the session must not end on a bare score alone — the wrong
-  // answers are the most valuable part of it. Reuses exactly the
-  // question/answer this same session already showed; no new quiz
-  // mechanism, no new analytics, no schema change.
+  // The block never ends on a bare score: every wrong item is shown with
+  // its gabarito (feedback is per BLOCK, never per question mid-session),
+  // and the one obvious next action is redoing exactly those items. The
+  // product is self-report (no typed answer exists), so what is shown is
+  // "you marked wrong" + the correct answer -- never an invented reason.
+  studyNowErrorsList.replaceChildren();
   if (state.wrongExercises.length > 0) {
-    studyNowReviewErrorsBtn.hidden = false;
-    studyNowReviewErrorsBtn.textContent = `Revisar meus erros (${state.wrongExercises.length})`;
-    studyNowErrorsList.replaceChildren();
-    for (const wrong of state.wrongExercises) {
-      const li = document.createElement("li");
-      li.className = "study-now-error-item";
-      li.append(
-        createTextElement("p", "study-now-error-question", wrong.questionText),
-        createTextElement("p", "study-now-error-answer", wrong.answerText),
-      );
-      studyNowErrorsList.append(li);
-    }
+    studyNowErrorsTitle.textContent = isRetest
+      ? `Ainda para fixar (${state.wrongExercises.length})`
+      : `Questões para revisar (${state.wrongExercises.length})`;
+    for (const wrong of state.wrongExercises) studyNowErrorsList.append(createStudyErrorItem(wrong));
+    studyNowErrorsSection.hidden = false;
+    studyNowRetestBtn.hidden = false;
+    studyNowRetestBtn.textContent = isRetest
+      ? `Refazer os que ainda errei (${state.wrongExercises.length})`
+      : `Refazer erros (${state.wrongExercises.length})`;
   } else {
-    studyNowReviewErrorsBtn.hidden = true;
-    studyNowErrorsList.hidden = true;
+    studyNowErrorsSection.hidden = true;
+    studyNowRetestBtn.hidden = true;
   }
 
+  studyNowCorrectedList.replaceChildren();
+  if (isRetest && state.correctedExercises.length > 0) {
+    studyNowCorrectedTitle.textContent = `Corrigidos (${state.correctedExercises.length})`;
+    for (const fixed of state.correctedExercises) {
+      const li = document.createElement("li");
+      li.className = "study-now-corrected-item";
+      li.append(
+        createTextElement("span", "study-now-chip is-corrected", "Corrigido"),
+        createTextElement("span", "study-now-corrected-question", fixed.questionText),
+      );
+      studyNowCorrectedList.append(li);
+    }
+    studyNowCorrectedSection.hidden = false;
+  } else {
+    studyNowCorrectedSection.hidden = true;
+  }
+
+  studyNowLastBlock = { unitId, wrong: state.wrongExercises.slice() };
+  studyNowSummaryCard.hidden = studyNowSummaryBody.textContent === "";
+  studyNowPracticeCard.hidden = true;
   studyNowResultCard.hidden = false;
+  studyNowResultTitle.focus();
   studyNowState = null;
   renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
   renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
 }
 
-studyNowReviewErrorsBtn?.addEventListener("click", () => {
-  studyNowErrorsList.hidden = !studyNowErrorsList.hidden;
-  studyNowReviewErrorsBtn.setAttribute("aria-expanded", String(!studyNowErrorsList.hidden));
+function createStudyErrorItem(exercise) {
+  const li = document.createElement("li");
+  li.className = "study-now-error-item";
+  li.append(
+    createTextElement("p", "study-now-error-question", exercise.questionText),
+    createTextElement("span", "study-now-chip", "Você marcou: errei"),
+  );
+  const answer = document.createElement("div");
+  answer.className = "study-now-error-answer-block";
+  answer.append(
+    createTextElement("p", "study-now-error-label", "Resposta correta"),
+    createTextElement("p", "study-now-error-answer", exercise.answerText),
+  );
+  li.append(answer);
+  if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", `Dica: ${exercise.hintText}`));
+  const origin = STUDY_PROVENANCE_LABEL[exercise.provenance];
+  if (origin) li.append(createTextElement("p", "study-now-error-meta", origin));
+  return li;
+}
+
+studyNowRetestBtn?.addEventListener("click", () => {
+  const block = studyNowLastBlock;
+  if (!block || block.wrong.length === 0) return;
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("retest", block.unitId, block.wrong.slice());
+  renderStudyNowQuestion();
 });
+
+studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
 
 studyNowRevealBtn?.addEventListener("click", async () => {
   const state = studyNowState;
@@ -3163,13 +3261,13 @@ async function judgeStudyNow(isCorrect) {
   state.answeredCount += 1;
   if (isCorrect) {
     state.correctCount += 1;
+    state.correctedExercises.push(state.exercises[state.index]);
   } else {
     // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): keep the exact question/answer
     // this session already has in memory — no new fetch, no new quiz
     // mechanism, just remembering what was already shown so the result
     // screen can offer "Revisar meus erros" instead of ending on a bare score.
-    const exercise = state.exercises[state.index];
-    state.wrongExercises.push({ questionText: exercise.questionText, answerText: exercise.answerText });
+    state.wrongExercises.push(state.exercises[state.index]);
   }
 
   if (REMOTE_MODE && DB.attempts && state.attemptId) {
