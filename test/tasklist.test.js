@@ -58,3 +58,10 @@ test('the REAL active track plan.md parses and keeps exactly one active task', (
   assert.ok(plan.tasks.length >= 6, 'real plan has its tasks');
   assert.deepEqual(checkInvariants(plan), []);
 });
+
+test('a task line whose id the parser rejects is reported instead of vanishing from the board', () => {
+  const plan = parsePlan('# TRACK: T\n\nStatus: IN_PROGRESS\n\n- [>] **A11Y-1 Sem padrão** — x\n- [ ] **OK-1 Certa** — x\n');
+  assert.deepEqual(plan.tasks.map((t) => t.id), ['OK-1']);
+  assert.deepEqual(plan.skipped, ['A11Y-1']);
+  assert.match(checkInvariants(plan).join(' '), /A11Y-1/);
+});

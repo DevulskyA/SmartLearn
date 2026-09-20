@@ -46,19 +46,25 @@ export function parsePlan(markdown) {
   const title = (text.match(/^# TRACK:\s*(.+)$/m) ?? [])[1]?.trim() ?? '(track sem título)';
   const status = (text.match(/Status:\s*([A-Z_]+)/) ?? [])[1] ?? 'UNKNOWN';
   const tasks = [];
+  const skipped = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(/^- \[(✓|>| |!|-)\] \*\*([A-Z]+(?:-\d+)?)\s+(.+?)\*\*\s*(?:—\s*(.*))?$/);
-    if (!m) continue;
+    if (!m) {
+      // a task-shaped line the id pattern rejected (e.g. "A11Y-1", "LARGE-PDF-1") would silently vanish from the board
+      const bad = lines[i].match(/^- \[(?:✓|>| |!|-)\] \*\*(\S+)/);
+      if (bad) skipped.push(bad[1]);
+      continue;
+    }
     const detail = [m[4] ?? ''];
     while (i + 1 < lines.length && /^\s{2,}\S/.test(lines[i + 1])) detail.push(lines[++i].trim());
     const { fields, free } = parseFields(detail);
     tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim(), fields, free: free.join(' ').trim(), owner: fields.OWNER ?? null });
   }
-  return { title, status, tasks };
+  return { title, status, tasks, skipped };
 }
 
-export function checkInvariants({ tasks, status }) {
+export function checkInvariants({ tasks, status, skipped = [] }) {
   const errors = [];
   const active = tasks.filter((t) => t.state === '>');
   // An open track has exactly one active task; a CLOSED (DONE) track has none.
@@ -69,6 +75,7 @@ export function checkInvariants({ tasks, status }) {
       : `exactly ONE active task ([>]) is required, found ${active.length}`);
   }
   if (tasks.length === 0) errors.push('no tasks parsed from the plan');
+  if (skipped?.length) errors.push(`task id(s) not parsed (use LETTERS-NUMBER, e.g. ACCESS-1): ${skipped.join(', ')}`);
   return errors;
 }
 

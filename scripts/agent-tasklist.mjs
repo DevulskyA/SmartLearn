@@ -101,6 +101,7 @@ function regenerate(root, coordDir) {
   const rel = (tracksMd.match(/conductor\/tracks\/([\w-]+)\/plan\.md/) ?? [])[1];
   const planPath = arg('--plan', rel ? join(root, 'conductor', 'tracks', rel, 'plan.md') : null);
   const plan = parsePlan(readFileSync(planPath, 'utf8'));
+  if (plan.skipped.length) console.error(`[agent-tasklist] ERRO: tarefa(s) fora do padrão de id NÃO aparecem no painel: ${plan.skipped.join(', ')} (use LETRAS-NÚMERO, ex.: ACCESS-1)`);
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
   const cliCoord = existsSync(join(coordDir, 'CLI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'CLI.md'), 'utf8')) : {};
   const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
