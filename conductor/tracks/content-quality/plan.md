@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8 concluídos; NEXT-4 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1 concluídos; ACCESS-4 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: NEXT-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: ACCESS-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -646,11 +646,35 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
       COMMIT: fast-forward para 97f8942.
-- [>] **NEXT-4 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+- [✓] **NEXT-4 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo).
       DETAILS: candidatos já mapeados nos NOT_PROVEN: formulário de exercícios externos e edição de resumo da Hoje por teclado; propostas de trecho de Materiais (renomear/ocultar) por teclado; nota de páginas puladas some ao recarregar (SCANNED-1); raiz de produto do UX-1 (Plano recolhendo linha ao re-renderizar); reteste do Estudar agora sob falha de rede. Bloqueadas por decisão humana: VERDICT-1, IMPORT-1; por chave: REALMODEL-1.
       DONE_WHEN: sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF.
       DEPENDENCIES: INTEGRATE-8.
+      EVIDENCE: escolha do usuário (2026-09-20): NEXT-4 = reteste do Estudar agora sob falha de rede; depois A) só-teclado dos formulários de Hoje, B) só-teclado das propostas de Materiais, C) persistência da nota de páginas puladas.
+      PRODUCT_DELTA: sprint definida (RETESTNET-1).
+- [✓] **RETESTNET-1 Reteste do Estudar agora sob falha de rede** — OWNER: GUI
+      SPRINT_GOAL: garantir que o que o aluno vê, o que o servidor tem e a evidência longitudinal coincidam quando a rede cai durante o reteste ("Refazer erros").
+      BEFORE: o reteste usa o mesmo caminho de julgamento do estudo (servidor primeiro, RESILIENCE-1); só o caso "o pedido nunca chegou" estava provado.
+      AFTER: também o caso "o servidor RECEBEU e gravou, mas a resposta se perdeu" fica coerente.
+      SCOPE: src/app.js (judgeStudyNow, flushPendingAttempt) + e2e novo.
+      PROOF: e2e com route.fetch()+abort() (servidor processa, resposta some).
+      DONE_WHEN: nenhum caso deixa o aluno preso nem mostra como gravado o que o servidor não tem.
+      DEPENDENCIES: NEXT-4.
+      EVIDENCE: CARACTERIZAÇÃO (e2e/study-retest-network.spec.js, servidor real, Chromium real): (1) pedido de envio ABORTADO antes de chegar: OK já hoje — a tela não avança, "para reforçar" continua 1, o retry conclui, "1/1 erros corrigidos", reforço 0, evidência agregada continua 1 (o reteste não fabrica evidência); (2) DEFEITO REAL: o servidor gravou a correção mas a resposta se perdeu -> o retry recebia ALREADY_SUBMITTED, a tela repetia "Não foi possível registrar" para sempre (aluno preso; servidor e tela discordando); vermelho provado. MESMA CLASSE em Hoje: flushPendingAttempt tratava ALREADY_SUBMITTED como falha, então concluir a revisão avisava "não consegui marcar 1 item" à toa; vermelho provado. CORREÇÃO mínima: no estudo/reteste o cliente lembra o desfecho do último envio de desfecho incerto (state.unconfirmed, por tentativa); ao receber ALREADY_SUBMITTED da MESMA tentativa adota o que o servidor tem (uma tentativa nunca é reescrita) e, se o aluno tocou o botão oposto, avisa "Sua resposta anterior já estava registrada como acerto/erro e foi mantida."; em Hoje ALREADY_SUBMITTED de um item com tentativa própria conta como enviado (botões travados = desfecho único). Sem chave de idempotência nova, sem mudança de servidor, tentativas históricas intactas, nenhuma evidência fabricada. Testes: study-retest-network (3) + resilience (+1); regressão 49/49 e2e (resilience, hoje-block-retest, keyboard-today, feature-parity, server-authority, priorities-hoje, study-resume, study-now-flow, exam-mode) e unit 398/398.
+      PRODUCT_DELTA: o aluno nunca fica preso nem vê aviso falso quando a resposta de gravação se perde; a tela adota o que o servidor tem.
+      PROOF_OBSERVED: contagens acima; vermelho -> verde.
+      NOT_PROVEN: falha de rede ao INICIAR o reteste a partir do resultado (usa dados já em memória); outros pontos que enviam desfechos (prova) com resposta perdida (a prova tem a própria idempotência, não re-medida aqui); Android/Windows nativos.
+      COMMIT: b2846d4.
+- [>] **ACCESS-4 Formulários de Hoje só com teclado (exercícios externos e edição do resumo)** — OWNER: GUI
+      SPRINT_GOAL: repetir a auditoria só-teclado nos dois formulários da revisão de Hoje que ACCESS-3 não varreu e corrigir só o que impedir concluir.
+      BEFORE: NOT_PROVEN de ACCESS-3: "Exercícios externos" e "Editar Resumo" não foram varridos por teclado.
+      AFTER: ambos concluídos só com Tab/Enter/Space, foco nunca cai no body, erros anunciados, foco visível.
+      WHY: são a saída para quem estuda com material externo; sem teclado o aluno fica de fora.
+      SCOPE: e2e só-teclado + a menor correção em src/app.js / index.html.
+      PROOF: sonda de foco -> defeito -> teste vermelho -> correção -> verde.
+      DONE_WHEN: os dois formulários concluídos só com teclado, verdes, regressão de Hoje verde.
+      DEPENDENCIES: RETESTNET-1.
 
 ## Evidência CQ-1
 
