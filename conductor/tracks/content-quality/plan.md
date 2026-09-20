@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TESTLIVE-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1 concluídos; INTEGRATE-5 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: TESTLIVE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-5 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -488,7 +488,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
       COMMIT: fast-forward para 9066d93.
-- [>] **TESTLIVE-1 Painel mostra "TESTES AO VIVO" a partir do runner real (PASS/FAIL/STALE ligados ao HEAD)** — OWNER: GUI
+- [✓] **TESTLIVE-1 Painel mostra "TESTES AO VIVO" a partir do runner real (PASS/FAIL/STALE ligados ao HEAD)** — OWNER: GUI
       SPRINT_GOAL: toda validação material fica observável pelo usuário no painel existente (conductor/.view/tasklist.html), com a verdade vinda do runner — nunca da narrativa do agente.
       BEFORE: os resultados de teste só aparecem no chat (texto do agente); o usuário não vê progresso, PASS/FAIL nem se o resultado é do commit atual.
       AFTER: seção compacta "TESTES AO VIVO" com HEAD testado x atual, suíte, comando, PID vivo, RUNNING/PASS/FAIL/ABORTED/STALE, total/concluídos/passed/failed/skipped, duração, último teste, última atualização, exit code e caminho do log bruto; STALE inequívoco se HEAD testado != atual; processo morto nunca fica RUNNING.
@@ -498,6 +498,35 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: 4 execuções reais: PASS; FAIL controlado (teste temporário que falha); término anormal (kill do processo) -> ABORTED; resultado antigo com HEAD novo -> STALE; painel + artefato + exit code concordam em cada uma.
       DONE_WHEN: painel, artefato estruturado e processo/exit code concordam nas 4 execuções; testes materiais passam a usar o wrapper.
       DEPENDENCIES: INTEGRATE-4.
+      EVIDENCE: `scripts/test-live.mjs <unit|server|e2e>` roda o comando real do projeto (sem shell), grava `conductor/.view/test-live/<suite>.json` de forma atômica (HEAD testado, cmd, pid do runner e do filho, contagens lidas da saída do próprio runner — resumo final do node --test/playwright é autoritativo —, exit code, log bruto) com heartbeat de 1 s; `agent-tasklist.mjs` deriva o estado mostrado a partir de artefato + HEAD atual + vivacidade do pid (por worktree) e o wrapper re-renderiza o painel a cada ~4 s. 4 EXECUÇÕES REAIS, painel = artefato = exit code: (1) PASS unit 390/390 exit 0; (2) FAIL controlado (teste temporário removido depois): 391 feitos, 390 ok, 1 falha, wrapper exit 1; (3) ABORTED: wrapper morto com Stop-Process -Force durante execução -> artefato ficou RUNNING, painel/status mostram ABORTED ("processo do runner não existe mais"), nunca RUNNING; (4) STALE: após commit d09b9cc as três suítes (HEAD testado 4495d13) passaram a STALE ("HEAD testado ≠ atual"), e voltaram a PASS ao rodar no HEAD novo (unit 391/391, server 490/490). e2e parcial real (21 testes) confirmou o parser do playwright (21/21). ACHADO AO PROVAR: meu glob do server (test/*.test.js) contava 489 vs 490 da descoberta padrão (`npm test` = `node --test`) — um teste ficaria de fora e o painel mostraria PASS a menos; suíte server agora usa exatamente `node --test` e um teste (test/test-live.test.js) trava SUITES == scripts do package.json. Testes: test/test-live.test.js (6). Produto intocado.
+      PRODUCT_DELTA: nenhum no produto; o desenvolvimento passa a ter evidência de teste observável e não forjável no painel.
+      PROOF_OBSERVED: as 4 execuções acima + status via `node scripts/test-live.mjs status`.
+      USER_VALUE: o usuário vê PASS/FAIL/STALE/ABORTED reais e o HEAD a que se referem, sem confiar no relato do agente.
+      NOT_PROVEN: caminho SIGINT/SIGTERM gracioso do wrapper (no Windows só o kill forçado foi exercido); e2e completo (158) via wrapper ainda não rodado; a página só reflete quem está vivo quando o painel é re-renderizado (--watch ou o próprio wrapper) — sem isso o heartbeat no navegador mostra "SEM SINAL" após 15 s.
+      COMMIT: d09b9cc.
+- [✓] **FLAKE-1 Endurecer o login do product-value.spec (flaky classificado em INTEGRATE-4)** — OWNER: GUI
+      SPRINT_GOAL: eliminar a 2ª falha intermitente do gate completo (`product-value.spec.js:80`: `#account-show-register` não fica visível em 30 s), sem tocar o produto.
+      BEFORE: o helper clica em Conta logo após networkidle e espera o botão para sempre; falhou 1 vez em ~6 gates, passa 8/8 isolado.
+      AFTER: o helper repete o clique de navegação até a tela de Conta aparecer (toPass), e o spec passa repetido sem falha.
+      WHY: um gate que falha por acaso ensina a ignorar falhas.
+      SCOPE: e2e/product-value.spec.js (helper registerAndLogin) somente.
+      PROOF: `node scripts/test-live.mjs e2e e2e/product-value.spec.js --repeat-each=8` verde; painel mostra o resultado.
+      DONE_WHEN: repetido 8x sem falha e a mudança é só de espera (nenhuma asserção enfraquecida).
+      DEPENDENCIES: TESTLIVE-1.
+      EVIDENCE: no helper `registerAndLogin`, o clique em Conta agora é repetido até `#account-show-register` aparecer (`expect(...).toPass`, 20 s; a asserção é a mesma, só a espera muda). `node scripts/test-live.mjs e2e e2e/product-value.spec.js --repeat-each=8`: 16/16 passaram (2 testes x 8), exit 0, HEAD d09b9cc, visto no painel.
+      PRODUCT_DELTA: nenhum no produto; um gate a menos que falha por acaso.
+      PROOF_OBSERVED: 16/16 acima.
+      NOT_PROVEN: a falha original nunca foi reproduzida (1 ocorrência em ~6 gates), então isto é endurecimento da causa mais provável (clique antes de a navegação estar ligada), não cura provada; só o histórico dos próximos gates confirma.
+      COMMIT: ver `git log` (test(e2e): retry account navigation in product-value login helper).
+- [>] **INTEGRATE-5 Gate completo pelo painel e integração no branch canônico (INTEGRATE-4 … FLAKE-1)** — OWNER: GUI
+      SPRINT_GOAL: levar ao canônico o que veio depois de 9066d93 (painel de testes ao vivo, helper de login endurecido) e provar o gate completo pelo wrapper, visível no painel.
+      BEFORE: canônico em 9066d93; o GUI está 3 commits à frente.
+      AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos, rodados com scripts/test-live.mjs no canônico, PASS no HEAD atual.
+      WHY: entregar onde o produto roda e provar que a soma não quebrou nada, com evidência do runner.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no canônico com as 3 suítes PASS e HEAD == atual (inclui production-build).
+      DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
+      DEPENDENCIES: FLAKE-1; CLI pausado.
 
 ## Evidência CQ-1
 
