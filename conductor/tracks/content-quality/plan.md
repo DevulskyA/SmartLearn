@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TRACKUX-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-3 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: TRACKUX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -383,7 +383,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: as revisões de todo dia ficam legíveis de relance no celular.
       NOT_PROVEN: aparelho físico; Estatísticas (superfície protegida) só observada, não alterada; o "—" solto ao lado das etiquetas (placeholder de nota) segue como está.
       COMMIT: ver `git log` (fix(mobile): Hoje/Plano rows readable at 375px).
-- [>] **TRACKUX-1 Varredura de uso no celular das telas restantes (Acompanhamento, Disciplinas, Materiais com propostas, Configurações)** — OWNER: GUI
+- [✓] **TRACKUX-1 Varredura de uso no celular das telas restantes (Acompanhamento, Disciplinas, Materiais com propostas, Configurações)** — OWNER: GUI
       SPRINT_GOAL: repetir a inspeção com dados reais nas telas ainda não vistas a 375px e corrigir só defeitos materiais.
       BEFORE: Hoje, Plano, Prova e primeiro uso foram inspecionados; Acompanhamento, Disciplinas, Materiais (lista de propostas) e Configurações não.
       AFTER: capturas revisadas; defeitos materiais viram teste de geometria vermelho -> correção mínima.
@@ -392,6 +392,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: capturas antes/depois + testes de geometria.
       DONE_WHEN: telas revisadas e defeitos materiais corrigidos e provados.
       DEPENDENCIES: TODAYUX-1.
+      EVIDENCE: capturas a 375px de Acompanhamento, Disciplinas, Materiais (PDF de 30 páginas, 3 propostas, nome de arquivo longo) e Configurações. Sem defeito em Acompanhamento (cartões legíveis, ações em linha que quebram bem), Disciplinas e Configurações (opções de tema em cartões). DEFEITO MATERIAL em Materiais: NENHUM CSS existia para as propostas — apareciam como itens de lista com marcador, caixa do título com ~190px (cortava o título que o aluno edita: "aula-de-fisiologia-renal-c…") e botões soltos. Correção: propostas viram cartões (lista sem marcador, borda, espaçamento), rótulo de páginas em destaque discreto, caixa do título com a largura do cartão, ações alinhadas. Prova (vermelho antes: marcador "disc", largura < 85%): e2e `large-pdf` TRACKUX-1 mede ausência de marcador, borda de cartão, título >= 85% da largura e sem overflow a 375px. Regressão: source-proposals, aceite de rascunho, fluxo de conteúdo, rascunho grande, product-value, PDF grande, jornada = 14/14.
+      PRODUCT_DELTA: o passo de revisar os trechos propostos de um PDF deixa de parecer um esboço: o título editável fica legível e cada proposta é um cartão claro no celular.
+      PROOF_OBSERVED: capturas + teste de geometria.
+      USER_VALUE: quem envia o material vê e ajusta os títulos antes de gerar rascunho sem esforço.
+      NOT_PROVEN: painel de rascunho (já revisado em CQ-4/CQ-7) não foi re-inspecionado; aparelho físico; Estatísticas (protegida) não tocada.
+      COMMIT: ver `git log` (fix(materials): proposals as cards on the phone).
+
+- [>] **INTEGRATE-3 Gate completo e integração no branch canônico (EXAM-7 … TRACKUX-1)** — OWNER: GUI
+      SPRINT_GOAL: levar ao branch canônico o que veio depois de 7494e61 (pendências da prova no aparelho, retomada do Estudar agora, Hoje/Plano/Materiais legíveis no celular) com o gate completo verde.
+      BEFORE: canônico em 7494e61; o GUI está alguns commits à frente sem gate completo.
+      AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no canônico.
+      WHY: entregar onde o produto roda e provar que a soma das sprints não quebrou nada.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: contagens do gate no worktree canônico (inclui production-build).
+      DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
+      DEPENDENCIES: TRACKUX-1; CLI pausado.
 
 ## Evidência CQ-1
 

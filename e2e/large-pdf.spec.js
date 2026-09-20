@@ -126,3 +126,20 @@ test('dense pages: chunks close before the model input limit, so every proposal 
   await expect(page.locator('#sources-message')).not.toContainText('excede o limite de');
   await expect(page.locator('#sources-message')).toBeInViewport(); // brought into view, not left off-screen
 });
+
+test('TRACKUX-1: on a 375px Materiais the proposals are cards with a full-width title box (the title being edited is readable), not bare bullets', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  const pages = Array.from({ length: 30 }, (_, n) => pageText(n + 1, 1500));
+  await page.setInputFiles('#sources-file-input', { name: 'aula-de-fisiologia-renal-completa-com-nome-longo.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 30000 });
+  await page.setViewportSize({ width: 375, height: 800 });
+  const item = page.locator('.source-proposal-item').first();
+  const m = await item.evaluate((el) => {
+    const input = el.querySelector('.source-proposal-title-input').getBoundingClientRect();
+    return { inputWidth: input.width, itemWidth: el.getBoundingClientRect().width, bullet: getComputedStyle(el).listStyleType, border: getComputedStyle(el).borderTopWidth };
+  });
+  expect(m.bullet, 'no bare bullets').toBe('none');
+  expect(m.inputWidth / m.itemWidth, 'the title box uses the card width').toBeGreaterThan(0.85);
+  expect(parseFloat(m.border), 'each proposal is a card').toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
