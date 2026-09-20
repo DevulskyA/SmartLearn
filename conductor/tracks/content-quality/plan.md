@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; RESILIENCE-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-2 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: RESILIENCE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -304,7 +304,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o que aparece no resultado e no histórico é exatamente o que foi registrado.
       NOT_PROVEN: falha ao INICIAR a tentativa ao revelar (o desenho atual trata esse rastreio como aditivo e segue sem tentativa); fechar a aba com sessão em andamento (o estado da sessão vive só em memória — recomeça na questão 1); reteste e revisão agendada de Hoje não passaram pelo mesmo cenário de queda.
       COMMIT: ver `git log` (fix(study-now): a judgment the server does not have is never counted).
-- [>] **RESILIENCE-1 Quedas de conexão nos passos restantes (correção da prova, registrar resultado, revisão de Hoje, revelar)** — OWNER: GUI
+- [✓] **RESILIENCE-1 Quedas de conexão nos passos restantes (correção da prova, registrar resultado, revisão de Hoje, revelar)** — OWNER: GUI
       SPRINT_GOAL: aplicar o mesmo teste de queda de conexão aos passos ainda não cobertos — julgar item da prova, registrar o resultado da prova, salvar revisão de Hoje, iniciar tentativa ao revelar — e corrigir só divergência real entre o que a tela mostra e o que o servidor tem.
       BEFORE: EXAM-6 e STUDYRESUME-1 corrigiram resposta da prova e julgamento do Estudar agora; os demais passos só foram lidos como "erro visível e repetível" sem teste.
       AFTER: cada passo tem teste de queda com o resultado observado (mensagem + retry sem duplicar) e, onde a tela e o servidor divergirem, correção mínima.
@@ -314,6 +314,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e por passo com contagens no servidor; defeitos viram teste vermelho -> menor correção.
       DONE_WHEN: nenhum passo mostra ao aluno progresso que o servidor não tem, ou a divergência é explicada e repetível.
       DEPENDENCIES: STUDYRESUME-1.
+      EVIDENCE: `e2e/resilience.spec.js` (3, rota abortada por passo, contagens no servidor). SEGUROS (já se comportavam certo, agora provados): julgar item da prova sem rede (mensagem "Não foi possível registrar essa correção", o chip continua "A julgar", o servidor sem resultado, o retry salva UMA vez) e registrar o resultado da prova sem rede (botão volta a ficar habilitado, nenhuma nota "registrado", 0 evidências; o retry cria exatamente 1). DEFEITO REAL: se o clique em "Ver resposta" não conseguia INICIAR a tentativa (conexão caída naquele instante), o julgamento seguinte avançava a sessão em silêncio — sem mensagem e com o servidor vazio (a "melhor tentativa" do desenho aditivo virava divergência). CORREÇÃO MÍNIMA: ao julgar sem tentativa, o cliente inicia a tentativa AGORA; se não conseguir, mesma mensagem e mesma questão (o botão repete); com a conexão de volta o mesmo toque inicia, registra e segue (1 item para reforçar; evidência final 2/1 batendo). Vermelho antes / verde depois. Regressão: resilience + study-resume + estudar agora + plano + prática + jornada = 10/10.
+      PRODUCT_DELTA: nenhum dos passos de medição/estudo mostra ao aluno progresso que o servidor não tem; onde a rede falha há mensagem e repetição do mesmo toque.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: o histórico e o "para reforçar" refletem exatamente o que o aluno fez, mesmo com rede instável.
+      NOT_PROVEN: a revisão agendada de Hoje (item-level tracking é aditivo por desenho; o salvamento principal já é coberto pelo teste de escritas offline); reteste; falhas parciais (rede que cai entre "iniciar" e "revelar" do servidor); Android/Windows nativos.
+      COMMIT: ver `git log` (fix(study-now): start the attempt when judging if reveal could not).
+- [>] **INTEGRATE-2 Gate completo e integração no branch canônico (tudo desde d6109f6)** — OWNER: GUI
+      SPRINT_GOAL: levar ao branch canônico o que foi entregue desde a última integração (primeiro uso, navegação mobile, rascunho grande/PDF grande, resiliência de rede, acessibilidade, painel simples) com o gate completo verde.
+      BEFORE: claude/smartlearn-v1-complete está em d6109f6; o GUI está ~20 commits à frente e o gate completo do último trecho ainda não rodou.
+      AFTER: fast-forward sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no branch canônico.
+      WHY: entregar onde o produto roda e provar que a soma das sprints não quebrou nada.
+      SCOPE: git (ff-only); nenhuma mudança de código.
+      PROOF: contagens do gate no worktree canônico (inclui production-build).
+      DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
+      DEPENDENCIES: RESILIENCE-1; CLI pausado.
 
 ## Evidência CQ-1
 

@@ -4221,9 +4221,17 @@ async function judgeStudyNow(isCorrect) {
   // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
   // this question with the same buttons and a plain message: nothing advances or is counted that the server
   // does not have, so the result, the evidence and "para reforçar" always agree.
-  if (REMOTE_MODE && DB.attempts && state.attemptId) {
+  if (REMOTE_MODE && DB.attempts) {
     state.judging = true;
     try {
+      if (!state.attemptId) {
+        // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
+        // or the screen would show progress the server does not have.
+        const started = await DB.attempts.start(state.exercises[state.index].id);
+        state.attemptId = started.id;
+        studyNowQuestionArea.dataset.attemptId = String(started.id);
+        try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
+      }
       await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
       // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
       // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
