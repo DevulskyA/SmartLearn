@@ -207,7 +207,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 
-- [ ] **LARGE-PDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
+- [ ] **LARGEPDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
       SPRINT_GOAL: provar (e corrigir só o que quebrar) que um PDF de aula realista, de dezenas a ~150 páginas, sai do upload para propostas e rascunhos utilizáveis sem travar, estourar limite silenciosamente ou perder páginas.
       BEFORE: todos os fluxos foram provados com PDFs de 2 a 5 páginas; o tamanho real de uma aula médica (slides/capítulo) é NOT_PROVEN — extração, divisão em trechos de 10 páginas, teto de entrada do modelo (SMARTLEARN_AI_MAX_INPUT_CHARS) e a lista de propostas na UI nunca foram exercitados em escala.
       AFTER: um PDF sintético de ~150 páginas percorre upload -> extração -> propostas -> rascunho de UM trecho; tempo medido; limites (tamanho, caracteres de entrada) têm mensagem clara ao aluno em vez de falha muda; a lista de propostas continua navegável a 375px.
