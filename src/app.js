@@ -819,6 +819,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   editSummaryButton.type = "button";
   editSummaryButton.className = "text-button review-edit-summary";
   editSummaryButton.dataset.action = "edit-summary";
+  editSummaryButton.setAttribute("aria-expanded", "false"); // the editor below opens and closes: expose its state
   editSummaryButton.textContent = "Editar Resumo";
 
   const summaryEditArea = document.createElement("div");
@@ -5455,6 +5456,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     console.error("Falha ao registrar exercícios externos.", error);
   } finally {
     button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   }
 });
 
@@ -5632,6 +5634,7 @@ reviewDashboard.addEventListener("click", (event) => {
   const editArea = row.querySelector(".review-summary-edit");
   if (!editArea) return;
   editArea.hidden = !editArea.hidden;
+  button.setAttribute("aria-expanded", String(!editArea.hidden));
   if (!editArea.hidden) {
     editArea.querySelector("textarea")?.focus();
   }
@@ -5667,12 +5670,18 @@ reviewDashboard.addEventListener("click", async (event) => {
       setTimeout(() => { messageEl.textContent = ""; }, 2000);
     }
     row.querySelector(".review-summary-edit").hidden = true;
+    // the editor closed with the focused button inside it: focus goes back to the button that opened it
+    const opener = row.querySelector('[data-action="edit-summary"]');
+    opener?.setAttribute("aria-expanded", "false");
+    opener?.focus();
   } catch (error) {
     if (messageEl) {
       messageEl.classList.add("is-error");
       messageEl.textContent = "Não foi possível salvar o resumo.";
     }
     console.error("Falha ao salvar resumo.", error);
+    button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   } finally {
     button.disabled = false;
   }
