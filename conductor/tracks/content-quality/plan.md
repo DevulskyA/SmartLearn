@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; STUDYRESUME-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; RESILIENCE-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: STUDYRESUME-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: RESILIENCE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -288,7 +288,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: quem usa teclado ou leitor de tela consegue fazer e corrigir a prova.
       NOT_PROVEN: NENHUM leitor de tela real foi ouvido (só atributos/nomes acessíveis e foco medidos); contraste de cores; outras telas (Estudar agora, Materiais) não passaram pela mesma auditoria só-teclado.
       COMMIT: ver `git log` (fix(exam): keyboard-only proof + accessible names).
-- [>] **STUDYRESUME-1 Sair do "Estudar agora" no meio não perde nem duplica o que já foi respondido** — OWNER: GUI
+- [✓] **STUDYRESUME-1 Sair do "Estudar agora" no meio não perde nem duplica o que já foi respondido** — OWNER: GUI
       SPRINT_GOAL: descobrir (e corrigir só se houver dano real) o que acontece com o progresso quando o aluno sai, recarrega ou perde a conexão no meio de uma sessão de Estudar agora ou de um reteste.
       BEFORE: a prova retoma de onde parou (EXAM-1) e agora guarda respostas pendentes (EXAM-6); o Estudar agora nunca foi inspecionado desse ângulo — as tentativas são criadas no servidor ao revelar, mas o que resta se a sessão é interrompida antes do fim (evidência, "para reforçar", duplicação ao recomeçar) é desconhecido.
       AFTER: comportamento MEDIDO e documentado; se a interrupção perde respostas já julgadas ou cria evidência duplicada/enganosa, corrigido com o menor ajuste e provado; se já é seguro, fecha só com a prova.
@@ -298,6 +298,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e com contagens de tentativas/evidência antes e depois da interrupção; defeitos achados viram teste vermelho -> menor correção.
       DONE_WHEN: interromper e retomar não perde resposta julgada nem duplica evidência, ou o comportamento é explicado ao aluno.
       DEPENDENCIES: ACCESS-1.
+      EVIDENCE: MEDIDO em e2e reais (`e2e/study-resume.spec.js`). (a) Interromper no meio (julgar 1 errado, revelar 2, recarregar): o julgamento já feito PERMANECE ("1 para reforçar"), NENHUMA evidência é escrita até o fim da sessão, "Estudar agora" segue disponível e recomeçar é uma passada completa nova que não dobra a contagem (evidência 3/3 só da passada concluída; a tentativa errada antiga deixa de pesar porque a última tentativa do item 1 é a certa) — já era seguro, agora provado. (b) DEFEITO REAL: se a conexão cai exatamente ao julgar, a sessão AVANÇAVA em silêncio: contadores locais (respondidas/acertos) eram incrementados antes do POST e o erro era engolido — o resultado mostrava uma resposta que o servidor não tinha, a evidência ficava com questionsCount maior que as tentativas ligadas e o item errado não entrava em "para reforçar" (mesma classe do EXAM-6). CORREÇÃO MÍNIMA: o servidor é avisado PRIMEIRO; se falhar, o aluno fica na mesma questão, com os mesmos botões e a mensagem "Não foi possível registrar sua resposta…" (novo #study-now-message, aria-live), sem contar nada; ao voltar a conexão o MESMO botão registra e a sessão segue; toque duplo não julga duas vezes. Prova (vermelho antes: elemento de mensagem inexistente e sessão avançando): e2e com rota abortada — servidor sem nada, mensagem, "Questão 1 de 2" mantida, retry registra, "Questão 2 de 2", 1 item para reforçar, evidência final 2/1 batendo com as tentativas. Regressão: e2e 11/11 (estudar agora, plano, prática, reteste de Hoje, explicação, fluxo de conteúdo, jornada).
+      PRODUCT_DELTA: uma queda de conexão ao responder no Estudar agora deixa de gerar resultado/evidência que o servidor não tem; o aluno é avisado e repete o toque.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: o que aparece no resultado e no histórico é exatamente o que foi registrado.
+      NOT_PROVEN: falha ao INICIAR a tentativa ao revelar (o desenho atual trata esse rastreio como aditivo e segue sem tentativa); fechar a aba com sessão em andamento (o estado da sessão vive só em memória — recomeça na questão 1); reteste e revisão agendada de Hoje não passaram pelo mesmo cenário de queda.
+      COMMIT: ver `git log` (fix(study-now): a judgment the server does not have is never counted).
+- [>] **RESILIENCE-1 Quedas de conexão nos passos restantes (correção da prova, registrar resultado, revisão de Hoje, revelar)** — OWNER: GUI
+      SPRINT_GOAL: aplicar o mesmo teste de queda de conexão aos passos ainda não cobertos — julgar item da prova, registrar o resultado da prova, salvar revisão de Hoje, iniciar tentativa ao revelar — e corrigir só divergência real entre o que a tela mostra e o que o servidor tem.
+      BEFORE: EXAM-6 e STUDYRESUME-1 corrigiram resposta da prova e julgamento do Estudar agora; os demais passos só foram lidos como "erro visível e repetível" sem teste.
+      AFTER: cada passo tem teste de queda com o resultado observado (mensagem + retry sem duplicar) e, onde a tela e o servidor divergirem, correção mínima.
+      WHY: a mesma classe de falha silenciosa apareceu duas vezes em duas horas; procurá-la sistematicamente é mais barato que descobrir pelo aluno.
+      SCOPE: src/app.js (prova, reteste, revisão de Hoje); servidor só se preciso.
+      DETAILS: rota abortada por passo; para cada um registrar: a tela avançou? o servidor tem o dado? o retry duplica?
+      PROOF: e2e por passo com contagens no servidor; defeitos viram teste vermelho -> menor correção.
+      DONE_WHEN: nenhum passo mostra ao aluno progresso que o servidor não tem, ou a divergência é explicada e repetível.
+      DEPENDENCIES: STUDYRESUME-1.
 
 ## Evidência CQ-1
 

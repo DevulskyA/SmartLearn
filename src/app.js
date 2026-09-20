@@ -317,6 +317,7 @@ const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
 const studyNowAnswerText = document.querySelector("#study-now-answer-text");
 const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
 const studyNowJudgment = document.querySelector("#study-now-judgment");
+const studyNowMessage = document.querySelector("#study-now-message");
 const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
 const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
 const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
@@ -3654,6 +3655,7 @@ async function startStudyNow(unit, subjectName) {
 function renderStudyNowQuestion() {
   const state = studyNowState;
   if (!state) return;
+  if (studyNowMessage) studyNowMessage.textContent = "";
 
   if (state.exercises.length === 0) {
     studyNowQuestionArea.hidden = true;
@@ -4215,6 +4217,27 @@ async function judgeStudyNow(isCorrect) {
   const state = studyNowState;
   if (!state || state.index >= state.exercises.length) return;
 
+  if (state.judging) return; // a double tap must not judge the same question twice
+  // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
+  // this question with the same buttons and a plain message: nothing advances or is counted that the server
+  // does not have, so the result, the evidence and "para reforçar" always agree.
+  if (REMOTE_MODE && DB.attempts && state.attemptId) {
+    state.judging = true;
+    try {
+      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+      // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
+      // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
+      state.attemptIds.push(Number(state.attemptId));
+    } catch (error) {
+      console.error("Falha ao registrar resultado (prática inicial).", error);
+      studyNowMessage.textContent = "Não foi possível registrar sua resposta. Verifique a conexão e toque de novo no mesmo botão.";
+      return;
+    } finally {
+      state.judging = false;
+    }
+  }
+  studyNowMessage.textContent = "";
+
   state.answeredCount += 1;
   if (isCorrect) {
     state.correctCount += 1;
@@ -4225,19 +4248,6 @@ async function judgeStudyNow(isCorrect) {
     // mechanism, just remembering what was already shown so the result
     // screen can offer "Revisar meus erros" instead of ending on a bare score.
     state.wrongExercises.push(state.exercises[state.index]);
-  }
-
-  if (REMOTE_MODE && DB.attempts && state.attemptId) {
-    try {
-      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
-      // Collected here, only after a successful submit — an attempt that
-      // never reached SUBMITTED (start/submit failure) must never be handed
-      // to learningEvidence.create's attemptIds (the server rejects any id
-      // that isn't already SUBMITTED).
-      state.attemptIds.push(Number(state.attemptId));
-    } catch (error) {
-      console.error("Falha ao registrar resultado (prática inicial).", error);
-    }
   }
 
   state.index += 1;
