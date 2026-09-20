@@ -184,3 +184,42 @@ test('HTTP: GET /v1/export returns only the caller\'s own data over a real sessi
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+// EXPORT-1: the student's own production (attempts, learning events, exam answers) leaves in the export too.
+// Additive keys only: every pre-existing key keeps its shape, the importer ignores the new ones.
+test('export also carries attempts, learning events and exam answers — only the exporting user\'s', async () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const exams = await import('../src/services/exams.js');
+    const userA = makeUser(db, 'exp-a@example.com');
+    const userB = makeUser(db, 'exp-b@example.com');
+    const setup = (userId, tag) => {
+      const unit = learningUnits.create(db, userId, { newSubjectName: `Disc ${tag}`, title: `Aula ${tag}`, studyDate: '2026-01-01' }).unit;
+      exercises.create(db, userId, { unitId: unit.id, question: `Q ${tag}?`, answer: `R ${tag}`, provenance: 'MANUAL' });
+      return unit;
+    };
+    const unitA = setup(userA, 'A');
+    setup(userB, 'B');
+    const started = exams.start(db, userA, { unitId: unitA.id }).exam;
+    exams.saveAnswer(db, userA, started.id, started.items[0].id, { answer: 'MINHA-RESPOSTA-A' });
+    const submitted = exams.submit(db, userA, started.id);
+    exams.judge(db, userA, submitted.id, submitted.items[0].id, { outcome: 'CORRECT' });
+    exams.finalize(db, userA, submitted.id);
+    // user B has an exam answer of their own that must never appear in A's export
+    const bUnit = db.prepare('SELECT id FROM learning_units WHERE user_id = ?').get(userB);
+    const bExam = exams.start(db, userB, { unitId: bUnit.id }).exam;
+    exams.saveAnswer(db, userB, bExam.id, bExam.items[0].id, { answer: 'RESPOSTA-DO-OUTRO-USUARIO' });
+
+    const exp = createLogicalExport(db, userA);
+    assert.equal(exp.exerciseAttempts.length, 1);
+    assert.ok(exp.learningEvents.length >= 1, 'the outcome events of the attempts are exported');
+    assert.equal(exp.exams.length, 1);
+    assert.equal(exp.examItems.length, 1);
+    assert.equal(exp.examItems[0].student_answer, 'MINHA-RESPOSTA-A');
+    assert.equal(exp.examEvidence.length, 1);
+    assert.ok(!JSON.stringify(exp).includes('RESPOSTA-DO-OUTRO-USUARIO'));
+    // every pre-existing key is still there, unchanged in kind
+    for (const key of ['exportVersion', 'exportedAt', 'schemaVersion', 'user', 'settings', 'subjects', 'learningUnits', 'reviewTasks', 'exercises', 'exerciseVersions', 'learningEvidence']) assert.ok(key in exp, key);
+    assert.equal(exp.exportVersion, LOGICAL_EXPORT_VERSION);
+  } finally { cleanup(); }
+});

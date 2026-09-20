@@ -50,10 +50,17 @@ export function createLogicalExport(db, userId) {
     exercises: db.prepare('SELECT * FROM exercises WHERE user_id = ? ORDER BY id').all(userId),
     exerciseVersions: db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? ORDER BY id').all(userId),
     learningEvidence: db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? ORDER BY id').all(userId),
+    // Added later, ADDITIVELY (existing keys unchanged, exportVersion unchanged, the importer ignores them): what the
+    // student produced — item-level attempts and their outcome events, and exam answers/corrections.
+    exerciseAttempts: db.prepare('SELECT * FROM exercise_attempts WHERE user_id = ? ORDER BY id').all(userId),
+    learningEvents: db.prepare('SELECT * FROM learning_events WHERE user_id = ? ORDER BY id').all(userId),
+    exams: db.prepare('SELECT * FROM exams WHERE user_id = ? ORDER BY id').all(userId),
+    examItems: db.prepare('SELECT * FROM exam_items WHERE user_id = ? ORDER BY id').all(userId),
+    examEvidence: db.prepare('SELECT * FROM exam_evidence WHERE user_id = ? ORDER BY exam_id, evidence_id').all(userId),
   };
 }
 
-const BACKUP_TABLES = ['users', 'sessions', 'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions', 'learning_evidence', 'user_settings', 'schema_migrations'];
+const BACKUP_TABLES = ['users', 'sessions', 'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions', 'learning_evidence', 'exercise_attempts', 'learning_events', 'exams', 'exam_items', 'exam_evidence', 'user_settings', 'schema_migrations'];
 
 /**
  * Writes a consistent whole-database physical snapshot via better-sqlite3's

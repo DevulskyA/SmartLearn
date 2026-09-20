@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; EXPORT-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; IMPORT-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXPORT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: IMPORT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -430,7 +430,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: os erros de uma revisão feita com rede ruim não somem do reforço.
       NOT_PROVEN: reteste ("Refazer erros") não retenta pendências antes de abrir; reconciliação depois de fechar a aba (o pendente vive na tela); Android/Windows nativos.
       COMMIT: ver `git log` (fix(review): unsent item judgments are retried when the review is completed).
-- [>] **EXPORT-1 O backup do aluno inclui as próprias respostas e tentativas** — OWNER: GUI
+- [✓] **EXPORT-1 O backup do aluno inclui as próprias respostas e tentativas** — OWNER: GUI
       SPRINT_GOAL: a exportação por usuário passa a incluir o que o aluno produziu (tentativas, eventos de aprendizagem, respostas digitadas e correções das provas), além de disciplinas/aulas/revisões/exercícios/evidência — hoje esses dados só existem no banco e nunca saem numa exportação.
       BEFORE: `createLogicalExport` exporta settings, subjects, learningUnits, reviewTasks, exercises, exerciseVersions e learningEvidence; tentativas, eventos, provas (exams/exam_items com a resposta digitada) e a proveniência do rascunho ficam de fora — quem exporta perde o histórico fino e as respostas das provas.
       AFTER: as novas chaves são ADITIVAS (`exerciseAttempts`, `learningEvents`, `exams`, `examItems`, `examEvidence`): nenhuma chave existente muda e o importador as ignora; o texto de ajuda de Configurações diz o que a cópia contém.
@@ -440,6 +440,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: teste de servidor (export traz tentativas/eventos/provas com a resposta digitada do próprio usuário e NADA de outro usuário; chaves antigas idênticas) + e2e/HTTP do endpoint; o teste de contrato existente do export continua verde.
       DONE_WHEN: exportação inclui os novos conjuntos sem quebrar contrato nem importador, provado.
       DEPENDENCIES: REVIEWNET-1.
+      EVIDENCE: `createLogicalExport` ganhou as chaves ADITIVAS `exerciseAttempts`, `learningEvents`, `exams`, `examItems` (com `student_answer`) e `examEvidence`, sempre filtradas por user_id; chaves existentes e `exportVersion` intactos; sem segredos/sessões. O texto de "Segurança dos dados" em Configurações passou a dizer o que a cópia contém (exercícios, histórico de desempenho, tentativas, respostas das provas). Também `BACKUP_TABLES` (verificação do backup físico) agora conta exercise_attempts, learning_events, exams, exam_items e exam_evidence — uma cópia que perdesse linhas dessas tabelas passa a ser reprovada. Prova: `server/test/backup-contract.test.js` (+1, vermelho antes): usuário A exporta 1 tentativa, eventos, 1 prova com a resposta "MINHA-RESPOSTA-A", 1 vínculo de evidência, e NADA do usuário B ("RESPOSTA-DO-OUTRO-USUARIO" ausente); todas as chaves antigas presentes. Regressão: server 489/489 (inclui contrato do backup, verificação física) + e2e paridade/migração 7/7.
+      PRODUCT_DELTA: a exportação do aluno deixa de perder o que ele produziu (tentativas e respostas de provas); a verificação do backup físico passa a cobrir essas tabelas.
+      PROOF_OBSERVED: testes acima.
+      USER_VALUE: dono dos próprios dados, inclusive das respostas que escreveu.
+      NOT_PROVEN: o IMPORTADOR não lê as novas chaves (ignora por desenho; restaurar tentativas/provas por importação é outra sprint); proveniência de rascunhos/fontes (PDFs) não entra na exportação lógica; ensaio de restauração do CLI (rehearseRestore) não foi estendido — anotado para o CLI.
+      COMMIT: ver `git log` (feat(export): attempts, events and exam answers in the student's export).
+- [>] **IMPORT-1 Restaurar tentativas e respostas de provas a partir do backup do aluno** — OWNER: GUI
+      SPRINT_GOAL: importar um backup do próprio SmartLearn devolve também tentativas, eventos e provas (com as respostas), não só disciplinas/aulas/exercícios.
+      BEFORE: EXPORT-1 exporta esses dados, mas o importador os ignora: exportar e importar em outra instância perde as respostas das provas e o histórico fino.
+      AFTER: importação idempotente e segura dos novos conjuntos, remapeando ids, sem duplicar em reimportação e sem tocar dados de outros usuários.
+      WHY: um backup que não restaura por completo não protege o estudo.
+      SCOPE: server/src/services/imports.js; contrato do import; sem migração.
+      DETAILS: PRIMEIRO medir o importador atual (formato aceito — export lógico ou o formato legado local?) e decidir se restaurar tentativas/provas cabe sem risco; se o importador só aceita o formato legado, registrar HUMAN_GATE de produto em vez de improvisar.
+      PROOF: teste de servidor export -> import em banco vazio: contagens e respostas iguais; reimportar não duplica; ids remapeados corretamente.
+      DONE_WHEN: ida e volta sem perda dos novos conjuntos, provada; ou decisão registrada com o motivo.
+      DEPENDENCIES: EXPORT-1.
 
 ## Evidência CQ-1
 

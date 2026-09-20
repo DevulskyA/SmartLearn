@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY — Conteúdo médico confiável e didático · Status: IN_PROGRESS · ATIVA (GUI): REVIEWNET-1 · bloqueadas: VERDICT-1, REALMODEL-1 · concluídas (31): CQ-1, CQ-2, CQ-3, CQ-4, CQ-5, CQ-6, CQ-7, EXAM-1, EXAM-2, EXAM-3, NEXT, GUI-05, AUTHOR-1, EXAM-4, EXAM-5, UX-1, ATTEMPT-1, INTEGRATE-1, LARGEPDF-1, FIRSTRUN-1, MOBILENAV-1, EXAM-6, ACCESS-1, STUDYRESUME-1, RESILIENCE-1, INTEGRATE-2, EXAM-7, STUDYSTATE-1, TODAYUX-1, TRACKUX-1, INTEGRATE-3 · branch `claude/content-quality`@3743fe7 · sincronizado 2026-09-20
+**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY — Conteúdo médico confiável e didático · Status: IN_PROGRESS · ATIVA (GUI): EXPORT-1 · bloqueadas: VERDICT-1, REALMODEL-1 · concluídas (32): CQ-1, CQ-2, CQ-3, CQ-4, CQ-5, CQ-6, CQ-7, EXAM-1, EXAM-2, EXAM-3, NEXT, GUI-05, AUTHOR-1, EXAM-4, EXAM-5, UX-1, ATTEMPT-1, INTEGRATE-1, LARGEPDF-1, FIRSTRUN-1, MOBILENAV-1, EXAM-6, ACCESS-1, STUDYRESUME-1, RESILIENCE-1, INTEGRATE-2, EXAM-7, STUDYSTATE-1, TODAYUX-1, TRACKUX-1, INTEGRATE-3, REVIEWNET-1 · branch `claude/content-quality`@bf13ef9 · sincronizado 2026-09-20
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
