@@ -113,5 +113,10 @@
     "version": 23,
     "name": "exercise-explanation",
     "checksum": "70dd1b01a73a9346f8a3d99a64ba57441332e8bbdaac99b5a217157b967303e0"
+  },
+  {
+    "version": 24,
+    "name": "exams",
+    "checksum": "5019a7fa261c90a45ce0d51ad4c1d50e3cf9581b2e46544182ebaf14dda11290"
   }
 ]

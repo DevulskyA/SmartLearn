@@ -1712,6 +1712,16 @@ export async function renderPlan() {
             startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
             exSection.append(startBtn);
           }
+          // Modo Prova: measure first, teach after (nothing is revealed until the student submits).
+          if (REMOTE_MODE && DB.exams) {
+            const examBtn = document.createElement("button");
+            examBtn.type = "button";
+            examBtn.className = "secondary-button plan-exam";
+            examBtn.dataset.action = "plan-exam";
+            examBtn.textContent = "Fazer prova";
+            examBtn.addEventListener("click", () => startExam(unit, subject?.name));
+            exSection.append(examBtn);
+          }
           detail.append(exSection);
         }
 
@@ -3799,6 +3809,152 @@ studyNowRetestBtn?.addEventListener("click", () => {
 
 studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
 
+// ── Modo Prova (EXAM-1) ─────────────────────────────────────────────────────────────────────────
+// The server returns ONLY the questions and the student's own answers while the exam is in progress;
+// nothing here can show a gabarito, explanation, hint or score because none is ever received.
+const examEls = {
+  unit: document.querySelector("#exam-unit"),
+  title: document.querySelector("#title-exam"),
+  message: document.querySelector("#exam-message"),
+  taking: document.querySelector("#exam-taking"),
+  progress: document.querySelector("#exam-progress"),
+  question: document.querySelector("#exam-question-text"),
+  answer: document.querySelector("#exam-answer-input"),
+  prev: document.querySelector("#exam-prev-btn"),
+  next: document.querySelector("#exam-next-btn"),
+  nav: document.querySelector("#exam-nav"),
+  submit: document.querySelector("#exam-submit-btn"),
+  confirm: document.querySelector("#exam-submit-confirm-btn"),
+  cancel: document.querySelector("#exam-submit-cancel-btn"),
+  warning: document.querySelector("#exam-submit-warning"),
+  submitted: document.querySelector("#exam-submitted"),
+  submittedTitle: document.querySelector("#exam-submitted-title"),
+  submittedText: document.querySelector("#exam-submitted-text"),
+  back: document.querySelector("#exam-back-btn"),
+};
+let examState = null; // { exam, index, dirty }
+
+async function startExam(unit, subjectName) {
+  if (!unit) return;
+  try {
+    const { exam } = await DB.exams.start(unit.id);
+    examState = { exam, index: 0, dirty: false, unitTitle: unit.title, subjectName };
+    examEls.unit.textContent = subjectName ?? "";
+    examEls.title.textContent = `Prova — ${unit.title ?? ""}`;
+    examEls.message.textContent = "";
+    examEls.submitted.hidden = true;
+    examEls.taking.hidden = false;
+    showScreen("exam", { focus: true });
+    renderExamQuestion();
+  } catch (error) {
+    console.error("Falha ao iniciar a prova.", error);
+    setPlanFormMessage?.("Não foi possível iniciar a prova. " + (error?.message ?? ""), true);
+  }
+}
+
+function currentExamItem() {
+  return examState?.exam.items[examState.index] ?? null;
+}
+
+function renderExamQuestion() {
+  if (!examState) return;
+  const { exam, index } = examState;
+  const item = exam.items[index];
+  examEls.progress.textContent = `Questão ${index + 1} de ${exam.items.length}`;
+  examEls.question.textContent = item.question;
+  examEls.answer.value = item.studentAnswer ?? "";
+  examEls.prev.disabled = index === 0;
+  examEls.next.disabled = index === exam.items.length - 1;
+  examEls.nav.replaceChildren();
+  exam.items.forEach((it, i) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = String(i + 1);
+    b.dataset.index = String(i);
+    b.setAttribute("aria-label", `Ir para a questão ${i + 1}${it.studentAnswer ? " (respondida)" : ""}`);
+    if (it.studentAnswer && it.studentAnswer.trim()) b.classList.add("is-answered");
+    if (i === index) b.setAttribute("aria-current", "true");
+    li.append(b);
+    examEls.nav.append(li);
+  });
+  resetExamSubmitConfirm();
+}
+
+async function saveExamAnswer() {
+  const item = currentExamItem();
+  if (!examState || !item) return;
+  const typed = examEls.answer.value;
+  if ((item.studentAnswer ?? "") === typed) return;
+  item.studentAnswer = typed.trim() === "" ? null : typed;
+  try {
+    await DB.exams.saveAnswer(examState.exam.id, item.id, typed);
+  } catch (error) {
+    console.error("Falha ao guardar a resposta.", error);
+    examEls.message.textContent = "Não foi possível guardar a última resposta. Verifique a conexão e tente de novo.";
+  }
+}
+
+async function goToExamQuestion(index) {
+  if (!examState || index < 0 || index >= examState.exam.items.length) return;
+  await saveExamAnswer();
+  examState.index = index;
+  renderExamQuestion();
+  examEls.answer.focus();
+}
+
+function resetExamSubmitConfirm() {
+  examEls.submit.hidden = false;
+  examEls.confirm.hidden = true;
+  examEls.cancel.hidden = true;
+  examEls.warning.hidden = true;
+  examEls.warning.textContent = "";
+}
+
+examEls.answer?.addEventListener("blur", () => { saveExamAnswer(); });
+examEls.prev?.addEventListener("click", () => goToExamQuestion(examState.index - 1));
+examEls.next?.addEventListener("click", () => goToExamQuestion(examState.index + 1));
+examEls.nav?.addEventListener("click", (event) => {
+  const b = event.target.closest("button[data-index]");
+  if (b) goToExamQuestion(Number(b.dataset.index));
+});
+examEls.submit?.addEventListener("click", async () => {
+  await saveExamAnswer();
+  const unanswered = examState.exam.items.filter((it) => !it.studentAnswer || !it.studentAnswer.trim()).length;
+  examEls.warning.hidden = false;
+  examEls.warning.textContent = unanswered > 0
+    ? `${unanswered} ${unanswered === 1 ? "questão sem resposta" : "questões sem resposta"}. Depois de submeter, as respostas não podem mais ser alteradas.`
+    : "Depois de submeter, as respostas não podem mais ser alteradas.";
+  examEls.submit.hidden = true;
+  examEls.confirm.hidden = false;
+  examEls.cancel.hidden = false;
+  examEls.confirm.focus();
+});
+examEls.cancel?.addEventListener("click", () => { resetExamSubmitConfirm(); examEls.answer.focus(); });
+examEls.confirm?.addEventListener("click", async () => {
+  examEls.confirm.disabled = true;
+  try {
+    const submitted = await DB.exams.submit(examState.exam.id);
+    examState.exam = submitted;
+    renderExamSubmitted();
+  } catch (error) {
+    console.error("Falha ao submeter a prova.", error);
+    examEls.message.textContent = "Não foi possível submeter a prova. Suas respostas continuam guardadas; tente de novo.";
+  } finally {
+    examEls.confirm.disabled = false;
+  }
+});
+examEls.back?.addEventListener("click", () => { examState = null; showScreen("plan", { focus: true }); });
+
+function renderExamSubmitted() {
+  const { exam } = examState;
+  examEls.taking.hidden = true;
+  examEls.submitted.hidden = false;
+  const answered = exam.items.filter((it) => it.studentAnswer && it.studentAnswer.trim()).length;
+  examEls.submittedText.textContent = `${answered} de ${exam.items.length} questões respondidas. Suas respostas foram guardadas e não podem mais ser alteradas.`;
+  examEls.submittedTitle.focus();
+}
+
 // Entry used by a Hoje review block: same retest engine as "Estudar agora",
 // just started from the wrong items of the block the student already judged.
 function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exercises }) {
@@ -4268,7 +4424,7 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
-const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now"]);
+const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now", "exam"]);
 
 // T22: "register" (#screen-register, "Cadastro") was removed from the NAV
 // in a prior decision (P1-2), but is NOT dead — it is the only UI in the

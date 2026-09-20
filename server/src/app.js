@@ -13,6 +13,7 @@ import { registerSubjectRoutes } from './routes/subjects.js';
 import { registerLearningUnitRoutes } from './routes/learning-units.js';
 import { registerReviewRoutes } from './routes/reviews.js';
 import { registerExerciseRoutes } from './routes/exercises.js';
+import { registerExamRoutes } from './routes/exams.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerBackupRoutes } from './routes/backup.js';
@@ -86,6 +87,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerLearningUnitRoutes(v1, db);
     registerReviewRoutes(v1, db);
     registerExerciseRoutes(v1, db);
+    registerExamRoutes(v1, db);
     registerEvidenceRoutes(v1, db);
     registerSettingsRoutes(v1, db);
     registerBackupRoutes(v1, db);

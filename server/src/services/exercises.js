@@ -32,7 +32,7 @@ const CITATION_TEXT_CAP = 2000;
  * gabarito right" evidence the product actually holds, so it is exposed
  * as-is instead of inventing an explanation. Manual exercises, and
  * versions created by an edit (no citation row of their own), get []. */
-function citationsForVersion(db, userId, versionId) {
+export function citationsForVersion(db, userId, versionId) {
   return db.prepare(`
     SELECT c.source_id, c.page_index, c.page_text_snapshot, s.original_name
     FROM exercise_source_citations c

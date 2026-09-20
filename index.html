@@ -648,6 +648,42 @@
           </section>
         </section>
 
+        <section class="screen" id="screen-exam" data-screen-panel="exam" aria-labelledby="title-exam" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow" id="exam-unit"></p>
+              <h1 id="title-exam" tabindex="-1">Prova</h1>
+            </div>
+          </div>
+          <p class="form-message" id="exam-message" role="status" aria-live="polite"></p>
+
+          <section class="settings-card" id="exam-taking" aria-label="Fazendo a prova" hidden>
+            <p class="study-now-progress" id="exam-progress"></p>
+            <p id="exam-question-text"></p>
+            <label class="exam-answer-label" for="exam-answer-input">Sua resposta</label>
+            <textarea id="exam-answer-input" rows="5" maxlength="5000"></textarea>
+            <div class="settings-actions">
+              <button class="secondary-button" id="exam-prev-btn" type="button">Anterior</button>
+              <button class="secondary-button" id="exam-next-btn" type="button">Próxima</button>
+            </div>
+            <ol class="exam-nav" id="exam-nav" aria-label="Questões da prova"></ol>
+            <div class="settings-actions">
+              <button class="primary-button" id="exam-submit-btn" type="button">Submeter prova</button>
+              <button class="primary-button" id="exam-submit-confirm-btn" type="button" hidden>Confirmar submissão</button>
+              <button class="secondary-button" id="exam-submit-cancel-btn" type="button" hidden>Continuar respondendo</button>
+            </div>
+            <p class="form-message" id="exam-submit-warning" role="status" aria-live="polite" hidden></p>
+          </section>
+
+          <section class="settings-card" id="exam-submitted" aria-label="Prova submetida" hidden>
+            <h2 id="exam-submitted-title" tabindex="-1">Prova submetida</h2>
+            <p id="exam-submitted-text"></p>
+            <div class="settings-actions">
+              <button class="secondary-button" id="exam-back-btn" type="button">Voltar para o Plano</button>
+            </div>
+          </section>
+        </section>
+
         <section class="screen" id="screen-study-now" data-screen-panel="study-now" aria-labelledby="title-study-now" hidden>
           <div class="screen-heading">
             <div>

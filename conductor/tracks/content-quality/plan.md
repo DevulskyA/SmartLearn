@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXAM-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 ```
 
 ## Tarefas
@@ -46,7 +46,7 @@ ATIVA AGORA: EXAM-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       USER_VALUE: revisar um lote grande deixa de exigir caça manual ao problema; o aluno não aceita sem revisar nem perde edições.
       NOT_PROVEN: rascunho com conteúdo médico real de um modelo real; mais de 50 questões (limite do servidor = 50); leitor de tela na navegação por "Corrigir a questão N".
       COMMIT: ver `git log` (feat(content-quality): jump to a flagged item in a large draft).
-- [>] **EXAM-1 Modo Prova sem feedback antecipado** — OWNER: GUI
+- [✓] **EXAM-1 Modo Prova sem feedback antecipado** — OWNER: GUI
       SPRINT_GOAL: o aluno consegue fazer uma prova completa sem receber resposta, explicação, dica ou nota antes de submeter.
       BEFORE: o SmartLearn só tem estudo por questão (Estudar agora / revisões) com feedback imediato; não existe prova.
       AFTER: o aluno inicia uma prova de uma unidade, responde as questões, navega entre elas sem perder respostas e submete; nada de gabarito/explicação/dica/nota aparece antes da submissão.
@@ -56,7 +56,12 @@ ATIVA AGORA: EXAM-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       PROOF: e2e discriminante: iniciar prova; várias questões visíveis; digitar respostas; ir e voltar sem perder; gabarito/explicação/dica/nota AUSENTES do DOM antes de submeter (e a API não devolve o gabarito na fase de prova); submeter encerra a tentativa.
       DONE_WHEN: uma prova completa é respondida e submetida sem vazamento pedagógico antes da submissão.
       DEPENDENCIES: CQ-7.
-- [ ] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
+      EVIDENCE: migration 024 (`exams`, `exam_items`; versão do exercício capturada, resposta do aluno por item); `server/src/services/exams.js` + rotas `POST /v1/exams` (retoma prova em andamento), `GET /v1/exams/:id`, `PUT .../items/:itemId/answer`, `POST .../submit`; UI: botão "Fazer prova" no Plano -> tela Prova (uma questão por vez, navegação anterior/próxima/numerada, resposta digitada guardada ao sair do campo, submissão em 2 passos que avisa "N questões sem resposta"). Testes: `server/test/exams.test.js` (6: chaves proibidas ausentes do DTO, retomada, submit trava e só então libera o gabarito, versão capturada não muda com edição/arquivamento, dono, HTTP com o corpo da resposta sem nenhum segredo) e `e2e/exam-mode.spec.js` (2: prova completa + mobile 375). server 472/472, unit 381/381, e2e focado + regressão do Estudar agora 17/17.
+      PRODUCT_DELTA: o SmartLearn agora TEM Modo Prova: o aluno faz uma prova de uma aula sem receber nenhuma correção antes de submeter — provado no FIO (nenhuma das respostas de /v1/exams antes do submit contém gabarito/explicação/dica) e no DOM (sem gabarito, dica, "por quê", nota); respostas sobrevivem à navegação e ao reload (a prova é retomada); depois do submit as respostas ficam travadas (409) e os dados de correção passam a existir no servidor.
+      PROOF_OBSERVED: e2e `exam-mode` 2/2; `exams.test.js` 6/6 (incl. HTTP); regressão de estudo/plano verde.
+      USER_VALUE: medir antes de ensinar — a base para treino de prova (REVALIDA, provas da faculdade) e para evidência honesta.
+      NOT_PROVEN: quem abrir o Plano/Estudar agora ainda vê os gabaritos por lá (a prova garante o FLUXO de prova, não impede o aluno de espiar por outro caminho — é app de estudo, não proctoring); a correção (EXAM-2) e a evidência (EXAM-3) ainda não existem: após submeter a tela só confirma o envio.
+- [>] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
       SPRINT_GOAL: depois de submeter, o aluno entende o resultado e aprende com os erros.
       BEFORE: EXAM-1 mede mas não entrega análise.
       AFTER: após submissão: acertos/total, percentual derivado, e por questão: enunciado, resposta do aluno, resposta correta, explicação ("Por quê"), fonte, acerto x erro separados.

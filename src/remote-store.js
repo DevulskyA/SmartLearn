@@ -406,6 +406,26 @@ async function clearAll() {
   throw new RemoteStoreError('NOT_YET_SUPPORTED', 'Reiniciar todos os dados ainda não é uma operação suportada no modo servidor.');
 }
 
+// -- exams (Modo Prova) ---------------------------------------------------------
+// While an exam is IN_PROGRESS the server returns only the questions and the student's own answers;
+// the gabarito/explanation/hint/sources arrive only after submit().
+const exams = {
+  async start(unitId) {
+    return apiRequest('/v1/exams', { method: 'POST', body: { unitId } });
+  },
+  async get(examId) {
+    const { exam } = await apiRequest(`/v1/exams/${examId}`);
+    return exam;
+  },
+  async saveAnswer(examId, itemId, answer) {
+    return apiRequest(`/v1/exams/${examId}/items/${itemId}/answer`, { method: 'PUT', body: { answer } });
+  },
+  async submit(examId) {
+    const { exam } = await apiRequest(`/v1/exams/${examId}/submit`, { method: 'POST', body: {} });
+    return exam;
+  },
+};
+
 export const DB = {
   // No local schema to initialize — the server owns its own migrations.
   // Kept as a resolved no-op returning DB itself so callers written
@@ -418,6 +438,7 @@ export const DB = {
   reviewTasks,
   exercises,
   attempts,
+  exams,
   priorities,
   learningEvidence,
   completeReviewWithEvidence,
