@@ -330,6 +330,15 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: RESILIENCE-1; CLI pausado.
 
+- [ ] **EXAM-7 Respostas pendentes da prova sobrevivem a fechar/recarregar a aba** — OWNER: GUI
+      SPRINT_GOAL: uma resposta digitada e ainda não guardada no servidor (rede caída) não se perde se a aba for fechada ou recarregada; ao reabrir a prova, ela volta e é enviada.
+      BEFORE: EXAM-6 retém pendências só em memória (NOT_PROVEN registrado): fechar a aba com resposta pendente a perde.
+      AFTER: pendências persistem localmente por prova (armazenamento do navegador, com try/catch e sem depender dele) e são reenviadas na retomada; nada é criado sem ação do aluno.
+      PROOF: e2e derruba a rede, digita, recarrega, reabre a prova, vê a resposta e a submissão a guarda.
+- [ ] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
+      SPRINT_GOAL: recarregar/sair no meio de uma sessão continua da próxima questão não julgada, em vez de recomeçar da 1ª (medido em STUDYRESUME-1: o julgado permanece como "para reforçar", mas a sessão reinicia).
+      DETAILS: decisão local de menor mudança (estado no servidor vs armazenamento local); só se o ganho compensar a complexidade.
+
 ## Evidência CQ-1
 
 ```
