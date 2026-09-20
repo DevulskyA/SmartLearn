@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3 concluídos; SCANNED-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1 concluídos; INTEGRATE-7 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: SCANNED-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-7 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -588,7 +588,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       DEPENDENCIES: INTEGRATE-6.
       EVIDENCE: candidatos (ganho x confiança / custo, sem depender de decisão humana): (A) páginas SEM texto de um PDF misto (slides com figura/escaneadas) são descartadas em silêncio — a UI só trata o caso "PDF inteiro é imagem" (frase sem próximo passo) e não há nenhuma menção a páginas puladas: o aluno não sabe que parte do material não virou trecho, o que mina a confiança no resumo -> ganho médio-alto, confiança alta, custo baixo => ESCOLHIDA; (B) propostas de trecho por teclado: ganho baixo-médio; (C) raiz de produto do UX-1: ganho baixo. Sprint aberta: SCANNED-1.
       PRODUCT_DELTA: próxima sprint definida (SCANNED-1).
-- [>] **SCANNED-1 O aluno sabe quais páginas do PDF não entraram e o que fazer** — OWNER: GUI
+- [✓] **SCANNED-1 O aluno sabe quais páginas do PDF não entraram e o que fazer** — OWNER: GUI
       SPRINT_GOAL: quando um PDF tem páginas sem texto extraível (escaneadas/figuras), a tela de Materiais diz quantas e quais páginas ficaram de fora e dá um próximo passo; para PDF inteiro em imagem, a mensagem deixa de ser um beco sem saída.
       BEFORE: só o caso "PDF inteiro é imagem" tem mensagem (sem próximo passo); em PDF misto as páginas sem texto somem sem aviso.
       AFTER: após a extração, a mensagem lista "N página(s) sem texto extraível (p. X, Y) não entram nos trechos"; PDF só de imagem diz o que fazer (usar versão com texto selecionável ou criar a aula à mão).
@@ -598,6 +598,20 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e com PDF misto e PDF só de imagem; mensagem observada.
       DONE_WHEN: PDF misto mostra as páginas puladas; PDF de imagem mostra próximo passo; regressão de Materiais verde.
       DEPENDENCIES: NEXT-3.
+      EVIDENCE: medição: a API já devolvia okPageCount/emptyPageCount/failedPageCount mas a UI os ignorava (só o caso "PDF inteiro é imagem" tinha frase, sem próximo passo). Servidor: a extração agora também devolve emptyPages/failedPages (números 1-based, os mesmos das citações) — teste server/test/pdf-extraction.test.js vermelho antes (2), verde depois. UI: funções puras skippedPagesNote/unreadableSourceMessage em src/source-proposals-ui.js (test/skipped-pages-note.test.js, 6) ligadas em src/app.js: PDF misto -> "1 página sem texto extraível (p. 2) ficou de fora dos trechos — provavelmente imagem ou digitalização. O resumo não cobre essa página."; lista longa é encurtada com total exato; PDF só de imagem -> "…apenas imagem… Envie uma versão com texto selecionável… ou use Plano para criar a aula à mão." e2e/source-proposals.spec.js +2 (SCANNED-1), vermelhos sem a mudança de app.js (2/2) e verdes com ela. Gate completo no HEAD 2e422ec: unit 398/398, server 490/490, e2e 165/165 (CI=1 só pelo guard do production-build).
+      PRODUCT_DELTA: o aluno sabe quais páginas do PDF não viraram material e o que fazer quando nada pôde ser lido; deixa de tratar silêncio como cobertura total.
+      PROOF_OBSERVED: contagens acima; vermelho/verde.
+      NOT_PROVEN: OCR não existe (por desenho); nomes de página do PDF vs índice interno em PDFs com numeração própria; a nota some quando o aluno recarrega a tela (mensagem de status, não estado persistente); PDF real escaneado (só fixture com páginas vazias).
+      COMMIT: 2e422ec.
+- [>] **INTEGRATE-7 Integrar SCANNED-1 no canônico e verificar lá** — OWNER: GUI
+      SPRINT_GOAL: levar ao canônico o que veio depois de 9b9c9da (SCANNED-1) com evidência no HEAD canônico.
+      BEFORE: canônico em 9b9c9da (verificado); o GUI está 2 commits à frente (docs + SCANNED-1).
+      AFTER: ff sem conflitos e unit + server + e2e completos PASS no canônico, sem STALE.
+      WHY: divergência pequena, evidência atual.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no canônico.
+      DONE_WHEN: canônico == GUI e as três suítes PASS no HEAD (ou só docs depois).
+      DEPENDENCIES: SCANNED-1; gate no GUI já verde (2e422ec).
 
 ## Evidência CQ-1
 
