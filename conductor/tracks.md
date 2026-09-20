@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY — Conteúdo médico confiável e didático · Status: IN_PROGRESS · ATIVA (GUI): LARGEPDF-1 · próximas: FIRSTRUN-1 · adiadas: VERDICT-1 · bloqueadas: REALMODEL-1 · concluídas (18): CQ-1, CQ-2, CQ-3, CQ-4, CQ-5, CQ-6, CQ-7, EXAM-1, EXAM-2, EXAM-3, NEXT, GUI-05, AUTHOR-1, EXAM-4, EXAM-5, UX-1, ATTEMPT-1, INTEGRATE-1 · branch `claude/content-quality`@1582ec8 · sincronizado 2026-09-20
+**`conductor/tracks/content-quality/plan.md`** — CONTENT-QUALITY — Conteúdo médico confiável e didático · Status: IN_PROGRESS · ATIVA (GUI): FIRSTRUN-1 · adiadas: VERDICT-1 · bloqueadas: REALMODEL-1 · concluídas (19): CQ-1, CQ-2, CQ-3, CQ-4, CQ-5, CQ-6, CQ-7, EXAM-1, EXAM-2, EXAM-3, NEXT, GUI-05, AUTHOR-1, EXAM-4, EXAM-5, UX-1, ATTEMPT-1, INTEGRATE-1, LARGEPDF-1 · branch `claude/content-quality`@304f5c9 · sincronizado 2026-09-20
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
