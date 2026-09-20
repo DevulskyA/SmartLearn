@@ -3057,6 +3057,10 @@ function createSourceProposalItem(proposal) {
 
   const draftPanel = document.createElement("div");
   draftPanel.className = "source-draft-panel";
+  // A focus target for when the draft appears or is re-rendered (the button that was pressed is gone or disabled).
+  draftPanel.tabIndex = -1;
+  draftPanel.setAttribute("role", "group");
+  draftPanel.setAttribute("aria-label", "Rascunho para revisar");
   draftPanel.hidden = true;
 
   li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
@@ -3228,7 +3232,9 @@ function createDraftEditor(draft) {
   save.className = "primary-button";
   save.dataset.action = "save-draft";
   save.textContent = "Salvar correções";
-  details.append(save, createTextElement("p", "source-draft-edit-message", ""));
+  const editMessage = createTextElement("p", "source-draft-edit-message", "");
+  editMessage.setAttribute("role", "status"); // an error on save is announced, not only painted
+  details.append(save, editMessage);
   return details;
 }
 
@@ -3334,6 +3340,7 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
   acceptBtn.textContent = "Aceitar e criar aula";
 
   const resultMessage = createTextElement("p", "source-draft-result", "");
+  resultMessage.setAttribute("role", "status"); // "Aula criada" / an accept error is announced, not only painted
 
   draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, ...(draft.status === "DRAFT" ? [createDraftEditor(draft)] : []), subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
   draftPanel.hidden = false;
@@ -3444,8 +3451,9 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
   if (generateDraftBtn) {
     const draftPanel = item.querySelector(".source-draft-panel");
     if (!draftPanel) return;
-    generateDraftBtn.disabled = true;
+    generateDraftBtn.disabled = true; // a disabled button drops keyboard focus: it is put back below
     setSourcesMessage("Gerando rascunho com IA...");
+    let generated = false;
     try {
       const result = await DraftReviewUI.generateDraft(proposalId);
       if (!result.ok) {
@@ -3457,8 +3465,11 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       const existingSubjects = await DB.subjects.getActive().catch(() => []);
       renderDraftPanel(draftPanel, result.draft, existingSubjects);
       setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+      generated = true;
     } finally {
       generateDraftBtn.disabled = false;
+      // success: keyboard/screen-reader focus goes to the draft to review; failure: back to the button that was pressed
+      (generated ? draftPanel : generateDraftBtn).focus();
     }
     return;
   }
@@ -3505,6 +3516,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       date: draftPanel.querySelector(".source-draft-date-input")?.value ?? "",
     };
     saveDraftBtn.disabled = true;
+    let saved = false;
     try {
       const result = await DraftReviewUI.reviseDraft(draftPanel.dataset.draftId, { summary, questions });
       if (!result.ok) {
@@ -3520,8 +3532,11 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       if (nameInput && !kept.subjectId) nameInput.value = kept.subjectName;
       if (dateInput && kept.date) dateInput.value = kept.date;
       setSourcesMessage("Correções salvas. A conferência automática foi refeita.");
+      saved = true;
     } finally {
       saveDraftBtn.disabled = false;
+      // the panel was re-rendered on success (the button no longer exists): focus the draft, whose check just re-ran
+      (saved ? draftPanel : saveDraftBtn).focus();
     }
     return;
   }
@@ -3553,6 +3568,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       if (!result.ok) {
         if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
         acceptDraftBtn.disabled = false;
+        acceptDraftBtn.focus();
         return;
       }
       if (resultMessage) {
@@ -3576,11 +3592,14 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
         });
         draftPanel.append(studyNowBtn);
       }
+      // the pressed button is now disabled ("Aceito"): the one obvious next action takes the focus
+      draftPanel.querySelector('[data-action="study-now"]')?.focus();
       await Promise.all([renderSubjects(), renderStudies(), renderToday()]);
     } catch (error) {
       if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
       console.error("Falha ao aceitar rascunho.", error);
       acceptDraftBtn.disabled = false;
+      acceptDraftBtn.focus();
     }
   }
 });
@@ -3665,6 +3684,12 @@ async function startStudyNow(unit, subjectName) {
   }
   studyNowResume.hidden = true;
   renderStudyNowQuestion();
+  focusStudyNowQuestion();
+}
+
+/** Keyboard/screen-reader users start on the first action of the question ("Ver resposta"), not on the page container. */
+function focusStudyNowQuestion() {
+  if (studyNowState && studyNowState.exercises.length > 0 && !studyNowQuestionArea.hidden) studyNowRevealBtn.focus();
 }
 
 // -- Estudar agora: resume an interrupted pass ----------------------------------------------------------------
@@ -3720,6 +3745,7 @@ studyNowResume?.querySelector("#study-now-resume-continue")?.addEventListener("c
   studyNowResume.hidden = true;
   studyNowResumeSnapshot = null;
   renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
 });
 
 studyNowResume?.querySelector("#study-now-resume-restart")?.addEventListener("click", () => {
@@ -3727,6 +3753,7 @@ studyNowResume?.querySelector("#study-now-resume-restart")?.addEventListener("cl
   studyNowResume.hidden = true;
   studyNowResumeSnapshot = null;
   renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
 });
 
 function renderStudyNowQuestion() {

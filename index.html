@@ -725,12 +725,12 @@
             <div id="study-now-question-area">
               <p id="study-now-question-text"></p>
               <p id="study-now-hint-text" class="study-now-hint" hidden></p>
-              <button class="secondary-button" id="study-now-reveal-btn" type="button">Ver resposta</button>
+              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
               <p id="study-now-answer-text" hidden></p>
               <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
               <div id="study-now-judgment" class="exercise-judgment" hidden>
-                <button class="primary-button" id="study-now-correct-btn" type="button">Acertei</button>
-                <button class="secondary-button" id="study-now-incorrect-btn" type="button">Errei</button>
+                <button class="primary-button" id="study-now-correct-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Acertei</button>
+                <button class="secondary-button" id="study-now-incorrect-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Errei</button>
               </div>
               <p class="form-message" id="study-now-message" role="status" aria-live="polite"></p>
             </div>

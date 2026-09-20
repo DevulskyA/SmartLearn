@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1 concluídos; ACCESS-2 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2 concluídos; INTEGRATE-6 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ACCESS-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-6 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -553,7 +553,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: reteste do Estudar agora (fora da revisão de Hoje) não foi exercido neste cenário; Android/Windows nativos.
       COMMIT: ver `git log` (fix(review): "Refazer erros" resends pending item judgments first (RETEST-1)).
-- [>] **ACCESS-2 Estudar agora e Materiais só com teclado, e leitor de tela** — OWNER: GUI
+- [✓] **ACCESS-2 Estudar agora e Materiais só com teclado, e leitor de tela** — OWNER: GUI
       SPRINT_GOAL: repetir para Estudar agora e Materiais a auditoria só-teclado feita para a prova (ACCESS-1) e corrigir só o que impedir concluir o fluxo.
       BEFORE: ACCESS-1 cobriu a prova; NOT_PROVEN registra que Estudar agora e Materiais não passaram pela mesma auditoria.
       AFTER: cada fluxo (estudar uma questão, revelar, julgar, ver erros; subir material, revisar rascunho, aceitar) é concluído só com teclado, com foco visível e nomes acessíveis medidos.
@@ -562,6 +562,20 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e que percorre os dois fluxos com Tab/Enter/Space e mede foco e nomes; defeitos viram teste vermelho -> menor correção.
       DONE_WHEN: os dois fluxos completos só com teclado e verdes.
       DEPENDENCIES: RETEST-1.
+      EVIDENCE: e2e/keyboard-study-materials.spec.js (3 testes, só Tab/Shift+Tab/Enter, foco e anel medidos), VERMELHO sem a correção (3/3) e verde com ela. DEFEITOS REAIS achados e corrigidos (src/app.js, index.html): Estudar agora — (1) ao iniciar, o foco ficava no container da página e Enter não fazia nada (agora vai para "Ver resposta"); (2) "Continuar de onde parei"/"Recomeçar" escondiam o botão pressionado e o foco caía no body (agora vai para a pergunta); (3) o botão em foco não dizia a pergunta nem o progresso, e Acertei/Errei não diziam a resposta (aria-describedby, como na prova). Materiais — (4) "Gerar rascunho", "Salvar correções" e "Aceitar" se desabilitavam com foco e o foco caía no body (agora: rascunho gerado/salvo -> foco no painel do rascunho, que ganhou tabindex -1 + role group + nome; falha -> volta ao botão; aceito -> foco em "Estudar agora", que funciona com Enter); (5) mensagens de erro de aceitar/salvar não eram anunciadas (role=status). Sem defeito: ordem de foco do rascunho (o Aceitar é alcançável por Tab com anel visível, nenhuma parada cai fora da página), foco do resultado (título) e "Refazer erros". Regressão: 27/27 e2e (draft-acceptance, study-now-flow, plan-study-now, large-draft-review, source-proposals, content-quality-flow, student-journey, resilience...), unit 391/391.
+      PRODUCT_DELTA: o aluno que usa só teclado (ou leitor de tela) consegue estudar uma aula e subir/revisar/aceitar um material sem perder o foco nem o contexto.
+      PROOF_OBSERVED: contagens acima; vermelho/verde do teste novo.
+      NOT_PROVEN: leitor de tela real (só atributos e nomes calculados); seletor de arquivo do SO; segmentos do campo de data nativo não têm anel próprio (padrão do navegador); Materiais não-remoto/mobile por teclado; propostas de trecho (renomear/ocultar) não foram varridas.
+      COMMIT: ver `git log` (fix(a11y): keyboard focus in Estudar agora and Materiais (ACCESS-2)).
+- [>] **INTEGRATE-6 Gate completo pelo painel e integração no branch canônico (INTEGRATE-5 … ACCESS-2)** — OWNER: GUI
+      SPRINT_GOAL: levar ao canônico RETEST-1 e ACCESS-2 com o gate completo rodado pelo mecanismo TESTES AO VIVO no HEAD que será integrado.
+      BEFORE: canônico em c4a0884; o GUI está 2 commits de código à frente (+ docs).
+      AFTER: ff sem conflitos (CLI pausado, árvore limpa), gate completo PASS no HEAD canônico, sem STALE.
+      WHY: manter a divergência pequena e a evidência atual.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no canônico com unit/server/e2e PASS e HEAD == atual.
+      DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
+      DEPENDENCIES: ACCESS-2; CLI pausado.
 
 ## Evidência CQ-1
 
