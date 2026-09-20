@@ -6,11 +6,11 @@
 > `smartlearn-v1-complete` (T45, plano antigo = histórico/paralelo, NÃO prioridade). Reconciliar as branches só com estado estável.
 
 ```
-Track:    content-quality                      Status: DONE
-MARCO ATUAL: Content quality — FECHADO (CQ-1..CQ-6; sem tarefa ativa)
+Track:    content-quality                      Status: IN_PROGRESS
+MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: nenhuma (track fechado)
+ATIVA AGORA: EXAM-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 ```
 
 ## Tarefas
@@ -30,6 +30,55 @@ ATIVA AGORA: nenhuma (track fechado)
       USER_VALUE: um achado real deixa de forçar "aceitar o erro" ou "jogar o rascunho fora": o aluno conserta em segundos e o que estuda é o que ele revisou.
       NOT_PROVEN: usabilidade do editor com rascunhos longos reais (50 questões); tipo e páginas-fonte não são editáveis (por desenho); sem full e2e nesta fatia (foco em Materiais).
       PERGUNTA: "O que o SmartLearn faz melhor agora?" — deixa o aluno CORRIGIR um ponto sinalizado do conteúdo gerado antes de virar estudo (antes só podia aceitar o erro ou descartar). SPRINT_PRODUCTIVE=TRUE.
+- [✓] **CQ-7 Provar (e corrigir só se preciso) a revisão de um rascunho grande** — OWNER: GUI
+      SPRINT_GOAL: um aluno consegue revisar, corrigir e aceitar um rascunho médico realisticamente grande (~50 questões) sem perder contexto, alterações ou a capacidade de localizar os pontos sinalizados.
+      BEFORE: CQ-6 foi provado com 1-3 questões; o uso com ~50 questões era NOT_PROVEN (lista longa, editor com 50 blocos, rolagem, save enviando tudo).
+      AFTER: comprovado (e ajustado só se houver problema real) que abrir, achar o item sinalizado, editar, salvar, ver a triagem refeita e aceitar funciona com ~50 questões, também a 375px, sem perda silenciosa.
+      WHY: conteúdo médico real vem em lotes grandes; se a revisão não escala o aluno aceita sem revisar ou desiste.
+      SCOPE: painel de revisão de rascunho em Materiais (src/app.js renderDraftPanel/createDraftEditor); nenhuma mudança de servidor esperada.
+      DETAILS: medir primeiro (tempo de render, tamanho do PATCH, foco/rolagem, achar o item sinalizado) com um rascunho de 50 questões contendo itens sinalizados; corrigir o MENOR problema real que impeça o uso; se já funciona, fechar só com a prova.
+      PROOF: e2e com stub de modelo devolvendo 50 questões (algumas com valor inventado/resposta entregue): abrir, localizar o sinalizado, editar uma questão do meio, salvar, triagem refeita, aceitar, unidade com 50 exercícios e o texto editado; 375px sem overflow; medições registradas.
+      DONE_WHEN: fluxo grande utilizável e comprovado (ou ajustado e comprovado); sem regressão.
+      DEPENDENCIES: CQ-6 (feito).
+      EVIDENCE: `e2e/large-draft-review.spec.js` — rascunho de 50 questões (5 páginas, stub do modelo no caminho do provider real; conteúdo sintético Zeta/Omega, mede a EXPERIÊNCIA, não a qualidade médica). Medido: gerar -> rascunho revisável (50 questões, triagem incluída) em ~300 ms; PATCH com as 50 questões e re-render sem perda. Achado real por inspeção + teste vermelho: com 50 blocos o revisor não tinha como ACHAR o item sinalizado (o achado dizia "Questão 30" sem levar até ela) -> corrigido com o menor ajuste: cada achado tem "Corrigir a questão N" / "Corrigir o resumo" (abre o editor, rola e foca o campo), e a questão sinalizada aparece marcada ("Sinalizada") na leitura.
+      PRODUCT_DELTA: num rascunho de 50 questões o revisor chega ao item sinalizado em 1 clique, corrige 3 pontos (resumo, resposta rasa, valor inventado), a triagem é refeita a cada salvar, uma edição em questão NÃO sinalizada (Q10) sobrevive a dois salvamentos, e "Aceitar" cria 50 exercícios com exatamente o texto revisado (Q30/Q41 corrigidas, Q1/Q10/Q50 conferidas); 375px sem overflow.
+      PROOF_OBSERVED: e2e acima verde (1/1) + draft-acceptance, content-quality-flow, source-proposals verdes (8/8 no conjunto).
+      USER_VALUE: revisar um lote grande deixa de exigir caça manual ao problema; o aluno não aceita sem revisar nem perde edições.
+      NOT_PROVEN: rascunho com conteúdo médico real de um modelo real; mais de 50 questões (limite do servidor = 50); leitor de tela na navegação por "Corrigir a questão N".
+      COMMIT: ver `git log` (feat(content-quality): jump to a flagged item in a large draft).
+- [>] **EXAM-1 Modo Prova sem feedback antecipado** — OWNER: GUI
+      SPRINT_GOAL: o aluno consegue fazer uma prova completa sem receber resposta, explicação, dica ou nota antes de submeter.
+      BEFORE: o SmartLearn só tem estudo por questão (Estudar agora / revisões) com feedback imediato; não existe prova.
+      AFTER: o aluno inicia uma prova de uma unidade, responde as questões, navega entre elas sem perder respostas e submete; nada de gabarito/explicação/dica/nota aparece antes da submissão.
+      WHY: medir desempenho ANTES da intervenção pedagógica é a base da evidência honesta e do treino de prova (REVALIDA, provas da faculdade).
+      SCOPE: nova tela/fluxo "Prova" reutilizando exercícios existentes; sem analytics novo; sem mastery.
+      DETAILS: a menor extensão do fluxo atual que agrupa as questões de uma unidade, guarda a resposta digitada de cada uma durante a navegação e só na submissão fecha a tentativa; as questões são abertas (autojulgadas), então a prova registra a resposta do aluno e a autoavaliação só depois de revelar o gabarito (decisão local: ver EXAM-2).
+      PROOF: e2e discriminante: iniciar prova; várias questões visíveis; digitar respostas; ir e voltar sem perder; gabarito/explicação/dica/nota AUSENTES do DOM antes de submeter (e a API não devolve o gabarito na fase de prova); submeter encerra a tentativa.
+      DONE_WHEN: uma prova completa é respondida e submetida sem vazamento pedagógico antes da submissão.
+      DEPENDENCIES: CQ-7.
+- [ ] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
+      SPRINT_GOAL: depois de submeter, o aluno entende o resultado e aprende com os erros.
+      BEFORE: EXAM-1 mede mas não entrega análise.
+      AFTER: após submissão: acertos/total, percentual derivado, e por questão: enunciado, resposta do aluno, resposta correta, explicação ("Por quê"), fonte, acerto x erro separados.
+      WHY: a prova mede primeiro e ensina depois; o erro precisa virar aprendizagem.
+      SCOPE: tela de resultado da prova; reutiliza cartão de erro do Estudar agora.
+      DETAILS: dados só liberados pelo servidor após a submissão; autojulgamento (acertei/errei) por questão feito na correção, com o gabarito à vista.
+      PROOF: e2e garante que tudo isso aparece SOMENTE depois da submissão e que antes a API recusa.
+      DONE_WHEN: "prova mede primeiro e ensina depois" observável.
+      DEPENDENCIES: EXAM-1.
+- [ ] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
+      SPRINT_GOAL: terminar uma prova não é um beco sem saída: o resultado entra no ciclo longitudinal e leva a uma próxima ação útil.
+      BEFORE: o valor da prova acabaria na tela de resultado.
+      AFTER: a prova submetida gera exatamente a evidência esperada (uma linha agregada, sem duplicar) e oferece seguir para os erros / unidade / reforço existentes.
+      WHY: PROVA -> RESULTADO -> EVIDÊNCIA -> FRAQUEZA -> PRÓXIMA AÇÃO.
+      SCOPE: evidência (learning_evidence) e navegação; preserva review_tasks != learning_evidence; sem mastery/ML/scheduler novo.
+      DETAILS: reutiliza o mecanismo de evidência da prática inicial; um reteste imediato continua sem gerar evidência.
+      PROOF: e2e + servidor: submeter uma prova gera exatamente 1 evidência com contagens corretas; submeter de novo não duplica; refazer erro depois não infla.
+      DONE_WHEN: a prova faz parte do ciclo e é comprovado sem duplicação/contaminação.
+      DEPENDENCIES: EXAM-2.
+- [ ] **NEXT Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+      SPRINT_GOAL: decidir e abrir sozinho a próxima melhoria de maior valor (ganho x confiança / custo).
+      DETAILS: consultar estado canônico, NOT_PROVEN, experiência atual, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
 
 ## Evidência CQ-1
 

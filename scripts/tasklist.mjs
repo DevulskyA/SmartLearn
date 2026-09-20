@@ -11,7 +11,35 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SYMBOL = { '✓': '✓', '>': '>', ' ': ' ', '!': '!', '-': '-' };
-const LABEL = { '✓': 'concluída', '>': 'ativa', ' ': 'pendente', '!': 'bloqueada', '-': 'adiada' };
+export const LABEL = { '✓': 'concluída', '>': 'ativa', ' ': 'pendente', '!': 'bloqueada', '-': 'adiada' };
+
+// Structured fields a task may carry (one per line, `KEY: text`, continuation lines append to the last key).
+// Legacy free-text tasks simply have none and keep showing their plain detail.
+export const FIELD_ORDER = [
+  'SPRINT_GOAL', 'BEFORE', 'AFTER', 'WHY', 'SCOPE', 'DETAILS', 'PROOF', 'DONE_WHEN', 'FILES_IN_FLIGHT', 'DEPENDENCIES',
+  'EVIDENCE', 'PRODUCT_DELTA', 'PROOF_OBSERVED', 'USER_VALUE', 'NOT_PROVEN', 'PERGUNTA', 'COMMIT',
+];
+const FIELD_LABEL = {
+  SPRINT_GOAL: 'Objetivo', BEFORE: 'Antes', AFTER: 'Depois', WHY: 'Por quê', SCOPE: 'Escopo', DETAILS: 'Detalhes', PROOF: 'Prova prevista',
+  DONE_WHEN: 'Pronto quando', FILES_IN_FLIGHT: 'Arquivos em andamento', DEPENDENCIES: 'Dependências', EVIDENCE: 'Evidência',
+  PRODUCT_DELTA: 'O que melhorou', PROOF_OBSERVED: 'Prova observada', USER_VALUE: 'Valor para o aluno', NOT_PROVEN: 'Não provado',
+  PERGUNTA: 'Pergunta de fechamento', COMMIT: 'Commit',
+};
+const FIELD_KEYS = new Set([...FIELD_ORDER, 'OWNER']);
+
+export function parseFields(lines) {
+  const fields = {};
+  const free = [];
+  let last = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    const m = line.match(/^([A-Z_]+):\s*(.*)$/);
+    if (m && FIELD_KEYS.has(m[1])) { last = m[1]; fields[last] = m[2]; continue; }
+    if (last) fields[last] = `${fields[last]} ${line}`.trim();
+    else free.push(line);
+  }
+  return { fields, free };
+}
 
 export function parsePlan(markdown) {
   const text = markdown.replace(/\r\n/g, '\n');
@@ -24,7 +52,8 @@ export function parsePlan(markdown) {
     if (!m) continue;
     const detail = [m[4] ?? ''];
     while (i + 1 < lines.length && /^\s{2,}\S/.test(lines[i + 1])) detail.push(lines[++i].trim());
-    tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim() });
+    const { fields, free } = parseFields(detail);
+    tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim(), fields, free: free.join(' ').trim(), owner: fields.OWNER ?? null });
   }
   return { title, status, tasks };
 }
@@ -49,7 +78,18 @@ export function renderCompact(plan) {
   return [`SMARTLEARN — TRACK: ${plan.title}  [${plan.status}]`, '', ...rows].join('\n');
 }
 
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/** Expandable detail block: structured fields when the task has them, otherwise its plain text. */
+export function detailHtml(t) {
+  const keys = FIELD_ORDER.filter((k) => t.fields?.[k]);
+  if (keys.length > 0) {
+    const rows = keys.map((k) => `<dt>${esc(FIELD_LABEL[k])}</dt><dd>${esc(t.fields[k])}</dd>`).join('');
+    const intro = t.free ? `<p>${esc(t.free)}</p>` : '';
+    return `<details${t.state === '>' ? ' open' : ''}><summary>detalhes</summary>${intro}<dl>${rows}</dl></details>`;
+  }
+  return t.detail ? `<details><summary>detalhes</summary><p>${esc(t.detail)}</p></details>` : '';
+}
 
 export function renderHtml(plan, now = new Date()) {
   const done = plan.tasks.filter((t) => t.state === '✓').length;
@@ -59,7 +99,7 @@ export function renderHtml(plan, now = new Date()) {
       <span class="mark" aria-hidden="true">${t.state === ' ' ? '' : esc(t.state)}</span>
       <div class="body">
         <div class="head"><span class="id">${esc(t.id)}</span><span class="title">${esc(t.title)}</span><span class="badge">${LABEL[t.state]}</span></div>
-        ${t.detail ? `<details><summary>detalhes</summary><p>${esc(t.detail)}</p></details>` : ''}
+        ${detailHtml(t)}
       </div>
     </li>`).join('');
   return `<!doctype html>
@@ -79,7 +119,7 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
 .s-active .mark{border-color:var(--accent);color:var(--accent)}.s-blocked .mark{border-color:var(--block);color:var(--block)}.s-deferred{opacity:.65}
 .head{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline}.id{font-weight:800;color:var(--muted);font-size:.8rem}.title{font-weight:650}
 .badge{margin-left:auto;font-size:.72rem;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:.05rem .55rem}
-.s-active .badge{color:var(--accent);border-color:var(--accent)}details{margin-top:.35rem;color:var(--muted);font-size:.85rem}summary{cursor:pointer}
+.s-active .badge{color:var(--accent);border-color:var(--accent)}details{margin-top:.35rem;color:var(--muted);font-size:.85rem}summary{cursor:pointer}dl{margin:.4rem 0 0;display:grid;grid-template-columns:max-content 1fr;gap:.25rem .75rem}dt{font-weight:700;color:var(--text)}dd{margin:0}
 </style></head><body><main>
 <h1>SMARTLEARN — TRACK: ${esc(plan.title)}</h1>
 <p class="meta">Status: ${esc(plan.status)} · ${done}/${total} concluídas · gerado de <code>plan.md</code> em ${esc(now.toLocaleString('pt-BR'))} (projeção — não edite aqui)</p>

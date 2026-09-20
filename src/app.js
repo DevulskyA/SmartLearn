@@ -3129,6 +3129,15 @@ function createDraftAudit(audit) {
     if (f.generatedClaim) item.append(createTextElement("p", "source-draft-audit-claim", `No rascunho: ${f.generatedClaim}`));
     if (f.sourceEvidence) item.append(createTextElement("p", "source-draft-audit-evidence", `Na fonte: ${f.sourceEvidence}`));
     if (f.repair) item.append(createTextElement("p", "source-draft-audit-repair", f.repair));
+    // In a long draft the reviewer must reach the flagged item in one step, not hunt through 50 blocks.
+    const target = /^question:(\d+)$/.exec(f.scope ?? "");
+    const goto = document.createElement("button");
+    goto.type = "button";
+    goto.className = "text-button source-draft-goto";
+    goto.dataset.action = "goto-draft-question";
+    goto.dataset.index = target ? target[1] : "summary";
+    goto.textContent = target ? `Corrigir a questão ${Number(target[1]) + 1}` : "Corrigir o resumo";
+    item.append(goto);
     list.append(item);
   }
   if (flagged.length > 0) box.append(list);
@@ -3214,6 +3223,11 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
     ? createSourceDetails(`Fonte do resumo · ${draft.summarySourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(draft.summarySourceSpans.map((s) => s.pageIndex))}`, pagesFor(draft.summarySourceSpans))
     : null;
   const auditBox = draft.audit ? createDraftAudit(draft.audit) : null;
+  const flaggedQuestions = new Set();
+  for (const f of draft.audit?.findings ?? []) {
+    const m = f.severity !== "LOW" ? /^question:(\d+)$/.exec(f.scope ?? "") : null;
+    if (m) flaggedQuestions.add(Number(m[1]));
+  }
 
   const questionsList = document.createElement("ul");
   questionsList.className = "source-draft-questions";
@@ -3224,6 +3238,10 @@ function renderDraftPanel(draftPanel, draft, subjects = []) {
       createTextElement("p", "source-draft-answer", question.answer),
     );
     if (question.explanation) item.append(createTextElement("p", "source-draft-explanation", `Por quê: ${question.explanation}`));
+    if (flaggedQuestions.has(draft.questions.indexOf(question))) {
+      item.classList.add("is-flagged");
+      item.prepend(createTextElement("span", "study-now-chip source-draft-flag-chip", "Sinalizada"));
+    }
     if (question.questionType && DRAFT_QUESTION_TYPE_LABELS[question.questionType]) {
       item.prepend(createTextElement("span", "study-now-chip source-draft-question-type", DRAFT_QUESTION_TYPE_LABELS[question.questionType]));
     }
@@ -3400,6 +3418,22 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
     } finally {
       generateDraftBtn.disabled = false;
+    }
+    return;
+  }
+
+  const gotoBtn = event.target.closest('[data-action="goto-draft-question"]');
+  if (gotoBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    const editor = draftPanel?.querySelector(".source-draft-editor");
+    if (!draftPanel || !editor) return;
+    editor.open = true;
+    const target = gotoBtn.dataset.index === "summary"
+      ? editor.querySelector(".source-draft-edit-summary")
+      : editor.querySelector(`.source-draft-edit-question[data-index="${gotoBtn.dataset.index}"] .source-draft-edit-a`);
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
     }
     return;
   }

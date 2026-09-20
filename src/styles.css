@@ -3094,6 +3094,16 @@ h1 {
   font-weight: 400;
 }
 
+.source-draft-questions > li.is-flagged {
+  border-left: 3px solid var(--color-warning, #b45309);
+  padding-left: 0.6rem;
+}
+
+.source-draft-goto {
+  margin-top: 0.25rem;
+  padding: 0.35rem 0;
+}
+
 /* Reviewer's corrections to a flagged draft (CQ-6): one collapsed block, native controls. */
 .source-draft-editor {
   margin: 0.75rem 0;
