@@ -420,6 +420,10 @@ const exams = {
   async saveAnswer(examId, itemId, answer) {
     return apiRequest(`/v1/exams/${examId}/items/${itemId}/answer`, { method: 'PUT', body: { answer } });
   },
+  async finalize(examId, evidenceDate) {
+    const { exam } = await apiRequest(`/v1/exams/${examId}/finalize`, { method: 'POST', body: evidenceDate ? { evidenceDate } : {} });
+    return exam;
+  },
   async judge(examId, itemId, outcome) {
     const { exam } = await apiRequest(`/v1/exams/${examId}/items/${itemId}/judgment`, { method: 'PUT', body: { outcome } });
     return exam;

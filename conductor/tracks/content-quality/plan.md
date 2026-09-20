@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: NEXT (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 ```
 
 ## Tarefas
@@ -76,7 +76,7 @@ ATIVA AGORA: EXAM-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       PROOF_OBSERVED: e2e EXAM-2 (chips 'A julgar' x3 -> 'Acerto'/'Erro', score oculto até o último, 1/3 -> 2/3 ao mudar de ideia, reload retoma com o mesmo resultado, sem overflow horizontal).
       USER_VALUE: o erro na prova vira aprendizagem (resposta certa + porquê + trecho) logo depois da medição, sem antecipar nada durante a prova.
       NOT_PROVEN: renderização do trecho da fonte na correção não foi exercitada no e2e da prova (mesmo dado/DTO do Estudar agora, coberto lá); enquanto a correção não é finalizada (EXAM-3) não se pode iniciar outra prova da mesma aula (a submetida é retomada).
-- [>] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
+- [✓] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
       SPRINT_GOAL: terminar uma prova não é um beco sem saída: o resultado entra no ciclo longitudinal e leva a uma próxima ação útil.
       BEFORE: o valor da prova acabaria na tela de resultado.
       AFTER: a prova submetida gera exatamente a evidência esperada (uma linha agregada, sem duplicar) e oferece seguir para os erros / unidade / reforço existentes.
@@ -86,7 +86,12 @@ ATIVA AGORA: EXAM-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       PROOF: e2e + servidor: submeter uma prova gera exatamente 1 evidência com contagens corretas; submeter de novo não duplica; refazer erro depois não infla.
       DONE_WHEN: a prova faz parte do ciclo e é comprovado sem duplicação/contaminação.
       DEPENDENCIES: EXAM-2.
-- [ ] **NEXT Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+      EVIDENCE: `finalize()` (POST /v1/exams/:id/finalize; só com TODAS as questões julgadas; idempotente; 1 transação): cada item vira uma tentativa SELF_REPORT sem review_task e UMA linha `INITIAL_PRACTICE` agregada as liga (mesma forma do Estudar agora) -> Plano/"para reforçar", Estatísticas e tendências já enxergam a prova sem mecanismo novo; prova vira CORRECTED (respostas e julgamentos finais) e uma NOVA prova pode começar. UI: "Concluir e registrar o resultado" (aparece só com tudo julgado) -> nota "Resultado registrado no seu histórico (2/3)…", "Refazer erros (N)" (fluxo de reteste existente), "Voltar para o Plano", "Ir para Hoje". Testes: `exams-finalize.test.js` (5: 1 evidência com contagens certas + 1 tentativa ligada por item com os outcomes, idempotência, incompleta/não submetida recusada sem resíduo, sinal "para reforçar" + redo sem evidência nova + sem review_task, CORRECTED final e nova prova) e e2e `exam-mode` EXAM-3 (evidência 0 antes de concluir, 2/3 -> 1 linha INITIAL_PRACTICE 3/2, /v1/reinforcement = 1 item, refazer erro -> "1/1 erros corrigidos", evidência CONTINUA 1, reforço 0, nova prova). server 479/479, unit 381/381, e2e focado 4/4 + regressão estudo/plano/estatísticas 13/13.
+      PRODUCT_DELTA: a prova faz parte do ciclo: PROVA -> RESULTADO -> EVIDÊNCIA (1 linha, sem duplicar) -> FRAQUEZA (erro vira "para reforçar" nos mesmos lugares de sempre) -> PRÓXIMA AÇÃO (refazer erros já, ou Plano/Hoje), sem mastery, ML, scheduler novo ou review_tasks; um reteste depois NÃO infla a evidência.
+      PROOF_OBSERVED: e2e + servidor acima; contagens de evidência conferidas antes/depois de concluir e depois do reteste.
+      USER_VALUE: o esforço da prova não morre na tela: aparece no histórico do aluno e aponta o que reforçar.
+      NOT_PROVEN: a evidência da prova usa o tipo existente INITIAL_PRACTICE (o esquema só admite REVIEW/INITIAL_PRACTICE/EXTERNAL), então o rótulo "Prática inicial" no histórico do Plano não distingue prova de estudo, e o botão "Estudar agora" some depois da 1ª evidência dessa aula; tentativas apontam a versão ATUAL do exercício (se editado entre iniciar e concluir a correção, a versão vinculada é a nova); nenhuma agenda de revisão nasce da prova (por desenho).
+- [>] **NEXT Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir sozinho a próxima melhoria de maior valor (ganho x confiança / custo).
       DETAILS: consultar estado canônico, NOT_PROVEN, experiência atual, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
 

@@ -1,4 +1,6 @@
 import { citationsForVersion } from './exercises.js';
+import * as attemptsService from './attempts.js';
+import * as evidenceService from './evidence.js';
 
 // EXAM-1/2/3: Modo Prova. MEASURE first, TEACH after.
 //
@@ -151,6 +153,45 @@ export function judge(db, userId, examId, itemId, { outcome } = {}) {
   const item = db.prepare('SELECT id FROM exam_items WHERE user_id = ? AND exam_id = ? AND id = ?').get(userId, examId, itemId);
   if (!item) throw new ExamError('NOT_FOUND', 'Questão da prova não encontrada.');
   db.prepare('UPDATE exam_items SET outcome = ? WHERE user_id = ? AND id = ?').run(outcome, userId, itemId);
+  return get(db, userId, examId);
+}
+
+/**
+ * Finishes the correction: SUBMITTED -> CORRECTED, and the result ENTERS the longitudinal ledger exactly once.
+ * Every judged item becomes a server-owned attempt (self-report, no review task) and ONE aggregate
+ * INITIAL_PRACTICE evidence row links them — the same shape "Estudar agora" writes, so Plano, "para reforçar"
+ * (last attempt wrong), Estatísticas and the trends all see the exam with no new mechanism. Idempotent:
+ * finalizing a CORRECTED exam returns it untouched (no second evidence, no second set of attempts).
+ * Does NOT create review_tasks, mastery or any schedule.
+ */
+export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => new Date()) {
+  const exam = findOwnedExam(db, userId, examId);
+  if (exam.status === 'CORRECTED') return get(db, userId, examId);
+  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', 'Submeta a prova antes de concluir a correção.');
+  const rows = itemRows(db, userId, examId);
+  const pending = rows.filter((r) => r.outcome == null).length;
+  if (pending > 0) throw new ExamError('INCOMPLETE', `Falta corrigir ${pending} ${pending === 1 ? 'questão' : 'questões'} antes de concluir.`);
+
+  const run = db.transaction(() => {
+    const attemptIds = [];
+    for (const r of rows) {
+      const attempt = attemptsService.start(db, userId, { exerciseId: r.exercise_id }, now);
+      attemptsService.submit(db, userId, attempt.id, { outcome: r.outcome, assessmentMethod: 'SELF_REPORT' }, now);
+      attemptIds.push(attempt.id);
+    }
+    const correct = rows.filter((r) => r.outcome === 'CORRECT').length;
+    const evidence = evidenceService.create(db, userId, {
+      unitId: exam.unit_id,
+      type: 'INITIAL_PRACTICE',
+      questionsCount: rows.length,
+      correctCount: correct,
+      evidenceDate: evidenceDate ?? now().toISOString().slice(0, 10),
+      attemptIds,
+    });
+    db.prepare("UPDATE exams SET status = 'CORRECTED', corrected_at = ?, evidence_id = ? WHERE user_id = ? AND id = ? AND status = 'SUBMITTED'")
+      .run(now().toISOString(), evidence.id, userId, examId);
+  });
+  run();
   return get(db, userId, examId);
 }
 

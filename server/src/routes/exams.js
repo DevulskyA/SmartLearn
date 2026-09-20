@@ -2,7 +2,7 @@ import * as exams from '../services/exams.js';
 
 function handleError(err, reply) {
   if (err instanceof exams.ExamError) {
-    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, INVALID_STATE: 409, NO_QUESTIONS: 409 };
+    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, INVALID_STATE: 409, NO_QUESTIONS: 409, INCOMPLETE: 409 };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
   }
@@ -52,6 +52,17 @@ export function registerExamRoutes(app, db) {
     const itemId = Number(request.params.itemId);
     if (!Number.isInteger(id) || !Number.isInteger(itemId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try { return { exam: exams.judge(db, request.actor.userId, id, itemId, request.body) }; } catch (err) { return handleError(err, reply); }
+  });
+
+  app.post('/exams/:id/finalize', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: ID } },
+      body: { type: 'object', properties: { evidenceDate: { type: 'string', pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { exam: exams.finalize(db, request.actor.userId, id, request.body ?? {}) }; } catch (err) { return handleError(err, reply); }
   });
 
   app.post('/exams/:id/submit', {

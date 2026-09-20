@@ -218,6 +218,67 @@ test('EXAM-2: after submitting, the result teaches — answer next to gabarito, 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
+test('EXAM-3: the corrected result enters the history exactly once, shows up as "para reforçar", and leads to a redo that does not inflate the evidence', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Ciclo', title: 'Aula ciclo', studyDate: '2026-04-01' });
+  for (const i of [1, 2, 3]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Ciclo ${i}?`, answer: `Certa ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
+  const evidenceOf = () => page.evaluate(async ({ base, unitId }) => (await (await fetch(`${base}/v1/learning-evidence?unitId=${unitId}`, { credentials: 'include' })).json()).evidence, { base: API_BASE, unitId: unit.id });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula ciclo' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').click();
+  for (let i = 0; i < 3; i += 1) {
+    await page.locator('#exam-answer-input').fill(`resp ${i + 1}`);
+    if (i < 2) await page.locator('#exam-next-btn').click();
+  }
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 8000 });
+
+  // nothing is history until the correction is finished
+  expect(await evidenceOf()).toHaveLength(0);
+  const items = page.locator('.exam-review-item');
+  await items.nth(0).locator('.exam-correct-btn').click();
+  await items.nth(1).locator('.exam-wrong-btn').click();
+  await expect(page.locator('#exam-finalize-btn')).toBeHidden();
+  await items.nth(2).locator('.exam-correct-btn').click();
+  await expect(page.locator('#exam-result-score')).toHaveText('2/3 corretas — 66,7%');
+  await expect(page.locator('#exam-finalize-btn')).toBeVisible();
+
+  // register the result: ONE aggregate evidence row with the right counts; the judgements become final
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toContainText('Resultado registrado no seu histórico (2/3)');
+  await expect(page.locator('#exam-finalize-btn')).toBeHidden();
+  await expect(items.nth(0).locator('.exam-correct-btn')).toBeDisabled();
+  const evidence = await evidenceOf();
+  expect(evidence).toHaveLength(1);
+  expect(evidence[0]).toMatchObject({ type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2 });
+
+  // the wrong item is a real signal elsewhere (the same one Plano/Hoje use): last attempt wrong = "para reforçar"
+  const reinforcement = () => page.evaluate(async (base) => (await (await fetch(`${base}/v1/reinforcement`, { credentials: 'include' })).json()).byUnit, API_BASE);
+  expect(Object.values(await reinforcement()).flat()).toHaveLength(1);
+
+  // ...and the result leads on: redo the error right here (a redo is recovery, NOT new evidence)
+  await expect(page.locator('#exam-retest-btn')).toHaveText('Refazer erros (1)');
+  await page.locator('#exam-retest-btn').click();
+  await expect(page.locator('#screen-study-now')).toBeVisible();
+  await expect(page.locator('#study-now-question-text')).toHaveText('Ciclo 2?');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 8000 });
+  expect(await evidenceOf()).toHaveLength(1);
+  expect(Object.values(await reinforcement()).flat()).toHaveLength(0);
+
+  // the history shows it in Plano too, and a NEW exam can be started now that the last one is corrected
+  await page.locator('[data-screen="plan"]').click();
+  const row2 = page.locator('.plan-row', { hasText: 'Aula ciclo' });
+  await row2.locator('.plan-expand-btn').click();
+  await expect(row2.locator('.plan-reinforce-chip')).toHaveCount(0);
+  await row2.locator('[data-action="plan-exam"]').click();
+  await expect(page.locator('#exam-progress')).toHaveText('Questão 1 de 3');
+  await expect(page.locator('#exam-answer-input')).toHaveValue('');
+});
+
 test('mobile 375: the exam fits without horizontal scroll and its controls are touch-sized', async ({ page }) => {
   const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Mobile', title: 'Prova mobile', studyDate: '2026-04-01' });
   for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Q${i}?`, answer: `R${i}`, provenance: 'MANUAL' });

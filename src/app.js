@@ -3833,6 +3833,10 @@ const examEls = {
   resultScore: document.querySelector("#exam-result-score"),
   counts: document.querySelector("#exam-counts"),
   reviewList: document.querySelector("#exam-review-list"),
+  finalNote: document.querySelector("#exam-final-note"),
+  finalize: document.querySelector("#exam-finalize-btn"),
+  retest: document.querySelector("#exam-retest-btn"),
+  today: document.querySelector("#exam-today-btn"),
   back: document.querySelector("#exam-back-btn"),
 };
 let examState = null; // { exam, index, dirty }
@@ -4016,8 +4020,61 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
     li.append(judge);
     examEls.reviewList.append(li);
   }
+  // Closing the loop: once every item is judged the student registers the result (one evidence row); after
+  // that the result is FINAL and leads on — the wrong items go straight into the existing redo flow.
+  const corrected = exam.status === "CORRECTED";
+  const allJudged = judged === exam.items.length;
+  examEls.finalize.hidden = corrected || !allJudged;
+  for (const b of examEls.reviewList.querySelectorAll('[data-action="exam-judge"]')) b.disabled = corrected;
+  const wrong = exam.items.filter((it) => it.outcome === "INCORRECT");
+  examEls.retest.hidden = !corrected || wrong.length === 0;
+  examEls.retest.textContent = `Refazer erros (${wrong.length})`;
+  examEls.finalNote.hidden = !corrected;
+  examEls.finalNote.textContent = corrected
+    ? `Resultado registrado no seu histórico (${exam.score.correct}/${exam.score.total}).${wrong.length > 0 ? " Os erros passam a aparecer como “para reforçar” no Plano." : ""}`
+    : "";
   if (focusHeading) examEls.submittedTitle.focus();
 }
+
+examEls.finalize?.addEventListener("click", async () => {
+  if (!examState) return;
+  examEls.finalize.disabled = true;
+  try {
+    examState.exam = await DB.exams.finalize(examState.exam.id, getLocalDateValue());
+    renderExamSubmitted({ focusHeading: false });
+    (examEls.retest.hidden ? examEls.back : examEls.retest).focus();
+    // the result is now part of the history: refresh what reads it
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  } catch (error) {
+    console.error("Falha ao concluir a correção.", error);
+    examEls.message.textContent = "Não foi possível registrar o resultado. Suas correções continuam guardadas; tente de novo.";
+  } finally {
+    examEls.finalize.disabled = false;
+  }
+});
+
+examEls.retest?.addEventListener("click", async () => {
+  if (!examState) return;
+  const wrongIds = new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.exerciseId));
+  try {
+    const all = await DB.exercises.getAll(examState.exam.unitId);
+    const wrong = all.filter((e) => wrongIds.has(e.id));
+    if (wrong.length === 0) return;
+    startRetestBlock({
+      returnReviewId: null,
+      unitId: examState.exam.unitId,
+      subjectName: examState.subjectName ?? "",
+      unitTitle: examState.unitTitle ?? examState.exam.unitTitle ?? "",
+      exercises: wrong,
+    });
+  } catch (error) {
+    console.error("Falha ao abrir o reteste dos erros da prova.", error);
+    examEls.message.textContent = "Não foi possível abrir o reteste agora. Tente de novo.";
+  }
+});
+
+examEls.today?.addEventListener("click", () => { examState = null; showScreen("today", { focus: true }); });
 
 examEls.reviewList?.addEventListener("click", async (event) => {
   const b = event.target.closest('[data-action="exam-judge"]');
