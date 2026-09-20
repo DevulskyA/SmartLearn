@@ -1703,7 +1703,8 @@ export async function renderPlan() {
           // its INITIAL_PRACTICE evidence: that is exactly what this flow
           // records, so a second on-demand pass would be mislabeled (later
           // retrieval belongs to the scheduled reviews, not to massed repeats).
-          if (!evidence.some((ev) => ev.context === "INITIAL_PRACTICE")) {
+          // An exam's evidence has the same type but is NOT a study pass: it must not hide "Estudar agora".
+          if (!evidence.some((ev) => ev.context === "INITIAL_PRACTICE" && ev.origin !== "EXAM")) {
             const startBtn = document.createElement("button");
             startBtn.type = "button";
             startBtn.className = "primary-button plan-study-now";
@@ -1737,7 +1738,8 @@ export async function renderPlan() {
           for (const ev of [...evidence].sort((a, b) => b.evidenceDate.localeCompare(a.evidenceDate))) {
             const li = document.createElement("li");
             const ctx = { INITIAL_PRACTICE: "Prática inicial", REVIEW: "Revisão", EXTERNAL: "Externo" };
-            li.textContent = `${formatDate(ev.evidenceDate)} — ${ctx[ev.context] ?? ev.context}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
+            const label = ev.origin === "EXAM" ? "Prova" : (ctx[ev.context] ?? ev.context);
+            li.textContent = `${formatDate(ev.evidenceDate)} — ${label}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
             evList.append(li);
           }
           evSection.append(evList);

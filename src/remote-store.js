@@ -336,6 +336,7 @@ function mapEvidence(row) {
     correctCount: row.correctCount,
     scorePercent: row.score != null ? row.score * 100 : null,
     reviewTaskId: row.reviewTaskId ?? null,
+    origin: row.origin ?? null,
     createdAt: row.createdAt,
   };
 }

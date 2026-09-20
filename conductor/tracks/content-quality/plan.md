@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-5 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXAM-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -128,10 +128,17 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno escreve o porquê uma vez (quando entende) e o relê no momento em que erra, em vez de só ver a resposta seca.
       NOT_PROVEN: no modo local (sem servidor) o campo não é oferecido; texto longo (limite do servidor = 2000 caracteres) sem teste de UI; leitor de tela nos novos campos.
       COMMIT: ver `git log` (feat(exercises): student writes the Por quê).
-- [ ] **EXAM-4 Prova por disciplina (candidata)** — OWNER: GUI
+- [>] **EXAM-4 Prova por disciplina** — OWNER: GUI
       SPRINT_GOAL: o aluno faz uma prova que cobre várias aulas de uma disciplina, com prioridade ao que precisa reforçar, e o resultado vira evidência por aula.
-      DETAILS: exige decisão de amostragem e migração (exam sem unit único); só ativar depois de AUTHOR-1 e de reavaliar valor x custo.
-- [>] **EXAM-5 O histórico distingue Prova de Estudo** — OWNER: GUI
+      BEFORE: a prova cobre UMA aula; quem se prepara para uma prova de disciplina (REVALIDA, faculdade) precisa fazer N provas separadas e não vê a disciplina como um todo.
+      AFTER: "Fazer prova da disciplina" monta uma prova com questões de várias aulas da disciplina, priorizando o que precisa reforçar; a correção e o resultado funcionam como hoje; a evidência é registrada POR AULA (uma linha por aula, contagens só das questões daquela aula), sem duplicar.
+      WHY: é assim que o aluno realmente é medido; sem isso a prova mede pedaço e nunca o conjunto.
+      SCOPE: exams/exam_items (migração 025+ — a 024 é do GUI; CLI usa 025 SÓ se combinado: reivindicar 025 no GUI.md), rotas /v1/exams, Plano (botão por disciplina), reaproveitando prioridades (/v1/priorities) para amostrar.
+      DETAILS: decisão local de amostragem (menor correta): até 20 questões; primeiro as "para reforçar" (último resultado errado), depois as demais, distribuídas entre as aulas em ordem estável; exam ganha subject_id (unit_id passa a ser opcional) e exam_items já guarda exercício e versão; finalize agrupa por aula. Sem mastery, ML ou agenda nova.
+      PROOF: teste de servidor (amostragem determinística, itens de 2+ aulas, finalize cria 1 evidência por aula com contagens certas, idempotente) + e2e (prova da disciplina, correção, evidência por aula no histórico de cada uma, sem vazamento de gabarito antes de submeter).
+      DONE_WHEN: uma prova de disciplina pode ser feita, corrigida e vira evidência por aula; prova de aula única intacta.
+      DEPENDENCIES: EXAM-1..3, EXAM-5 (feitos). Risco: migração — só dados novos, nada destrutivo.
+- [✓] **EXAM-5 O histórico distingue Prova de Estudo** — OWNER: GUI
       SPRINT_GOAL: no histórico do Plano o aluno vê quais registros vieram de uma prova e quais do estudo; "Estudar agora" deixa de sumir depois da primeira evidência.
       BEFORE: a prova grava evidência do tipo INITIAL_PRACTICE; o rótulo "Prática inicial" não diferencia prova de estudo e "Estudar agora" some após a 1ª evidência da aula.
       AFTER: rótulo próprio para a origem prova sem quebrar o esquema (REVIEW/INITIAL_PRACTICE/EXTERNAL) nem duplicar evidência; estudar de novo continua disponível.
@@ -140,6 +147,12 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: teste de servidor (evidência de prova tem origin EXAM; a de estudo e a externa não) + e2e: estudar (Prática inicial) e prova (Prova) aparecem com rótulos distintos no histórico; só prova => "Estudar agora" continua disponível; só estudo => some como antes.
       DONE_WHEN: o histórico do Plano diz de onde veio cada linha e o botão de estudo não some por causa de uma prova; sem regressão em Estatísticas/analytics (tipo continua INITIAL_PRACTICE).
       DEPENDENCIES: AUTHOR-1 (feito).
+      EVIDENCE: `evidence.list` faz LEFT JOIN em exams.evidence_id e o DTO ganha `origin: 'EXAM'` (ausente para estudo/externo; o TIPO segue INITIAL_PRACTICE, sem migração, esquema e analytics intactos); `remote-store` repassa `origin`; o Plano rotula "Prova: 1/2" e só evidência de ESTUDO (origin != EXAM) esconde "Estudar agora". Prova: `server/test/evidence-origin.test.js` (vermelho antes: origin inexistente; verde depois); e2e `exam-mode` EXAM-5: só prova => 1 linha "Prova: 1/2" e "Estudar agora" continua; depois estudo => 2 linhas ("Prova: 1/2", "Prática inicial: 2/2") e só agora o botão some. Regressão: unit 382/382, server 480/480, e2e 32/32 (plano, estudar agora, veredito, prioridades/Hoje, reteste, drilldown de Estatísticas, tentativas, jornada) + exam-mode 5/5 + student-journey.
+      PRODUCT_DELTA: o histórico do Plano diz de onde veio cada linha (Prova x Prática inicial) e fazer uma prova deixa de tirar do aluno o "Estudar agora".
+      PROOF_OBSERVED: teste de servidor + e2e acima.
+      USER_VALUE: o aluno lê a própria trajetória sem confundir medir com estudar e continua podendo estudar depois de medir.
+      NOT_PROVEN: Estatísticas/"Exercícios resolvidos" continuam tratando a prova como INITIAL_PRACTICE (rótulo lá não muda; decisão consciente para não tocar superfície protegida); Android/Windows nativos.
+      COMMIT: ver `git log` (feat(exam): history labels Prova).
 - [ ] **VERDICT-1 Veredito de Estatísticas ponderado por volume (candidata, pode exigir HUMAN_GATE)** — OWNER: GUI
       SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
       DETAILS: é semântica de produto (o que significa "melhorando" no agregado); superfície protegida (ADR-0001, Estatísticas): só ativar se a mudança for funcional e coberta pelos guardrails; caso contrário registrar HUMAN_GATE.

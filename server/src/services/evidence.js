@@ -25,6 +25,9 @@ function toDto(row) {
     score: row.questions_count != null ? row.correct_count / row.questions_count : null,
     evidenceDate: row.evidence_date,
     createdAt: row.created_at,
+    // Only listings know it (LEFT JOIN below). The TYPE stays INITIAL_PRACTICE; "origin" only says a corrected
+    // exam produced the row, so the history can tell an exam from a study pass. Absent = not from an exam.
+    ...(row.from_exam ? { origin: 'EXAM' } : {}),
   };
 }
 
@@ -111,5 +114,8 @@ export function list(db, userId, { unitId, dateFrom, dateTo } = {}) {
   if (dateFrom) { clauses.push('evidence_date >= ?'); params.push(dateFrom); }
   if (dateTo) { clauses.push('evidence_date <= ?'); params.push(dateTo); }
 
-  return db.prepare(`SELECT * FROM learning_evidence WHERE ${clauses.join(' AND ')} ORDER BY evidence_date, id`).all(...params).map(toDto);
+  return db.prepare(`
+    SELECT le.*, EXISTS(SELECT 1 FROM exams e WHERE e.user_id = le.user_id AND e.evidence_id = le.id) AS from_exam
+    FROM learning_evidence le WHERE ${clauses.map((c) => `le.${c}`).join(' AND ')} ORDER BY le.evidence_date, le.id
+  `).all(...params).map(toDto);
 }

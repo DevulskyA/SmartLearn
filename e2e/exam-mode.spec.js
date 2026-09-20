@@ -293,3 +293,50 @@ test('mobile 375: the exam fits without horizontal scroll and its controls are t
     expect((await page.locator(sel).boundingBox()).height).toBeGreaterThanOrEqual(44);
   }
 });
+
+test('EXAM-5: the Plano history tells a Prova from a study pass, and an exam does not hide "Estudar agora"', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Rotulo', title: 'Aula rotulo', studyDate: '2026-04-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Rot ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+
+  // 1) an exam only: the history says "Prova" and the student can still study on demand
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula rotulo' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').click();
+  await page.locator('#exam-answer-input').fill('a');
+  await page.locator('#exam-next-btn').click();
+  await page.locator('#exam-answer-input').fill('b');
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  const items = page.locator('.exam-review-item');
+  await items.nth(0).locator('.exam-correct-btn').click();
+  await items.nth(1).locator('.exam-wrong-btn').click();
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toBeVisible();
+
+  await page.locator('[data-screen="plan"]').click();
+  const row2 = page.locator('.plan-row', { hasText: 'Aula rotulo' });
+  await row2.locator('.plan-expand-btn').click();
+  const history = row2.locator('.plan-evidence-list li');
+  await expect(history).toHaveCount(1);
+  await expect(history.first()).toContainText('Prova: 1/2');
+  await expect(history.first()).not.toContainText('Prática inicial');
+  await expect(row2.locator('[data-action="plan-study-now"]')).toBeVisible();
+
+  // 2) then a study pass: it is its own line, labeled "Prática inicial", and only NOW does the button go away
+  await row2.locator('[data-action="plan-study-now"]').click();
+  for (const outcome of ['correct', 'correct']) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(`#study-now-${outcome}-btn`).click();
+  }
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 8000 });
+  await page.locator('#study-now-done-btn').click();
+  await page.locator('[data-screen="plan"]').click();
+  const row3 = page.locator('.plan-row', { hasText: 'Aula rotulo' });
+  await row3.locator('.plan-expand-btn').click();
+  const history2 = row3.locator('.plan-evidence-list li');
+  await expect(history2).toHaveCount(2);
+  await expect(history2.filter({ hasText: 'Prova: 1/2' })).toHaveCount(1);
+  await expect(history2.filter({ hasText: 'Prática inicial: 2/2' })).toHaveCount(1);
+  await expect(row3.locator('[data-action="plan-study-now"]')).toHaveCount(0);
+});
