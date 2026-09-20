@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; MOBILENAV-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; A11Y-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: MOBILENAV-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: A11Y-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -244,7 +244,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: a primeira impressão deixa de ser uma tela vazia sem saída.
       NOT_PROVEN: aluno real sem orientação (a prova é um roteiro automatizado); textos em outro idioma; OBSERVADO E NÃO CORRIGIDO: a barra inferior a 375px quebra palavras no meio ("Estatístic/as", "Disciplin/as", "Configur/ações") — vira MOBILENAV-1.
       COMMIT: ver `git log` (feat(first-run): Hoje vazio oferece os dois caminhos).
-- [>] **MOBILENAV-1 Barra de navegação inferior legível a 375px** — OWNER: GUI
+- [✓] **MOBILENAV-1 Barra de navegação inferior legível a 375px** — OWNER: GUI
       SPRINT_GOAL: os oito itens da barra inferior no celular deixam de quebrar palavras no meio e continuam tocáveis.
       BEFORE: a 375px "Estatísticas", "Disciplinas", "Configurações" e "Acompanhar" quebram no meio da palavra (visto nas capturas de FIRSTRUN-1) — aparece em TODA tela no celular.
       AFTER: rótulos inteiros e legíveis (ou forma abreviada consistente), alvos >= 44px, sem overflow, sem perder acesso a nenhuma tela.
@@ -254,6 +254,37 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e mede que nenhum rótulo quebra no meio da palavra (altura de linha única ou palavras inteiras) e que cada item tem >= 44px de alvo, a 375 e 360px; captura antes/depois.
       DONE_WHEN: navegação legível e provada em 375/360px, sem regressão em mobile-nav.
       DEPENDENCIES: FIRSTRUN-1.
+      EVIDENCE: teste MEDIDO (vermelho antes: "Estatísticas" a 375px e até "Materiais" a 360px quebravam em duas linhas) exige, com os 8 destinos visíveis, rótulo de UMA linha sem overflow e alvo >= 44px a 375 e 360px. Correção mínima: as quatro palavras longas mostram forma curta no celular (Estat., Acomp., Discipl., Config.) enquanto a palavra inteira fica no DOM, visualmente oculta, como nome acessível (getByRole 'Estatísticas' continua achando 1 botão); rótulos sem quebra no meio da palavra; espaçamento lateral reduzido; desktop intacto (rótulos completos). Capturas 375/360/1280 revisadas. Regressão: e2e 49/49 (nav mobile, tema, paridade, auth, estatísticas responsivas, seletor de contexto, primeiro uso, prova).
+      PRODUCT_DELTA: a navegação principal do celular deixa de mostrar palavras cortadas no meio em todas as telas.
+      PROOF_OBSERVED: teste medido + capturas.
+      USER_VALUE: o destino de cada botão é reconhecível de relance no celular.
+      NOT_PROVEN: aparelho físico e leitor de tela real (o nome acessível está no DOM, não foi ouvido); larguras < 360px; abreviações "Estat./Acomp./Discipl./Config." são uma escolha de texto que o usuário pode preferir trocar.
+      COMMIT: ver `git log` (fix(nav): short labels in the phone bottom bar).
+- [✓] **EXAM-6 Resposta da prova não se perde quando a conexão cai** — OWNER: GUI
+      SPRINT_GOAL: uma resposta digitada na prova nunca é perdida nem ignorada em silêncio se o servidor não puder ser alcançado; a submissão só acontece com tudo guardado.
+      BEFORE: `saveExamAnswer` marcava a resposta como "guardada" ANTES de salvar; se o PUT falhava, o próximo salvamento via "nada mudou" e nunca reenviava — a resposta sumia do servidor, a mensagem dizia "continuam guardadas" e a submissão prosseguia (bug achado lendo o código durante a inspeção de uso).
+      AFTER: respostas que falharam ficam pendentes no aparelho, são reenviadas a cada salvar/navegar/submeter; submeter com pendência é RECUSADO com explicação clara; ao voltar a conexão o mesmo clique guarda tudo e segue.
+      WHY: a prova é medição; perder uma resposta por uma queda de rede distorce o resultado sem o aluno saber.
+      SCOPE: src/app.js (fluxo da prova); sem mudança de servidor.
+      EVIDENCE: e2e `exam-mode` EXAM-6 (vermelho antes: a submissão prosseguia com a 1ª resposta perdida): com a rede derrubada (rota abortada) a resposta 1 falha ao navegar (mensagem), a 2 falha ao submeter -> aviso "2 respostas ainda não foram guardadas … Nada foi submetido" e sem tela de confirmação; com a rede de volta o mesmo clique guarda as duas, confirma, submete, e a correção mostra "resp 1" e "resp 2". Regressão: exam-mode 9/9. Implementação: mapa `unsaved` por questão, `pushExamAnswer`/`flushExamAnswers`, submeter e confirmar só com tudo guardado.
+      PRODUCT_DELTA: uma queda de conexão no meio da prova deixa de apagar respostas em silêncio; o aluno é avisado e nada é submetido pela metade.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: confiança de que o que foi digitado chega ao servidor.
+      NOT_PROVEN: fechar a aba/travar o navegador com resposta pendente (o texto pendente vive só em memória; não há rascunho local persistente); julgamento/registro do resultado sem rede já mostram erro e permitem repetir, sem teste dedicado.
+      COMMIT: ver `git log` (fix(exam): unsaved answers are retried and block submission).
+- [>] **A11Y-1 A prova pode ser feita só com teclado e é compreensível por leitor de tela** — OWNER: GUI
+      SPRINT_GOAL: provar (e corrigir só o que faltar) que o fluxo da prova funciona sem mouse e expõe estado a tecnologias assistivas: ordem de foco, numeração de questões, anúncio de progresso e de resultado.
+      BEFORE: UX-1 deixou "navegação só por teclado e leitor de tela" como NOT_PROVEN; há aria-labels e foco em pontos isolados, mas nenhum teste percorre a prova inteira só com teclado.
+      AFTER: um e2e faz a prova inteira (navegar, responder, submeter, corrigir, registrar) só com teclado, e verifica nomes acessíveis (questão atual, respondida, progresso, resultado) e foco previsível.
+      WHY: acessibilidade é requisito de uso real e a prova é a tela mais interativa.
+      SCOPE: tela da prova (src/app.js, index.html); correções mínimas de foco/rótulos.
+      DETAILS: percorrer com Tab/Shift+Tab/Enter/Espaço; conferir role/aria (nav numerada com aria-current, alerta de submissão, status do resultado); medir onde o foco cai depois de cada ação.
+      PROOF: e2e só-teclado + asserções de nome acessível; defeitos achados viram teste vermelho -> menor correção.
+      DONE_WHEN: prova completa só com teclado e estados anunciados, sem regressão.
+      DEPENDENCIES: EXAM-6.
+- [ ] **STUDYRESUME-1 Sair do "Estudar agora" no meio não perde o que já foi respondido** — OWNER: GUI
+      SPRINT_GOAL: verificar (e corrigir se preciso) o que acontece com o progresso ao sair e voltar no meio de uma sessão de Estudar agora ou de um reteste.
+      DETAILS: medir primeiro (recarregar/navegar no meio, tentativas já criadas, evidência); só corrigir se houver perda ou duplicação real.
 
 ## Evidência CQ-1
 

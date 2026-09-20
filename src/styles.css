@@ -319,6 +319,10 @@ button {
     background-color 140ms ease;
 }
 
+.nav-short {
+  display: none;
+}
+
 .nav-item:hover {
   background: var(--color-surface-sunken);
   color: var(--color-primary);
@@ -1784,7 +1788,7 @@ h1 {
     flex-direction: column;
     justify-content: center;
     gap: 0.3rem;
-    padding: 0.45rem 0.2rem 0.35rem;
+    padding: 0.45rem 0.05rem 0.35rem;
     border-radius: 0;
     font-size: clamp(0.56rem, 2.4vw, 0.68rem);
     font-weight: 600;
@@ -1793,7 +1797,23 @@ h1 {
 
   .nav-item span {
     width: 100%;
-    overflow-wrap: break-word;
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+
+  /* Eight destinations do not fit at phone width with full words: long labels show a short form (never cut in
+     the middle of a word); the full word stays in the DOM, visually hidden, as the accessible name. */
+  .nav-item .nav-long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .nav-item .nav-short {
+    display: inline;
   }
 
   .nav-item svg {

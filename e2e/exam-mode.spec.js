@@ -479,3 +479,35 @@ test('ATTEMPT-1: reviewing an exam in Exercícios resolvidos shows what the stud
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
+
+test('EXAM-6: an answer that could not be saved is never lost or silently skipped — it is retried, and submitting is blocked until everything is saved', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Rede', title: 'Aula rede', studyDate: '2026-04-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Rede ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula rede' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').click();
+
+  // the connection drops while answering: saving the answers fails
+  await page.route('**/v1/exams/*/items/*/answer', (route) => route.abort());
+  await page.locator('#exam-answer-input').fill('resp 1');
+  await page.locator('#exam-next-btn').click();
+  await expect(page.locator('#exam-message')).toContainText('Não foi possível guardar');
+  await page.locator('#exam-answer-input').fill('resp 2');
+
+  // submitting while answers are unsaved is refused with a plain explanation (nothing is silently dropped)
+  await page.locator('#exam-submit-btn').click();
+  await expect(page.locator('#exam-submit-warning')).toContainText('não foram guardadas');
+  await expect(page.locator('#exam-submit-confirm-btn')).toBeHidden();
+
+  // the connection returns: the same click now saves both answers and proceeds to the confirmation
+  await page.unroute('**/v1/exams/*/items/*/answer');
+  await page.locator('#exam-submit-btn').click();
+  await expect(page.locator('#exam-submit-confirm-btn')).toBeVisible({ timeout: 8000 });
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 8000 });
+  const items = page.locator('.exam-review-item');
+  await expect(items.nth(0).locator('.exam-review-student')).toHaveText('resp 1');
+  await expect(items.nth(1).locator('.exam-review-student')).toHaveText('resp 2');
+});

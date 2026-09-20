@@ -31,3 +31,31 @@ for (const localAuthority of [false, true]) {
     await expect(page.locator('#screen-account')).toBeVisible();
   });
 }
+
+// MOBILENAV-1: a label must read whole on ONE line (or in an agreed short form), never be cut in the middle of a
+// word ("Estatístic/as"). Measured on the visible label of every item, with all 8 destinations shown.
+for (const width of [375, 360]) {
+  test(`${width}px bottom nav: every visible label is a single unbroken line and each item is a >=44px touch target`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.addInitScript(() => { window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; });
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const items = page.locator('.app-nav .nav-item:visible');
+    await expect(items).toHaveCount(8);
+    const report = await items.evaluateAll((els) => els.map((el) => {
+      const labels = [...el.querySelectorAll('span, span span')].filter((s) => s.getClientRects().length > 0 && getComputedStyle(s).position !== 'absolute' && s.textContent.trim() !== '');
+      const leaf = labels.filter((s) => !s.querySelector('span')).filter((s) => { const r = s.getBoundingClientRect(); return r.width > 1 && r.height > 1; });
+      const visible = leaf[leaf.length - 1] ?? el.querySelector('span');
+      const range = document.createRange();
+      range.selectNodeContents(visible);
+      const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+      const box = el.getBoundingClientRect();
+      return { text: visible.textContent.trim(), lines, overflow: visible.scrollWidth > visible.clientWidth + 1, height: box.height, width: box.width };
+    }));
+    for (const r of report) {
+      expect(r.lines, `"${r.text}" must be one line`).toBe(1);
+      expect(r.overflow, `"${r.text}" must not overflow its item`).toBe(false);
+      expect(r.height, `"${r.text}" touch target height`).toBeGreaterThanOrEqual(44);
+    }
+  });
+}

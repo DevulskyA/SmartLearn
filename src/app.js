@@ -3883,7 +3883,7 @@ async function openExam(begin, { subjectName, fallbackTitle }) {
   try {
     const { exam } = await begin();
     const title = exam.title ?? fallbackTitle ?? "";
-    examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName };
+    examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
     examEls.unit.textContent = exam.scope === "SUBJECT" ? "Prova da disciplina" : (subjectName ?? "");
     examEls.title.textContent = `Prova — ${title}`;
     examEls.message.textContent = "";
@@ -3931,18 +3931,37 @@ function renderExamQuestion() {
   resetExamSubmitConfirm();
 }
 
-async function saveExamAnswer() {
-  const item = currentExamItem();
-  if (!examState || !item) return;
-  const typed = examEls.answer.value;
-  if ((item.studentAnswer ?? "") === typed) return;
-  item.studentAnswer = typed.trim() === "" ? null : typed;
+// An answer that failed to reach the server stays in `examState.unsaved` (itemId -> text) and is retried on the
+// next save / navigation / submit: it is never dropped, and submitting is blocked until nothing is pending.
+async function pushExamAnswer(itemId, text) {
   try {
-    await DB.exams.saveAnswer(examState.exam.id, item.id, typed);
+    await DB.exams.saveAnswer(examState.exam.id, itemId, text);
+    examState.unsaved.delete(itemId);
+    return true;
   } catch (error) {
     console.error("Falha ao guardar a resposta.", error);
-    examEls.message.textContent = "Não foi possível guardar a última resposta. Verifique a conexão e tente de novo.";
+    examState.unsaved.set(itemId, text);
+    examEls.message.textContent = "Não foi possível guardar a resposta. Ela fica neste aparelho e será enviada de novo; verifique a conexão.";
+    return false;
   }
+}
+
+async function saveExamAnswer() {
+  const item = currentExamItem();
+  if (!examState || !item) return true;
+  examState.unsaved ??= new Map();
+  const typed = examEls.answer.value;
+  if ((item.studentAnswer ?? "") !== typed) item.studentAnswer = typed.trim() === "" ? null : typed;
+  else if (!examState.unsaved.has(item.id)) return true;
+  const ok = await pushExamAnswer(item.id, typed);
+  return ok;
+}
+
+/** Retries every answer still pending; true only when the server has them all. */
+async function flushExamAnswers() {
+  if (!examState?.unsaved) return true;
+  for (const [itemId, text] of [...examState.unsaved]) await pushExamAnswer(itemId, text);
+  return examState.unsaved.size === 0;
 }
 
 async function goToExamQuestion(index) {
@@ -3970,6 +3989,12 @@ examEls.nav?.addEventListener("click", (event) => {
 });
 examEls.submit?.addEventListener("click", async () => {
   await saveExamAnswer();
+  if (!(await flushExamAnswers())) {
+    const n = examState.unsaved.size;
+    examEls.warning.hidden = false;
+    examEls.warning.textContent = `${n} ${n === 1 ? "resposta ainda não foi guardada" : "respostas ainda não foram guardadas"}: sem conexão com o servidor. Elas continuam neste aparelho; tente de novo quando a conexão voltar. Nada foi submetido.`;
+    return;
+  }
   const unanswered = examState.exam.items.filter((it) => !it.studentAnswer || !it.studentAnswer.trim()).length;
   examEls.warning.hidden = false;
   examEls.warning.textContent = unanswered > 0
@@ -3984,6 +4009,10 @@ examEls.cancel?.addEventListener("click", () => { resetExamSubmitConfirm(); exam
 examEls.confirm?.addEventListener("click", async () => {
   examEls.confirm.disabled = true;
   try {
+    if (!(await flushExamAnswers())) {
+      examEls.message.textContent = "Ainda há respostas não guardadas; a prova não foi submetida. Verifique a conexão e tente de novo.";
+      return;
+    }
     const submitted = await DB.exams.submit(examState.exam.id);
     examState.exam = submitted;
     renderExamSubmitted();
