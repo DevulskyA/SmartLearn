@@ -7,7 +7,7 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; LARGEPDF-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
 ATIVA AGORA: LARGEPDF-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
@@ -209,7 +209,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o que foi construído está onde o produto roda, com prova de que nada quebrou.
       NOT_PROVEN: Android/Windows nativos (o gate é WEB); o CLI ainda precisa reconciliar ao voltar (registrado em GUI.md).
       COMMIT: fast-forward para d6109f6 (sem commit novo de código).
-- [!] **REAL-MODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
+- [!] **REALMODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 

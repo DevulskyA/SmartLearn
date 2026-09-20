@@ -108,6 +108,31 @@ ${freshnessHtml(now)}
 </div></main></body></html>`;
 }
 
+function gitOut(cwd, args) {
+  try { return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim(); } catch { return ''; }
+}
+
+/**
+ * The Conductor's "ACTIVE TRACK" paragraph, derived from plan.md so it can never disagree with it. Written
+ * between the ACTIVE-TRACK markers of conductor/tracks.md by the same command that refreshes the boards.
+ */
+export function activeTrackBlock(plan, { planPath, branch = '', head = '', date = '' } = {}) {
+  const ids = (state) => plan.tasks.filter((t) => t.state === state).map((t) => t.id);
+  const list = (label, arr) => (arr.length ? ` · ${label}: ${arr.join(', ')}` : '');
+  const done = ids('✓');
+  const line = `**\`${planPath}\`** — ${plan.title} · Status: ${plan.status}`
+    + list('ATIVA (GUI)', ids('>')) + list('próximas', ids(' ')) + list('adiadas', ids('-')) + list('bloqueadas', ids('!'))
+    + ` · concluídas (${done.length}): ${done.join(', ') || '—'}`
+    + (branch ? ` · branch \`${branch}\`` : '') + (head ? `@${head}` : '') + (date ? ` · sincronizado ${date}` : '');
+  return `<!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->\n${line}\n<!-- ACTIVE-TRACK:END -->`;
+}
+
+/** Replaces the marked block in tracks.md text; returns null when the markers are missing. */
+export function syncActiveTrack(tracksMd, block) {
+  const re = /<!-- ACTIVE-TRACK:BEGIN[\s\S]*?<!-- ACTIVE-TRACK:END -->/;
+  return re.test(tracksMd) ? tracksMd.replace(re, () => block) : null;
+}
+
 /** conductor/.view/tasklist.html for every worktree that has a conductor/ folder (git worktree list). */
 export function worktreeBoards(root) {
   try {
@@ -140,5 +165,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const html = renderAgentBoard({ gui, cli: cliLane(cliCoord) });
   for (const out of outs) { mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, html); }
   const out = outs.join(' + ');
+  // Conductor: keep tracks.md's ACTIVE TRACK in step with plan.md (same command, so it cannot go stale)
+  const tracksPath = join(root, 'conductor', 'tracks.md');
+  const tracksLf = tracksMd.replace(/\r\n/g, '\n');
+  const synced = syncActiveTrack(tracksLf, activeTrackBlock(plan, {
+    planPath: `conductor/tracks/${rel}/plan.md`,
+    branch: gitOut(root, ['branch', '--show-current']),
+    head: gitOut(root, ['rev-parse', '--short', 'HEAD']),
+    date: new Date().toISOString().slice(0, 10),
+  }));
+  if (synced === null) console.warn('[agent-tasklist] AVISO: conductor/tracks.md sem marcadores ACTIVE-TRACK; não sincronizado.');
+  else if (synced !== tracksLf) writeFileSync(tracksPath, tracksMd.includes('\r\n') ? synced.replace(/\n/g, '\r\n') : synced);
   console.log(`[agent-tasklist] ${out} — GUI ${gui.tasks.length} tarefas (${gui.tasks.filter((t) => t.state === '>').map((t) => t.id).join(',') || 'nenhuma ativa'}), CLI ${cliLane(cliCoord).tasks[0].title.slice(0, 60)}`);
 }

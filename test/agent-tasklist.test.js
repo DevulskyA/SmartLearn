@@ -87,3 +87,16 @@ test('the board states its own age and warns when stale; one command targets eve
   const boards = worktreeBoards(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
   assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\\/]\.view[\\/]tasklist\.html$/.test(p)));
 });
+
+test('Conductor ACTIVE TRACK block is derived from the plan and replaces only the marked block', async () => {
+  const { activeTrackBlock, syncActiveTrack } = await import('../scripts/agent-tasklist.mjs');
+  const plan = parsePlan(PLAN);
+  const block = activeTrackBlock(plan, { planPath: 'conductor/tracks/t/plan.md', branch: 'b', head: 'abc123', date: '2026-09-19' });
+  assert.match(block, /ATIVA \(GUI\): EXAM-1/);
+  assert.match(block, /próximas: EXAM-2/);
+  assert.match(block, /concluídas \(1\): CQ-1/);
+  const md = 'antes\n<!-- ACTIVE-TRACK:BEGIN velho -->\nvelho\n<!-- ACTIVE-TRACK:END -->\ndepois\n';
+  const out = syncActiveTrack(md, block);
+  assert.ok(out.startsWith('antes\n') && out.endsWith('\ndepois\n') && !out.includes('velho'));
+  assert.equal(syncActiveTrack('sem marcadores', block), null);
+});
