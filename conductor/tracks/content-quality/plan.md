@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1 concluídos; ACCESS-4 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1, ACCESS-4, ACCESS-5, SCANNED-2 concluídos; INTEGRATE-9 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ACCESS-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-9 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -666,7 +666,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima; vermelho -> verde.
       NOT_PROVEN: falha de rede ao INICIAR o reteste a partir do resultado (usa dados já em memória); outros pontos que enviam desfechos (prova) com resposta perdida (a prova tem a própria idempotência, não re-medida aqui); Android/Windows nativos.
       COMMIT: b2846d4.
-- [>] **ACCESS-4 Formulários de Hoje só com teclado (exercícios externos e edição do resumo)** — OWNER: GUI
+- [✓] **ACCESS-4 Formulários de Hoje só com teclado (exercícios externos e edição do resumo)** — OWNER: GUI
       SPRINT_GOAL: repetir a auditoria só-teclado nos dois formulários da revisão de Hoje que ACCESS-3 não varreu e corrigir só o que impedir concluir.
       BEFORE: NOT_PROVEN de ACCESS-3: "Exercícios externos" e "Editar Resumo" não foram varridos por teclado.
       AFTER: ambos concluídos só com Tab/Enter/Space, foco nunca cai no body, erros anunciados, foco visível.
@@ -675,6 +675,37 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: sonda de foco -> defeito -> teste vermelho -> correção -> verde.
       DONE_WHEN: os dois formulários concluídos só com teclado, verdes, regressão de Hoje verde.
       DEPENDENCIES: RETESTNET-1.
+      EVIDENCE: e2e/keyboard-today.spec.js (+2). DEFEITOS REAIS: (1) "Registrar" (exercícios externos) e "Salvar" (resumo) se desabilitavam com foco -> o foco caía no body; agora voltam ao botão, e ao salvar o resumo o foco vai para "Editar Resumo" (o editor fecha); (2) "Editar Resumo" não expunha se o editor estava aberto -> aria-expanded. SEM defeito: abrir o formulário externo leva o cursor ao campo, erro de validação explicado no lugar com foco no campo, mensagens já eram role=status, campos já tinham rótulo. Vermelho -> verde; 36/36 e2e de Hoje/relacionados, unit 398/398.
+      PRODUCT_DELTA: os dois formulários de Hoje se completam só com teclado sem perder o foco.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: leitor de tela real; falha de rede nesses dois formulários.
+      COMMIT: e33b04a.
+- [✓] **ACCESS-5 Propostas de trecho de Materiais só com teclado** — OWNER: GUI
+      SPRINT_GOAL: (item B da lista do usuário) varrer título/salvar/ver trecho das propostas por teclado.
+      DONE_WHEN: concluído só com teclado, foco nunca perdido, controles nomeados.
+      DEPENDENCIES: ACCESS-4.
+      EVIDENCE: e2e/keyboard-study-materials.spec.js (+1). DEFEITOS REAIS: campo de título sem nome acessível (várias linhas iguais) -> aria-label "Título do trecho, página N"; "Ver trecho da fonte" sem estado -> aria-expanded; "Salvar título" desabilitava com foco (foco ao body) -> foco preservado. Vermelho -> verde; 17/17 e2e de Materiais.
+      PRODUCT_DELTA: o aluno de teclado/leitor de tela renomeia trechos e lê a fonte sem perder o foco.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: leitor de tela real.
+      COMMIT: f7e2de8.
+- [✓] **SCANNED-2 A nota de páginas puladas fica junto das propostas** — OWNER: GUI
+      SPRINT_GOAL: (item C) a nota de SCANNED-1 vivia só na linha de status, que a ação seguinte sobrescreve.
+      DONE_WHEN: a nota permanece enquanto as propostas estão na tela e some no próximo envio.
+      DEPENDENCIES: ACCESS-5.
+      EVIDENCE: medição: renomear um título já apagava a nota (a mensagem de status é única). Correção: parágrafo próprio #sources-coverage-note (role=note) dentro do painel de propostas, preenchido após a extração e limpo no próximo envio (e2e/source-proposals.spec.js +1, vermelho -> verde; 16/16 e2e de Materiais). Não há tela que liste fontes já enviadas: recarregar a página descarta o painel de propostas por desenho do produto atual, então "persistir depois de recarregar" exigiria uma lista de fontes (funcionalidade nova, NÃO feita).
+      PRODUCT_DELTA: o aluno continua vendo o que o resumo não cobre enquanto trabalha nas propostas.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: sobreviver a recarregar (precisa de lista de fontes); PDF real escaneado.
+      COMMIT: ver git log (fix(materials): coverage note stays with the proposals).
+- [>] **INTEGRATE-9 Gate completo (GUI) e decisão de integração** — OWNER: GUI
+      SPRINT_GOAL: provar o lote RETESTNET-1..SCANNED-2 com o gate completo no HEAD final, sem avançar o canônico sem autorização.
+      BEFORE: canônico em 73f4929; GUI 6 commits de código à frente.
+      AFTER: unit + server + e2e completos PASS no GUI; integração no canônico só com autorização do usuário (que pediu não fazer push/merge/deploy sem ela).
+      SCOPE: gate; sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no GUI.
+      DONE_WHEN: gate verde e a pergunta de integração/push feita ao usuário.
+      DEPENDENCIES: SCANNED-2.
 
 ## Evidência CQ-1
 

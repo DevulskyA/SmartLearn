@@ -305,6 +305,7 @@ const sourcesFileInput = document.querySelector("#sources-file-input");
 const sourcesMessage = document.querySelector("#sources-message");
 const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
 const sourcesProposalsList = document.querySelector("#sources-proposals-list");
+const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
 const studyNowSubjectEl = document.querySelector("#study-now-subject");
 const studyNowTitleEl = document.querySelector("#title-study-now");
 const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
@@ -3371,6 +3372,7 @@ sourcesFileInput?.addEventListener("change", async () => {
   if (!file) return;
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
   if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+  if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
   try {
     setSourcesMessage("Enviando PDF...");
@@ -3401,6 +3403,8 @@ sourcesFileInput?.addEventListener("change", async () => {
     renderSourceProposals(chunkResult.proposals);
     // pages with no extractable text never became a proposal: say so, or silence reads as full coverage
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
+    // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
+    if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
     setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
   } catch (error) {
     setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);

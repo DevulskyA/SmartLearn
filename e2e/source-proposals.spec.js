@@ -155,3 +155,27 @@ test('SCANNED-1: a PDF that is only images explains the two ways forward instead
   await expect(page.locator('#sources-message')).toContainText('criar a aula à mão');
   await expect(page.locator('#sources-message')).toHaveClass(/is-error/);
 });
+
+test('SCANNED-2: the note about skipped pages stays next to the proposals while they are on screen, and goes away with the next upload', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  const mixed = buildFixturePdf(['Farmacocinética: absorção e distribuição', 'figura sem texto', 'Farmacodinâmica: receptores e afinidade'], { emptyPages: [2] });
+  await page.setInputFiles('#sources-file-input', { name: 'misto.pdf', mimeType: 'application/pdf', buffer: mixed });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  const note = page.locator('#sources-coverage-note');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('1 página sem texto extraível (p. 2)');
+
+  // the status line is overwritten by the very next action; the coverage note must not be
+  const item = page.locator('.source-proposal-item').first();
+  await item.locator('[data-action="save-proposal-title"]').click();
+  await expect(page.locator('#sources-message')).toContainText('Título atualizado', { timeout: 8000 });
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('O resumo não cobre essa página');
+
+  // a PDF with every page readable leaves no stale warning behind
+  const clean = buildFixturePdf(['Anatomia: sistema nervoso central']);
+  await page.setInputFiles('#sources-file-input', { name: 'limpo.pdf', mimeType: 'application/pdf', buffer: clean });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(note).toBeHidden();
+});
