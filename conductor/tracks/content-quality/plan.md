@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-2 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; EXAM-7 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXAM-7 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -320,7 +320,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o histórico e o "para reforçar" refletem exatamente o que o aluno fez, mesmo com rede instável.
       NOT_PROVEN: a revisão agendada de Hoje (item-level tracking é aditivo por desenho; o salvamento principal já é coberto pelo teste de escritas offline); reteste; falhas parciais (rede que cai entre "iniciar" e "revelar" do servidor); Android/Windows nativos.
       COMMIT: ver `git log` (fix(study-now): start the attempt when judging if reveal could not).
-- [>] **INTEGRATE-2 Gate completo e integração no branch canônico (tudo desde d6109f6)** — OWNER: GUI
+- [✓] **INTEGRATE-2 Gate completo e integração no branch canônico (tudo desde d6109f6)** — OWNER: GUI
       SPRINT_GOAL: levar ao branch canônico o que foi entregue desde a última integração (primeiro uso, navegação mobile, rascunho grande/PDF grande, resiliência de rede, acessibilidade, painel simples) com o gate completo verde.
       BEFORE: claude/smartlearn-v1-complete está em d6109f6; o GUI está ~20 commits à frente e o gate completo do último trecho ainda não rodou.
       AFTER: fast-forward sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no branch canônico.
@@ -329,12 +329,23 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: contagens do gate no worktree canônico (inclui production-build).
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: RESILIENCE-1; CLI pausado.
+      EVIDENCE: pré-condições conferidas (CLI.md PAUSED, FILES_IN_FLIGHT=none, worktree canônico só com .impeccable/ não rastreado); `git merge --ff-only claude/content-quality`: d6109f6 -> 7494e61, sem conflitos. GATE COMPLETO NO BRANCH CANÔNICO: unit 385/385, server 488/488, e2e 148/148 (inclusive production-build, prova do guard de worktree).
+      PRODUCT_DELTA: o branch canônico tem tudo desde a última integração (primeiro uso, navegação mobile, PDF/rascunho grande, resiliência de rede, acessibilidade da prova, painel simples) com gate 100% verde.
+      PROOF_OBSERVED: contagens acima.
+      USER_VALUE: o que foi construído roda onde o produto roda, provado.
+      NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
+      COMMIT: fast-forward para 7494e61.
 
-- [ ] **EXAM-7 Respostas pendentes da prova sobrevivem a fechar/recarregar a aba** — OWNER: GUI
+- [>] **EXAM-7 Respostas pendentes da prova sobrevivem a fechar/recarregar a aba** — OWNER: GUI
       SPRINT_GOAL: uma resposta digitada e ainda não guardada no servidor (rede caída) não se perde se a aba for fechada ou recarregada; ao reabrir a prova, ela volta e é enviada.
       BEFORE: EXAM-6 retém pendências só em memória (NOT_PROVEN registrado): fechar a aba com resposta pendente a perde.
       AFTER: pendências persistem localmente por prova (armazenamento do navegador, com try/catch e sem depender dele) e são reenviadas na retomada; nada é criado sem ação do aluno.
-      PROOF: e2e derruba a rede, digita, recarrega, reabre a prova, vê a resposta e a submissão a guarda.
+      WHY: prova é medição; perder o que foi digitado ao trocar de aba/travar o celular no meio de uma queda de rede é exatamente quando o aluno mais precisa que ela sobreviva.
+      SCOPE: fluxo da prova (src/app.js); sem mudança de servidor.
+      DETAILS: espelhar o mapa `unsaved` em sessionStorage/localStorage por id de prova (try/catch em toda leitura/escrita; a tela funciona sem ele); ao abrir a prova, fundir as pendências locais sobre o que o servidor devolveu e reenviar; limpar ao submeter ou ao guardar com sucesso. Só o texto que o aluno digitou; nada de dado do servidor (gabarito) vai para o navegador.
+      PROOF: e2e derruba a rede, digita, recarrega, reabre a prova, vê a resposta e a submissão a guarda; sem o armazenamento (bloqueado) a prova segue funcionando como hoje.
+      DONE_WHEN: uma resposta pendente sobrevive ao recarregar e chega ao servidor; nada vaza; sem regressão nos e2e da prova.
+      DEPENDENCIES: EXAM-6 (feito).
 - [ ] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
       SPRINT_GOAL: recarregar/sair no meio de uma sessão continua da próxima questão não julgada, em vez de recomeçar da 1ª (medido em STUDYRESUME-1: o julgado permanece como "para reforçar", mas a sessão reinicia).
       DETAILS: decisão local de menor mudança (estado no servidor vs armazenamento local); só se o ganho compensar a complexidade.
