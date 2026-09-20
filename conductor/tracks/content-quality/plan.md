@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: NEXT (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 ```
 
 ## Tarefas
@@ -91,9 +91,23 @@ ATIVA AGORA: NEXT (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em 
       PROOF_OBSERVED: e2e + servidor acima; contagens de evidência conferidas antes/depois de concluir e depois do reteste.
       USER_VALUE: o esforço da prova não morre na tela: aparece no histórico do aluno e aponta o que reforçar.
       NOT_PROVEN: a evidência da prova usa o tipo existente INITIAL_PRACTICE (o esquema só admite REVIEW/INITIAL_PRACTICE/EXTERNAL), então o rótulo "Prática inicial" no histórico do Plano não distingue prova de estudo, e o botão "Estudar agora" some depois da 1ª evidência dessa aula; tentativas apontam a versão ATUAL do exercício (se editado entre iniciar e concluir a correção, a versão vinculada é a nova); nenhuma agenda de revisão nasce da prova (por desenho).
-- [>] **NEXT Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+- [✓] **NEXT Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir sozinho a próxima melhoria de maior valor (ganho x confiança / custo).
       DETAILS: consultar estado canônico, NOT_PROVEN, experiência atual, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
+      EVIDENCE: seleção 2026-09-19 (ganho x confiança / custo), candidatos avaliados: (A) "Por quê" nas questões ESCRITAS pelo aluno — o campo existe no servidor desde a mig 023 e alimenta Estudar agora, erro e correção da prova, mas só questões geradas por IA o têm: ganho médio-alto, confiança alta, custo baixo (form + edição) => ESCOLHIDA; (B) rótulo "Prova" no histórico do Plano — ganho baixo/médio, custo baixo => depois; (C) prova por disciplina (multi-unidade, amostrando o que reforçar) — ganho alto, custo/risco altos (migração, evidência por unidade) => próxima grande; (D) veredito de Estatísticas ponderado por volume — semântica de produto em aberto, superfície protegida => não agora; (E) rodar o pipeline com chave real — bloqueado (sem chave).
+      PRODUCT_DELTA: sprints seguintes definidas: AUTHOR-1 (ativa) e EXAM-4 (candidata).
+- [>] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
+      SPRINT_GOAL: uma questão criada pelo próprio aluno ensina como as geradas por IA: ele escreve (e edita) o porquê da resposta e o vê no Estudar agora, no cartão de erro, na revisão da Hoje e na correção da prova.
+      BEFORE: só questões geradas por IA têm "Por quê"; o formulário de exercício manual tem enunciado, resposta e dica, sem explicação; editar uma questão não permite mexer no porquê.
+      AFTER: o formulário de criar e o de editar exercício têm o campo "Por quê (opcional)"; o texto salvo aparece onde a resposta aparece; vazio = nada aparece (nunca inventado).
+      WHY: quem estuda com as próprias questões (o caso comum) perde o feedback que ensina exatamente no momento do erro.
+      SCOPE: formulário de exercícios em Registro/Plano (src/app.js), remote-store (create/update), já suportado pelo servidor.
+      PROOF: e2e: criar exercício com porquê pela UI -> aparece após revelar no Estudar agora e na correção da prova; editar o porquê -> nova versão mostra o texto novo; sem porquê -> nenhum bloco "Por quê"; unit do mapeamento.
+      DONE_WHEN: o fluxo acima verde, sem regressão nos e2e de exercícios.
+      DEPENDENCIES: EXAM-3 (feito).
+- [ ] **EXAM-4 Prova por disciplina (candidata)** — OWNER: GUI
+      SPRINT_GOAL: o aluno faz uma prova que cobre várias aulas de uma disciplina, com prioridade ao que precisa reforçar, e o resultado vira evidência por aula.
+      DETAILS: exige decisão de amostragem e migração (exam sem unit único); só ativar depois de AUTHOR-1 e de reavaliar valor x custo.
 
 ## Evidência CQ-1
 
