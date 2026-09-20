@@ -706,6 +706,11 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: `node scripts/test-live.mjs status` no GUI.
       DONE_WHEN: gate verde e a pergunta de integração/push feita ao usuário.
       DEPENDENCIES: SCANNED-2.
+      EVIDENCE: gate no GUI pelo wrapper, 3 rodadas completas. Rodada 1 (df988e5): unit 398, server 490, e2e 173/174 — falha em author-why.spec.js (clique em Plano depois de re-render; isolado 20/20). Rodada 2 (2982a2c, teste de author-why endurecido): unit 398, e2e 173/174 — falha diferente em exam-mode EXAM-4 (lia a mesma pergunta duas vezes: o teste lia antes da tela avançar; isolado 16/16 depois de esperar o progresso) e server 489/490 — process-smoke "occupied port" estourou o waitFor sob carga (isolado 4/4). Nenhuma das falhas toca código alterado nesta rodada (Estudar agora/Hoje/Materiais/servidor de extração); TODAS são corridas de harness, cada uma numa linha diferente — padrão recorrente (~1 flake por gate completo de ~15 min). Correções só de teste: author-why (esperar a criação da disciplina e a linha do Plano), exam-mode EXAM-4 (esperar o progresso). GATE COMPLETAMENTE VERDE NUMA ÚNICA RODADA: NÃO obtido neste lote; cada falha foi caracterizada e provada não-produto por repetição isolada, mas o critério "gate verde" exige uma rodada limpa antes de integrar.
+      PRODUCT_DELTA: nenhum novo; o lote RETESTNET-1..SCANNED-2 está provado por especificação e regressão proporcional (várias dezenas de e2e verdes por fatia).
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: uma rodada completa 100% verde do lote; canônico NÃO foi tocado (usuário exigiu autorização para push/merge). Próximo passo sugerido: uma rodada limpa no HEAD final antes de integrar, e uma tarefa FLAKE-2 para varrer helpers de teste com o padrão "ler estado antes de o Plano/tela terminar de renderizar" (já corrigido em product-value, UX-1, author-why, EXAM-4).
+      COMMIT: ver git log.
 
 ## Evidência CQ-1
 

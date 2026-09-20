@@ -361,7 +361,11 @@ test('EXAM-4: a discipline exam mixes the units, shows no gabarito before submit
     const screen = await page.locator('#screen-exam').innerText();
     expect(screen).not.toMatch(/GABARITO|PORQUE/);
     await page.locator('#exam-answer-input').fill(`r${i + 1}`);
-    if (i < 3) await page.locator('#exam-next-btn').click();
+    if (i < 3) {
+      await page.locator('#exam-next-btn').click();
+      // read the next question only after the screen has moved on, or the same question is counted twice
+      await expect(page.locator('#exam-progress')).toHaveText(`Questão ${i + 2} de 4`);
+    }
   }
   expect([...seen].sort()).toEqual(['Enun A1?', 'Enun A2?', 'Enun B1?', 'Enun B2?']); // both units are in the exam
   await page.locator('#exam-submit-btn').click();
