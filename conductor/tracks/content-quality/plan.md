@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: UX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: ATTEMPT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -162,7 +162,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
 - [-] **VERDICT-1 Veredito de Estatísticas ponderado por volume (adiada: decisão de produto)** — OWNER: GUI
       SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
       DETAILS: lido o código (src/analytics.js studyVerdict): o veredito CONTA disciplinas e mostra cada contagem à parte ("Disciplinas: 1 melhorando · 1 piorando"), com o volume por período exigido dentro de cada disciplina (mín. 10 questões) — não há erro, e ponderar por volume mudaria o significado do veredito numa superfície protegida (ADR-0001). Só ativar com decisão de produto (HUMAN_GATE); até lá, adiada.
-- [>] **UX-1 Inspeção visual do fluxo de prova em uso real (desktop + 375px)** — OWNER: GUI
+- [✓] **UX-1 Inspeção visual do fluxo de prova em uso real (desktop + 375px)** — OWNER: GUI
       SPRINT_GOAL: olhar de verdade (capturas 1280/375) o fluxo Plano -> Prova (aula e disciplina) -> correção -> resultado e corrigir só os defeitos visuais/de uso realmente observados.
       BEFORE: os e2e provam comportamento e ausência de overflow, mas ninguém olhou as telas novas de prova/correção/disciplina como um aluno olharia.
       AFTER: capturas revisadas; cada defeito material achado (hierarquia, botões apertados, texto cortado, rótulo confuso) virou teste vermelho -> menor correção; se não houver defeito, fecha só com as capturas.
@@ -171,6 +171,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: capturas 1280/375 de: botões no Plano, prova em andamento, correção (aula e disciplina), resultado registrado; lista de defeitos com decisão (corrigido/aceito).
       DONE_WHEN: telas revisadas; defeitos materiais corrigidos e provados; sem regressão.
       DEPENDENCIES: EXAM-4 (gate e2e completo).
+      EVIDENCE: prova por disciplina executada no app real (servidor real, UI real) a 1280 e 375px com capturas de: Plano com os botões, prova em andamento (1ª e última questão), confirmação, correção, tudo julgado, resultado registrado. Defeitos MATERIAIS observados: (1) no Plano "Estudar agora / Fazer prova / Prova da disciplina" ficavam COLADOS, sem espaço; (2) depois de registrar o resultado os botões Acertei/Errei continuavam à vista (um com anel de foco) parecendo ativos embora desabilitados. Correções mínimas: contêiner flex com gap `.plan-exercise-actions` e `.exam-judge[hidden]` (o chip Acerto/Erro continua mostrando o resultado). Prova: e2e `exam-mode` UX-1 (vermelho antes: contêiner inexistente; verde depois) mede o espaço entre os botões a 1280 e a 375px e exige os botões ocultos após registrar. Sem defeito achado em: navegação entre questões, resposta preservada, numeração com respondidas destacadas, aviso/confirmação de submissão, correção legível a 375px (aula por questão, sua resposta x correta x porquê), nenhum vazamento antes de submeter (coberto pelos e2e EXAM-1/4), sem overflow horizontal. Regressão: exam-mode 7/7 + plano/estudar/jornada/autoria/prioridades/product-value/mobile-nav 15/15.
+      PRODUCT_DELTA: a prova (aula e disciplina) deixa de ter dois defeitos de uso que o teste funcional não pegava: ações coladas no Plano e controles "vivos" após o resultado final.
+      PROOF_OBSERVED: capturas revisadas antes/depois + e2e acima.
+      USER_VALUE: menos confusão e menos toque errado no celular; o resultado registrado é lido como final.
+      NOT_PROVEN: leitor de tela e navegação só por teclado da prova não foram exercitados além do que os e2e já cobrem (foco após julgar); dispositivo físico real (só emulação de viewport).
+      COMMIT: ver `git log` (fix(exam): space Plano action buttons; hide Acertei/Errei).
+- [>] **ATTEMPT-1 A própria resposta da prova aparece ao rever o desempenho** — OWNER: GUI
+      SPRINT_GOAL: ao abrir um item de prova em "Exercícios resolvidos" (Estatísticas/Plano), o aluno vê o que ELE escreveu ao lado do gabarito, e não só o "acertei/errei" — o dado já existe (exam_items.student_answer) e hoje se perde.
+      BEFORE: o detalhe da tentativa mostra enunciado, gabarito e resultado; para provas ele diz que o produto nunca captura a resposta do aluno — o que deixou de ser verdade com o Modo Prova.
+      AFTER: tentativas nascidas de uma prova mostram "Sua resposta na prova" (ou "Sem resposta"); estudo/revisão seguem como hoje (sem campo inventado).
+      WHY: rever o erro comparando com o que se escreveu é o que faz a prova ensinar depois de dias; sem isso a resposta some depois da tela de correção.
+      SCOPE: server/src/services/exercise-review.js (+DTO), diálogo de tentativas (src/app.js). Superfície de Estatísticas: acréscimo funcional de um campo, sem redesenhar.
+      DETAILS: junção evidence -> exam_evidence -> exam_items por exercise_id (a mesma questão pode aparecer em provas diferentes: o vínculo é pela prova daquela evidência); campo só quando a fonte é prova; texto vem do aluno, sempre inserido como texto (nunca HTML).
+      PROOF: teste de servidor (prova de disciplina: cada tentativa traz a resposta certa do aluno; estudo não traz o campo; outra prova da mesma questão não vaza) + e2e (prova -> registrar -> Estatísticas/Plano -> abrir a evidência -> "Sua resposta na prova").
+      DONE_WHEN: a resposta digitada na prova é visível ao rever a evidência, sem regressão nos fluxos de tentativa existentes.
+      DEPENDENCIES: EXAM-3/4 (feitos).
 - [!] **REAL-MODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
