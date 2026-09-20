@@ -42,6 +42,18 @@ export function registerExamRoutes(app, db) {
     try { return exams.saveAnswer(db, request.actor.userId, id, itemId, request.body); } catch (err) { return handleError(err, reply); }
   });
 
+  app.put('/exams/:id/items/:itemId/judgment', {
+    schema: {
+      params: { type: 'object', required: ['id', 'itemId'], properties: { id: ID, itemId: ID } },
+      body: { type: 'object', required: ['outcome'], properties: { outcome: { type: 'string' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    const itemId = Number(request.params.itemId);
+    if (!Number.isInteger(id) || !Number.isInteger(itemId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { exam: exams.judge(db, request.actor.userId, id, itemId, request.body) }; } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/exams/:id/submit', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: ID } } },
   }, async (request, reply) => {

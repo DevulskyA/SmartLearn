@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXAM-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 ```
 
 ## Tarefas
@@ -61,7 +61,7 @@ ATIVA AGORA: EXAM-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       PROOF_OBSERVED: e2e `exam-mode` 2/2; `exams.test.js` 6/6 (incl. HTTP); regressão de estudo/plano verde.
       USER_VALUE: medir antes de ensinar — a base para treino de prova (REVALIDA, provas da faculdade) e para evidência honesta.
       NOT_PROVEN: quem abrir o Plano/Estudar agora ainda vê os gabaritos por lá (a prova garante o FLUXO de prova, não impede o aluno de espiar por outro caminho — é app de estudo, não proctoring); a correção (EXAM-2) e a evidência (EXAM-3) ainda não existem: após submeter a tela só confirma o envio.
-- [>] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
+- [✓] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
       SPRINT_GOAL: depois de submeter, o aluno entende o resultado e aprende com os erros.
       BEFORE: EXAM-1 mede mas não entrega análise.
       AFTER: após submissão: acertos/total, percentual derivado, e por questão: enunciado, resposta do aluno, resposta correta, explicação ("Por quê"), fonte, acerto x erro separados.
@@ -71,7 +71,12 @@ ATIVA AGORA: EXAM-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele e
       PROOF: e2e garante que tudo isso aparece SOMENTE depois da submissão e que antes a API recusa.
       DONE_WHEN: "prova mede primeiro e ensina depois" observável.
       DEPENDENCIES: EXAM-1.
-- [ ] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
+      EVIDENCE: `judge()` (PUT /v1/exams/:id/items/:itemId/judgment; só depois de submeter; mudável até finalizar) + `start()` agora RETOMA também prova SUBMETIDA ainda sem correção completa. UI: tela "Correção da prova" com, por questão, enunciado, "Sua resposta" (ou "Sem resposta"), "Resposta correta", "Por quê" (só onde existe), trecho da fonte (quando há citação), botões Acertei/Errei (aria-pressed, foco preservado), chip "Acerto/Erro/A julgar" + borda por resultado (nunca só cor), contagem "Acertos: X · Erros: Y" e resultado "X/N corretas — P%" SÓ quando todas foram julgadas. Testes: `exams-judgment.test.js` (2: julgar só após submeter, sem nota parcial, nota derivada, mudar de ideia, dono/foreign item) + `exams.test.js` (retomada da submetida) + e2e `exam-mode` (3: prova completa sem vazamento; EXAM-2 correção; mobile 375). server 474/474 esperado, e2e exam-mode 3/3.
+      PRODUCT_DELTA: "a prova mede primeiro e ensina depois" é observável: só depois de submeter o aluno vê a própria resposta ao lado do gabarito, o porquê e a fonte, corrige item a item e recebe "2/3 corretas — 66,7%" com acertos e erros distintos; sair e voltar retoma a mesma correção; a nota nunca aparece parcial.
+      PROOF_OBSERVED: e2e EXAM-2 (chips 'A julgar' x3 -> 'Acerto'/'Erro', score oculto até o último, 1/3 -> 2/3 ao mudar de ideia, reload retoma com o mesmo resultado, sem overflow horizontal).
+      USER_VALUE: o erro na prova vira aprendizagem (resposta certa + porquê + trecho) logo depois da medição, sem antecipar nada durante a prova.
+      NOT_PROVEN: renderização do trecho da fonte na correção não foi exercitada no e2e da prova (mesmo dado/DTO do Estudar agora, coberto lá); enquanto a correção não é finalizada (EXAM-3) não se pode iniciar outra prova da mesma aula (a submetida é retomada).
+- [>] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
       SPRINT_GOAL: terminar uma prova não é um beco sem saída: o resultado entra no ciclo longitudinal e leva a uma próxima ação útil.
       BEFORE: o valor da prova acabaria na tela de resultado.
       AFTER: a prova submetida gera exatamente a evidência esperada (uma linha agregada, sem duplicar) e oferece seguir para os erros / unidade / reforço existentes.

@@ -3830,6 +3830,9 @@ const examEls = {
   submitted: document.querySelector("#exam-submitted"),
   submittedTitle: document.querySelector("#exam-submitted-title"),
   submittedText: document.querySelector("#exam-submitted-text"),
+  resultScore: document.querySelector("#exam-result-score"),
+  counts: document.querySelector("#exam-counts"),
+  reviewList: document.querySelector("#exam-review-list"),
   back: document.querySelector("#exam-back-btn"),
 };
 let examState = null; // { exam, index, dirty }
@@ -3842,10 +3845,15 @@ async function startExam(unit, subjectName) {
     examEls.unit.textContent = subjectName ?? "";
     examEls.title.textContent = `Prova — ${unit.title ?? ""}`;
     examEls.message.textContent = "";
-    examEls.submitted.hidden = true;
-    examEls.taking.hidden = false;
     showScreen("exam", { focus: true });
-    renderExamQuestion();
+    if (exam.status === "IN_PROGRESS") {
+      examEls.submitted.hidden = true;
+      examEls.taking.hidden = false;
+      renderExamQuestion();
+    } else {
+      // already submitted and waiting for its correction: continue where the student stopped
+      renderExamSubmitted();
+    }
   } catch (error) {
     console.error("Falha ao iniciar a prova.", error);
     setPlanFormMessage?.("Não foi possível iniciar a prova. " + (error?.message ?? ""), true);
@@ -3946,14 +3954,87 @@ examEls.confirm?.addEventListener("click", async () => {
 });
 examEls.back?.addEventListener("click", () => { examState = null; showScreen("plan", { focus: true }); });
 
-function renderExamSubmitted() {
+// After submitting: the correction. Everything the student needs to learn from the exam is here — their
+// answer next to the gabarito, the WHY, the source — and only now. Right and wrong are judged by the
+// student (open-response questions), item by item; the score exists once every item is judged.
+function renderExamSubmitted({ focusHeading = true } = {}) {
   const { exam } = examState;
   examEls.taking.hidden = true;
   examEls.submitted.hidden = false;
   const answered = exam.items.filter((it) => it.studentAnswer && it.studentAnswer.trim()).length;
-  examEls.submittedText.textContent = `${answered} de ${exam.items.length} questões respondidas. Suas respostas foram guardadas e não podem mais ser alteradas.`;
-  examEls.submittedTitle.focus();
+  const judged = exam.items.filter((it) => it.outcome).length;
+  examEls.submittedText.textContent = judged < exam.items.length
+    ? `${answered} de ${exam.items.length} questões respondidas. Compare com o gabarito e marque Acertei ou Errei em cada questão (${judged} de ${exam.items.length} corrigidas).`
+    : `${answered} de ${exam.items.length} questões respondidas. Correção completa.`;
+
+  if (exam.score) {
+    const pct = exam.score.percent.toFixed(1).replace(".", ",");
+    examEls.resultScore.textContent = `${exam.score.correct}/${exam.score.total} corretas — ${pct}%`;
+    examEls.resultScore.hidden = false;
+    examEls.counts.textContent = `Acertos: ${exam.score.correct} · Erros: ${exam.score.total - exam.score.correct}`;
+    examEls.counts.hidden = false;
+  } else {
+    examEls.resultScore.hidden = true;
+    examEls.counts.hidden = true;
+  }
+
+  examEls.reviewList.replaceChildren();
+  const OUTCOME_LABEL = { CORRECT: "Acerto", INCORRECT: "Erro" };
+  for (const it of exam.items) {
+    const li = document.createElement("li");
+    li.className = "exam-review-item";
+    li.dataset.itemId = String(it.id);
+    li.dataset.outcome = it.outcome ?? "";
+    li.append(createTextElement("p", "exam-review-q", `${it.position + 1}. ${it.question}`));
+    li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : "A julgar"));
+    li.append(createTextElement("p", "exam-review-label", "Sua resposta"));
+    const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : "Sem resposta");
+    if (!it.studentAnswer || !it.studentAnswer.trim()) mine.classList.add("is-empty");
+    li.append(mine);
+    li.append(createTextElement("p", "exam-review-label", "Resposta correta"), createTextElement("p", "exam-review-text exam-review-correct", it.answer ?? ""));
+    if (it.explanation) li.append(createTextElement("p", "exam-review-label", "Por quê"), createTextElement("p", "exam-review-text exam-review-why", it.explanation));
+    const sources = (it.citations ?? []).filter((c) => c.pageText);
+    if (sources.length > 0) {
+      li.append(createSourceDetails(
+        `Trecho do material · ${sources[0].sourceName}, ${sources.length > 1 ? "páginas" : "página"} ${formatPageList(sources.map((c) => c.pageIndex))}`,
+        sources.map((c) => ({ pageIndex: c.pageIndex, text: c.pageText })),
+      ));
+    }
+    const judge = document.createElement("div");
+    judge.className = "exam-judge";
+    for (const [outcome, label, cls] of [["CORRECT", "Acertei", "exam-correct-btn"], ["INCORRECT", "Errei", "exam-wrong-btn"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `secondary-button ${cls}`;
+      b.dataset.action = "exam-judge";
+      b.dataset.itemId = String(it.id);
+      b.dataset.outcome = outcome;
+      b.setAttribute("aria-pressed", String(it.outcome === outcome));
+      b.textContent = label;
+      judge.append(b);
+    }
+    li.append(judge);
+    examEls.reviewList.append(li);
+  }
+  if (focusHeading) examEls.submittedTitle.focus();
 }
+
+examEls.reviewList?.addEventListener("click", async (event) => {
+  const b = event.target.closest('[data-action="exam-judge"]');
+  if (!b || !examState) return;
+  const itemId = Number(b.dataset.itemId);
+  const outcome = b.dataset.outcome;
+  b.disabled = true;
+  try {
+    examState.exam = await DB.exams.judge(examState.exam.id, itemId, outcome);
+    renderExamSubmitted({ focusHeading: false });
+    examEls.reviewList.querySelector(`[data-action="exam-judge"][data-item-id="${itemId}"][data-outcome="${outcome}"]`)?.focus();
+  } catch (error) {
+    console.error("Falha ao registrar a correção.", error);
+    examEls.message.textContent = "Não foi possível registrar essa correção. Tente de novo.";
+    b.disabled = false;
+  }
+});
 
 // Entry used by a Hoje review block: same retest engine as "Estudar agora",
 // just started from the wrong items of the block the student already judged.

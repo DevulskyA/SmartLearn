@@ -109,10 +109,12 @@ test('submit locks the answers and only THEN returns the correction data (gabari
     assert.equal(again.submittedAt, '2026-04-01T10:00:00.000Z', 'a second submit does not move the timestamp');
     assert.throws(() => exams.saveAnswer(db, userId, exam.id, exam.items[0].id, { answer: 'tarde demais' }), (e) => e.code === 'INVALID_STATE');
     assert.equal(exams.get(db, userId, exam.id).items[0].studentAnswer, 'x', 'locked answers are unchanged');
-    // after submission a new start begins a NEW exam
+    // a submitted exam that is not corrected yet is RESUMED at its correction, not duplicated
     const next = exams.start(db, userId, { unitId: unit.id });
-    assert.equal(next.resumed, false);
-    assert.notEqual(next.exam.id, exam.id);
+    assert.equal(next.resumed, true);
+    assert.equal(next.exam.id, exam.id);
+    assert.equal(next.exam.status, 'SUBMITTED');
+    assert.equal(next.exam.items[0].answer, 'GABARITO-UNICO-1');
   } finally { cleanup(); }
 });
 

@@ -3146,6 +3146,70 @@ h1 {
   outline-offset: 2px;
 }
 
+/* Modo Prova (EXAM-2): correction shown only after submitting; right and wrong are told apart by chip + border, not colour alone. */
+.exam-review-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.exam-review-item {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: 0.65rem;
+}
+
+.exam-review-item[data-outcome="CORRECT"] {
+  border-left-color: #15803d;
+}
+
+.exam-review-item[data-outcome="INCORRECT"] {
+  border-left-color: #b91c1c;
+}
+
+.exam-review-q {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+
+.exam-review-label {
+  margin: 0.5rem 0 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.exam-review-text {
+  margin: 0;
+}
+
+.exam-review-text.is-empty {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.exam-judge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.exam-judge button[aria-pressed="true"] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.exam-counts {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+}
+
 /* Reviewer's corrections to a flagged draft (CQ-6): one collapsed block, native controls. */
 .source-draft-editor {
   margin: 0.75rem 0;

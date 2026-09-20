@@ -105,7 +105,9 @@ export function start(db, userId, { unitId }, now = () => new Date()) {
   const unit = findOwnedUnit(db, userId, unitId);
   if (!unit) throw new ExamError('NOT_FOUND', 'Aula não encontrada.');
 
-  const existing = db.prepare("SELECT id FROM exams WHERE user_id = ? AND unit_id = ? AND status = 'IN_PROGRESS' ORDER BY id DESC LIMIT 1").get(userId, unitId);
+  // An exam that is still open — being taken (IN_PROGRESS) or waiting for its correction (SUBMITTED) — is
+  // RESUMED, never duplicated: leaving or reloading loses neither the answers nor the correction so far.
+  const existing = db.prepare("SELECT id FROM exams WHERE user_id = ? AND unit_id = ? AND status IN ('IN_PROGRESS','SUBMITTED') ORDER BY id DESC LIMIT 1").get(userId, unitId);
   if (existing) return { exam: get(db, userId, existing.id), resumed: true };
 
   const exercises = db.prepare('SELECT id FROM exercises WHERE user_id = ? AND unit_id = ? AND archived_at IS NULL ORDER BY order_index, id').all(userId, unitId);
@@ -134,6 +136,22 @@ export function saveAnswer(db, userId, examId, itemId, { answer } = {}) {
   if (!item) throw new ExamError('NOT_FOUND', 'Questão da prova não encontrada.');
   db.prepare('UPDATE exam_items SET student_answer = ? WHERE user_id = ? AND id = ?').run(answer.trim() === '' ? null : answer, userId, itemId);
   return { saved: true, answeredCount: db.prepare("SELECT COUNT(*) AS n FROM exam_items WHERE user_id = ? AND exam_id = ? AND student_answer IS NOT NULL AND TRIM(student_answer) <> ''").get(userId, examId).n };
+}
+
+/**
+ * The student's own judgement of one item, made AFTER submitting, with the gabarito in front of them
+ * (the questions are open-response, so only the student can say "acertei"/"errei" — the same
+ * self-report model as Estudar agora). Can be changed until the exam is finalized (EXAM-3).
+ */
+export function judge(db, userId, examId, itemId, { outcome } = {}) {
+  const exam = findOwnedExam(db, userId, examId);
+  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', 'Submeta a prova antes de corrigir.');
+  if (exam.status === 'CORRECTED') throw new ExamError('INVALID_STATE', 'A correção desta prova já foi concluída.');
+  if (outcome !== 'CORRECT' && outcome !== 'INCORRECT') throw new ExamError('VALIDATION_FAILED', 'outcome deve ser CORRECT ou INCORRECT.', 'outcome');
+  const item = db.prepare('SELECT id FROM exam_items WHERE user_id = ? AND exam_id = ? AND id = ?').get(userId, examId, itemId);
+  if (!item) throw new ExamError('NOT_FOUND', 'Questão da prova não encontrada.');
+  db.prepare('UPDATE exam_items SET outcome = ? WHERE user_id = ? AND id = ?').run(outcome, userId, itemId);
+  return get(db, userId, examId);
 }
 
 /** IN_PROGRESS -> SUBMITTED, once. Submitting again returns the same correction data and changes nothing. */

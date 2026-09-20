@@ -161,6 +161,63 @@ test('a complete exam: answer, navigate without losing answers, resume, submit -
   expect(after.lateStatus).toBe(409);
 });
 
+test('EXAM-2: after submitting, the result teaches — answer next to gabarito, the why, right/wrong told apart, score only when every item is judged', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Correcao', title: 'Aula correcao', studyDate: '2026-04-01' });
+  const specs = [
+    ['Enunciado A?', 'Resposta A', 'Porque A explica.'],
+    ['Enunciado B?', 'Resposta B', 'Porque B explica.'],
+    ['Enunciado C?', 'Resposta C', null],
+  ];
+  for (const [question, answer, explanation] of specs) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question, answer, explanation, provenance: 'MANUAL' });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula correcao' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').click();
+  await page.locator('#exam-answer-input').fill('minha A');
+  await page.locator('#exam-next-btn').click();
+  await page.locator('#exam-answer-input').fill('minha B');
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 8000 });
+
+  // the correction: the student's answer beside the gabarito, the why (only where it exists), no score yet
+  const items = page.locator('.exam-review-item');
+  await expect(items).toHaveCount(3);
+  await expect(items.nth(0).locator('.exam-review-student')).toHaveText('minha A');
+  await expect(items.nth(0).locator('.exam-review-correct')).toHaveText('Resposta A');
+  await expect(items.nth(0).locator('.exam-review-why')).toHaveText('Porque A explica.');
+  await expect(items.nth(2).locator('.exam-review-student')).toHaveText('Sem resposta');
+  await expect(items.nth(2).locator('.exam-review-why')).toHaveCount(0);
+  await expect(page.locator('#exam-result-score')).toBeHidden();
+  await expect(page.locator('#exam-submitted-text')).toContainText('0 de 3 corrigidas');
+  await expect(items.locator('.exam-review-chip')).toHaveText(['A julgar', 'A julgar', 'A julgar']);
+
+  // judge item by item: right and wrong are told apart by chip + attribute, and there is no score until the last one
+  await items.nth(0).locator('.exam-correct-btn').click();
+  await expect(items.nth(0)).toHaveAttribute('data-outcome', 'CORRECT');
+  await expect(items.nth(0).locator('.exam-review-chip')).toHaveText('Acerto');
+  await expect(items.nth(0).locator('.exam-correct-btn')).toBeFocused();
+  await items.nth(1).locator('.exam-wrong-btn').click();
+  await expect(items.nth(1).locator('.exam-review-chip')).toHaveText('Erro');
+  await expect(page.locator('#exam-result-score')).toBeHidden();
+  await items.nth(2).locator('.exam-wrong-btn').click();
+  await expect(page.locator('#exam-result-score')).toHaveText('1/3 corretas — 33,3%');
+  await expect(page.locator('#exam-counts')).toHaveText('Acertos: 1 · Erros: 2');
+
+  // changing one's mind updates the result; leaving and coming back resumes the SAME correction
+  await items.nth(2).locator('.exam-correct-btn').click();
+  await expect(page.locator('#exam-result-score')).toHaveText('2/3 corretas — 66,7%');
+  await page.reload();
+  await page.locator('[data-screen="plan"]').click();
+  const row2 = page.locator('.plan-row', { hasText: 'Aula correcao' });
+  await row2.locator('.plan-expand-btn').click();
+  await row2.locator('[data-action="plan-exam"]').click();
+  await expect(page.locator('#exam-result-score')).toHaveText('2/3 corretas — 66,7%');
+  await expect(page.locator('.exam-review-item').nth(1)).toHaveAttribute('data-outcome', 'INCORRECT');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
 test('mobile 375: the exam fits without horizontal scroll and its controls are touch-sized', async ({ page }) => {
   const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Mobile', title: 'Prova mobile', studyDate: '2026-04-01' });
   for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Q${i}?`, answer: `R${i}`, provenance: 'MANUAL' });
