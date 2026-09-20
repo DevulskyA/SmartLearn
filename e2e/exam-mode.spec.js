@@ -405,3 +405,42 @@ test('EXAM-4: a discipline exam mixes the units, shows no gabarito before submit
   await rowB.locator('.plan-expand-btn').click();
   await expect(rowB.locator('.plan-evidence-list li')).toContainText('Prova: 2/2');
 });
+
+test('UX-1: Plano action buttons are spaced apart (also at 375), and once the result is registered the Acertei/Errei buttons are gone', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Visual', title: 'Aula visual', studyDate: '2026-04-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Vis ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+
+  const gaps = async () => {
+    const boxes = await page.locator('.plan-row', { hasText: 'Aula visual' }).locator('.plan-exercise-actions button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom })));
+    expect(boxes.length).toBe(3);
+    for (let i = 1; i < boxes.length; i += 1) {
+      const horizontal = boxes[i].l - boxes[i - 1].r; // same line: needs a visible gap
+      const vertical = boxes[i].t - boxes[i - 1].b;   // wrapped to a new line: needs a gap too
+      expect(Math.max(horizontal, vertical)).toBeGreaterThanOrEqual(6);
+    }
+  };
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.locator('[data-screen="plan"]:visible').first().click();
+    const row = page.locator('.plan-row', { hasText: 'Aula visual' });
+    if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded')) !== 'true') await row.locator('.plan-expand-btn').click();
+    await gaps();
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  const row = page.locator('.plan-row', { hasText: 'Aula visual' });
+  await row.locator('[data-action="plan-exam"]').click();
+  await page.locator('#exam-answer-input').fill('a');
+  await page.locator('#exam-next-btn').click();
+  await page.locator('#exam-answer-input').fill('b');
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  const items = page.locator('.exam-review-item');
+  await expect(items.nth(0).locator('.exam-judge')).toBeVisible();
+  for (const i of [0, 1]) await items.nth(i).locator('.exam-correct-btn').click();
+  await expect(items.nth(0).locator('.exam-judge')).toBeVisible(); // still editable until the result is registered
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toBeVisible();
+  await expect(items.nth(0).locator('.exam-judge')).toBeHidden(); // final: no buttons that look live but do nothing
+  await expect(items.nth(0).locator('.exam-review-chip')).toHaveText('Acerto'); // the outcome is still shown as a label
+});

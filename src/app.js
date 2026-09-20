@@ -1699,6 +1699,9 @@ export async function renderPlan() {
             }
             exSection.append(item);
           }
+          const actions = document.createElement("div");
+          actions.className = "plan-exercise-actions";
+          exSection.append(actions);
           // First active-recall pass on demand. Offered only until the unit has
           // its INITIAL_PRACTICE evidence: that is exactly what this flow
           // records, so a second on-demand pass would be mislabeled (later
@@ -1711,7 +1714,7 @@ export async function renderPlan() {
             startBtn.dataset.action = "plan-study-now";
             startBtn.textContent = "Estudar agora";
             startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
-            exSection.append(startBtn);
+            actions.append(startBtn);
           }
           // Modo Prova: measure first, teach after (nothing is revealed until the student submits).
           if (REMOTE_MODE && DB.exams) {
@@ -1721,7 +1724,7 @@ export async function renderPlan() {
             examBtn.dataset.action = "plan-exam";
             examBtn.textContent = "Fazer prova";
             examBtn.addEventListener("click", () => startExam(unit, subject?.name));
-            exSection.append(examBtn);
+            actions.append(examBtn);
             if (subject && DB.exams.startSubject) {
               const subjectExamBtn = document.createElement("button");
               subjectExamBtn.type = "button";
@@ -1730,7 +1733,7 @@ export async function renderPlan() {
               subjectExamBtn.textContent = "Prova da disciplina";
               subjectExamBtn.title = `Uma prova com questões de todas as aulas de ${subject.name}, começando pelo que você errou`;
               subjectExamBtn.addEventListener("click", () => startSubjectExam(subject));
-              exSection.append(subjectExamBtn);
+              actions.append(subjectExamBtn);
             }
           }
           detail.append(exSection);
@@ -4049,6 +4052,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   const allJudged = judged === exam.items.length;
   examEls.finalize.hidden = corrected || !allJudged;
   for (const b of examEls.reviewList.querySelectorAll('[data-action="exam-judge"]')) b.disabled = corrected;
+  for (const j of examEls.reviewList.querySelectorAll(".exam-judge")) j.hidden = corrected;
   const wrong = exam.items.filter((it) => it.outcome === "INCORRECT");
   examEls.retest.hidden = !corrected || wrong.length === 0;
   examEls.retest.textContent = `Refazer erros (${wrong.length})`;

@@ -3194,6 +3194,10 @@ h1 {
   font-style: italic;
 }
 
+.exam-judge[hidden] {
+  display: none;
+}
+
 .exam-judge {
   display: flex;
   flex-wrap: wrap;
@@ -3612,6 +3616,13 @@ h1 {
 }
 
 .plan-study-now {
+  margin-top: 0;
+}
+
+.plan-exercise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.75rem;
 }
 
