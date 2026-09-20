@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; REVIEW-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-4 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: REVIEW-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -459,7 +459,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       EVIDENCE (medição): o importador do servidor (server/src/services/imports.js -> shared/import-normalization.js) só normaliza o export LEGADO do app local (subjects/studies/reviews/exercises); NÃO existe fluxo de importar o export lógico do servidor. A restauração completa hoje é a cópia física por operador (server/scripts/backup.mjs --package|--verify|--rehearse), que já leva todas as tabelas. Criar um "restaurar backup lógico" é uma capacidade nova (contrato, remapeamento de ids, conflitos, idempotência, segurança entre usuários), não um ajuste — fora do que as decisões canônicas já autorizam.
       DECISÃO: bloqueada como HUMAN_GATE de produto ("o aluno precisa restaurar o próprio backup lógico sozinho?"); sem essa decisão nenhuma linha de código é escrita. Nada perdido: a exportação (EXPORT-1) já entrega os dados ao aluno e o backup físico do operador restaura tudo.
 
-- [>] **REVIEW-1 Revisão de código independente do que foi entregue nesta rodada (2ca64d8..HEAD)** — OWNER: GUI
+- [✓] **REVIEW-1 Revisão de código independente do que foi entregue nesta rodada (2ca64d8..HEAD)** — OWNER: GUI
       SPRINT_GOAL: um revisor que não escreveu o código lê as mudanças de servidor e cliente desta rodada e aponta bugs reais (corretude, segurança entre usuários, perda de dado); cada achado confirmado é corrigido com teste.
       BEFORE: toda a rodada foi verificada por testes escritos por quem implementou; nenhum revisor independente leu o diff (regra do padrão elite: autor != verificador).
       AFTER: achados classificados (confirmado/descartado com motivo); os confirmados viram teste vermelho -> correção mínima.
@@ -468,6 +468,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: relatório do revisor + para cada achado confirmado um teste que falha antes e passa depois.
       DONE_WHEN: achados triados; confirmados corrigidos e provados; nenhum achado sem decisão.
       DEPENDENCIES: EXPORT-1.
+      EVIDENCE: revisor independente (agente caveman:cavecrew-reviewer, somente leitura, diff 2ca64d8..HEAD de server/src, migrações, src/app.js, src/remote-store.js). 4 achados TRIADOS por mim lendo o código: (1) "migração 025 não idempotente — use ADD COLUMN IF NOT EXISTS": DESCARTADO — SQLite NÃO tem `ADD COLUMN IF NOT EXISTS` (a correção sugerida seria erro de sintaxe), o executor aplica cada versão UMA vez (schema_migrations com checksum) e a 023 usa o mesmo padrão; o arquivo tem 21 linhas (a linha citada não existe). (2) "maxPagesPerChunk sem limite (DoS)": PARCIALMENTE CONFIRMADO como endurecimento — não havia exaustão (o teto de caracteres e o número de páginas limitam o trabalho, e é usuário autenticado sobre a própria fonte), mas o esquema aceitava 0/negativos/gigantes; CORRIGIDO: `minimum: 1, maximum: 100`. (3) "INNER JOIN em exams.itemRows perde itens de exercício apagado": DESCARTADO — nenhum caminho apaga exercícios ou aulas (nenhum DELETE em server/src), `foreign_keys = ON` e `exam_items` referencia exercises: um delete falharia; exercícios são arquivados, não removidos. (4) "UPDATE ... WHERE status=SUBMITTED redundante": não é defeito (guarda contra corrida). O revisor CONFIRMOU sem achados: filtro por user_id em exams/exercise-review/evidence/backup, nenhum gabarito/explicação/dica em prova IN_PROGRESS, exportação aditiva, fluxo de pendências/retomada. LACUNA que eu mesmo achei ao triar: o contrato de corpo de POST /v1/exams (exatamente um de unitId/subjectId) só era exercitado pelo serviço, nunca pelo fio. Prova: `server/test/http-round-validation.test.js` (vermelho antes para o limite: 404 em vez de 400): sem chave -> 400, ambas -> 400, subjectId -> 201 com scope SUBJECT, unitId clássico continua 201; maxPagesPerChunk 0/-3/101 -> 400. Regressão: server 490/490.
+      PRODUCT_DELTA: nenhum bug de dado do aluno achado pela revisão independente; dois contratos de entrada passaram a ser garantidos e testados no fio.
+      PROOF_OBSERVED: teste acima + triagem documentada.
+      USER_VALUE: confiança de que a rodada foi lida por alguém que não a escreveu.
+      NOT_PROVEN: o revisor foi um agente de custo baixo com no máximo ~40 leituras: não substitui uma revisão humana nem cobriu todo src/app.js linha a linha; nada de leitor de tela/aparelho.
+      COMMIT: ver `git log` (test(review): wire contracts for exams body and chunk size).
+- [>] **INTEGRATE-4 Gate completo e integração no branch canônico (REVIEWNET-1 … REVIEW-1)** — OWNER: GUI
+      SPRINT_GOAL: levar ao canônico o que veio depois de cd7966e (revisão de Hoje com rede instável, exportação do aluno, contratos de entrada, verificação do backup) com o gate completo verde.
+      BEFORE: canônico em cd7966e; o GUI está alguns commits à frente sem gate completo.
+      AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no canônico.
+      WHY: entregar onde o produto roda e provar que a soma não quebrou nada.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: contagens do gate no canônico (inclui production-build).
+      DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
+      DEPENDENCIES: REVIEW-1; CLI pausado.
 
 ## Evidência CQ-1
 

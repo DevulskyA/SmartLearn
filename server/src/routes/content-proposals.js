@@ -14,7 +14,7 @@ export function registerContentProposalRoutes(app, db) {
   app.post('/sources/:id/proposals', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-      body: { type: 'object', properties: { maxPagesPerChunk: { type: 'integer' } } },
+      body: { type: 'object', properties: { maxPagesPerChunk: { type: 'integer', minimum: 1, maximum: 100 } } },
     },
   }, async (request, reply) => {
     const id = Number(request.params.id);
