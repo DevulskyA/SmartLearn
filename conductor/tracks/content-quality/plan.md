@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; IMPORT-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; REVIEW-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: IMPORT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: REVIEW-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -446,7 +446,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: dono dos próprios dados, inclusive das respostas que escreveu.
       NOT_PROVEN: o IMPORTADOR não lê as novas chaves (ignora por desenho; restaurar tentativas/provas por importação é outra sprint); proveniência de rascunhos/fontes (PDFs) não entra na exportação lógica; ensaio de restauração do CLI (rehearseRestore) não foi estendido — anotado para o CLI.
       COMMIT: ver `git log` (feat(export): attempts, events and exam answers in the student's export).
-- [>] **IMPORT-1 Restaurar tentativas e respostas de provas a partir do backup do aluno** — OWNER: GUI
+- [!] **IMPORT-1 Restaurar tentativas e respostas de provas a partir do backup do aluno (bloqueada: decisão de produto)** — OWNER: GUI
       SPRINT_GOAL: importar um backup do próprio SmartLearn devolve também tentativas, eventos e provas (com as respostas), não só disciplinas/aulas/exercícios.
       BEFORE: EXPORT-1 exporta esses dados, mas o importador os ignora: exportar e importar em outra instância perde as respostas das provas e o histórico fino.
       AFTER: importação idempotente e segura dos novos conjuntos, remapeando ids, sem duplicar em reimportação e sem tocar dados de outros usuários.
@@ -455,6 +455,18 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       DETAILS: PRIMEIRO medir o importador atual (formato aceito — export lógico ou o formato legado local?) e decidir se restaurar tentativas/provas cabe sem risco; se o importador só aceita o formato legado, registrar HUMAN_GATE de produto em vez de improvisar.
       PROOF: teste de servidor export -> import em banco vazio: contagens e respostas iguais; reimportar não duplica; ids remapeados corretamente.
       DONE_WHEN: ida e volta sem perda dos novos conjuntos, provada; ou decisão registrada com o motivo.
+      DEPENDENCIES: EXPORT-1.
+      EVIDENCE (medição): o importador do servidor (server/src/services/imports.js -> shared/import-normalization.js) só normaliza o export LEGADO do app local (subjects/studies/reviews/exercises); NÃO existe fluxo de importar o export lógico do servidor. A restauração completa hoje é a cópia física por operador (server/scripts/backup.mjs --package|--verify|--rehearse), que já leva todas as tabelas. Criar um "restaurar backup lógico" é uma capacidade nova (contrato, remapeamento de ids, conflitos, idempotência, segurança entre usuários), não um ajuste — fora do que as decisões canônicas já autorizam.
+      DECISÃO: bloqueada como HUMAN_GATE de produto ("o aluno precisa restaurar o próprio backup lógico sozinho?"); sem essa decisão nenhuma linha de código é escrita. Nada perdido: a exportação (EXPORT-1) já entrega os dados ao aluno e o backup físico do operador restaura tudo.
+
+- [>] **REVIEW-1 Revisão de código independente do que foi entregue nesta rodada (2ca64d8..HEAD)** — OWNER: GUI
+      SPRINT_GOAL: um revisor que não escreveu o código lê as mudanças de servidor e cliente desta rodada e aponta bugs reais (corretude, segurança entre usuários, perda de dado); cada achado confirmado é corrigido com teste.
+      BEFORE: toda a rodada foi verificada por testes escritos por quem implementou; nenhum revisor independente leu o diff (regra do padrão elite: autor != verificador).
+      AFTER: achados classificados (confirmado/descartado com motivo); os confirmados viram teste vermelho -> correção mínima.
+      WHY: testes do autor não pegam o ponto cego do autor; migrações 023-025, provas, exportação e fluxos de rede mexem em dados do aluno.
+      SCOPE: git diff 2ca64d8..HEAD em server/src, server/migrations, src/app.js, src/remote-store.js (leitura); correções onde confirmado.
+      PROOF: relatório do revisor + para cada achado confirmado um teste que falha antes e passa depois.
+      DONE_WHEN: achados triados; confirmados corrigidos e provados; nenhum achado sem decisão.
       DEPENDENCIES: EXPORT-1.
 
 ## Evidência CQ-1
