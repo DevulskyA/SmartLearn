@@ -207,6 +207,26 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 
+- [ ] **LARGE-PDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
+      SPRINT_GOAL: provar (e corrigir só o que quebrar) que um PDF de aula realista, de dezenas a ~150 páginas, sai do upload para propostas e rascunhos utilizáveis sem travar, estourar limite silenciosamente ou perder páginas.
+      BEFORE: todos os fluxos foram provados com PDFs de 2 a 5 páginas; o tamanho real de uma aula médica (slides/capítulo) é NOT_PROVEN — extração, divisão em trechos de 10 páginas, teto de entrada do modelo (SMARTLEARN_AI_MAX_INPUT_CHARS) e a lista de propostas na UI nunca foram exercitados em escala.
+      AFTER: um PDF sintético de ~150 páginas percorre upload -> extração -> propostas -> rascunho de UM trecho; tempo medido; limites (tamanho, caracteres de entrada) têm mensagem clara ao aluno em vez de falha muda; a lista de propostas continua navegável a 375px.
+      WHY: o aluno real envia o material inteiro da aula; se o produto engasga ou trunca sem avisar, ele desiste ou estuda conteúdo incompleto.
+      SCOPE: source-extraction / content-proposals / generated-drafts (servidor) e a lista de propostas em Materiais (src/app.js); só correções mínimas do que a medição mostrar.
+      DETAILS: medir primeiro (tempo de extração, nº de propostas, tamanho do prompt de um trecho de 10 páginas densas vs o teto de entrada, comportamento acima do teto); corrigir o menor problema real; se já funciona, fechar só com a prova e os números.
+      PROOF: e2e com PDF sintético de 150 páginas (stub de modelo) + medições registradas; caso de trecho acima do teto de entrada com mensagem explícita; 375px sem overflow.
+      DONE_WHEN: fluxo grande utilizável e comprovado (ou ajustado e comprovado), sem regressão em source-proposals/draft-acceptance.
+      DEPENDENCIES: INTEGRATE-1.
+- [ ] **FIRSTRUN-1 Primeira vez do aluno: telas vazias levam a uma ação (desktop + 375px)** — OWNER: GUI
+      SPRINT_GOAL: uma conta nova, sem nada cadastrado, vê em Hoje/Plano/Estatísticas/Materiais/Disciplinas estados vazios que dizem o que fazer a seguir, sem beco sem saída.
+      BEFORE: a jornada foi provada de ponta a ponta com dados criados no caminho, mas ninguém inspecionou o que a conta vazia mostra em cada tela.
+      AFTER: capturas revisadas de cada tela vazia; cada beco sem saída ou texto confuso achado vira teste vermelho e a menor correção.
+      WHY: a primeira impressão decide se o aluno continua; uma tela vazia sem próximo passo é o pior ponto de abandono.
+      SCOPE: estados vazios (src/app.js, index.html); sem redesign de superfície protegida (Estatísticas só ganha texto/ação se faltar).
+      PROOF: capturas 1280/375 por tela + e2e que segue o primeiro passo sugerido de cada tela vazia até a tela seguinte.
+      DONE_WHEN: nenhuma tela vazia sem saída clara; defeitos materiais corrigidos e provados.
+      DEPENDENCIES: INTEGRATE-1.
+
 ## Evidência CQ-1
 
 ```
