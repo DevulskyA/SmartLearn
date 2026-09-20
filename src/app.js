@@ -4382,6 +4382,18 @@ async function renderStudies() {
     hInput.placeholder = "Dica (opcional)";
     hLabel.append(hInput);
 
+    // "Por quê" only where the store can keep it (the server); the local store has no such column.
+    let wLabel = null;
+    if (REMOTE_MODE) {
+      wLabel = document.createElement("label");
+      wLabel.textContent = "Por quê (opcional)";
+      const wInput = document.createElement("textarea");
+      wInput.rows = 2;
+      wInput.className = "exercise-why-input";
+      wInput.placeholder = "Por que essa é a resposta? Aparece depois de revelar e ao errar.";
+      wLabel.append(wInput);
+    }
+
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "small-button is-primary";
@@ -4392,7 +4404,7 @@ async function renderStudies() {
     const exerciseFormMsg = createTextElement("p", "field-message exercise-form-message", "");
     exerciseFormMsg.setAttribute("role", "status");
 
-    exerciseAddForm.append(qLabel, aLabel, hLabel, addBtn, exerciseFormMsg);
+    exerciseAddForm.append(qLabel, aLabel, hLabel, ...(wLabel ? [wLabel] : []), addBtn, exerciseFormMsg);
     exercisesSection.append(exerciseList, exerciseAddForm);
 
     const toggleExercisesBtn = document.createElement("button");
@@ -4425,6 +4437,7 @@ async function renderExerciseList(unitId) {
     const qEl = createTextElement("p", "exercise-question", exercise.questionText);
     const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
     const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", `Dica: ${exercise.hintText}`) : null;
+    const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", `Por quê: ${exercise.explanationText}`) : null;
 
     const itemActions = document.createElement("div");
     itemActions.className = "exercise-item-actions";
@@ -4446,8 +4459,7 @@ async function renderExerciseList(unitId) {
     delExBtn.textContent = "Remover";
 
     itemActions.append(editExBtn, delExBtn);
-    if (hEl) item.append(qEl, aEl, hEl, itemActions);
-    else item.append(qEl, aEl, itemActions);
+    item.append(qEl, aEl, ...[hEl, wEl].filter(Boolean), itemActions);
     list.append(item);
   }
 }
@@ -4919,6 +4931,7 @@ studyList.addEventListener("click", async (event) => {
     const qInput = section?.querySelector(".exercise-question-input");
     const aInput = section?.querySelector(".exercise-answer-input");
     const hInput = section?.querySelector(".exercise-hint-input");
+    const wInput = section?.querySelector(".exercise-why-input");
     const msgEl = section?.querySelector(".exercise-form-message");
     const questionText = qInput?.value.trim() ?? "";
     if (!questionText) {
@@ -4932,11 +4945,13 @@ studyList.addEventListener("click", async (event) => {
         questionText,
         answerText: aInput?.value.trim() ?? "",
         hintText: hInput?.value.trim() || null,
+        ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
         provenance: 'MANUAL',
       });
       if (qInput) qInput.value = "";
       if (aInput) aInput.value = "";
       if (hInput) hInput.value = "";
+      if (wInput) wInput.value = "";
       if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = "Exercício adicionado."; }
       await renderExerciseList(studyId);
     } catch (error) {
@@ -4972,6 +4987,8 @@ studyList.addEventListener("click", async (event) => {
     const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
     const hintEl = item.querySelector(".exercise-hint");
     const currentH = hintEl ? hintEl.textContent.replace(/^Dica:\s*/, "") : "";
+    const whyEl = item.querySelector(".exercise-why");
+    const currentW = whyEl ? whyEl.textContent.replace(/^Por quê:\s*/, "") : "";
 
     const editForm = document.createElement("div");
     editForm.className = "exercise-item exercise-item-edit";
@@ -4982,6 +4999,12 @@ studyList.addEventListener("click", async (event) => {
     ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
     const eh = document.createElement("input");
     eh.type = "text"; eh.value = currentH; eh.placeholder = "Dica (opcional)"; eh.className = "exercise-hint-input";
+    let ew = null;
+    if (REMOTE_MODE) {
+      ew = document.createElement("textarea");
+      ew.rows = 2; ew.value = currentW; ew.placeholder = "Por quê (opcional)"; ew.className = "exercise-why-input";
+      ew.setAttribute("aria-label", "Por quê (opcional)");
+    }
 
     const saveEx = document.createElement("button");
     saveEx.type = "button"; saveEx.className = "small-button is-primary";
@@ -4996,7 +5019,7 @@ studyList.addEventListener("click", async (event) => {
     cancelEx.dataset.studyId = String(studyId);
     cancelEx.textContent = "Cancelar";
 
-    editForm.append(eq, ea, eh, saveEx, cancelEx);
+    editForm.append(eq, ea, eh, ...(ew ? [ew] : []), saveEx, cancelEx);
     item.replaceWith(editForm);
     eq.focus();
     return;
@@ -5009,6 +5032,7 @@ studyList.addEventListener("click", async (event) => {
     const eq = item?.querySelector(".exercise-question-input");
     const ea = item?.querySelector(".exercise-answer-input");
     const eh = item?.querySelector(".exercise-hint-input");
+    const ew = item?.querySelector(".exercise-why-input");
     const questionText = eq?.value.trim() ?? "";
     if (!questionText) { eq?.focus(); return; }
     button.disabled = true;
@@ -5017,6 +5041,7 @@ studyList.addEventListener("click", async (event) => {
         questionText,
         answerText: ea?.value.trim() ?? "",
         hintText: eh?.value.trim() || null,
+        ...(ew ? { explanationText: ew.value.trim() || null } : {}),
       });
       await renderExerciseList(studyId);
     } catch (error) {

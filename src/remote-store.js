@@ -239,17 +239,18 @@ const exercises = {
   // Matches src/db.js's real signature: (unitId, fields) — two args, not
   // one merged object. app.js's actual call sites (add-exercise) rely on
   // this exact shape.
-  async create(unitId, { questionText, answerText, hintText, provenance } = {}) {
+  async create(unitId, { questionText, answerText, hintText, explanationText, provenance } = {}) {
     const { exercise } = await apiRequest(`/v1/learning-units/${unitId}/exercises`, {
       method: 'POST',
-      body: { question: questionText, answer: answerText, hint: hintText, provenance },
+      body: { question: questionText, answer: answerText, hint: hintText, explanation: explanationText, provenance },
     });
     return mapExercise(exercise);
   },
-  async update(id, { questionText, answerText, hintText, provenance }) {
+  // explanationText: undefined keeps the current "Por quê"; null clears it (server: undefined = keep).
+  async update(id, { questionText, answerText, hintText, explanationText, provenance }) {
     const { exercise } = await apiRequest(`/v1/exercises/${id}`, {
       method: 'PATCH',
-      body: { question: questionText, answer: answerText, hint: hintText, provenance },
+      body: { question: questionText, answer: answerText, hint: hintText, explanation: explanationText, provenance },
     });
     return mapExercise(exercise);
   },

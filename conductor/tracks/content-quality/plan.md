@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXAM-5 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -113,7 +113,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: quebras entre telas — o que faz o aluno desistir — passam a ser detectadas por um teste único; hoje não há nenhuma.
       NOT_PROVEN: qualidade de um modelo REAL; leitor de tela; uso com vários dias/revisões agendadas (a aula usa data futura para a sugestão vir do ledger, não de revisão vencida); Android/Windows nativos (esta prova é WEB).
       COMMIT: ver `git log` (test(journey): full student journey).
-- [>] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
+- [✓] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
       SPRINT_GOAL: uma questão criada pelo próprio aluno ensina como as geradas por IA: ele escreve (e edita) o porquê da resposta e o vê no Estudar agora, no cartão de erro, na revisão da Hoje e na correção da prova.
       BEFORE: só questões geradas por IA têm "Por quê"; o formulário de exercício manual tem enunciado, resposta e dica, sem explicação; editar uma questão não permite mexer no porquê.
       AFTER: o formulário de criar e o de editar exercício têm o campo "Por quê (opcional)"; o texto salvo aparece onde a resposta aparece; vazio = nada aparece (nunca inventado).
@@ -122,15 +122,24 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e: criar exercício com porquê pela UI -> aparece após revelar no Estudar agora e na correção da prova; editar o porquê -> nova versão mostra o texto novo; sem porquê -> nenhum bloco "Por quê"; unit do mapeamento.
       DONE_WHEN: o fluxo acima verde, sem regressão nos e2e de exercícios.
       DEPENDENCIES: EXAM-3 (feito).
+      EVIDENCE: formulários de criar e de editar exercício (Registro) ganharam "Por quê (opcional)" (`.exercise-why-input`, só em modo servidor — o armazenamento local não tem a coluna; não se finge salvar); `remote-store` create/update passam `explanation` (update: undefined mantém, null limpa); a lista do Registro mostra "Por quê: …". Prova: `e2e/author-why.spec.js` (2): o texto escrito pelo aluno aparece na lista, SÓ depois de revelar no Estudar agora, no cartão de erro e na correção da prova; item sem porquê não mostra bloco algum; editar pré-preenche, salva nova versão com o texto novo (visto no Estudar agora); esvaziar remove; resposta preservada; formulários de criar e editar a 375px sem overflow. Regressão: unit 382/382; e2e practice, plan-study-now, study-now-flow, exercise-explanation, exam-mode, feature-parity, offline-writes = 17/17 verdes.
+      PRODUCT_DELTA: quem estuda com as PRÓPRIAS questões (o caso comum) passa a ter o mesmo feedback que ensina, no momento do erro, que as questões geradas por IA têm.
+      PROOF_OBSERVED: e2e + unit acima.
+      USER_VALUE: o aluno escreve o porquê uma vez (quando entende) e o relê no momento em que erra, em vez de só ver a resposta seca.
+      NOT_PROVEN: no modo local (sem servidor) o campo não é oferecido; texto longo (limite do servidor = 2000 caracteres) sem teste de UI; leitor de tela nos novos campos.
+      COMMIT: ver `git log` (feat(exercises): student writes the Por quê).
 - [ ] **EXAM-4 Prova por disciplina (candidata)** — OWNER: GUI
       SPRINT_GOAL: o aluno faz uma prova que cobre várias aulas de uma disciplina, com prioridade ao que precisa reforçar, e o resultado vira evidência por aula.
       DETAILS: exige decisão de amostragem e migração (exam sem unit único); só ativar depois de AUTHOR-1 e de reavaliar valor x custo.
-- [ ] **EXAM-5 O histórico distingue Prova de Estudo (candidata)** — OWNER: GUI
+- [>] **EXAM-5 O histórico distingue Prova de Estudo** — OWNER: GUI
       SPRINT_GOAL: no histórico do Plano o aluno vê quais registros vieram de uma prova e quais do estudo; "Estudar agora" deixa de sumir depois da primeira evidência.
       BEFORE: a prova grava evidência do tipo INITIAL_PRACTICE; o rótulo "Prática inicial" não diferencia prova de estudo e "Estudar agora" some após a 1ª evidência da aula.
       AFTER: rótulo próprio para a origem prova sem quebrar o esquema (REVIEW/INITIAL_PRACTICE/EXTERNAL) nem duplicar evidência; estudar de novo continua disponível.
       WHY: medir e estudar são coisas diferentes; sem o rótulo o aluno não lê a própria trajetória.
-      DEPENDENCIES: AUTHOR-1; decisão local de modelagem (campo de origem na evidência vs. leitura via exam_items).
+      DETAILS: menor mudança: o DTO da evidência ganha `origin` ("EXAM" quando existe exams.evidence_id = evidência; senão null) por LEFT JOIN, sem migração nem novo tipo de evidência; o Plano rotula "Prova" e passa a oferecer "Estudar agora" mesmo com evidência de prova (só a evidência de ESTUDO esconde o botão).
+      PROOF: teste de servidor (evidência de prova tem origin EXAM; a de estudo e a externa não) + e2e: estudar (Prática inicial) e prova (Prova) aparecem com rótulos distintos no histórico; só prova => "Estudar agora" continua disponível; só estudo => some como antes.
+      DONE_WHEN: o histórico do Plano diz de onde veio cada linha e o botão de estudo não some por causa de uma prova; sem regressão em Estatísticas/analytics (tipo continua INITIAL_PRACTICE).
+      DEPENDENCIES: AUTHOR-1 (feito).
 - [ ] **VERDICT-1 Veredito de Estatísticas ponderado por volume (candidata, pode exigir HUMAN_GATE)** — OWNER: GUI
       SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
       DETAILS: é semântica de produto (o que significa "melhorando" no agregado); superfície protegida (ADR-0001, Estatísticas): só ativar se a mudança for funcional e coberta pelos guardrails; caso contrário registrar HUMAN_GATE.
