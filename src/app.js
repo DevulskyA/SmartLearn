@@ -3886,6 +3886,7 @@ async function openExam(begin, { subjectName, fallbackTitle }) {
     const { exam } = await begin();
     const title = exam.title ?? fallbackTitle ?? "";
     examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
+    restoreExamPending(examState);
     examEls.unit.textContent = exam.scope === "SUBJECT" ? "Prova da disciplina" : (subjectName ?? "");
     examEls.title.textContent = `Prova — ${title}`;
     examEls.message.textContent = "";
@@ -3933,16 +3934,49 @@ function renderExamQuestion() {
   resetExamSubmitConfirm();
 }
 
+// Pending (unsaved) answers are mirrored in the browser so they survive closing/reloading the tab while the
+// connection is down. Only what the student typed (never anything from the server); every access is guarded, so
+// the exam works exactly as before when storage is unavailable.
+const examPendingKey = (examId) => `smartlearn.exam.pending.${examId}`;
+
+function persistExamPending() {
+  if (!examState) return;
+  try {
+    const key = examPendingKey(examState.exam.id);
+    if (examState.unsaved.size === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(Object.fromEntries(examState.unsaved)));
+  } catch { /* storage unavailable: memory-only, as before */ }
+}
+
+/** Merges pending answers typed in an earlier tab over what the server returned, and retries sending them. */
+function restoreExamPending(state) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(examPendingKey(state.exam.id)) ?? "null"); } catch { saved = null; }
+  if (!saved || state.exam.status !== "IN_PROGRESS") return;
+  for (const [itemId, text] of Object.entries(saved)) {
+    const item = state.exam.items.find((it) => String(it.id) === itemId);
+    if (!item || typeof text !== "string") continue;
+    item.studentAnswer = text.trim() === "" ? null : text;
+    state.unsaved.set(item.id, text);
+  }
+  if (state.unsaved.size > 0) {
+    examEls.message.textContent = "Recuperei respostas que não tinham sido enviadas; vou enviá-las agora.";
+    flushExamAnswers().then((ok) => { if (ok && examState === state) examEls.message.textContent = ""; });
+  }
+}
+
 // An answer that failed to reach the server stays in `examState.unsaved` (itemId -> text) and is retried on the
 // next save / navigation / submit: it is never dropped, and submitting is blocked until nothing is pending.
 async function pushExamAnswer(itemId, text) {
   try {
     await DB.exams.saveAnswer(examState.exam.id, itemId, text);
     examState.unsaved.delete(itemId);
+    persistExamPending();
     return true;
   } catch (error) {
     console.error("Falha ao guardar a resposta.", error);
     examState.unsaved.set(itemId, text);
+    persistExamPending();
     examEls.message.textContent = "Não foi possível guardar a resposta. Ela fica neste aparelho e será enviada de novo; verifique a conexão.";
     return false;
   }
@@ -3983,6 +4017,15 @@ function resetExamSubmitConfirm() {
 }
 
 examEls.answer?.addEventListener("blur", () => { saveExamAnswer(); });
+// Typing is mirrored on the device as it happens (closing the tab before the box loses focus must not lose it);
+// a successful save clears it again.
+examEls.answer?.addEventListener("input", () => {
+  const item = currentExamItem();
+  if (!examState || !item) return;
+  examState.unsaved ??= new Map();
+  examState.unsaved.set(item.id, examEls.answer.value);
+  persistExamPending();
+});
 examEls.prev?.addEventListener("click", () => goToExamQuestion(examState.index - 1));
 examEls.next?.addEventListener("click", () => goToExamQuestion(examState.index + 1));
 examEls.nav?.addEventListener("click", (event) => {

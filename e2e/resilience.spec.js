@@ -152,3 +152,53 @@ test('Estudar agora: if the attempt could not be STARTED when revealing, judging
   expect(evidence).toHaveLength(1);
   expect([evidence[0].questionsCount, evidence[0].correctCount]).toEqual([2, 1]);
 });
+
+// EXAM-7: pending exam answers survive closing/reloading the tab.
+test('EXAM-7: an answer that could not be sent (and one not yet blurred) survive a reload and reach the server on reopening', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Pendente', title: 'Aula pendente', studyDate: '2030-01-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Pend ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+  const openExam = async () => {
+    await page.locator('[data-screen="plan"]').click();
+    const row = page.locator('.plan-row', { hasText: 'Aula pendente' });
+    if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded')) !== 'true') await row.locator('.plan-expand-btn').click();
+    await row.locator('[data-action="plan-exam"]').click();
+  };
+  await openExam();
+  await page.route('**/v1/exams/*/items/*/answer', (route) => route.abort());
+  await page.locator('#exam-answer-input').fill('pendente 1');
+  await page.locator('#exam-next-btn').click(); // fails to send -> pending
+  await expect(page.locator('#exam-message')).toContainText('Não foi possível guardar');
+  await page.locator('#exam-answer-input').fill('digitando 2'); // typed, never blurred
+
+  await page.unroute('**/v1/exams/*/items/*/answer'); // the connection is back only AFTER the tab is reloaded
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openExam();
+  await expect(page.locator('#exam-answer-input')).toHaveValue('pendente 1'); // question 1 restored from the device
+  await expect.poll(async () => {
+    const exam = await page.evaluate(async (base) => {
+      const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+      const units = (await (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json()).units;
+      const res = await fetch(`${base}/v1/exams`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify({ unitId: units[units.length - 1].id }) });
+      return (await res.json()).exam;
+    }, API_BASE);
+    return exam.items.map((i) => i.studentAnswer);
+  }, { timeout: 8000 }).toEqual(['pendente 1', 'digitando 2']); // both reached the server without the student retyping anything
+
+  await page.locator('#exam-next-btn').click();
+  await expect(page.locator('#exam-answer-input')).toHaveValue('digitando 2');
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('.exam-review-item').nth(0).locator('.exam-review-student')).toHaveText('pendente 1');
+  const leftovers = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('smartlearn.exam.pending.')));
+  expect(leftovers).toEqual([]); // nothing left on the device once everything is saved
+});
+
+test('EXAM-7: with browser storage blocked the exam still works exactly as before', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } });
+  });
+  const unit = await startExamOver(page, 'Sem storage', [1, 2]);
+  expect(unit.id).toBeTruthy(); // reaching the correction screen (startExamOver asserts it) proves the flow ran end to end
+});

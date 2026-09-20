@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; EXAM-7 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; STUDYSTATE-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-7 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: STUDYSTATE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -336,7 +336,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
       COMMIT: fast-forward para 7494e61.
 
-- [>] **EXAM-7 Respostas pendentes da prova sobrevivem a fechar/recarregar a aba** — OWNER: GUI
+- [✓] **EXAM-7 Respostas pendentes da prova sobrevivem a fechar/recarregar a aba** — OWNER: GUI
       SPRINT_GOAL: uma resposta digitada e ainda não guardada no servidor (rede caída) não se perde se a aba for fechada ou recarregada; ao reabrir a prova, ela volta e é enviada.
       BEFORE: EXAM-6 retém pendências só em memória (NOT_PROVEN registrado): fechar a aba com resposta pendente a perde.
       AFTER: pendências persistem localmente por prova (armazenamento do navegador, com try/catch e sem depender dele) e são reenviadas na retomada; nada é criado sem ação do aluno.
@@ -346,9 +346,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e derruba a rede, digita, recarrega, reabre a prova, vê a resposta e a submissão a guarda; sem o armazenamento (bloqueado) a prova segue funcionando como hoje.
       DONE_WHEN: uma resposta pendente sobrevive ao recarregar e chega ao servidor; nada vaza; sem regressão nos e2e da prova.
       DEPENDENCIES: EXAM-6 (feito).
-- [ ] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
+      EVIDENCE: pendências espelhadas em localStorage por prova (`smartlearn.exam.pending.<id>`, só o texto digitado, todo acesso em try/catch), gravadas a cada tecla (fechar a aba antes do blur não perde) e removidas quando o servidor confirma; ao reabrir a prova elas são mescladas sobre o retorno do servidor, aparece "Recuperei respostas que não tinham sido enviadas…" e são reenviadas sozinhas. Prova (`e2e/resilience.spec.js`, vermelho antes: caixa vazia após recarregar): rede caída + resposta 1 pendente + resposta 2 digitada sem blur -> recarregar com a rede de volta -> reabrir: caixa mostra "pendente 1", o servidor recebe AS DUAS ("pendente 1", "digitando 2") sem redigitar, submete e a correção mostra a resposta; nenhuma chave sobra no aparelho; com localStorage bloqueado a prova completa funciona como antes. Regressão: resilience + exam-mode = 15/15.
+      PRODUCT_DELTA: a resposta digitada durante uma queda de rede sobrevive a fechar/recarregar a aba e chega ao servidor sozinha.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: o aluno não redigita nada depois de um problema de conexão no meio da prova.
+      NOT_PROVEN: navegador que apaga o armazenamento ao fechar (modo privado); outro aparelho (o rascunho é local); expiração das pendências antigas (ficam até serem enviadas ou a prova ser submetida).
+      COMMIT: ver `git log` (feat(exam): pending answers survive a reload).
+- [>] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
       SPRINT_GOAL: recarregar/sair no meio de uma sessão continua da próxima questão não julgada, em vez de recomeçar da 1ª (medido em STUDYRESUME-1: o julgado permanece como "para reforçar", mas a sessão reinicia).
-      DETAILS: decisão local de menor mudança (estado no servidor vs armazenamento local); só se o ganho compensar a complexidade.
+      BEFORE: a sessão vive só em memória; ao recarregar o aluno refaz da questão 1, inclusive itens já julgados nesta mesma passada.
+      AFTER: ao voltar a "Estudar agora" da mesma aula existe a opção clara de continuar de onde parou (com o placar parcial) ou recomeçar; concluir grava UMA evidência com as tentativas de toda a passada.
+      WHY: o aluno é interrompido; repetir o que já respondeu desperdiça a sessão e distorce o ganho do "primeiro contato".
+      SCOPE: src/app.js (estado da sessão); sem mudança de servidor.
+      DETAILS: menor mudança: espelhar no navegador (guardado, com try/catch) o estado mínimo da sessão — ids dos exercícios na ordem, índice, ids de tentativas já submetidas, acertos/erros — por aula; ao iniciar, se existir e for da mesma aula com os mesmos exercícios, oferecer continuar/recomeçar; validar contra o servidor (exercícios ainda existem); limpar ao concluir. Nada de dado do servidor sensível (gabarito) é guardado além do que a sessão já tinha em tela.
+      PROOF: e2e: julgar 2 de 3, recarregar, voltar: "Continuar (2 de 3 respondidas)" -> termina na questão 3, evidência 1 linha com 3 questões e as 3 tentativas; "Recomeçar" descarta e não duplica; sem armazenamento a sessão funciona como hoje.
+      DONE_WHEN: retomar continua da questão certa sem duplicar evidência nem contagem.
+      DEPENDENCIES: STUDYRESUME-1, EXAM-7 (feitos).
 
 ## Evidência CQ-1
 
