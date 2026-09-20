@@ -10,7 +10,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SUITES, createParser, artifactDir, writeArtifact, readArtifacts, effectiveState } from './test-live-core.mjs';
+import { SUITES, createParser, artifactDir, writeArtifact, readArtifacts, effectiveState, onlyConductorDocs } from './test-live-core.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const git = (args) => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };
@@ -26,7 +26,8 @@ const [, , suiteName, ...extra] = process.argv;
 if (suiteName === 'status') {
   const head = git(['rev-parse', 'HEAD']);
   for (const a of readArtifacts(dir)) {
-    const eff = effectiveState(a, { currentHead: head });
+    const docsOnlySince = (from, to) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'));
+    const eff = effectiveState(a, { currentHead: head, docsOnlySince });
     console.log(`${a.suite.padEnd(7)} ${eff.state.padEnd(8)} ${a.counts.done}/${a.counts.total ?? '?'} ok=${a.counts.passed} fail=${a.counts.failed} skip=${a.counts.skipped} exit=${a.exitCode ?? '-'} head=${a.headTested.slice(0, 7)}${eff.note ? ` (${eff.note})` : ''}`);
   }
   process.exit(0);

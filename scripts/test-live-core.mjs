@@ -107,17 +107,27 @@ const HEARTBEAT_STALE_MS = 15000;
  *   STALE    a finished result whose tested head is not the current head — it proves nothing about this code
  *   PASS/FAIL  finished, tested head == current head
  */
-export function effectiveState(artifact, { currentHead, alive = pidAlive, now = Date.now() } = {}) {
+export function effectiveState(artifact, { currentHead, alive = pidAlive, now = Date.now(), docsOnlySince = null } = {}) {
   const stored = artifact.state;
-  const headMatches = !!currentHead && artifact.headTested === currentHead;
+  const sameHead = !!currentHead && artifact.headTested === currentHead;
+  // Commits made after the run that touch ONLY conductor/ (the plan, tracks, notes that record the result) cannot
+  // change what was tested: the result still holds. Any other changed file makes it STALE.
+  const docsOnly = !sameHead && !!currentHead && !!docsOnlySince && docsOnlySince(artifact.headTested, currentHead) === true;
+  const headMatches = sameHead || docsOnly;
   if (stored === 'RUNNING') {
     if (!alive(artifact.runnerPid)) return { state: 'ABORTED', note: 'processo do runner não existe mais (sem estado final)', headMatches };
     const age = now - Date.parse(artifact.updatedAt);
     const note = [!headMatches ? 'HEAD mudou durante a execução' : '', age > HEARTBEAT_STALE_MS ? `sem sinal há ${Math.round(age / 1000)}s` : ''].filter(Boolean).join('; ');
-    return { state: 'RUNNING', note, headMatches };
+    return { state: 'RUNNING', note, headMatches, docsOnly };
   }
   if (!headMatches) return { state: 'STALE', note: `último resultado ${stored}`, headMatches };
-  return { state: stored, note: '', headMatches };
+  return { state: stored, note: docsOnly ? 'commits posteriores só mudam conductor/ (docs)' : '', headMatches, docsOnly };
+}
+
+/** True when every changed path is under conductor/ (and there is at least one) — pure, the caller supplies the list. */
+export function onlyConductorDocs(paths) {
+  const list = (paths ?? []).map((x) => String(x).trim().replace(/\\/g, '/')).filter(Boolean);
+  return list.length > 0 && list.every((f) => f.startsWith('conductor/'));
 }
 
 export function fmtDuration(ms) {
@@ -130,15 +140,15 @@ const short = (h) => (h ? h.slice(0, 7) : '?');
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR') : '—');
 
 /** The board section. Plain lines in the board's existing style (no cards); one small block per suite. */
-export function renderTestsSection(artifacts, { currentHead, alive, now } = {}) {
+export function renderTestsSection(artifacts, { currentHead, alive, now, docsOnlySince } = {}) {
   if (!artifacts.length) {
     return '<div class="goal"><strong>TESTES AO VIVO:</strong><p class="muted">nenhuma execução registrada (rode: node scripts/test-live.mjs unit|server|e2e)</p></div>';
   }
   const rows = artifacts.map((a) => {
-    const eff = effectiveState(a, { currentHead, alive, now });
+    const eff = effectiveState(a, { currentHead, alive, now, docsOnlySince });
     const c = a.counts ?? emptyCounts();
     const total = c.total ?? '?';
-    const head = eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ atual ${short(currentHead)}`;
+    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (atual ${short(currentHead)}, só docs depois)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ atual ${short(currentHead)}`;
     const running = eff.state === 'RUNNING';
     const dur = running ? fmtDuration(Date.now() - Date.parse(a.startedAt)) : fmtDuration(a.durationMs ?? Date.parse(a.updatedAt) - Date.parse(a.startedAt));
     return `<div class="tl ${esc(eff.state.toLowerCase())}"${running ? ` data-hb="${esc(a.updatedAt)}"` : ''}>

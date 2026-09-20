@@ -3469,7 +3469,8 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
     } finally {
       generateDraftBtn.disabled = false;
       // success: keyboard/screen-reader focus goes to the draft to review; failure: back to the button that was pressed
-      (generated ? draftPanel : generateDraftBtn).focus();
+      // (on failure the button was just pressed, so it is on screen: do not scroll, or the error message scrolls away)
+      if (generated) draftPanel.focus(); else generateDraftBtn.focus({ preventScroll: true });
     }
     return;
   }
@@ -3536,7 +3537,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
     } finally {
       saveDraftBtn.disabled = false;
       // the panel was re-rendered on success (the button no longer exists): focus the draft, whose check just re-ran
-      (saved ? draftPanel : saveDraftBtn).focus();
+      if (saved) draftPanel.focus(); else saveDraftBtn.focus({ preventScroll: true });
     }
     return;
   }
@@ -3568,7 +3569,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       if (!result.ok) {
         if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
         acceptDraftBtn.disabled = false;
-        acceptDraftBtn.focus();
+        acceptDraftBtn.focus({ preventScroll: true });
         return;
       }
       if (resultMessage) {
@@ -3599,7 +3600,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
       console.error("Falha ao aceitar rascunho.", error);
       acceptDraftBtn.disabled = false;
-      acceptDraftBtn.focus();
+      acceptDraftBtn.focus({ preventScroll: true });
     }
   }
 });

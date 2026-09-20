@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
-import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir } from './test-live-core.mjs';
+import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs } from './test-live-core.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -99,7 +99,8 @@ export function worktreeBoards(root) {
 /** "TESTES AO VIVO" for the worktree whose board this is: ITS artifacts judged against ITS current head. */
 function testsFor(wt) {
   const head = gitOut(wt, ['rev-parse', 'HEAD']);
-  return renderTestsSection(readArtifacts(artifactDir(wt)), { currentHead: head }) + HEARTBEAT_SCRIPT;
+  const docsOnlySince = (from, to) => onlyConductorDocs(gitOut(wt, ['diff', '--name-only', from, to]).split('\n'));
+  return renderTestsSection(readArtifacts(artifactDir(wt)), { currentHead: head, docsOnlySince }) + HEARTBEAT_SCRIPT;
 }
 
 function arg(name, fallback) {

@@ -86,7 +86,10 @@ async function unitWithExercises(page, title, n) {
 async function openPlanRow(page, title) {
   await page.locator('[data-screen="plan"]').click();
   const row = page.locator('.plan-row', { hasText: title });
-  if (!(await row.locator('[data-action="plan-study-now"]').isVisible())) await row.locator('.plan-expand-btn').click();
+  await expect(row).toBeVisible({ timeout: 8000 }); // decide "expand?" only after the screen has rendered, or an open row gets closed
+  const toggle = row.locator('.plan-expand-btn');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(row.locator('[data-action="plan-study-now"]')).toBeVisible();
   return row;
 }
 

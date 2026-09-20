@@ -99,3 +99,17 @@ test('SUITES run the same tests as the project scripts (a narrower discovery wou
   assert.equal(root['test:e2e'], 'playwright test');
   assert.deepEqual(SUITES.e2e.args.slice(0, 2), ['node_modules/@playwright/test/cli.js', 'test']);
 });
+
+test('commits after a run that only touch conductor/ keep the result valid; any code change makes it STALE', async () => {
+  const { onlyConductorDocs } = await import('../scripts/test-live-core.mjs');
+  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor\\tracks\\content-quality\\plan.md']), true);
+  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'src/app.js']), false);
+  assert.equal(onlyConductorDocs([]), false); // nothing changed => not "docs only" (heads differ for another reason)
+  const art = { suite: 'unit', state: 'PASS', headTested: 'aaaaaaa1', runnerPid: 1, exitCode: 0, updatedAt: new Date().toISOString(), counts: { total: 1, done: 1, passed: 1, failed: 0, skipped: 0 } };
+  const docs = effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true });
+  assert.equal(docs.state, 'PASS');
+  assert.equal(docs.docsOnly, true);
+  assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => false }).state, 'STALE');
+  assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false }).state, 'STALE'); // no resolver => strict
+  assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /só docs depois/);
+});
