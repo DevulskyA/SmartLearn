@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parsePlan, checkInvariants, renderCompact, renderHtml } from '../scripts/tasklist.mjs';
+import { parsePlan, checkInvariants, renderCompact, renderChecklistHtml } from '../scripts/tasklist.mjs';
 
 const SAMPLE = `# TRACK: Exemplo
 
@@ -46,9 +46,10 @@ test('the compact projection marks the single active task; the HTML board escape
   const compact = renderCompact(parsePlan(SAMPLE));
   assert.match(compact, /\[>\] OPS-2 — Segunda {3}← ATIVA/);
   assert.equal((compact.match(/← ATIVA/g) ?? []).length, 1);
-  const html = renderHtml(parsePlan(SAMPLE.replace('Primeira', '<b>x</b> & y')), new Date('2026-09-19T12:00:00Z'));
+  const html = renderChecklistHtml({ tasks: parsePlan(SAMPLE.replace('Primeira', '<b>x</b> & y')).tasks });
   assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt; &amp; y'), 'task text is escaped');
-  assert.match(html, /1\/4 concluídas/);
+  assert.match(html, /\[✓\]/);
+  assert.match(html, /\[>\]/);
 });
 
 test('the REAL active track plan.md parses and keeps exactly one active task', () => {

@@ -78,68 +78,47 @@ export function renderCompact(plan) {
   return [`SMARTLEARN — TRACK: ${plan.title}  [${plan.status}]`, '', ...rows].join('\n');
 }
 
-/** A board is a snapshot: it must SAY how old it is and warn when it may no longer be true. */
-export function freshnessHtml(now = new Date()) {
-  return `<p class="fresh" id="fresh" data-generated="${now.toISOString()}" role="status"></p>
-<style>.fresh{margin:.25rem 0 .75rem;font-size:.85rem;color:var(--muted)}.fresh.is-stale{color:#fff;background:var(--block);padding:.4rem .7rem;border-radius:.5rem;font-weight:700}</style>
-<script>(function(){var el=document.getElementById('fresh');function tick(){var min=Math.floor((Date.now()-Date.parse(el.dataset.generated))/60000);var stale=min>=10;el.className='fresh'+(stale?' is-stale':'');el.textContent=stale?'ATENÇÃO: este painel foi gerado há '+min+' min e pode estar desatualizado — o trabalho pode ter avançado. Peça ao agente para regenerar (node scripts/agent-tasklist.mjs).':'Painel gerado há '+(min<1?'menos de 1':min)+' min.';}tick();setInterval(tick,30000);})();</script>`;
-}
 
 export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Expandable detail block: structured fields when the task has them, otherwise its plain text. */
-export function detailHtml(t) {
-  const keys = FIELD_ORDER.filter((k) => t.fields?.[k]);
-  if (keys.length > 0) {
-    const rows = keys.map((k) => `<dt>${esc(FIELD_LABEL[k])}</dt><dd>${esc(t.fields[k])}</dd>`).join('');
-    const intro = t.free ? `<p>${esc(t.free)}</p>` : '';
-    return `<details${t.state === '>' ? ' open' : ''}><summary>detalhes</summary>${intro}<dl>${rows}</dl></details>`;
-  }
-  return t.detail ? `<details><summary>detalhes</summary><p>${esc(t.detail)}</p></details>` : '';
-}
 
-export function renderHtml(plan, now = new Date()) {
-  const done = plan.tasks.filter((t) => t.state === '✓').length;
-  const total = plan.tasks.length;
-  const renderTasks = (list) => list.map((t) => `
-    <li class="task s-${t.state === '✓' ? 'done' : t.state === '>' ? 'active' : t.state === '!' ? 'blocked' : t.state === '-' ? 'deferred' : 'todo'}">
-      <span class="mark" aria-hidden="true">${t.state === ' ' ? '' : esc(t.state)}</span>
-      <div class="body">
-        <div class="head"><span class="id">${esc(t.id)}</span><span class="title">${esc(t.title)}</span><span class="badge">${LABEL[t.state]}</span></div>
-        ${detailHtml(t)}
-      </div>
-    </li>`).join('');
-  const running = plan.tasks.filter((t) => t.state === '>' || t.state === '!');
-  const upcoming = plan.tasks.filter((t) => t.state === ' ' || t.state === '-');
-  const finished = plan.tasks.filter((t) => t.state === '✓').reverse();
-  const group = (label, list, empty) => `<h2 class="group">${label} <span class="count">${list.length}</span></h2>${list.length ? `<ul>${renderTasks(list)}</ul>` : `<p class="meta">${empty}</p>`}`;
-  const items = `${group('Em andamento', running, 'nada em andamento')}${group('Próximas', upcoming, 'nada planejado')}<details class="done-group"><summary>Concluídas (${finished.length})</summary><ul>${renderTasks(finished)}</ul></details>`;
+/**
+ * The board is a SIMPLE CHECKLIST, nothing else (Conductor model): finished, doing NOW, next, blocked.
+ * Details stay in plan.md. `nowGoal` is the one-line goal of the active task; `extraLines` are plain lines
+ * (e.g. the other agent's one-line state).
+ */
+export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', tasks, extraLines = [], keepDone = 6 }) {
+  const mark = (t) => (t.state === '-' ? '!' : t.state === '✓' ? '✓' : t.state === '>' ? '>' : t.state === '!' ? '!' : ' ');
+  const line = (t) => `<li class="t${mark(t) === '>' ? ' now' : ''}"><span class="m">[${mark(t)}]</span> ${esc(t.id)} — ${esc(t.title)}</li>`;
+  const done = tasks.filter((t) => t.state === '✓');
+  const shownDone = done.slice(-keepDone);
+  const rest = tasks.filter((t) => t.state !== '✓');
+  const order = { '>': 0, '!': 2, '-': 2, ' ': 1 };
+  const upcoming = [...rest].sort((a, b) => order[a.state] - order[b.state]);
+  const active = tasks.find((t) => t.state === '>');
+  const goal = active ? (active.fields?.SPRINT_GOAL || active.title) : null;
+  const older = done.length - shownDone.length;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="10"><title>SmartLearn — tasklist</title>
+<meta http-equiv="refresh" content="5"><title>SmartLearn — tasklist</title>
 <style>
-:root{--bg:#f6f7fb;--card:#fff;--text:#1d2433;--muted:#5b6478;--line:#e2e6f0;--accent:#3a5fc8;--done:#1f7a4a;--warn:#b45309;--block:#b91c1c}
-@media (prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1b2029;--text:#e8ebf2;--muted:#a3adc0;--line:#2b3342;--accent:#8ea8ff;--done:#5fd39a;--warn:#f0b35a;--block:#ff8a8a}}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
-main{max-width:52rem;margin:0 auto;padding:1.5rem 1rem 3rem}
-h1{font-size:1.15rem;margin:0 0 .25rem}.meta{color:var(--muted);font-size:.85rem;margin:0 0 1rem}
-.bar{height:.5rem;background:var(--line);border-radius:99px;overflow:hidden;margin:.5rem 0 1.25rem}.bar>i{display:block;height:100%;background:var(--done);width:${total ? Math.round((done / total) * 100) : 0}%}
-ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}h2.group{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:1.1rem 0 .5rem}.count{font-weight:400}.done-group{margin-top:1.1rem}.done-group>summary{font-weight:700;color:var(--muted)}.done-group>ul{margin-top:.5rem}
-.task{display:flex;gap:.75rem;background:var(--card);border:1px solid var(--line);border-radius:.75rem;padding:.75rem .9rem}
-.mark{flex:0 0 1.6rem;height:1.6rem;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:.85rem}
-.s-done .mark{background:var(--done);border-color:var(--done);color:#fff}.s-active{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
-.s-active .mark{border-color:var(--accent);color:var(--accent)}.s-blocked .mark{border-color:var(--block);color:var(--block)}.s-deferred{opacity:.65}
-.head{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline}.id{font-weight:800;color:var(--muted);font-size:.8rem}.title{font-weight:650}
-.badge{margin-left:auto;font-size:.72rem;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:.05rem .55rem}
-.s-active .badge{color:var(--accent);border-color:var(--accent)}details{margin-top:.35rem;color:var(--muted);font-size:.85rem}summary{cursor:pointer}dl{margin:.4rem 0 0;display:grid;grid-template-columns:max-content 1fr;gap:.25rem .75rem}dt{font-weight:700;color:var(--text)}dd{margin:0}
+:root{--bg:#fff;--text:#1d2433;--muted:#5b6478;--now:#3a5fc8}
+@media (prefers-color-scheme:dark){:root{--bg:#12151c;--text:#e8ebf2;--muted:#a3adc0;--now:#8ea8ff}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace}
+main{max-width:52rem;margin:0 auto;padding:1.25rem 1rem 2rem}
+h1{font-size:1rem;margin:0 0 1rem;letter-spacing:.02em}
+ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0}.m{display:inline-block;width:2.2rem}
+.now{font-weight:700;color:var(--now)}.muted{color:var(--muted)}
+.goal{margin-top:1.25rem}.goal p{margin:.25rem 0 0}
 </style></head><body><main>
-<h1>SMARTLEARN — TRACK: ${esc(plan.title)}</h1>
-${freshnessHtml(now)}
-<p class="meta">Status: ${esc(plan.status)} · ${done}/${total} concluídas · gerado de <code>plan.md</code> em ${esc(now.toLocaleString('pt-BR'))} (projeção — não edite aqui)</p>
-<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i></i></div>
-${items}
+<h1>${esc(title)}</h1>
+<ul>${older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : ''}${shownDone.map(line).join('')}${upcoming.map(line).join('')}</ul>
+${goal ? `<div class="goal"><strong>EXECUTANDO AGORA:</strong><p>${esc(active.id)} — ${esc(goal)}</p></div>` : '<div class="goal"><strong>EXECUTANDO AGORA:</strong><p>nada em execução</p></div>'}
+${extraLines.map((l) => `<p class="muted">${esc(l)}</p>`).join('')}
 </main></body></html>`;
 }
+
 
 function defaultPlanPath(root) {
   const tracks = join(root, 'conductor', 'tracks');
@@ -162,7 +141,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.log(renderCompact(plan));
   if (htmlOut) {
     mkdirSync(dirname(htmlOut), { recursive: true });
-    writeFileSync(htmlOut, renderHtml(plan));
+    writeFileSync(htmlOut, renderChecklistHtml({ tasks: plan.tasks }));
     console.log(`\n[tasklist] HTML: ${htmlOut}`);
   }
   if (errors.length) { console.error(`\n[tasklist] INVARIANT VIOLATED: ${errors.join('; ')}`); process.exit(1); }

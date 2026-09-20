@@ -49,43 +49,32 @@ UPDATED_AT=hoje
   assert.equal(cliLane(parseCoordFile('STATUS=BLOCKED\nACTIVE_TASK=x')).tasks[0].state, '!');
 });
 
-test('the board shows two lanes, one active per agent is fine, two active in one lane is warned, content is escaped', () => {
-  const gui = { title: 'AGENT_GUI', branch: 'gb', head: 'h1', updated: '', tasks: parsePlan(PLAN).tasks };
+test('the board is a SIMPLE checklist: [✓] finished, [>] doing now, [ ] next, [!] blocked; the active goal is one line; content is escaped', () => {
+  const plan = parsePlan(PLAN + '- [!] **BLK-1 Depende de chave** — OWNER: GUI\n');
+  const gui = { title: 'AGENT_GUI', tasks: plan.tasks.map((t) => ({ ...t, owner: 'GUI' })) };
   const cli = cliLane(parseCoordFile('ACTIVE_TASK=<b>x</b>\nSTATUS=RUNNING\nGOAL=g'));
-  const html = renderAgentBoard({ gui, cli, now: new Date('2026-09-19T12:00:00Z') });
-  assert.match(html, /aria-label="GUI"/);
-  assert.match(html, /aria-label="CLI"/);
-  assert.match(html, /ativa: <strong>EXAM-1<\/strong>/);
-  assert.match(html, /ativa: <strong>CLI<\/strong>/);
-  assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt;'), 'escaped');
-  assert.match(html, /<dt>Objetivo<\/dt><dd>fazer prova completa/);
-  const twoActive = renderAgentBoard({ gui: { ...gui, tasks: gui.tasks.map((t) => ({ ...t, state: '>' })) }, cli });
-  assert.match(twoActive, /2 ativas|3 ativas/);
+  const html = renderAgentBoard({ gui, cli });
+  assert.match(html, /\[✓\]<\/span> CQ-1 — Feita/);
+  assert.match(html, /class="t now"><span class="m">\[>\]<\/span> EXAM-1 — Prova sem feedback/);
+  assert.match(html, /\[ \]<\/span> EXAM-2 — Resultado/);
+  assert.match(html, /\[!\]<\/span> BLK-1 — Depende de chave/);
+  assert.match(html, /EXECUTANDO AGORA:<\/strong><p>EXAM-1 — fazer prova completa sem feedback antes de submeter\./);
+  assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt;'), 'CLI line escaped');
+  // no dashboard furniture
+  for (const forbidden of ['<details', 'class="badge"', '<dl>', 'aria-label="GUI"', 'pode estar desatualizado']) assert.ok(!html.includes(forbidden), forbidden);
 });
 
-test('the board separates what is running and what is next from what is finished; a PAUSED lane is not shown as done', () => {
-  const plan = parsePlan(PLAN);
-  const gui = { title: 'AGENT_GUI', tasks: plan.tasks.map((t) => ({ ...t, owner: 'GUI' })) };
+test('order is finished (last 6), then the active one, then next, then blocked; older finished collapse into a count; a PAUSED CLI is one plain line', () => {
+  const many = Array.from({ length: 9 }, (_, n) => `- [✓] **DONE-${n + 1} Feita ${n + 1}** — x`).join('\n');
+  const plan = parsePlan(`# TRACK: T\n\nStatus: IN_PROGRESS\n\n${many}\n- [ ] **NEXT-1 Depois** — x\n- [>] **NOW-1 Agora** — x\n- [!] **BLK-1 Travada** — x\n`);
   const cli = cliLane(parseCoordFile('AGENT=AGENT_CLI\nACTIVE_TASK=PAUSED (token budget)\nSTATUS=DONE   (slice)\n'));
   assert.equal(cli.tasks[0].state, '-');
-  const html = renderAgentBoard({ gui, cli });
-  assert.match(html, /Em andamento <span class="count">1<\/span>/);
-  assert.match(html, /Próximas <span class="count">1<\/span>/);
-  assert.match(html, /<summary>Concluídas \(1\)<\/summary>/);
-  const running = html.slice(html.indexOf('Em andamento'), html.indexOf('Próximas'));
-  assert.match(running, /EXAM-1/);
-  assert.doesNotMatch(running, /CQ-1/);
-});
-
-test('the board states its own age and warns when stale; one command targets every worktree copy', async () => {
-  const plan = parsePlan(PLAN);
-  const gui = { title: 'AGENT_GUI', tasks: plan.tasks.map((t) => ({ ...t, owner: 'GUI' })) };
-  const html = renderAgentBoard({ gui, cli: cliLane({}), now: new Date('2026-09-19T12:00:00Z') });
-  assert.match(html, /id="fresh" data-generated="2026-09-19T12:00:00.000Z"/);
-  assert.match(html, /pode estar desatualizado/);
-  const { worktreeBoards } = await import('../scripts/agent-tasklist.mjs');
-  const boards = worktreeBoards(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
-  assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\\/]\.view[\\/]tasklist\.html$/.test(p)));
+  const html = renderAgentBoard({ gui: { title: 'G', tasks: plan.tasks }, cli });
+  assert.match(html, /… \+3 concluídas antes/);
+  assert.ok(!html.includes('DONE-3 ') && html.includes('DONE-4 —') && html.includes('DONE-9 —'));
+  const at = (id) => html.indexOf(id);
+  assert.ok(at('DONE-9') < at('NOW-1') && at('NOW-1') < at('NEXT-1') && at('NEXT-1') < at('BLK-1'), 'done, now, next, blocked');
+  assert.match(html, /CLI \(outro agente\): pausado — PAUSED \(token budget\)/);
 });
 
 test('Conductor ACTIVE TRACK block is derived from the plan and replaces only the marked block', async () => {
@@ -99,4 +88,10 @@ test('Conductor ACTIVE TRACK block is derived from the plan and replaces only th
   const out = syncActiveTrack(md, block);
   assert.ok(out.startsWith('antes\n') && out.endsWith('\ndepois\n') && !out.includes('velho'));
   assert.equal(syncActiveTrack('sem marcadores', block), null);
+});
+
+test('one command targets every worktree copy of the board', async () => {
+  const { worktreeBoards } = await import('../scripts/agent-tasklist.mjs');
+  const boards = worktreeBoards(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+  assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\\/]\.view[\\/]tasklist\.html$/.test(p)));
 });

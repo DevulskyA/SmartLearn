@@ -159,7 +159,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno lê a própria trajetória sem confundir medir com estudar e continua podendo estudar depois de medir.
       NOT_PROVEN: Estatísticas/"Exercícios resolvidos" continuam tratando a prova como INITIAL_PRACTICE (rótulo lá não muda; decisão consciente para não tocar superfície protegida); Android/Windows nativos.
       COMMIT: ver `git log` (feat(exam): history labels Prova).
-- [-] **VERDICT-1 Veredito de Estatísticas ponderado por volume (adiada: decisão de produto)** — OWNER: GUI
+- [!] **VERDICT-1 Veredito de Estatísticas ponderado por volume (bloqueada: precisa de decisão de produto)** — OWNER: GUI
       SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
       DETAILS: lido o código (src/analytics.js studyVerdict): o veredito CONTA disciplinas e mostra cada contagem à parte ("Disciplinas: 1 melhorando · 1 piorando"), com o volume por período exigido dentro de cada disciplina (mín. 10 questões) — não há erro, e ponderar por volume mudaria o significado do veredito numa superfície protegida (ADR-0001). Só ativar com decisão de produto (HUMAN_GATE); até lá, adiada.
 - [✓] **UX-1 Inspeção visual do fluxo de prova em uso real (desktop + 375px)** — OWNER: GUI

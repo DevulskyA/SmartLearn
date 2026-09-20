@@ -34,13 +34,9 @@ Conductor nunca vira segunda Constitution (intenção = Constitution §0.1; esta
 
 ## Painel sempre verdadeiro (regra obrigatória — o usuário precisa saber o que está acontecendo)
 
-O usuário acompanha o trabalho **só pelo painel**. Um painel velho que diz "tudo concluído" enquanto o agente trabalha o deixa perdido.
-Por isso, em TODA mudança de estado (abrir/fechar/mudar de sprint, commit material, bloqueio) e ao trocar de worktree/branch:
-1. atualizar o `plan.md` primeiro (uma `[>]` por agente; o que vem depois DEVE existir como `[ ]` — nunca deixar o painel sem "Próximas" enquanto ainda há trabalho previsto);
-2. rodar `node scripts/agent-tasklist.mjs` — ele regenera TODAS as cópias (AgentCoord + `conductor/.view/tasklist.html` de cada worktree) **e o bloco ACTIVE TRACK de `conductor/tracks.md`** (gerado do plan.md entre os marcadores ACTIVE-TRACK; nunca edite esse bloco à mão);
-3. conferir na cópia que o usuário abre que "Gerado há" e "Em andamento" batem com a realidade; se o painel mostrar 0 em andamento mas o agente está executando, isso é um BUG a corrigir antes de continuar;
-4. dizer no chat, em uma linha, qual é a tarefa ativa e qual é a próxima.
-O painel exibe a idade do snapshot e avisa em vermelho quando passa de 10 min sem regenerar; nunca ignore esse aviso.
+O painel é uma LISTA SIMPLES do Conductor, não um dashboard: `[✓]` concluída · `[>]` sendo feita AGORA · `[ ]` próxima · `[!]` bloqueada, mais a linha "EXECUTANDO AGORA". Sem cards, badges, seções expansíveis ou aviso de "pode estar desatualizado": os detalhes ficam no `plan.md`. Painel velho é BUG.
+O painel é gerado do `plan.md` por `node scripts/agent-tasklist.mjs`, que também regrava todas as cópias (AgentCoord + `conductor/.view/tasklist.html` de cada worktree) e o bloco ACTIVE TRACK de `conductor/tracks.md` (nunca edite esse bloco à mão). Mantenha `node scripts/agent-tasklist.mjs --watch` rodando em segundo plano: qualquer edição do plan.md/GUI.md/CLI.md atualiza o painel em ~1 s.
+Ao iniciar/terminar/trocar tarefa, criar tarefa ou surgir/sumir bloqueio: editar o `plan.md` NA MESMA AÇÃO — `[>]` vira `[✓]` e a próxima `[ ]` vira `[>]` imediatamente; sempre deixar as próximas como `[ ]`; conferir a linha "EXECUTANDO AGORA" e dizer no chat, em uma linha, a tarefa ativa e a próxima.
 
 ## Recuperação de sessão/contexto perdido
 
