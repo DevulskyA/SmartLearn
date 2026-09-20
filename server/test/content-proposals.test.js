@@ -306,3 +306,32 @@ test('chunking a source with no accepted draft yet still replaces proposals whol
     assert.equal(second.length, 1);
   } finally { cleanup(); }
 });
+
+// LARGEPDF-1: a chunk must always be draftable. Chunks close at 10 pages OR when adding the next page would
+// pass the model input limit, so dense pages never produce a proposal that can only fail with "too large".
+const dense = (n, chars) => `P${n} ` + 'x'.repeat(chars - 4);
+const sizeOf = (db, userId, proposal) => db.prepare('SELECT COALESCE(SUM(LENGTH(text)),0) AS n FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index BETWEEN ? AND ?')
+  .get(userId, proposal.sourceId, proposal.pageStart, proposal.pageEnd).n;
+
+test('dense pages: chunks split before the input limit, every page still lands in exactly one chunk, in order', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'c@example.com');
+    const source = await extractedSource(db, userId, sourcesDir, Array.from({ length: 10 }, (_, i) => dense(i + 1, 6500)));
+    const chunks = proposals.chunkSource(db, userId, source.id, { maxCharsPerChunk: 20000 });
+    assert.equal(chunks.length, 4); // 3 pages (19.5k) per chunk: 3 + 3 + 3 + 1
+    assert.deepEqual(chunks.map((c) => [c.pageStart, c.pageEnd]), [[1, 3], [4, 6], [7, 9], [10, 10]]);
+    for (const c of chunks) assert.ok(sizeOf(db, userId, c) <= 20000, `chunk ${c.pageStart}-${c.pageEnd} over the limit`);
+  } finally { cleanup(); }
+});
+
+test('normal-density pages keep the 10-page chunks; a single page above the limit is its own chunk (never dropped)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'd@example.com');
+    const light = await extractedSource(db, userId, sourcesDir, Array.from({ length: 25 }, (_, i) => dense(i + 1, 500)));
+    assert.deepEqual(proposals.chunkSource(db, userId, light.id).map((c) => [c.pageStart, c.pageEnd]), [[1, 10], [11, 20], [21, 25]]);
+    const huge = await extractedSource(db, userId, sourcesDir, [dense(1, 300), dense(2, 5000), dense(3, 300)]);
+    assert.deepEqual(proposals.chunkSource(db, userId, huge.id, { maxCharsPerChunk: 1000 }).map((c) => [c.pageStart, c.pageEnd]), [[1, 1], [2, 2], [3, 3]]);
+  } finally { cleanup(); }
+});

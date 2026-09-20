@@ -189,7 +189,7 @@ export async function createDraft(db, userId, proposalId, {
 
   const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
   if (totalChars > maxInputChars) {
-    throw new DraftError('INPUT_TOO_LARGE', `O texto de origem (${totalChars} caracteres) excede o limite de ${maxInputChars}.`);
+    throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
   }
 
   const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });

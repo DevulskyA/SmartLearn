@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; LARGEPDF-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; FIRSTRUN-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: LARGEPDF-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: FIRSTRUN-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -213,7 +213,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 
-- [>] **LARGEPDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
+- [✓] **LARGEPDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
       SPRINT_GOAL: provar (e corrigir só o que quebrar) que um PDF de aula realista, de dezenas a ~150 páginas, sai do upload para propostas e rascunhos utilizáveis sem travar, estourar limite silenciosamente ou perder páginas.
       BEFORE: todos os fluxos foram provados com PDFs de 2 a 5 páginas; o tamanho real de uma aula médica (slides/capítulo) é NOT_PROVEN — extração, divisão em trechos de 10 páginas, teto de entrada do modelo (SMARTLEARN_AI_MAX_INPUT_CHARS) e a lista de propostas na UI nunca foram exercitados em escala.
       AFTER: um PDF sintético de ~150 páginas percorre upload -> extração -> propostas -> rascunho de UM trecho; tempo medido; limites (tamanho, caracteres de entrada) têm mensagem clara ao aluno em vez de falha muda; a lista de propostas continua navegável a 375px.
@@ -223,7 +223,13 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e com PDF sintético de 150 páginas (stub de modelo) + medições registradas; caso de trecho acima do teto de entrada com mensagem explícita; 375px sem overflow.
       DONE_WHEN: fluxo grande utilizável e comprovado (ou ajustado e comprovado), sem regressão em source-proposals/draft-acceptance.
       DEPENDENCIES: INTEGRATE-1.
-- [ ] **FIRSTRUN-1 Primeira vez do aluno: telas vazias levam a uma ação (desktop + 375px)** — OWNER: GUI
+      EVIDENCE: MEDIDO (e2e/large-pdf.spec.js, PDF sintético de 150 páginas ≈ 303 KB, servidor e UI reais): upload -> extração -> 15 propostas em ~1,5 s, cobrindo 1-10 … 141-150 (toda página em exatamente uma proposta), sem overflow a 1280/375px, e um trecho do meio vira rascunho revisável. ACHADOS REAIS: (1) páginas densas (10 x 6.500 caracteres = 65.000 > limite de entrada de 50.000) geravam um trecho que NUNCA podia virar rascunho; (2) o clique em "Gerar rascunho com IA" nesse trecho não mostrava NADA perto do item — o erro caía em #sources-message no topo, fora da tela numa lista longa — e o texto era técnico ("excede o limite de 50000"). CORREÇÕES MÍNIMAS: `chunkSource` fecha o trecho antes de ultrapassar o limite de caracteres (padrão 45.000; a rota usa 90% de `aiMaxInputChars`; máx. 10 páginas como antes; uma página acima do limite vira trecho próprio, nunca é descartada); mensagem em português claro para o caso restante (uma única página gigante); erro de Materiais passa a rolar até a mensagem. Prova: `server/test/content-proposals.test.js` (+2: páginas densas partem antes do limite com todas as páginas presentes e em ordem; páginas leves mantêm 10 por trecho e uma página gigante fica sozinha) e e2e `large-pdf` (2): o trecho denso agora tem >=2 propostas e a 1ª vira rascunho; página gigante no fim de uma lista de 16 propostas mostra "texto demais…" DENTRO da tela — vermelho sem a rolagem (toBeInViewport), verde com. Regressão: server 488/488, unit 384/384, e2e source-proposals/draft-acceptance/content-quality-flow/large-draft-review/product-value/jornada + large-pdf = 13/13.
+      PRODUCT_DELTA: uma aula de ~150 páginas percorre o produto sem travar em ~1,5 s até propostas utilizáveis; nenhum trecho fica impossível de virar rascunho por excesso de texto, e o único caso restante (uma página gigante) é explicado ao aluno e aparece na tela.
+      PROOF_OBSERVED: medição + testes acima.
+      USER_VALUE: o aluno que sobe o material inteiro da aula não esbarra num botão que "não faz nada".
+      NOT_PROVEN: PDF real escaneado/com imagens (OCR não existe), tabelas/figuras médicas; PDFs próximos do teto de 25 MB; qualidade do rascunho de um modelo real sobre um trecho denso; a geração de rascunho de TODOS os 15 trechos em sequência (só um por vez foi exercitado).
+      COMMIT: ver `git log` (feat(sources): chunks close before the model input limit).
+- [>] **FIRSTRUN-1 Primeira vez do aluno: telas vazias levam a uma ação (desktop + 375px)** — OWNER: GUI
       SPRINT_GOAL: uma conta nova, sem nada cadastrado, vê em Hoje/Plano/Estatísticas/Materiais/Disciplinas estados vazios que dizem o que fazer a seguir, sem beco sem saída.
       BEFORE: a jornada foi provada de ponta a ponta com dados criados no caminho, mas ninguém inspecionou o que a conta vazia mostra em cada tela.
       AFTER: capturas revisadas de cada tela vazia; cada beco sem saída ou texto confuso achado vira teste vermelho e a menor correção.

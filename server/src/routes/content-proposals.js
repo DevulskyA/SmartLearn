@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import * as proposals from '../services/content-proposals.js';
 
 function handleError(err, reply) {
@@ -19,7 +20,9 @@ export function registerContentProposalRoutes(app, db) {
     const id = Number(request.params.id);
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
-      const opts = request.body?.maxPagesPerChunk ? { maxPagesPerChunk: request.body.maxPagesPerChunk } : {};
+      // chunks close before the model input limit, so every proposal can actually become a draft
+      const opts = { maxCharsPerChunk: Math.floor(config.aiMaxInputChars * 0.9) };
+      if (request.body?.maxPagesPerChunk) opts.maxPagesPerChunk = request.body.maxPagesPerChunk;
       reply.status(201);
       return { proposals: proposals.chunkSource(db, request.actor.userId, id, opts) };
     } catch (err) { return handleError(err, reply); }

@@ -3006,6 +3006,9 @@ function setSourcesMessage(message = "", isError = false) {
   if (!sourcesMessage) return;
   sourcesMessage.classList.toggle("is-error", isError);
   sourcesMessage.textContent = message;
+  // The list of proposals can be long (a 150-page PDF = 15 items): an error raised far below must not be
+  // left off-screen, or the student clicks and sees nothing happen.
+  if (isError && message) sourcesMessage.scrollIntoView({ block: "nearest" });
 }
 
 function createSourceProposalItem(proposal) {

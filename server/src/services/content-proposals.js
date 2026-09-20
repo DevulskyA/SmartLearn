@@ -9,6 +9,10 @@ export class ProposalError extends Error {
 }
 
 const DEFAULT_MAX_PAGES_PER_CHUNK = 10;
+// A chunk must always be draftable: it closes early when the next page would push its text past this size
+// (kept under the draft input limit, config.aiMaxInputChars = 50_000 by default). One page above the limit still
+// becomes its own chunk — pages are never dropped.
+const DEFAULT_MAX_CHARS_PER_CHUNK = 45_000;
 const EXCERPT_LENGTH = 200;
 
 function findOwnedSource(db, userId, sourceId) {
@@ -73,7 +77,7 @@ function toSummaryDto(row) {
  * intentional: a stale chunking scheme should not linger next to a fresh
  * one for the same source.
  */
-export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK } = {}) {
+export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK } = {}) {
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
   if (source.extraction_status !== 'EXTRACTED') {
@@ -108,10 +112,21 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   }
 
   const chunks = [];
-  for (let i = 0; i < pages.length; i += maxPagesPerChunk) {
-    const slice = pages.slice(i, i + maxPagesPerChunk);
-    chunks.push({ pageStart: slice[0].pageIndex, pageEnd: slice[slice.length - 1].pageIndex });
+  let current = [];
+  let currentChars = 0;
+  const close = () => {
+    if (current.length === 0) return;
+    chunks.push({ pageStart: current[0].pageIndex, pageEnd: current[current.length - 1].pageIndex });
+    current = [];
+    currentChars = 0;
+  };
+  for (const page of pages) {
+    const size = (page.text ?? '').length;
+    if (current.length > 0 && (current.length >= maxPagesPerChunk || currentChars + size > maxCharsPerChunk)) close();
+    current.push(page);
+    currentChars += size;
   }
+  close();
 
   const now = new Date().toISOString();
   const run = db.transaction(() => {
