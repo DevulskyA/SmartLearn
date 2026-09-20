@@ -423,7 +423,12 @@ test('UX-1: Plano action buttons are spaced apart (also at 375), and once the re
     await page.setViewportSize({ width, height: 800 });
     await page.locator('[data-screen="plan"]:visible').first().click();
     const row = page.locator('.plan-row', { hasText: 'Aula visual' });
-    if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded')) !== 'true') await row.locator('.plan-expand-btn').click();
+    // Plano re-renders after it loads: an "expanded?" read taken before that describes a row that is about to be
+    // replaced. Retry the read+expand until the three action buttons really exist.
+    await expect(async () => {
+      if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded', { timeout: 1500 })) !== 'true') await row.locator('.plan-expand-btn').click({ timeout: 1500 });
+      await expect(row.locator('.plan-exercise-actions button')).toHaveCount(3, { timeout: 1500 });
+    }).toPass({ timeout: 15000 });
     await gaps();
   }
   await page.setViewportSize({ width: 1280, height: 900 });
