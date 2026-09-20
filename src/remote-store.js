@@ -415,6 +415,10 @@ const exams = {
   async start(unitId) {
     return apiRequest('/v1/exams', { method: 'POST', body: { unitId } });
   },
+  // A whole discipline: questions from all its units (the server samples them; an open one is resumed).
+  async startSubject(subjectId) {
+    return apiRequest('/v1/exams', { method: 'POST', body: { subjectId } });
+  },
   async get(examId) {
     const { exam } = await apiRequest(`/v1/exams/${examId}`);
     return exam;

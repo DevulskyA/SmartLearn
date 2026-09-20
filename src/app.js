@@ -1722,6 +1722,16 @@ export async function renderPlan() {
             examBtn.textContent = "Fazer prova";
             examBtn.addEventListener("click", () => startExam(unit, subject?.name));
             exSection.append(examBtn);
+            if (subject && DB.exams.startSubject) {
+              const subjectExamBtn = document.createElement("button");
+              subjectExamBtn.type = "button";
+              subjectExamBtn.className = "secondary-button plan-subject-exam";
+              subjectExamBtn.dataset.action = "plan-subject-exam";
+              subjectExamBtn.textContent = "Prova da disciplina";
+              subjectExamBtn.title = `Uma prova com questões de todas as aulas de ${subject.name}, começando pelo que você errou`;
+              subjectExamBtn.addEventListener("click", () => startSubjectExam(subject));
+              exSection.append(subjectExamBtn);
+            }
           }
           detail.append(exSection);
         }
@@ -3843,13 +3853,23 @@ const examEls = {
 };
 let examState = null; // { exam, index, dirty }
 
+async function startSubjectExam(subject) {
+  if (!subject) return;
+  await openExam(() => DB.exams.startSubject(subject.id), { subjectName: subject.name, fallbackTitle: subject.name });
+}
+
 async function startExam(unit, subjectName) {
   if (!unit) return;
+  await openExam(() => DB.exams.start(unit.id), { subjectName, fallbackTitle: unit.title });
+}
+
+async function openExam(begin, { subjectName, fallbackTitle }) {
   try {
-    const { exam } = await DB.exams.start(unit.id);
-    examState = { exam, index: 0, dirty: false, unitTitle: unit.title, subjectName };
-    examEls.unit.textContent = subjectName ?? "";
-    examEls.title.textContent = `Prova — ${unit.title ?? ""}`;
+    const { exam } = await begin();
+    const title = exam.title ?? fallbackTitle ?? "";
+    examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName };
+    examEls.unit.textContent = exam.scope === "SUBJECT" ? "Prova da disciplina" : (subjectName ?? "");
+    examEls.title.textContent = `Prova — ${title}`;
     examEls.message.textContent = "";
     showScreen("exam", { focus: true });
     if (exam.status === "IN_PROGRESS") {
@@ -3992,6 +4012,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
     li.dataset.itemId = String(it.id);
     li.dataset.outcome = it.outcome ?? "";
     li.append(createTextElement("p", "exam-review-q", `${it.position + 1}. ${it.question}`));
+    if (exam.scope === "SUBJECT" && it.unitTitle) li.append(createTextElement("p", "exam-review-unit", `Aula: ${it.unitTitle}`));
     li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : "A julgar"));
     li.append(createTextElement("p", "exam-review-label", "Sua resposta"));
     const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : "Sem resposta");
@@ -4033,7 +4054,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   examEls.retest.textContent = `Refazer erros (${wrong.length})`;
   examEls.finalNote.hidden = !corrected;
   examEls.finalNote.textContent = corrected
-    ? `Resultado registrado no seu histórico (${exam.score.correct}/${exam.score.total}).${wrong.length > 0 ? " Os erros passam a aparecer como “para reforçar” no Plano." : ""}`
+    ? `Resultado registrado no seu histórico (${exam.score.correct}/${exam.score.total})${exam.scope === "SUBJECT" ? `, por aula (${(exam.evidenceIds ?? []).length})` : ""}.${wrong.length > 0 ? " Os erros passam a aparecer como “para reforçar” no Plano." : ""}`
     : "";
   if (focusHeading) examEls.submittedTitle.focus();
 }
@@ -4060,12 +4081,14 @@ examEls.retest?.addEventListener("click", async () => {
   if (!examState) return;
   const wrongIds = new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.exerciseId));
   try {
-    const all = await DB.exercises.getAll(examState.exam.unitId);
+    // a discipline exam's wrong items live in several units: load each unit that has one
+    const unitIds = [...new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.unitId ?? examState.exam.unitId))];
+    const all = (await Promise.all(unitIds.map((id) => DB.exercises.getAll(id)))).flat();
     const wrong = all.filter((e) => wrongIds.has(e.id));
     if (wrong.length === 0) return;
     startRetestBlock({
       returnReviewId: null,
-      unitId: examState.exam.unitId,
+      unitId: unitIds[0] ?? examState.exam.unitId,
       subjectName: examState.subjectName ?? "",
       unitTitle: examState.unitTitle ?? examState.exam.unitTitle ?? "",
       exercises: wrong,

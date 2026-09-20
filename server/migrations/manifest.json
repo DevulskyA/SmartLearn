@@ -118,5 +118,10 @@
     "version": 24,
     "name": "exams",
     "checksum": "5019a7fa261c90a45ce0d51ad4c1d50e3cf9581b2e46544182ebaf14dda11290"
+  },
+  {
+    "version": 25,
+    "name": "exam-subject",
+    "checksum": "3a1b8e87e4d0ff2220f7ff326088a9b2baed52f122b417a3dc8c81b82b12b855"
   }
 ]

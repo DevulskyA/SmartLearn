@@ -115,7 +115,7 @@ export function list(db, userId, { unitId, dateFrom, dateTo } = {}) {
   if (dateTo) { clauses.push('evidence_date <= ?'); params.push(dateTo); }
 
   return db.prepare(`
-    SELECT le.*, EXISTS(SELECT 1 FROM exams e WHERE e.user_id = le.user_id AND e.evidence_id = le.id) AS from_exam
+    SELECT le.*, EXISTS(SELECT 1 FROM exam_evidence x WHERE x.user_id = le.user_id AND x.evidence_id = le.id) AS from_exam
     FROM learning_evidence le WHERE ${clauses.map((c) => `le.${c}`).join(' AND ')} ORDER BY le.evidence_date, le.id
   `).all(...params).map(toDto);
 }

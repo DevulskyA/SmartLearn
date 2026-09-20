@@ -13,10 +13,14 @@ const ID = { type: 'string' };
 
 export function registerExamRoutes(app, db) {
   app.post('/exams', {
-    schema: { body: { type: 'object', required: ['unitId'], properties: { unitId: { type: 'integer' } } } },
+    // exactly one of unitId (one class) or subjectId (a whole discipline)
+    schema: { body: { type: 'object', oneOf: [{ required: ['unitId'] }, { required: ['subjectId'] }], properties: { unitId: { type: 'integer' }, subjectId: { type: 'integer' } } } },
   }, async (request, reply) => {
     try {
-      const { exam, resumed } = exams.start(db, request.actor.userId, { unitId: request.body.unitId });
+      const { unitId, subjectId } = request.body;
+      const { exam, resumed } = subjectId !== undefined
+        ? exams.startSubject(db, request.actor.userId, { subjectId })
+        : exams.start(db, request.actor.userId, { unitId });
       reply.status(resumed ? 200 : 201);
       return { exam, resumed };
     } catch (err) { return handleError(err, reply); }

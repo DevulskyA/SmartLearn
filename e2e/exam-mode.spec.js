@@ -340,3 +340,68 @@ test('EXAM-5: the Plano history tells a Prova from a study pass, and an exam doe
   await expect(history2.filter({ hasText: 'Prática inicial: 2/2' })).toHaveCount(1);
   await expect(row3.locator('[data-action="plan-study-now"]')).toHaveCount(0);
 });
+
+test('EXAM-4: a discipline exam mixes the units, shows no gabarito before submitting, and the result becomes one evidence row PER unit', async ({ page }) => {
+  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Disciplina Prova', title: 'Aula A', studyDate: '2026-04-01' });
+  const b = await apiCall(page, '/v1/learning-units', { subjectId: a.unit.subjectId, title: 'Aula B', studyDate: '2026-04-01' });
+  for (const [unit, tag] of [[a.unit, 'A'], [b.unit, 'B']]) {
+    for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Enun ${tag}${i}?`, answer: `GABARITO-${tag}${i}`, explanation: `PORQUE-${tag}${i}`, provenance: 'MANUAL' });
+  }
+  const evidenceOf = (unitId) => page.evaluate(async ({ base, unitId }) => (await (await fetch(`${base}/v1/learning-evidence?unitId=${unitId}`, { credentials: 'include' })).json()).evidence, { base: API_BASE, unitId });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula A' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-subject-exam"]').click();
+  await expect(page.locator('#exam-progress')).toHaveText('Questão 1 de 4');
+  await expect(page.locator('#title-exam')).toHaveText('Prova — Disciplina Prova');
+  const seen = new Set();
+  for (let i = 0; i < 4; i += 1) {
+    seen.add(await page.locator('#exam-question-text').innerText());
+    const screen = await page.locator('#screen-exam').innerText();
+    expect(screen).not.toMatch(/GABARITO|PORQUE/);
+    await page.locator('#exam-answer-input').fill(`r${i + 1}`);
+    if (i < 3) await page.locator('#exam-next-btn').click();
+  }
+  expect([...seen].sort()).toEqual(['Enun A1?', 'Enun A2?', 'Enun B1?', 'Enun B2?']); // both units are in the exam
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 8000 });
+
+  // correction: each item says which class it came from; the gabarito/why are there only now
+  const items = page.locator('.exam-review-item');
+  await expect(items).toHaveCount(4);
+  await expect(items.nth(0).locator('.exam-review-unit')).toHaveText('Aula: Aula A');
+  await expect(items.nth(3).locator('.exam-review-unit')).toHaveText('Aula: Aula B');
+  await expect(items.nth(0).locator('.exam-review-correct')).toHaveText('GABARITO-A1');
+  await items.nth(0).locator('.exam-wrong-btn').click();
+  for (const i of [1, 2, 3]) await items.nth(i).locator('.exam-correct-btn').click();
+  await expect(page.locator('#exam-result-score')).toHaveText('3/4 corretas — 75,0%');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toContainText('Resultado registrado no seu histórico (3/4), por aula (2)');
+  // one evidence row PER unit, each counting only its own questions
+  const evA = await evidenceOf(a.unit.id);
+  const evB = await evidenceOf(b.unit.id);
+  expect(evA).toHaveLength(1);
+  expect(evB).toHaveLength(1);
+  expect([evA[0].questionsCount, evA[0].correctCount, evA[0].origin]).toEqual([2, 1, 'EXAM']);
+  expect([evB[0].questionsCount, evB[0].correctCount, evB[0].origin]).toEqual([2, 2, 'EXAM']);
+
+  // the wrong item is redone from the result (a redo is recovery, not new evidence), and the history says "Prova"
+  await expect(page.locator('#exam-retest-btn')).toHaveText('Refazer erros (1)');
+  await page.locator('#exam-retest-btn').click();
+  await expect(page.locator('#study-now-question-text')).toHaveText('Enun A1?');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 8000 });
+  expect(await evidenceOf(a.unit.id)).toHaveLength(1);
+  await page.locator('[data-screen="plan"]').click();
+  const rowB = page.locator('.plan-row', { hasText: 'Aula B' });
+  await rowB.locator('.plan-expand-btn').click();
+  await expect(rowB.locator('.plan-evidence-list li')).toContainText('Prova: 2/2');
+});
