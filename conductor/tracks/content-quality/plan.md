@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6 concluídos; NEXT-3 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3 concluídos; SCANNED-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: NEXT-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: SCANNED-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -581,11 +581,23 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima (rodada 3) + vermelho->verde de cada falha.
       NOT_PROVEN: Android/Windows nativos; UX-1 pode ter uma raiz de produto (Plano recolher a linha ao re-renderizar) — só a espera do teste foi endurecida; o CLI ainda precisa reconciliar.
       COMMIT: fast-forward para o HEAD deste commit de docs.
-- [>] **NEXT-3 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+- [✓] **NEXT-3 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo) depois da verificação no canônico.
       DETAILS: NOT_PROVEN acumulados (ex.: raiz de produto do UX-1, propostas de trecho por teclado, reteste do Estudar agora sob falha de rede), experiência atual do aluno; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
       DONE_WHEN: sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF.
       DEPENDENCIES: INTEGRATE-6.
+      EVIDENCE: candidatos (ganho x confiança / custo, sem depender de decisão humana): (A) páginas SEM texto de um PDF misto (slides com figura/escaneadas) são descartadas em silêncio — a UI só trata o caso "PDF inteiro é imagem" (frase sem próximo passo) e não há nenhuma menção a páginas puladas: o aluno não sabe que parte do material não virou trecho, o que mina a confiança no resumo -> ganho médio-alto, confiança alta, custo baixo => ESCOLHIDA; (B) propostas de trecho por teclado: ganho baixo-médio; (C) raiz de produto do UX-1: ganho baixo. Sprint aberta: SCANNED-1.
+      PRODUCT_DELTA: próxima sprint definida (SCANNED-1).
+- [>] **SCANNED-1 O aluno sabe quais páginas do PDF não entraram e o que fazer** — OWNER: GUI
+      SPRINT_GOAL: quando um PDF tem páginas sem texto extraível (escaneadas/figuras), a tela de Materiais diz quantas e quais páginas ficaram de fora e dá um próximo passo; para PDF inteiro em imagem, a mensagem deixa de ser um beco sem saída.
+      BEFORE: só o caso "PDF inteiro é imagem" tem mensagem (sem próximo passo); em PDF misto as páginas sem texto somem sem aviso.
+      AFTER: após a extração, a mensagem lista "N página(s) sem texto extraível (p. X, Y) não entram nos trechos"; PDF só de imagem diz o que fazer (usar versão com texto selecionável ou criar a aula à mão).
+      WHY: cobertura silenciosa de material médico é risco pedagógico; o aluno precisa saber o que o resumo NÃO cobre.
+      SCOPE: server (se preciso expor as páginas vazias na resposta de extração) + src/app.js (mensagem) + teste.
+      DETAILS: medir primeiro com um PDF de 3 páginas (2 com texto, 1 vazia): o que a API devolve e o que a UI mostra; qualquer defeito vira teste vermelho -> menor correção; sem OCR.
+      PROOF: e2e com PDF misto e PDF só de imagem; mensagem observada.
+      DONE_WHEN: PDF misto mostra as páginas puladas; PDF de imagem mostra próximo passo; regressão de Materiais verde.
+      DEPENDENCIES: NEXT-3.
 
 ## Evidência CQ-1
 
