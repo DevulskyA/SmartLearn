@@ -10,8 +10,8 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: GUI-05 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
-BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA (ativa). Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
+ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
 ## Tarefas
@@ -97,7 +97,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       DETAILS: consultar estado canônico, NOT_PROVEN, experiência atual, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
       EVIDENCE: seleção 2026-09-19 (ganho x confiança / custo), candidatos avaliados: (A) "Por quê" nas questões ESCRITAS pelo aluno — o campo existe no servidor desde a mig 023 e alimenta Estudar agora, erro e correção da prova, mas só questões geradas por IA o têm: ganho médio-alto, confiança alta, custo baixo (form + edição) => ESCOLHIDA; (B) rótulo "Prova" no histórico do Plano — ganho baixo/médio, custo baixo => depois; (C) prova por disciplina (multi-unidade, amostrando o que reforçar) — ganho alto, custo/risco altos (migração, evidência por unidade) => próxima grande; (D) veredito de Estatísticas ponderado por volume — semântica de produto em aberto, superfície protegida => não agora; (E) rodar o pipeline com chave real — bloqueado (sem chave).
       PRODUCT_DELTA: sprints seguintes definidas: AUTHOR-1 (ativa) e EXAM-4 (candidata).
-- [>] **GUI-05 Jornada completa do aluno, ponta a ponta** — OWNER: GUI
+- [✓] **GUI-05 Jornada completa do aluno, ponta a ponta** — OWNER: GUI
       SPRINT_GOAL: provar uma jornada real sem dead ends: material -> unidade -> Resumo Mestre -> revisão/aceite -> estudo -> perguntas -> feedback -> revisão -> prova -> resultado -> evidência -> Estatísticas -> próxima ação.
       BEFORE: cada parte foi provada em spec separado (draft-acceptance, study-now-flow, exam-mode, stats); nenhuma prova única conecta todas, então um dead end ENTRE etapas passaria despercebido.
       AFTER: um único e2e percorre a jornada inteira num mesmo perfil e banco reais (servidor, UI e PDF reais; modelo = stub), a 1280 e a 375px, e cada etapa termina com uma próxima ação visível baseada na evidência do próprio aluno.
@@ -107,7 +107,13 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e da jornada completa; desktop + 375px sem overflow; dados persistem após reload; Estatísticas reflete a evidência da prova/estudo; a próxima ação (Hoje/Plano "para reforçar") aponta para o erro do aluno; toda tela alcançada tem saída clara.
       DONE_WHEN: um aluno entra com um PDF e chega, sem sair do produto, a uma próxima ação baseada na própria evidência; e2e verde e regressão relevante verde.
       DEPENDENCIES: GUI-01..04 (feitos); gate e2e completo do snapshot EXAM.
-- [ ] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
+      EVIDENCE: `e2e/student-journey.spec.js` (1 teste, 3/3 repetições verdes; mutação — trocar "Refazer erros (1)" por (9) — o deixa vermelho): PDF real -> rascunho (stub no caminho do provider real) -> aceite -> Plano com origem do resumo -> Estudar agora (Por quê após revelar; erro com resposta + trecho da página 2; "Refazer erros"/"Concluir" visíveis) -> reteste (1/1, sem evidência nova) -> Prova (nenhum gabarito/"Por quê" no DOM antes de submeter) -> correção (resposta do aluno ao lado do gabarito e do porquê; nota só quando tudo julgado, 2/3 — 66,7%) -> registrar (exatamente 2 linhas de evidência: estudo + prova; 1 item "para reforçar") -> Hoje "1 exercício para reforçar" -> Estatísticas/Por conteúdo lista a aula -> "Ver no Plano" -> chip "1 para reforçar" -> reload preserva tudo; o modelo só foi chamado para PRODUZIR o material (GENERATE, AUDIT). 375px sem overflow horizontal no resultado do estudo, na prova, na correção, em Hoje e em Estatísticas. Nenhum dead end achado; nenhum código de produto alterado. GATE do snapshot EXAM: e2e completo 125/127 — 1 falha era corrida DE TESTE (product-value:141 lia data-attempt-id uma vez, sem esperar o POST assíncrono; passou 4/4 isoladamente; corrigido com toHaveAttribute que espera) e 1 é AMBIENTE conhecido (production-build exige a branch claude/smartlearn-v1-complete; passa com CI=1, guard não alterado).
+      PRODUCT_DELTA: o SmartLearn passa a ter a jornada inteira provada num só perfil/banco, sem seed por API: um aluno entra com um PDF e chega a uma próxima ação (reforçar o erro) baseada na própria evidência de estudo E de prova.
+      PROOF_OBSERVED: e2e acima + gate completo (ver EVIDENCE).
+      USER_VALUE: quebras entre telas — o que faz o aluno desistir — passam a ser detectadas por um teste único; hoje não há nenhuma.
+      NOT_PROVEN: qualidade de um modelo REAL; leitor de tela; uso com vários dias/revisões agendadas (a aula usa data futura para a sugestão vir do ledger, não de revisão vencida); Android/Windows nativos (esta prova é WEB).
+      COMMIT: ver `git log` (test(journey): full student journey).
+- [>] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
       SPRINT_GOAL: uma questão criada pelo próprio aluno ensina como as geradas por IA: ele escreve (e edita) o porquê da resposta e o vê no Estudar agora, no cartão de erro, na revisão da Hoje e na correção da prova.
       BEFORE: só questões geradas por IA têm "Por quê"; o formulário de exercício manual tem enunciado, resposta e dica, sem explicação; editar uma questão não permite mexer no porquê.
       AFTER: o formulário de criar e o de editar exercício têm o campo "Por quê (opcional)"; o texto salvo aparece onde a resposta aparece; vazio = nada aparece (nunca inventado).

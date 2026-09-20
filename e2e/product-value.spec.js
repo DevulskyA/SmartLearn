@@ -137,6 +137,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   // is attached to the question area the moment it's revealed, with
   // real server-side state: SOLUTION-level assistance recorded, and
   // deliberately no reviewTaskId (INITIAL_PRACTICE, not a scheduled review).
+  await expect(page.locator('#study-now-question-area')).toHaveAttribute('data-attempt-id', /.+/); // set after an async attempt POST: wait, do not read once
   const firstAttemptId = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
   expect(firstAttemptId).toBeTruthy();
   const firstAttemptAfterReveal = await page.evaluate(async ({ base, id }) => {
