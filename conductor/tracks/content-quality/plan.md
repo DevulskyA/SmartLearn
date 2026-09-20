@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3 concluídos; INTEGRATE-8 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8 concluídos; NEXT-4 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-8 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: NEXT-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -632,7 +632,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima; vermelho/verde.
       NOT_PROVEN: leitor de tela real; ordem de foco entre linhas de revisão de vários dias; formulário de exercícios externos e edição de resumo não foram varridos por teclado.
       COMMIT: 7456541.
-- [>] **INTEGRATE-8 Integrar ACCESS-3 no canônico e verificar lá** — OWNER: GUI
+- [✓] **INTEGRATE-8 Integrar ACCESS-3 no canônico e verificar lá** — OWNER: GUI
       SPRINT_GOAL: levar ao canônico o que veio depois de 0007cdf (ACCESS-3) com evidência no HEAD canônico.
       BEFORE: canônico em 0007cdf (PASS até 2bd9008 + docs); o GUI está à frente com ACCESS-3.
       AFTER: ff sem conflitos e unit + server + e2e completos PASS no canônico, sem STALE.
@@ -641,6 +641,16 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: `node scripts/test-live.mjs status` no canônico.
       DONE_WHEN: canônico == GUI e as três suítes PASS no HEAD (ou só docs depois).
       DEPENDENCIES: ACCESS-3; gate no GUI já verde (7456541).
+      EVIDENCE: pré-gate no GUI (7456541): unit 398, server 490, e2e 166/166. `git merge --ff-only`: 0007cdf -> 97f8942 (CLI pausado, árvore limpa). VERIFICAÇÃO NO CANÔNICO pelo wrapper, HEAD 97f8942, guard ativo: unit 398/398, server 490/490, e2e 166/166 (13,4 min, inclusive production-build), exit 0.
+      PRODUCT_DELTA: o canônico contém ACCESS-3 com evidência no próprio HEAD.
+      PROOF_OBSERVED: contagens acima.
+      NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
+      COMMIT: fast-forward para 97f8942.
+- [>] **NEXT-4 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+      SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo).
+      DETAILS: candidatos já mapeados nos NOT_PROVEN: formulário de exercícios externos e edição de resumo da Hoje por teclado; propostas de trecho de Materiais (renomear/ocultar) por teclado; nota de páginas puladas some ao recarregar (SCANNED-1); raiz de produto do UX-1 (Plano recolhendo linha ao re-renderizar); reteste do Estudar agora sob falha de rede. Bloqueadas por decisão humana: VERDICT-1, IMPORT-1; por chave: REALMODEL-1.
+      DONE_WHEN: sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF.
+      DEPENDENCIES: INTEGRATE-8.
 
 ## Evidência CQ-1
 
