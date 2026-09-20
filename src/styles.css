@@ -2645,6 +2645,12 @@ h1 {
   line-height: 1.4;
 }
 
+/* the legacy two-column grid of .review-meta (a definition list elsewhere) also caught this plain date line and
+   squeezed it into half the width */
+.review-row-heading .review-meta {
+  display: block;
+}
+
 .review-row-tags {
   display: flex;
   flex-direction: column;
@@ -3937,3 +3943,40 @@ h1 {
 .small-button:hover { background: var(--color-surface-alt); }
 .small-button.is-primary { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
 .small-button.is-danger { color: var(--color-danger, #dc2626); border-color: var(--color-danger, #dc2626); }
+
+/* Phone width: the status pills ("Atrasada 20 dias", "1 para reforçar") drop under the title, so the title and
+   the date get the card width instead of a ~100px sliver (the date used to break over three lines). */
+@media (max-width: 30rem) {
+  .review-row-header {
+    flex-wrap: wrap;
+  }
+
+  .review-row-tags {
+    flex: 1 0 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: calc(2.65rem + 0.85rem);
+  }
+}
+
+/* Phone width: the chevron is pinned to the top-right corner of the row, so a long subject chip plus status pills can
+   never push it onto a line of its own. */
+@media (max-width: 30rem) {
+  .plan-row-compact {
+    position: relative;
+    padding-right: 3rem;
+  }
+
+  .plan-row-compact .plan-expand-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  .plan-row-badges {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+}

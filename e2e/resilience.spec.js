@@ -202,3 +202,38 @@ test('EXAM-7: with browser storage blocked the exam still works exactly as befor
   const unit = await startExamOver(page, 'Sem storage', [1, 2]);
   expect(unit.id).toBeTruthy(); // reaching the correction screen (startExamOver asserts it) proves the flow ran end to end
 });
+
+// TODAYUX-1 (kept here to reuse the real-server harness): the daily screen must stay readable on a phone.
+test('TODAYUX-1: on a 375px Hoje an overdue review keeps its title and date readable (date on one line, title not squeezed by the status pills)', async ({ page }) => {
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Semiologia Médica Completa', title: 'Ausculta cardíaca: bulhas e sopros', studyDate: '2026-08-01' });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.locator('[data-screen="today"]:visible').first().click();
+  const row = page.locator('.review-row').first();
+  await expect(row).toBeVisible({ timeout: 8000 });
+  const measured = await row.evaluate((el) => {
+    const lines = (node) => new Set([...(() => { const r = document.createRange(); r.selectNodeContents(node); return r.getClientRects(); })()].map((c) => Math.round(c.top))).size;
+    const meta = el.querySelector('.review-meta');
+    const title = el.querySelector('.review-content');
+    return { dateLines: lines(meta), titleWidth: title.getBoundingClientRect().width, rowWidth: el.getBoundingClientRect().width };
+  });
+  expect(measured.dateLines, 'the date must not be broken over several lines').toBe(1);
+  expect(measured.titleWidth / measured.rowWidth, 'the title gets most of the card width').toBeGreaterThan(0.6);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('TODAYUX-1: on a 375px Plano row the expand chevron stays on the identity line (never orphaned on a line of its own)', async ({ page }) => {
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal Avançada', title: 'Transporte tubular de sódio e água', studyDate: '2026-08-01' });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.locator('[data-screen="plan"]:visible').first().click();
+  const row = page.locator('.plan-row').first();
+  await expect(row).toBeVisible({ timeout: 8000 });
+  const gap = await row.evaluate((el) => {
+    const chip = el.querySelector('.subject-chip').getBoundingClientRect();
+    const chevron = el.querySelector('.plan-expand-btn').getBoundingClientRect();
+    const badges = el.querySelector('.plan-row-badges').getBoundingClientRect();
+    return { chevronBelowChip: chevron.top - chip.top, overlapsBadges: badges.right > chevron.left + 1 && badges.bottom > chevron.top && badges.top < chevron.bottom };
+  });
+  expect(gap.chevronBelowChip, 'the chevron is on the first line, beside the subject chip').toBeLessThan(24);
+  expect(gap.overlapsBadges, 'the chevron does not cover the status pills').toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});

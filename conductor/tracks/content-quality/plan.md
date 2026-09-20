@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TODAYUX-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TRACKUX-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: TODAYUX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: TRACKUX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -368,7 +368,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno é interrompido o tempo todo; retomar de onde parou respeita o esforço já feito.
       NOT_PROVEN: retomada em outro aparelho (o snapshot é local); reteste ("Refazer erros") não é retomável; se exercícios forem editados entre a interrupção e a volta o snapshot é descartado por segurança (recomeça).
       COMMIT: ver `git log` (feat(study-now): resume an interrupted pass).
-- [>] **TODAYUX-1 Hoje e Plano com dados reais no celular: inspeção de uso (375px)** — OWNER: GUI
+- [✓] **TODAYUX-1 Hoje e Plano com dados reais no celular: inspeção de uso (375px)** — OWNER: GUI
       SPRINT_GOAL: olhar de verdade a tela que o aluno abre todo dia — Hoje com revisões, "para reforçar" e prioridades, e o Plano com várias aulas — a 375px e a 1280px, e corrigir só os defeitos materiais observados.
       BEFORE: Hoje/Plano foram provados por comportamento e "sem overflow", mas a densidade real (várias revisões vencidas, chips, textos longos) nunca foi inspecionada visualmente com dados.
       AFTER: capturas revisadas com uma conta populada (várias disciplinas, revisões atrasadas/hoje/futuras, itens para reforçar); cada defeito material (texto cortado, ação escondida, hierarquia confusa, alvo pequeno) vira teste vermelho -> menor correção; se estiver bom, fecha só com as capturas.
@@ -377,6 +377,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: capturas 1280/375 antes/depois + e2e para cada defeito corrigido.
       DONE_WHEN: telas revisadas; defeitos materiais corrigidos e provados; sem regressão.
       DEPENDENCIES: STUDYSTATE-1.
+      EVIDENCE: conta populada no app real (8 aulas em 4 disciplinas, revisões vencidas, itens errados, textos longos) — Hoje e Plano a 1280 e 375px, capturas antes/depois. DEFEITOS MATERIAIS (vermelho antes, verde depois): (1) HOJE 375px: em cada cartão de revisão a data quebrava em TRÊS linhas ("30 de / ago. de / 2026") e o título ficava numa faixa de ~100px — causa dupla: a regra legada `.review-meta{display:grid;grid-template-columns:repeat(2,1fr)}` (de uma lista de definição) também pegava a linha de data e a espremia em metade da largura, e as etiquetas ("Atrasada 20 dias", "1 para reforçar") ocupavam a coluna ao lado; correção: a data volta a bloco e, a 30rem ou menos, as etiquetas descem para baixo do título; teste mede data em 1 linha e título >= 60% da largura do cartão; (2) PLANO 375px: com chip de disciplina longo + etiqueta, o chevron de expandir caía SOZINHO numa linha própria; correção: fixado no canto superior direito (linha de identidade) sem cobrir as etiquetas; teste mede posição e sobreposição. Sem defeito em: resumo do dia, bloco "Começar agora", lista de vencidas, filtros do Plano, nav inferior. Regressão: 48/48 (Hoje, prioridades, reteste, plano, prova, nav mobile, primeiro uso, ordenação/veredito de Estatísticas) + resiliência.
+      PRODUCT_DELTA: a tela diária no celular deixa de espremer título/data e de soltar o chevron no meio do nada.
+      PROOF_OBSERVED: capturas + testes de geometria acima.
+      USER_VALUE: as revisões de todo dia ficam legíveis de relance no celular.
+      NOT_PROVEN: aparelho físico; Estatísticas (superfície protegida) só observada, não alterada; o "—" solto ao lado das etiquetas (placeholder de nota) segue como está.
+      COMMIT: ver `git log` (fix(mobile): Hoje/Plano rows readable at 375px).
+- [>] **TRACKUX-1 Varredura de uso no celular das telas restantes (Acompanhamento, Disciplinas, Materiais com propostas, Configurações)** — OWNER: GUI
+      SPRINT_GOAL: repetir a inspeção com dados reais nas telas ainda não vistas a 375px e corrigir só defeitos materiais.
+      BEFORE: Hoje, Plano, Prova e primeiro uso foram inspecionados; Acompanhamento, Disciplinas, Materiais (lista de propostas) e Configurações não.
+      AFTER: capturas revisadas; defeitos materiais viram teste de geometria vermelho -> correção mínima.
+      WHY: o celular é o caminho de estudo diário; cada tela com texto espremido/ação escondida custa uso.
+      SCOPE: src/styles.css / app.js dessas telas; Estatísticas fica de fora (protegida).
+      PROOF: capturas antes/depois + testes de geometria.
+      DONE_WHEN: telas revisadas e defeitos materiais corrigidos e provados.
+      DEPENDENCIES: TODAYUX-1.
 
 ## Evidência CQ-1
 
