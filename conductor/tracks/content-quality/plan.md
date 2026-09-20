@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1 concluídos; INTEGRATE-7 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7 concluídos; ACCESS-3 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-7 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: ACCESS-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -603,7 +603,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima; vermelho/verde.
       NOT_PROVEN: OCR não existe (por desenho); nomes de página do PDF vs índice interno em PDFs com numeração própria; a nota some quando o aluno recarrega a tela (mensagem de status, não estado persistente); PDF real escaneado (só fixture com páginas vazias).
       COMMIT: 2e422ec.
-- [>] **INTEGRATE-7 Integrar SCANNED-1 no canônico e verificar lá** — OWNER: GUI
+- [✓] **INTEGRATE-7 Integrar SCANNED-1 no canônico e verificar lá** — OWNER: GUI
       SPRINT_GOAL: levar ao canônico o que veio depois de 9b9c9da (SCANNED-1) com evidência no HEAD canônico.
       BEFORE: canônico em 9b9c9da (verificado); o GUI está 2 commits à frente (docs + SCANNED-1).
       AFTER: ff sem conflitos e unit + server + e2e completos PASS no canônico, sem STALE.
@@ -612,6 +612,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: `node scripts/test-live.mjs status` no canônico.
       DONE_WHEN: canônico == GUI e as três suítes PASS no HEAD (ou só docs depois).
       DEPENDENCIES: SCANNED-1; gate no GUI já verde (2e422ec).
+      EVIDENCE: pré-gate no GUI (2e422ec): unit 398, server 490, e2e 165/165. `git merge --ff-only`: 9b9c9da -> 2bd9008 (CLI pausado, árvore limpa). VERIFICAÇÃO NO CANÔNICO pelo wrapper, HEAD 2bd9008, guard de branch ativo (sem CI=1): unit 398/398, server 490/490, e2e 165/165 (12,8 min, inclusive production-build), exit 0; painel sem STALE.
+      PRODUCT_DELTA: o canônico contém SCANNED-1 com evidência no próprio HEAD.
+      PROOF_OBSERVED: contagens acima.
+      NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
+      COMMIT: fast-forward para 2bd9008.
+- [>] **ACCESS-3 Revisão agendada de Hoje só com teclado** — OWNER: GUI
+      SPRINT_GOAL: repetir a auditoria só-teclado (ACCESS-1 prova, ACCESS-2 Estudar agora/Materiais) na tela mais usada, Hoje: abrir a revisão, ver resposta, Acertei/Errei, "Revisão feita", "Refazer erros", e corrigir só o que impedir concluir.
+      BEFORE: NOT_PROVEN de ACCESS-1/2: Hoje não passou pela auditoria de foco (botões que desabilitam com foco, re-render que derruba o foco, resultado sem nome acessível).
+      AFTER: a revisão de uma aula é concluída só com Tab/Enter/Space, o foco nunca cai no body, e o aluno de leitor de tela ouve pergunta/resposta/resultado.
+      WHY: é a tela diária; um aluno que não usa mouse precisa poder revisar.
+      SCOPE: e2e novo de teclado + a menor correção em src/app.js / index.html.
+      DETAILS: mesma sonda de foco de ACCESS-2 (onde está o foco após cada ação; anel visível; elementos alcançáveis); defeitos viram teste vermelho -> menor correção; sem auditoria geral.
+      PROOF: e2e só-teclado da revisão de Hoje, vermelho antes da correção.
+      DONE_WHEN: revisão completa só com teclado, verde, regressão de Hoje verde.
+      DEPENDENCIES: INTEGRATE-7.
 
 ## Evidência CQ-1
 
