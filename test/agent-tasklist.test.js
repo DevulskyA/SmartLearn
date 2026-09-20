@@ -76,3 +76,14 @@ test('the board separates what is running and what is next from what is finished
   assert.match(running, /EXAM-1/);
   assert.doesNotMatch(running, /CQ-1/);
 });
+
+test('the board states its own age and warns when stale; one command targets every worktree copy', async () => {
+  const plan = parsePlan(PLAN);
+  const gui = { title: 'AGENT_GUI', tasks: plan.tasks.map((t) => ({ ...t, owner: 'GUI' })) };
+  const html = renderAgentBoard({ gui, cli: cliLane({}), now: new Date('2026-09-19T12:00:00Z') });
+  assert.match(html, /id="fresh" data-generated="2026-09-19T12:00:00.000Z"/);
+  assert.match(html, /pode estar desatualizado/);
+  const { worktreeBoards } = await import('../scripts/agent-tasklist.mjs');
+  const boards = worktreeBoards(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+  assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\/]\.view[\/]tasklist\.html$/.test(p)));
+});

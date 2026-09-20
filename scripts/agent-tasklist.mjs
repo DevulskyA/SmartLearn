@@ -10,7 +10,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { parsePlan, detailHtml, LABEL, esc } from './tasklist.mjs';
+import { execFileSync } from 'node:child_process';
+import { parsePlan, detailHtml, LABEL, esc, freshnessHtml } from './tasklist.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -102,8 +103,18 @@ dl{margin:.4rem 0 0;display:grid;grid-template-columns:max-content 1fr;gap:.25re
 </style></head><body><main>
 <h1>SmartLearn — tasklist dos agentes</h1>
 <p class="meta">Gerado em ${esc(now.toLocaleString('pt-BR'))} a partir de <code>plan.md</code> (GUI) e <code>CLI.md</code> (CLI). Projeção somente leitura — não edite aqui. Uma tarefa ativa por agente.</p>
+${freshnessHtml(now)}
 <div class="lanes">${laneHtml('GUI', gui, 'plan.md do track ativo')}${laneHtml('CLI', cli, 'publicado pelo agente em CLI.md')}
 </div></main></body></html>`;
+}
+
+/** conductor/.view/tasklist.html for every worktree that has a conductor/ folder (git worktree list). */
+export function worktreeBoards(root) {
+  try {
+    const listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
+    return listing.split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9).trim())
+      .filter((wt) => existsSync(join(wt, 'conductor'))).map((wt) => join(wt, 'conductor', '.view', 'tasklist.html'));
+  } catch { return []; }
 }
 
 function arg(name, fallback) {
@@ -121,8 +132,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
   const cliCoord = existsSync(join(coordDir, 'CLI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'CLI.md'), 'utf8')) : {};
   const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
-  const out = arg('--out', join(coordDir, 'tasklist.html'));
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, renderAgentBoard({ gui, cli: cliLane(cliCoord) }));
+  // ONE command refreshes EVERY copy of the board the user might have open: the shared coordination copy and
+  // conductor/.view/tasklist.html of every worktree of this repo (a stale copy that says "all done" while work
+  // continues leaves the user lost). --out writes only that single file.
+  const explicit = arg('--out', null);
+  const outs = explicit ? [explicit] : [join(coordDir, 'tasklist.html'), ...worktreeBoards(root)];
+  const html = renderAgentBoard({ gui, cli: cliLane(cliCoord) });
+  for (const out of outs) { mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, html); }
+  const out = outs.join(' + ');
   console.log(`[agent-tasklist] ${out} — GUI ${gui.tasks.length} tarefas (${gui.tasks.filter((t) => t.state === '>').map((t) => t.id).join(',') || 'nenhuma ativa'}), CLI ${cliLane(cliCoord).tasks[0].title.slice(0, 60)}`);
 }

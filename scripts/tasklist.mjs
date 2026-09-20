@@ -78,6 +78,13 @@ export function renderCompact(plan) {
   return [`SMARTLEARN — TRACK: ${plan.title}  [${plan.status}]`, '', ...rows].join('\n');
 }
 
+/** A board is a snapshot: it must SAY how old it is and warn when it may no longer be true. */
+export function freshnessHtml(now = new Date()) {
+  return `<p class="fresh" id="fresh" data-generated="${now.toISOString()}" role="status"></p>
+<style>.fresh{margin:.25rem 0 .75rem;font-size:.85rem;color:var(--muted)}.fresh.is-stale{color:#fff;background:var(--block);padding:.4rem .7rem;border-radius:.5rem;font-weight:700}</style>
+<script>(function(){var el=document.getElementById('fresh');function tick(){var min=Math.floor((Date.now()-Date.parse(el.dataset.generated))/60000);var stale=min>=10;el.className='fresh'+(stale?' is-stale':'');el.textContent=stale?'ATENÇÃO: este painel foi gerado há '+min+' min e pode estar desatualizado — o trabalho pode ter avançado. Peça ao agente para regenerar (node scripts/agent-tasklist.mjs).':'Painel gerado há '+(min<1?'menos de 1':min)+' min.';}tick();setInterval(tick,30000);})();</script>`;
+}
+
 export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Expandable detail block: structured fields when the task has them, otherwise its plain text. */
@@ -127,6 +134,7 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}h2.group{font-size:
 .s-active .badge{color:var(--accent);border-color:var(--accent)}details{margin-top:.35rem;color:var(--muted);font-size:.85rem}summary{cursor:pointer}dl{margin:.4rem 0 0;display:grid;grid-template-columns:max-content 1fr;gap:.25rem .75rem}dt{font-weight:700;color:var(--text)}dd{margin:0}
 </style></head><body><main>
 <h1>SMARTLEARN — TRACK: ${esc(plan.title)}</h1>
+${freshnessHtml(now)}
 <p class="meta">Status: ${esc(plan.status)} · ${done}/${total} concluídas · gerado de <code>plan.md</code> em ${esc(now.toLocaleString('pt-BR'))} (projeção — não edite aqui)</p>
 <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i></i></div>
 ${items}
