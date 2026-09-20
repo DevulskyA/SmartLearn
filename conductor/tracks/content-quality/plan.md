@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; A11Y-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; ACCESS-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: A11Y-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: ACCESS-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -272,7 +272,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: confiança de que o que foi digitado chega ao servidor.
       NOT_PROVEN: fechar a aba/travar o navegador com resposta pendente (o texto pendente vive só em memória; não há rascunho local persistente); julgamento/registro do resultado sem rede já mostram erro e permitem repetir, sem teste dedicado.
       COMMIT: ver `git log` (fix(exam): unsaved answers are retried and block submission).
-- [>] **A11Y-1 A prova pode ser feita só com teclado e é compreensível por leitor de tela** — OWNER: GUI
+- [>] **ACCESS-1 A prova pode ser feita só com teclado e é compreensível por leitor de tela** — OWNER: GUI
       SPRINT_GOAL: provar (e corrigir só o que faltar) que o fluxo da prova funciona sem mouse e expõe estado a tecnologias assistivas: ordem de foco, numeração de questões, anúncio de progresso e de resultado.
       BEFORE: UX-1 deixou "navegação só por teclado e leitor de tela" como NOT_PROVEN; há aria-labels e foco em pontos isolados, mas nenhum teste percorre a prova inteira só com teclado.
       AFTER: um e2e faz a prova inteira (navegar, responder, submeter, corrigir, registrar) só com teclado, e verifica nomes acessíveis (questão atual, respondida, progresso, resultado) e foco previsível.
