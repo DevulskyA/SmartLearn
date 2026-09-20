@@ -10,7 +10,8 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: GUI-05 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA (ativa). Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
 ## Tarefas
@@ -30,7 +31,7 @@ ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele
       USER_VALUE: um achado real deixa de forçar "aceitar o erro" ou "jogar o rascunho fora": o aluno conserta em segundos e o que estuda é o que ele revisou.
       NOT_PROVEN: usabilidade do editor com rascunhos longos reais (50 questões); tipo e páginas-fonte não são editáveis (por desenho); sem full e2e nesta fatia (foco em Materiais).
       PERGUNTA: "O que o SmartLearn faz melhor agora?" — deixa o aluno CORRIGIR um ponto sinalizado do conteúdo gerado antes de virar estudo (antes só podia aceitar o erro ou descartar). SPRINT_PRODUCTIVE=TRUE.
-- [✓] **CQ-7 Provar (e corrigir só se preciso) a revisão de um rascunho grande** — OWNER: GUI
+- [✓] **CQ-7 [GUI-01] Provar (e corrigir só se preciso) a revisão de um rascunho grande** — OWNER: GUI
       SPRINT_GOAL: um aluno consegue revisar, corrigir e aceitar um rascunho médico realisticamente grande (~50 questões) sem perder contexto, alterações ou a capacidade de localizar os pontos sinalizados.
       BEFORE: CQ-6 foi provado com 1-3 questões; o uso com ~50 questões era NOT_PROVEN (lista longa, editor com 50 blocos, rolagem, save enviando tudo).
       AFTER: comprovado (e ajustado só se houver problema real) que abrir, achar o item sinalizado, editar, salvar, ver a triagem refeita e aceitar funciona com ~50 questões, também a 375px, sem perda silenciosa.
@@ -46,7 +47,7 @@ ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele
       USER_VALUE: revisar um lote grande deixa de exigir caça manual ao problema; o aluno não aceita sem revisar nem perde edições.
       NOT_PROVEN: rascunho com conteúdo médico real de um modelo real; mais de 50 questões (limite do servidor = 50); leitor de tela na navegação por "Corrigir a questão N".
       COMMIT: ver `git log` (feat(content-quality): jump to a flagged item in a large draft).
-- [✓] **EXAM-1 Modo Prova sem feedback antecipado** — OWNER: GUI
+- [✓] **EXAM-1 [GUI-02] Modo Prova sem feedback antecipado** — OWNER: GUI
       SPRINT_GOAL: o aluno consegue fazer uma prova completa sem receber resposta, explicação, dica ou nota antes de submeter.
       BEFORE: o SmartLearn só tem estudo por questão (Estudar agora / revisões) com feedback imediato; não existe prova.
       AFTER: o aluno inicia uma prova de uma unidade, responde as questões, navega entre elas sem perder respostas e submete; nada de gabarito/explicação/dica/nota aparece antes da submissão.
@@ -61,7 +62,7 @@ ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele
       PROOF_OBSERVED: e2e `exam-mode` 2/2; `exams.test.js` 6/6 (incl. HTTP); regressão de estudo/plano verde.
       USER_VALUE: medir antes de ensinar — a base para treino de prova (REVALIDA, provas da faculdade) e para evidência honesta.
       NOT_PROVEN: quem abrir o Plano/Estudar agora ainda vê os gabaritos por lá (a prova garante o FLUXO de prova, não impede o aluno de espiar por outro caminho — é app de estudo, não proctoring); a correção (EXAM-2) e a evidência (EXAM-3) ainda não existem: após submeter a tela só confirma o envio.
-- [✓] **EXAM-2 Resultado que ensina depois de medir** — OWNER: GUI
+- [✓] **EXAM-2 [GUI-03] Resultado que ensina depois de medir** — OWNER: GUI
       SPRINT_GOAL: depois de submeter, o aluno entende o resultado e aprende com os erros.
       BEFORE: EXAM-1 mede mas não entrega análise.
       AFTER: após submissão: acertos/total, percentual derivado, e por questão: enunciado, resposta do aluno, resposta correta, explicação ("Por quê"), fonte, acerto x erro separados.
@@ -76,7 +77,7 @@ ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele
       PROOF_OBSERVED: e2e EXAM-2 (chips 'A julgar' x3 -> 'Acerto'/'Erro', score oculto até o último, 1/3 -> 2/3 ao mudar de ideia, reload retoma com o mesmo resultado, sem overflow horizontal).
       USER_VALUE: o erro na prova vira aprendizagem (resposta certa + porquê + trecho) logo depois da medição, sem antecipar nada durante a prova.
       NOT_PROVEN: renderização do trecho da fonte na correção não foi exercitada no e2e da prova (mesmo dado/DTO do Estudar agora, coberto lá); enquanto a correção não é finalizada (EXAM-3) não se pode iniciar outra prova da mesma aula (a submetida é retomada).
-- [✓] **EXAM-3 Resultado vira continuidade** — OWNER: GUI
+- [✓] **EXAM-3 [GUI-04] Resultado vira continuidade** — OWNER: GUI
       SPRINT_GOAL: terminar uma prova não é um beco sem saída: o resultado entra no ciclo longitudinal e leva a uma próxima ação útil.
       BEFORE: o valor da prova acabaria na tela de resultado.
       AFTER: a prova submetida gera exatamente a evidência esperada (uma linha agregada, sem duplicar) e oferece seguir para os erros / unidade / reforço existentes.
@@ -96,7 +97,17 @@ ATIVA AGORA: AUTHOR-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele
       DETAILS: consultar estado canônico, NOT_PROVEN, experiência atual, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
       EVIDENCE: seleção 2026-09-19 (ganho x confiança / custo), candidatos avaliados: (A) "Por quê" nas questões ESCRITAS pelo aluno — o campo existe no servidor desde a mig 023 e alimenta Estudar agora, erro e correção da prova, mas só questões geradas por IA o têm: ganho médio-alto, confiança alta, custo baixo (form + edição) => ESCOLHIDA; (B) rótulo "Prova" no histórico do Plano — ganho baixo/médio, custo baixo => depois; (C) prova por disciplina (multi-unidade, amostrando o que reforçar) — ganho alto, custo/risco altos (migração, evidência por unidade) => próxima grande; (D) veredito de Estatísticas ponderado por volume — semântica de produto em aberto, superfície protegida => não agora; (E) rodar o pipeline com chave real — bloqueado (sem chave).
       PRODUCT_DELTA: sprints seguintes definidas: AUTHOR-1 (ativa) e EXAM-4 (candidata).
-- [>] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
+- [>] **GUI-05 Jornada completa do aluno, ponta a ponta** — OWNER: GUI
+      SPRINT_GOAL: provar uma jornada real sem dead ends: material -> unidade -> Resumo Mestre -> revisão/aceite -> estudo -> perguntas -> feedback -> revisão -> prova -> resultado -> evidência -> Estatísticas -> próxima ação.
+      BEFORE: cada parte foi provada em spec separado (draft-acceptance, study-now-flow, exam-mode, stats); nenhuma prova única conecta todas, então um dead end ENTRE etapas passaria despercebido.
+      AFTER: um único e2e percorre a jornada inteira num mesmo perfil e banco reais (servidor, UI e PDF reais; modelo = stub), a 1280 e a 375px, e cada etapa termina com uma próxima ação visível baseada na evidência do próprio aluno.
+      WHY: um produto só existe quando o fluxo completo funciona; quebras entre telas são o que faz o aluno desistir.
+      SCOPE: e2e/student-journey.spec.js (novo) + correção do MENOR dead end material que a jornada revelar (src/app.js).
+      DETAILS: reutilizar helpers e stubs dos specs existentes (content-quality-flow, exam-mode); medir, não redesenhar; qualquer beco sem saída achado vira teste vermelho -> menor correção.
+      PROOF: e2e da jornada completa; desktop + 375px sem overflow; dados persistem após reload; Estatísticas reflete a evidência da prova/estudo; a próxima ação (Hoje/Plano "para reforçar") aponta para o erro do aluno; toda tela alcançada tem saída clara.
+      DONE_WHEN: um aluno entra com um PDF e chega, sem sair do produto, a uma próxima ação baseada na própria evidência; e2e verde e regressão relevante verde.
+      DEPENDENCIES: GUI-01..04 (feitos); gate e2e completo do snapshot EXAM.
+- [ ] **AUTHOR-1 O aluno escreve o "Por quê" das próprias questões** — OWNER: GUI
       SPRINT_GOAL: uma questão criada pelo próprio aluno ensina como as geradas por IA: ele escreve (e edita) o porquê da resposta e o vê no Estudar agora, no cartão de erro, na revisão da Hoje e na correção da prova.
       BEFORE: só questões geradas por IA têm "Por quê"; o formulário de exercício manual tem enunciado, resposta e dica, sem explicação; editar uma questão não permite mexer no porquê.
       AFTER: o formulário de criar e o de editar exercício têm o campo "Por quê (opcional)"; o texto salvo aparece onde a resposta aparece; vazio = nada aparece (nunca inventado).
