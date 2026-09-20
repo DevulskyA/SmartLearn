@@ -85,5 +85,5 @@ test('the board states its own age and warns when stale; one command targets eve
   assert.match(html, /pode estar desatualizado/);
   const { worktreeBoards } = await import('../scripts/agent-tasklist.mjs');
   const boards = worktreeBoards(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
-  assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\/]\.view[\/]tasklist\.html$/.test(p)));
+  assert.ok(boards.length >= 1 && boards.every((p) => /conductor[\\/]\.view[\\/]tasklist\.html$/.test(p)));
 });
