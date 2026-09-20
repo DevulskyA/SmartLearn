@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; REVIEWNET-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; EXPORT-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: REVIEWNET-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: EXPORT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -414,7 +414,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o que foi construído roda onde o produto roda, provado.
       NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
       COMMIT: fast-forward para cd7966e.
-- [>] **REVIEWNET-1 Revisão agendada de Hoje com conexão instável** — OWNER: GUI
+- [✓] **REVIEWNET-1 Revisão agendada de Hoje com conexão instável** — OWNER: GUI
       SPRINT_GOAL: aplicar o teste de queda de conexão ao fluxo mais usado do produto — concluir uma revisão agendada em Hoje (marcar feita, notas, julgar itens, refazer erros) — e corrigir só divergência real entre o que a tela mostra e o que o servidor tem.
       BEFORE: a mesma falha silenciosa (progresso mostrado que o servidor não tem) apareceu em duas telas (resposta da prova, julgamento do Estudar agora); a revisão de Hoje só foi coberta por "escrita offline falha visível e sem linhas no servidor", não por cenários de queda no meio do fluxo.
       AFTER: cada passo da revisão tem teste de queda com o resultado observado (mensagem, retry sem duplicar, servidor consistente) e, onde a tela e o servidor divergirem, correção mínima.
@@ -424,6 +424,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e com contagens no servidor; defeitos viram teste vermelho -> menor correção.
       DONE_WHEN: nenhum passo da revisão mostra ao aluno progresso que o servidor não tem, ou a divergência é explicada e repetível.
       DEPENDENCIES: INTEGRATE-3.
+      EVIDENCE: MEDIDO em e2e reais (`e2e/resilience.spec.js`, rotas abortadas). "Revisão feita" com conexão caída já era segura (a caixa volta ao estado anterior e aparece "Não foi possível salvar a revisão."). DEFEITO REAL: o julgamento de um item na revisão de Hoje que não chegava ao servidor ficava só na tela; a revisão era concluída com evidência REVIEW 2/1 (certa: a contagem local é o registro principal) mas o item errado NUNCA entrava em "para reforçar" (0 no servidor) — a evidência e o "para reforçar" discordavam em silêncio. CORREÇÃO MÍNIMA: o desfecho pendente do item fica guardado no próprio item (`data-pending-outcome`), a tentativa é iniciada/enviada de novo (`flushPendingAttempt`) e, ao marcar "Revisão feita", todas as pendências são reenviadas ANTES de fechar a revisão; se ainda não houver conexão, a revisão é registrada e o aluno lê "Revisão registrada, mas não consegui marcar N itens como “para reforçar” (sem conexão com o servidor)." Prova (2 e2e, vermelhos antes): conexão volta antes de concluir -> evidência REVIEW 2/1 E 1 item "para reforçar"; conexão ainda caída -> mensagem "não consegui marcar 2 itens". Regressão: resiliência + reteste/Hoje + prática + escritas offline + prioridades + tentativas = 22/22.
+      PRODUCT_DELTA: o que a revisão de Hoje diz (evidência) e o que o "para reforçar" mostra deixam de divergir em silêncio quando a rede oscila; quando não dá para reconciliar, o aluno é avisado.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: os erros de uma revisão feita com rede ruim não somem do reforço.
+      NOT_PROVEN: reteste ("Refazer erros") não retenta pendências antes de abrir; reconciliação depois de fechar a aba (o pendente vive na tela); Android/Windows nativos.
+      COMMIT: ver `git log` (fix(review): unsent item judgments are retried when the review is completed).
+- [>] **EXPORT-1 O backup do aluno inclui as próprias respostas e tentativas** — OWNER: GUI
+      SPRINT_GOAL: a exportação por usuário passa a incluir o que o aluno produziu (tentativas, eventos de aprendizagem, respostas digitadas e correções das provas), além de disciplinas/aulas/revisões/exercícios/evidência — hoje esses dados só existem no banco e nunca saem numa exportação.
+      BEFORE: `createLogicalExport` exporta settings, subjects, learningUnits, reviewTasks, exercises, exerciseVersions e learningEvidence; tentativas, eventos, provas (exams/exam_items com a resposta digitada) e a proveniência do rascunho ficam de fora — quem exporta perde o histórico fino e as respostas das provas.
+      AFTER: as novas chaves são ADITIVAS (`exerciseAttempts`, `learningEvents`, `exams`, `examItems`, `examEvidence`): nenhuma chave existente muda e o importador as ignora; o texto de ajuda de Configurações diz o que a cópia contém.
+      WHY: o aluno é dono do que produziu; um backup que perde as respostas da prova não é um backup do estudo.
+      SCOPE: server/src/backup.js (createLogicalExport), texto em Configurações; sem migração; sem mudar o importador.
+      DETAILS: só leitura por user_id; incluir apenas colunas do próprio usuário; não incluir sessões/segredos; versão de exportação inalterada (mudança aditiva) com nota no contrato.
+      PROOF: teste de servidor (export traz tentativas/eventos/provas com a resposta digitada do próprio usuário e NADA de outro usuário; chaves antigas idênticas) + e2e/HTTP do endpoint; o teste de contrato existente do export continua verde.
+      DONE_WHEN: exportação inclui os novos conjuntos sem quebrar contrato nem importador, provado.
+      DEPENDENCIES: REVIEWNET-1.
 
 ## Evidência CQ-1
 

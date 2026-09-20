@@ -237,3 +237,46 @@ test('TODAYUX-1: on a 375px Plano row the expand chevron stays on the identity l
   expect(gap.overlapsBadges, 'the chevron does not cover the status pills').toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
+
+// REVIEWNET-1: scheduled review in Hoje with an unstable connection.
+async function reviewWithTwoItems(page, title) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Rev ${title}`, title, studyDate: '2026-08-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+  await page.locator('[data-screen="today"]').click();
+  const row = page.locator('.review-row', { hasText: title }).first();
+  await expect(row).toBeVisible({ timeout: 8000 });
+  await row.locator('.review-row-toggle').first().click();
+  await expect(row.locator('[data-action="reveal-answer"]').first()).toBeVisible({ timeout: 5000 });
+  return { unit, row };
+}
+const reinforceTotal = async (page) => Object.values((await getJson(page, '/v1/reinforcement')).byUnit).flat().length;
+
+test('REVIEWNET-1: a wrong item whose attempt could not be sent is retried when the review is completed, so "para reforçar" agrees with the evidence', async ({ page }) => {
+  const { unit, row } = await reviewWithTwoItems(page, 'Aula revrede a');
+  await row.locator('[data-action="reveal-answer"]').first().click();
+  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  await row.locator('[data-action="exercise-errei"]').first().click();
+  await page.waitForTimeout(600);
+  expect(await reinforceTotal(page)).toBe(0); // the server has not heard about it yet
+  await page.unroute('**/v1/attempts/*/submit'); // the connection returns before the review is completed
+  await row.locator('[data-action="reveal-answer"]').nth(1).click();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
+  await row.locator('[data-action="review-done"]').check();
+  await expect.poll(async () => (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence.length, { timeout: 8000 }).toBe(1);
+  const evidence = (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
+  expect([evidence[0].type, evidence[0].questionsCount, evidence[0].correctCount]).toEqual(['REVIEW', 2, 1]);
+  expect(await reinforceTotal(page)).toBe(1); // the wrong item now shows up as "para reforçar"
+});
+
+test('REVIEWNET-1: if the connection is STILL down when the review is completed, the student is told which items could not be marked', async ({ page }) => {
+  const { row } = await reviewWithTwoItems(page, 'Aula revrede b');
+  await row.locator('[data-action="reveal-answer"]').first().click();
+  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  await row.locator('[data-action="exercise-errei"]').first().click();
+  await row.locator('[data-action="reveal-answer"]').nth(1).click();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
+  await page.waitForTimeout(400);
+  await row.locator('[data-action="review-done"]').check();
+  await expect(page.locator('#review-dashboard-message')).toContainText('não consegui marcar 2 itens');
+  await page.unroute('**/v1/attempts/*/submit');
+});

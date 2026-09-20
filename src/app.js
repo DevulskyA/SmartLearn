@@ -5450,6 +5450,31 @@ async function ensureAttemptStarted(exItem) {
   }
 }
 
+/** Sends the remembered outcome of one Hoje item to the attempt ledger. True once the server has it. */
+async function flushPendingAttempt(exItem) {
+  const outcome = exItem.dataset.pendingOutcome;
+  if (!outcome) return true;
+  try {
+    const attemptId = exItem.dataset.attemptId || await ensureAttemptStarted(exItem);
+    if (!attemptId) return false;
+    await DB.attempts.submit(attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+    delete exItem.dataset.pendingOutcome;
+    return true;
+  } catch (error) {
+    console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
+    return false;
+  }
+}
+
+/** Retries every pending item under `container`; returns how many the server still does not have. */
+async function flushPendingAttempts(container) {
+  let remaining = 0;
+  for (const exItem of container?.querySelectorAll(".review-exercise-item[data-pending-outcome]") ?? []) {
+    if (!(await flushPendingAttempt(exItem))) remaining += 1;
+  }
+  return remaining;
+}
+
 reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
@@ -5482,12 +5507,12 @@ reviewDashboard.addEventListener("click", async (event) => {
   exItem.dataset.exerciseAnswered = "true";
   exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
 
-  if (REMOTE_MODE && DB.attempts && exItem.dataset.attemptId) {
-    try {
-      await DB.attempts.submit(exItem.dataset.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
-    } catch (error) {
-      console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
-    }
+  if (REMOTE_MODE && DB.attempts) {
+    // The local judgment stays the primary record of the review (it feeds the review's own evidence); the item-level
+    // attempt is what "para reforçar" reads. If it cannot be sent now it is remembered and retried when the review is
+    // completed or the redo starts, so the two cannot silently disagree.
+    exItem.dataset.pendingOutcome = isCorrect ? "CORRECT" : "INCORRECT";
+    await flushPendingAttempt(exItem);
   }
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
@@ -5604,6 +5629,12 @@ reviewDashboard.addEventListener("change", async (event) => {
   try {
     const row = input.closest(".review-row");
     const exercisesSection = row?.querySelector("[data-exercises-total]");
+    // Items whose attempt could not be sent earlier get another try now, before the review is closed.
+    let unsentItems = 0;
+    if (input.checked && exercisesSection && REMOTE_MODE && DB.attempts) unsentItems = await flushPendingAttempts(exercisesSection);
+    const unsentNote = () => (unsentItems > 0
+      ? `Revisão registrada, mas não consegui marcar ${unsentItems} ${unsentItems === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor).`
+      : "");
 
     if (input.checked && exercisesSection) {
       const total = Number(exercisesSection.dataset.exercisesTotal);
@@ -5613,6 +5644,7 @@ reviewDashboard.addEventListener("change", async (event) => {
         await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
         setReviewMessage();
         await renderToday();
+        if (unsentItems > 0) setReviewMessage(unsentNote(), true);
         return;
       }
     }
