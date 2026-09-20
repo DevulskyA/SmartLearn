@@ -65,7 +65,12 @@ async function registerAndLogin(page, { localAuthority }) {
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="account"]').click();
+  // networkidle does not mean the app finished wiring the nav: a click that lands too early is lost, so retry the
+  // navigation until the account screen is really there (the assertion itself is unchanged).
+  await expect(async () => {
+    await page.locator('[data-screen="account"]').click();
+    await expect(page.locator('#account-show-register')).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
   await page.locator('#account-show-register').click();
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
