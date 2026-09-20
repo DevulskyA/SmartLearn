@@ -64,6 +64,8 @@ async function createUnit(page, { subject, title }) {
   await page.locator('#show-subject-form').click();
   await page.locator('#new-subject-input').fill(subject);
   await page.locator('#new-subject-form button[type="submit"]').click();
+  // creating the subject finishes by resetting the register forms: filling the study form before that loses the text
+  await expect(page.locator('#new-subject-input')).toBeHidden({ timeout: 8000 });
   await page.locator('#study-date').fill('2030-01-01');
   await page.locator('#study-content').fill(title);
   await page.locator('#study-form button[type="submit"]').click();
@@ -81,6 +83,18 @@ async function addExercise(studyRow, { question, answer, why }) {
   await expect(studyRow.locator('.exercise-question', { hasText: question })).toBeVisible({ timeout: 5000 });
 }
 
+/**
+ * Plano re-renders after it loads, so an unconditional click on the expand button can CLOSE a row that is already
+ * open (or hit a row about to be replaced). Retry read-then-expand until the row's actions are really there.
+ */
+async function expandPlanRow(row) {
+  await expect(async () => {
+    const toggle = row.locator('.plan-expand-btn');
+    if ((await toggle.getAttribute('aria-expanded', { timeout: 1500 })) !== 'true') await toggle.click({ timeout: 1500 });
+    await expect(row.locator('.plan-exercise-actions button').first()).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 15000 });
+}
+
 test('the student writes the "Por quê": it shows in the list, after the reveal, in the error card and in the exam correction; an item without it shows none', async ({ page }) => {
   const studyRow = await createUnit(page, { subject: 'Autoria', title: 'Aula autoria' });
   await expect(studyRow.locator('.exercise-why-input')).toHaveCount(1); // the create form offers it
@@ -93,7 +107,7 @@ test('the student writes the "Por quê": it shows in the list, after the reveal,
   // Estudar agora: the WHY only after revealing, only where the student wrote one
   await page.locator('[data-screen="plan"]').click();
   const row = page.locator('.plan-row', { hasText: 'Aula autoria' });
-  await row.locator('.plan-expand-btn').click();
+  await expandPlanRow(row);
   await row.locator('[data-action="plan-study-now"]').click();
   await expect(page.locator('#study-now-explanation-text')).toBeHidden();
   await page.locator('#study-now-reveal-btn').click();
@@ -113,7 +127,7 @@ test('the student writes the "Por quê": it shows in the list, after the reveal,
   // exam correction shows it as well, after submitting
   await page.locator('[data-screen="plan"]').click();
   const row2 = page.locator('.plan-row', { hasText: 'Aula autoria' });
-  await row2.locator('.plan-expand-btn').click();
+  await expandPlanRow(row2);
   await row2.locator('[data-action="plan-exam"]').click();
   await page.locator('#exam-answer-input').fill('a');
   await page.locator('#exam-next-btn').click();
@@ -140,7 +154,7 @@ test('editing the "Por quê" saves a new version with the new text; clearing it 
   // the new text is what Estudar agora shows
   await page.locator('[data-screen="plan"]').click();
   const row = page.locator('.plan-row', { hasText: 'Aula edicao' });
-  await row.locator('.plan-expand-btn').click();
+  await expandPlanRow(row);
   await row.locator('[data-action="plan-study-now"]').click();
   await page.locator('#study-now-reveal-btn').click();
   await expect(page.locator('#study-now-explanation-text')).toHaveText('Por quê: Texto novo');
