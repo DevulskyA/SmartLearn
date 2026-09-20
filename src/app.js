@@ -1522,6 +1522,10 @@ export async function renderPlan() {
   });
 
   planEmpty.hidden = filtered.length > 0;
+  // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
+  planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
+    ? "Nenhuma aula cadastrada. Envie um PDF em Materiais ou crie uma aula em “+ Nova aula”."
+    : "Nenhuma aula cadastrada.";
   planList.replaceChildren();
 
   for (const unit of filtered) {
@@ -5892,6 +5896,16 @@ const studySaveOperation = createOperationKeyTracker();
 
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
+});
+
+// First run (empty Hoje): the two ways to start. "Enviar um PDF" exists only where Materiais does.
+const firstUploadBtn = todayEmptyState?.querySelector('[data-action="first-upload"]');
+const firstCreateBtn = todayEmptyState?.querySelector('[data-action="first-create"]');
+if (firstUploadBtn) firstUploadBtn.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+firstUploadBtn?.addEventListener("click", () => showScreen("materials", { focus: true }));
+firstCreateBtn?.addEventListener("click", () => {
+  showScreen("plan", { focus: false });
+  setPlanFormVisible(true);
 });
 
 planUnitCancelBtn?.addEventListener("click", () => {

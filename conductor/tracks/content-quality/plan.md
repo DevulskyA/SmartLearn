@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; FIRSTRUN-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; MOBILENAV-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: FIRSTRUN-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: MOBILENAV-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -229,7 +229,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno que sobe o material inteiro da aula não esbarra num botão que "não faz nada".
       NOT_PROVEN: PDF real escaneado/com imagens (OCR não existe), tabelas/figuras médicas; PDFs próximos do teto de 25 MB; qualidade do rascunho de um modelo real sobre um trecho denso; a geração de rascunho de TODOS os 15 trechos em sequência (só um por vez foi exercitado).
       COMMIT: ver `git log` (feat(sources): chunks close before the model input limit).
-- [>] **FIRSTRUN-1 Primeira vez do aluno: telas vazias levam a uma ação (desktop + 375px)** — OWNER: GUI
+- [✓] **FIRSTRUN-1 Primeira vez do aluno: telas vazias levam a uma ação (desktop + 375px)** — OWNER: GUI
       SPRINT_GOAL: uma conta nova, sem nada cadastrado, vê em Hoje/Plano/Estatísticas/Materiais/Disciplinas estados vazios que dizem o que fazer a seguir, sem beco sem saída.
       BEFORE: a jornada foi provada de ponta a ponta com dados criados no caminho, mas ninguém inspecionou o que a conta vazia mostra em cada tela.
       AFTER: capturas revisadas de cada tela vazia; cada beco sem saída ou texto confuso achado vira teste vermelho e a menor correção.
@@ -238,6 +238,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: capturas 1280/375 por tela + e2e que segue o primeiro passo sugerido de cada tela vazia até a tela seguinte.
       DONE_WHEN: nenhuma tela vazia sem saída clara; defeitos materiais corrigidos e provados.
       DEPENDENCIES: INTEGRATE-1.
+      EVIDENCE: conta nova (servidor e UI reais) inspecionada em Hoje, Plano, Estatísticas, Materiais, Disciplinas, Acompanhamento e Configurações a 1280 e 375px (capturas + texto de cada tela). Estatísticas, Materiais, Disciplinas e Acompanhamento já diziam o que fazer; Configurações não é ponto de partida. DEFEITO MATERIAL: a PRIMEIRA tela que o aluno vê (Hoje vazia) dizia só "Nenhuma revisão cadastrada. Cadastre ou importe estudos…" SEM nenhum botão — beco sem saída (o aluno tinha de adivinhar Materiais ou Plano). CORREÇÃO MÍNIMA: Hoje vazio agora explica o começo (envie o PDF de uma aula, o SmartLearn propõe resumo e questões para revisar) e oferece "Enviar um PDF de aula" (abre Materiais; só aparece onde Materiais existe) e "Criar uma aula" (abre Plano com o formulário de nova aula aberto e focado); o Plano vazio aponta para Materiais/“+ Nova aula”. Prova: `e2e/first-run.spec.js` (3, vermelhos antes: botões inexistentes): com autoridade de PDF os dois botões levam às telas certas; sem ela não há botão morto; 375px sem overflow e botões >= 44px. A continuação (PDF -> aula -> estudo) é a jornada já provada em `student-journey`. Regressão: e2e 39/39 (primeiro uso, Hoje, prioridades, plano, paridade, nav mobile, jornada, offline, auth) + unit 384/384.
+      PRODUCT_DELTA: um aluno novo sabe o que fazer na primeira tela e chega a Materiais ou ao formulário de aula com um toque.
+      PROOF_OBSERVED: capturas antes/depois + e2e acima.
+      USER_VALUE: a primeira impressão deixa de ser uma tela vazia sem saída.
+      NOT_PROVEN: aluno real sem orientação (a prova é um roteiro automatizado); textos em outro idioma; OBSERVADO E NÃO CORRIGIDO: a barra inferior a 375px quebra palavras no meio ("Estatístic/as", "Disciplin/as", "Configur/ações") — vira MOBILENAV-1.
+      COMMIT: ver `git log` (feat(first-run): Hoje vazio oferece os dois caminhos).
+- [>] **MOBILENAV-1 Barra de navegação inferior legível a 375px** — OWNER: GUI
+      SPRINT_GOAL: os oito itens da barra inferior no celular deixam de quebrar palavras no meio e continuam tocáveis.
+      BEFORE: a 375px "Estatísticas", "Disciplinas", "Configurações" e "Acompanhar" quebram no meio da palavra (visto nas capturas de FIRSTRUN-1) — aparece em TODA tela no celular.
+      AFTER: rótulos inteiros e legíveis (ou forma abreviada consistente), alvos >= 44px, sem overflow, sem perder acesso a nenhuma tela.
+      WHY: é a navegação principal do celular; texto quebrado parece defeito e dificulta reconhecer o destino.
+      SCOPE: CSS/markup da navegação inferior (index.html, src/styles.css); sem mudar as telas.
+      DETAILS: medir a largura real por item a 375/360/320; menor solução que couber (fonte/espaçamento, rótulo curto por item, ou rolagem horizontal do trilho) — decidir pelo que preserva alvo de toque e legibilidade.
+      PROOF: e2e mede que nenhum rótulo quebra no meio da palavra (altura de linha única ou palavras inteiras) e que cada item tem >= 44px de alvo, a 375 e 360px; captura antes/depois.
+      DONE_WHEN: navegação legível e provada em 375/360px, sem regressão em mobile-nav.
+      DEPENDENCIES: FIRSTRUN-1.
 
 ## Evidência CQ-1
 
