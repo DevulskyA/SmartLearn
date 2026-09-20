@@ -73,3 +73,39 @@ export async function renameProposal(proposalId, title) {
     return { ok: true, proposal };
   } catch (err) { return fail(err); }
 }
+
+const PAGES_SHOWN = 8;
+
+/** "p. 2, 5" — long lists are shortened, the count in front stays exact. */
+function pageList(pages) {
+  const shown = pages.slice(0, PAGES_SHOWN).join(", ");
+  return pages.length > PAGES_SHOWN ? `p. ${shown} e mais ${pages.length - PAGES_SHOWN}` : `p. ${shown}`;
+}
+
+/**
+ * SCANNED-1: what the extraction left out. Pages with no extractable text (scans, figures) never become a
+ * proposal, so without this the student cannot tell what the summary does not cover. "" when nothing was skipped.
+ */
+export function skippedPagesNote(extraction) {
+  const empty = extraction?.emptyPages ?? [];
+  const failed = extraction?.failedPages ?? [];
+  const parts = [];
+  if (empty.length > 0) {
+    parts.push(`${empty.length} ${empty.length === 1 ? "página sem texto extraível" : "páginas sem texto extraível"} (${pageList(empty)}) ${empty.length === 1 ? "ficou" : "ficaram"} de fora dos trechos — provavelmente imagem ou digitalização. O resumo não cobre ${empty.length === 1 ? "essa página" : "essas páginas"}.`);
+  }
+  if (failed.length > 0) {
+    parts.push(`${failed.length} ${failed.length === 1 ? "página não pôde ser lida" : "páginas não puderam ser lidas"} (${pageList(failed)}).`);
+  }
+  return parts.join(" ");
+}
+
+/** The message for an extraction that produced no usable text; the image-only case says what to do next. */
+export function unreadableSourceMessage(status) {
+  const reasons = {
+    ENCRYPTED: "Este PDF está criptografado e não pode ser lido.",
+    TIMEOUT: "A extração excedeu o tempo limite.",
+    IMAGE_ONLY_OR_UNREADABLE: "Este PDF parece ser apenas imagem (sem texto extraível). Envie uma versão com texto selecionável (por exemplo, exportada do arquivo original) ou use Plano para criar a aula à mão.",
+    EXTRACTION_FAILED: "Não foi possível extrair o texto deste PDF.",
+  };
+  return reasons[status] || "Não foi possível extrair o texto deste PDF.";
+}

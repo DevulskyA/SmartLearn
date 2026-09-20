@@ -132,3 +132,26 @@ test('uploading a real PDF through the Fontes card produces inspectable proposal
   expect(domainCheck.unitsLen).toBe(0);
   expect(domainCheck.subjectsLen).toBe(0);
 });
+
+// SCANNED-1: the student learns which pages did NOT become material, and what to do when nothing could be read.
+test('SCANNED-1: a PDF with a page that has no text says which page was left out and that the summary does not cover it', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  const pdfBuffer = buildFixturePdf(['Farmacocinética: absorção e distribuição', 'figura sem texto', 'Farmacodinâmica: receptores e afinidade'], { emptyPages: [2] });
+  await page.setInputFiles('#sources-file-input', { name: 'misto.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText('1 página sem texto extraível (p. 2)');
+  await expect(page.locator('#sources-message')).toContainText('O resumo não cobre essa página');
+  await expect(page.locator('#sources-message')).not.toHaveClass(/is-error/);
+});
+
+test('SCANNED-1: a PDF that is only images explains the two ways forward instead of stopping at "sem texto"', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  const pdfBuffer = buildFixturePdf(['a', 'b'], { emptyPages: [1, 2] });
+  await page.setInputFiles('#sources-file-input', { name: 'escaneado.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
+  await expect(page.locator('#sources-message')).toContainText('apenas imagem', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText('texto selecionável');
+  await expect(page.locator('#sources-message')).toContainText('criar a aula à mão');
+  await expect(page.locator('#sources-message')).toHaveClass(/is-error/);
+});

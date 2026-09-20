@@ -111,10 +111,13 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
   const okCount = (result.pages ?? []).filter((p) => p.status === 'OK').length;
   const emptyCount = (result.pages ?? []).filter((p) => p.status === 'EMPTY').length;
   const failedCount = (result.pages ?? []).filter((p) => p.status === 'FAILED').length;
+  // Which pages were left out (same page numbers the citations use), so the student can see what the material does NOT cover.
+  const pagesWith = (status) => (result.pages ?? []).filter((p) => p.status === status).map((p) => p.index).sort((x, y) => x - y);
 
   return {
     sourceId, status: result.status, pageCount: result.pageCount ?? null, errorMessage: result.errorMessage ?? null, applied,
     okPageCount: okCount, emptyPageCount: emptyCount, failedPageCount: failedCount,
+    emptyPages: pagesWith('EMPTY'), failedPages: pagesWith('FAILED'),
   };
 }
 

@@ -199,6 +199,9 @@ test('C5: a document mixing a real text page with a legitimately empty page repo
     assert.equal(result.status, 'EXTRACTED', 'one legitimately blank page must not fail the whole document');
     assert.equal(result.okPageCount, 2);
     assert.equal(result.emptyPageCount, 1);
+    // SCANNED-1: the student is told WHICH pages were left out, not only how many (page numbers are 1-based, as cited)
+    assert.deepEqual(result.emptyPages, [2]);
+    assert.deepEqual(result.failedPages, []);
     assert.equal(result.failedPageCount, 0);
 
     const pages = listPages(db, userId, source.id);
@@ -220,6 +223,7 @@ test('C5: a document where every page is legitimately empty reports IMAGE_ONLY_O
     assert.equal(result.status, 'IMAGE_ONLY_OR_UNREADABLE');
     assert.equal(result.okPageCount, 0);
     assert.equal(result.emptyPageCount, 2);
+    assert.deepEqual(result.emptyPages, [1, 2]);
   } finally { cleanup(); }
 });
 

@@ -3381,13 +3381,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       return;
     }
     if (extractResult.extraction.status !== "EXTRACTED") {
-      const reasons = {
-        ENCRYPTED: "Este PDF está criptografado e não pode ser lido.",
-        TIMEOUT: "A extração excedeu o tempo limite.",
-        IMAGE_ONLY_OR_UNREADABLE: "Este PDF parece ser apenas imagem (sem texto extraível).",
-        EXTRACTION_FAILED: "Não foi possível extrair o texto deste PDF.",
-      };
-      setSourcesMessage(reasons[extractResult.extraction.status] || "Não foi possível extrair o texto deste PDF.", true);
+      setSourcesMessage(SourceProposalsUI.unreadableSourceMessage(extractResult.extraction.status), true);
       return;
     }
 
@@ -3399,7 +3393,9 @@ sourcesFileInput?.addEventListener("change", async () => {
     }
 
     renderSourceProposals(chunkResult.proposals);
-    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.`);
+    // pages with no extractable text never became a proposal: say so, or silence reads as full coverage
+    const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
+    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
   } catch (error) {
     setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
     console.error("Falha ao processar fonte enviada.", error);
