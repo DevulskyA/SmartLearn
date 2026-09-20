@@ -12,6 +12,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
+import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir } from './test-live-core.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -49,11 +50,11 @@ export function cliLane(coord) {
 
 
 /** GUI plan tasks as the checklist; the CLI agent is one plain line under it. */
-export function renderAgentBoard({ gui, cli }) {
+export function renderAgentBoard({ gui, cli, testsHtml = '' }) {
   const c = cli.tasks[0];
   const cliState = c.state === '>' ? 'executando' : c.state === '-' ? 'pausado' : c.state === '!' ? 'bloqueado' : c.state === '✓' ? 'parado (fatia concluída)' : 'sem tarefa';
   const cliLine = `CLI (outro agente): ${cliState} — ${String(c.title).slice(0, 110)}`;
-  return renderChecklistHtml({ tasks: gui.tasks, extraLines: [cliLine] });
+  return renderChecklistHtml({ tasks: gui.tasks, extraLines: [cliLine], testsHtml });
 }
 
 function gitOut(cwd, args) {
@@ -81,13 +82,24 @@ export function syncActiveTrack(tracksMd, block) {
   return re.test(tracksMd) ? tracksMd.replace(re, () => block) : null;
 }
 
-/** conductor/.view/tasklist.html for every worktree that has a conductor/ folder (git worktree list). */
-export function worktreeBoards(root) {
+/** Every worktree of this repo that has a conductor/ folder (git worktree list). */
+export function worktreeDirs(root) {
   try {
     const listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
     return listing.split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9).trim())
-      .filter((wt) => existsSync(join(wt, 'conductor'))).map((wt) => join(wt, 'conductor', '.view', 'tasklist.html'));
+      .filter((wt) => existsSync(join(wt, 'conductor')));
   } catch { return []; }
+}
+
+/** conductor/.view/tasklist.html of every such worktree. */
+export function worktreeBoards(root) {
+  return worktreeDirs(root).map((wt) => join(wt, 'conductor', '.view', 'tasklist.html'));
+}
+
+/** "TESTES AO VIVO" for the worktree whose board this is: ITS artifacts judged against ITS current head. */
+function testsFor(wt) {
+  const head = gitOut(wt, ['rev-parse', 'HEAD']);
+  return renderTestsSection(readArtifacts(artifactDir(wt)), { currentHead: head }) + HEARTBEAT_SCRIPT;
 }
 
 function arg(name, fallback) {
@@ -109,10 +121,13 @@ function regenerate(root, coordDir) {
   // conductor/.view/tasklist.html of every worktree of this repo (a stale copy that says "all done" while work
   // continues leaves the user lost). --out writes only that single file.
   const explicit = arg('--out', null);
-  const outs = explicit ? [explicit] : [join(coordDir, 'tasklist.html'), ...worktreeBoards(root)];
-  const html = renderAgentBoard({ gui, cli: cliLane(cliCoord) });
-  for (const out of outs) { mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, html); }
-  const out = outs.join(' + ');
+  const targets = explicit ? [{ out: explicit, wt: root }]
+    : [{ out: join(coordDir, 'tasklist.html'), wt: root }, ...worktreeDirs(root).map((wt) => ({ out: join(wt, 'conductor', '.view', 'tasklist.html'), wt }))];
+  for (const { out, wt } of targets) {
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, renderAgentBoard({ gui, cli: cliLane(cliCoord), testsHtml: testsFor(wt) }));
+  }
+  const out = targets.map((t) => t.out).join(' + ');
   // Conductor: keep tracks.md's ACTIVE TRACK in step with plan.md (same command, so it cannot go stale)
   const tracksPath = join(root, 'conductor', 'tracks.md');
   const tracksLf = tracksMd.replace(/\r\n/g, '\n');
@@ -144,6 +159,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         timer = setTimeout(() => { try { regenerate(root, coordDir); } catch (err) { console.error('[agent-tasklist] falha ao regenerar:', err.message); } }, 400);
       });
     }
+    // test runs: the wrapper refreshes the board too, but a killed wrapper cannot — re-derive every 5 s while watching
+    // so a dead runner is shown ABORTED (and a moved head STALE) without anyone running anything.
+    setInterval(() => { try { regenerate(root, coordDir); } catch { /* next tick */ } }, 5000);
     console.log('[agent-tasklist] observando ' + targets.length + ' arquivo(s); Ctrl+C para parar.');
   }
 }

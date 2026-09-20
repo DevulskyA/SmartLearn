@@ -95,7 +95,7 @@ export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt
  * Details stay in plan.md. `nowGoal` is the one-line goal of the active task; `extraLines` are plain lines
  * (e.g. the other agent's one-line state).
  */
-export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', tasks, extraLines = [], keepDone = 6 }) {
+export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', tasks, extraLines = [], keepDone = 6, testsHtml = '' }) {
   const mark = (t) => (t.state === '-' ? '!' : t.state === '✓' ? '✓' : t.state === '>' ? '>' : t.state === '!' ? '!' : ' ');
   const line = (t) => `<li class="t${mark(t) === '>' ? ' now' : ''}"><span class="m">[${mark(t)}]</span> ${esc(t.id)} — ${esc(t.title)}</li>`;
   const done = tasks.filter((t) => t.state === '✓');
@@ -118,11 +118,13 @@ h1{font-size:1rem;margin:0 0 1rem;letter-spacing:.02em}
 ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0}.m{display:inline-block;width:2.2rem}
 .now{font-weight:700;color:var(--now)}.muted{color:var(--muted)}
 .goal{margin-top:1.25rem}.goal p{margin:.25rem 0 0}
+.tl{margin:.5rem 0;font-size:.85rem;line-height:1.5}.tl .st{font-weight:700}.tl.pass .st{color:#1f8a4c}.tl.fail .st,.tl.aborted .st{color:#c0392b}.tl.stale .st{color:#b7791f}.tl.running .st{color:var(--now)}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
 <ul>${older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : ''}${shownDone.map(line).join('')}${upcoming.map(line).join('')}</ul>
 ${goal ? `<div class="goal"><strong>EXECUTANDO AGORA:</strong><p>${esc(active.id)} — ${esc(goal)}</p></div>` : '<div class="goal"><strong>EXECUTANDO AGORA:</strong><p>nada em execução</p></div>'}
 ${extraLines.map((l) => `<p class="muted">${esc(l)}</p>`).join('')}
+${testsHtml}
 </main></body></html>`;
 }
 
