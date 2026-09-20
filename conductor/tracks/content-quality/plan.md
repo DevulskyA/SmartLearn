@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1 concluídos; INTEGRATE-5 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5 concluídos; NEXT-2 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-5 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: NEXT-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -518,7 +518,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: 16/16 acima.
       NOT_PROVEN: a falha original nunca foi reproduzida (1 ocorrência em ~6 gates), então isto é endurecimento da causa mais provável (clique antes de a navegação estar ligada), não cura provada; só o histórico dos próximos gates confirma.
       COMMIT: ver `git log` (test(e2e): retry account navigation in product-value login helper).
-- [>] **INTEGRATE-5 Gate completo pelo painel e integração no branch canônico (INTEGRATE-4 … FLAKE-1)** — OWNER: GUI
+- [✓] **INTEGRATE-5 Gate completo pelo painel e integração no branch canônico (INTEGRATE-4 … FLAKE-1)** — OWNER: GUI
       SPRINT_GOAL: levar ao canônico o que veio depois de 9066d93 (painel de testes ao vivo, helper de login endurecido) e provar o gate completo pelo wrapper, visível no painel.
       BEFORE: canônico em 9066d93; o GUI está 3 commits à frente.
       AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos, rodados com scripts/test-live.mjs no canônico, PASS no HEAD atual.
@@ -527,6 +527,16 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: `node scripts/test-live.mjs status` no canônico com as 3 suítes PASS e HEAD == atual (inclui production-build).
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: FLAKE-1; CLI pausado.
+      EVIDENCE: pré-condições conferidas (CLI.md PAUSED, FILES_IN_FLIGHT=none, canônico só com .impeccable/); `git merge --ff-only claude/content-quality`: 9066d93 -> 490bf20, sem conflitos. GATE COMPLETO NO CANÔNICO, rodado pelo wrapper e visto no painel, HEAD testado 490bf20: unit 391/391 exit 0, server 490/490 exit 0, e2e 158/158 exit 0 (12,2 min, inclusive production-build e product-value). O commit docs que fecha esta tarefa vem depois de 490bf20 (só plan.md/tracks.md), então o painel os mostrará STALE até o próximo gate — esperado.
+      PRODUCT_DELTA: o canônico contém o painel de testes ao vivo e o helper de login endurecido; gate 100% verde, agora com evidência do runner.
+      PROOF_OBSERVED: contagens acima.
+      NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
+      COMMIT: fast-forward para 490bf20.
+- [>] **NEXT-2 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+      SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo), já que VERDICT-1, IMPORT-1 (decisão de produto) e REALMODEL-1 (chave) estão bloqueadas.
+      DETAILS: consultar NOT_PROVEN acumulados, experiência atual do aluno, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior; se nada de ganho claro sobrar sem decisão humana, dizer isso em vez de inventar tarefa.
+      DONE_WHEN: uma sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF, ou a lista de decisões humanas pendentes apresentada ao usuário.
+      DEPENDENCIES: INTEGRATE-5.
 
 ## Evidência CQ-1
 
