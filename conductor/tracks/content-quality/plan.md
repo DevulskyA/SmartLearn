@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: EXAM-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: UX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -128,7 +128,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno escreve o porquê uma vez (quando entende) e o relê no momento em que erra, em vez de só ver a resposta seca.
       NOT_PROVEN: no modo local (sem servidor) o campo não é oferecido; texto longo (limite do servidor = 2000 caracteres) sem teste de UI; leitor de tela nos novos campos.
       COMMIT: ver `git log` (feat(exercises): student writes the Por quê).
-- [>] **EXAM-4 Prova por disciplina** — OWNER: GUI
+- [✓] **EXAM-4 Prova por disciplina** — OWNER: GUI
       SPRINT_GOAL: o aluno faz uma prova que cobre várias aulas de uma disciplina, com prioridade ao que precisa reforçar, e o resultado vira evidência por aula.
       BEFORE: a prova cobre UMA aula; quem se prepara para uma prova de disciplina (REVALIDA, faculdade) precisa fazer N provas separadas e não vê a disciplina como um todo.
       AFTER: "Fazer prova da disciplina" monta uma prova com questões de várias aulas da disciplina, priorizando o que precisa reforçar; a correção e o resultado funcionam como hoje; a evidência é registrada POR AULA (uma linha por aula, contagens só das questões daquela aula), sem duplicar.
@@ -138,6 +138,12 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: teste de servidor (amostragem determinística, itens de 2+ aulas, finalize cria 1 evidência por aula com contagens certas, idempotente) + e2e (prova da disciplina, correção, evidência por aula no histórico de cada uma, sem vazamento de gabarito antes de submeter).
       DONE_WHEN: uma prova de disciplina pode ser feita, corrigida e vira evidência por aula; prova de aula única intacta.
       DEPENDENCIES: EXAM-1..3, EXAM-5 (feitos). Risco: migração — só dados novos, nada destrutivo.
+      EVIDENCE: migração 025 (aditiva: `exams.subject_id` + tabela `exam_evidence` com backfill das provas existentes; `unit_id` segue NOT NULL e guarda a aula da 1ª questão como âncora). Serviço: `startSubject` (até 20 questões; primeiro as "para reforçar", depois rodízio entre as aulas, apresentadas agrupadas por aula; retoma a prova aberta; prova de aula única independente), `finalize` agora agrupa por aula (1 evidência INITIAL_PRACTICE POR aula, só com as questões dela; idempotente), DTO com `scope`/`title`/`unitTitle` por item/`evidenceIds`; `POST /v1/exams` aceita `unitId` XOR `subjectId`; origem "EXAM" agora lida da tabela de vínculo. UI: botão "Prova da disciplina" no Plano, título "Prova — <disciplina>", "Aula: …" por questão na correção, nota "Resultado registrado no seu histórico (3/4), por aula (2)", "Refazer erros" busca os erros em várias aulas. Prova: `server/test/exams-subject.test.js` (4: mistura + sem vazamento + retomada; máx. 20 com fraca primeiro e rodízio 10/10; evidência por aula com contagens próprias, idempotente; dono/inexistente/vazia) + e2e `exam-mode` EXAM-4 (sem gabarito/porquê no DOM antes de submeter, duas aulas presentes, correção por aula, evidência 1/2 e 2/2 com origem EXAM, refazer erro, histórico da aula B mostra "Prova: 2/2", 375px sem overflow). GATE COMPLETO no snapshot: unit 383/383, server 484/484, e2e 131/132 — a falha é `production-build.spec` (guard de worktree, AMBIENTE; passa 1/1 com CI=1 neste código, guard não alterado).
+      PRODUCT_DELTA: o aluno faz UMA prova cobrindo a disciplina inteira, começando pelo que errou, e cada aula recebe a própria evidência (histórico/Estatísticas continuam por aula, sem mistura).
+      PROOF_OBSERVED: testes e gate acima.
+      USER_VALUE: prepara para provas de disciplina (REVALIDA/faculdade) em vez de várias provas isoladas; o erro certo volta primeiro.
+      NOT_PROVEN: a amostragem é uma regra simples e explicável, não uma calibração de qualidade; disciplinas com centenas de questões usam só 20 por prova; backup/rehearse do CLI ainda não cobre exams/exam_evidence (registrado para o CLI); Android/Windows nativos.
+      COMMIT: ver `git log` (feat(exam): Prova da disciplina).
 - [✓] **EXAM-5 O histórico distingue Prova de Estudo** — OWNER: GUI
       SPRINT_GOAL: no histórico do Plano o aluno vê quais registros vieram de uma prova e quais do estudo; "Estudar agora" deixa de sumir depois da primeira evidência.
       BEFORE: a prova grava evidência do tipo INITIAL_PRACTICE; o rótulo "Prática inicial" não diferencia prova de estudo e "Estudar agora" some após a 1ª evidência da aula.
@@ -153,9 +159,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno lê a própria trajetória sem confundir medir com estudar e continua podendo estudar depois de medir.
       NOT_PROVEN: Estatísticas/"Exercícios resolvidos" continuam tratando a prova como INITIAL_PRACTICE (rótulo lá não muda; decisão consciente para não tocar superfície protegida); Android/Windows nativos.
       COMMIT: ver `git log` (feat(exam): history labels Prova).
-- [ ] **VERDICT-1 Veredito de Estatísticas ponderado por volume (candidata, pode exigir HUMAN_GATE)** — OWNER: GUI
+- [-] **VERDICT-1 Veredito de Estatísticas ponderado por volume (adiada: decisão de produto)** — OWNER: GUI
       SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
-      DETAILS: é semântica de produto (o que significa "melhorando" no agregado); superfície protegida (ADR-0001, Estatísticas): só ativar se a mudança for funcional e coberta pelos guardrails; caso contrário registrar HUMAN_GATE.
+      DETAILS: lido o código (src/analytics.js studyVerdict): o veredito CONTA disciplinas e mostra cada contagem à parte ("Disciplinas: 1 melhorando · 1 piorando"), com o volume por período exigido dentro de cada disciplina (mín. 10 questões) — não há erro, e ponderar por volume mudaria o significado do veredito numa superfície protegida (ADR-0001). Só ativar com decisão de produto (HUMAN_GATE); até lá, adiada.
+- [>] **UX-1 Inspeção visual do fluxo de prova em uso real (desktop + 375px)** — OWNER: GUI
+      SPRINT_GOAL: olhar de verdade (capturas 1280/375) o fluxo Plano -> Prova (aula e disciplina) -> correção -> resultado e corrigir só os defeitos visuais/de uso realmente observados.
+      BEFORE: os e2e provam comportamento e ausência de overflow, mas ninguém olhou as telas novas de prova/correção/disciplina como um aluno olharia.
+      AFTER: capturas revisadas; cada defeito material achado (hierarquia, botões apertados, texto cortado, rótulo confuso) virou teste vermelho -> menor correção; se não houver defeito, fecha só com as capturas.
+      WHY: uma tela que passa no teste mas confunde o aluno não é entrega.
+      SCOPE: telas da Prova (src/app.js, src/styles.css, index.html); sem redesign de superfície protegida.
+      PROOF: capturas 1280/375 de: botões no Plano, prova em andamento, correção (aula e disciplina), resultado registrado; lista de defeitos com decisão (corrigido/aceito).
+      DONE_WHEN: telas revisadas; defeitos materiais corrigidos e provados; sem regressão.
+      DEPENDENCIES: EXAM-4 (gate e2e completo).
+- [!] **REAL-MODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
+      SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
+      DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 
 ## Evidência CQ-1
 
