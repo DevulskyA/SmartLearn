@@ -4365,6 +4365,8 @@ async function judgeStudyNow(isCorrect) {
   if (!state || state.index >= state.exercises.length) return;
 
   if (state.judging) return; // a double tap must not judge the same question twice
+  const tapped = isCorrect ? "CORRECT" : "INCORRECT";
+  let adoptedOutcome = null; // set when the server already held an earlier tap (see the submit below)
   // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
   // this question with the same buttons and a plain message: nothing advances or is counted that the server
   // does not have, so the result, the evidence and "para reforçar" always agree.
@@ -4379,7 +4381,24 @@ async function judgeStudyNow(isCorrect) {
         studyNowQuestionArea.dataset.attemptId = String(started.id);
         try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
       }
-      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+      let outcome = isCorrect ? "CORRECT" : "INCORRECT";
+      try {
+        await DB.attempts.submit(state.attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+      } catch (error) {
+        // The reply to an earlier tap was lost AFTER the server had recorded it: the attempt is already SUBMITTED
+        // with what that tap said. That outcome stands (an attempt is never rewritten); adopt it instead of leaving
+        // the student stuck on a question the server already holds.
+        const earlier = state.unconfirmed;
+        if (error?.code === "ALREADY_SUBMITTED" && earlier && earlier.attemptId === state.attemptId) {
+          adoptedOutcome = earlier.outcome;
+          outcome = earlier.outcome;
+        } else {
+          state.unconfirmed = { attemptId: state.attemptId, outcome }; // unknown whether the server received it
+          throw error;
+        }
+      }
+      state.unconfirmed = null;
+      isCorrect = outcome === "CORRECT";
       // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
       // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
       state.attemptIds.push(Number(state.attemptId));
@@ -4409,6 +4428,9 @@ async function judgeStudyNow(isCorrect) {
   persistStudySnapshot(state);
   renderStudyNowQuestion();
   if (state.index < state.exercises.length) studyNowRevealBtn.focus();
+  if (adoptedOutcome && adoptedOutcome !== tapped) {
+    studyNowMessage.textContent = `Sua resposta anterior já estava registrada como ${adoptedOutcome === "CORRECT" ? "acerto" : "erro"} e foi mantida.`;
+  }
 }
 
 studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
@@ -5487,6 +5509,12 @@ async function flushPendingAttempt(exItem) {
     delete exItem.dataset.pendingOutcome;
     return true;
   } catch (error) {
+    // An earlier send of THIS outcome reached the server and only its reply was lost: the attempt is already
+    // SUBMITTED with exactly that outcome (the item's buttons are locked, so it cannot differ). It is not unsent.
+    if (error?.code === "ALREADY_SUBMITTED" && exItem.dataset.attemptId) {
+      delete exItem.dataset.pendingOutcome;
+      return true;
+    }
     console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
     return false;
   }

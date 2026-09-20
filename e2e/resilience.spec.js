@@ -309,3 +309,23 @@ test('RETEST-1: if the connection is still down the redo still opens and the stu
   await expect(page.locator('#study-now-message')).toContainText('Não consegui marcar 2 itens');
   await page.unroute('**/v1/attempts/*/submit');
 });
+
+// RETESTNET-1 (same defect class in Hoje): the server recorded the item but the reply was lost.
+test('RETESTNET-1: in Hoje, an item the server already holds (reply lost) is not reported as unsent when the review is completed', async ({ page }) => {
+  const { unit, row } = await reviewWithTwoItems(page, 'Aula revrede c');
+  await row.locator('[data-action="reveal-answer"]').first().click();
+  let lost = false;
+  await page.route('**/v1/attempts/*/submit', async (route) => {
+    if (!lost) { lost = true; await route.fetch(); await route.abort(); return; } // recorded by the server, reply lost
+    await route.continue();
+  });
+  await row.locator('[data-action="exercise-errei"]').first().click();
+  await page.waitForTimeout(600);
+  expect(await reinforceTotal(page)).toBe(1); // the server has it
+  await row.locator('[data-action="reveal-answer"]').nth(1).click();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
+  await row.locator('[data-action="review-done"]').check();
+  await expect.poll(async () => (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence.length, { timeout: 8000 }).toBe(1);
+  await expect(page.locator('#review-dashboard-message')).not.toContainText('não consegui marcar');
+  expect(await reinforceTotal(page)).toBe(1); // still exactly one, no duplicate attempt
+});
