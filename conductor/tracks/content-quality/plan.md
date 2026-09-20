@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7 concluídos; ACCESS-3 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3 concluídos; INTEGRATE-8 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ACCESS-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-8 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -617,7 +617,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
       COMMIT: fast-forward para 2bd9008.
-- [>] **ACCESS-3 Revisão agendada de Hoje só com teclado** — OWNER: GUI
+- [✓] **ACCESS-3 Revisão agendada de Hoje só com teclado** — OWNER: GUI
       SPRINT_GOAL: repetir a auditoria só-teclado (ACCESS-1 prova, ACCESS-2 Estudar agora/Materiais) na tela mais usada, Hoje: abrir a revisão, ver resposta, Acertei/Errei, "Revisão feita", "Refazer erros", e corrigir só o que impedir concluir.
       BEFORE: NOT_PROVEN de ACCESS-1/2: Hoje não passou pela auditoria de foco (botões que desabilitam com foco, re-render que derruba o foco, resultado sem nome acessível).
       AFTER: a revisão de uma aula é concluída só com Tab/Enter/Space, o foco nunca cai no body, e o aluno de leitor de tela ouve pergunta/resposta/resultado.
@@ -627,6 +627,20 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e só-teclado da revisão de Hoje, vermelho antes da correção.
       DONE_WHEN: revisão completa só com teclado, verde, regressão de Hoje verde.
       DEPENDENCIES: INTEGRATE-7.
+      EVIDENCE: sonda de foco na revisão de Hoje (mesma técnica de ACCESS-2). SEM defeito: abrir a linha por Enter (foco fica no botão, padrão de disclosure), ver resposta -> Tab -> Acertei/Errei com anel visível, foco nunca cai no body após julgar, o último "Errei" leva o foco a "Refazer erros". DEFEITOS REAIS (src/app.js): (1) o checkbox "Revisão feita" não dizia QUAL revisão (várias linhas com o mesmo texto) -> aria-label "Revisão feita: <aula>, revisão número N" (continua começando pelo rótulo visível); (2) ao concluir/desfazer uma revisão o checkbox era desabilitado e Hoje re-renderizado: o foco caía no body (medido: BODY) -> refocusReviewDone(taskId) leva o foco ao checkbox da MESMA revisão na nova posição (ou ao título da página), e na falha o foco volta ao checkbox. e2e/keyboard-today.spec.js (1 teste só-teclado) vermelho sem a correção, verde com ela. Regressão: 33/33 e2e (feature-parity, hoje-block-retest, resilience, server-authority, priorities-hoje, practice, offline), unit 398/398. Gate completo no HEAD 7456541: unit 398, server 490, e2e 166/166 (CI=1 só pelo guard do production-build).
+      PRODUCT_DELTA: o aluno de teclado/leitor de tela conclui a revisão diária sem perder o foco e sabe qual revisão está marcando.
+      PROOF_OBSERVED: contagens acima; vermelho/verde.
+      NOT_PROVEN: leitor de tela real; ordem de foco entre linhas de revisão de vários dias; formulário de exercícios externos e edição de resumo não foram varridos por teclado.
+      COMMIT: 7456541.
+- [>] **INTEGRATE-8 Integrar ACCESS-3 no canônico e verificar lá** — OWNER: GUI
+      SPRINT_GOAL: levar ao canônico o que veio depois de 0007cdf (ACCESS-3) com evidência no HEAD canônico.
+      BEFORE: canônico em 0007cdf (PASS até 2bd9008 + docs); o GUI está à frente com ACCESS-3.
+      AFTER: ff sem conflitos e unit + server + e2e completos PASS no canônico, sem STALE.
+      WHY: divergência pequena, evidência atual.
+      SCOPE: git (ff-only); sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no canônico.
+      DONE_WHEN: canônico == GUI e as três suítes PASS no HEAD (ou só docs depois).
+      DEPENDENCIES: ACCESS-3; gate no GUI já verde (7456541).
 
 ## Evidência CQ-1
 
