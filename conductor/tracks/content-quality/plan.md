@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: LARGEPDF-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -193,7 +193,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: revisar o erro com a própria resposta na frente é o que transforma a prova em aprendizado duradouro.
       NOT_PROVEN: só provas registradas depois desta mudança e com resposta digitada mostram o campo (provas antigas: idem, pois o dado sempre existiu em exam_items); não há edição da resposta depois de submetida (por desenho).
       COMMIT: ver `git log` (feat(stats): show the student's exam answer when reviewing an attempt).
-- [>] **INTEGRATE-1 Trazer o trabalho do GUI para o branch canônico (fast-forward)** — OWNER: GUI
+- [✓] **INTEGRATE-1 Trazer o trabalho do GUI para o branch canônico (fast-forward)** — OWNER: GUI
       SPRINT_GOAL: quem abre o app pelo worktree canônico (claude/smartlearn-v1-complete) passa a ter a Prova, o "Por quê" autoral, a jornada e o painel novos — hoje só existem em claude/content-quality (~17 commits à frente).
       BEFORE: o branch canônico está em 2ca64d8 e não tem Modo Prova, prova por disciplina, migrações 023-025 nem o painel de duas lanes; o CLI ficou pausado sem nada a mesclar.
       AFTER: fast-forward sem conflitos (CLI pausado, árvore limpa, sem trabalho em voo); gate no branch canônico com production-build verde (o guard de worktree passa lá).
@@ -203,11 +203,17 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: git log/HEAD iguais nos dois; `npm test` + server + e2e completo no worktree canônico com 0 falhas (inclusive production-build).
       DONE_WHEN: branch canônico em ff com o GUI e o gate completo verde lá.
       DEPENDENCIES: ATTEMPT-1 (feito); CLI pausado.
+      EVIDENCE: pré-condições conferidas (CLI.md PAUSED, FILES_IN_FLIGHT=none, worktree canônico só com o .impeccable/ não rastreado, ff possível); `git merge --ff-only claude/content-quality` em claude/smartlearn-v1-complete: 2ca64d8 -> d6109f6, sem conflitos. GATE COMPLETO NO BRANCH CANÔNICO: unit 383/383, server 486/486, e2e 134/134 (inclusive production-build, que só passa nesse branch pelo guard de worktree — o "1 falha de ambiente" dos gates anteriores desaparece).
+      PRODUCT_DELTA: o branch canônico passa a ter tudo o que o GUI entregou (Prova por aula e por disciplina, "Por quê" autoral, resposta da prova ao rever, jornada provada, painel de duas lanes) com o gate 100% verde; quem abre o app por lá já usa essas capacidades.
+      PROOF_OBSERVED: gate acima.
+      USER_VALUE: o que foi construído está onde o produto roda, com prova de que nada quebrou.
+      NOT_PROVEN: Android/Windows nativos (o gate é WEB); o CLI ainda precisa reconciliar ao voltar (registrado em GUI.md).
+      COMMIT: fast-forward para d6109f6 (sem commit novo de código).
 - [!] **REAL-MODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
 
-- [ ] **LARGEPDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
+- [>] **LARGEPDF-1 Material grande (aula de ~150 páginas) do PDF ao rascunho** — OWNER: GUI
       SPRINT_GOAL: provar (e corrigir só o que quebrar) que um PDF de aula realista, de dezenas a ~150 páginas, sai do upload para propostas e rascunhos utilizáveis sem travar, estourar limite silenciosamente ou perder páginas.
       BEFORE: todos os fluxos foram provados com PDFs de 2 a 5 páginas; o tamanho real de uma aula médica (slides/capítulo) é NOT_PROVEN — extração, divisão em trechos de 10 páginas, teto de entrada do modelo (SMARTLEARN_AI_MAX_INPUT_CHARS) e a lista de propostas na UI nunca foram exercitados em escala.
       AFTER: um PDF sintético de ~150 páginas percorre upload -> extração -> propostas -> rascunho de UM trecho; tempo medido; limites (tamanho, caracteres de entrada) têm mensagem clara ao aluno em vez de falha muda; a lista de propostas continua navegável a 375px.
