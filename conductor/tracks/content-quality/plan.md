@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2 concluídos; INTEGRATE-6 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6 concluídos; NEXT-3 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-6 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: NEXT-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -567,7 +567,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima; vermelho/verde do teste novo.
       NOT_PROVEN: leitor de tela real (só atributos e nomes calculados); seletor de arquivo do SO; segmentos do campo de data nativo não têm anel próprio (padrão do navegador); Materiais não-remoto/mobile por teclado; propostas de trecho (renomear/ocultar) não foram varridas.
       COMMIT: ver `git log` (fix(a11y): keyboard focus in Estudar agora and Materiais (ACCESS-2)).
-- [>] **INTEGRATE-6 Gate completo pelo painel e integração no branch canônico (INTEGRATE-5 … ACCESS-2)** — OWNER: GUI
+- [✓] **INTEGRATE-6 Gate completo pelo painel e integração no branch canônico (INTEGRATE-5 … ACCESS-2)** — OWNER: GUI
       SPRINT_GOAL: levar ao canônico RETEST-1 e ACCESS-2 com o gate completo rodado pelo mecanismo TESTES AO VIVO no HEAD que será integrado.
       BEFORE: canônico em c4a0884; o GUI está 2 commits de código à frente (+ docs).
       AFTER: ff sem conflitos (CLI pausado, árvore limpa), gate completo PASS no HEAD canônico, sem STALE.
@@ -576,6 +576,16 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: `node scripts/test-live.mjs status` no canônico com unit/server/e2e PASS e HEAD == atual.
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: ACCESS-2; CLI pausado.
+      EVIDENCE: gate completo pelo wrapper no worktree GUI ANTES de integrar (e2e com CI=1 só para pular o guard de branch do production-build, que é reexecutado no canônico). Rodada 1 (1f730ca): e2e 161/163 — 2 falhas caracterizadas: (a) large-pdf: REGRESSÃO MINHA da ACCESS-2 — devolver o foco ao botão de gerar, ao falhar, rolava a página e tirava a mensagem de erro da viewport; corrigido com focus({ preventScroll: true }) nos 4 refocos de falha; (b) keyboard-study-materials "retomada": corrida do MEU helper (decidia "expandir?" antes de o Plano renderizar e fechava a linha aberta); helper corrigido. Rodada 2 (a115864): unit 392, server 490, e2e 162/163 — falha em exam-mode UX-1 (intermitente, código intocado): reproduzido 1/8 isolado -> causa: leitura de aria-expanded antes do re-render do Plano -> teste espera as 3 ações; 16/16 depois. Rodada 3 (93a6185, código idêntico ao a115864 + só o teste): unit 392/392, server 490/490, e2e 163/163, exit 0. Ferramenta: o painel agora mantém um resultado válido quando os commits seguintes só tocam conductor/ (docs), sem afrouxar o STALE para qualquer arquivo de código (teste em test/test-live.test.js).
+      PRODUCT_DELTA: RETEST-1 e ACCESS-2 chegam ao canônico com o gate verde e sem regressão de mensagem de erro.
+      PROOF_OBSERVED: contagens acima (rodada 3) + vermelho->verde de cada falha.
+      NOT_PROVEN: Android/Windows nativos; UX-1 pode ter uma raiz de produto (Plano recolher a linha ao re-renderizar) — só a espera do teste foi endurecida; o CLI ainda precisa reconciliar.
+      COMMIT: fast-forward para o HEAD deste commit de docs.
+- [>] **NEXT-3 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+      SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo) depois da verificação no canônico.
+      DETAILS: NOT_PROVEN acumulados (ex.: raiz de produto do UX-1, propostas de trecho por teclado, reteste do Estudar agora sob falha de rede), experiência atual do aluno; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior.
+      DONE_WHEN: sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF.
+      DEPENDENCIES: INTEGRATE-6.
 
 ## Evidência CQ-1
 
