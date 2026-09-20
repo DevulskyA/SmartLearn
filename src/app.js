@@ -3036,6 +3036,8 @@ function createSourceProposalItem(proposal) {
   titleInput.type = "text";
   titleInput.className = "source-proposal-title-input";
   titleInput.value = proposal.title;
+  // Every proposal has one of these fields: the name says which proposal it is for.
+  titleInput.setAttribute("aria-label", `Título do trecho, ${proposal.pageStart === proposal.pageEnd ? `página ${proposal.pageStart}` : `páginas ${proposal.pageStart} a ${proposal.pageEnd}`}`);
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
@@ -3047,6 +3049,7 @@ function createSourceProposalItem(proposal) {
   toggleBtn.type = "button";
   toggleBtn.className = "text-button";
   toggleBtn.dataset.action = "toggle-proposal-excerpt";
+  toggleBtn.setAttribute("aria-expanded", "false"); // a disclosure: expose whether the excerpt is open
   toggleBtn.textContent = "Ver trecho da fonte";
 
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
@@ -3420,9 +3423,11 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       const result = await SourceProposalsUI.getProposal(proposalId);
       if (result.ok) excerptEl.textContent = result.proposal.excerpt;
       excerptEl.hidden = false;
+      toggleBtn.setAttribute("aria-expanded", "true");
       toggleBtn.textContent = "Ocultar trecho da fonte";
     } else {
       excerptEl.hidden = true;
+      toggleBtn.setAttribute("aria-expanded", "false");
       toggleBtn.textContent = "Ver trecho da fonte";
     }
     return;
@@ -3442,6 +3447,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       }
     } finally {
       saveBtn.disabled = false;
+      saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
     }
     return;
   }
