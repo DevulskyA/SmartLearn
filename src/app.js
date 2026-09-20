@@ -5546,7 +5546,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   (nextOpen ?? section.querySelector(".review-block-retest"))?.focus();
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="retest-block"]');
   if (!button) return;
   const section = button.closest("[data-exercises-total]");
@@ -5557,6 +5557,9 @@ reviewDashboard.addEventListener("click", (event) => {
   );
   const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
   if (wrong.length === 0) return;
+  // The redo pairs with the original error on the server: send what could not be sent during the review first. If it
+  // still fails the redo opens anyway (studying is never blocked by the ledger) and the student is told.
+  const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
   startRetestBlock({
     returnReviewId: Number(row.dataset.reviewId),
     unitId: Number(row.dataset.unitId),
@@ -5564,6 +5567,7 @@ reviewDashboard.addEventListener("click", (event) => {
     unitTitle: row.querySelector(".review-content")?.textContent ?? "",
     exercises: wrong,
   });
+  if (unsent > 0) studyNowMessage.textContent = `Não consegui marcar ${unsent} ${unsent === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor); o reteste segue normalmente.`;
 });
 
 reviewDashboard.addEventListener("click", (event) => {

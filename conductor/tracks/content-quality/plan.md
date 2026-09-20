@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5 concluídos; NEXT-2 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1 concluídos; ACCESS-2 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: NEXT-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: ACCESS-2 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -532,11 +532,36 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
       COMMIT: fast-forward para 490bf20.
-- [>] **NEXT-2 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+- [✓] **NEXT-2 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo), já que VERDICT-1, IMPORT-1 (decisão de produto) e REALMODEL-1 (chave) estão bloqueadas.
       DETAILS: consultar NOT_PROVEN acumulados, experiência atual do aluno, CLI.md/GUI.md; não escolher trabalho cosmético/arquitetural havendo ganho de produto maior; se nada de ganho claro sobrar sem decisão humana, dizer isso em vez de inventar tarefa.
       DONE_WHEN: uma sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF, ou a lista de decisões humanas pendentes apresentada ao usuário.
       DEPENDENCIES: INTEGRATE-5.
+      EVIDENCE: candidatos lidos dos NOT_PROVEN acumulados, sem depender de VERDICT-1/IMPORT-1/REALMODEL-1: (A) "Refazer erros" da revisão de Hoje não reenvia o julgamento pendente antes de abrir o reteste — mesma classe de divergência silenciosa já corrigida 3x (EXAM-6, STUDYRESUME-1, REVIEWNET-1), NOT_PROVEN explícito de REVIEWNET-1, custo baixo, confiança alta => ESCOLHIDA; (B) auditoria só-teclado de Estudar agora/Materiais: ganho médio, custo médio; (C) OCR de PDF escaneado: ganho alto, custo alto, sem provedor decidido; (D) reteste retomável após fechar a aba: ganho baixo. Sprint aberta: RETEST-1.
+      PRODUCT_DELTA: próxima sprint definida (RETEST-1).
+- [✓] **RETEST-1 "Refazer erros" da revisão de Hoje reenvia o que ficou pendente antes de abrir** — OWNER: GUI
+      SPRINT_GOAL: garantir que quando o aluno erra um item da revisão de Hoje sem conexão e toca "Refazer erros", o erro original chega ao servidor (vira "para reforçar") antes do reteste começar.
+      BEFORE: o julgamento pendente só é reenviado ao concluir a revisão (REVIEWNET-1); "Refazer erros" abre o reteste sem tentar, então o reteste pode registrar correção de um erro que o servidor nunca soube que aconteceu.
+      AFTER: ao tocar "Refazer erros", os pendentes do bloco são reenviados primeiro; se ainda falharem, o reteste abre mesmo assim (não bloqueia o estudo) e o aluno é avisado.
+      WHY: mesma divergência silenciosa entre o que a tela mostra e o que o servidor tem, no fluxo diário.
+      SCOPE: src/app.js (handler retest-block) + e2e/resilience.spec.js.
+      PROOF: e2e vermelho antes: item errado com rota de submit abortada -> conexão volta -> "Refazer erros" -> `/v1/reinforcement` deve listar o item já ao abrir o reteste; outro cenário: rede ainda fora -> reteste abre e há aviso.
+      DONE_WHEN: os dois cenários verdes e o resto de resilience.spec.js verde.
+      DEPENDENCIES: NEXT-2.
+      EVIDENCE: vermelho antes (e2e via wrapper: reforço 0 em vez de 1 ao abrir o reteste; aviso ausente). Correção em src/app.js (handler retest-block agora async): `flushPendingAttempts(section)` antes de abrir o reteste; se ainda falhar o reteste abre mesmo assim e #study-now-message avisa "Não consegui marcar N item(ns) como para reforçar…". e2e/resilience.spec.js +2 (RETEST-1): 11/11; regressão dos specs com reteste (hoje-block-retest, plan-study-now, priorities-hoje, student-journey, exam-mode) 19/19; unit 391/391. Tudo pelo wrapper, HEAD c4a0884 + árvore com a mudança (o resultado vira STALE ao commitar; o gate completo fica para INTEGRATE-6).
+      PRODUCT_DELTA: o reteste de Hoje só começa depois de o erro original ter chegado ao servidor, ou o aluno é avisado de que não chegou.
+      PROOF_OBSERVED: contagens acima.
+      NOT_PROVEN: reteste do Estudar agora (fora da revisão de Hoje) não foi exercido neste cenário; Android/Windows nativos.
+      COMMIT: ver `git log` (fix(review): "Refazer erros" resends pending item judgments first (RETEST-1)).
+- [>] **ACCESS-2 Estudar agora e Materiais só com teclado, e leitor de tela** — OWNER: GUI
+      SPRINT_GOAL: repetir para Estudar agora e Materiais a auditoria só-teclado feita para a prova (ACCESS-1) e corrigir só o que impedir concluir o fluxo.
+      BEFORE: ACCESS-1 cobriu a prova; NOT_PROVEN registra que Estudar agora e Materiais não passaram pela mesma auditoria.
+      AFTER: cada fluxo (estudar uma questão, revelar, julgar, ver erros; subir material, revisar rascunho, aceitar) é concluído só com teclado, com foco visível e nomes acessíveis medidos.
+      WHY: um aluno que não usa mouse (ou usa leitor de tela) precisa poder estudar.
+      SCOPE: e2e novo de teclado + a menor correção em src/app.js / index.html / styles.css.
+      PROOF: e2e que percorre os dois fluxos com Tab/Enter/Space e mede foco e nomes; defeitos viram teste vermelho -> menor correção.
+      DONE_WHEN: os dois fluxos completos só com teclado e verdes.
+      DEPENDENCIES: RETEST-1.
 
 ## Evidência CQ-1
 

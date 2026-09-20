@@ -280,3 +280,32 @@ test('REVIEWNET-1: if the connection is STILL down when the review is completed,
   await expect(page.locator('#review-dashboard-message')).toContainText('não consegui marcar 2 itens');
   await page.unroute('**/v1/attempts/*/submit');
 });
+
+// RETEST-1: "Refazer erros" must not open a redo of an error the server never heard about.
+async function reviewWithOneWrongPending(page, title) {
+  const { unit, row } = await reviewWithTwoItems(page, title);
+  await row.locator('[data-action="reveal-answer"]').first().click();
+  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  await row.locator('[data-action="exercise-errei"]').first().click();
+  await page.waitForTimeout(600);
+  expect(await reinforceTotal(page)).toBe(0);
+  await row.locator('[data-action="reveal-answer"]').nth(1).click();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
+  return { unit, row };
+}
+
+test('RETEST-1: the pending wrong item is sent when "Refazer erros" is tapped, before the redo opens', async ({ page }) => {
+  const { row } = await reviewWithOneWrongPending(page, 'Aula reteste a');
+  await page.unroute('**/v1/attempts/*/submit'); // connection is back
+  await row.locator('[data-action="retest-block"]').click();
+  await expect(page.locator('#study-now-progress')).toContainText('Erro 1 de 1', { timeout: 8000 });
+  expect(await reinforceTotal(page)).toBe(1);
+});
+
+test('RETEST-1: if the connection is still down the redo still opens and the student is told', async ({ page }) => {
+  const { row } = await reviewWithOneWrongPending(page, 'Aula reteste b');
+  await row.locator('[data-action="retest-block"]').click();
+  await expect(page.locator('#study-now-progress')).toContainText('Erro 1 de 1', { timeout: 8000 });
+  await expect(page.locator('#study-now-message')).toContainText('Não consegui marcar 2 itens');
+  await page.unroute('**/v1/attempts/*/submit');
+});
