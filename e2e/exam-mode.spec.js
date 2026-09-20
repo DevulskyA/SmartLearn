@@ -444,3 +444,38 @@ test('UX-1: Plano action buttons are spaced apart (also at 375), and once the re
   await expect(items.nth(0).locator('.exam-judge')).toBeHidden(); // final: no buttons that look live but do nothing
   await expect(items.nth(0).locator('.exam-review-chip')).toHaveText('Acerto'); // the outcome is still shown as a label
 });
+
+test('ATTEMPT-1: reviewing an exam in Exercícios resolvidos shows what the student wrote next to the gabarito', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Revisao', title: 'Aula revisao', studyDate: '2026-04-01' });
+  await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: 'Rev 1?', answer: 'GABARITO-REV-1', provenance: 'MANUAL' });
+  await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: 'Rev 2?', answer: 'GABARITO-REV-2', provenance: 'MANUAL' });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula revisao' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').click();
+  await page.locator('#exam-answer-input').fill('<b>o que eu escrevi</b>');
+  await page.locator('#exam-next-btn').click(); // the second question stays unanswered
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  const items = page.locator('.exam-review-item');
+  await items.nth(0).locator('.exam-wrong-btn').click();
+  await items.nth(1).locator('.exam-wrong-btn').click();
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toBeVisible();
+
+  await page.locator('[data-screen="stats"]').click();
+  const statsRow = page.locator('#exercise-notes-body .exercise-row', { hasText: 'Aula revisao' });
+  await expect(statsRow).toBeVisible({ timeout: 8000 });
+  await statsRow.click();
+  const dialog = page.locator('#exercise-detail-dialog');
+  await expect(dialog).toBeVisible();
+  const attempts = dialog.locator('.exercise-attempt-item');
+  await expect(attempts).toHaveCount(2);
+  await expect(attempts.nth(0).locator('.exercise-attempt-student')).toHaveText('Sua resposta na prova: <b>o que eu escrevi</b>'); // shown as TEXT, never as HTML
+  await expect(attempts.nth(0).locator('.exercise-attempt-answer')).toHaveText('Gabarito: GABARITO-REV-1');
+  await expect(attempts.nth(1).locator('.exercise-attempt-student')).toHaveText('Sua resposta na prova: sem resposta');
+  await expect(dialog.locator('b')).toHaveCount(0);
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});

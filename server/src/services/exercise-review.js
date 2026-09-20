@@ -37,6 +37,7 @@ function attemptRowsForLinkColumn(db, userId, column, value) {
       a.max_assistance,
       a.started_at,
       a.submitted_at,
+      v.exercise_id,
       v.question,
       v.answer,
       v.hint,
@@ -53,6 +54,18 @@ function attemptRowsForLinkColumn(db, userId, column, value) {
   `).all(userId, value);
 }
 
+/** exercise_id -> what the student typed, for the exam(s) that produced THIS evidence row (never another exam's). */
+function examAnswersForEvidence(db, userId, evidenceId) {
+  const rows = db.prepare(`
+    SELECT i.exercise_id, i.student_answer
+    FROM exam_evidence x
+    JOIN exam_items i ON i.user_id = x.user_id AND i.exam_id = x.exam_id
+    WHERE x.user_id = ? AND x.evidence_id = ?
+  `).all(userId, evidenceId);
+  if (rows.length === 0) return null;
+  return new Map(rows.map((r) => [r.exercise_id, r.student_answer != null && r.student_answer.trim() !== '' ? r.student_answer : null]));
+}
+
 function toAttemptDetailDto(row) {
   return {
     attemptId: row.attempt_id,
@@ -60,10 +73,10 @@ function toAttemptDetailDto(row) {
     question: row.question,
     answer: row.answer,
     hint: row.hint,
-    // Self-report model (assessmentMethod on every submit() call): the app
-    // never captures free-text/selected student input, only a self-judged
-    // outcome — there is no "resposta dada pelo aluno" field to return
-    // because the product never asks the student to type or pick one.
+    // Self-report model (assessmentMethod on every submit() call): study and review
+    // attempts hold only a self-judged outcome, so no student answer is returned here.
+    // The one exception is an attempt born in a Prova, which adds `studentAnswer`
+    // in getAttemptDetails (exam_items.student_answer).
     outcome: row.outcome ?? null,
     assistanceUsed: row.assistance_used ?? row.max_assistance,
     startedAt: row.started_at,
@@ -92,9 +105,16 @@ export function getAttemptDetails(db, userId, evidenceId) {
     if (rows.length > 0) source = 'PRACTICE';
   }
 
+  // Evidence written by a corrected exam: the student's own typed answer is real data (Modo Prova captures it),
+  // shown only here — study/review attempts are self-report and have no such field, so none is invented.
+  const examAnswers = source === 'PRACTICE' ? examAnswersForEvidence(db, userId, evidence.id) : null;
   return {
     evidenceId: evidence.id,
     source,
-    attempts: rows.map(toAttemptDetailDto),
+    ...(examAnswers ? { origin: 'EXAM' } : {}),
+    attempts: rows.map((row) => ({
+      ...toAttemptDetailDto(row),
+      ...(examAnswers ? { studentAnswer: examAnswers.get(row.exercise_id) ?? null } : {}),
+    })),
   };
 }

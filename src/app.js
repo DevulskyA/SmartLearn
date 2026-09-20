@@ -464,6 +464,12 @@ function createAttemptItem(attempt) {
   li.className = `exercise-attempt-item ${outcomeClass}`;
 
   li.append(createTextElement("p", "exercise-attempt-question", attempt.question ?? "—"));
+  // Only attempts born in a Prova carry what the student typed ("studentAnswer" is absent for study/review).
+  if ("studentAnswer" in attempt) {
+    const mine = createTextElement("p", "exercise-attempt-student", attempt.studentAnswer ? `Sua resposta na prova: ${attempt.studentAnswer}` : "Sua resposta na prova: sem resposta");
+    if (!attempt.studentAnswer) mine.classList.add("is-empty");
+    li.append(mine);
+  }
   if (attempt.answer) {
     li.append(createTextElement("p", "exercise-attempt-answer", `Gabarito: ${attempt.answer}`));
   }

@@ -10,7 +10,7 @@ Track:    content-quality                      Status: IN_PROGRESS
 MARCO ATUAL: desenvolvimento contínuo em sprints produtivas (CQ-7 -> EXAM-1..3 -> NEXT)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ATTEMPT-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -177,7 +177,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: menos confusão e menos toque errado no celular; o resultado registrado é lido como final.
       NOT_PROVEN: leitor de tela e navegação só por teclado da prova não foram exercitados além do que os e2e já cobrem (foco após julgar); dispositivo físico real (só emulação de viewport).
       COMMIT: ver `git log` (fix(exam): space Plano action buttons; hide Acertei/Errei).
-- [>] **ATTEMPT-1 A própria resposta da prova aparece ao rever o desempenho** — OWNER: GUI
+- [✓] **ATTEMPT-1 A própria resposta da prova aparece ao rever o desempenho** — OWNER: GUI
       SPRINT_GOAL: ao abrir um item de prova em "Exercícios resolvidos" (Estatísticas/Plano), o aluno vê o que ELE escreveu ao lado do gabarito, e não só o "acertei/errei" — o dado já existe (exam_items.student_answer) e hoje se perde.
       BEFORE: o detalhe da tentativa mostra enunciado, gabarito e resultado; para provas ele diz que o produto nunca captura a resposta do aluno — o que deixou de ser verdade com o Modo Prova.
       AFTER: tentativas nascidas de uma prova mostram "Sua resposta na prova" (ou "Sem resposta"); estudo/revisão seguem como hoje (sem campo inventado).
@@ -187,6 +187,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: teste de servidor (prova de disciplina: cada tentativa traz a resposta certa do aluno; estudo não traz o campo; outra prova da mesma questão não vaza) + e2e (prova -> registrar -> Estatísticas/Plano -> abrir a evidência -> "Sua resposta na prova").
       DONE_WHEN: a resposta digitada na prova é visível ao rever a evidência, sem regressão nos fluxos de tentativa existentes.
       DEPENDENCIES: EXAM-3/4 (feitos).
+      EVIDENCE: `getAttemptDetails` junta evidência -> exam_evidence -> exam_items (por exercise_id, só da prova DAQUELA evidência) e devolve `origin: 'EXAM'` + `studentAnswer` (null = sem resposta) por tentativa; estudo/revisão não ganham o campo. O diálogo de "Exercícios resolvidos" mostra "Sua resposta na prova: …" (ou "sem resposta", em itálico) acima do Gabarito, sempre como TEXTO. Prova: `server/test/exercise-review-exam.test.js` (2: resposta do aluno por tentativa + null sem resposta + origin; duas provas da mesma questão não se misturam; estudo sem o campo) + e2e `exam-mode` ATTEMPT-1 (prova -> registrar -> Estatísticas -> abrir a linha; "<b>…</b>" digitado aparece como texto, sem HTML; 375px sem overflow). Regressão: server 486/486, unit 383/383, e2e 32/32 (tentativas, estudar agora, exam-mode, stats sorting/responsive).
+      PRODUCT_DELTA: a resposta escrita na prova deixa de sumir depois da tela de correção: dias depois, ao rever o desempenho, o aluno compara o que escreveu com o gabarito.
+      PROOF_OBSERVED: testes acima.
+      USER_VALUE: revisar o erro com a própria resposta na frente é o que transforma a prova em aprendizado duradouro.
+      NOT_PROVEN: só provas registradas depois desta mudança e com resposta digitada mostram o campo (provas antigas: idem, pois o dado sempre existiu em exam_items); não há edição da resposta depois de submetida (por desenho).
+      COMMIT: ver `git log` (feat(stats): show the student's exam answer when reviewing an attempt).
+- [>] **INTEGRATE-1 Trazer o trabalho do GUI para o branch canônico (fast-forward)** — OWNER: GUI
+      SPRINT_GOAL: quem abre o app pelo worktree canônico (claude/smartlearn-v1-complete) passa a ter a Prova, o "Por quê" autoral, a jornada e o painel novos — hoje só existem em claude/content-quality (~17 commits à frente).
+      BEFORE: o branch canônico está em 2ca64d8 e não tem Modo Prova, prova por disciplina, migrações 023-025 nem o painel de duas lanes; o CLI ficou pausado sem nada a mesclar.
+      AFTER: fast-forward sem conflitos (CLI pausado, árvore limpa, sem trabalho em voo); gate no branch canônico com production-build verde (o guard de worktree passa lá).
+      WHY: entregar o que foi construído; o guard de build só passa no branch canônico, então o gate completo só fecha 100% lá.
+      SCOPE: git (ff-only) no worktree canônico; nenhuma mudança de código.
+      DETAILS: conferir CLI.md (PAUSED, FILES_IN_FLIGHT=none) e git status limpo no worktree canônico; `git merge --ff-only claude/content-quality` (reversível: mover o ponteiro do branch de volta a 2ca64d8); registrar em GUI.md para o CLI reconciliar.
+      PROOF: git log/HEAD iguais nos dois; `npm test` + server + e2e completo no worktree canônico com 0 falhas (inclusive production-build).
+      DONE_WHEN: branch canônico em ff com o GUI e o gate completo verde lá.
+      DEPENDENCIES: ATTEMPT-1 (feito); CLI pausado.
 - [!] **REAL-MODEL-1 Rodar o pipeline com um modelo REAL e revisar a saída (bloqueada: precisa de chave)** — OWNER: GUI
       SPRINT_GOAL: provar (ou refutar) a qualidade do conteúdo médico gerado por um modelo real — o maior NOT_PROVEN do track.
       DETAILS: exige SMARTLEARN_AI_API_KEY + consentimento + orçamento (custo real, dependência paga): HUMAN_GATE. Quando liberado: 1 PDF médico, revisar a saída a olho, registrar achados; sem chamar o modelo em runtime de estudo.
