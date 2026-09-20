@@ -125,6 +125,15 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
 - [ ] **EXAM-4 Prova por disciplina (candidata)** — OWNER: GUI
       SPRINT_GOAL: o aluno faz uma prova que cobre várias aulas de uma disciplina, com prioridade ao que precisa reforçar, e o resultado vira evidência por aula.
       DETAILS: exige decisão de amostragem e migração (exam sem unit único); só ativar depois de AUTHOR-1 e de reavaliar valor x custo.
+- [ ] **EXAM-5 O histórico distingue Prova de Estudo (candidata)** — OWNER: GUI
+      SPRINT_GOAL: no histórico do Plano o aluno vê quais registros vieram de uma prova e quais do estudo; "Estudar agora" deixa de sumir depois da primeira evidência.
+      BEFORE: a prova grava evidência do tipo INITIAL_PRACTICE; o rótulo "Prática inicial" não diferencia prova de estudo e "Estudar agora" some após a 1ª evidência da aula.
+      AFTER: rótulo próprio para a origem prova sem quebrar o esquema (REVIEW/INITIAL_PRACTICE/EXTERNAL) nem duplicar evidência; estudar de novo continua disponível.
+      WHY: medir e estudar são coisas diferentes; sem o rótulo o aluno não lê a própria trajetória.
+      DEPENDENCIES: AUTHOR-1; decisão local de modelagem (campo de origem na evidência vs. leitura via exam_items).
+- [ ] **VERDICT-1 Veredito de Estatísticas ponderado por volume (candidata, pode exigir HUMAN_GATE)** — OWNER: GUI
+      SPRINT_GOAL: o veredito agregado deixa de contar disciplinas com peso igual quando os volumes de evidência são muito diferentes.
+      DETAILS: é semântica de produto (o que significa "melhorando" no agregado); superfície protegida (ADR-0001, Estatísticas): só ativar se a mudança for funcional e coberta pelos guardrails; caso contrário registrar HUMAN_GATE.
 
 ## Evidência CQ-1
 

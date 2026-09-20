@@ -62,3 +62,17 @@ test('the board shows two lanes, one active per agent is fine, two active in one
   const twoActive = renderAgentBoard({ gui: { ...gui, tasks: gui.tasks.map((t) => ({ ...t, state: '>' })) }, cli });
   assert.match(twoActive, /2 ativas|3 ativas/);
 });
+
+test('the board separates what is running and what is next from what is finished; a PAUSED lane is not shown as done', () => {
+  const plan = parsePlan(PLAN);
+  const gui = { title: 'AGENT_GUI', tasks: plan.tasks.map((t) => ({ ...t, owner: 'GUI' })) };
+  const cli = cliLane(parseCoordFile('AGENT=AGENT_CLI\nACTIVE_TASK=PAUSED (token budget)\nSTATUS=DONE   (slice)\n'));
+  assert.equal(cli.tasks[0].state, '-');
+  const html = renderAgentBoard({ gui, cli });
+  assert.match(html, /Em andamento <span class="count">1<\/span>/);
+  assert.match(html, /Próximas <span class="count">1<\/span>/);
+  assert.match(html, /<summary>Concluídas \(1\)<\/summary>/);
+  const running = html.slice(html.indexOf('Em andamento'), html.indexOf('Próximas'));
+  assert.match(running, /EXAM-1/);
+  assert.doesNotMatch(running, /CQ-1/);
+});

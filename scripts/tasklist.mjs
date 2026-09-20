@@ -94,7 +94,7 @@ export function detailHtml(t) {
 export function renderHtml(plan, now = new Date()) {
   const done = plan.tasks.filter((t) => t.state === '✓').length;
   const total = plan.tasks.length;
-  const items = plan.tasks.map((t) => `
+  const renderTasks = (list) => list.map((t) => `
     <li class="task s-${t.state === '✓' ? 'done' : t.state === '>' ? 'active' : t.state === '!' ? 'blocked' : t.state === '-' ? 'deferred' : 'todo'}">
       <span class="mark" aria-hidden="true">${t.state === ' ' ? '' : esc(t.state)}</span>
       <div class="body">
@@ -102,6 +102,11 @@ export function renderHtml(plan, now = new Date()) {
         ${detailHtml(t)}
       </div>
     </li>`).join('');
+  const running = plan.tasks.filter((t) => t.state === '>' || t.state === '!');
+  const upcoming = plan.tasks.filter((t) => t.state === ' ' || t.state === '-');
+  const finished = plan.tasks.filter((t) => t.state === '✓').reverse();
+  const group = (label, list, empty) => `<h2 class="group">${label} <span class="count">${list.length}</span></h2>${list.length ? `<ul>${renderTasks(list)}</ul>` : `<p class="meta">${empty}</p>`}`;
+  const items = `${group('Em andamento', running, 'nada em andamento')}${group('Próximas', upcoming, 'nada planejado')}<details class="done-group"><summary>Concluídas (${finished.length})</summary><ul>${renderTasks(finished)}</ul></details>`;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="10"><title>SmartLearn — tasklist</title>
@@ -112,7 +117,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-ap
 main{max-width:52rem;margin:0 auto;padding:1.5rem 1rem 3rem}
 h1{font-size:1.15rem;margin:0 0 .25rem}.meta{color:var(--muted);font-size:.85rem;margin:0 0 1rem}
 .bar{height:.5rem;background:var(--line);border-radius:99px;overflow:hidden;margin:.5rem 0 1.25rem}.bar>i{display:block;height:100%;background:var(--done);width:${total ? Math.round((done / total) * 100) : 0}%}
-ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
+ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}h2.group{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:1.1rem 0 .5rem}.count{font-weight:400}.done-group{margin-top:1.1rem}.done-group>summary{font-weight:700;color:var(--muted)}.done-group>ul{margin-top:.5rem}
 .task{display:flex;gap:.75rem;background:var(--card);border:1px solid var(--line);border-radius:.75rem;padding:.75rem .9rem}
 .mark{flex:0 0 1.6rem;height:1.6rem;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:.85rem}
 .s-done .mark{background:var(--done);border-color:var(--done);color:#fff}.s-active{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
@@ -124,8 +129,8 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
 <h1>SMARTLEARN — TRACK: ${esc(plan.title)}</h1>
 <p class="meta">Status: ${esc(plan.status)} · ${done}/${total} concluídas · gerado de <code>plan.md</code> em ${esc(now.toLocaleString('pt-BR'))} (projeção — não edite aqui)</p>
 <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i></i></div>
-<ul>${items}
-</ul></main></body></html>`;
+${items}
+</main></body></html>`;
 }
 
 function defaultPlanPath(root) {
