@@ -646,6 +646,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   reviewDoneInput.type = "checkbox";
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
+  // Several rows say "Revisão feita": the name must tell a screen reader WHICH review (it still starts with the visible label).
+  reviewDoneInput.setAttribute("aria-label", `Revisão feita: ${unit?.title ?? "conteúdo"}, revisão número ${task.reviewNumber}`);
   reviewDoneInput.dataset.reviewId = String(task.id);
   reviewDoneInput.dataset.committedChecked = String(task.reviewDone);
   reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Revisão feita"));
@@ -5648,6 +5650,18 @@ reviewDashboard.addEventListener("click", async (event) => {
   }
 });
 
+/**
+ * Completing (or undoing) a review re-renders Hoje and the row moves to another group, so the checkbox the keyboard
+ * was on no longer exists. Put focus on the same review's checkbox in its new place (its state is now committed and
+ * it can be undone from there); if that row is gone, on the page heading.
+ */
+function refocusReviewDone(taskId) {
+  const again = reviewDashboard.querySelector(`[data-action="review-done"][data-review-id="${taskId}"]`);
+  if (again) { again.focus({ preventScroll: true }); return; }
+  const heading = document.querySelector("#title-today");
+  if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+}
+
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="review-done"]');
   if (!input) return;
@@ -5672,6 +5686,7 @@ reviewDashboard.addEventListener("change", async (event) => {
         await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
         setReviewMessage();
         await renderToday();
+        refocusReviewDone(taskId);
         if (unsentItems > 0) setReviewMessage(unsentNote(), true);
         return;
       }
@@ -5683,9 +5698,11 @@ reviewDashboard.addEventListener("change", async (event) => {
     });
     setReviewMessage();
     await renderToday();
+    refocusReviewDone(taskId);
   } catch (error) {
     input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
+    input.focus({ preventScroll: true });
     setReviewMessage("Não foi possível salvar a revisão.", true);
     console.error("Falha ao atualizar a revisão.", error);
   }
