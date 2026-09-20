@@ -93,6 +93,7 @@ test('leaving in the middle: what was judged stays ("para reforçar"), no eviden
 
   // starting again is a fresh, complete pass: it must not double-count the interrupted one
   await row2.locator('[data-action="plan-study-now"]').click();
+  await page.locator('#study-now-resume-restart').click(); // the interrupted pass is offered for continuing; here the student restarts
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 3');
   for (let i = 0; i < 3; i += 1) {
     await page.locator('#study-now-reveal-btn').click();
@@ -134,4 +135,84 @@ test('a dropped connection while judging keeps the student on the question with 
   const evidence = (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
   expect(evidence).toHaveLength(1);
   expect([evidence[0].questionsCount, evidence[0].correctCount]).toEqual([2, 1]);
+});
+
+// STUDYSTATE-1: the session resumes where it stopped.
+async function threeItemUnit(page, title) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Sessao ${title}`, title, studyDate: '2030-01-01' });
+  for (const i of [1, 2, 3]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+  return unit;
+}
+async function openStudyNow(page, title) {
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: title });
+  if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded')) !== 'true') await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-study-now"]').click();
+}
+
+test('STUDYSTATE-1: after an interruption the student can CONTINUE from the next question; one evidence row with the whole pass', async ({ page }) => {
+  const unit = await threeItemUnit(page, 'Sessao continua');
+  await openStudyNow(page, 'Sessao continua');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 3 de 3');
+
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openStudyNow(page, 'Sessao continua');
+  await expect(page.locator('#study-now-resume')).toBeVisible();
+  await expect(page.locator('#study-now-resume-text')).toContainText('2 de 3');
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  for (const id of ['#study-now-resume-continue', '#study-now-resume-restart']) expect((await page.locator(id).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#study-now-resume-continue').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 3 de 3');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 8000 });
+
+  const evidence = (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
+  expect(evidence).toHaveLength(1);
+  expect([evidence[0].questionsCount, evidence[0].correctCount]).toEqual([3, 2]); // the WHOLE pass, not just the last question
+  expect((await getJson(page, `/v1/learning-evidence/${evidence[0].id}/attempts`)).attempts).toHaveLength(3);
+  // the finished session leaves nothing to resume
+  const leftovers = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('smartlearn.studynow.')));
+  expect(leftovers).toEqual([]);
+});
+
+test('STUDYSTATE-1: "Recomeçar" starts a fresh pass and does not double-count the interrupted one', async ({ page }) => {
+  const unit = await threeItemUnit(page, 'Sessao recomeca');
+  await openStudyNow(page, 'Sessao recomeca');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openStudyNow(page, 'Sessao recomeca');
+  await page.locator('#study-now-resume-restart').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 3');
+  for (let i = 0; i < 3; i += 1) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator('#study-now-correct-btn').click();
+  }
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 8000 });
+  const evidence = (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
+  expect(evidence).toHaveLength(1);
+  expect([evidence[0].questionsCount, evidence[0].correctCount]).toEqual([3, 3]);
+});
+
+test('STUDYSTATE-1: with browser storage blocked the session simply starts at question 1, as before', async ({ page }) => {
+  await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } }); });
+  await threeItemUnit(page, 'Sessao sem storage');
+  await openStudyNow(page, 'Sessao sem storage');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openStudyNow(page, 'Sessao sem storage');
+  await expect(page.locator('#study-now-resume')).toBeHidden();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 3');
 });

@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; STUDYSTATE-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TODAYUX-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: STUDYSTATE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: TODAYUX-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -352,7 +352,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: o aluno não redigita nada depois de um problema de conexão no meio da prova.
       NOT_PROVEN: navegador que apaga o armazenamento ao fechar (modo privado); outro aparelho (o rascunho é local); expiração das pendências antigas (ficam até serem enviadas ou a prova ser submetida).
       COMMIT: ver `git log` (feat(exam): pending answers survive a reload).
-- [>] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
+- [✓] **STUDYSTATE-1 A sessão do Estudar agora retoma da questão onde parou** — OWNER: GUI
       SPRINT_GOAL: recarregar/sair no meio de uma sessão continua da próxima questão não julgada, em vez de recomeçar da 1ª (medido em STUDYRESUME-1: o julgado permanece como "para reforçar", mas a sessão reinicia).
       BEFORE: a sessão vive só em memória; ao recarregar o aluno refaz da questão 1, inclusive itens já julgados nesta mesma passada.
       AFTER: ao voltar a "Estudar agora" da mesma aula existe a opção clara de continuar de onde parou (com o placar parcial) ou recomeçar; concluir grava UMA evidência com as tentativas de toda a passada.
@@ -362,6 +362,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e: julgar 2 de 3, recarregar, voltar: "Continuar (2 de 3 respondidas)" -> termina na questão 3, evidência 1 linha com 3 questões e as 3 tentativas; "Recomeçar" descarta e não duplica; sem armazenamento a sessão funciona como hoje.
       DONE_WHEN: retomar continua da questão certa sem duplicar evidência nem contagem.
       DEPENDENCIES: STUDYRESUME-1, EXAM-7 (feitos).
+      EVIDENCE: estado mínimo da passada "inicial" espelhado no navegador (`smartlearn.studynow.<aula>`: ids dos exercícios na ordem, índice, tentativas já aceitas pelo servidor, acertos/erros) após CADA julgamento aceito; ao abrir "Estudar agora" com snapshot válido (mesma lista de exercícios, índice entre 1 e N-1, < 7 dias) aparece "Você já respondeu 2 de 3 nesta aula (1 acerto). Quer continuar de onde parou?" com [Continuar de onde parei] / [Recomeçar]; concluir/recomeçar limpa. Todo acesso ao armazenamento em try/catch. Prova (`e2e/study-resume.spec.js`, vermelho antes: bloco de retomada inexistente): (1) julgar 2 de 3, recarregar, "2 de 3", continuar na Questão 3, concluir -> UMA evidência 3 questões/2 acertos com as 3 tentativas ligadas, nada sobra no aparelho; (2) Recomeçar -> Questão 1 de 3, evidência 3/3 só da nova passada; (3) storage bloqueado -> começa na questão 1 como antes; prompt a 375px sem overflow e botões >= 44px. O teste de interrupção do STUDYRESUME-1 passou a clicar Recomeçar (o comportamento mudou de propósito). Regressão: 17/17 (estudar agora, plano, prática, reteste, jornada, explicação, fluxo de conteúdo, resiliência) + unit 385/385.
+      PRODUCT_DELTA: interromper o Estudar agora deixa de custar a passada: o aluno continua da próxima questão, com o placar parcial, e a evidência final soma a passada inteira sem duplicar.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: o aluno é interrompido o tempo todo; retomar de onde parou respeita o esforço já feito.
+      NOT_PROVEN: retomada em outro aparelho (o snapshot é local); reteste ("Refazer erros") não é retomável; se exercícios forem editados entre a interrupção e a volta o snapshot é descartado por segurança (recomeça).
+      COMMIT: ver `git log` (feat(study-now): resume an interrupted pass).
+- [>] **TODAYUX-1 Hoje e Plano com dados reais no celular: inspeção de uso (375px)** — OWNER: GUI
+      SPRINT_GOAL: olhar de verdade a tela que o aluno abre todo dia — Hoje com revisões, "para reforçar" e prioridades, e o Plano com várias aulas — a 375px e a 1280px, e corrigir só os defeitos materiais observados.
+      BEFORE: Hoje/Plano foram provados por comportamento e "sem overflow", mas a densidade real (várias revisões vencidas, chips, textos longos) nunca foi inspecionada visualmente com dados.
+      AFTER: capturas revisadas com uma conta populada (várias disciplinas, revisões atrasadas/hoje/futuras, itens para reforçar); cada defeito material (texto cortado, ação escondida, hierarquia confusa, alvo pequeno) vira teste vermelho -> menor correção; se estiver bom, fecha só com as capturas.
+      WHY: Hoje é a tela diária; qualquer atrito ali é sentido todo dia.
+      SCOPE: Hoje e Plano (src/app.js, src/styles.css, index.html); Estatísticas é superfície protegida (só leitura).
+      PROOF: capturas 1280/375 antes/depois + e2e para cada defeito corrigido.
+      DONE_WHEN: telas revisadas; defeitos materiais corrigidos e provados; sem regressão.
+      DEPENDENCIES: STUDYSTATE-1.
 
 ## Evidência CQ-1
 

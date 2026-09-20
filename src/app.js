@@ -318,6 +318,8 @@ const studyNowAnswerText = document.querySelector("#study-now-answer-text");
 const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
 const studyNowJudgment = document.querySelector("#study-now-judgment");
 const studyNowMessage = document.querySelector("#study-now-message");
+const studyNowResume = document.querySelector("#study-now-resume");
+const studyNowResumeText = document.querySelector("#study-now-resume-text");
 const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
 const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
 const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
@@ -3649,10 +3651,86 @@ async function startStudyNow(unit, subjectName) {
     console.error("Falha ao carregar exercícios da unidade.", error);
     studyNowState.exercises = [];
   }
+  const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
+  if (snapshot) {
+    // Interrupted earlier: offer to continue instead of silently repeating what was already answered.
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = true;
+    studyNowProgress.textContent = "";
+    studyNowResumeText.textContent = `Você já respondeu ${snapshot.answeredCount} de ${snapshot.exerciseIds.length} nesta aula (${snapshot.correctCount} ${snapshot.correctCount === 1 ? "acerto" : "acertos"}). Quer continuar de onde parou?`;
+    studyNowResume.hidden = false;
+    studyNowResumeSnapshot = snapshot;
+    studyNowResume.querySelector("#study-now-resume-continue").focus();
+    return;
+  }
+  studyNowResume.hidden = true;
   renderStudyNowQuestion();
 }
 
+// -- Estudar agora: resume an interrupted pass ----------------------------------------------------------------
+// The minimal state of an "initial" pass is mirrored on the device after every judgment the server accepted, so
+// closing/reloading the tab does not restart from question 1. Every access is guarded (storage may be blocked) and
+// the snapshot is discarded when the pass ends, when the exercises changed, or after a week.
+let studyNowResumeSnapshot = null;
+const STUDY_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const studySnapshotKey = (unitId) => `smartlearn.studynow.${unitId}`;
+
+function persistStudySnapshot(state) {
+  if (!state || state.mode !== "initial") return;
+  try {
+    if (state.index <= 0 || state.index >= state.exercises.length) { localStorage.removeItem(studySnapshotKey(state.unitId)); return; }
+    localStorage.setItem(studySnapshotKey(state.unitId), JSON.stringify({
+      savedAt: Date.now(),
+      exerciseIds: state.exercises.map((e) => e.id),
+      index: state.index,
+      attemptIds: state.attemptIds,
+      answeredCount: state.answeredCount,
+      correctCount: state.correctCount,
+      wrongIds: state.wrongExercises.map((e) => e.id),
+      correctedIds: state.correctedExercises.map((e) => e.id),
+    }));
+  } catch { /* storage unavailable: the pass just cannot be resumed */ }
+}
+
+function clearStudySnapshot(unitId) {
+  try { localStorage.removeItem(studySnapshotKey(unitId)); } catch { /* ignore */ }
+}
+
+function readStudySnapshot(unitId, exercises) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(studySnapshotKey(unitId)) ?? "null");
+    if (!raw || Date.now() - raw.savedAt > STUDY_SNAPSHOT_MAX_AGE_MS) return null;
+    const same = Array.isArray(raw.exerciseIds) && raw.exerciseIds.length === exercises.length && raw.exerciseIds.every((id, i) => id === exercises[i].id);
+    if (!same || !(raw.index > 0 && raw.index < exercises.length)) return null;
+    return raw;
+  } catch { return null; }
+}
+
+studyNowResume?.querySelector("#study-now-resume-continue")?.addEventListener("click", () => {
+  const state = studyNowState;
+  const snap = studyNowResumeSnapshot;
+  if (!state || !snap) return;
+  const byId = new Map(state.exercises.map((e) => [e.id, e]));
+  state.index = snap.index;
+  state.attemptIds = snap.attemptIds.slice();
+  state.answeredCount = snap.answeredCount;
+  state.correctCount = snap.correctCount;
+  state.wrongExercises = snap.wrongIds.map((id) => byId.get(id)).filter(Boolean);
+  state.correctedExercises = snap.correctedIds.map((id) => byId.get(id)).filter(Boolean);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+});
+
+studyNowResume?.querySelector("#study-now-resume-restart")?.addEventListener("click", () => {
+  if (studyNowState) clearStudySnapshot(studyNowState.unitId);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+});
+
 function renderStudyNowQuestion() {
+  if (studyNowResume) studyNowResume.hidden = true;
   const state = studyNowState;
   if (!state) return;
   if (studyNowMessage) studyNowMessage.textContent = "";
@@ -4302,6 +4380,7 @@ async function judgeStudyNow(isCorrect) {
   }
 
   state.index += 1;
+  persistStudySnapshot(state);
   renderStudyNowQuestion();
   if (state.index < state.exercises.length) studyNowRevealBtn.focus();
 }
