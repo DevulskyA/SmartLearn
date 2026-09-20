@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-3 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; REVIEWNET-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-3 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: REVIEWNET-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -399,7 +399,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       NOT_PROVEN: painel de rascunho (já revisado em CQ-4/CQ-7) não foi re-inspecionado; aparelho físico; Estatísticas (protegida) não tocada.
       COMMIT: ver `git log` (fix(materials): proposals as cards on the phone).
 
-- [>] **INTEGRATE-3 Gate completo e integração no branch canônico (EXAM-7 … TRACKUX-1)** — OWNER: GUI
+- [✓] **INTEGRATE-3 Gate completo e integração no branch canônico (EXAM-7 … TRACKUX-1)** — OWNER: GUI
       SPRINT_GOAL: levar ao branch canônico o que veio depois de 7494e61 (pendências da prova no aparelho, retomada do Estudar agora, Hoje/Plano/Materiais legíveis no celular) com o gate completo verde.
       BEFORE: canônico em 7494e61; o GUI está alguns commits à frente sem gate completo.
       AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no canônico.
@@ -408,6 +408,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: contagens do gate no worktree canônico (inclui production-build).
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: TRACKUX-1; CLI pausado.
+      EVIDENCE: pré-condições conferidas (CLI.md PAUSED, FILES_IN_FLIGHT=none, worktree canônico só com .impeccable/); `git merge --ff-only claude/content-quality`: 7494e61 -> cd7966e (8 arquivos), sem conflitos. GATE COMPLETO NO CANÔNICO: unit 385/385, server 488/488, e2e 156/156 (inclusive production-build).
+      PRODUCT_DELTA: o branch canônico ganha pendências da prova no aparelho, retomada do Estudar agora, Hoje/Plano/Materiais legíveis no celular, com gate 100% verde.
+      PROOF_OBSERVED: contagens acima.
+      USER_VALUE: o que foi construído roda onde o produto roda, provado.
+      NOT_PROVEN: Android/Windows nativos (gate WEB); o CLI ainda precisa reconciliar ao voltar.
+      COMMIT: fast-forward para cd7966e.
+- [>] **REVIEWNET-1 Revisão agendada de Hoje com conexão instável** — OWNER: GUI
+      SPRINT_GOAL: aplicar o teste de queda de conexão ao fluxo mais usado do produto — concluir uma revisão agendada em Hoje (marcar feita, notas, julgar itens, refazer erros) — e corrigir só divergência real entre o que a tela mostra e o que o servidor tem.
+      BEFORE: a mesma falha silenciosa (progresso mostrado que o servidor não tem) apareceu em duas telas (resposta da prova, julgamento do Estudar agora); a revisão de Hoje só foi coberta por "escrita offline falha visível e sem linhas no servidor", não por cenários de queda no meio do fluxo.
+      AFTER: cada passo da revisão tem teste de queda com o resultado observado (mensagem, retry sem duplicar, servidor consistente) e, onde a tela e o servidor divergirem, correção mínima.
+      WHY: é a tela diária; a divergência silenciosa aqui distorce agenda e histórico todos os dias.
+      SCOPE: src/app.js (revisão de Hoje: "Revisão feita", notas, julgar itens, reteste); servidor só se preciso.
+      DETAILS: rota abortada por passo (concluir revisão, submit de tentativa de item, reteste); registrar para cada: a tela avançou? o servidor tem? o retry duplica evidência/revisão?
+      PROOF: e2e com contagens no servidor; defeitos viram teste vermelho -> menor correção.
+      DONE_WHEN: nenhum passo da revisão mostra ao aluno progresso que o servidor não tem, ou a divergência é explicada e repetível.
+      DEPENDENCIES: INTEGRATE-3.
 
 ## Evidência CQ-1
 
