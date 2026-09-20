@@ -511,3 +511,60 @@ test('EXAM-6: an answer that could not be saved is never lost or silently skippe
   await expect(items.nth(0).locator('.exam-review-student')).toHaveText('resp 1');
   await expect(items.nth(1).locator('.exam-review-student')).toHaveText('resp 2');
 });
+
+test('ACCESS-1: the whole exam works with the keyboard alone, and assistive tech gets the question, the progress and distinct button names', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Prova Teclado', title: 'Aula teclado', studyDate: '2026-04-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Teclado ${i}?`, answer: `Certa ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula teclado' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-exam"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-progress')).toHaveText('Questão 1 de 2');
+
+  // the answer box is described by the question and the progress (a screen-reader user hears them on focus)
+  await page.locator('#exam-answer-input').focus();
+  const description = await page.locator('#exam-answer-input').evaluate((el) => el.getAttribute('aria-describedby'));
+  expect(description).toBeTruthy();
+  const described = await page.locator('#exam-answer-input').evaluate((el) => el.getAttribute('aria-describedby').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
+  expect(described).toContain('Teclado 1?');
+  expect(described).toContain('Questão 1 de 2');
+
+  // keyboard only: type, Tab to "Próxima", Enter; focus lands back in the answer box on the next question
+  await page.keyboard.type('resp 1');
+  await page.keyboard.press('Tab'); // (Anterior is disabled on the first question) -> Próxima
+  await expect(page.locator('#exam-next-btn')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-progress')).toHaveText('Questão 2 de 2');
+  await expect(page.locator('#exam-answer-input')).toBeFocused();
+  await page.keyboard.type('resp 2');
+
+  // the numbered nav is a named list; the current question is marked
+  await expect(page.locator('#exam-nav')).toHaveAttribute('aria-label', 'Questões da prova');
+  await expect(page.locator('#exam-nav [aria-current="true"]')).toHaveAttribute('aria-label', /questão 2/i);
+
+  // submit and confirm with the keyboard; focus goes to the confirmation, then to the correction heading
+  await page.locator('#exam-submit-btn').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-submit-confirm-btn')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-submitted-title')).toBeFocused({ timeout: 8000 });
+
+  // each judge button has its OWN accessible name (two "Acertei" in a row tell a screen reader nothing)
+  const names = await page.locator('.exam-review-item [data-action="exam-judge"]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent.trim()));
+  expect(new Set(names).size).toBe(names.length);
+  expect(names[0]).toMatch(/Acertei.*1/);
+  expect(names[1]).toMatch(/Errei.*1/);
+
+  // judge with Space, register with Enter, all from the keyboard
+  await page.locator('.exam-review-item').nth(0).locator('.exam-correct-btn').focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('.exam-review-item').nth(0).locator('.exam-correct-btn')).toBeFocused();
+  await page.locator('.exam-review-item').nth(1).locator('.exam-wrong-btn').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-finalize-btn')).toBeVisible();
+  await page.locator('#exam-finalize-btn').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#exam-final-note')).toContainText('Resultado registrado');
+});

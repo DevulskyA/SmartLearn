@@ -4082,6 +4082,8 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
       b.dataset.itemId = String(it.id);
       b.dataset.outcome = outcome;
       b.setAttribute("aria-pressed", String(it.outcome === outcome));
+      // "Acertei" x N tells a screen reader nothing: name the question each button refers to
+      b.setAttribute("aria-label", `${label} — questão ${it.position + 1}`);
       b.textContent = label;
       judge.append(b);
     }

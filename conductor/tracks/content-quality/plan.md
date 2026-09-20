@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; ACCESS-1 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; STUDYRESUME-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: ACCESS-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: STUDYRESUME-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -272,7 +272,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: confiança de que o que foi digitado chega ao servidor.
       NOT_PROVEN: fechar a aba/travar o navegador com resposta pendente (o texto pendente vive só em memória; não há rascunho local persistente); julgamento/registro do resultado sem rede já mostram erro e permitem repetir, sem teste dedicado.
       COMMIT: ver `git log` (fix(exam): unsaved answers are retried and block submission).
-- [>] **ACCESS-1 A prova pode ser feita só com teclado e é compreensível por leitor de tela** — OWNER: GUI
+- [✓] **ACCESS-1 A prova pode ser feita só com teclado e é compreensível por leitor de tela** — OWNER: GUI
       SPRINT_GOAL: provar (e corrigir só o que faltar) que o fluxo da prova funciona sem mouse e expõe estado a tecnologias assistivas: ordem de foco, numeração de questões, anúncio de progresso e de resultado.
       BEFORE: UX-1 deixou "navegação só por teclado e leitor de tela" como NOT_PROVEN; há aria-labels e foco em pontos isolados, mas nenhum teste percorre a prova inteira só com teclado.
       AFTER: um e2e faz a prova inteira (navegar, responder, submeter, corrigir, registrar) só com teclado, e verifica nomes acessíveis (questão atual, respondida, progresso, resultado) e foco previsível.
@@ -282,9 +282,22 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: e2e só-teclado + asserções de nome acessível; defeitos achados viram teste vermelho -> menor correção.
       DONE_WHEN: prova completa só com teclado e estados anunciados, sem regressão.
       DEPENDENCIES: EXAM-6.
-- [ ] **STUDYRESUME-1 Sair do "Estudar agora" no meio não perde o que já foi respondido** — OWNER: GUI
-      SPRINT_GOAL: verificar (e corrigir se preciso) o que acontece com o progresso ao sair e voltar no meio de uma sessão de Estudar agora ou de um reteste.
-      DETAILS: medir primeiro (recarregar/navegar no meio, tentativas já criadas, evidência); só corrigir se houver perda ou duplicação real.
+      EVIDENCE: e2e `exam-mode` ACCESS-1 percorre a prova INTEIRA só com teclado (abrir pela tecla Enter no botão do Plano, digitar, Tab até "Próxima" e Enter — o foco volta à caixa de resposta da questão seguinte —, submeter e confirmar com Enter, foco na confirmação e depois no título da correção, julgar com Espaço/Enter mantendo o foco no botão, registrar com Enter). Defeitos MATERIAIS achados (vermelho antes): (1) a caixa "Sua resposta" não estava ligada à pergunta nem ao progresso — um leitor de tela ouvia só "Sua resposta" ao focar; (2) todos os botões "Acertei"/"Errei" tinham o MESMO nome acessível, sem dizer a qual questão se referem. Correções mínimas: `aria-describedby="exam-progress exam-question-text"` na caixa de resposta e `aria-label` "Acertei — questão N" / "Errei — questão N" (nomes distintos). Já estavam certos e ficaram provados: lista numerada nomeada com `aria-current` e rótulos "Ir para a questão N (respondida)", Anterior desabilitado na 1ª questão, foco previsível em cada etapa. Regressão: exam-mode + jornada + autoria + estudar agora = 15/15.
+      PRODUCT_DELTA: a prova passa a ser realizável sem mouse e a expor, a tecnologias assistivas, a pergunta, o progresso e a qual questão cada botão de correção se refere.
+      PROOF_OBSERVED: e2e acima.
+      USER_VALUE: quem usa teclado ou leitor de tela consegue fazer e corrigir a prova.
+      NOT_PROVEN: NENHUM leitor de tela real foi ouvido (só atributos/nomes acessíveis e foco medidos); contraste de cores; outras telas (Estudar agora, Materiais) não passaram pela mesma auditoria só-teclado.
+      COMMIT: ver `git log` (fix(exam): keyboard-only proof + accessible names).
+- [>] **STUDYRESUME-1 Sair do "Estudar agora" no meio não perde nem duplica o que já foi respondido** — OWNER: GUI
+      SPRINT_GOAL: descobrir (e corrigir só se houver dano real) o que acontece com o progresso quando o aluno sai, recarrega ou perde a conexão no meio de uma sessão de Estudar agora ou de um reteste.
+      BEFORE: a prova retoma de onde parou (EXAM-1) e agora guarda respostas pendentes (EXAM-6); o Estudar agora nunca foi inspecionado desse ângulo — as tentativas são criadas no servidor ao revelar, mas o que resta se a sessão é interrompida antes do fim (evidência, "para reforçar", duplicação ao recomeçar) é desconhecido.
+      AFTER: comportamento MEDIDO e documentado; se a interrupção perde respostas já julgadas ou cria evidência duplicada/enganosa, corrigido com o menor ajuste e provado; se já é seguro, fecha só com a prova.
+      WHY: o aluno é interrompido o tempo todo (celular, aula, rede); uma sessão que o pune por sair não se sustenta.
+      SCOPE: fluxo Estudar agora / reteste (src/app.js) e, se preciso, serviço de tentativas/evidência (servidor).
+      DETAILS: e2e que julga 1 de 3 itens, recarrega/navega e volta: o que o Plano mostra ("para reforçar", "Estudar agora"), quantas tentativas e evidências existem; depois concluir a sessão e conferir que não há linha duplicada; simular queda de rede ao julgar.
+      PROOF: e2e com contagens de tentativas/evidência antes e depois da interrupção; defeitos achados viram teste vermelho -> menor correção.
+      DONE_WHEN: interromper e retomar não perde resposta julgada nem duplica evidência, ou o comportamento é explicado ao aluno.
+      DEPENDENCIES: ACCESS-1.
 
 ## Evidência CQ-1
 
