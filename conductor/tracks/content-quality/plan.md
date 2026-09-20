@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; INTEGRATE-4 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1 concluídos; TESTLIVE-1 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: TESTLIVE-1 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -474,7 +474,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       USER_VALUE: confiança de que a rodada foi lida por alguém que não a escreveu.
       NOT_PROVEN: o revisor foi um agente de custo baixo com no máximo ~40 leituras: não substitui uma revisão humana nem cobriu todo src/app.js linha a linha; nada de leitor de tela/aparelho.
       COMMIT: ver `git log` (test(review): wire contracts for exams body and chunk size).
-- [>] **INTEGRATE-4 Gate completo e integração no branch canônico (REVIEWNET-1 … REVIEW-1)** — OWNER: GUI
+- [✓] **INTEGRATE-4 Gate completo e integração no branch canônico (REVIEWNET-1 … REVIEW-1)** — OWNER: GUI
       SPRINT_GOAL: levar ao canônico o que veio depois de cd7966e (revisão de Hoje com rede instável, exportação do aluno, contratos de entrada, verificação do backup) com o gate completo verde.
       BEFORE: canônico em cd7966e; o GUI está alguns commits à frente sem gate completo.
       AFTER: ff sem conflitos (CLI pausado, árvore limpa) e unit + server + e2e completos verdes no canônico.
@@ -483,6 +483,21 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF: contagens do gate no canônico (inclui production-build).
       DONE_WHEN: canônico == GUI e gate 100% verde, ou falha classificada e corrigida.
       DEPENDENCIES: REVIEW-1; CLI pausado.
+      EVIDENCE: ff de cd7966e para 9066d93 (canônico == GUI), CLI pausado e árvore limpa. GATE NO CANÔNICO: unit 385/385, server 490/490, e2e 157 passaram + 1 falha em `product-value.spec.js:80` (timeout de 30 s esperando `#account-show-register` ficar visível no login do helper; NÃO chegou a rodar o produto). CLASSIFICAÇÃO: flaky de harness, não regressão — o mesmo spec passa 8/8 isolado no canônico (--repeat-each=4), e é a 2ª vez em ~6 gates completos que ele falha, cada vez por causa diferente (1ª: leitura única de data-attempt-id, já corrigida; 2ª: helper de login sem esperar a tela de conta). Nenhum produto tocado. Ação pendente de baixo custo: endurecer o helper de login desse spec (esperar #account-login-form visível antes de clicar).
+      PRODUCT_DELTA: o canônico contém tudo até REVIEW-1 (revisão de Hoje com rede instável, exportação do aluno, contratos de entrada).
+      PROOF_OBSERVED: contagens acima.
+      NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
+      COMMIT: fast-forward para 9066d93.
+- [>] **TESTLIVE-1 Painel mostra "TESTES AO VIVO" a partir do runner real (PASS/FAIL/STALE ligados ao HEAD)** — OWNER: GUI
+      SPRINT_GOAL: toda validação material fica observável pelo usuário no painel existente (conductor/.view/tasklist.html), com a verdade vinda do runner — nunca da narrativa do agente.
+      BEFORE: os resultados de teste só aparecem no chat (texto do agente); o usuário não vê progresso, PASS/FAIL nem se o resultado é do commit atual.
+      AFTER: seção compacta "TESTES AO VIVO" com HEAD testado x atual, suíte, comando, PID vivo, RUNNING/PASS/FAIL/ABORTED/STALE, total/concluídos/passed/failed/skipped, duração, último teste, última atualização, exit code e caminho do log bruto; STALE inequívoco se HEAD testado != atual; processo morto nunca fica RUNNING.
+      WHY: evidência real > narrativa do agente; o usuário precisa ver o estado dos testes sem confiar em quem os roda.
+      SCOPE: scripts (runner wrapper + gerador do painel); NÃO altera o produto; sem dependência pesada.
+      DETAILS: wrapper `scripts/test-live.mjs <suite>` executa o comando real (unit: node --test com reporter; server: idem; e2e: playwright --reporter=json/list) e grava, de forma atômica (tmp+rename), um artefato JSON determinístico (headTested, cmd, pid, state, counts, exit code, log bruto preservado); o gerador do painel lê o artefato e compara com o HEAD atual e com a vivacidade do PID. Proibido o agente escrever status à mão.
+      PROOF: 4 execuções reais: PASS; FAIL controlado (teste temporário que falha); término anormal (kill do processo) -> ABORTED; resultado antigo com HEAD novo -> STALE; painel + artefato + exit code concordam em cada uma.
+      DONE_WHEN: painel, artefato estruturado e processo/exit code concordam nas 4 execuções; testes materiais passam a usar o wrapper.
+      DEPENDENCIES: INTEGRATE-4.
 
 ## Evidência CQ-1
 
