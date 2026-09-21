@@ -101,3 +101,52 @@ export function planUnits(pages, outline, bounds) {
 
   return merged.sort((x, y) => x.pageStart - y.pageStart || x.pageEnd - y.pageEnd);
 }
+
+// ---- unit titles --------------------------------------------------------------------------------------------------
+// A book's outline is often in capitals ("INNATE IMMUNE SYSTEM"); that title becomes the study unit's name everywhere.
+// A capitals title is rewritten like a normal title, except acronyms the DOCUMENT itself writes in capitals (HLA, IgG).
+const ROMAN = /^[IVX]{2,4}$/;
+
+function isAllCapsLine(line) {
+  const letters = line.replace(/[^\p{L}]/gu, '');
+  return letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase();
+}
+
+/**
+ * Acronym-like tokens (two or more capitals: HLA, MHC, IgG) as the document writes them, keyed by their uppercase form.
+ * Only ordinary lines count: a capital heading cannot vouch for its own words.
+ */
+export function acronymsIn(texts) {
+  const found = new Map();
+  const upper = new Map();
+  const lower = new Map();
+  const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
+  for (const text of texts) {
+    for (const line of text.split('\n')) {
+      if (isAllCapsLine(line)) continue;
+      for (const token of line.match(/[\p{L}\p{N}]{2,8}/gu) ?? []) {
+        if (token === token.toLowerCase()) bump(lower, token);
+        else if ((token.match(/\p{Lu}/gu) ?? []).length >= 2 && !/^\p{Lu}\p{Ll}+$/u.test(token)) { found.set(token.toUpperCase(), token); bump(upper, token.toUpperCase()); }
+      }
+    }
+  }
+  // A token the document mostly writes in lowercase ("in", "and") is a word, not an acronym
+  for (const key of [...found.keys()]) if ((upper.get(key) ?? 0) <= 2 * (lower.get(key.toLowerCase()) ?? 0)) found.delete(key);
+  return found;
+}
+
+/** An all-capitals title in sentence case, keeping the document's own acronyms; any other title is returned untouched. */
+export function readableTitle(title, acronyms) {
+  if (typeof title !== 'string' || title.length === 0) return title;
+  const letters = title.replace(/[^\p{L}]/gu, '');
+  if (letters.length < 4 || letters !== letters.toUpperCase() || letters === letters.toLowerCase()) return title;
+  let first = true;
+  return title.replace(/[\p{L}\p{N}]+/gu, (token) => {
+    if (!/\p{L}/u.test(token)) return token;
+    const known = acronyms?.get?.(token);
+    let word = known ?? (ROMAN.test(token) ? token : token.toLowerCase());
+    if (first && !known && !ROMAN.test(token)) word = word.charAt(0).toUpperCase() + word.slice(1);
+    first = false;
+    return word;
+  });
+}

@@ -1,5 +1,5 @@
 import { listPages } from './source-extraction.js';
-import { planUnits } from './outline-units.js';
+import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
@@ -132,6 +132,9 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   const outline = db.prepare('SELECT level, title, page_index AS pageIndex FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
   const chunks = planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk });
 
+  // The book's outline is often in capitals; a unit title reads like a title, keeping the document's own acronyms.
+  const acronyms = acronymsIn(pages.map((p) => p.text ?? ''));
+
   const now = new Date().toISOString();
   const run = db.transaction(() => {
     if (pendingDrafts > 0) {
@@ -147,7 +150,8 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     chunks.forEach((chunk, index) => {
-      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, (chunk.title ?? defaultTitle(source, chunk.pageStart, chunk.pageEnd)).slice(0, 300), now, now);
+      const title = chunk.title ? readableTitle(chunk.title, acronyms) : defaultTitle(source, chunk.pageStart, chunk.pageEnd);
+      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, title.slice(0, 300), now, now);
     });
   });
   run();

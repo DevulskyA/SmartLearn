@@ -82,3 +82,14 @@ test('re-extraction replaces the stored outline instead of accumulating it', asy
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM source_outline WHERE user_id = ? AND source_id = ?').get(userId, source.id).n, 4);
   } finally { cleanup(); }
 });
+
+test('a capitals outline becomes readable unit titles, keeping the acronyms the document writes in capitals', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'e@example.com');
+    const outline = [{ title: 'HLA MOLECULES AND ANTIGEN PRESENTATION', page: 1 }, { title: 'INNATE IMMUNE SYSTEM', page: 3 }];
+    const { source } = await extracted(db, userId, sourcesDir, ['HLA class I presents peptides.', 'texto', 'the innate system responds fast.', 'texto'], { outline });
+    const units = proposals.chunkSource(db, userId, source.id, { maxPagesPerChunk: 2 });
+    assert.deepEqual(units.map((u) => u.title), ['HLA molecules and antigen presentation', 'Innate immune system']);
+  } finally { cleanup(); }
+});
