@@ -48,6 +48,18 @@ export async function chunkSource(sourceId) {
   } catch (err) { return fail(err); }
 }
 
+/** True when the server refused to re-chunk because this source's trechos already carry a rascunho or accepted content. */
+export function isAlreadyProcessed(code) {
+  return code === "HAS_EXISTING_DRAFT" || code === "HAS_ACCEPTED_CONTENT";
+}
+
+/** The same PDF sent again lands on its existing trechos; this is what the student is told. */
+export function alreadyProcessedMessage(count, extraction) {
+  const shown = `${count} ${count === 1 ? "trecho existente" : "trechos existentes"}`;
+  const skipped = skippedPagesNote(extraction);
+  return `Este PDF já foi processado: ${shown}, com o que você já fez neles.${skipped ? ` ${skipped}` : ""}`;
+}
+
 export async function listProposals(sourceId) {
   try {
     const { proposals } = await apiRequest(`/v1/sources/${sourceId}/proposals`);

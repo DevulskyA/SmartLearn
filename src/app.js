@@ -3389,6 +3389,16 @@ sourcesFileInput?.addEventListener("change", async () => {
 
     setSourcesMessage("Gerando trechos propostos...");
     const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
+    // The same PDF sent again: its trechos (and any rascunho or accepted content on them) already exist and are never
+    // replaced silently. Land on them instead of a dead-end error.
+    if (!chunkResult.ok && SourceProposalsUI.isAlreadyProcessed(chunkResult.code)) {
+      const existing = await SourceProposalsUI.listProposals(uploadResult.source.id);
+      if (existing.ok) {
+        renderSourceProposals(existing.proposals);
+        setSourcesMessage(SourceProposalsUI.alreadyProcessedMessage(existing.proposals.length, extractResult.extraction));
+        return;
+      }
+    }
     if (!chunkResult.ok) {
       setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
       return;
