@@ -34,7 +34,7 @@ test('spaces items inside a line are kept, trailing blanks before a break are dr
   assert.equal(pageTextFromItems([{ str: '', hasEOL: true }]).trim(), '');
 });
 
-test('end to end: a two-line PDF page extracts as two lines, and the frozen page text keeps them apart', async () => {
+test('end to end: a two-sentence PDF page extracts as two lines, and the frozen page text keeps them apart', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sl-textfidelity-'));
   const db = openDb(join(dir, 'test.db'));
   try {
@@ -42,10 +42,10 @@ test('end to end: a two-line PDF page extracts as two lines, and the frozen page
     const now = new Date().toISOString();
     const userId = db.prepare(`INSERT INTO users (email, email_display, password_hash, password_salt, password_algorithm, password_params, created_at, updated_at) VALUES ('a@example.com', 'a@example.com', 'h', 's', 'scrypt', '{}', ?, ?)`).run(now, now).lastInsertRowid;
     const sourcesDir = join(dir, 'sources');
-    const source = sourceStorage.acceptUpload(db, userId, { buffer: buildFixturePdf(['o anticorpo pertence\nà classe IgG']), originalName: 'a.pdf', contentType: 'application/pdf', sourcesDir, maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1024 });
+    const source = sourceStorage.acceptUpload(db, userId, { buffer: buildFixturePdf(['o anticorpo pertence a classe IgG.\nA classe IgM tambem']), originalName: 'a.pdf', contentType: 'application/pdf', sourcesDir, maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1024 });
     const result = await extractSource(db, userId, source.id, { sourcesDir });
     assert.equal(result.status, 'EXTRACTED');
     const page = db.prepare('SELECT text FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index = 1').get(userId, source.id);
-    assert.equal(page.text, 'o anticorpo pertence\nà classe IgG');
+    assert.equal(page.text, 'o anticorpo pertence a classe IgG.\nA classe IgM tambem');
   } finally { db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });

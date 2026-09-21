@@ -4013,6 +4013,13 @@ h1 {
   box-sizing: border-box;
 }
 
+/* The source text keeps the line breaks the extraction kept (sentence ends, headings, list items): without this a
+   real textbook trecho collapses into one wall of text with headings glued to the body. */
+.source-proposal-excerpt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .source-proposal-item > .small-button,
 .source-proposal-item > .text-button {
   justify-self: start;

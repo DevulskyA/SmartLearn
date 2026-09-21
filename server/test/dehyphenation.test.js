@@ -67,3 +67,31 @@ test('end to end: a PDF whose word is split across two lines extracts as one wor
     assert.equal(page.text, 'a proteina liga os anticorpos ao antigeno');
   } finally { db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+// Real compounds broken at THEIR hyphen must keep it: joining them changes the medical term (found auditing the real
+// chapter: "gram-positive" -> "grampositive", "permeability-increasing" -> "permeabilityincreasing").
+test('a real compound broken at its own hyphen keeps the hyphen when both halves are words the document uses', () => {
+  const evidence = 'positive results, the gram stain, the permeability of the vessel and increasing levels';
+  const out = dehyphenatePages(['the bacteria are gram-\npositive cocci and the permeability-\nincreasing factor acts', evidence]);
+  assert.equal(out[0], 'the bacteria are gram-positive cocci and the permeability-increasing factor acts');
+});
+
+test('a long complete word before the hyphen is a compound, not a syllable: the hyphen stays even if the tail is unknown', () => {
+  const out = dehyphenatePages(['the lymphocyte-\nassociated antigen and the pathogen-\nsensing receptor', 'lymphocyte counts and pathogen load']);
+  assert.equal(out[0], 'the lymphocyte-associated antigen and the pathogen-sensing receptor');
+});
+
+test('non-, self- and cross- keep their hyphen', () => {
+  assert.equal(dehyphenatePages(['a non-\nencapsulated strain and self-\ntolerance and cross-\npresentation'])[0], 'a non-encapsulated strain and self-tolerance and cross-presentation');
+});
+
+test('syllable breaks whose halves are not words stay rejoined (sys-tem, infec-tions, com-plement)', () => {
+  const out = dehyphenatePages(['the immune sys-\ntem and infec-\ntions and com-\nplement activation', 'the immune system and infections']);
+  assert.equal(out[0], 'the immune system and infections and complement activation');
+});
+
+test('a capitalised compound keeps its capital and its hyphen (Gram-positive, Complement-binding), a chemical name keeps its hyphens', () => {
+  const evidence = 'positive results and the complement system, binding of gram stain and complement';
+  const out = dehyphenatePages(['Gram-\npositive cocci and Complement-\nbinding proteins and methionyl-\nleucyl-\nphenylalanine', evidence]);
+  assert.equal(out[0], 'Gram-positive cocci and Complement-binding proteins and methionyl-leucyl-phenylalanine');
+});
