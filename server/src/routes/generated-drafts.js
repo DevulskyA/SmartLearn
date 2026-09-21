@@ -6,7 +6,7 @@ function handleError(err, reply) {
   if (err instanceof drafts.DraftError || err instanceof AcceptDraftError) {
     const statusByCode = {
       NOT_FOUND: 404,
-      INPUT_TOO_LARGE: 413,
+      INPUT_TOO_LARGE: 413, NO_USABLE_TEXT: 409,
       INVALID_DRAFT: 502,
       MISSING_CREDENTIALS: 409,
       TIMEOUT: 504,

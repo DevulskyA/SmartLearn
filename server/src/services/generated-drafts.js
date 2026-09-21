@@ -116,7 +116,7 @@ function findOwnedProposalWithSegments(db, userId, proposalId) {
   if (!proposal) return null;
   const segments = db.prepare(`
     SELECT page_index as pageIndex, text FROM source_pages
-    WHERE user_id = ? AND source_id = ? AND page_index BETWEEN ? AND ?
+    WHERE user_id = ? AND source_id = ? AND page_status = 'OK' AND page_index BETWEEN ? AND ?
     ORDER BY page_index
   `).all(userId, proposal.source_id, proposal.page_start, proposal.page_end);
   return { proposal, segments };
@@ -185,7 +185,7 @@ export async function createDraft(db, userId, proposalId, {
 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
   if (!found) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
-  if (found.segments.length === 0) throw new DraftError('NOT_FOUND', 'A proposta não tem texto de origem associado.');
+  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
 
   const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
   if (totalChars > maxInputChars) {

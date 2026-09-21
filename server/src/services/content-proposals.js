@@ -30,7 +30,7 @@ function findOwnedProposal(db, userId, proposalId) {
 function chunkText(db, userId, sourceId, pageStart, pageEnd) {
   const rows = db.prepare(`
     SELECT text FROM source_pages
-    WHERE user_id = ? AND source_id = ? AND page_index BETWEEN ? AND ?
+    WHERE user_id = ? AND source_id = ? AND page_status = 'OK' AND page_index BETWEEN ? AND ?
     ORDER BY page_index
   `).all(userId, sourceId, pageStart, pageEnd);
   return rows.map((r) => r.text).join('\n\n');
@@ -84,9 +84,11 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
     throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de gerar propostas.');
   }
 
-  const pages = listPages(db, userId, sourceId);
+  // Only pages with usable text become proposals. An EMPTY/FAILED page keeps its diagnosis in source_pages
+  // (and stays visible to the student) but is never study material or model input.
+  const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK');
   if (pages.length === 0) {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte não tem páginas extraídas.');
+    throw new ProposalError('NOT_EXTRACTED', 'A fonte não tem nenhuma página com texto utilizável.');
   }
 
   // P1_PRODUCT B (found during PRODUCT-REAL-01): re-chunking a source
