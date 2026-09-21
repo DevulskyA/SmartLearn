@@ -128,5 +128,10 @@
     "version": 26,
     "name": "draft-input-binding",
     "checksum": "80aa947040f360c954b43ee81cc5a7da04d56a5c2930fb8f326b41cb326db3ab"
+  },
+  {
+    "version": 27,
+    "name": "question-type",
+    "checksum": "005eb76719aff84b7578bc94cc44c6a57750db378c0f320af778711b85af9e2e"
   }
 ]

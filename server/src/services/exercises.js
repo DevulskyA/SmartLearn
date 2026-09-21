@@ -68,6 +68,7 @@ function versionToDto(row) {
     explanation: row.explanation ?? null,
     hint: row.hint,
     provenance: row.provenance,
+    questionType: row.question_type ?? null,
     createdAt: row.created_at,
   };
 }
@@ -159,9 +160,9 @@ export function edit(db, userId, exerciseId, { question, answer, explanation, hi
   db.transaction(() => {
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, exerciseId, nextQuestion, nextAnswer ?? null, nextExplanation ?? null, nextHint ?? null, nextProvenance, now);
+      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at, question_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, exerciseId, nextQuestion, nextAnswer ?? null, nextExplanation ?? null, nextHint ?? null, nextProvenance, now, current.question_type ?? null);
     db.prepare('UPDATE exercises SET updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, exerciseId);
   })();
 
