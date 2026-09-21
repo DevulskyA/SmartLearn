@@ -77,7 +77,7 @@ function toSummaryDto(row) {
  * intentional: a stale chunking scheme should not linger next to a fresh
  * one for the same source.
  */
-export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK } = {}) {
+export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, discardDrafts = false } = {}) {
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
   if (source.extraction_status !== 'EXTRACTED') {
@@ -109,7 +109,21 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   if (hasAcceptedDraft) {
     throw new ProposalError(
       'HAS_ACCEPTED_CONTENT',
-      'Esta fonte já tem conteúdo aceito a partir de uma proposta anterior. Reprocessar substituiria essa proposta. Envie o PDF novamente como uma fonte separada se quiser gerar propostas diferentes.',
+      'Esta fonte já tem conteúdo aceito a partir de uma proposta anterior. Conteúdo aceito nunca é apagado nem reprocessado; os trechos existentes continuam disponíveis em Materiais.',
+    );
+  }
+
+  // A draft that is not accepted yet still hangs on its proposal (same foreign key). Re-chunking would
+  // discard it, so that is only ever done on an explicit request, and only for unaccepted drafts.
+  const pendingDrafts = db.prepare(`
+    SELECT COUNT(*) AS n FROM generated_drafts
+    WHERE user_id = ? AND status <> 'ACCEPTED'
+      AND proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
+  `).get(userId, userId, sourceId).n;
+  if (pendingDrafts > 0 && !discardDrafts) {
+    throw new ProposalError(
+      'HAS_EXISTING_DRAFT',
+      `Esta fonte já tem ${pendingDrafts} rascunho(s) ainda não aceito(s). Reprocessar os trechos os descartaria, então nada foi alterado. Continue pelos trechos existentes ou confirme o descarte.`,
     );
   }
 
@@ -132,6 +146,13 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
 
   const now = new Date().toISOString();
   const run = db.transaction(() => {
+    if (pendingDrafts > 0) {
+      db.prepare(`
+        DELETE FROM generated_drafts
+        WHERE user_id = ? AND status <> 'ACCEPTED'
+          AND proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
+      `).run(userId, userId, sourceId);
+    }
     db.prepare('DELETE FROM content_proposals WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
     const insert = db.prepare(`
       INSERT INTO content_proposals (user_id, source_id, chunk_index, page_start, page_end, title, created_at, updated_at)

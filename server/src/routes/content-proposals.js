@@ -3,7 +3,7 @@ import * as proposals from '../services/content-proposals.js';
 
 function handleError(err, reply) {
   if (err instanceof proposals.ProposalError) {
-    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, NOT_EXTRACTED: 409, HAS_ACCEPTED_CONTENT: 409 };
+    const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, NOT_EXTRACTED: 409, HAS_ACCEPTED_CONTENT: 409, HAS_EXISTING_DRAFT: 409 };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
   }
@@ -14,7 +14,7 @@ export function registerContentProposalRoutes(app, db) {
   app.post('/sources/:id/proposals', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-      body: { type: 'object', properties: { maxPagesPerChunk: { type: 'integer', minimum: 1, maximum: 100 } } },
+      body: { type: 'object', properties: { maxPagesPerChunk: { type: 'integer', minimum: 1, maximum: 100 }, discardDrafts: { type: 'boolean' } } },
     },
   }, async (request, reply) => {
     const id = Number(request.params.id);
@@ -23,6 +23,7 @@ export function registerContentProposalRoutes(app, db) {
       // chunks close before the model input limit, so every proposal can actually become a draft
       const opts = { maxCharsPerChunk: Math.floor(config.aiMaxInputChars * 0.9) };
       if (request.body?.maxPagesPerChunk) opts.maxPagesPerChunk = request.body.maxPagesPerChunk;
+      if (request.body?.discardDrafts === true) opts.discardDrafts = true;
       reply.status(201);
       return { proposals: proposals.chunkSource(db, request.actor.userId, id, opts) };
     } catch (err) { return handleError(err, reply); }
