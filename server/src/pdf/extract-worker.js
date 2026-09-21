@@ -12,6 +12,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
 import { pageTextFromItems } from './page-text.js';
+import { readOutline } from './outline.js';
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -49,7 +50,7 @@ async function run() {
     }
   }
 
-  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version });
+  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline: await readOutline(doc) });
 }
 
 run().catch((err) => {

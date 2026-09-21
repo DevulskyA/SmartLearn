@@ -1,4 +1,5 @@
 import { listPages } from './source-extraction.js';
+import { planUnits } from './outline-units.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
@@ -127,22 +128,9 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
     );
   }
 
-  const chunks = [];
-  let current = [];
-  let currentChars = 0;
-  const close = () => {
-    if (current.length === 0) return;
-    chunks.push({ pageStart: current[0].pageIndex, pageEnd: current[current.length - 1].pageIndex });
-    current = [];
-    currentChars = 0;
-  };
-  for (const page of pages) {
-    const size = (page.text ?? '').length;
-    if (current.length > 0 && (current.length >= maxPagesPerChunk || currentChars + size > maxCharsPerChunk)) close();
-    current.push(page);
-    currentChars += size;
-  }
-  close();
+  // Units follow the document's own structure when it has one (its outline); page count and size are only safety bounds.
+  const outline = db.prepare('SELECT level, title, page_index AS pageIndex FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
+  const chunks = planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk });
 
   const now = new Date().toISOString();
   const run = db.transaction(() => {
@@ -159,7 +147,7 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     chunks.forEach((chunk, index) => {
-      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, defaultTitle(source, chunk.pageStart, chunk.pageEnd), now, now);
+      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, (chunk.title ?? defaultTitle(source, chunk.pageStart, chunk.pageEnd)).slice(0, 300), now, now);
     });
   });
   run();

@@ -109,6 +109,10 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
       db.prepare('DELETE FROM source_pages WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
       const insertPage = db.prepare('INSERT INTO source_pages (user_id, source_id, page_index, text, created_at, page_status) VALUES (?, ?, ?, ?, ?, ?)');
       for (const page of result.pages) insertPage.run(userId, sourceId, page.index, page.text, nowIso, page.status ?? 'OK');
+      // The document's own structure (outline), a derived projection replaced wholesale like the pages.
+      db.prepare('DELETE FROM source_outline WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
+      const insertOutline = db.prepare('INSERT INTO source_outline (user_id, source_id, ordinal, level, title, page_index) VALUES (?, ?, ?, ?, ?, ?)');
+      (result.outline ?? []).forEach((entry, ordinal) => insertOutline.run(userId, sourceId, ordinal, entry.level, entry.title, entry.pageIndex));
       db.prepare(`
         UPDATE sources SET extraction_status = ?, parser_version = ?, page_count = ?, extracted_at = ?
         WHERE user_id = ? AND id = ?

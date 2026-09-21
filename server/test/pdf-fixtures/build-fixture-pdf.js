@@ -19,7 +19,7 @@ function pdfObject(id, body) {
  *   direct reproduction against the real pdf.js parser).
  * @returns {Buffer} a well-formed single/multi-page PDF.
  */
-export function buildFixturePdf(pagesText, { emptyPages = [] } = {}) {
+export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {}) {
   const pageCount = pagesText.length;
   const header = '%PDF-1.4\n';
 
@@ -34,7 +34,29 @@ export function buildFixturePdf(pagesText, { emptyPages = [] } = {}) {
   const pageIds = Array.from({ length: pageCount }, (_, i) => firstPageId + i);
   const contentIds = Array.from({ length: pageCount }, (_, i) => firstContentId + i);
 
-  const catalogObj = pdfObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+  // Optional real document outline (bookmarks): a tree of { title, page (1-based), items? }, exactly what a
+  // textbook / lecture PDF carries for chapter > section > subsection.
+  let nextId = firstContentId + pageCount;
+  const outlineRootId = nextId++;
+  const outlineDocs = [];
+  const buildItems = (items, parentId) => {
+    const ids = items.map(() => nextId++);
+    items.forEach((item, i) => {
+      const kids = item.items?.length ? buildItems(item.items, ids[i]) : null;
+      const parts = [`/Title (${item.title.replace(/[\\()]/g, '\\$&')})`, `/Parent ${parentId} 0 R`, `/Dest [${pageIds[item.page - 1]} 0 R /Fit]`];
+      if (i > 0) parts.push(`/Prev ${ids[i - 1]} 0 R`);
+      if (i < items.length - 1) parts.push(`/Next ${ids[i + 1]} 0 R`);
+      if (kids) parts.push(`/First ${kids[0]} 0 R`, `/Last ${kids[kids.length - 1]} 0 R`, `/Count ${kids.length}`);
+      outlineDocs.push({ id: ids[i], body: pdfObject(ids[i], `<< ${parts.join(' ')} >>`) });
+    });
+    return ids;
+  };
+  if (outline.length > 0) {
+    const topIds = buildItems(outline, outlineRootId);
+    outlineDocs.push({ id: outlineRootId, body: pdfObject(outlineRootId, `<< /Type /Outlines /First ${topIds[0]} 0 R /Last ${topIds[topIds.length - 1]} 0 R /Count ${topIds.length} >>`) });
+  }
+
+  const catalogObj = pdfObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outline.length > 0 ? ` /Outlines ${outlineRootId} 0 R` : ''} >>`);
   const pagesObj = pdfObject(pagesId, `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageCount} >>`);
   // WinAnsiEncoding so Latin-1-encoded accented characters (e.g. the
   // Portuguese fixture text below) map to the correct glyphs -- without an
@@ -71,6 +93,7 @@ export function buildFixturePdf(pagesText, { emptyPages = [] } = {}) {
     { id: fontId, body: fontObj },
     ...pageIds.map((id, i) => ({ id, body: pageObjs[i] })),
     ...contentIds.map((id, i) => ({ id, body: contentObjs[i] })),
+    ...outlineDocs,
   ].sort((a, b) => a.id - b.id);
 
   let body = header;
