@@ -11,7 +11,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
-import { pageTextFromItems } from './page-text.js';
+import { pageTextFromItems, dehyphenatePages } from './page-text.js';
 import { readOutline } from './outline.js';
 
 async function run() {
@@ -49,6 +49,10 @@ async function run() {
       pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });
     }
   }
+
+  // Words the typesetter split at a line end are rejoined, with the whole document as evidence (see page-text.js).
+  const rejoined = dehyphenatePages(pages.map((p) => p.text));
+  pages.forEach((p, i) => { p.text = rejoined[i]; });
 
   parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline: await readOutline(doc) });
 }
