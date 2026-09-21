@@ -11,6 +11,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
+import { pageTextFromItems } from './page-text.js';
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -41,7 +42,7 @@ async function run() {
     try {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map((item) => item.str).join('');
+      const text = pageTextFromItems(content.items);
       pages.push({ index: i, text, status: text.trim().length > 0 ? 'OK' : 'EMPTY' });
     } catch (err) {
       pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });

@@ -59,8 +59,9 @@ export function buildFixturePdf(pagesText, { emptyPages = [] } = {}) {
   ));
 
   const contentObjs = pagesText.map((text, i) => {
-    const escaped = text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-    const stream = `BT /F1 18 Tf 20 100 Td (${escaped}) Tj ET`;
+    // A "\n" in the page text becomes a real new text line (Td down 22pt), like a real multi-line page.
+    const lines = text.split('\n').map((line) => line.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'));
+    const stream = `BT /F1 18 Tf 20 100 Td (${lines[0]}) Tj${lines.slice(1).map((line) => ` 0 -22 Td (${line}) Tj`).join('')} ET`;
     return pdfObject(contentIds[i], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
 
