@@ -34,3 +34,64 @@ export function dehyphenatePages(texts) {
     return `${head}${tail}`;
   }));
 }
+
+// ---- running headers / footers (page furniture) -------------------------------------------------------------
+// A header such as "Adaptive immune system 87" / "88 Immunity" repeats on every page and carries the page number,
+// so it lands inside the study text (often in the middle of a sentence that continues on the next page). What makes
+// removing it safe is its signature: the number ADVANCES by one from page to page, and the words around it repeat.
+// Content that merely starts with a number ("3 mg por dia") does not have that signature and is never touched.
+const FURNITURE_MAX_CHARS = 80;
+const FURNITURE_MIN_PAGES = 4;
+const FURNITURE_MIN_SHARE = 0.6;
+
+function edgeNumbers(line) {
+  const text = line.trim();
+  if (text.length === 0 || text.length > FURNITURE_MAX_CHARS || /[.!?;:]$/.test(text)) return [];
+  const numbers = [];
+  const lead = text.match(/^(\d{1,4})(?![\d.,/%])/);
+  const trail = text.match(/(?<![\d.,/%-])(\d{1,4})$/);
+  if (lead) numbers.push(Number(lead[1]));
+  if (trail && !(lead && text.length === lead[1].length)) numbers.push(Number(trail[1]));
+  return numbers;
+}
+
+function remainder(line) {
+  return line.trim()
+    .replace(/^\d{1,4}(?![\d.,/%])\s*/, '')
+    .replace(/\s*(?<![\d.,/%-])\d{1,4}$/, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Removes running headers/footers (a first or last line whose page number advances page after page and whose
+ * words repeat). Conservative on purpose: needs at least 4 pages and 60% of them to carry the signature.
+ * Returns new texts, same order; a page that held only the header becomes ''.
+ */
+export function stripRunningHeaders(texts) {
+  const result = texts.map((text) => text.split('\n'));
+  if (texts.length < FURNITURE_MIN_PAGES) return texts.slice();
+
+  for (const side of ['first', 'last']) {
+    const picked = result.map((lines) => {
+      const nonEmpty = lines.map((l, i) => [l, i]).filter(([l]) => l !== null && l.trim().length > 0);
+      if (nonEmpty.length === 0 || (side === 'last' && nonEmpty.length < 2)) return null;
+      const [line, index] = side === 'first' ? nonEmpty[0] : nonEmpty[nonEmpty.length - 1];
+      const numbers = edgeNumbers(line);
+      return numbers.length > 0 ? { index, numbers, words: remainder(line), hasBody: nonEmpty.length >= 2 } : null;
+    });
+
+    const chained = picked.map((cur, i) => {
+      if (!cur) return false;
+      const neighbours = [picked[i - 1], picked[i + 1]].filter(Boolean);
+      const sequential = neighbours.some((n) => cur.numbers.some((a) => n.numbers.some((b) => Math.abs(a - b) === 1)));
+      const repeated = picked.some((other, j) => j !== i && other && other.words === cur.words);
+      return sequential && repeated;
+    });
+    // A header is a distinct element ABOVE a body: if most pages consist of that one line alone, it is the content.
+    const withBody = chained.filter((yes, i) => yes && picked[i].hasBody).length;
+    if (withBody < Math.ceil(texts.length * FURNITURE_MIN_SHARE)) continue;
+
+    chained.forEach((yes, i) => { if (yes) result[i][picked[i].index] = null; });
+  }
+  return result.map((lines) => lines.filter((l) => l !== null).join('\n').replace(/^\n+|\n+$/g, ''));
+}
