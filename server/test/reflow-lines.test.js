@@ -83,7 +83,8 @@ test('a full-width line that just wraps before a capitalised word (acronym, prop
   const filler = Array.from({ length: 8 }, (_, i) => `${full}${i}`);
   const wrapped = [...filler, 'antigen binding is confirmed by', 'PCR testing of the sample.'].join('\n');
   // 'antigen binding is confirmed by' is short: the width rule does not fire, so the break is kept (conservative)
-  assert.ok(reflowLines(wrapped).endsWith('antigen binding is confirmed by\nPCR testing of the sample.'));
+  // 'by' cannot end a sentence: the next line continues it, whatever its case
+  assert.ok(reflowLines(wrapped).endsWith('antigen binding is confirmed by PCR testing of the sample.'));
   const wideWrap = [...filler, `${full} and it continues to`, 'Bordetella pertussis in infants.'].join('\n');
   assert.ok(reflowLines(wideWrap).endsWith(`${full} and it continues to Bordetella pertussis in infants.`));
 });
@@ -104,4 +105,25 @@ test('empty and single-line input is safe', () => {
   assert.equal(reflowLines(''), '');
   assert.equal(reflowLines('only one line'), 'only one line');
   assert.equal(reflowLines('a\n\nb'), 'a\n\nb');
+});
+
+test('a line ending in a word that cannot end a sentence continues on the next line, whatever its case (found on the real chapter)', () => {
+  assert.equal(reflowLines('interaction with T lymphocytes such as\nHuman Leucocyte Antigen (HLA) molecules.'), 'interaction with T lymphocytes such as Human Leucocyte Antigen (HLA) molecules.');
+  assert.equal(reflowLines('is composed of\nB cells and of\nT cells.'), 'is composed of B cells and of T cells.');
+});
+
+test('a nearly full line that wraps before an acronym is one sentence; a short subheading before a paragraph is not', () => {
+  const body = [
+    'The major types are the conventional DC (cDC), the plasmacytoid',
+    'DC, and a variety of specialized DCs found in tissues that resemble cDCs (e.g.,',
+    'the Langerhans cell in the skin). DCs have several distinctive cell surface',
+    'molecules, some of which have pathogen-sensing activity (e.g., the antigen',
+    'uptake receptor DEC205 on cDCs), while others are involved in interaction with T',
+    'lymphocytes. Immature cDCs and pDCs are present in the blood but at very low',
+    'levels (<0.5% of lymphocyte/monocyte cells).',
+    'Pathogen sensing is a key component of the function of immature DCs, as well',
+  ];
+  const out = reflowLines(['Types of dendritic cell', ...body].join('\n')).split('\n');
+  assert.equal(out[0], 'Types of dendritic cell', 'a short subheading stays on its own line');
+  assert.ok(out[1].startsWith('The major types are the conventional DC (cDC), the plasmacytoid DC, and a variety'));
 });

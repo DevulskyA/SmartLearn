@@ -11,7 +11,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
-import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShiftedGlyphs, reflowLines } from './page-text.js';
+import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShiftedGlyphs, reflowLines, groupFigureLabels } from './page-text.js';
 import { readOutline } from './outline.js';
 
 async function run() {
@@ -57,7 +57,7 @@ async function run() {
   // Glyph-index encoded labels (figures/tables) are decoded only where the document itself confirms the words.
   const rejoined = dehyphenatePages(decodeShiftedGlyphs(withoutFurniture));
   pages.forEach((p, i) => {
-    p.text = reflowLines(rejoined[i]);
+    p.text = groupFigureLabels(reflowLines(rejoined[i]));
     if (p.status === 'OK' && p.text.trim().length === 0) p.status = 'EMPTY';
   });
 

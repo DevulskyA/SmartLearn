@@ -214,7 +214,9 @@ const SENTENCE_END = /[.!?:]["')\]]*$/u;
 const LIST_ITEM = /^(?:[•·▪◦‣⁃*]\s|[-–—]\s|\(?\d{1,3}[.)]\s|\(?\p{Ll}[.)]\s)/u;
 const CAPTION = /^(?:Fig(?:ure)?\.?|Box|Table|Tab\.)\s*\d/iu;
 const NEXT_CONTINUES = /^(?:\p{Ll}|\d+(?:[.,]\d+)?\s+\p{Ll})/u;
-const FULL_WIDTH = 0.85;
+const FULL_WIDTH = 0.7;
+// A line that ends in one of these cannot be the end of a sentence: the next line continues it, whatever its case.
+const CONTINUES_AFTER = /(?:^|\s)(?:the|a|an|of|and|or|as|to|in|by|for|with|from|that|which|such|is|are|was|were|on|at|be|than|into|between|its|their)$/iu;
 
 function isAllCaps(line) {
   const letters = line.replace(/[^\p{L}]/gu, '');
@@ -230,6 +232,7 @@ function isSoftBreak(above, below, width) {
   if (LIST_ITEM.test(b) || CAPTION.test(b)) return false;
   if (isAllCaps(a)) return isAllCaps(b);              // a heading wraps onto its own next line, and stays apart from the body
   if (NEXT_CONTINUES.test(b)) return true;            // lowercase (or "10 individuals"): the sentence goes on
+  if (CONTINUES_AFTER.test(a) && !isAllCaps(b)) return true; // "... such as" / "... the": the sentence cannot end here
   // A capital that starts the next line (acronym, proper noun): only when the line above ran the full width
   return width !== null && a.length >= FULL_WIDTH * width && !isAllCaps(b);
 }
@@ -243,5 +246,40 @@ export function reflowLines(text) {
     if (i > 0 && isSoftBreak(lines[i - 1], line, width)) out[out.length - 1] = `${out[out.length - 1].trimEnd()} ${line.trimStart()}`;
     else out.push(line);
   });
+  return out.join('\n');
+}
+
+// ---- figure labels --------------------------------------------------------------------------------------------------
+// The text inside a figure (its labels) arrives as many short lines in the middle of the prose, right before the
+// caption. They are kept, word for word, but set apart from the prose as ONE line: a blank line before, the labels
+// joined by " · ", the caption straight after. Only a run of at least five short lines that ends at a "Fig. N" caption
+// qualifies, so headings, tables (a "Table N" title) and contents pages are never touched.
+const FIGURE_CAPTION = /^Fig(?:ure)?\.?\s*\d/iu;
+const LABEL_MAX_CHARS = 60;
+const LABEL_MIN_RUN = 5;
+
+function isLabelLine(line) {
+  const text = line.trim();
+  return text.length > 0 && text.length <= LABEL_MAX_CHARS && !SENTENCE_END.test(text) && !FIGURE_CAPTION.test(text);
+}
+
+export function groupFigureLabels(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    // a figure block is a run of label lines that is directly followed by a caption
+    let end = i;
+    while (end < lines.length && isLabelLine(lines[end])) end += 1;
+    const isBlock = end - i >= LABEL_MIN_RUN && end < lines.length && FIGURE_CAPTION.test(lines[end].trim());
+    if (isBlock) {
+      if (out.length > 0 && out[out.length - 1] !== '') out.push('');
+      out.push(lines.slice(i, end).map((l) => l.trim()).join(' · '));
+      i = end;
+    } else {
+      out.push(lines[i]);
+      i += 1;
+    }
+  }
   return out.join('\n');
 }
