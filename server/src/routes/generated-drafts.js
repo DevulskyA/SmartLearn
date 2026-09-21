@@ -47,6 +47,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
           apiUrl: config.aiApiUrl,
           apiKey: config.aiApiKey,
           model: config.aiModel,
+          provider: config.aiProvider,
           consentGranted: config.aiConsentGranted,
           budgetCapUsd: config.aiBudgetCapUsd,
           timeoutMs: config.aiRequestTimeoutMs,

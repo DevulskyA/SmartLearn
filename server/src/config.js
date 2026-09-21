@@ -43,6 +43,8 @@ export const config = {
   // becomes a fabricated "live" pass (design.md/T37).
   aiApiKey: process.env.SMARTLEARN_AI_API_KEY || null,
   aiModel: process.env.SMARTLEARN_AI_MODEL || null,
+  // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | FAKE. Declared = honoured exactly, never silently replaced.
+  aiProvider: process.env.SMARTLEARN_AI_PROVIDER ? process.env.SMARTLEARN_AI_PROVIDER.trim().toUpperCase() : null,
   aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
   aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,
   // Operator-controlled endpoint override (e.g. a local stub in tests); the default is the real API.

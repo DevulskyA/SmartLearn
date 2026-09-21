@@ -4,6 +4,9 @@ import {
   generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
   ANTHROPIC_PROVIDER_NAME, ProviderRequestError,
 } from '../ai/anthropic-provider.js';
+import {
+  generateDraft as openaiGenerateDraft, auditDraftWithModel as openaiAudit, repairDraftWithModel as openaiRepair, OPENAI_PROVIDER_NAME,
+} from '../ai/openai-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
 
@@ -23,23 +26,44 @@ export class DraftError extends Error {
  * cap"). Pure and side-effect-free so it is directly unit-testable
  * without touching config.js or the network.
  */
-export function selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl }) {
+export function selectProvider({ provider: declared = null, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl }) {
   const liveAvailable = Boolean(apiKey) && Boolean(model) && consentGranted === true && typeof budgetCapUsd === 'number' && budgetCapUsd > 0;
-  if (liveAvailable) {
-    const options = { apiKey, model, ...(fetchImpl ? { fetchImpl } : {}), ...(apiUrl ? { apiUrl } : {}) };
-    return {
-      name: ANTHROPIC_PROVIDER_NAME,
-      live: true,
-      generate: (input) => anthropicGenerateDraft(input, options),
-      // Production-time quality gate: an independent audit and one targeted repair. Same
-      // credentials, consent and budget as generation — never a runtime call for the student.
-      audit: (input) => auditDraftWithModel(input, options),
-      repair: (input) => repairDraftWithModel(input, options),
-    };
+  const options = { apiKey, model, ...(fetchImpl ? { fetchImpl } : {}), ...(apiUrl ? { apiUrl } : {}) };
+  const anthropic = () => ({
+    name: ANTHROPIC_PROVIDER_NAME,
+    live: true,
+    generate: (input) => anthropicGenerateDraft(input, options),
+    // Production-time quality gate: an independent audit and one targeted repair. Same
+    // credentials, consent and budget as generation — never a runtime call for the student.
+    audit: (input) => auditDraftWithModel(input, options),
+    repair: (input) => repairDraftWithModel(input, options),
+  });
+  const openai = () => ({
+    name: OPENAI_PROVIDER_NAME,
+    live: true,
+    generate: (input) => openaiGenerateDraft(input, options),
+    audit: (input) => openaiAudit(input, options),
+    repair: (input) => openaiRepair(input, options),
+  });
+
+  // A DECLARED provider is honoured exactly: never silently replaced by fake or by another provider
+  // (AI_SILENT_FALLBACK=FORBIDDEN). Without credentials/consent/budget it is an explicit error.
+  if (declared) {
+    const name = String(declared).toUpperCase();
+    if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
+    if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
+      throw new DraftError('UNKNOWN_PROVIDER', `Provedor de IA desconhecido: ${declared}.`);
+    }
+    if (!liveAvailable) {
+      throw new DraftError('MISSING_CREDENTIALS', `O provedor ${name} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.`);
+    }
+    return name === OPENAI_PROVIDER_NAME ? openai() : anthropic();
   }
+
+  // Nothing declared (legacy behaviour): the configured real adapter when fully configured, otherwise the fake.
+  if (liveAvailable) return anthropic();
   return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
 }
-
 function withTimeout(promise, timeoutMs, onTimeoutCode) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -201,6 +225,7 @@ export async function createDraft(db, userId, proposalId, {
   maxInputChars = 50_000,
   fetchImpl = null,
   apiUrl = null,
+  provider: declaredProvider = null,
   now = () => new Date(),
 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
@@ -216,7 +241,7 @@ export async function createDraft(db, userId, proposalId, {
   const inputDigest = segmentsDigest(found.segments);
   const inputGeneration = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
 
-  const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });
+  const provider = selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });
 
   let raw;
   try {
