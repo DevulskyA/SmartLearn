@@ -14,7 +14,8 @@ import { classifyExtractionError, rollUpExtractionStatus } from './classify-extr
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const data = new Uint8Array(readFileSync(workerData.filePath));
+  // The caller passes the bytes it already verified against the source checksum; the path is only a fallback.
+  const data = workerData.data ? new Uint8Array(workerData.data) : new Uint8Array(readFileSync(workerData.filePath));
 
   let doc;
   try {

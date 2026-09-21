@@ -11,6 +11,8 @@ function handleError(err, reply) {
       FILE_TOO_LARGE: 413,
       QUOTA_EXCEEDED: 413,
       NOT_FOUND: 404,
+      SOURCE_INTEGRITY_FAILED: 409,
+      SOURCE_FILE_MISSING: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };

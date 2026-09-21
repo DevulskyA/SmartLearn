@@ -1,5 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { sha256Hex } from './source-storage.js';
 import { fileURLToPath } from 'node:url';
 
 const WORKER_PATH = fileURLToPath(new URL('../pdf/extract-worker.js', import.meta.url));
@@ -23,7 +25,7 @@ function findOwnedSource(db, userId, sourceId) {
  * outcome, so a slow/hostile PDF can never propagate an unhandled
  * rejection into the caller's request lifecycle.
  */
-function runWorker(filePath, { deadlineMs, memoryLimitMb }) {
+function runWorker(filePath, data, { deadlineMs, memoryLimitMb }) {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (result) => {
@@ -34,7 +36,7 @@ function runWorker(filePath, { deadlineMs, memoryLimitMb }) {
     };
 
     const worker = new Worker(WORKER_PATH, {
-      workerData: { filePath },
+      workerData: { filePath, data },
       resourceLimits: { maxOldGenerationSizeMb: memoryLimitMb },
     });
 
@@ -76,13 +78,27 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new SourceExtractionError('NOT_FOUND', 'Fonte não encontrada.');
 
+  // SPRINT 03 (source file identity): the checksum/size recorded at upload IS the identity of this source.
+  // Content is only derived from bytes that still match it. The verified bytes themselves go to the worker
+  // (not the path), so nothing can change between the check and the parse. A mismatch fails closed before
+  // ANY mutation: no generation bump, no page replacement, no status change.
+  const filePath = join(sourcesDir, source.filename);
+  let verifiedBytes;
+  try {
+    verifiedBytes = readFileSync(filePath);
+  } catch {
+    throw new SourceExtractionError('SOURCE_FILE_MISSING', 'O arquivo original desta fonte não foi encontrado no armazenamento. Nada foi extraído nem alterado.');
+  }
+  if (verifiedBytes.length !== source.byte_size || sha256Hex(verifiedBytes) !== source.checksum) {
+    throw new SourceExtractionError('SOURCE_INTEGRITY_FAILED', 'O arquivo armazenado desta fonte não confere mais com o que foi enviado (tamanho/checksum). Nada foi extraído nem alterado; restaure o arquivo original ou envie o PDF novamente.');
+  }
+
   const myGeneration = db.transaction(() => {
     db.prepare('UPDATE sources SET extraction_generation = extraction_generation + 1 WHERE user_id = ? AND id = ?').run(userId, sourceId);
     return db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId).extraction_generation;
   })();
 
-  const filePath = join(sourcesDir, source.filename);
-  const result = await runWorker(filePath, { deadlineMs, memoryLimitMb });
+  const result = await runWorker(filePath, verifiedBytes, { deadlineMs, memoryLimitMb });
   const nowIso = now().toISOString();
 
   const applied = db.transaction(() => {
