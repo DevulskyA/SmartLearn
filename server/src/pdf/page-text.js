@@ -11,6 +11,27 @@ export function pageTextFromItems(items) {
   return text.replace(/[ \t]+\n/g, '\n').replace(/\n+$/, '');
 }
 
+/**
+ * The visual lines of a page with the largest item height of each (the structure signal headings are read from).
+ * Same line rule as pageTextFromItems: a line ends at an item with hasEOL.
+ */
+export function linesFromItems(items) {
+  const lines = [];
+  let text = '';
+  let height = 0;
+  const flush = () => {
+    if (text.trim().length > 0) lines.push({ text: text.trim(), height });
+    text = '';
+    height = 0;
+  };
+  for (const item of items) {
+    text += item.str;
+    if (item.str.trim().length > 0) height = Math.max(height, item.height ?? 0);
+    if (item.hasEOL) flush();
+  }
+  flush();
+  return lines;
+}
 // A word the typesetter split at the line end: lowercase letters, a hyphen, a line break, lowercase letters.
 // Capitals, digits and spaced dashes ("T-\ncell", "PD-\n1", "5 -\n7") are never touched.
 // The tail is only LOOKED AT (lookahead), so a chain of breaks (methionyl-, leucyl-, phenylalanine) resolves link by link.
@@ -80,7 +101,7 @@ function remainder(line) {
  * purpose: at least 4 pages, 60% of them carrying the signature, and the header must sit above a body.
  * Returns new texts, same order; a page that held only the header becomes ''.
  */
-export function stripRunningHeaders(texts) {
+function stripNumberedEdges(texts) {
   const result = texts.map((text) => text.split('\n'));
   if (texts.length < FURNITURE_MIN_PAGES) return texts.slice();
 
@@ -114,6 +135,47 @@ export function stripRunningHeaders(texts) {
   return result.map((lines) => lines.filter((l) => l !== null).join('\n').replace(/^\n+|\n+$/g, ''));
 }
 
+// A line repeated VERBATIM at the same edge of many pages (a course title, "Seccion XII Gastroenterologia", a copyright
+// notice) is furniture even without a page number. At least four pages, at least 40% of them, a header-sized line, and
+// the page must have a body under (or above, for a footer) it.
+const REPEAT_MIN_SHARE = 0.4;
+const REPEAT_MIN_CHARS = 6;
+const REPEAT_MAX_CHARS = 100;
+const normalizeLine = (line) => line.trim().replace(/\s+/g, ' ').toLowerCase();
+
+function stripRepeatedEdges(texts) {
+  if (texts.length < FURNITURE_MIN_PAGES) return texts.slice();
+  const result = texts.map((text) => text.split('\n'));
+  for (const side of ['first', 'last']) {
+    const edge = result.map((lines) => {
+      const nonEmpty = lines.map((l, i) => [l, i]).filter(([l]) => l !== null && l.trim().length > 0);
+      if (nonEmpty.length < 2) return null;
+      const [line, index] = side === 'first' ? nonEmpty[0] : nonEmpty[nonEmpty.length - 1];
+      const text = line.trim();
+      return text.length >= REPEAT_MIN_CHARS && text.length <= REPEAT_MAX_CHARS ? { index, key: normalizeLine(line) } : null;
+    });
+    const counts = new Map();
+    for (const e of edge) if (e) counts.set(e.key, (counts.get(e.key) ?? 0) + 1);
+    const needed = Math.max(FURNITURE_MIN_PAGES, Math.ceil(texts.length * REPEAT_MIN_SHARE));
+    edge.forEach((e, i) => { if (e && counts.get(e.key) >= needed) result[i][e.index] = null; });
+  }
+  return result.map((lines) => lines.filter((l) => l !== null).join('\n').replace(/^\n+|\n+$/g, ''));
+}
+
+/**
+ * Removes page furniture: numbered running headers/footers and verbatim-repeated edge lines. A header block of several
+ * lines (real books alternate odd/even layouts) peels off pass by pass until the page is stable. Conservative by
+ * design (see the two rules above). Returns new texts, same order; a page that held only furniture becomes ''.
+ */
+export function stripRunningHeaders(texts) {
+  let current = texts;
+  for (let pass = 0; pass < 5; pass += 1) {
+    const next = stripRepeatedEdges(stripNumberedEdges(current));
+    if (next.every((text, i) => text === current[i])) break;
+    current = next;
+  }
+  return current;
+}
 // ---- glyph-index encoded labels ------------------------------------------------------------------------------------
 // Some fonts (figure and table labels) map letters to code points shifted by a constant: pdf.js returns
 // "$FWLYDWLRQ" for "Activation" and 0x03 for a space. A line is decoded only when the DOCUMENT confirms it: the

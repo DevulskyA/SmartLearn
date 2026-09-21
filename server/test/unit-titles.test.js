@@ -58,3 +58,10 @@ test('a capital token that is also an ordinary lowercase word of the document is
   assert.equal(readableTitle('ORGAN REJECTION IN CLINICAL TRANSPLANTATION', acronyms), 'Organ rejection in clinical transplantation');
   assert.ok(acronyms.has('MHC'));
 });
+
+test('a merged title is rewritten segment by segment: capitals segments become readable, mixed-case segments are kept', () => {
+  const acronyms = acronymsIn(BODY);
+  assert.equal(readableTitle('ESOFAGITIS · Esofagitis infecciosa', acronyms), 'Esofagitis · Esofagitis infecciosa');
+  assert.equal(readableTitle('HLA MOLECULES · INNATE IMMUNE SYSTEM · …', acronyms), 'HLA molecules · Innate immune system · …');
+  assert.equal(readableTitle('Cell migration · Antigen presentation', acronyms), 'Cell migration · Antigen presentation');
+});

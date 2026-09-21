@@ -42,7 +42,7 @@ test('a footer with a running page number is removed the same way', () => {
 });
 
 test('ordinary first lines, non-sequential numbers, long lines and short documents are never touched', () => {
-  const prose = [1, 2, 3, 4, 5].map((n) => `Uma frase comum numero ${n}, que termina aqui.\ncontinua`);
+  const prose = [1, 2, 3, 4, 5].map((n) => `Uma frase comum numero ${n}, que termina aqui.\ncontinua ${'abcde'[n - 1]}${'abcde'[n - 1]}${'abcde'[n - 1]}`);
   assert.deepEqual(stripRunningHeaders(prose), prose);
 
   const doses = ['3 mg por dia\nx', '7 dias de uso\nx', '12 semanas\nx', '5 ampolas\nx', '9 vezes\nx'];

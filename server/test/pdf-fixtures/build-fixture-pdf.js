@@ -82,8 +82,9 @@ export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {
 
   const contentObjs = pagesText.map((text, i) => {
     // A "\n" in the page text becomes a real new text line (Td down 22pt), like a real multi-line page.
-    const lines = text.split('\n').map((line) => line.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'));
-    const stream = `BT /F1 18 Tf 20 100 Td (${lines[0]}) Tj${lines.slice(1).map((line) => ` 0 -22 Td (${line}) Tj`).join('')} ET`;
+    // A line starting with "# " is a heading: drawn larger (26pt) than the body (18pt), like a real book's headings.
+    const lines = text.split('\n').map((line) => ({ heading: line.startsWith('# '), text: (line.startsWith('# ') ? line.slice(2) : line).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)') }));
+    const stream = `BT 20 100 Td${lines.map((l, k) => `${k > 0 ? ' 0 -22 Td' : ''} /F1 ${l.heading ? 26 : 18} Tf (${l.text}) Tj`).join('')} ET`;
     return pdfObject(contentIds[i], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
 

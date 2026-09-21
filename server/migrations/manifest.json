@@ -138,5 +138,10 @@
     "version": 28,
     "name": "source-outline",
     "checksum": "2932c983b8976c18028579e871da3baf517d681cdf709654270cd463a3fc0e53"
+  },
+  {
+    "version": 29,
+    "name": "outline-detected",
+    "checksum": "0efd47eeec07d9f0c3341afeff38272f98653c65c7ea18579228a5f9d28d0f6c"
   }
 ]

@@ -11,8 +11,9 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
-import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShiftedGlyphs, reflowLines, groupFigureLabels } from './page-text.js';
+import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShiftedGlyphs, reflowLines, groupFigureLabels, linesFromItems } from './page-text.js';
 import { readOutline } from './outline.js';
+import { detectHeadings, keepPresentHeadings } from './headings.js';
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -39,11 +40,13 @@ async function run() {
   // extraction of an otherwise-good document. A per-page failure becomes an
   // explicit FAILED page_status, not a document-wide EXTRACTION_FAILED.
   const pages = [];
+  const pageLines = []; // visual lines with their font height: the structure signal headings are read from
   for (let i = 1; i <= doc.numPages; i++) {
     try {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const text = pageTextFromItems(content.items);
+      pageLines[i - 1] = linesFromItems(content.items);
       pages.push({ index: i, text, status: text.trim().length > 0 ? 'OK' : 'EMPTY' });
     } catch (err) {
       pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });
@@ -61,7 +64,15 @@ async function run() {
     if (p.status === 'OK' && p.text.trim().length === 0) p.status = 'EMPTY';
   });
 
-  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline: await readOutline(doc) });
+  // The document's own outline when it has one; otherwise headings read from the text's font sizes (see headings.js),
+  // kept only where the heading is still in the final page text (furniture and undecoded garbage drop out).
+  let outline = (await readOutline(doc)).map((entry) => ({ ...entry, detected: false }));
+  if (outline.length === 0) {
+    const found = detectHeadings(pageLines.map((lines, i) => ({ pageIndex: i + 1, lines: lines ?? [] })));
+    outline = keepPresentHeadings(found, (pageIndex) => pages[pageIndex - 1]?.text ?? '').map((entry) => ({ ...entry, detected: true }));
+  }
+
+  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline });
 }
 
 run().catch((err) => {

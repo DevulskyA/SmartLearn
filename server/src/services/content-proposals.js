@@ -15,6 +15,8 @@ const DEFAULT_MAX_PAGES_PER_CHUNK = 10;
 // becomes its own chunk — pages are never dropped.
 const DEFAULT_MAX_CHARS_PER_CHUNK = 45_000;
 const EXCERPT_LENGTH = 200;
+// Headings read from font sizes can be very fine (a slide per heading): those units are merged up to this size.
+const DEFAULT_MIN_CHARS_PER_DETECTED_UNIT = 3500;
 
 function findOwnedSource(db, userId, sourceId) {
   return db.prepare('SELECT * FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
@@ -78,7 +80,7 @@ function toSummaryDto(row) {
  * intentional: a stale chunking scheme should not linger next to a fresh
  * one for the same source.
  */
-export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, discardDrafts = false } = {}) {
+export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, discardDrafts = false, minCharsPerDetectedUnit = DEFAULT_MIN_CHARS_PER_DETECTED_UNIT } = {}) {
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
   if (source.extraction_status !== 'EXTRACTED') {
@@ -129,8 +131,8 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   }
 
   // Units follow the document's own structure when it has one (its outline); page count and size are only safety bounds.
-  const outline = db.prepare('SELECT level, title, page_index AS pageIndex FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
-  const chunks = planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk });
+  const outline = db.prepare('SELECT level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
+  const chunks = planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk, minChars: outline.some((e) => e.detected) ? minCharsPerDetectedUnit : 0 });
 
   // The book's outline is often in capitals; a unit title reads like a title, keeping the document's own acronyms.
   const acronyms = acronymsIn(pages.map((p) => p.text ?? ''));

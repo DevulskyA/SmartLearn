@@ -80,7 +80,7 @@ export function planUnits(pages, outline, bounds) {
   const merged = [];
   for (const unit of units) {
     const same = merged.find((m) => m.pageStart === unit.pageStart && m.pageEnd === unit.pageEnd);
-    if (same) same.title = `${same.title} · ${unit.title}`;
+    if (same) same.title = joinTitles(same.title, unit.title);
     else merged.push({ ...unit });
   }
 
@@ -99,7 +99,32 @@ export function planUnits(pages, outline, bounds) {
   }
   flushRun();
 
-  return merged.sort((x, y) => x.pageStart - y.pageStart || x.pageEnd - y.pageEnd);
+  const ordered = merged.sort((x, y) => x.pageStart - y.pageStart || x.pageEnd - y.pageEnd);
+  return bounds.minChars > 0 ? mergeSmallUnits(ordered, pages, bounds) : ordered;
+}
+
+// At most three titles are listed; a merge of many tiny units reads "A · B · C · …" instead of a wall of titles.
+const MAX_LISTED_TITLES = 3;
+function joinTitles(a, b) {
+  if (!a || !b) return a ?? b ?? null;
+  if (a.endsWith(' · …')) return a;
+  return a.split(' · ').length >= MAX_LISTED_TITLES ? `${a} · …` : `${a} · ${b}`;
+}
+
+/** Units smaller than minChars are merged with the next one while the safety bounds allow; titles are kept. */
+function mergeSmallUnits(units, pages, { maxPages, maxChars, minChars }) {
+  const within = (u) => pages.filter((p) => p.pageIndex >= u.pageStart && p.pageIndex <= u.pageEnd);
+  const charsOf = (u) => within(u).reduce((sum, p) => sum + p.chars, 0);
+  const out = [];
+  for (const unit of units) {
+    const last = out[out.length - 1];
+    if (last && charsOf(last) < minChars) {
+      const combined = { pageStart: last.pageStart, pageEnd: Math.max(last.pageEnd, unit.pageEnd), title: joinTitles(last.title, unit.title) };
+      if (within(combined).length <= maxPages && charsOf(combined) <= maxChars) { out[out.length - 1] = combined; continue; }
+    }
+    out.push({ ...unit });
+  }
+  return out;
 }
 
 // ---- unit titles --------------------------------------------------------------------------------------------------
@@ -138,6 +163,7 @@ export function acronymsIn(texts) {
 /** An all-capitals title in sentence case, keeping the document's own acronyms; any other title is returned untouched. */
 export function readableTitle(title, acronyms) {
   if (typeof title !== 'string' || title.length === 0) return title;
+  if (title.includes(' · ')) return title.split(' · ').map((part) => readableTitle(part, acronyms)).join(' · '); // a merged title, segment by segment
   const letters = title.replace(/[^\p{L}]/gu, '');
   if (letters.length < 4 || letters !== letters.toUpperCase() || letters === letters.toLowerCase()) return title;
   let first = true;

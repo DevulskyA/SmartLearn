@@ -60,3 +60,34 @@ test('entries without a title or a resolvable page are ignored', () => {
   const outline = [{ level: 1, title: '   ', pageIndex: 1 }, { level: 1, title: 'Sem página', pageIndex: null }];
   assert.deepEqual(shape(planUnits(pages(2), outline, B)), [[1, 2, null]]);
 });
+
+// SPRINT 05i: headings read from font sizes (no PDF outline) can be very fine-grained (a slide per heading), so tiny
+// units are merged up to the safety bounds; real outline units are never merged (minChars is not passed for them).
+test('units smaller than minChars are merged with their neighbours, up to the safety bounds, with the titles kept', () => {
+  const outline = [{ level: 1, title: 'A', pageIndex: 1 }, { level: 1, title: 'B', pageIndex: 2 }, { level: 1, title: 'C', pageIndex: 3 }, { level: 1, title: 'D', pageIndex: 4 }];
+  const units = planUnits(pages(4, 100), outline, { maxPages: 10, maxChars: 45_000, minChars: 250 });
+  assert.deepEqual(shape(units), [[1, 3, 'A · B · C'], [4, 4, 'D']]);
+});
+
+test('merging never crosses the safety bounds and never touches units that are already large enough', () => {
+  const outline = [{ level: 1, title: 'A', pageIndex: 1 }, { level: 1, title: 'B', pageIndex: 2 }, { level: 1, title: 'C', pageIndex: 3 }, { level: 1, title: 'D', pageIndex: 4 }];
+  assert.deepEqual(shape(planUnits(pages(4, 100), outline, { maxPages: 2, maxChars: 45_000, minChars: 10_000 })), [[1, 2, 'A · B'], [3, 4, 'C · D']]);
+  assert.deepEqual(shape(planUnits(pages(4, 5000), outline, { maxPages: 10, maxChars: 45_000, minChars: 3000 })), [[1, 1, 'A'], [2, 2, 'B'], [3, 3, 'C'], [4, 4, 'D']]);
+});
+
+test('without minChars nothing is merged (real outline behaviour unchanged)', () => {
+  const outline = [{ level: 1, title: 'A', pageIndex: 1 }, { level: 1, title: 'B', pageIndex: 2 }];
+  assert.deepEqual(shape(planUnits(pages(2, 10), outline, B)), [[1, 1, 'A'], [2, 2, 'B']]);
+});
+
+test('merged titles stay readable: at most three titles are listed, then an ellipsis', () => {
+  const outline = ['A', 'B', 'C', 'D', 'E'].map((title, i) => ({ level: 1, title, pageIndex: i + 1 }));
+  const units = planUnits(pages(5, 100), outline, { maxPages: 10, maxChars: 45_000, minChars: 10_000 });
+  assert.deepEqual(shape(units), [[1, 5, 'A · B · C · …']]);
+});
+
+test('several headings that share the same pages are listed at most three at a time, not as a wall of titles', () => {
+  const outline = ['A', 'B', 'C', 'D', 'E', 'F'].map((title) => ({ level: 1, title, pageIndex: 2 }));
+  // A..E end on their own page; the last heading runs to the end of the document, so it is a unit of its own
+  assert.deepEqual(shape(planUnits(pages(3), outline, B)), [[1, 1, null], [2, 2, 'A · B · C · …'], [2, 3, 'F']]);
+});
