@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { generateDraft as fakeGenerateDraft, FAKE_PROVIDER_NAME } from '../ai/fake-provider.js';
 import {
   generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
@@ -122,6 +123,24 @@ function findOwnedProposalWithSegments(db, userId, proposalId) {
   return { proposal, segments };
 }
 
+/** Identity of the exact text a draft is generated from: SHA-256 over the (pageIndex, text) segments sent to the provider. */
+export function segmentsDigest(segments) {
+  return createHash('sha256').update(JSON.stringify(segments.map((s) => [s.pageIndex, s.text]))).digest('hex');
+}
+
+/**
+ * SPRINT-04: true when this unaccepted draft was generated from text that the proposal's pages no longer hold
+ * (the source was re-extracted with different text, or a page went away). Compared by content, so re-extracting
+ * IDENTICAL text never invalidates a draft. A draft with no recorded input (created before the binding existed)
+ * is unknown, not stale; an accepted draft is history, not stale.
+ */
+export function isDraftStale(db, userId, row) {
+  if (row.status !== 'DRAFT' || !row.input_sha256) return false;
+  const found = findOwnedProposalWithSegments(db, userId, row.proposal_id);
+  if (!found) return true;
+  return segmentsDigest(found.segments) !== row.input_sha256;
+}
+
 const CITED_PAGE_TEXT_CAP = 1500;
 
 /** The source pages this draft cites (summary + questions), so a reviewer can verify each claim
@@ -153,6 +172,7 @@ function toDraftDto(row, { db, userId } = {}) {
     acceptedAt: row.accepted_at ?? null,
     acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
+    sourceStale: db ? isDraftStale(db, userId, row) : false,
     pages: db ? citedPagesFor(db, userId, row, draft) : [],
   };
 }
@@ -192,6 +212,10 @@ export async function createDraft(db, userId, proposalId, {
     throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
   }
 
+  // Bind the draft to the exact text it is generated from (SPRINT-04), fixed BEFORE the provider call.
+  const inputDigest = segmentsDigest(found.segments);
+  const inputGeneration = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
+
   const provider = selectProvider({ apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });
 
   let raw;
@@ -223,10 +247,11 @@ export async function createDraft(db, userId, proposalId, {
     audit: audited.audit,
   };
   const result = db.prepare(`
-    INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at)
-    VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?)
+    INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
+    VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
   `).run(
-    userId, proposalId, provider.name, validated.modelVersion, validated.promptVersion, JSON.stringify(draftContent), nowIso
+    userId, proposalId, provider.name, validated.modelVersion, validated.promptVersion, JSON.stringify(draftContent), nowIso,
+    inputDigest, inputGeneration,
   );
 
   return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid), { db, userId }), live: provider.live };

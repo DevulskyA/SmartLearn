@@ -1,5 +1,6 @@
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { resolveOrCreateSubject, LearningUnitError } from './learning-units.js';
+import { isDraftStale } from './generated-drafts.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
@@ -71,6 +72,12 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
 
   const proposal = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, draftRow.proposal_id);
   if (!proposal) throw new AcceptDraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+
+  // SPRINT-04: the draft was generated from specific source text. If the proposal's pages now hold different text
+  // (re-extraction), freezing citations from them would attribute text B to content produced from text A.
+  if (isDraftStale(db, userId, draftRow)) {
+    throw new AcceptDraftError('SOURCE_CHANGED', 'O texto da fonte mudou depois que este rascunho foi gerado (a fonte foi extraída de novo). Gere o rascunho novamente a partir do texto atual antes de aceitar.');
+  }
 
   const draftContent = JSON.parse(draftRow.draft_json);
 

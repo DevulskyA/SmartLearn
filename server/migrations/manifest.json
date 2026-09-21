@@ -123,5 +123,10 @@
     "version": 25,
     "name": "exam-subject",
     "checksum": "3a1b8e87e4d0ff2220f7ff326088a9b2baed52f122b417a3dc8c81b82b12b855"
+  },
+  {
+    "version": 26,
+    "name": "draft-input-binding",
+    "checksum": "80aa947040f360c954b43ee81cc5a7da04d56a5c2930fb8f326b41cb326db3ab"
   }
 ]

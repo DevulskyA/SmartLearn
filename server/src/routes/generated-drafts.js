@@ -16,6 +16,7 @@ function handleError(err, reply) {
       INVALID_STATE: 409,
       SUBJECT_CONFLICT: 409,
       REVISION_CONFLICT: 409,
+      SOURCE_CHANGED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
