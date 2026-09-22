@@ -4,12 +4,35 @@
 // words, hyphenation and spacing inside a line stay exactly as the source has them.
 export function pageTextFromItems(items) {
   let text = '';
+  let base = null; // the last ordinary text item of the current line: what an exponent would sit on
+  let previous = null;
   for (const item of items) {
-    text += item.str;
-    if (item.hasEOL) text += '\n';
+    if (base && isExponent(item, base, previous)) {
+      text += toSuperscript(item.str.trim());
+    } else {
+      text += item.str;
+      if (item.str.trim().length > 0 && Number.isFinite(item.height) && Array.isArray(item.transform)) base = { height: item.height, y: item.transform[5] };
+    }
+    if (item.hasEOL) { text += '\n'; base = null; }
+    previous = item;
   }
   return text.replace(/[ \t]+\n/g, '\n').replace(/\n+$/, '');
 }
+
+// pdf.js reports an exponent as its own item: smaller and raised above the baseline of the text it belongs to. Joined as
+// plain text it flattens into the base ("0.5 × 109/L", "1011"), which reads as a number seven orders of magnitude off.
+// Only a run of digits (optionally signed) is treated this way; footnote letters, subscripts and same-baseline small print
+// are left as they are.
+const EXPONENT_TEXT = /^[+\-−–]?\d+$/;
+const SUPERSCRIPT = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '+': '⁺', '-': '⁻', '−': '⁻', '–': '⁻' };
+function isExponent(item, base, previous) {
+  // it touches its base: a space item between them ends the word (a running header "6 80 Immunity" is not 6 to the 80th)
+  if (!previous || previous.str.length === 0 || /\s$/.test(previous.str)) return false;
+  if (!Array.isArray(item.transform) || !Number.isFinite(item.height) || !EXPONENT_TEXT.test(item.str.trim())) return false;
+  const raise = item.transform[5] - base.y;
+  return item.height <= base.height * 0.85 && raise >= base.height * 0.15 && raise <= base.height * 0.8;
+}
+const toSuperscript = (digits) => [...digits].map((ch) => SUPERSCRIPT[ch]).join('');
 
 /**
  * The visual lines of a page with the largest item height of each (the structure signal headings are read from).

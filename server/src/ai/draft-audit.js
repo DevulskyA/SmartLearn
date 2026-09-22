@@ -31,11 +31,18 @@ const GENERIC = new Set([
   'caracteriza', 'caracterizada', 'caracterizado', 'refere', 'utilizado', 'utilizada', 'observado', 'observada',
 ]);
 
+// An exponent is one number however it is written: extraction gives "10¹¹", a summary may say "10^11". Both read as base 10
+// and the exponent "e11", so neither an equal exponent is flagged nor a different one ("10^13") let through.
+const SUPERSCRIPT_TO_ASCII = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '', '⁻': '-' };
 function numbersIn(text) {
   const out = [];
-  for (const m of String(text).matchAll(/\d+(?:[.,]\d+)?/g)) {
-    const key = m[0].replace(',', '.');
-    out.push({ raw: m[0], key, index: m.index });
+  for (const m of String(text).matchAll(/\^\s?[-−]?\d+|[⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+(?:[.,]\d+)?/g)) {
+    const raw = m[0];
+    const isExponent = raw.startsWith('^') || /^[⁺⁻⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(raw);
+    const key = isExponent
+      ? `e${[...raw].map((ch) => SUPERSCRIPT_TO_ASCII[ch] ?? ch).join('').replace(/[\^\s]/g, '').replace('−', '-')}`
+      : raw.replace(',', '.');
+    out.push({ raw, key, index: m.index });
   }
   return out;
 }

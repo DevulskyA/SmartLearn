@@ -88,3 +88,14 @@ test('the audit never mutates its input and is deterministic', () => {
   assert.equal(JSON.stringify(d), before);
   assert.deepEqual(a, b);
 });
+
+// SPRINT 05j: extraction now writes an exponent as a superscript ("10¹¹"), so the audit must read the same number
+// whichever way the summary writes it, and still catch an exponent the source never states.
+test('an exponent is one number however it is written: 10¹¹ in the source supports 10^11 in the summary, but 10^13 is still an invented value', () => {
+  const source = [{ pageIndex: 1, text: 'Neutrophils derive from the bone marrow, which can produce between 10¹¹ (healthy state) and 10¹² (during infection) new cells per day.' }];
+  const summary = (text) => draft({ summary: text, questions: [] });
+  const flagged = (text) => issues(auditDraft(summary(text), { segments: source }), 'summary').includes('SUMMARY_UNSUPPORTED_VALUE');
+  assert.equal(flagged('The marrow produces between 10^11 and 10^12 neutrophils per day (more during infection).'), false);
+  assert.equal(flagged('The marrow produces between 10¹¹ and 10¹² neutrophils per day (more during infection).'), false);
+  assert.equal(flagged('The marrow produces up to 10^13 neutrophils per day during infection.'), true);
+});
