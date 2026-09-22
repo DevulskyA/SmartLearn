@@ -74,11 +74,11 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
 });
 
-async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, studyDate }) {
+async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, sourcePages, studyDate }) {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
 
-  const pdfBuffer = buildFixturePdf([sourceText]);
+  const pdfBuffer = buildFixturePdf(sourcePages ?? [sourceText]);
   await page.setInputFiles('#sources-file-input', { name: 'material.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
 
@@ -162,4 +162,59 @@ test('Study Now with an INCORRECT judgment reaches Exercícios resolvidos showin
   await expect(dialog.getByText(draftQuestionText.trim())).toBeVisible();
   await expect(dialog.locator('.exercise-attempt-outcome')).toHaveText('Errou');
   await expect(dialog.locator('.exercise-attempt-item')).toHaveClass(/is-incorrect/);
+});
+
+// SPRINT 5 (FASE D): "Refazer erros" is recovery, not a second observation of the same performance -- the
+// original INITIAL_PRACTICE evidence (1/2) must survive a corrected retest completely unchanged: never
+// overwritten, never summed into a second row, never inflated into what the retest's own outcome would imply
+// (2/2). Found already correct in the code (app.js only calls learningEvidence.create in "initial" mode); this
+// closes the one gap in existing coverage -- hoje-block-retest.spec.js proves the analogous invariant for the
+// REVIEW context, nothing proved it end to end for Estudar agora's own INITIAL_PRACTICE evidence.
+test('a corrected retest never rewrites, duplicates or inflates the original Estudar agora evidence (4/6-then-1/2 must stay 4/6, not become 5/6)', async ({ page }) => {
+  const { studyNowBtn } = await acceptDraftAndGetStudyNowButton(page, {
+    subjectName: 'Imunologia Retest Evidence E2E',
+    sourcePages: ['Complemento: cascata de proteinas do sistema imune.', 'Neutrofilos: fagocitose e granulos.'],
+    studyDate: '2026-04-03',
+  });
+
+  await studyNowBtn.click();
+  await expect(page.locator('#title-study-now')).toBeVisible({ timeout: 5000 });
+  // Question 1: correct. Question 2: wrong (this is the one retested below).
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#study-now-result-text')).toContainText('1/2');
+
+  const fetchUnitEvidence = () => page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/learning-evidence`, { credentials: 'include' });
+    return (await res.json()).evidence.filter((e) => e.type === 'INITIAL_PRACTICE');
+  }, API_BASE);
+  await expect.poll(fetchUnitEvidence, { timeout: 5000 }).toHaveLength(1);
+  const original = (await fetchUnitEvidence())[0];
+  expect({ questionsCount: original.questionsCount, correctCount: original.correctCount }).toEqual({ questionsCount: 2, correctCount: 1 });
+
+  // Corrected retest of the one wrong question.
+  await page.locator('#study-now-retest-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 5000 });
+  await page.locator('#study-now-done-btn').click();
+
+  // The retest wrote NO new row: still exactly one INITIAL_PRACTICE row, and it is the SAME row with the
+  // SAME original numbers -- not overwritten to 2/2, not a second 1/1 row summed alongside it.
+  const after = await fetchUnitEvidence();
+  expect(after).toHaveLength(1);
+  expect(after[0].id).toBe(original.id);
+  expect({ questionsCount: after[0].questionsCount, correctCount: after[0].correctCount }).toEqual({ questionsCount: 2, correctCount: 1 });
+
+  // ...and the corrected item is no longer suggested for reinforcement (it has been recovered), while the
+  // original 1/2 is still what Estatisticas/Hoje would compute weighted accuracy from -- distinct signals,
+  // reconciled, never conflated (this file's own claim about analytics.js is exercised, not asserted twice).
+  const reinforcement = await page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/reinforcement`, { credentials: 'include' });
+    return (await res.json()).byUnit;
+  }, API_BASE);
+  expect(Object.values(reinforcement).flat()).toHaveLength(0);
 });
