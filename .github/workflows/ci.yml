@@ -28,6 +28,16 @@ jobs:
         run: npm ci
         working-directory: server
 
+      - name: Lint (structural: eqeqeq, no-undef; no-unused-vars is warn-only, tracked separately)
+        run: npm run lint
+
+      - name: Dependency audit (root)
+        run: npm audit --omit=dev
+
+      - name: Dependency audit (server)
+        run: npm audit
+        working-directory: server
+
       - name: Test inventory check (no silently excluded test files)
         run: npm run test:inventory
 
@@ -69,6 +79,9 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Clippy (structural warnings as errors; fmt is style-only, not included)
+        run: cargo clippy --all-targets --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
 
       - name: Rust tests (locked)
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
