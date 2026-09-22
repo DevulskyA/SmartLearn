@@ -216,7 +216,7 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
-  promptVersion = '3',
+  promptVersion = '4',
   apiKey = null,
   model = null,
   consentGranted = false,
