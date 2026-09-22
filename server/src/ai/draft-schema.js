@@ -15,7 +15,10 @@ export class DraftValidationError extends Error {
   }
 }
 
-const MAX_SUMMARY_LENGTH = 2000;
+// A unit holds up to ~45,000 characters of source (content-proposals.js) and the Resumo Mestre must keep its
+// definitions, mechanisms, conditions and numbers: 2,000 was a ~5% ceiling that rejected the whole draft when a faithful
+// summary went over it. The bound is still real (a summary is not a copy of the source) and the prompt states it.
+export const MAX_SUMMARY_LENGTH = 12_000;
 const MAX_QUESTIONS = 50;
 const MAX_QUESTION_LENGTH = 1000;
 const MAX_ANSWER_LENGTH = 2000;
