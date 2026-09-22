@@ -2349,10 +2349,14 @@ export async function renderDisciplinas() {
     archiveBtn.type = "button";
     archiveBtn.textContent = subj.isActive ? "Arquivar" : "Reativar";
     archiveBtn.addEventListener("click", async () => {
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.update(subj.id, { isActive: !subj.isActive });
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao arquivar/reativar disciplina.", error);
+        if (msg) msg.textContent = "Não foi possível salvar. Verifique a conexão e tente de novo.";
+      }
     });
 
     const deleteBtn = document.createElement("button");
@@ -2368,10 +2372,14 @@ export async function renderDisciplinas() {
       }
       const confirmed = await showConfirm(`Excluir disciplina "${subj.name}"? Essa ação não pode ser desfeita.`);
       if (!confirmed) return;
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.delete(subj.id);
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao excluir disciplina.", error);
+        if (msg) msg.textContent = "Não foi possível excluir. Verifique a conexão e tente de novo.";
+      }
     });
 
     const deleteMsg = document.createElement("p");
