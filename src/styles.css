@@ -234,14 +234,16 @@
   box-sizing: border-box;
 }
 
+/* 320 CSS px is the reflow floor (WCAG 1.4.10). In rem it grew with the text size (640px at 200%) and forced a
+   horizontal scroll on every phone-width screen. */
 html {
-  min-width: 20rem;
+  min-width: 320px;
   min-height: 100%;
   background: var(--color-bg);
 }
 
 body {
-  min-width: 20rem;
+  min-width: 320px;
   min-height: 100vh;
   height: 100dvh;
   margin: 0;
@@ -4011,6 +4013,12 @@ h1 {
 .source-proposal-title-input {
   width: 100%;
   box-sizing: border-box;
+  min-height: 2.5rem;
+}
+
+.source-proposal-title-input:focus-visible {
+  outline: 3px solid var(--color-primary-soft);
+  outline-offset: 2px;
 }
 
 /* The source text keeps the line breaks the extraction kept (sentence ends, headings, list items): without this a

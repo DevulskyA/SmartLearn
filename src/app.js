@@ -3025,16 +3025,16 @@ function createSourceProposalItem(proposal) {
   li.className = "source-proposal-item";
   li.dataset.proposalId = String(proposal.id);
 
-  const range = createTextElement(
-    "p",
-    "source-proposal-range",
-    proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`,
-  );
+  const rangeText = proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`;
+  const range = createTextElement("p", "source-proposal-range", rangeText);
+  range.id = `source-proposal-range-${proposal.id}`;
 
   const titleInput = document.createElement("input");
   titleInput.type = "text";
   titleInput.className = "source-proposal-title-input";
   titleInput.value = proposal.title;
+  // The field has no visible label: its accessible name says what it edits, and which trecho (the list repeats it).
+  titleInput.setAttribute("aria-label", `Título do trecho, ${rangeText.toLowerCase()}`);
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
@@ -3064,6 +3064,9 @@ function createSourceProposalItem(proposal) {
   draftPanel.setAttribute("role", "group");
   draftPanel.setAttribute("aria-label", "Rascunho para revisar");
   draftPanel.hidden = true;
+
+  // The same three buttons repeat in every trecho: the pages of the trecho they belong to are their description.
+  for (const button of [saveBtn, toggleBtn, generateDraftBtn]) button.setAttribute("aria-describedby", range.id);
 
   li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
   return li;
