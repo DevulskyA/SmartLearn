@@ -1,18 +1,29 @@
 ﻿import "./styles.css";
-import { DB } from "./db.js";
+import { DB as LocalDB } from "./db.js";
+import { DB as RemoteDB } from "./remote-store.js";
+import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks } from "./scheduler.js";
+import { generateInitialTasks, getNextReview, getDaysBetween, getReviewStatusLabel } from "./scheduler.js";
+import { pickPrimaryReview } from "./today-priority.js";
+import { weakPracticeReason } from "./priorities-text.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
-import { Analytics, subtractDays } from "./analytics.js";
+import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
+import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
+import * as AuthUI from "./auth-ui.js";
+import * as MigrationUI from "./migration-ui.js";
+import * as SourceProposalsUI from "./source-proposals-ui.js";
+import * as DraftReviewUI from "./draft-review-ui.js";
+import * as OfflineStore from "./offline-store.js";
+import * as OfflineUI from "./offline-ui.js";
+import { enhanceAllSelects, enhanceSelect, syncSelect, wireListboxKeyboard } from "./select-ui.js";
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -45,10 +56,73 @@ function showConfirm(message) {
   });
 }
 
+// T21: explicit, configuration-controlled authority switch — never an
+// automatic/implicit fallback. Default is the existing local BrowserStore/
+// SQLite path (db.js), completely unchanged; the real server-authoritative
+// path (remote-store.js) is opt-in via this runtime flag so it can be
+// staged and tested (e.g. e2e/server-authority.spec.js sets it via
+// page.addInitScript, the same mechanism already used for
+// window.__SMARTLEARN_API_BASE__) without touching the many existing
+// screens/tests that still assume the local store. Flipping this default
+// once every screen has real server parity is T22-T24's job, not this one's.
+const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
+const DB = REMOTE_MODE ? RemoteDB : LocalDB;
+
+// LOCAL-01A / ARCH-01: Desktop still uses REMOTE_MODE=true (same
+// remote-store.js/API-HTTP pipeline as before — see .specs/STATE.md's
+// "ARCHITECTURE SUPERSESSION" section), but the "remote" it talks to is a
+// backend running on THIS computer (127.0.0.1 loopback), started by the
+// Tauri wrapper, not a cloud server. Set once by src-tauri/src/lib.rs's
+// window init script, never by remote/web content. api-client.js and
+// offline-ui.js each read this same flag independently for their own
+// LOCAL_DESKTOP_AUTHORITY branches — this module's copy is for renderToday.
+const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+
+// PV1-01: Materiais (the PDF -> proposal -> draft -> accept pipeline,
+// relocated from Configurações to its own primary screen) is exclusive to
+// LOCAL_DESKTOP_AUTHORITY — Companion (not implemented yet) stays a
+// read-only surface, and REMOTE_AUTHORITY-without-local-authority keeps
+// the existing server endpoints reachable (nothing removed server-side)
+// but never surfaces this as a product screen. This flag is stable for
+// the whole session (set once by the window init script before this
+// module loads), so it's safe to apply it once here rather than on every
+// navigation.
+const materialsNavItem = document.querySelector('[data-screen="materials"]');
+if (materialsNavItem) materialsNavItem.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+
 let databaseAvailable = false;
+// In remote mode, "available" also requires a logged-in session — there is
+// no local schema to fail to open, but every domain call needs an
+// authenticated actor. This is the "distinguish unavailable server from
+// empty data" seam: a reachable-but-unauthenticated server is a distinct,
+// visible state (redirect to login), never rendered as an empty agenda.
+let authenticated = !REMOTE_MODE;
 const dbInit = DB.init()
-  .then(() => {
+  .then(async () => {
     databaseAvailable = true;
+    if (REMOTE_MODE) {
+      const user = await AuthUI.bootstrap();
+      // T40: best-effort — a registration/sync failure here never blocks
+      // boot, same "failure only logs" contract as T30's client wiring.
+      OfflineStore.registerServiceWorker().catch(() => {});
+      // T41: app-wide connectivity indicator + reconnect handling (session
+      // revalidation + resync), mounted once regardless of auth outcome so
+      // it can show "offline" state even for a not-yet-authenticated tab.
+      OfflineUI.mount({ onReconnect: () => { if (authenticated) return renderToday(); } });
+      if (user) {
+        authenticated = true;
+        OfflineStore.syncSnapshot(user.id).catch(() => {});
+      } else if (AuthUI.wasLastBootstrapNetworkError() && OfflineStore.getLastAccountId()) {
+        // Cold offline reopen: the server can't confirm a session, but a
+        // previously-synced account exists on this device — presume it for
+        // read-only offline display. The server remains the sole real
+        // session authority the moment it's reachable again; nothing here
+        // grants any write capability (T41's job to keep it that way).
+        authenticated = true;
+      } else {
+        authenticated = false;
+      }
+    }
     return true;
   })
   .catch((error) => {
@@ -57,7 +131,9 @@ const dbInit = DB.init()
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
-    banner.textContent = 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
+    banner.textContent = REMOTE_MODE
+      ? 'Erro: não foi possível conectar ao servidor. Tente novamente em instantes.'
+      : 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
     document.body.prepend(banner);
     return false;
   });
@@ -118,7 +194,13 @@ const todayEmptyState = document.querySelector("#today-empty-state");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
+const weakBlock = document.querySelector("#block-weak");
+const weakList = document.querySelector("#weak-list");
+const weakCount = document.querySelector("#weak-count");
 const reviewDashboard = document.querySelector("#review-dashboard");
+const todayPrimaryAction = document.querySelector("#today-primary-action");
+const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
+const todayPrimaryActionBtn = document.querySelector("#today-primary-action-btn");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
@@ -138,20 +220,26 @@ const metricElements = {
 };
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
-const statsSubjectSort = document.querySelector("#stats-subject-sort");
+const studyVerdictEl = document.querySelector("#stats-verdict");
+const studyVerdictHeadline = document.querySelector("#stats-verdict-headline");
+const studyVerdictDetail = document.querySelector("#stats-verdict-detail");
+const studyVerdictAttention = document.querySelector("#stats-verdict-attention");
+const studyVerdictAttentionText = document.querySelector("#stats-verdict-attention-text");
+const studyVerdictAttentionBtn = document.querySelector("#stats-verdict-attention-btn");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
-const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
-const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
+const unitDetailPanel = document.querySelector("#unit-detail-panel");
+const unitDetailEmpty = document.querySelector("#unit-detail-empty");
+const unitDetailBody = document.querySelector("#unit-detail-body");
+const contentContextPlate = document.querySelector("#content-context-plate");
+const disciplineSwitchList = document.querySelector("#discipline-switch-list");
+const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
-const statsUnitSort = document.querySelector("#stats-unit-sort");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
 const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
-const subjectAveragesBody = document.querySelector("#subject-averages-body");
-const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
 const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
@@ -199,6 +287,59 @@ const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
 const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
+const migrationCard = document.querySelector("#migration-card");
+const migrationChooseFileButton = document.querySelector("#migration-choose-file");
+const migrationFileInput = document.querySelector("#migration-file-input");
+const migrationMessage = document.querySelector("#migration-message");
+const migrationPreviewPanel = document.querySelector("#migration-preview-panel");
+const migrationCounts = document.querySelector("#migration-counts");
+const migrationWarnings = document.querySelector("#migration-warnings");
+const migrationConflicts = document.querySelector("#migration-conflicts");
+const migrationConfirmBtn = document.querySelector("#migration-confirm-btn");
+const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
+const migrationResultPanel = document.querySelector("#migration-result-panel");
+const migrationResultSummary = document.querySelector("#migration-result-summary");
+const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
+const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
+const sourcesFileInput = document.querySelector("#sources-file-input");
+const sourcesMessage = document.querySelector("#sources-message");
+const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
+const sourcesProposalsList = document.querySelector("#sources-proposals-list");
+const studyNowSubjectEl = document.querySelector("#study-now-subject");
+const studyNowTitleEl = document.querySelector("#title-study-now");
+const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
+const studyNowSummaryBody = document.querySelector("#study-now-summary-body");
+const studyNowProgress = document.querySelector("#study-now-progress");
+const studyNowQuestionArea = document.querySelector("#study-now-question-area");
+const studyNowQuestionText = document.querySelector("#study-now-question-text");
+const studyNowHintText = document.querySelector("#study-now-hint-text");
+const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
+const studyNowAnswerText = document.querySelector("#study-now-answer-text");
+const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
+const studyNowJudgment = document.querySelector("#study-now-judgment");
+const studyNowMessage = document.querySelector("#study-now-message");
+const studyNowResume = document.querySelector("#study-now-resume");
+const studyNowResumeText = document.querySelector("#study-now-resume-text");
+const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
+const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
+const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
+const studyNowResultCard = document.querySelector("#study-now-result-card");
+const studyNowResultText = document.querySelector("#study-now-result-text");
+const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
+const studyNowResultTitle = document.querySelector("#study-now-result-title");
+const studyNowResultNote = document.querySelector("#study-now-result-note");
+const studyNowErrorsSection = document.querySelector("#study-now-errors-section");
+const studyNowErrorsTitle = document.querySelector("#study-now-errors-title");
+const studyNowErrorsList = document.querySelector("#study-now-errors-list");
+const studyNowCorrectedSection = document.querySelector("#study-now-corrected-section");
+const studyNowCorrectedTitle = document.querySelector("#study-now-corrected-title");
+const studyNowCorrectedList = document.querySelector("#study-now-corrected-list");
+const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
+const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
+const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
+const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
+let migrationActivePreview = null;
+let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
 const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -246,13 +387,27 @@ function formatPerformanceScore(value) {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
 }
 
+const PERFORMANCE_BAND_CLASS = {
+  CRITICAL: "performance-badge--critical",
+  ATTENTION: "performance-badge--attention",
+  ADEQUATE: "performance-badge--good",
+  STRONG: "performance-badge--strong",
+};
+
+// Delegates the actual threshold comparison to getState (performance-
+// thresholds.js, already unit-tested) instead of a second independent
+// >= THRESHOLDS.X chain — this file previously had three copies of the
+// exact same 3-cutoff banding logic (this function, getPlanPerfBadge
+// below, and getState itself), a real drift risk if THRESHOLDS ever
+// changed and only some copies were updated. totalQuestions=1 is a
+// sentinel (any truthy value works): this function only ever receives a
+// raw percent, with no question-count context of its own, and the
+// !Number.isFinite guard above already covers the "no real value" case
+// getState's own totalQuestions===0 check exists for.
 function getPerformanceBandClass(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  if (number < THRESHOLDS.ATTENTION) return "performance-badge--critical";
-  if (number < THRESHOLDS.ADEQUATE) return "performance-badge--attention";
-  if (number < THRESHOLDS.STRONG) return "performance-badge--good";
-  return "performance-badge--strong";
+  return PERFORMANCE_BAND_CLASS[getState(number, 1)];
 }
 
 function createPerformanceBadge(value) {
@@ -265,6 +420,11 @@ function createPerformanceBadge(value) {
 function createExerciseRow(exercise) {
   const row = document.createElement("tr");
   row.className = "exercise-row";
+  // Same activate-a-row idiom as unit-stats-list's .matrix-row below
+  // (tabIndex + click/keydown, no role override — a table row's default
+  // `row` role stays correct for a screen reader; this only adds a second
+  // way to activate it, same as a normal clickable table row does).
+  row.tabIndex = 0;
 
   const subjectCell = document.createElement("th");
   subjectCell.scope = "row";
@@ -288,20 +448,115 @@ function createExerciseRow(exercise) {
   scoreCell.append(createPerformanceBadge(exercise.scorePercent));
 
   row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
+  row.addEventListener("click", () => openExerciseDetail(exercise));
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openExerciseDetail(exercise);
+    }
+  });
   return row;
 }
-function getDaysBetween(fromDate, toDate) {
-  const from = new Date(`${fromDate}T00:00:00.000Z`);
-  const to = new Date(`${toDate}T00:00:00.000Z`);
-  return Math.round((to - from) / 86400000);
+
+const OUTCOME_LABEL = { CORRECT: "Acertou", INCORRECT: "Errou", UNKNOWN: "Resultado não registrado" };
+const ASSISTANCE_LABEL = { NONE: "Sem ajuda", HINT: "Usou dica", PARTIAL_SOLUTION: "Viu parte da resposta", SOLUTION: "Viu a resposta" };
+
+function createAttemptItem(attempt) {
+  const li = document.createElement("li");
+  const outcomeClass = attempt.outcome === "CORRECT" ? "is-correct" : attempt.outcome === "INCORRECT" ? "is-incorrect" : "is-unknown";
+  li.className = `exercise-attempt-item ${outcomeClass}`;
+
+  li.append(createTextElement("p", "exercise-attempt-question", attempt.question ?? "—"));
+  // Only attempts born in a Prova carry what the student typed ("studentAnswer" is absent for study/review).
+  if ("studentAnswer" in attempt) {
+    const mine = createTextElement("p", "exercise-attempt-student", attempt.studentAnswer ? `Sua resposta na prova: ${attempt.studentAnswer}` : "Sua resposta na prova: sem resposta");
+    if (!attempt.studentAnswer) mine.classList.add("is-empty");
+    li.append(mine);
+  }
+  if (attempt.answer) {
+    li.append(createTextElement("p", "exercise-attempt-answer", `Gabarito: ${attempt.answer}`));
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "exercise-attempt-meta";
+  const outcomeBadge = document.createElement("span");
+  outcomeBadge.className = `exercise-attempt-outcome ${outcomeClass}`;
+  outcomeBadge.textContent = OUTCOME_LABEL[attempt.outcome ?? "UNKNOWN"] ?? OUTCOME_LABEL.UNKNOWN;
+  meta.append(outcomeBadge);
+  const assistance = ASSISTANCE_LABEL[attempt.assistanceUsed];
+  if (assistance) meta.append(createTextElement("span", "exercise-attempt-assistance", assistance));
+  li.append(meta);
+
+  return li;
 }
 
-function getReviewStatusLabel(groupName, task, today) {
-  if (groupName === "doneToday") return "Concluída";
-  if (groupName === "today") return "Vence hoje";
-  const days = getDaysBetween(task.dueDate, today);
-  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
+// Whole-row click (per product request: the natural target of tapping a
+// solved-exercise row is opening that attempt, not a small separate
+// button) opens this dialog. `exercise` is one completedExercises item
+// (src/stats.js) — id is the learning_evidence row id, context is
+// REVIEW/INITIAL_PRACTICE/EXTERNAL.
+async function openExerciseDetail(exercise) {
+  const dialog = document.getElementById("exercise-detail-dialog");
+  const eyebrow = document.getElementById("exercise-detail-eyebrow");
+  const title = document.getElementById("exercise-detail-title");
+  const body = document.getElementById("exercise-detail-body");
+  if (!dialog || !body) return;
+
+  eyebrow.textContent = exercise.subjectName ?? "";
+  title.textContent = exercise.title ?? "";
+  body.replaceChildren();
+
+  // EXTERNAL evidence never has an in-app attempt to link — answered
+  // outside the app, by definition — so this is answered locally, honestly,
+  // with no network round-trip and no chance of it ever resolving otherwise.
+  if (exercise.context === "EXTERNAL") {
+    body.append(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Este resultado foi registrado como feito fora do app — não há como mostrar as perguntas desta tentativa.",
+    ));
+    dialog.showModal();
+    return;
+  }
+
+  body.append(createTextElement("p", "exercise-detail-unavailable", "Carregando…"));
+  dialog.showModal();
+
+  let result;
+  try {
+    result = await DB.learningEvidence.getAttempts(exercise.id);
+  } catch (error) {
+    console.error("Falha ao buscar detalhe da tentativa.", error);
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Não foi possível carregar o detalhe desta tentativa agora.",
+    ));
+    return;
+  }
+
+  const attempts = result?.attempts ?? [];
+  if (attempts.length === 0) {
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      "Detalhe da tentativa indisponível — este resultado foi registrado antes do detalhe por questão existir, ou o registro individual não chegou a ser salvo.",
+    ));
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "exercise-attempt-list";
+  for (const attempt of attempts) list.append(createAttemptItem(attempt));
+  body.replaceChildren(list);
 }
+
+document.getElementById("exercise-detail-close")?.addEventListener("click", () => {
+  document.getElementById("exercise-detail-dialog")?.close();
+});
+// getDaysBetween/getReviewStatusLabel now live in scheduler.js (pure,
+// unit-tested there — see test/scheduler.test.js) since they have no DOM
+// dependency.
 
 function createScoreInput(task, field, label) {
   const wrapper = document.createElement("label");
@@ -326,7 +581,7 @@ function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
-function createReviewRow(task, unit, subject, groupName, today, exercises = []) {
+function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set()) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -367,6 +622,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   scorePill.dataset.scoreFor = String(task.id);
   scorePill.setAttribute("aria-hidden", "true");
   tags.append(statusBadge, scorePill);
+  // At-a-glance retention cue (visible while the row is still collapsed): how
+  // many of this review's items were wrong last time and not yet judged here.
+  {
+    const judgedIds = new Set(judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId));
+    const toReinforce = [...priorWrong].filter((id) => !judgedIds.has(id)).length;
+    if (toReinforce > 0) {
+      const reinforce = createTextElement("span", "study-now-chip review-reinforce-chip", `${toReinforce} para reforçar`);
+      reinforce.title = "Itens que você errou na última tentativa";
+      tags.append(reinforce);
+    }
+  }
 
   header.append(marker, heading, tags);
 
@@ -380,6 +646,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   reviewDoneInput.type = "checkbox";
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
+  // Several rows say "Revisão feita": the name must tell a screen reader WHICH review (it still starts with the visible label).
+  reviewDoneInput.setAttribute("aria-label", `Revisão feita: ${unit?.title ?? "conteúdo"}, revisão número ${task.reviewNumber}`);
   reviewDoneInput.dataset.reviewId = String(task.id);
   reviewDoneInput.dataset.committedChecked = String(task.reviewDone);
   reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Revisão feita"));
@@ -390,12 +658,68 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     task.correctCount != null ||
     (task.comment ?? "") !== "";
 
-  const expandButton = document.createElement("button");
-  expandButton.type = "button";
-  expandButton.className = "review-expand";
-  expandButton.dataset.action = "expand";
-  expandButton.setAttribute("aria-expanded", String(hasScoreData));
-  expandButton.textContent = "Ver desempenho";
+  // Collapsible detail: questions-done toggle, free-form score inputs,
+  // comment. None of these have a server-mode equivalent (T20/heritage.md:
+  // the new model records evidence atomically via the exercises Q&A flow
+  // or the external-exercises form below, never a free-standing manual
+  // patch of questionsDone/score/comment) — showing controls that would
+  // fail on every use is worse than not showing them, so remote mode
+  // simply omits this panel rather than rendering a broken one.
+  const detail = document.createElement("div");
+  detail.className = "review-row-detail";
+  detail.hidden = true;
+
+  let expandButton = null;
+  if (!REMOTE_MODE) {
+    expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "review-expand";
+    expandButton.dataset.action = "expand";
+    expandButton.setAttribute("aria-expanded", String(hasScoreData));
+    expandButton.textContent = "Ver desempenho";
+    detail.hidden = !hasScoreData;
+
+    const questionsDoneLabel = document.createElement("label");
+    questionsDoneLabel.className = "check-control review-toggle";
+    const questionsDoneInput = document.createElement("input");
+    questionsDoneInput.type = "checkbox";
+    questionsDoneInput.checked = task.questionsDone;
+    questionsDoneInput.dataset.action = "questions-done";
+    questionsDoneInput.dataset.reviewId = String(task.id);
+    questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
+    questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+
+    const scoreInputs = document.createElement("div");
+    scoreInputs.className = "review-score-inputs";
+    const live = document.createElement("div");
+    live.className = "review-score-live";
+    live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
+    const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
+    score.dataset.scoreFor = String(task.id);
+    score.setAttribute("aria-label", "Percentual de acertos");
+    live.append(score);
+    scoreInputs.append(
+      createScoreInput(task, "questionsCount", "Questões"),
+      createScoreInput(task, "correctCount", "Acertos"),
+      live,
+    );
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "comment-control review-note";
+    commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
+    const commentInput = document.createElement("textarea");
+    commentInput.rows = 2;
+    commentInput.maxLength = 500;
+    commentInput.value = task.comment ?? "";
+    commentInput.placeholder = "Anote uma dúvida ou ponto importante";
+    commentInput.dataset.action = "comment";
+    commentInput.dataset.reviewId = String(task.id);
+    commentInput.dataset.committedValue = task.comment ?? "";
+    commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
+    commentLabel.append(commentInput);
+
+    detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  }
 
   const externalBtn = document.createElement("button");
   externalBtn.type = "button";
@@ -404,53 +728,26 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   externalBtn.setAttribute("aria-expanded", "false");
   externalBtn.textContent = "Exercícios externos";
 
-  primary.append(reviewDoneLabel, expandButton, externalBtn);
+  // Progressive disclosure (Hoje = ação, não dashboard — master build plan
+  // §21): a collapsed row shows only what's needed to decide/act (identity,
+  // status, score-at-a-glance, mark-done). Resumo/exercícios/detalhe/
+  // externos open on demand instead of every card rendering fully expanded.
+  const toggleRowBtn = document.createElement("button");
+  toggleRowBtn.type = "button";
+  toggleRowBtn.className = "review-row-toggle";
+  toggleRowBtn.dataset.action = "toggle-row";
+  toggleRowBtn.setAttribute("aria-expanded", "false");
+  toggleRowBtn.textContent = "Ver conteúdo";
 
-  // Collapsible detail: questions, score, comment
-  const detail = document.createElement("div");
-  detail.className = "review-row-detail";
-  detail.hidden = !hasScoreData;
+  primary.append(reviewDoneLabel, toggleRowBtn);
 
-  const questionsDoneLabel = document.createElement("label");
-  questionsDoneLabel.className = "check-control review-toggle";
-  const questionsDoneInput = document.createElement("input");
-  questionsDoneInput.type = "checkbox";
-  questionsDoneInput.checked = task.questionsDone;
-  questionsDoneInput.dataset.action = "questions-done";
-  questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+  const secondaryControls = document.createElement("div");
+  secondaryControls.className = "review-row-secondary-controls";
+  secondaryControls.append(...(expandButton ? [expandButton] : []), externalBtn);
 
-  const scoreInputs = document.createElement("div");
-  scoreInputs.className = "review-score-inputs";
-  const live = document.createElement("div");
-  live.className = "review-score-live";
-  live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
-  const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
-  score.dataset.scoreFor = String(task.id);
-  score.setAttribute("aria-label", "Percentual de acertos");
-  live.append(score);
-  scoreInputs.append(
-    createScoreInput(task, "questionsCount", "Questões"),
-    createScoreInput(task, "correctCount", "Acertos"),
-    live,
-  );
-
-  const commentLabel = document.createElement("label");
-  commentLabel.className = "comment-control review-note";
-  commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
-  const commentInput = document.createElement("textarea");
-  commentInput.rows = 2;
-  commentInput.maxLength = 500;
-  commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
-  commentInput.dataset.action = "comment";
-  commentInput.dataset.reviewId = String(task.id);
-  commentInput.dataset.committedValue = task.comment ?? "";
-  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
-  commentLabel.append(commentInput);
-
-  detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  const body = document.createElement("div");
+  body.className = "review-row-body";
+  body.hidden = true;
 
   // External exercises section
   const externalSection = document.createElement("div");
@@ -506,9 +803,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   const summarySection = document.createElement("div");
   summarySection.className = "review-row-summary";
 
-  const summaryDisplayText = unit?.summaryBody ?? unit?.title ?? "";
-  const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
+  const summaryHasBody = Boolean(unit?.summaryBody);
+  const summaryDisplay = createTextElement("p", "review-summary-text", unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
+  summaryDisplay.hidden = !summaryHasBody;
+
+  const summaryPlaceholder = createTextElement(
+    "p",
+    "review-summary-placeholder",
+    "Sem resumo salvo. Toque em Editar Resumo para adicionar.",
+  );
+  summaryPlaceholder.hidden = summaryHasBody;
 
   const editSummaryButton = document.createElement("button");
   editSummaryButton.type = "button";
@@ -538,7 +843,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   summaryMessage.setAttribute("aria-live", "polite");
 
   summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
-  summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
+  summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
   if (exercises.length > 0) {
@@ -551,10 +856,18 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     const exercisesTitle = createTextElement("p", "review-exercises-title", `Exercícios (${exercises.length})`);
     exercisesReviewSection.append(exercisesTitle);
 
+    const judgmentByExercise = new Map(
+      judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => [j.exerciseId, j]),
+    );
+    let restoredAnswered = 0;
+    let restoredCorrect = 0;
+
     for (const exercise of exercises) {
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
       exItem.dataset.exerciseAnswered = "false";
+      exItem.dataset.exerciseId = String(exercise.id);
+      exItem.dataset.reviewTaskId = String(task.id);
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -565,6 +878,10 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       revealBtn.textContent = "Ver resposta";
 
       const answerEl = createTextElement("p", "review-exercise-answer", exercise.answerText);
+      // The WHY (AI-generated exercises): revealed together with the answer it explains; absent otherwise.
+      if (exercise.explanationText) {
+        answerEl.append(createTextElement("span", "review-exercise-explanation", `Por quê: ${exercise.explanationText}`));
+      }
       answerEl.hidden = true;
 
       const judgmentRow = document.createElement("div");
@@ -593,28 +910,259 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      // Retention cue from the longitudinal ledger: the last time this item was
+      // answered it was wrong and no correct answer has followed.
+      if (priorWrong.has(exercise.id) && !judgmentByExercise.has(exercise.id)) {
+        exItem.prepend(createTextElement("span", "study-now-chip review-exercise-prior", "Errou na última tentativa"));
+      }
+      const restored = judgmentByExercise.get(exercise.id);
+      if (restored) {
+        const wasCorrect = restored.outcome === "CORRECT";
+        exItem.dataset.exerciseAnswered = "true";
+        exItem.dataset.attemptId = String(restored.attemptId);
+        exItem.classList.add(wasCorrect ? "is-correct" : "is-wrong");
+        answerEl.hidden = false;
+        revealBtn.textContent = "Ocultar resposta";
+        judgmentRow.hidden = false;
+        acerteiBtn.disabled = true;
+        erreiBtn.disabled = true;
+        (wasCorrect ? acerteiBtn : erreiBtn).classList.add("is-selected");
+        if (restored.retest) {
+          const redoCorrect = restored.retest.outcome === "CORRECT";
+          exItem.dataset.retest = restored.retest.outcome;
+          exItem.append(createTextElement("span", `study-now-chip${redoCorrect ? " is-corrected" : ""}`, redoCorrect ? "Reteste: corrigido" : "Reteste: ainda errou"));
+        }
+        restoredAnswered += 1;
+        if (wasCorrect) restoredCorrect += 1;
+      }
       exercisesReviewSection.append(exItem);
     }
+    exercisesReviewSection.dataset.exercisesAnswered = String(restoredAnswered);
+    exercisesReviewSection.dataset.exercisesCorrect = String(restoredCorrect);
 
-    row.append(header, summarySection, exercisesReviewSection, primary, detail, externalSection);
+    const blockResult = document.createElement("div");
+    blockResult.className = "review-block-result";
+    blockResult.setAttribute("role", "status");
+    blockResult.hidden = true;
+    exercisesReviewSection.append(blockResult);
+    reviewBlockExercises.set(exercisesReviewSection, exercises);
+
+    // Retrieval first (product intent I.4): the questions come BEFORE the Resumo
+    // Mestre, so the student tries to recall, then consults the summary to see
+    // what was missing -- not the other way round.
+    body.append(exercisesReviewSection, summarySection, secondaryControls, detail, externalSection);
   } else {
-    row.append(header, summarySection, primary, detail, externalSection);
+    body.append(summarySection, secondaryControls, detail, externalSection);
+  }
+  row.append(header, primary, body);
+  const restoredSection = row.querySelector("[data-exercises-total]");
+  if (restoredSection && Number(restoredSection.dataset.exercisesAnswered) > 0) {
+    const total = Number(restoredSection.dataset.exercisesTotal);
+    const answered = Number(restoredSection.dataset.exercisesAnswered);
+    if (answered === total) {
+      const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
+      for (const el of row.querySelectorAll("[data-score-for]")) {
+        el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+        el.classList.remove("is-empty");
+      }
+      restoredSection.dataset.allAnswered = "true";
+    }
+    updateReviewBlockResult(restoredSection);
+    // The student already worked this block: come back to it open, with the
+    // result and "Refazer erros" in view, not folded behind "Ver conteúdo".
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggleRowBtn.setAttribute("aria-expanded", "true");
+    toggleRowBtn.textContent = "Recolher";
   }
   return row;
 }
 
+let pendingTodayReturnReviewId = null;
+
+// Exercises of a Hoje review block, kept out of the DOM so "Refazer erros"
+// can hand the exact wrong items to the shared retest flow.
+const reviewBlockExercises = new WeakMap();
+
+function updateReviewBlockResult(section) {
+  const result = section.querySelector(".review-block-result");
+  if (!result) return;
+  const total = Number(section.dataset.exercisesTotal);
+  const answered = Number(section.dataset.exercisesAnswered);
+  if (answered < total) {
+    result.hidden = true;
+    result.replaceChildren();
+    return;
+  }
+  const correct = Number(section.dataset.exercisesCorrect);
+  const wrong = total - correct;
+  const redone = section.querySelectorAll(".review-exercise-item.is-wrong[data-retest]").length;
+  const fixed = section.querySelectorAll('.review-exercise-item.is-wrong[data-retest="CORRECT"]').length;
+  const pending = wrong - fixed;
+  const summary = document.createElement("div");
+  summary.className = "review-block-summary";
+  summary.append(createTextElement("p", "review-block-score", `Bloco concluído: ${correct}/${total} corretas`));
+  if (redone > 0) summary.append(createTextElement("p", "review-block-note", `Reteste: ${fixed} de ${wrong} ${wrong === 1 ? "erro corrigido" : "erros corrigidos"}`));
+  if (wrong > 0 && pending === 0) summary.append(createTextElement("p", "review-block-note", "Todos os erros foram corrigidos. Marque a revisão como feita quando terminar."));
+  result.replaceChildren(summary);
+  if (pending > 0) {
+    const retest = document.createElement("button");
+    retest.type = "button";
+    retest.className = "primary-button review-block-retest";
+    retest.dataset.action = "retest-block";
+    retest.textContent = redone > 0 ? `Refazer os que ainda errei (${pending})` : `Refazer erros (${pending})`;
+    result.append(retest);
+  }
+  result.hidden = false;
+}
+
+// T40: read-only fallback for "cold offline reopen after prior sync
+// displays the app/agenda". Deliberately renders plain text rows, not
+// createReviewRow's interactive complete/reveal actions — those require a
+// live server round-trip that offline-by-definition cannot make (T41
+// disables mutation UI explicitly; this predates that, so it just never
+// offers the action at all rather than offering one that would silently
+// fail). Only overdue/today buckets are shown: T39's snapshot excludes
+// already-completed tasks, so "done today" has no offline equivalent.
+async function renderOfflineToday(accountId) {
+  const snapshot = await OfflineStore.loadSnapshot(accountId);
+  const today = getLocalDateValue();
+
+  let banner = document.querySelector("#offline-banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "offline-banner";
+    banner.setAttribute("role", "status");
+    banner.style.cssText = "position:sticky;top:0;z-index:100;background:#92400e;color:#fff;padding:.5rem 1rem;font-size:.8125rem;text-align:center;";
+    mainContent?.prepend(banner);
+  }
+  banner.hidden = false;
+  banner.textContent = snapshot
+    ? `Modo offline — última sincronização: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(snapshot.syncedAt))}.`
+    : "Modo offline — nenhuma agenda sincronizada anteriormente.";
+
+  const overdue = (snapshot?.items ?? []).filter((i) => i.dueDate < today);
+  const dueToday = (snapshot?.items ?? []).filter((i) => i.dueDate === today);
+  const groups = { overdue, today: dueToday, doneToday: [] };
+
+  for (const [groupName, tasks] of Object.entries(groups)) {
+    const block = reviewGroups[groupName];
+    const list = block.querySelector(`[data-review-list="${groupName}"]`);
+    const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    list.replaceChildren();
+    count.textContent = String(tasks.length);
+    block.hidden = tasks.length === 0;
+    for (const item of tasks) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+  }
+
+  // Suggestions come from the live server; never show stale ones from the last online render.
+  weakRenderSeq += 1; // also cancels an online render still in flight
+  if (weakBlock) weakBlock.hidden = true;
+  todayEmptyState.hidden = true;
+  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0);
+  todayTomorrow.hidden = true;
+  if (todayLoadSummary) {
+    const parts = [];
+    if (overdue.length > 0) parts.push(`${overdue.length} vencida${overdue.length !== 1 ? "s" : ""}`);
+    if (dueToday.length > 0) parts.push(`${dueToday.length} hoje`);
+    todayLoadSummary.hidden = parts.length === 0;
+    todayLoadSummary.textContent = parts.join(" · ");
+  }
+  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+}
+
+// "Vale reforçar": optional suggestions from the server's explainable priorities
+// (units NOT already due, weak by observed recent evidence and/or with items still
+// wrong). Extra signal only — a failure or local mode just hides the block.
+let weakRenderSeq = 0;
+async function renderWeakPractice(today) {
+  if (!weakBlock) return;
+  const seq = ++weakRenderSeq;
+  let suggestions = [];
+  if (REMOTE_MODE && DB.priorities?.get) {
+    try {
+      suggestions = (await DB.priorities.get(today)).weakPractice ?? [];
+    } catch (error) {
+      console.warn("Falha ao carregar sugestões de reforço.", error);
+    }
+  }
+  if (seq !== weakRenderSeq) return; // a newer render already owns the block
+  weakList.replaceChildren();
+  weakCount.textContent = String(suggestions.length);
+  weakBlock.hidden = suggestions.length === 0;
+  for (const item of suggestions) {
+    const row = document.createElement("article");
+    row.className = "weak-practice-row";
+    row.dataset.unitId = String(item.unitId);
+    const text = document.createElement("div");
+    text.className = "weak-practice-text";
+    text.append(
+      createTextElement("span", "weak-practice-title", item.unitTitle),
+      createTextElement("span", "weak-practice-meta", `${item.subjectName} · ${weakPracticeReason(item)}`),
+    );
+    const open = createTextElement("button", "small-button", "Ver no Plano");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      pendingPlanFocusUnitId = item.unitId;
+      showScreen("plan");
+    });
+    row.append(text, open);
+    weakList.append(row);
+  }
+}
+
 export async function renderToday() {
+  const existingOfflineBanner = document.querySelector("#offline-banner");
+  // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
+  // nothing about a loopback backend's reachability — Desktop must not
+  // treat "no Wi-Fi/internet" as "no authority" (STATE.md's ARCHITECTURE
+  // SUPERSESSION §3). This read-only snapshot fallback stays REMOTE_MODE
+  // (non-local) territory only.
+  if (REMOTE_MODE && !LOCAL_AUTHORITY && !navigator.onLine) {
+    const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+    return renderOfflineToday(accountId);
+  }
+
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
-    await Promise.all([
-      DB.reviewTasks.getForToday(today),
-      DB.reviewTasks.getOverdue(today),
-      DB.reviewTasks.getCompletedToday(today),
-      DB.reviewTasks.getTomorrow(tomorrow),
-      DB.learningUnits.getAll(),
-      DB.subjects.getAll(),
-    ]);
+  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects;
+  try {
+    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
+      await Promise.all([
+        DB.reviewTasks.getForToday(today),
+        DB.reviewTasks.getOverdue(today),
+        DB.reviewTasks.getCompletedToday(today),
+        DB.reviewTasks.getTomorrow(tomorrow),
+        DB.learningUnits.getAll(),
+        DB.subjects.getAll(),
+      ]);
+  } catch (error) {
+    // T42 fix (AC-24): navigator.onLine only reflects the OS network
+    // adapter's link state, not whether the SmartLearn server itself is
+    // reachable — a dead/restarting/firewalled server with Wi-Fi otherwise
+    // up never flips navigator.onLine, so the check above alone can't catch
+    // it. A NetworkError here means fetch() itself never got a response
+    // (api-client.js's own distinction) — route it through the same
+    // read-only snapshot path as a known-offline cold start. Any other
+    // error (a real HTTP response, auth, etc.) is a different failure and
+    // must keep propagating, not get silently reinterpreted as "offline".
+    // LOCAL-01A: a local backend that's down is a real, explicit failure
+    // (item E of LOCAL-01A's discriminating tests) — it must surface as an
+    // error, never get silently reinterpreted as "offline, show the last
+    // snapshot" the way a genuinely unreachable REMOTE cloud server does.
+    if (REMOTE_MODE && !LOCAL_AUTHORITY && error instanceof NetworkError) {
+      const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+      return renderOfflineToday(accountId);
+    }
+    throw error;
+  }
+  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
@@ -640,6 +1188,26 @@ export async function renderToday() {
     }),
   );
 
+  // Judgments already given in still-open reviews live on the server (each
+  // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
+  // reloading never silently drops a block the student already answered.
+  const judgmentsByTaskId = new Map();
+  const priorWrongByTaskId = new Map();
+  if (REMOTE_MODE && DB.attempts?.listForReviews) {
+    // Completed-today reviews too: marking a review done must not wipe its
+    // errors (and "Refazer erros") from view by re-rendering fresh exercises.
+    const openWithExercises = [...overdueReviews, ...pendingToday, ...completedToday]
+      .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
+      .map((t) => t.id);
+    try {
+      const { attemptsByReviewTask, priorWrongByReviewTask } = await DB.attempts.listForReviews(openWithExercises);
+      for (const [taskId, judgments] of Object.entries(attemptsByReviewTask)) judgmentsByTaskId.set(Number(taskId), judgments);
+      for (const [taskId, ids] of Object.entries(priorWrongByReviewTask ?? {})) priorWrongByTaskId.set(Number(taskId), new Set(ids));
+    } catch (error) {
+      console.error("Falha ao restaurar julgamentos das revisões.", error);
+    }
+  }
+
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
@@ -652,7 +1220,39 @@ export async function renderToday() {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
+      list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set()));
+    }
+  }
+
+  renderWeakPractice(today).catch(console.error); // not awaited: suggestions must never delay Hoje
+
+  // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
+  // with data already fetched above — no new scheduler, no change to the
+  // 16-review schedule. Priority: overdue (oldest first, already the
+  // server's own sort order) > today > (tomorrow/none handled by the
+  // existing todayTomorrow/todaySuccessState elements below, which
+  // already communicate those two cases adequately).
+  if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
+    // Overdue before today (protocol kept), but never a review with nothing to
+    // retrieve while another one has exercises / items to reinforce.
+    const contextOf = (task) => ({
+      exerciseIds: (exercisesByUnitId.get(task.unitId) ?? []).map((e) => e.id),
+      judgedIds: new Set((judgmentsByTaskId.get(task.id) ?? []).filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId)),
+      priorWrongIds: priorWrongByTaskId.get(task.id) ?? new Set(),
+    });
+    const pick = pickPrimaryReview(overdueReviews, pendingToday, contextOf);
+    const primaryTask = pick?.task ?? null;
+    if (primaryTask) {
+      const lead = overdueReviews.length > 0
+        ? (overdueReviews.length === 1 ? "Você tem 1 revisão vencida." : `Você tem ${overdueReviews.length} revisões vencidas.`)
+        : (pendingToday.length === 1 ? "Você tem 1 revisão para hoje." : `Você tem ${pendingToday.length} revisões para hoje.`);
+      const unitTitle = unitsById.get(primaryTask.unitId)?.title;
+      const reinforce = pick.reinforce > 0 ? ` — ${pick.reinforce} para reforçar` : "";
+      todayPrimaryActionText.textContent = unitTitle ? `${lead} Comece por “${unitTitle}”${reinforce}.` : lead;
+      todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
+      todayPrimaryAction.hidden = false;
+    } else {
+      todayPrimaryAction.hidden = true;
     }
   }
 
@@ -696,7 +1296,45 @@ export async function renderToday() {
   if (dailySummaryPanel) {
     dailySummaryPanel.hidden = true;
   }
+
+  // Coming back from a redo started inside a review block: land on that block,
+  // not at the top of Hoje. Only consumed once Hoje is actually the visible
+  // screen (the redo's own finish also re-renders while still on Estudar).
+  if (pendingTodayReturnReviewId != null && document.querySelector("#screen-today")?.hidden === false) {
+    const target = reviewDashboard.querySelector(`.review-row[data-review-id="${pendingTodayReturnReviewId}"]`);
+    pendingTodayReturnReviewId = null;
+    const anchor = target?.querySelector(".review-block-result:not([hidden])") ?? target;
+    anchor?.scrollIntoView({ block: "center" });
+  }
 }
+
+// SLICE 2 (Stats Visual Intelligence): performance and volume are two
+// different questions ("how well" vs "how much") and must never share a
+// bar or a color scale — a short green bar (little practice, good score)
+// must never look like a short red one (lots of practice, bad score).
+function createComparisonBar(fillPercent, background, extraClass) {
+  const bar = document.createElement("div");
+  bar.className = "subject-compare-bar";
+  const fill = document.createElement("div");
+  fill.className = ["subject-compare-bar-fill", extraClass].filter(Boolean).join(" ");
+  fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
+  fill.style.background = background;
+  bar.append(fill);
+  return bar;
+}
+
+function createComparisonCell(valueText, bar) {
+  const cell = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "subject-compare-cell";
+  const value = document.createElement("span");
+  value.className = "subject-compare-value";
+  value.textContent = valueText;
+  wrap.append(value, bar);
+  cell.append(wrap);
+  return cell;
+}
+
 
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
@@ -717,22 +1355,6 @@ export async function renderStats() {
   exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
   for (const exercise of stats.completedExercises) {
     exerciseNotesBody.append(createExerciseRow(exercise));
-  }
-
-  subjectAveragesBody.replaceChildren();
-  subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
-  for (const subject of stats.avgBySubject) {
-    const row = document.createElement("tr");
-    const name = document.createElement("th");
-    name.scope = "row";
-    name.textContent = subject.subjectName;
-    const average = document.createElement("td");
-    average.dataset.cell = "avg";
-    average.append(createPerformanceBadge(subject.avgScore));
-    const questions = document.createElement("td");
-    questions.textContent = String(subject.totalQuestions);
-    row.append(name, average, questions);
-    subjectAveragesBody.append(row);
   }
 
   const dataPoints = evidence
@@ -764,6 +1386,7 @@ export async function renderStats() {
       opt.textContent = s.name;
       evolutionFilterSubject.append(opt);
     }
+    syncSelect(evolutionFilterSubject);
   }
   const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
   chartEmpty.hidden = svgRendered;
@@ -784,12 +1407,8 @@ function getPlanStateBadge(state) {
   return span;
 }
 
-function getNextReview(unitId, allTasks) {
-  const pending = allTasks
-    .filter((t) => t.unitId === unitId && !t.reviewDone)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  return pending.length > 0 ? pending[0].dueDate : null;
-}
+// getNextReview itself now lives in scheduler.js (pure, unit-tested there —
+// see test/scheduler.test.js) since it has no DOM dependency.
 
 function getPlanPerfBadge(evidence) {
   const total = evidence.reduce((s, e) => s + e.questionsCount, 0);
@@ -798,10 +1417,10 @@ function getPlanPerfBadge(evidence) {
   const pct = (correct / total) * 100;
   const span = document.createElement("span");
   span.className = "performance-badge";
-  if (pct >= THRESHOLDS.STRONG) span.dataset.perf = "strong";
-  else if (pct >= THRESHOLDS.ADEQUATE) span.dataset.perf = "adequate";
-  else if (pct >= THRESHOLDS.ATTENTION) span.dataset.perf = "attention";
-  else span.dataset.perf = "critical";
+  // getState's states (STRONG/ADEQUATE/ATTENTION/CRITICAL) match dataset.perf's
+  // own lowercase vocabulary exactly — see getPerformanceBandClass above for
+  // why this delegates to getState instead of an independent threshold chain.
+  span.dataset.perf = getState(pct, total).toLowerCase();
   span.textContent = `${pct.toFixed(0)}%`;
   return span;
 }
@@ -809,14 +1428,31 @@ function getPlanPerfBadge(evidence) {
 let planCurrentSubjectFilter = "";
 let planCurrentStateFilter = "";
 
+// "Para reforçar": exercises still wrong at their last attempt, by unit. Only the server
+// keeps item-level attempts; without it (or if it fails) the callers just show no cue —
+// it is an extra signal, never a reason to fail a whole screen.
+async function loadReinforcementByUnit() {
+  if (!REMOTE_MODE || !DB.attempts?.reinforcement) return {};
+  try {
+    return await DB.attempts.reinforcement();
+  } catch (error) {
+    console.warn("Falha ao carregar itens para reforçar.", error);
+    return {};
+  }
+}
+
+// Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
+let pendingPlanFocusUnitId = null;
+
 export async function renderPlan() {
   if (!planList) return;
   const today = getLocalDateValue();
-  const [learningUnits, subjects, allTasks, allEvidence] = await Promise.all([
+  const [learningUnits, subjects, allTasks, allEvidence, reinforcementByUnit] = await Promise.all([
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
     DB.reviewTasks.getAll(),
     DB.learningEvidence.getAll(),
+    loadReinforcementByUnit(),
   ]);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
   const evidenceByUnitId = new Map();
@@ -851,6 +1487,7 @@ export async function renderPlan() {
       select.append(opt);
     }
     if (currentValue) select.value = currentValue;
+    syncSelect(select);
   }
   syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
   syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
@@ -890,6 +1527,10 @@ export async function renderPlan() {
   });
 
   planEmpty.hidden = filtered.length > 0;
+  // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
+  planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
+    ? "Nenhuma aula cadastrada. Envie um PDF em Materiais ou crie uma aula em “+ Nova aula”."
+    : "Nenhuma aula cadastrada.";
   planList.replaceChildren();
 
   for (const unit of filtered) {
@@ -933,13 +1574,16 @@ export async function renderPlan() {
     badges.append(getPlanStateBadge(state));
     const perfBadge = getPlanPerfBadge(evidence);
     if (perfBadge) badges.append(perfBadge);
+    const reinforceIds = new Set(reinforcementByUnit[unit.id] ?? []);
+    if (reinforceIds.size > 0) {
+      badges.append(createTextElement("span", "study-now-chip plan-reinforce-chip", `${reinforceIds.size} para reforçar`));
+    }
 
     const expandBtn = document.createElement("button");
     expandBtn.className = "plan-expand-btn";
     expandBtn.type = "button";
     expandBtn.setAttribute("aria-expanded", "false");
     expandBtn.setAttribute("aria-label", "Expandir detalhes");
-    expandBtn.textContent = "▸";
 
     compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
 
@@ -951,7 +1595,7 @@ export async function renderPlan() {
     expandBtn.addEventListener("click", async () => {
       const isExpanded = expandBtn.getAttribute("aria-expanded") === "true";
       expandBtn.setAttribute("aria-expanded", String(!isExpanded));
-      expandBtn.textContent = isExpanded ? "▸" : "▾";
+      expandBtn.setAttribute("aria-label", isExpanded ? "Expandir detalhes" : "Recolher detalhes");
       detail.hidden = isExpanded;
 
       if (!isExpanded && !detail.dataset.loaded) {
@@ -965,6 +1609,7 @@ export async function renderPlan() {
         const summaryHeading = document.createElement("h3");
         summaryHeading.textContent = "Resumo Mestre";
         summarySection.append(summaryHeading);
+        appendSummarySources(summarySection, unit.id);
 
         let currentSummary = unit.summaryBody ?? "";
 
@@ -1058,8 +1703,53 @@ export async function renderPlan() {
           for (const ex of exs) {
             const item = document.createElement("div");
             item.className = "plan-exercise-item";
-            item.textContent = ex.questionText;
+            if (reinforceIds.has(ex.id)) {
+              item.classList.add("is-reinforce");
+              item.append(
+                createTextElement("span", "plan-exercise-text", ex.questionText),
+                createTextElement("span", "study-now-chip plan-exercise-prior", "Errou na última tentativa"),
+              );
+            } else {
+              item.textContent = ex.questionText;
+            }
             exSection.append(item);
+          }
+          const actions = document.createElement("div");
+          actions.className = "plan-exercise-actions";
+          exSection.append(actions);
+          // First active-recall pass on demand. Offered only until the unit has
+          // its INITIAL_PRACTICE evidence: that is exactly what this flow
+          // records, so a second on-demand pass would be mislabeled (later
+          // retrieval belongs to the scheduled reviews, not to massed repeats).
+          // An exam's evidence has the same type but is NOT a study pass: it must not hide "Estudar agora".
+          if (!evidence.some((ev) => ev.context === "INITIAL_PRACTICE" && ev.origin !== "EXAM")) {
+            const startBtn = document.createElement("button");
+            startBtn.type = "button";
+            startBtn.className = "primary-button plan-study-now";
+            startBtn.dataset.action = "plan-study-now";
+            startBtn.textContent = "Estudar agora";
+            startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
+            actions.append(startBtn);
+          }
+          // Modo Prova: measure first, teach after (nothing is revealed until the student submits).
+          if (REMOTE_MODE && DB.exams) {
+            const examBtn = document.createElement("button");
+            examBtn.type = "button";
+            examBtn.className = "secondary-button plan-exam";
+            examBtn.dataset.action = "plan-exam";
+            examBtn.textContent = "Fazer prova";
+            examBtn.addEventListener("click", () => startExam(unit, subject?.name));
+            actions.append(examBtn);
+            if (subject && DB.exams.startSubject) {
+              const subjectExamBtn = document.createElement("button");
+              subjectExamBtn.type = "button";
+              subjectExamBtn.className = "secondary-button plan-subject-exam";
+              subjectExamBtn.dataset.action = "plan-subject-exam";
+              subjectExamBtn.textContent = "Prova da disciplina";
+              subjectExamBtn.title = `Uma prova com questões de todas as aulas de ${subject.name}, começando pelo que você errou`;
+              subjectExamBtn.addEventListener("click", () => startSubjectExam(subject));
+              actions.append(subjectExamBtn);
+            }
           }
           detail.append(exSection);
         }
@@ -1076,7 +1766,8 @@ export async function renderPlan() {
           for (const ev of [...evidence].sort((a, b) => b.evidenceDate.localeCompare(a.evidenceDate))) {
             const li = document.createElement("li");
             const ctx = { INITIAL_PRACTICE: "Prática inicial", REVIEW: "Revisão", EXTERNAL: "Externo" };
-            li.textContent = `${formatDate(ev.evidenceDate)} — ${ctx[ev.context] ?? ev.context}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
+            const label = ev.origin === "EXAM" ? "Prova" : (ctx[ev.context] ?? ev.context);
+            li.textContent = `${formatDate(ev.evidenceDate)} — ${label}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
             evList.append(li);
           }
           evSection.append(evList);
@@ -1095,6 +1786,15 @@ export async function renderPlan() {
     row.append(compact, detail);
     planList.append(row);
   }
+
+  if (pendingPlanFocusUnitId != null) {
+    const target = planList.querySelector(`.plan-row[data-unit-id="${pendingPlanFocusUnitId}"]`);
+    pendingPlanFocusUnitId = null;
+    if (target) {
+      target.querySelector(".plan-expand-btn")?.click();
+      target.scrollIntoView({ block: "center" });
+    }
+  }
 }
 
 function createTrendBadge(direction) {
@@ -1106,13 +1806,114 @@ function createTrendBadge(direction) {
   return span;
 }
 
-function createStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "performance-state-badge";
-  span.dataset.state = state;
-  const labels = { NO_EVIDENCE: "Sem evidência", CRITICAL: "Crítico", ATTENTION: "Atenção", ADEQUATE: "Adequado", STRONG: "Forte" };
-  span.textContent = labels[state] ?? state;
-  return span;
+// Header-click sorting (approved pattern — no separate sort dropdown when a
+// table column can sort itself). One {key,dir} state per table; ascending
+// "performance" is the existing worst-first default in both tables.
+const subjectSortState = { key: "performance", dir: "asc" };
+const unitSortState = { key: "performance", dir: "asc" };
+
+// Global período control (screen-heading): shared by both Por disciplina
+// and Por conteúdo, same cutoff rule either table already used.
+// filterByPeriod/sortMatrixRows themselves live in analytics.js (pure,
+// unit-tested there — see test/analytics.test.js) since they're plain row
+// transforms with no DOM dependency; this file only wires them to the UI.
+
+// P0-3 (revised): Recência shares the exact same single Prática button
+// instead of a second stacked button — a visually-stacked version briefly
+// existed and was reverted (it changed the header cell's content shape at
+// every width, including the phone breakpoint commit ff7dec2 had already
+// fixed and locked, silently re-breaking it). One button, one line, zero
+// header-geometry change at any width: clicking it steps through this
+// fixed cycle instead.
+const PRACTICE_RECENCY_CYCLE = [
+  { key: "practice", dir: "asc" },
+  { key: "practice", dir: "desc" },
+  { key: "recency", dir: "asc" },
+  { key: "recency", dir: "desc" },
+];
+
+function updateSortHeaderUI(theadRow, state) {
+  if (!theadRow) return;
+  for (const th of theadRow.querySelectorAll("th")) {
+    const buttons = th.querySelectorAll(".th-sort-btn");
+    if (buttons.length === 0) continue;
+    let anyActive = false;
+    for (const btn of buttons) {
+      if (btn.classList.contains("th-sort-btn-practice-recency")) {
+        // This one button represents two sort dimensions; its label and
+        // data-sort-key follow whichever is currently engaged, defaulting
+        // back to its original "Prática" identity when neither is active
+        // (some other header is the current sort) — same idle appearance
+        // this button always had before Recência existed.
+        const engaged = state.key === "practice" || state.key === "recency";
+        const effectiveKey = engaged ? state.key : "practice";
+        btn.dataset.sortKey = effectiveKey;
+        const label = effectiveKey === "recency" ? "Recência" : "Prática";
+        if (btn.firstChild && btn.firstChild.nodeType === Node.TEXT_NODE) {
+          btn.firstChild.textContent = label;
+        }
+        btn.setAttribute("aria-label", `Ordenar por ${label.toLowerCase()}`);
+        if (engaged) anyActive = true;
+        btn.classList.toggle("is-active", engaged);
+        btn.dataset.dir = engaged ? state.dir : "";
+        continue;
+      }
+      const isActive = btn.dataset.sortKey === state.key;
+      if (isActive) anyActive = true;
+      btn.classList.toggle("is-active", isActive);
+      btn.dataset.dir = isActive ? state.dir : "";
+    }
+    th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
+  }
+}
+
+function wireSortableHeaders(rowId, state, onChange) {
+  const row = document.querySelector(`#${rowId}`);
+  if (!row || row.dataset.sortWired) return;
+  row.dataset.sortWired = "true";
+  row.addEventListener("click", (event) => {
+    const btn = event.target.closest(".th-sort-btn");
+    if (!btn) return;
+    if (btn.classList.contains("th-sort-btn-practice-recency")) {
+      const currentIndex = PRACTICE_RECENCY_CYCLE.findIndex((s) => s.key === state.key && s.dir === state.dir);
+      const next = PRACTICE_RECENCY_CYCLE[(currentIndex + 1 + PRACTICE_RECENCY_CYCLE.length) % PRACTICE_RECENCY_CYCLE.length];
+      state.key = next.key;
+      state.dir = next.dir;
+    } else {
+      const key = btn.dataset.sortKey;
+      state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
+      state.key = key;
+    }
+    updateSortHeaderUI(row, state);
+    onChange();
+  });
+}
+
+// "Meu estudo está funcionando?" — plain text from observable evidence (see studyVerdict).
+// It ignores the period filter on purpose: a trend is a comparison over time, not a slice.
+async function renderStudyVerdict(subjectRows, unitRows) {
+  if (!studyVerdictEl) return;
+  const verdict = Analytics.studyVerdict(subjectRows, unitRows, await loadReinforcementByUnit());
+  const text = verdictText(verdict);
+  studyVerdictEl.dataset.state = verdict.state;
+  studyVerdictHeadline.textContent = text.headline;
+  studyVerdictDetail.textContent = text.detail;
+  studyVerdictEl.hidden = false;
+
+  const a = verdict.attention;
+  studyVerdictAttention.hidden = a == null;
+  if (a == null) return;
+  const pct = (n) => `${Math.round(n)}%`;
+  const items = a.reinforceCount > 0
+    ? ` ${a.reinforceCount} ${a.reinforceCount === 1 ? "exercício" : "exercícios"} para reforçar.`
+    : "";
+  studyVerdictAttentionText.textContent = a.reason === "DECLINING"
+    ? `Atenção: “${a.unitTitle}” (${a.subjectName}) está piorando, de ${pct(a.olderAccuracy)} para ${pct(a.recentAccuracy)}.${items}`
+    : `Atenção: “${a.unitTitle}” (${a.subjectName}) tem${items ? "" : " itens para reforçar."}${items}`;
+  studyVerdictAttentionBtn.onclick = () => {
+    pendingPlanFocusUnitId = a.unitId;
+    showScreen("plan");
+  };
 }
 
 export async function renderStatsBySubject() {
@@ -1124,72 +1925,108 @@ export async function renderStatsBySubject() {
     DB.subjects.getAll(),
   ]);
   let results = Analytics.bySubject(evidence, units, subjects, today);
-
-  const sortValue = statsSubjectSort?.value ?? "worst-first";
-  if (sortValue === "best-first") {
-    results = [...results].sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return b.weightedAccuracy - a.weightedAccuracy;
-    });
-  } else if (sortValue === "volume") {
-    results = [...results].sort((a, b) => b.totalQuestions - a.totalQuestions);
-  } else if (sortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = [...results].sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  }
-  // "worst-first" is default from Analytics.bySubject sort
+  await renderStudyVerdict(results, Analytics.byUnit(evidence, units, subjects));
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  results = sortMatrixRows(results, subjectSortState);
+  wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
+  updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
 
   const hasAny = results.some((r) => r.totalQuestions > 0);
   subjectKpiEmpty.hidden = hasAny || results.length > 0;
   subjectKpiList.replaceChildren();
 
+  // Matrix row: identidade (subject-cell) | desempenho (% + barra, nunca
+  // texto quando sem evidência) | prática (volume, independente de
+  // desempenho) | tendência (seta, neutra em relação à cor de performance).
+  // Selecionar uma linha também dirige o gráfico de evolução ao lado — evita
+  // duas formas redundantes de escolher a mesma disciplina (linha + dropdown
+  // do gráfico ficam em sincronia, nenhuma delas é removida).
   for (const r of results) {
-    const card = document.createElement("article");
-    card.className = "subject-kpi";
-    card.dataset.state = r.state;
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.subjectId = String(r.subjectId);
 
-    const header = document.createElement("div");
-    header.className = "subject-kpi-header";
-
+    const identityCell = document.createElement("td");
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+    // P1-2: at narrower table widths this chip can be visually truncated
+    // (ellipsis) to keep the table from silently overflowing — the native
+    // title tooltip keeps the full name one hover/long-press away instead
+    // of losing it outright.
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+    identityCell.append(chip);
 
-    const badges = document.createElement("div");
-    badges.className = "subject-kpi-badges";
-    badges.append(createStateBadge(r.state), createTrendBadge(r.trend.direction));
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    header.append(chip, badges);
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = `${r.totalQuestions} q · ${r.totalCorrect} acertos`;
+    const practiceRecent = document.createElement("div");
+    practiceRecent.className = "practice-recent";
+    practiceRecent.textContent = `Últimos 30d: ${r.recentQuestions} q`;
+    practiceCell.append(practiceMain, practiceRecent);
 
-    const metrics = document.createElement("div");
-    metrics.className = "subject-kpi-metrics";
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
 
-    const accEl = document.createElement("div");
-    accEl.className = "subject-kpi-acc";
-    // AC-EST1-05: sem evidência ≠ 0% — show neutral, never red
-    // AC-EST1-07: always show % + n questões
-    if (r.weightedAccuracy == null) {
-      accEl.textContent = "Sem evidência";
-      accEl.classList.add("is-no-evidence");
-    } else {
-      accEl.textContent = `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%`;
-    }
-
-    const qEl = document.createElement("div");
-    qEl.className = "subject-kpi-questions";
-    qEl.textContent = `${r.totalQuestions} questões · ${r.totalCorrect} acertos`;
-
-    const recentEl = document.createElement("div");
-    recentEl.className = "subject-kpi-recent";
-    recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
-
-    metrics.append(accEl, qEl, recentEl);
-    card.append(header, metrics);
-    subjectKpiList.append(card);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => openSubjectContents(r.subjectId));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openSubjectContents(r.subjectId);
+      }
+    });
+    subjectKpiList.append(row);
   }
+}
+
+function selectSubjectForEvolution(subjectId) {
+  if (evolutionFilterSubject) {
+    evolutionFilterSubject.value = String(subjectId);
+    syncSelect(evolutionFilterSubject);
+    evolutionFilterSubject.dispatchEvent(new Event("change"));
+  }
+  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.subjectId === String(subjectId));
+  }
+}
+
+// Single semantic action for "activate a discipline row in Por disciplina":
+// used identically by click, Enter and Space so mouse and keyboard never
+// diverge. Restores the pre-regression behavior (row activation used to
+// switch to Por conteúdo) while keeping the newer evolution-chart sync,
+// which is still legitimate/useful on its own.
+function openSubjectContents(subjectId) {
+  // 1) keep discipline selection in sync — same mechanism the evolution
+  // chart already used (dropdown value + row highlight in Por disciplina).
+  selectSubjectForEvolution(subjectId);
+  // 2) drive Por conteúdo to the same discipline.
+  selectedUnitSubjectId = subjectId;
+  // 3) activate the Por conteúdo tab (shared setStatsView, same path a real
+  // tab click uses — no parallel tab-activation logic).
+  const unitTab = document.querySelector("#tab-stats-unit");
+  if (unitTab) setStatsView(unitTab);
+  // 4) re-render Por conteúdo (updates the matrix rows AND, via
+  // renderContentContext inside it, the context-switcher trigger/menu).
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  // 5) focus/ARIA coherence: move focus to the now-selected tab, matching
+  // the tablist's own roving-tabindex state (setStatsView already put
+  // tabindex=0 only on this tab) instead of leaving focus stranded on a
+  // row that just disappeared into the other, now-hidden panel.
+  unitTab?.focus();
 }
 
 function createTrackingStateBadge(state) {
@@ -1224,6 +2061,7 @@ export async function renderTracking() {
       opt.textContent = s.name;
       trackingFilterSubject.append(opt);
     }
+    syncSelect(trackingFilterSubject);
   }
 
   const subjFilter = trackingFilterSubject?.value ?? "";
@@ -1418,6 +2256,7 @@ export async function renderDisciplinas() {
     const card = document.createElement("article");
     card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;
     card.dataset.subjectId = String(subj.id);
+    card.style.setProperty("--subject-color", `var(${colorVarForKey(subj.color ?? "DISC-BLUE")})`);
 
     const chipRow = document.createElement("div");
     chipRow.className = "subject-catalog-chip-row";
@@ -1510,10 +2349,14 @@ export async function renderDisciplinas() {
     archiveBtn.type = "button";
     archiveBtn.textContent = subj.isActive ? "Arquivar" : "Reativar";
     archiveBtn.addEventListener("click", async () => {
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.update(subj.id, { isActive: !subj.isActive });
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao arquivar/reativar disciplina.", error);
+        if (msg) msg.textContent = "Não foi possível salvar. Verifique a conexão e tente de novo.";
+      }
     });
 
     const deleteBtn = document.createElement("button");
@@ -1529,10 +2372,14 @@ export async function renderDisciplinas() {
       }
       const confirmed = await showConfirm(`Excluir disciplina "${subj.name}"? Essa ação não pode ser desfeita.`);
       if (!confirmed) return;
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.delete(subj.id);
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao excluir disciplina.", error);
+        if (msg) msg.textContent = "Não foi possível excluir. Verifique a conexão e tente de novo.";
+      }
     });
 
     const deleteMsg = document.createElement("p");
@@ -1576,8 +2423,58 @@ function buildSparkline(scores, width = 60, height = 24) {
   return svg;
 }
 
+let selectedUnitSubjectId = null;
+
+function formatContentContextMeta(row) {
+  if (!row || row.totalQuestions <= 0) return "Sem evidência ainda";
+  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return `${pct}% desempenho · ${row.totalQuestions} questões`;
+}
+
+// Context switcher aprovado: trigger mostra a disciplina atual; o menu que
+// ele abre nunca repete essa disciplina, só mostra as alternativas.
+function renderContentContext(activeSubjectRows, currentSubjectId) {
+  if (!contentContextPlate || !disciplineSwitchList) return;
+  const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
+
+  contentContextPlate.textContent = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.title = current?.subjectName ?? "Sem disciplina";
+  contentContextPlate.style.setProperty(
+    "--subject-fill",
+    `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
+  );
+  if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
+
+  disciplineSwitchList.replaceChildren();
+  let optionIndex = 0;
+  for (const row of activeSubjectRows) {
+    if (row.subjectId === currentSubjectId) continue;
+    const item = document.createElement("li");
+    // Menu Button pattern (DESIGN.md): this widget performs an action
+    // ("switch to this discipline"), it is not a value picker with a
+    // selection state — menuitem, never option/aria-selected.
+    item.setAttribute("role", "menuitem");
+    // Stable per-render id + tabIndex=-1: same roving-focus contract as
+    // select-ui.js's own Menu popup (see wireListboxKeyboard in
+    // src/select-ui.js) — real DOM focus stays on the list itself,
+    // individual items are only ever visually marked via .is-focused.
+    item.id = `discipline-switch-opt-${optionIndex++}`;
+    item.tabIndex = -1;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "subject-cell";
+    btn.textContent = row.subjectName;
+    btn.title = row.subjectName;
+    btn.dataset.subjectId = String(row.subjectId);
+    btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
+    item.append(btn);
+    disciplineSwitchList.append(item);
+  }
+}
+
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
+  const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
@@ -1586,104 +2483,146 @@ export async function renderStatsByUnit() {
   let results = Analytics.byUnit(evidence, units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
-  // Populate subject filter
-  if (statsUnitFilterSubject && statsUnitFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      statsUnitFilterSubject.append(opt);
-    }
+  // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
+  // trigger = disciplina atual, menu = só as alternativas) em vez de um
+  // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
+  // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
+  // reaproveitado aqui, não recalculado.
+  const activeSubjectRows = Analytics.bySubject(evidence, units, subjects, today).filter(
+    (r) => subjectsById.get(r.subjectId)?.isActive,
+  );
+  if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
+    selectedUnitSubjectId = activeSubjectRows[0]?.subjectId ?? null;
   }
+  renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const subjFilter = statsUnitFilterSubject?.value ?? "";
-  const trendFilter = statsUnitFilterTrend?.value ?? "";
-  const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
-  if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
-  if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
-  if (unitPeriodFilter) {
-    const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
-    const cutoff = subtractDays(today, days);
-    results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
-  }
+  if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
+  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
 
-  // Sort (AC-EST2-05)
-  const unitSortValue = statsUnitSort?.value ?? "worst-first";
-  if (unitSortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = results.sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  } else if (unitSortValue === "volume") {
-    results = results.sort((a, b) => b.evidenceCount - a.evidenceCount);
-  } else if (unitSortValue === "subject") {
-    results = results.sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? "") || (a.unitTitle ?? "").localeCompare(b.unitTitle ?? ""));
-  } else if (unitSortValue === "last-activity") {
-    results = results.sort((a, b) => {
-      const da = a.lastEvidence?.evidenceDate;
-      const db = b.lastEvidence?.evidenceDate;
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return db.localeCompare(da);
-    });
-  } else {
-    // worst-first (default): worst recent score → best
-    results = results.sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return a.weightedAccuracy - b.weightedAccuracy;
-    });
-  }
+  // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
+  results = sortMatrixRows(results, unitSortState);
+  wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
+  updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
 
   const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
   unitStatsList.replaceChildren();
+  if (unitDetailEmpty && unitDetailBody) {
+    unitDetailEmpty.hidden = false;
+    unitDetailBody.hidden = true;
+    unitDetailBody.replaceChildren();
+  }
 
+  // Matriz por conteúdo — mesma gramática da matriz por disciplina (mesmas
+  // 4 colunas), só a entidade muda. Identidade aqui é chip da disciplina
+  // (compacto) + título do conteúdo, porque esta lista cruza disciplinas
+  // (é filtro, não um drill-down já dentro de uma disciplina) — sem a cor
+  // a varredura visual entre disciplinas se perde. Sparkline/data completos
+  // ficam no painel de detalhe ao selecionar a linha, não espremidos na
+  // matriz.
   for (const r of results) {
-    const subject = subjectsById.get(r.subjectId);
-    const row = document.createElement("article");
-    row.className = "unit-stats-row";
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.unitId = String(r.unitId ?? r.id ?? "");
 
-    const header = document.createElement("div");
-    header.className = "unit-stats-header";
-
+    const identityCell = document.createElement("td");
+    identityCell.className = "unit-identity-cell";
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell subject-cell--compact";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
-
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     const title = document.createElement("span");
-    title.className = "unit-stats-title";
+    title.className = "unit-title";
     title.textContent = r.unitTitle;
+    title.title = r.unitTitle;
+    identityCell.append(chip, title);
 
-    header.append(chip, title);
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : "Sem evidência";
+    const perfBar = createComparisonBar(
+      hasEvidence ? r.weightedAccuracy : 100,
+      performanceColor(r.weightedAccuracy, r.totalQuestions),
+      !hasEvidence ? "is-no-evidence" : undefined
+    );
+    const perfCell = createComparisonCell(perfValueText, perfBar);
 
-    const body = document.createElement("div");
-    body.className = "unit-stats-body";
-
-    const sparkEl = buildSparkline(r.scoresSequence);
-    if (sparkEl) body.append(sparkEl);
-
-    const meta = document.createElement("div");
-    meta.className = "unit-stats-meta";
-
-    const accText = r.weightedAccuracy != null
-      ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} q`
-      : "Sem evidência";
-    meta.textContent = accText;
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = hasEvidence ? `${r.totalQuestions} q` : "Sem prática";
+    practiceCell.append(practiceMain);
     if (r.lastEvidence) {
-      const lastDate = document.createElement("span");
-      lastDate.className = "unit-stats-last";
-      lastDate.textContent = ` · ${formatDate(r.lastEvidence.evidenceDate)}`;
-      meta.append(lastDate);
+      const lastDate = document.createElement("div");
+      lastDate.className = "practice-recent";
+      lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
+      lastDate.title = formatDate(r.lastEvidence.evidenceDate);
+      practiceCell.append(lastDate);
     }
 
-    const trendBadge = createTrendBadge(r.trend.direction);
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend.direction));
 
-    body.append(meta, trendBadge);
-    row.append(header, body);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => showUnitDetail(r));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showUnitDetail(r);
+      }
+    });
     unitStatsList.append(row);
+  }
+}
+
+// Painel de detalhe do conteúdo selecionado — reaproveita exatamente os
+// mesmos campos que a linha da matriz já carregava (nada novo é calculado
+// aqui), só muda a representação: sparkline completa + data por extenso.
+function showUnitDetail(r) {
+  if (!unitDetailPanel) return;
+  for (const tr of unitStatsList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.unitId === String(r.unitId ?? r.id ?? ""));
+  }
+  unitDetailEmpty.hidden = true;
+  unitDetailBody.hidden = false;
+  unitDetailBody.replaceChildren();
+
+  const heading = document.createElement("div");
+  heading.className = "unit-detail-heading";
+  const chip = document.createElement("span");
+  chip.className = "subject-cell";
+  chip.textContent = r.subjectName;
+  chip.title = r.subjectName;
+  chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+  const title = document.createElement("h3");
+  title.className = "unit-detail-title";
+  title.textContent = r.unitTitle;
+  heading.append(chip, title);
+
+  const score = document.createElement("div");
+  score.className = "unit-detail-score";
+  score.textContent = r.weightedAccuracy != null
+    ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} questões`
+    : "Sem evidência registrada";
+
+  const trend = createTrendBadge(r.trend.direction);
+
+  unitDetailBody.append(heading, score, trend);
+
+  if (r.lastEvidence) {
+    const last = document.createElement("p");
+    last.className = "unit-detail-last";
+    last.textContent = `Última prática: ${formatDate(r.lastEvidence.evidenceDate)}`;
+    unitDetailBody.append(last);
+  }
+
+  const sparkEl = buildSparkline(r.scoresSequence, 260, 64);
+  if (sparkEl) {
+    sparkEl.classList.add("unit-detail-spark");
+    unitDetailBody.append(sparkEl);
   }
 }
 
@@ -1841,17 +2780,36 @@ export async function renderSettings() {
   lastBackupLabel.textContent = settings?.lastBackupAt
     ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
     : "Nenhum backup exportado.";
+
+  // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
+  // mode (T20) — restoring a snapshot into the server, and a full-account
+  // wipe, are real operations the migration phase (T25+) and an explicit
+  // future owned-reset endpoint must define deliberately, not something a
+  // client-only local-DB affordance can honestly offer against someone
+  // else's data authority. Rather than leave buttons that fail every
+  // click, this is the "safe explanatory state" tasks.md T22 asks for:
+  // hidden buttons, a plain-language reason in their place.
+  if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
+  if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
+  if (REMOTE_MODE) {
+    setResetMessage("Apagar todos os dados ainda não é uma operação suportada no modo servidor.");
+  }
+  // T28: legacy-import migration only exists against the real server
+  // (T25-T27) — no local-only equivalent, so it's REMOTE_MODE-only,
+  // mirroring how import/reset are REMOTE_MODE-only in the opposite
+  // direction above.
+  if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
 }
 
-// Salva o JSON em disco. No runtime Tauri (desktop/Android) usa o diálogo
-// nativo + fs; o WebView do Android ignora <a download>, então o caminho
-// nativo é obrigatório lá. No navegador (modo dev) cai no <a download>.
+// Salva o JSON em disco. O wrapper remoto não recebe diálogo/FS nativos:
+// nele, exportar permanece um download do próprio WebView. O caminho nativo
+// fica restrito ao legado local, onde as permissões correspondentes existem.
 async function saveBackupFile(filename, contents) {
-  if (hasTauriRuntime()) {
+  if (hasTauriRuntime() && !REMOTE_MODE) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({
@@ -1890,7 +2848,15 @@ export async function exportBackup() {
       return; // exportação cancelada pelo usuário
     }
 
-    await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    // Best-effort bookkeeping only — the export itself already succeeded
+    // and was saved, so a failure here (e.g. remote mode doesn't track
+    // lastBackupAt at all, per T18's settings contract) must never turn
+    // an already-successful export into a reported failure.
+    try {
+      await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    } catch (metaError) {
+      console.warn("Não foi possível registrar a data do último backup.", metaError);
+    }
     await renderSettings();
     backupMessage.textContent = "Backup exportado com sucesso.";
   } catch (error) {
@@ -1915,6 +2881,1559 @@ function setResetMessage(message = "", isError = false) {
   resetMessage.classList.toggle("is-error", isError);
   resetMessage.textContent = message;
 }
+
+function setMigrationMessage(message = "", isError = false) {
+  if (!migrationMessage) return;
+  migrationMessage.classList.toggle("is-error", isError);
+  migrationMessage.textContent = message;
+}
+
+function resetMigrationPanels() {
+  migrationActivePreview = null;
+  migrationLastReport = null;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  if (migrationCounts) migrationCounts.replaceChildren();
+  if (migrationWarnings) migrationWarnings.replaceChildren();
+  if (migrationConflicts) migrationConflicts.replaceChildren();
+}
+
+function renderMigrationPreview(preview) {
+  migrationActivePreview = preview;
+  if (migrationCounts) {
+    migrationCounts.replaceChildren();
+    for (const [key, value] of Object.entries(preview.counts ?? {})) {
+      const dt = document.createElement("dt");
+      dt.textContent = MigrationUI.entityLabel(key);
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      migrationCounts.append(dt, dd);
+    }
+  }
+  if (migrationWarnings) {
+    migrationWarnings.replaceChildren();
+    for (const warning of preview.warnings ?? []) {
+      const li = document.createElement("li");
+      li.textContent = warning.message ?? warning.code ?? String(warning);
+      migrationWarnings.append(li);
+    }
+  }
+  const hasConflicts = (preview.conflicts ?? []).length > 0;
+  if (migrationConflicts) {
+    migrationConflicts.replaceChildren();
+    for (const conflict of preview.conflicts ?? []) {
+      const li = document.createElement("li");
+      li.textContent = conflict.reason === 'ARCHIVED_HOMONYM'
+        ? `"${conflict.name}" já existe nesta conta como disciplina arquivada — reative-a nas Disciplinas ou renomeie a de origem e envie o arquivo novamente.`
+        : `"${conflict.name}" já existe nesta conta — renomeie a disciplina de origem e envie o arquivo novamente para importar este item.`;
+      migrationConflicts.append(li);
+    }
+  }
+  if (migrationConfirmBtn) migrationConfirmBtn.disabled = hasConflicts;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = false;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  setMigrationMessage(hasConflicts
+    ? "Há conflitos de nome — resolva-os antes de confirmar (veja a lista abaixo)."
+    : "Revise os itens acima. Confirmar grava esses dados nesta conta.");
+}
+
+migrationChooseFileButton?.addEventListener("click", () => {
+  migrationFileInput?.click();
+});
+
+migrationFileInput?.addEventListener("change", async () => {
+  const [file] = migrationFileInput.files ?? [];
+  if (!file) return;
+  resetMigrationPanels();
+  setMigrationMessage("Lendo e validando o arquivo...");
+  try {
+    const rawSource = JSON.parse(await readFileText(file));
+    const result = await MigrationUI.previewImport(rawSource);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível gerar a prévia desta importação.", true);
+      return;
+    }
+    renderMigrationPreview(result.preview);
+  } catch (error) {
+    setMigrationMessage(
+      error instanceof SyntaxError
+        ? "O arquivo selecionado não contém JSON válido."
+        : "Não foi possível ler o arquivo selecionado.",
+      true,
+    );
+    console.error("Falha ao gerar prévia de migração.", error);
+  } finally {
+    migrationFileInput.value = "";
+  }
+});
+
+migrationCancelBtn?.addEventListener("click", () => {
+  resetMigrationPanels();
+  setMigrationMessage("Importação cancelada. Nenhum dado foi alterado.");
+});
+
+migrationConfirmBtn?.addEventListener("click", async () => {
+  if (!migrationActivePreview) return;
+  const confirmed = await showConfirm(
+    "Confirmar grava estes dados de forma real e definitiva nesta conta. Continuar?",
+  );
+  if (!confirmed) return;
+
+  migrationConfirmBtn.disabled = true;
+  setMigrationMessage("Confirmando importação...");
+  try {
+    const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
+    if (!result.ok) {
+      setMigrationMessage(result.message || "Não foi possível confirmar a importação.", true);
+      migrationConfirmBtn.disabled = false; // still on the preview panel — must stay clickable to retry
+      return;
+    }
+    migrationLastReport = MigrationUI.buildMigrationReport({ preview: migrationActivePreview, commit: result.commit });
+    if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+    if (migrationResultPanel) migrationResultPanel.hidden = false;
+    if (migrationResultSummary) {
+      const parts = Object.entries(result.commit.counts ?? {})
+        .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
+      migrationResultSummary.textContent = `Importação concluída — ${parts.join(", ")}.`;
+    }
+    setMigrationMessage("");
+    // Deliberately NOT re-enabling migrationConfirmBtn here: the preview
+    // panel is now hidden, so its own enabled/disabled state is moot until
+    // the next previewImport() explicitly sets it — resetting it here on a
+    // delay (after these renders) could otherwise race a fresh preview the
+    // user already started uploading and silently re-enable a
+    // conflict-blocked confirm underneath them.
+    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
+  } catch (error) {
+    setMigrationMessage("Não foi possível confirmar a importação.", true);
+    migrationConfirmBtn.disabled = false;
+    console.error("Falha ao confirmar migração.", error);
+  }
+});
+
+migrationDownloadReportBtn?.addEventListener("click", async () => {
+  if (!migrationLastReport) return;
+  await saveBackupFile(
+    `smartlearn-migracao-${getLocalDateValue()}.json`,
+    JSON.stringify(migrationLastReport, null, 2),
+  );
+});
+
+function setSourcesMessage(message = "", isError = false) {
+  if (!sourcesMessage) return;
+  sourcesMessage.classList.toggle("is-error", isError);
+  sourcesMessage.textContent = message;
+  // The list of proposals can be long (a 150-page PDF = 15 items): an error raised far below must not be
+  // left off-screen, or the student clicks and sees nothing happen.
+  if (isError && message) sourcesMessage.scrollIntoView({ block: "nearest" });
+}
+
+function createSourceProposalItem(proposal) {
+  const li = document.createElement("li");
+  li.className = "source-proposal-item";
+  li.dataset.proposalId = String(proposal.id);
+
+  const rangeText = proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`;
+  const range = createTextElement("p", "source-proposal-range", rangeText);
+  range.id = `source-proposal-range-${proposal.id}`;
+
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.className = "source-proposal-title-input";
+  titleInput.value = proposal.title;
+  // The field has no visible label: its accessible name says what it edits, and which trecho (the list repeats it).
+  titleInput.setAttribute("aria-label", `Título do trecho, ${rangeText.toLowerCase()}`);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "small-button";
+  saveBtn.dataset.action = "save-proposal-title";
+  saveBtn.textContent = "Salvar título";
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "text-button";
+  toggleBtn.dataset.action = "toggle-proposal-excerpt";
+  toggleBtn.textContent = "Ver trecho da fonte";
+
+  const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
+  excerpt.hidden = true;
+
+  const generateDraftBtn = document.createElement("button");
+  generateDraftBtn.type = "button";
+  generateDraftBtn.className = "small-button";
+  generateDraftBtn.dataset.action = "generate-draft";
+  generateDraftBtn.textContent = "Gerar rascunho com IA";
+
+  const draftPanel = document.createElement("div");
+  draftPanel.className = "source-draft-panel";
+  // A focus target for when the draft appears or is re-rendered (the button that was pressed is gone or disabled).
+  draftPanel.tabIndex = -1;
+  draftPanel.setAttribute("role", "group");
+  draftPanel.setAttribute("aria-label", "Rascunho para revisar");
+  draftPanel.hidden = true;
+
+  // The same three buttons repeat in every trecho: the pages of the trecho they belong to are their description.
+  for (const button of [saveBtn, toggleBtn, generateDraftBtn]) button.setAttribute("aria-describedby", range.id);
+
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
+  return li;
+}
+
+// "3", "1–3", "1, 3–4": a compact page list for provenance labels.
+function formatPageList(pageIndexes) {
+  const pages = [...new Set(pageIndexes)].sort((a, b) => a - b);
+  const parts = [];
+  for (let i = 0; i < pages.length;) {
+    let j = i;
+    while (j + 1 < pages.length && pages[j + 1] === pages[j] + 1) j += 1;
+    parts.push(j > i ? `${pages[i]}–${pages[j]}` : String(pages[i]));
+    i = j + 1;
+  }
+  return parts.join(", ");
+}
+
+// A collapsed "origin" block: which source pages a piece of content came from, with the page text
+// itself so the student can check the claim. `pages` = [{pageIndex, text}] (text may be missing).
+function createSourceDetails(label, pages) {
+  const details = document.createElement("details");
+  details.className = "study-now-source summary-source";
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  details.append(summary);
+  for (const page of pages) {
+    if (!page.text) continue;
+    details.append(
+      createTextElement("p", "study-now-error-label", `Página ${page.pageIndex}`),
+      createTextElement("p", "study-now-source-text", page.text),
+    );
+  }
+  return details;
+}
+
+// Where an AI-generated unit's Resumo Mestre came from (frozen at acceptance). Manual units, units
+// accepted before this existed, and the offline store have nothing to show — and show nothing.
+async function appendSummarySources(container, unitId) {
+  if (!REMOTE_MODE || !DB.learningUnits?.summarySources || !container) return;
+  let sources;
+  try {
+    sources = await DB.learningUnits.summarySources(unitId);
+  } catch {
+    return;
+  }
+  container.querySelector(":scope > .summary-source")?.remove();
+  if (!sources.length) return;
+  const name = sources[0].sourceName;
+  const pages = sources.map((s) => s.pageIndex);
+  container.append(createSourceDetails(
+    `Origem do resumo · ${name}, ${pages.length > 1 ? "páginas" : "página"} ${formatPageList(pages)}`,
+    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
+  ));
+}
+
+const DRAFT_ISSUE_LABELS = {
+  SUMMARY_UNSUPPORTED_VALUE: "Valor que a fonte não traz",
+  SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
+  SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
+  SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
+  QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
+  QUESTION_NO_EXPLANATION: "Falta explicar por quê",
+  QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
+  HINT_REVEALS_ANSWER: "A dica entrega a resposta",
+  QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",
+  QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
+  QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
+  QUESTION_DUPLICATE: "Questão repetida",
+  QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
+};
+
+const DRAFT_QUESTION_TYPE_LABELS = {
+  RECALL: "Recordação",
+  CONCEPT: "Conceito",
+  MECHANISM: "Mecanismo",
+  APPLICATION: "Aplicação",
+  DISCRIMINATION: "Discriminação",
+  CLINICAL_REASONING: "Raciocínio clínico",
+  TRANSFER: "Transferência",
+};
+
+function draftFindingScopeLabel(scope) {
+  if (scope === "summary") return "Resumo";
+  const m = /^question:(\d+)$/.exec(scope ?? "");
+  return m ? `Questão ${Number(m[1]) + 1}` : "Rascunho";
+}
+
+// The automatic check is a screen, not a verdict: it says where to look. "No flags" is never "verified".
+function createDraftAudit(audit) {
+  const box = document.createElement("div");
+  box.className = "source-draft-audit";
+  const flagged = (audit.findings ?? []).filter((f) => f.severity !== "LOW");
+  box.dataset.result = flagged.length > 0 ? "REPAIR" : "PASS";
+  const head = flagged.length > 0
+    ? `Conferência automática: ${flagged.length} ${flagged.length === 1 ? "ponto" : "pontos"} para verificar antes de aceitar`
+    : "Conferência automática: nada sinalizado. Isso não é validação médica — confira a fonte.";
+  box.append(createTextElement("p", "source-draft-audit-head", head));
+  if (audit.repaired) {
+    box.append(createTextElement("p", "source-draft-audit-note", "O rascunho foi corrigido uma vez automaticamente a partir dos pontos apontados."));
+  }
+  if (audit.modelAudit === "UNAVAILABLE" || audit.modelAudit === "MALFORMED") {
+    box.append(createTextElement("p", "source-draft-audit-note", "A auditoria por modelo não pôde ser concluída; só a conferência automática básica foi feita."));
+  }
+  const list = document.createElement("ul");
+  list.className = "source-draft-audit-list";
+  for (const f of flagged) {
+    const item = document.createElement("li");
+    item.append(createTextElement("p", "source-draft-audit-issue", `${draftFindingScopeLabel(f.scope)} · ${DRAFT_ISSUE_LABELS[f.issue] ?? f.issue}`));
+    if (f.generatedClaim) item.append(createTextElement("p", "source-draft-audit-claim", `No rascunho: ${f.generatedClaim}`));
+    if (f.sourceEvidence) item.append(createTextElement("p", "source-draft-audit-evidence", `Na fonte: ${f.sourceEvidence}`));
+    if (f.repair) item.append(createTextElement("p", "source-draft-audit-repair", f.repair));
+    // In a long draft the reviewer must reach the flagged item in one step, not hunt through 50 blocks.
+    const target = /^question:(\d+)$/.exec(f.scope ?? "");
+    const goto = document.createElement("button");
+    goto.type = "button";
+    goto.className = "text-button source-draft-goto";
+    goto.dataset.action = "goto-draft-question";
+    goto.dataset.index = target ? target[1] : "summary";
+    goto.textContent = target ? `Corrigir a questão ${Number(target[1]) + 1}` : "Corrigir o resumo";
+    item.append(goto);
+    list.append(item);
+  }
+  if (flagged.length > 0) box.append(list);
+  return box;
+}
+
+// The reviewer's own corrections to a flagged draft (CQ-6). One collapsed block: summary plus, per question,
+// the wording, answer, explanation and hint — exactly the fields the screen can flag. Saving re-runs the
+// screen on the server, so a fixed point disappears and a remaining one stays visible.
+function createDraftEditor(draft) {
+  const details = document.createElement("details");
+  details.className = "source-draft-editor";
+  const summaryEl = document.createElement("summary");
+  summaryEl.textContent = "Corrigir o rascunho";
+  details.append(summaryEl);
+
+  const field = (labelText, tag, className, value, rows) => {
+    const label = document.createElement("label");
+    label.className = "source-draft-edit-field";
+    label.append(createTextElement("span", "source-draft-edit-label", labelText));
+    const input = document.createElement(tag);
+    input.className = className;
+    if (tag === "textarea") input.rows = rows ?? 3;
+    else input.type = "text";
+    input.value = value ?? "";
+    label.append(input);
+    return label;
+  };
+
+  details.append(field("Resumo Mestre", "textarea", "source-draft-edit-summary", draft.summary, 7));
+  (draft.questions ?? []).forEach((q, index) => {
+    const group = document.createElement("div");
+    group.className = "source-draft-edit-question";
+    group.dataset.index = String(index);
+    group.append(
+      createTextElement("p", "source-draft-edit-label", `Questão ${index + 1}`),
+      field("Enunciado", "textarea", "source-draft-edit-q", q.question, 2),
+      field("Resposta", "textarea", "source-draft-edit-a", q.answer, 2),
+      field("Por quê (explicação)", "textarea", "source-draft-edit-e", q.explanation, 3),
+      field("Dica (opcional)", "input", "source-draft-edit-h", q.hint),
+    );
+    details.append(group);
+  });
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary-button";
+  save.dataset.action = "save-draft";
+  save.textContent = "Salvar correções";
+  const editMessage = createTextElement("p", "source-draft-edit-message", "");
+  editMessage.setAttribute("role", "status"); // an error on save is announced, not only painted
+  details.append(save, editMessage);
+  return details;
+}
+
+// The draft object each panel currently shows (spans, types and pages are not editable, so a save sends them back untouched).
+const draftByPanel = new WeakMap();
+
+// T38: renders one generated draft for inspection/acceptance. Every
+// rendering carries the same explicit caveat — this is unverified AI
+// output, not a medical/scientific claim (design.md/T37/T38).
+// PRODUCT-REAL-01 P1_PRODUCT A: before this, accepting a draft could only
+// ever create a NEW subject (free-text name) — a returning student adding
+// more material to a discipline they already created had no way to pick
+// it, and typing the existing name outright failed ("Já existe uma
+// disciplina com esse nome."). The server already supports accepting
+// with either `subjectId` (existing) or `newSubjectName` (create) — see
+// accept-draft.js — this was a client-only gap. Mirrors the exact same
+// existing-vs-new pattern Plano's own new-unit form already uses.
+function renderDraftPanel(draftPanel, draft, subjects = []) {
+  draftPanel.dataset.draftId = String(draft.id);
+  draftPanel.dataset.revision = String(draft.revision);
+  draftByPanel.set(draftPanel, draft);
+  draftPanel.replaceChildren();
+
+  const caveat = createTextElement(
+    "p",
+    "source-draft-caveat",
+    "Rascunho gerado por IA — não verificado. Revise cada questão antes de aceitar; isto não é uma validação científica ou médica do conteúdo.",
+  );
+  const summary = createTextElement("p", "source-draft-summary", draft.summary);
+  const pagesByIndex = new Map((draft.pages ?? []).map((p) => [p.pageIndex, p]));
+  const pagesFor = (spans) => (spans ?? []).map((s) => pagesByIndex.get(s.pageIndex) ?? { pageIndex: s.pageIndex, text: null });
+  const summaryOrigin = draft.summarySourceSpans?.length
+    ? createSourceDetails(`Fonte do resumo · ${draft.summarySourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(draft.summarySourceSpans.map((s) => s.pageIndex))}`, pagesFor(draft.summarySourceSpans))
+    : null;
+  const auditBox = draft.audit ? createDraftAudit(draft.audit) : null;
+  const flaggedQuestions = new Set();
+  for (const f of draft.audit?.findings ?? []) {
+    const m = f.severity !== "LOW" ? /^question:(\d+)$/.exec(f.scope ?? "") : null;
+    if (m) flaggedQuestions.add(Number(m[1]));
+  }
+
+  const questionsList = document.createElement("ul");
+  questionsList.className = "source-draft-questions";
+  for (const question of draft.questions ?? []) {
+    const item = document.createElement("li");
+    item.append(
+      createTextElement("p", "source-draft-question", question.question),
+      createTextElement("p", "source-draft-answer", question.answer),
+    );
+    if (question.explanation) item.append(createTextElement("p", "source-draft-explanation", `Por quê: ${question.explanation}`));
+    if (flaggedQuestions.has(draft.questions.indexOf(question))) {
+      item.classList.add("is-flagged");
+      item.prepend(createTextElement("span", "study-now-chip source-draft-flag-chip", "Sinalizada"));
+    }
+    if (question.questionType && DRAFT_QUESTION_TYPE_LABELS[question.questionType]) {
+      item.prepend(createTextElement("span", "study-now-chip source-draft-question-type", DRAFT_QUESTION_TYPE_LABELS[question.questionType]));
+    }
+    if (question.sourceSpans?.length) {
+      item.append(createSourceDetails(
+        `Fonte da questão · ${question.sourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(question.sourceSpans.map((s) => s.pageIndex))}`,
+        pagesFor(question.sourceSpans),
+      ));
+    }
+    questionsList.append(item);
+  }
+
+  const subjectSelect = document.createElement("select");
+  subjectSelect.className = "source-draft-subject-select";
+  subjectSelect.setAttribute("aria-label", "Disciplina existente");
+  const newSubjectOption = document.createElement("option");
+  newSubjectOption.value = "";
+  newSubjectOption.textContent = "+ Nova disciplina (usar campo abaixo)";
+  subjectSelect.append(newSubjectOption);
+  for (const subject of subjects) {
+    const opt = document.createElement("option");
+    opt.value = String(subject.id);
+    opt.textContent = subject.name;
+    subjectSelect.append(opt);
+  }
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.className = "source-draft-subject-input";
+  subjectInput.placeholder = "Nome da disciplina";
+  subjectInput.setAttribute("aria-label", "Nome da disciplina");
+
+  subjectSelect.addEventListener("change", () => {
+    const pickedExisting = subjectSelect.value !== "";
+    subjectInput.disabled = pickedExisting;
+    if (pickedExisting) subjectInput.value = "";
+  });
+
+  const dateInput = document.createElement("input");
+  dateInput.type = "date";
+  dateInput.className = "source-draft-date-input";
+  dateInput.value = getLocalDateValue();
+  dateInput.setAttribute("aria-label", "Data da aula");
+
+  const acceptBtn = document.createElement("button");
+  acceptBtn.type = "button";
+  acceptBtn.className = "primary-button";
+  acceptBtn.dataset.action = "accept-draft";
+  acceptBtn.textContent = "Aceitar e criar aula";
+
+  const resultMessage = createTextElement("p", "source-draft-result", "");
+  resultMessage.setAttribute("role", "status"); // "Aula criada" / an accept error is announced, not only painted
+
+  draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, ...(draft.status === "DRAFT" ? [createDraftEditor(draft)] : []), subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
+  draftPanel.hidden = false;
+  enhanceSelect(subjectSelect);
+}
+
+function renderSourceProposals(proposals) {
+  if (!sourcesProposalsList) return;
+  sourcesProposalsList.replaceChildren();
+  for (const proposal of proposals) {
+    sourcesProposalsList.append(createSourceProposalItem(proposal));
+  }
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+}
+
+sourcesChooseFileButton?.addEventListener("click", () => {
+  sourcesFileInput?.click();
+});
+
+sourcesFileInput?.addEventListener("change", async () => {
+  const [file] = sourcesFileInput.files ?? [];
+  if (!file) return;
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
+  if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+
+  try {
+    setSourcesMessage("Enviando PDF...");
+    const uploadResult = await SourceProposalsUI.uploadSource(file);
+    if (!uploadResult.ok) {
+      setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
+      return;
+    }
+
+    setSourcesMessage("Extraindo texto do PDF...");
+    const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
+    if (!extractResult.ok) {
+      setSourcesMessage(extractResult.message || "Não foi possível extrair o texto do PDF.", true);
+      return;
+    }
+    if (extractResult.extraction.status !== "EXTRACTED") {
+      setSourcesMessage(SourceProposalsUI.unreadableSourceMessage(extractResult.extraction.status), true);
+      return;
+    }
+
+    setSourcesMessage("Gerando trechos propostos...");
+    const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
+    // The same PDF sent again: its trechos (and any rascunho or accepted content on them) already exist and are never
+    // replaced silently. Land on them instead of a dead-end error.
+    if (!chunkResult.ok && SourceProposalsUI.isAlreadyProcessed(chunkResult.code)) {
+      const existing = await SourceProposalsUI.listProposals(uploadResult.source.id);
+      if (existing.ok) {
+        renderSourceProposals(existing.proposals);
+        setSourcesMessage(SourceProposalsUI.alreadyProcessedMessage(existing.proposals.length, extractResult.extraction));
+        return;
+      }
+    }
+    if (!chunkResult.ok) {
+      setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
+      return;
+    }
+
+    renderSourceProposals(chunkResult.proposals);
+    // pages with no extractable text never became a proposal: say so, or silence reads as full coverage
+    const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
+    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
+  } catch (error) {
+    setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
+    console.error("Falha ao processar fonte enviada.", error);
+  } finally {
+    sourcesFileInput.value = "";
+  }
+});
+
+sourcesProposalsList?.addEventListener("click", async (event) => {
+  const item = event.target.closest(".source-proposal-item");
+  if (!item) return;
+  const proposalId = item.dataset.proposalId;
+
+  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
+  if (toggleBtn) {
+    const excerptEl = item.querySelector(".source-proposal-excerpt");
+    if (!excerptEl) return;
+    if (excerptEl.hidden) {
+      const result = await SourceProposalsUI.getProposal(proposalId);
+      if (result.ok) excerptEl.textContent = result.proposal.excerpt;
+      excerptEl.hidden = false;
+      toggleBtn.textContent = "Ocultar trecho da fonte";
+    } else {
+      excerptEl.hidden = true;
+      toggleBtn.textContent = "Ver trecho da fonte";
+    }
+    return;
+  }
+
+  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
+  if (saveBtn) {
+    const input = item.querySelector(".source-proposal-title-input");
+    if (!input) return;
+    saveBtn.disabled = true;
+    try {
+      const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
+      if (result.ok) {
+        setSourcesMessage("Título atualizado.");
+      } else {
+        setSourcesMessage(result.message || "Não foi possível salvar o título.", true);
+      }
+    } finally {
+      saveBtn.disabled = false;
+    }
+    return;
+  }
+
+  const generateDraftBtn = event.target.closest('[data-action="generate-draft"]');
+  if (generateDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    generateDraftBtn.disabled = true; // a disabled button drops keyboard focus: it is put back below
+    setSourcesMessage("Gerando rascunho com IA...");
+    let generated = false;
+    try {
+      const result = await DraftReviewUI.generateDraft(proposalId);
+      if (!result.ok) {
+        setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
+        return;
+      }
+      // P1_PRODUCT A: existing subjects, so the accept form can offer
+      // reusing one instead of only ever creating a new one.
+      const existingSubjects = await DB.subjects.getActive().catch(() => []);
+      renderDraftPanel(draftPanel, result.draft, existingSubjects);
+      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+      generated = true;
+    } finally {
+      generateDraftBtn.disabled = false;
+      // success: keyboard/screen-reader focus goes to the draft to review; failure: back to the button that was pressed
+      // (on failure the button was just pressed, so it is on screen: do not scroll, or the error message scrolls away)
+      if (generated) draftPanel.focus(); else generateDraftBtn.focus({ preventScroll: true });
+    }
+    return;
+  }
+
+  const gotoBtn = event.target.closest('[data-action="goto-draft-question"]');
+  if (gotoBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    const editor = draftPanel?.querySelector(".source-draft-editor");
+    if (!draftPanel || !editor) return;
+    editor.open = true;
+    const target = gotoBtn.dataset.index === "summary"
+      ? editor.querySelector(".source-draft-edit-summary")
+      : editor.querySelector(`.source-draft-edit-question[data-index="${gotoBtn.dataset.index}"] .source-draft-edit-a`);
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    }
+    return;
+  }
+
+  const saveDraftBtn = event.target.closest('[data-action="save-draft"]');
+  if (saveDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    const current = draftPanel ? draftByPanel.get(draftPanel) : null;
+    if (!draftPanel || !current) return;
+    const message = draftPanel.querySelector(".source-draft-edit-message");
+    const questions = (current.questions ?? []).map((q, index) => {
+      const group = draftPanel.querySelector(`.source-draft-edit-question[data-index="${index}"]`);
+      const read = (selector) => group?.querySelector(selector)?.value.trim() ?? "";
+      return {
+        question: read(".source-draft-edit-q"),
+        answer: read(".source-draft-edit-a"),
+        explanation: read(".source-draft-edit-e") || null,
+        questionType: q.questionType ?? null,
+        hint: read(".source-draft-edit-h") || null,
+        sourceSpans: q.sourceSpans,
+      };
+    });
+    const summary = draftPanel.querySelector(".source-draft-edit-summary")?.value.trim() ?? "";
+    // keep what the student already typed in the accept form across the re-render
+    const kept = {
+      subjectId: draftPanel.querySelector(".source-draft-subject-select")?.value ?? "",
+      subjectName: draftPanel.querySelector(".source-draft-subject-input")?.value ?? "",
+      date: draftPanel.querySelector(".source-draft-date-input")?.value ?? "",
+    };
+    saveDraftBtn.disabled = true;
+    let saved = false;
+    try {
+      const result = await DraftReviewUI.reviseDraft(draftPanel.dataset.draftId, { summary, questions });
+      if (!result.ok) {
+        if (message) { message.classList.add("is-error"); message.textContent = result.message || "Não foi possível salvar as correções."; }
+        return;
+      }
+      const existingSubjects = await DB.subjects.getActive().catch(() => []);
+      renderDraftPanel(draftPanel, result.draft, existingSubjects);
+      const select = draftPanel.querySelector(".source-draft-subject-select");
+      const nameInput = draftPanel.querySelector(".source-draft-subject-input");
+      const dateInput = draftPanel.querySelector(".source-draft-date-input");
+      if (select && kept.subjectId) { select.value = kept.subjectId; select.dispatchEvent(new Event("change")); }
+      if (nameInput && !kept.subjectId) nameInput.value = kept.subjectName;
+      if (dateInput && kept.date) dateInput.value = kept.date;
+      setSourcesMessage("Correções salvas. A conferência automática foi refeita.");
+      saved = true;
+    } finally {
+      saveDraftBtn.disabled = false;
+      // the panel was re-rendered on success (the button no longer exists): focus the draft, whose check just re-ran
+      if (saved) draftPanel.focus(); else saveDraftBtn.focus({ preventScroll: true });
+    }
+    return;
+  }
+
+  const acceptDraftBtn = event.target.closest('[data-action="accept-draft"]');
+  if (acceptDraftBtn) {
+    const draftPanel = item.querySelector(".source-draft-panel");
+    if (!draftPanel) return;
+    const draftId = draftPanel.dataset.draftId;
+    const subjectSelect = draftPanel.querySelector(".source-draft-subject-select");
+    const subjectInput = draftPanel.querySelector(".source-draft-subject-input");
+    const dateInput = draftPanel.querySelector(".source-draft-date-input");
+    const resultMessage = draftPanel.querySelector(".source-draft-result");
+
+    // P1_PRODUCT A: an existing subject picked in the select wins over the
+    // free-text field — the server's own contract already distinguishes
+    // subjectId (reuse) from newSubjectName (create); this was only ever
+    // a client gap.
+    const pickedSubjectId = subjectSelect?.value ? Number(subjectSelect.value) : null;
+
+    acceptDraftBtn.disabled = true;
+    try {
+      const result = await DraftReviewUI.acceptDraft(draftId, {
+        subjectId: pickedSubjectId ?? undefined,
+        newSubjectName: pickedSubjectId ? undefined : subjectInput?.value,
+        studyDate: dateInput?.value,
+        expectedRevision: Number(draftPanel.dataset.revision),
+      });
+      if (!result.ok) {
+        if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
+        acceptDraftBtn.disabled = false;
+        acceptDraftBtn.focus({ preventScroll: true });
+        return;
+      }
+      if (resultMessage) {
+        resultMessage.classList.remove("is-error");
+        resultMessage.textContent = `Aula criada: ${result.acceptance.exerciseCount} exercício(s), ${result.acceptance.reviewCount} revisões agendadas.`;
+      }
+      acceptDraftBtn.textContent = "Aceito";
+      // PV1-01: continuity after accept — the acceptance response already
+      // carries the created unit (real contract field: `acceptance.unit`,
+      // confirmed in server/src/services/accept-draft.js's `unitDto`), so
+      // "Estudar agora" needs no extra fetch. The user should never have
+      // to go find the just-created unit in Plano/Hoje themselves.
+      if (!draftPanel.querySelector('[data-action="study-now"]')) {
+        const studyNowBtn = document.createElement("button");
+        studyNowBtn.type = "button";
+        studyNowBtn.className = "primary-button";
+        studyNowBtn.dataset.action = "study-now";
+        studyNowBtn.textContent = "Estudar agora";
+        studyNowBtn.addEventListener("click", () => {
+          startStudyNow(result.acceptance.unit, result.acceptance.subject?.name);
+        });
+        draftPanel.append(studyNowBtn);
+      }
+      // the pressed button is now disabled ("Aceito"): the one obvious next action takes the focus
+      draftPanel.querySelector('[data-action="study-now"]')?.focus();
+      await Promise.all([renderSubjects(), renderStudies(), renderToday()]);
+    } catch (error) {
+      if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
+      console.error("Falha ao aceitar rascunho.", error);
+      acceptDraftBtn.disabled = false;
+      acceptDraftBtn.focus({ preventScroll: true });
+    }
+  }
+});
+
+// PV1-01: the first learning journey's focused study surface — reachable
+// via "Estudar agora" right after accepting a draft, not necessarily a
+// permanent nav item (task's own wording). Reuses the existing
+// DB.attempts/DB.exercises/DB.learningEvidence contracts exactly as the
+// Hoje review UI does (see ensureAttemptStarted above) — the one real
+// difference is deliberate: no reviewTaskId is ever passed (this is
+// INITIAL_PRACTICE, not a scheduled review), and no review_task is ever
+// created or completed by this flow. One question at a time, per spec.
+let studyNowState = null;
+let studyNowLastBlock = null;
+
+// "initial" = the block the student just practiced (writes the aggregate
+// INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
+// questions that block got wrong: each redo is a NEW server attempt (the
+// original attempts stay untouched), but deliberately writes NO aggregate
+// learning_evidence row -- a correct answer given right after reading the
+// gabarito shows recovery, not performance, and must not inflate the
+// unit's accuracy or volume in Estatisticas.
+function newStudyNowState(mode, unitId, exercises) {
+  return { mode, unitId, exercises, index: 0, attemptId: null, attemptIds: [], correctCount: 0, answeredCount: 0, wrongExercises: [], correctedExercises: [] };
+}
+
+function resetStudyNowResult() {
+  studyNowResultCard.hidden = true;
+  studyNowResultTitle.textContent = "Resultado";
+  studyNowResultText.textContent = "";
+  studyNowResultNote.hidden = true;
+  studyNowResultNote.textContent = "";
+  studyNowNextReviewText.textContent = "";
+  studyNowErrorsSection.hidden = true;
+  studyNowErrorsList.replaceChildren();
+  studyNowCorrectedSection.hidden = true;
+  studyNowCorrectedList.replaceChildren();
+  studyNowRetestBtn.hidden = true;
+  studyNowPracticeCard.hidden = false;
+}
+
+const STUDY_PROVENANCE_LABEL = {
+  MANUAL: "Origem: escrita por você",
+  SOURCE: "Origem: material enviado",
+  AI_GENERATED: "Origem: gerada por IA a partir do material",
+};
+
+async function startStudyNow(unit, subjectName) {
+  if (!unit) return;
+  studyNowSubjectEl.textContent = subjectName ?? "";
+  studyNowTitleEl.textContent = unit.title ?? "";
+  if (unit.summaryBody) {
+    studyNowSummaryCard.hidden = false;
+    studyNowSummaryBody.textContent = unit.summaryBody;
+    studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
+    appendSummarySources(studyNowSummaryCard, unit.id);
+  } else {
+    studyNowSummaryCard.hidden = true;
+    studyNowSummaryBody.textContent = "";
+  }
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("initial", unit.id, []);
+  showScreen("study-now", { focus: true });
+
+  try {
+    studyNowState.exercises = await DB.exercises.getAll(unit.id);
+  } catch (error) {
+    console.error("Falha ao carregar exercícios da unidade.", error);
+    studyNowState.exercises = [];
+  }
+  const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
+  if (snapshot) {
+    // Interrupted earlier: offer to continue instead of silently repeating what was already answered.
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = true;
+    studyNowProgress.textContent = "";
+    studyNowResumeText.textContent = `Você já respondeu ${snapshot.answeredCount} de ${snapshot.exerciseIds.length} nesta aula (${snapshot.correctCount} ${snapshot.correctCount === 1 ? "acerto" : "acertos"}). Quer continuar de onde parou?`;
+    studyNowResume.hidden = false;
+    studyNowResumeSnapshot = snapshot;
+    studyNowResume.querySelector("#study-now-resume-continue").focus();
+    return;
+  }
+  studyNowResume.hidden = true;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion();
+}
+
+/** Keyboard/screen-reader users start on the first action of the question ("Ver resposta"), not on the page container. */
+function focusStudyNowQuestion() {
+  if (studyNowState && studyNowState.exercises.length > 0 && !studyNowQuestionArea.hidden) studyNowRevealBtn.focus();
+}
+
+// -- Estudar agora: resume an interrupted pass ----------------------------------------------------------------
+// The minimal state of an "initial" pass is mirrored on the device after every judgment the server accepted, so
+// closing/reloading the tab does not restart from question 1. Every access is guarded (storage may be blocked) and
+// the snapshot is discarded when the pass ends, when the exercises changed, or after a week.
+let studyNowResumeSnapshot = null;
+const STUDY_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const studySnapshotKey = (unitId) => `smartlearn.studynow.${unitId}`;
+
+function persistStudySnapshot(state) {
+  if (!state || state.mode !== "initial") return;
+  try {
+    if (state.index <= 0 || state.index >= state.exercises.length) { localStorage.removeItem(studySnapshotKey(state.unitId)); return; }
+    localStorage.setItem(studySnapshotKey(state.unitId), JSON.stringify({
+      savedAt: Date.now(),
+      exerciseIds: state.exercises.map((e) => e.id),
+      index: state.index,
+      attemptIds: state.attemptIds,
+      answeredCount: state.answeredCount,
+      correctCount: state.correctCount,
+      wrongIds: state.wrongExercises.map((e) => e.id),
+      correctedIds: state.correctedExercises.map((e) => e.id),
+    }));
+  } catch { /* storage unavailable: the pass just cannot be resumed */ }
+}
+
+function clearStudySnapshot(unitId) {
+  try { localStorage.removeItem(studySnapshotKey(unitId)); } catch { /* ignore */ }
+}
+
+function readStudySnapshot(unitId, exercises) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(studySnapshotKey(unitId)) ?? "null");
+    if (!raw || Date.now() - raw.savedAt > STUDY_SNAPSHOT_MAX_AGE_MS) return null;
+    const same = Array.isArray(raw.exerciseIds) && raw.exerciseIds.length === exercises.length && raw.exerciseIds.every((id, i) => id === exercises[i].id);
+    if (!same || !(raw.index > 0 && raw.index < exercises.length)) return null;
+    return raw;
+  } catch { return null; }
+}
+
+studyNowResume?.querySelector("#study-now-resume-continue")?.addEventListener("click", () => {
+  const state = studyNowState;
+  const snap = studyNowResumeSnapshot;
+  if (!state || !snap) return;
+  const byId = new Map(state.exercises.map((e) => [e.id, e]));
+  state.index = snap.index;
+  state.attemptIds = snap.attemptIds.slice();
+  state.answeredCount = snap.answeredCount;
+  state.correctCount = snap.correctCount;
+  state.wrongExercises = snap.wrongIds.map((id) => byId.get(id)).filter(Boolean);
+  state.correctedExercises = snap.correctedIds.map((id) => byId.get(id)).filter(Boolean);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
+});
+
+studyNowResume?.querySelector("#study-now-resume-restart")?.addEventListener("click", () => {
+  if (studyNowState) clearStudySnapshot(studyNowState.unitId);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
+});
+
+function renderStudyNowQuestion() {
+  if (studyNowResume) studyNowResume.hidden = true;
+  const state = studyNowState;
+  if (!state) return;
+  if (studyNowMessage) studyNowMessage.textContent = "";
+
+  if (state.exercises.length === 0) {
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = false;
+    studyNowProgress.textContent = "";
+    return;
+  }
+
+  if (state.index >= state.exercises.length) {
+    finishStudyNowSession();
+    return;
+  }
+
+  studyNowNoExercises.hidden = true;
+  studyNowQuestionArea.hidden = false;
+
+  const exercise = state.exercises[state.index];
+  studyNowQuestionText.textContent = exercise.questionText;
+  studyNowAnswerText.textContent = exercise.answerText;
+  studyNowAnswerText.hidden = true;
+  studyNowExplanationText.textContent = exercise.explanationText ? `Por quê: ${exercise.explanationText}` : "";
+  studyNowExplanationText.hidden = true;
+  if (exercise.hintText) {
+    // Honest reuse, not invention: shown unconditionally exactly like the
+    // Hoje review UI already does (a hint the learner can already see is
+    // truthfully "available", not a fabricated NONE for it).
+    studyNowHintText.textContent = exercise.hintText;
+    studyNowHintText.hidden = false;
+  } else {
+    studyNowHintText.hidden = true;
+    studyNowHintText.textContent = "";
+  }
+  studyNowJudgment.hidden = true;
+  studyNowRevealBtn.hidden = false;
+  studyNowRevealBtn.textContent = "Ver resposta";
+  studyNowProgress.textContent = `${state.mode === "retest" ? "Erro" : "Questão"} ${state.index + 1} de ${state.exercises.length}`;
+  studyNowPracticeTitle.textContent = state.mode === "retest" ? "Refazendo seus erros" : "Praticar";
+  // The Resumo Mestre contains the very answers being retrieved: showing it
+  // above a redo question would turn retrieval practice into reading.
+  if (state.mode === "retest") studyNowSummaryCard.hidden = true;
+  state.attemptId = null;
+  delete studyNowQuestionArea.dataset.attemptId;
+}
+
+async function finishStudyNowSession() {
+  const state = studyNowState;
+  if (!state) return;
+  const isRetest = state.mode === "retest";
+  studyNowQuestionArea.hidden = true;
+  studyNowProgress.textContent = "";
+
+  const { unitId, answeredCount, correctCount, attemptIds } = state;
+  if (answeredCount > 0 && !isRetest) {
+    try {
+      await DB.learningEvidence.create({
+        unitId,
+        context: "INITIAL_PRACTICE",
+        questionsCount: answeredCount,
+        correctCount,
+        evidenceDate: getLocalDateValue(),
+        attemptIds,
+      });
+    } catch (error) {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+    }
+  }
+
+  if (isRetest) {
+    studyNowResultTitle.textContent = "Resultado do reteste";
+    studyNowResultText.textContent = `${correctCount}/${answeredCount} erros corrigidos`;
+    studyNowResultNote.hidden = false;
+    studyNowResultNote.textContent = state.wrongExercises.length === 0
+      ? "Você corrigiu todos os erros deste bloco. Acertar logo depois de ver a resposta mostra que você recuperou o conteúdo; a próxima revisão confirma se ficou."
+      : "Acertar logo depois de ver a resposta mostra recuperação, não domínio. O que ainda errou fica abaixo para você fixar.";
+  } else {
+    const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+    studyNowResultTitle.textContent = "Resultado";
+    studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+  }
+
+  try {
+    const tasks = await DB.reviewTasks.getByUnit(unitId);
+    const next = getNextReview(unitId, tasks);
+    studyNowNextReviewText.textContent = next ? `Próxima revisão: ${formatDate(next)}` : "Nenhuma revisão pendente.";
+  } catch (error) {
+    console.error("Falha ao buscar próxima revisão.", error);
+    studyNowNextReviewText.textContent = "";
+  }
+
+  // The block never ends on a bare score: every wrong item is shown with
+  // its gabarito (feedback is per BLOCK, never per question mid-session),
+  // and the one obvious next action is redoing exactly those items. The
+  // product is self-report (no typed answer exists), so what is shown is
+  // "you marked wrong" + the correct answer -- never an invented reason.
+  studyNowErrorsList.replaceChildren();
+  if (state.wrongExercises.length > 0) {
+    studyNowErrorsTitle.textContent = isRetest
+      ? `Ainda para fixar (${state.wrongExercises.length})`
+      : `Questões para revisar (${state.wrongExercises.length})`;
+    for (const wrong of state.wrongExercises) studyNowErrorsList.append(createStudyErrorItem(wrong));
+    studyNowErrorsSection.hidden = false;
+    studyNowRetestBtn.hidden = false;
+    studyNowRetestBtn.textContent = isRetest
+      ? `Refazer os que ainda errei (${state.wrongExercises.length})`
+      : `Refazer erros (${state.wrongExercises.length})`;
+  } else {
+    studyNowErrorsSection.hidden = true;
+    studyNowRetestBtn.hidden = true;
+  }
+
+  studyNowCorrectedList.replaceChildren();
+  if (isRetest && state.correctedExercises.length > 0) {
+    studyNowCorrectedTitle.textContent = `Corrigidos (${state.correctedExercises.length})`;
+    for (const fixed of state.correctedExercises) {
+      const li = document.createElement("li");
+      li.className = "study-now-corrected-item";
+      li.append(
+        createTextElement("span", "study-now-chip is-corrected", "Corrigido"),
+        createTextElement("span", "study-now-corrected-question", fixed.questionText),
+      );
+      studyNowCorrectedList.append(li);
+    }
+    studyNowCorrectedSection.hidden = false;
+  } else {
+    studyNowCorrectedSection.hidden = true;
+  }
+
+  studyNowLastBlock = { unitId, wrong: state.wrongExercises.slice() };
+  studyNowSummaryCard.hidden = studyNowSummaryBody.textContent === "";
+  studyNowPracticeCard.hidden = true;
+  studyNowResultCard.hidden = false;
+  studyNowResultTitle.focus();
+  studyNowState = null;
+  renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+  renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+}
+
+function createStudyErrorItem(exercise) {
+  const li = document.createElement("li");
+  li.className = "study-now-error-item";
+  li.append(
+    createTextElement("p", "study-now-error-question", exercise.questionText),
+    createTextElement("span", "study-now-chip", "Você marcou: errei"),
+  );
+  const answer = document.createElement("div");
+  answer.className = "study-now-error-answer-block";
+  answer.append(
+    createTextElement("p", "study-now-error-label", "Resposta correta"),
+    createTextElement("p", "study-now-error-answer", exercise.answerText),
+  );
+  li.append(answer);
+  if (exercise.explanationText) {
+    li.append(createTextElement("p", "study-now-error-label", "Por quê"), createTextElement("p", "study-now-error-why", exercise.explanationText));
+  }
+  if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", `Dica: ${exercise.hintText}`));
+  const origin = STUDY_PROVENANCE_LABEL[exercise.provenance];
+  if (origin) li.append(createTextElement("p", "study-now-error-meta", origin));
+  // The only explanation the product really holds: the exact source page the
+  // question was drafted from (frozen at acceptance). Shown as evidence, not
+  // paraphrased -- and absent (nothing invented) for manual exercises.
+  for (const citation of exercise.citations ?? []) {
+    if (!citation.pageText) continue;
+    const details = document.createElement("details");
+    details.className = "study-now-source";
+    const summary = document.createElement("summary");
+    summary.textContent = `Trecho do material · ${citation.sourceName}, página ${citation.pageIndex}`;
+    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
+    li.append(details);
+  }
+  return li;
+}
+
+studyNowRetestBtn?.addEventListener("click", () => {
+  const block = studyNowLastBlock;
+  if (!block || block.wrong.length === 0) return;
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("retest", block.unitId, block.wrong.slice());
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+});
+
+studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
+
+// ── Modo Prova (EXAM-1) ─────────────────────────────────────────────────────────────────────────
+// The server returns ONLY the questions and the student's own answers while the exam is in progress;
+// nothing here can show a gabarito, explanation, hint or score because none is ever received.
+const examEls = {
+  unit: document.querySelector("#exam-unit"),
+  title: document.querySelector("#title-exam"),
+  message: document.querySelector("#exam-message"),
+  taking: document.querySelector("#exam-taking"),
+  progress: document.querySelector("#exam-progress"),
+  question: document.querySelector("#exam-question-text"),
+  answer: document.querySelector("#exam-answer-input"),
+  prev: document.querySelector("#exam-prev-btn"),
+  next: document.querySelector("#exam-next-btn"),
+  nav: document.querySelector("#exam-nav"),
+  submit: document.querySelector("#exam-submit-btn"),
+  confirm: document.querySelector("#exam-submit-confirm-btn"),
+  cancel: document.querySelector("#exam-submit-cancel-btn"),
+  warning: document.querySelector("#exam-submit-warning"),
+  submitted: document.querySelector("#exam-submitted"),
+  submittedTitle: document.querySelector("#exam-submitted-title"),
+  submittedText: document.querySelector("#exam-submitted-text"),
+  resultScore: document.querySelector("#exam-result-score"),
+  counts: document.querySelector("#exam-counts"),
+  reviewList: document.querySelector("#exam-review-list"),
+  finalNote: document.querySelector("#exam-final-note"),
+  finalize: document.querySelector("#exam-finalize-btn"),
+  retest: document.querySelector("#exam-retest-btn"),
+  today: document.querySelector("#exam-today-btn"),
+  back: document.querySelector("#exam-back-btn"),
+};
+let examState = null; // { exam, index, dirty }
+
+async function startSubjectExam(subject) {
+  if (!subject) return;
+  await openExam(() => DB.exams.startSubject(subject.id), { subjectName: subject.name, fallbackTitle: subject.name });
+}
+
+async function startExam(unit, subjectName) {
+  if (!unit) return;
+  await openExam(() => DB.exams.start(unit.id), { subjectName, fallbackTitle: unit.title });
+}
+
+async function openExam(begin, { subjectName, fallbackTitle }) {
+  try {
+    const { exam } = await begin();
+    const title = exam.title ?? fallbackTitle ?? "";
+    examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
+    restoreExamPending(examState);
+    examEls.unit.textContent = exam.scope === "SUBJECT" ? "Prova da disciplina" : (subjectName ?? "");
+    examEls.title.textContent = `Prova — ${title}`;
+    examEls.message.textContent = "";
+    showScreen("exam", { focus: true });
+    if (exam.status === "IN_PROGRESS") {
+      examEls.submitted.hidden = true;
+      examEls.taking.hidden = false;
+      renderExamQuestion();
+    } else {
+      // already submitted and waiting for its correction: continue where the student stopped
+      renderExamSubmitted();
+    }
+  } catch (error) {
+    console.error("Falha ao iniciar a prova.", error);
+    setPlanFormMessage?.("Não foi possível iniciar a prova. " + (error?.message ?? ""), true);
+  }
+}
+
+function currentExamItem() {
+  return examState?.exam.items[examState.index] ?? null;
+}
+
+function renderExamQuestion() {
+  if (!examState) return;
+  const { exam, index } = examState;
+  const item = exam.items[index];
+  examEls.progress.textContent = `Questão ${index + 1} de ${exam.items.length}`;
+  examEls.question.textContent = item.question;
+  examEls.answer.value = item.studentAnswer ?? "";
+  examEls.prev.disabled = index === 0;
+  examEls.next.disabled = index === exam.items.length - 1;
+  examEls.nav.replaceChildren();
+  exam.items.forEach((it, i) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = String(i + 1);
+    b.dataset.index = String(i);
+    b.setAttribute("aria-label", `Ir para a questão ${i + 1}${it.studentAnswer ? " (respondida)" : ""}`);
+    if (it.studentAnswer && it.studentAnswer.trim()) b.classList.add("is-answered");
+    if (i === index) b.setAttribute("aria-current", "true");
+    li.append(b);
+    examEls.nav.append(li);
+  });
+  resetExamSubmitConfirm();
+}
+
+// Pending (unsaved) answers are mirrored in the browser so they survive closing/reloading the tab while the
+// connection is down. Only what the student typed (never anything from the server); every access is guarded, so
+// the exam works exactly as before when storage is unavailable.
+const examPendingKey = (examId) => `smartlearn.exam.pending.${examId}`;
+
+function persistExamPending() {
+  if (!examState) return;
+  try {
+    const key = examPendingKey(examState.exam.id);
+    if (examState.unsaved.size === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(Object.fromEntries(examState.unsaved)));
+  } catch { /* storage unavailable: memory-only, as before */ }
+}
+
+/** Merges pending answers typed in an earlier tab over what the server returned, and retries sending them. */
+function restoreExamPending(state) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(examPendingKey(state.exam.id)) ?? "null"); } catch { saved = null; }
+  if (!saved || state.exam.status !== "IN_PROGRESS") return;
+  for (const [itemId, text] of Object.entries(saved)) {
+    const item = state.exam.items.find((it) => String(it.id) === itemId);
+    if (!item || typeof text !== "string") continue;
+    item.studentAnswer = text.trim() === "" ? null : text;
+    state.unsaved.set(item.id, text);
+  }
+  if (state.unsaved.size > 0) {
+    examEls.message.textContent = "Recuperei respostas que não tinham sido enviadas; vou enviá-las agora.";
+    flushExamAnswers().then((ok) => { if (ok && examState === state) examEls.message.textContent = ""; });
+  }
+}
+
+// An answer that failed to reach the server stays in `examState.unsaved` (itemId -> text) and is retried on the
+// next save / navigation / submit: it is never dropped, and submitting is blocked until nothing is pending.
+async function pushExamAnswer(itemId, text) {
+  try {
+    await DB.exams.saveAnswer(examState.exam.id, itemId, text);
+    examState.unsaved.delete(itemId);
+    persistExamPending();
+    return true;
+  } catch (error) {
+    console.error("Falha ao guardar a resposta.", error);
+    examState.unsaved.set(itemId, text);
+    persistExamPending();
+    examEls.message.textContent = "Não foi possível guardar a resposta. Ela fica neste aparelho e será enviada de novo; verifique a conexão.";
+    return false;
+  }
+}
+
+async function saveExamAnswer() {
+  const item = currentExamItem();
+  if (!examState || !item) return true;
+  examState.unsaved ??= new Map();
+  const typed = examEls.answer.value;
+  if ((item.studentAnswer ?? "") !== typed) item.studentAnswer = typed.trim() === "" ? null : typed;
+  else if (!examState.unsaved.has(item.id)) return true;
+  const ok = await pushExamAnswer(item.id, typed);
+  return ok;
+}
+
+/** Retries every answer still pending; true only when the server has them all. */
+async function flushExamAnswers() {
+  if (!examState?.unsaved) return true;
+  for (const [itemId, text] of [...examState.unsaved]) await pushExamAnswer(itemId, text);
+  return examState.unsaved.size === 0;
+}
+
+async function goToExamQuestion(index) {
+  if (!examState || index < 0 || index >= examState.exam.items.length) return;
+  await saveExamAnswer();
+  examState.index = index;
+  renderExamQuestion();
+  examEls.answer.focus();
+}
+
+function resetExamSubmitConfirm() {
+  examEls.submit.hidden = false;
+  examEls.confirm.hidden = true;
+  examEls.cancel.hidden = true;
+  examEls.warning.hidden = true;
+  examEls.warning.textContent = "";
+}
+
+examEls.answer?.addEventListener("blur", () => { saveExamAnswer(); });
+// Typing is mirrored on the device as it happens (closing the tab before the box loses focus must not lose it);
+// a successful save clears it again.
+examEls.answer?.addEventListener("input", () => {
+  const item = currentExamItem();
+  if (!examState || !item) return;
+  examState.unsaved ??= new Map();
+  examState.unsaved.set(item.id, examEls.answer.value);
+  persistExamPending();
+});
+examEls.prev?.addEventListener("click", () => goToExamQuestion(examState.index - 1));
+examEls.next?.addEventListener("click", () => goToExamQuestion(examState.index + 1));
+examEls.nav?.addEventListener("click", (event) => {
+  const b = event.target.closest("button[data-index]");
+  if (b) goToExamQuestion(Number(b.dataset.index));
+});
+examEls.submit?.addEventListener("click", async () => {
+  await saveExamAnswer();
+  if (!(await flushExamAnswers())) {
+    const n = examState.unsaved.size;
+    examEls.warning.hidden = false;
+    examEls.warning.textContent = `${n} ${n === 1 ? "resposta ainda não foi guardada" : "respostas ainda não foram guardadas"}: sem conexão com o servidor. Elas continuam neste aparelho; tente de novo quando a conexão voltar. Nada foi submetido.`;
+    return;
+  }
+  const unanswered = examState.exam.items.filter((it) => !it.studentAnswer || !it.studentAnswer.trim()).length;
+  examEls.warning.hidden = false;
+  examEls.warning.textContent = unanswered > 0
+    ? `${unanswered} ${unanswered === 1 ? "questão sem resposta" : "questões sem resposta"}. Depois de submeter, as respostas não podem mais ser alteradas.`
+    : "Depois de submeter, as respostas não podem mais ser alteradas.";
+  examEls.submit.hidden = true;
+  examEls.confirm.hidden = false;
+  examEls.cancel.hidden = false;
+  examEls.confirm.focus();
+});
+examEls.cancel?.addEventListener("click", () => { resetExamSubmitConfirm(); examEls.answer.focus(); });
+examEls.confirm?.addEventListener("click", async () => {
+  examEls.confirm.disabled = true;
+  try {
+    if (!(await flushExamAnswers())) {
+      examEls.message.textContent = "Ainda há respostas não guardadas; a prova não foi submetida. Verifique a conexão e tente de novo.";
+      return;
+    }
+    const submitted = await DB.exams.submit(examState.exam.id);
+    examState.exam = submitted;
+    renderExamSubmitted();
+  } catch (error) {
+    console.error("Falha ao submeter a prova.", error);
+    examEls.message.textContent = "Não foi possível submeter a prova. Suas respostas continuam guardadas; tente de novo.";
+  } finally {
+    examEls.confirm.disabled = false;
+  }
+});
+examEls.back?.addEventListener("click", () => { examState = null; showScreen("plan", { focus: true }); });
+
+// After submitting: the correction. Everything the student needs to learn from the exam is here — their
+// answer next to the gabarito, the WHY, the source — and only now. Right and wrong are judged by the
+// student (open-response questions), item by item; the score exists once every item is judged.
+function renderExamSubmitted({ focusHeading = true } = {}) {
+  const { exam } = examState;
+  examEls.taking.hidden = true;
+  examEls.submitted.hidden = false;
+  const answered = exam.items.filter((it) => it.studentAnswer && it.studentAnswer.trim()).length;
+  const judged = exam.items.filter((it) => it.outcome).length;
+  examEls.submittedText.textContent = judged < exam.items.length
+    ? `${answered} de ${exam.items.length} questões respondidas. Compare com o gabarito e marque Acertei ou Errei em cada questão (${judged} de ${exam.items.length} corrigidas).`
+    : `${answered} de ${exam.items.length} questões respondidas. Correção completa.`;
+
+  if (exam.score) {
+    const pct = exam.score.percent.toFixed(1).replace(".", ",");
+    examEls.resultScore.textContent = `${exam.score.correct}/${exam.score.total} corretas — ${pct}%`;
+    examEls.resultScore.hidden = false;
+    examEls.counts.textContent = `Acertos: ${exam.score.correct} · Erros: ${exam.score.total - exam.score.correct}`;
+    examEls.counts.hidden = false;
+  } else {
+    examEls.resultScore.hidden = true;
+    examEls.counts.hidden = true;
+  }
+
+  examEls.reviewList.replaceChildren();
+  const OUTCOME_LABEL = { CORRECT: "Acerto", INCORRECT: "Erro" };
+  for (const it of exam.items) {
+    const li = document.createElement("li");
+    li.className = "exam-review-item";
+    li.dataset.itemId = String(it.id);
+    li.dataset.outcome = it.outcome ?? "";
+    li.append(createTextElement("p", "exam-review-q", `${it.position + 1}. ${it.question}`));
+    if (exam.scope === "SUBJECT" && it.unitTitle) li.append(createTextElement("p", "exam-review-unit", `Aula: ${it.unitTitle}`));
+    li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : "A julgar"));
+    li.append(createTextElement("p", "exam-review-label", "Sua resposta"));
+    const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : "Sem resposta");
+    if (!it.studentAnswer || !it.studentAnswer.trim()) mine.classList.add("is-empty");
+    li.append(mine);
+    li.append(createTextElement("p", "exam-review-label", "Resposta correta"), createTextElement("p", "exam-review-text exam-review-correct", it.answer ?? ""));
+    if (it.explanation) li.append(createTextElement("p", "exam-review-label", "Por quê"), createTextElement("p", "exam-review-text exam-review-why", it.explanation));
+    const sources = (it.citations ?? []).filter((c) => c.pageText);
+    if (sources.length > 0) {
+      li.append(createSourceDetails(
+        `Trecho do material · ${sources[0].sourceName}, ${sources.length > 1 ? "páginas" : "página"} ${formatPageList(sources.map((c) => c.pageIndex))}`,
+        sources.map((c) => ({ pageIndex: c.pageIndex, text: c.pageText })),
+      ));
+    }
+    const judge = document.createElement("div");
+    judge.className = "exam-judge";
+    for (const [outcome, label, cls] of [["CORRECT", "Acertei", "exam-correct-btn"], ["INCORRECT", "Errei", "exam-wrong-btn"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `secondary-button ${cls}`;
+      b.dataset.action = "exam-judge";
+      b.dataset.itemId = String(it.id);
+      b.dataset.outcome = outcome;
+      b.setAttribute("aria-pressed", String(it.outcome === outcome));
+      // "Acertei" x N tells a screen reader nothing: name the question each button refers to
+      b.setAttribute("aria-label", `${label} — questão ${it.position + 1}`);
+      b.textContent = label;
+      judge.append(b);
+    }
+    li.append(judge);
+    examEls.reviewList.append(li);
+  }
+  // Closing the loop: once every item is judged the student registers the result (one evidence row); after
+  // that the result is FINAL and leads on — the wrong items go straight into the existing redo flow.
+  const corrected = exam.status === "CORRECTED";
+  const allJudged = judged === exam.items.length;
+  examEls.finalize.hidden = corrected || !allJudged;
+  for (const b of examEls.reviewList.querySelectorAll('[data-action="exam-judge"]')) b.disabled = corrected;
+  for (const j of examEls.reviewList.querySelectorAll(".exam-judge")) j.hidden = corrected;
+  const wrong = exam.items.filter((it) => it.outcome === "INCORRECT");
+  examEls.retest.hidden = !corrected || wrong.length === 0;
+  examEls.retest.textContent = `Refazer erros (${wrong.length})`;
+  examEls.finalNote.hidden = !corrected;
+  examEls.finalNote.textContent = corrected
+    ? `Resultado registrado no seu histórico (${exam.score.correct}/${exam.score.total})${exam.scope === "SUBJECT" ? `, por aula (${(exam.evidenceIds ?? []).length})` : ""}.${wrong.length > 0 ? " Os erros passam a aparecer como “para reforçar” no Plano." : ""}`
+    : "";
+  if (focusHeading) examEls.submittedTitle.focus();
+}
+
+examEls.finalize?.addEventListener("click", async () => {
+  if (!examState) return;
+  examEls.finalize.disabled = true;
+  try {
+    examState.exam = await DB.exams.finalize(examState.exam.id, getLocalDateValue());
+    renderExamSubmitted({ focusHeading: false });
+    (examEls.retest.hidden ? examEls.back : examEls.retest).focus();
+    // the result is now part of the history: refresh what reads it
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  } catch (error) {
+    console.error("Falha ao concluir a correção.", error);
+    examEls.message.textContent = "Não foi possível registrar o resultado. Suas correções continuam guardadas; tente de novo.";
+  } finally {
+    examEls.finalize.disabled = false;
+  }
+});
+
+examEls.retest?.addEventListener("click", async () => {
+  if (!examState) return;
+  const wrongIds = new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.exerciseId));
+  try {
+    // a discipline exam's wrong items live in several units: load each unit that has one
+    const unitIds = [...new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.unitId ?? examState.exam.unitId))];
+    const all = (await Promise.all(unitIds.map((id) => DB.exercises.getAll(id)))).flat();
+    const wrong = all.filter((e) => wrongIds.has(e.id));
+    if (wrong.length === 0) return;
+    startRetestBlock({
+      returnReviewId: null,
+      unitId: unitIds[0] ?? examState.exam.unitId,
+      subjectName: examState.subjectName ?? "",
+      unitTitle: examState.unitTitle ?? examState.exam.unitTitle ?? "",
+      exercises: wrong,
+    });
+  } catch (error) {
+    console.error("Falha ao abrir o reteste dos erros da prova.", error);
+    examEls.message.textContent = "Não foi possível abrir o reteste agora. Tente de novo.";
+  }
+});
+
+examEls.today?.addEventListener("click", () => { examState = null; showScreen("today", { focus: true }); });
+
+examEls.reviewList?.addEventListener("click", async (event) => {
+  const b = event.target.closest('[data-action="exam-judge"]');
+  if (!b || !examState) return;
+  const itemId = Number(b.dataset.itemId);
+  const outcome = b.dataset.outcome;
+  b.disabled = true;
+  try {
+    examState.exam = await DB.exams.judge(examState.exam.id, itemId, outcome);
+    renderExamSubmitted({ focusHeading: false });
+    examEls.reviewList.querySelector(`[data-action="exam-judge"][data-item-id="${itemId}"][data-outcome="${outcome}"]`)?.focus();
+  } catch (error) {
+    console.error("Falha ao registrar a correção.", error);
+    examEls.message.textContent = "Não foi possível registrar essa correção. Tente de novo.";
+    b.disabled = false;
+  }
+});
+
+// Entry used by a Hoje review block: same retest engine as "Estudar agora",
+// just started from the wrong items of the block the student already judged.
+function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exercises }) {
+  pendingTodayReturnReviewId = returnReviewId;
+  resetStudyNowResult();
+  studyNowSubjectEl.textContent = subjectName;
+  studyNowTitleEl.textContent = unitTitle;
+  studyNowState = newStudyNowState("retest", unitId, exercises.slice());
+  showScreen("study-now", { focus: true });
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+}
+
+studyNowRevealBtn?.addEventListener("click", async () => {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+  const exercise = state.exercises[state.index];
+
+  studyNowAnswerText.hidden = false;
+  studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
+  studyNowJudgment.hidden = false;
+  studyNowRevealBtn.hidden = true;
+  // The focused button just disappeared: keep keyboard users in the flow.
+  studyNowCorrectBtn.focus();
+
+  if (REMOTE_MODE && DB.attempts) {
+    try {
+      // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
+      const attempt = await DB.attempts.start(exercise.id);
+      state.attemptId = attempt.id;
+      // Real, observable signal (same idiom as ensureAttemptStarted's
+      // exItem.dataset.attemptId above) — lets tests confirm a real
+      // server-owned attempt exists without a dedicated listing endpoint.
+      studyNowQuestionArea.dataset.attemptId = String(attempt.id);
+      if (exercise.hintText) {
+        try { await DB.attempts.useHint(attempt.id); }
+        catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
+      }
+      await DB.attempts.revealSolution(attempt.id);
+    } catch (error) {
+      console.error("Falha ao iniciar tentativa (prática inicial).", error);
+    }
+  }
+});
+
+async function judgeStudyNow(isCorrect) {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+
+  if (state.judging) return; // a double tap must not judge the same question twice
+  // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
+  // this question with the same buttons and a plain message: nothing advances or is counted that the server
+  // does not have, so the result, the evidence and "para reforçar" always agree.
+  if (REMOTE_MODE && DB.attempts) {
+    state.judging = true;
+    try {
+      if (!state.attemptId) {
+        // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
+        // or the screen would show progress the server does not have.
+        const started = await DB.attempts.start(state.exercises[state.index].id);
+        state.attemptId = started.id;
+        studyNowQuestionArea.dataset.attemptId = String(started.id);
+        try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
+      }
+      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+      // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
+      // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
+      state.attemptIds.push(Number(state.attemptId));
+    } catch (error) {
+      console.error("Falha ao registrar resultado (prática inicial).", error);
+      studyNowMessage.textContent = "Não foi possível registrar sua resposta. Verifique a conexão e toque de novo no mesmo botão.";
+      return;
+    } finally {
+      state.judging = false;
+    }
+  }
+  studyNowMessage.textContent = "";
+
+  state.answeredCount += 1;
+  if (isCorrect) {
+    state.correctCount += 1;
+    state.correctedExercises.push(state.exercises[state.index]);
+  } else {
+    // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): keep the exact question/answer
+    // this session already has in memory — no new fetch, no new quiz
+    // mechanism, just remembering what was already shown so the result
+    // screen can offer "Revisar meus erros" instead of ending on a bare score.
+    state.wrongExercises.push(state.exercises[state.index]);
+  }
+
+  state.index += 1;
+  persistStudySnapshot(state);
+  renderStudyNowQuestion();
+  if (state.index < state.exercises.length) studyNowRevealBtn.focus();
+}
+
+studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
+studyNowIncorrectBtn?.addEventListener("click", () => judgeStudyNow(false));
 
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
@@ -2123,6 +4642,18 @@ async function renderStudies() {
     hInput.placeholder = "Dica (opcional)";
     hLabel.append(hInput);
 
+    // "Por quê" only where the store can keep it (the server); the local store has no such column.
+    let wLabel = null;
+    if (REMOTE_MODE) {
+      wLabel = document.createElement("label");
+      wLabel.textContent = "Por quê (opcional)";
+      const wInput = document.createElement("textarea");
+      wInput.rows = 2;
+      wInput.className = "exercise-why-input";
+      wInput.placeholder = "Por que essa é a resposta? Aparece depois de revelar e ao errar.";
+      wLabel.append(wInput);
+    }
+
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "small-button is-primary";
@@ -2133,7 +4664,7 @@ async function renderStudies() {
     const exerciseFormMsg = createTextElement("p", "field-message exercise-form-message", "");
     exerciseFormMsg.setAttribute("role", "status");
 
-    exerciseAddForm.append(qLabel, aLabel, hLabel, addBtn, exerciseFormMsg);
+    exerciseAddForm.append(qLabel, aLabel, hLabel, ...(wLabel ? [wLabel] : []), addBtn, exerciseFormMsg);
     exercisesSection.append(exerciseList, exerciseAddForm);
 
     const toggleExercisesBtn = document.createElement("button");
@@ -2166,6 +4697,7 @@ async function renderExerciseList(unitId) {
     const qEl = createTextElement("p", "exercise-question", exercise.questionText);
     const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
     const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", `Dica: ${exercise.hintText}`) : null;
+    const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", `Por quê: ${exercise.explanationText}`) : null;
 
     const itemActions = document.createElement("div");
     itemActions.className = "exercise-item-actions";
@@ -2187,8 +4719,7 @@ async function renderExerciseList(unitId) {
     delExBtn.textContent = "Remover";
 
     itemActions.append(editExBtn, delExBtn);
-    if (hEl) item.append(qEl, aEl, hEl, itemActions);
-    else item.append(qEl, aEl, itemActions);
+    item.append(qEl, aEl, ...[hEl, wEl].filter(Boolean), itemActions);
     list.append(item);
   }
 }
@@ -2214,6 +4745,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
       subjectSelect.value = remembered;
     }
   }
+  syncSelect(subjectSelect);
 
   renderSubjectList(allSubjects);
 }
@@ -2302,12 +4834,58 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
+const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now", "exam"]);
+
+// T22: "register" (#screen-register, "Cadastro") was removed from the NAV
+// in a prior decision (P1-2), but is NOT dead — it is the only UI in the
+// app that manages exercises (add/edit/delete), a real product capability
+// with no other entry point today (confirmed by hands-on verification:
+// Plano's own unit rows have no exercise-authoring section at all). An
+// earlier version of this comment/redirect wrongly assumed it was a
+// redundant duplicate of Plano's create-unit flow and redirected #register
+// away, which would have made exercise management completely
+// unreachable — reverted before landing. Preserving required entry
+// behavior (per tasks.md T22) means leaving #register reachable exactly
+// as P1-2 left it: nav-hidden, but a direct/bookmarked hash still works.
+// A real fix (surfacing exercise management from Plano/Hoje instead of
+// this legacy screen) is future UI work, not a T22 redirect decision.
+
 export function showScreen(screenId, { focus = false } = {}) {
-  const nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+  let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+
+  // Remote mode: a data screen with no authenticated session is a login
+  // requirement, not empty data — redirect to Conta rather than attempting
+  // (and failing 401 on) a render.
+  if (REMOTE_MODE && databaseAvailable && !authenticated && DATA_SCREENS.has(nextScreen)) {
+    nextScreen = "account";
+  }
+
+  // PV1-01: Materiais is exclusive to LOCAL_DESKTOP_AUTHORITY — a direct/
+  // bookmarked #materials hash must not expose the screen under plain
+  // REMOTE_AUTHORITY (no local backend), even though the nav item is
+  // already hidden for that case (hiding the nav button alone doesn't
+  // stop a direct hash navigation).
+  if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
+    nextScreen = DEFAULT_SCREEN;
+  }
+
+  // A redo's "return to the block" intent only lives until the student is
+  // back on Hoje; wandering elsewhere drops it instead of surprising them later.
+  if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
 
   for (const panel of screenPanels) {
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
   }
+
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey
+  // — the scrollable container (.app-main) kept whatever scroll offset the
+  // PREVIOUS screen had, so switching screens after scrolling down landed
+  // mid-content on the new screen instead of at its top (observed
+  // navigating a scrolled Conta into Materiais — arrived mid-paragraph,
+  // not at the "Materiais" heading). showScreen() is the one place every
+  // real screen switch goes through; a same-screen re-click scrolling
+  // back to top is reasonable, not a regression.
+  if (mainContent) mainContent.scrollTop = 0;
 
   for (const item of navigationItems) {
     const isActive = item.dataset.screen === nextScreen;
@@ -2341,6 +4919,21 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
   if (nextScreen === "settings" && databaseAvailable) {
     renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+  }
+  // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
+  // list populated on plain navigation — renderStudies() only ran after a
+  // submission through this same form, leaving units created elsewhere
+  // (e.g. Plano) invisible here even though the underlying data is the
+  // same. Exercise management lives exclusively on this screen (no other
+  // entry point exists), so a unit not appearing here means its
+  // exercises are unmanageable — a real, previously-silent gap, fixed by
+  // wiring this screen's list to the same on-navigate pattern every
+  // other screen already uses.
+  if (nextScreen === "register" && databaseAvailable) {
+    renderStudies().catch((error) => console.error("Falha ao carregar estudos.", error));
+  }
+  if (nextScreen === "account") {
+    renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));
   }
 }
 
@@ -2598,6 +5191,7 @@ studyList.addEventListener("click", async (event) => {
     const qInput = section?.querySelector(".exercise-question-input");
     const aInput = section?.querySelector(".exercise-answer-input");
     const hInput = section?.querySelector(".exercise-hint-input");
+    const wInput = section?.querySelector(".exercise-why-input");
     const msgEl = section?.querySelector(".exercise-form-message");
     const questionText = qInput?.value.trim() ?? "";
     if (!questionText) {
@@ -2611,11 +5205,13 @@ studyList.addEventListener("click", async (event) => {
         questionText,
         answerText: aInput?.value.trim() ?? "",
         hintText: hInput?.value.trim() || null,
+        ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
         provenance: 'MANUAL',
       });
       if (qInput) qInput.value = "";
       if (aInput) aInput.value = "";
       if (hInput) hInput.value = "";
+      if (wInput) wInput.value = "";
       if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = "Exercício adicionado."; }
       await renderExerciseList(studyId);
     } catch (error) {
@@ -2651,6 +5247,8 @@ studyList.addEventListener("click", async (event) => {
     const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
     const hintEl = item.querySelector(".exercise-hint");
     const currentH = hintEl ? hintEl.textContent.replace(/^Dica:\s*/, "") : "";
+    const whyEl = item.querySelector(".exercise-why");
+    const currentW = whyEl ? whyEl.textContent.replace(/^Por quê:\s*/, "") : "";
 
     const editForm = document.createElement("div");
     editForm.className = "exercise-item exercise-item-edit";
@@ -2661,6 +5259,12 @@ studyList.addEventListener("click", async (event) => {
     ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
     const eh = document.createElement("input");
     eh.type = "text"; eh.value = currentH; eh.placeholder = "Dica (opcional)"; eh.className = "exercise-hint-input";
+    let ew = null;
+    if (REMOTE_MODE) {
+      ew = document.createElement("textarea");
+      ew.rows = 2; ew.value = currentW; ew.placeholder = "Por quê (opcional)"; ew.className = "exercise-why-input";
+      ew.setAttribute("aria-label", "Por quê (opcional)");
+    }
 
     const saveEx = document.createElement("button");
     saveEx.type = "button"; saveEx.className = "small-button is-primary";
@@ -2675,7 +5279,7 @@ studyList.addEventListener("click", async (event) => {
     cancelEx.dataset.studyId = String(studyId);
     cancelEx.textContent = "Cancelar";
 
-    editForm.append(eq, ea, eh, saveEx, cancelEx);
+    editForm.append(eq, ea, eh, ...(ew ? [ew] : []), saveEx, cancelEx);
     item.replaceWith(editForm);
     eq.focus();
     return;
@@ -2688,6 +5292,7 @@ studyList.addEventListener("click", async (event) => {
     const eq = item?.querySelector(".exercise-question-input");
     const ea = item?.querySelector(".exercise-answer-input");
     const eh = item?.querySelector(".exercise-hint-input");
+    const ew = item?.querySelector(".exercise-why-input");
     const questionText = eq?.value.trim() ?? "";
     if (!questionText) { eq?.focus(); return; }
     button.disabled = true;
@@ -2696,6 +5301,7 @@ studyList.addEventListener("click", async (event) => {
         questionText,
         answerText: ea?.value.trim() ?? "",
         hintText: eh?.value.trim() || null,
+        ...(ew ? { explanationText: ew.value.trim() || null } : {}),
       });
       await renderExerciseList(studyId);
     } catch (error) {
@@ -2760,6 +5366,37 @@ studyList.addEventListener("click", async (event) => {
       console.error("Falha ao salvar estudo.", error);
     }
   }
+});
+
+todayPrimaryActionBtn?.addEventListener("click", () => {
+  const reviewId = todayPrimaryActionBtn.dataset.reviewId;
+  if (!reviewId) return;
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  if (!row) return;
+  const body = row.querySelector(".review-row-body");
+  const toggle = row.querySelector('[data-action="toggle-row"]');
+  if (body && body.hidden) {
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggle?.setAttribute("aria-expanded", "true");
+    if (toggle) toggle.textContent = "Recolher";
+  }
+  row.scrollIntoView({ behavior: "smooth", block: "start" });
+  row.classList.add("is-highlighted");
+  setTimeout(() => row.classList.remove("is-highlighted"), 2000);
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="toggle-row"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const body = row?.querySelector(".review-row-body");
+  if (!body) return;
+  const expanded = body.hidden;
+  body.hidden = !expanded;
+  row.classList.toggle("is-open", expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "Recolher" : "Ver conteúdo";
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -2830,21 +5467,84 @@ reviewDashboard.addEventListener("click", (event) => {
   detail.hidden = !expanded;
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+// T30: lazily starts a server-owned attempt the first time an exercise's
+// answer is revealed in this review, then records the reveal itself as an
+// attributable action. REMOTE_MODE-only (no local equivalent, same pattern
+// as migration-ui.js) and best-effort: a failure here never blocks the
+// existing reveal/judge UI or the aggregate evidence this review already
+// saves — item-level tracking is additive, not a dependency of the save path.
+async function ensureAttemptStarted(exItem) {
+  if (!REMOTE_MODE || !DB.attempts || !exItem) return null;
+  if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
+  const exerciseId = Number(exItem.dataset.exerciseId);
+  if (!Number.isInteger(exerciseId)) return null;
+  const reviewTaskId = Number(exItem.dataset.reviewTaskId);
+  try {
+    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
+    exItem.dataset.attemptId = String(attempt.id);
+    // The hint (when this exercise has one) is already visible in the DOM
+    // unconditionally, not gated behind its own action — so the truthful
+    // observation is that assistance was available from the start, not a
+    // fabricated NONE for a hint the learner could already see.
+    if (exItem.querySelector(".review-exercise-hint")) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (hintError) { console.error("Falha ao registrar uso de dica (item-level tracking).", hintError); }
+    }
+    return exItem.dataset.attemptId;
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa de exercício (item-level tracking).", error);
+    return null;
+  }
+}
+
+/** Sends the remembered outcome of one Hoje item to the attempt ledger. True once the server has it. */
+async function flushPendingAttempt(exItem) {
+  const outcome = exItem.dataset.pendingOutcome;
+  if (!outcome) return true;
+  try {
+    const attemptId = exItem.dataset.attemptId || await ensureAttemptStarted(exItem);
+    if (!attemptId) return false;
+    await DB.attempts.submit(attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+    delete exItem.dataset.pendingOutcome;
+    return true;
+  } catch (error) {
+    console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
+    return false;
+  }
+}
+
+/** Retries every pending item under `container`; returns how many the server still does not have. */
+async function flushPendingAttempts(container) {
+  let remaining = 0;
+  for (const exItem of container?.querySelectorAll(".review-exercise-item[data-pending-outcome]") ?? []) {
+    if (!(await flushPendingAttempt(exItem))) remaining += 1;
+  }
+  return remaining;
+}
+
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
   const answerEl = button.nextElementSibling;
   if (!answerEl) return;
+  const wasHidden = answerEl.hidden;
   answerEl.hidden = !answerEl.hidden;
   button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
   if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
     const judgment = exItem.querySelector(".exercise-judgment");
     if (judgment) judgment.hidden = false;
   }
+  if (wasHidden && !answerEl.hidden) {
+    const attemptId = await ensureAttemptStarted(exItem);
+    if (attemptId) {
+      try { await DB.attempts.revealSolution(attemptId); }
+      catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
+    }
+  }
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
@@ -2853,6 +5553,14 @@ reviewDashboard.addEventListener("click", (event) => {
   const isCorrect = button.dataset.action === "exercise-acertei";
   exItem.dataset.exerciseAnswered = "true";
   exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
+
+  if (REMOTE_MODE && DB.attempts) {
+    // The local judgment stays the primary record of the review (it feeds the review's own evidence); the item-level
+    // attempt is what "para reforçar" reads. If it cannot be sent now it is remembered and retried when the review is
+    // completed or the redo starts, so the two cannot silently disagree.
+    exItem.dataset.pendingOutcome = isCorrect ? "CORRECT" : "INCORRECT";
+    await flushPendingAttempt(exItem);
+  }
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
   }
@@ -2876,6 +5584,37 @@ reviewDashboard.addEventListener("click", (event) => {
     }
     section.dataset.allAnswered = "true";
   }
+  updateReviewBlockResult(section);
+
+  // The judged button was just disabled, which drops keyboard focus to <body>:
+  // hand it to the next actionable control (next question, or the redo action
+  // when the block just ended with errors).
+  const nextOpen = section.querySelector('.review-exercise-item[data-exercise-answered="false"] [data-action="reveal-answer"]');
+  (nextOpen ?? section.querySelector(".review-block-retest"))?.focus();
+});
+
+reviewDashboard.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="retest-block"]');
+  if (!button) return;
+  const section = button.closest("[data-exercises-total]");
+  const row = section?.closest(".review-row");
+  if (!section || !row) return;
+  const wrongIds = new Set(
+    [...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)),
+  );
+  const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
+  if (wrong.length === 0) return;
+  // The redo pairs with the original error on the server: send what could not be sent during the review first. If it
+  // still fails the redo opens anyway (studying is never blocked by the ledger) and the student is told.
+  const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  startRetestBlock({
+    returnReviewId: Number(row.dataset.reviewId),
+    unitId: Number(row.dataset.unitId),
+    subjectName: row.querySelector(".subject-chip")?.textContent ?? "",
+    unitTitle: row.querySelector(".review-content")?.textContent ?? "",
+    exercises: wrong,
+  });
+  if (unsent > 0) studyNowMessage.textContent = `Não consegui marcar ${unsent} ${unsent === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor); o reteste segue normalmente.`;
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -2902,6 +5641,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   const textarea = row.querySelector(".review-summary-edit textarea");
   const messageEl = row.querySelector(".review-summary-message");
   const displayEl = row.querySelector(".review-summary-text");
+  const placeholderEl = row.querySelector(".review-summary-placeholder");
   if (!textarea) return;
 
   const newSummaryBody = textarea.value.trim() || null;
@@ -2909,7 +5649,9 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? updated.title ?? "";
+      displayEl.textContent = updated.summaryBody ?? "";
+      displayEl.hidden = !updated.summaryBody;
+      if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
@@ -2929,6 +5671,18 @@ reviewDashboard.addEventListener("click", async (event) => {
   }
 });
 
+/**
+ * Completing (or undoing) a review re-renders Hoje and the row moves to another group, so the checkbox the keyboard
+ * was on no longer exists. Put focus on the same review's checkbox in its new place (its state is now committed and
+ * it can be undone from there); if that row is gone, on the page heading.
+ */
+function refocusReviewDone(taskId) {
+  const again = reviewDashboard.querySelector(`[data-action="review-done"][data-review-id="${taskId}"]`);
+  if (again) { again.focus({ preventScroll: true }); return; }
+  const heading = document.querySelector("#title-today");
+  if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+}
+
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="review-done"]');
   if (!input) return;
@@ -2938,6 +5692,12 @@ reviewDashboard.addEventListener("change", async (event) => {
   try {
     const row = input.closest(".review-row");
     const exercisesSection = row?.querySelector("[data-exercises-total]");
+    // Items whose attempt could not be sent earlier get another try now, before the review is closed.
+    let unsentItems = 0;
+    if (input.checked && exercisesSection && REMOTE_MODE && DB.attempts) unsentItems = await flushPendingAttempts(exercisesSection);
+    const unsentNote = () => (unsentItems > 0
+      ? `Revisão registrada, mas não consegui marcar ${unsentItems} ${unsentItems === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor).`
+      : "");
 
     if (input.checked && exercisesSection) {
       const total = Number(exercisesSection.dataset.exercisesTotal);
@@ -2947,6 +5707,8 @@ reviewDashboard.addEventListener("change", async (event) => {
         await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
         setReviewMessage();
         await renderToday();
+        refocusReviewDone(taskId);
+        if (unsentItems > 0) setReviewMessage(unsentNote(), true);
         return;
       }
     }
@@ -2957,9 +5719,11 @@ reviewDashboard.addEventListener("change", async (event) => {
     });
     setReviewMessage();
     await renderToday();
+    refocusReviewDone(taskId);
   } catch (error) {
     input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
+    input.focus({ preventScroll: true });
     setReviewMessage("Não foi possível salvar a revisão.", true);
     console.error("Falha ao atualizar a revisão.", error);
   }
@@ -3186,7 +5950,9 @@ studyForm.addEventListener("submit", async (event) => {
       studyDate,
       title: content,
       summaryBody,
+      operationKey: studySaveOperation.key,
     });
+    studySaveOperation.renew();
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     await renderStudies();
     studyContentInput.value = "";
@@ -3194,7 +5960,8 @@ studyForm.addEventListener("submit", async (event) => {
     if (studySourceTextInput) studySourceTextInput.value = "";
     studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
     studyContentInput.focus();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof NetworkError)) studySaveOperation.renew();
     studyMessage.classList.add("is-error");
     studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
   }
@@ -3202,19 +5969,91 @@ studyForm.addEventListener("submit", async (event) => {
 
 studyDateInput.value = getLocalDateValue();
 await dbInit;
-if (databaseAvailable) {
+if (databaseAvailable && authenticated) {
   await renderSubjects();
   await renderToday();
 }
 
-statsSubjectSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsBySubject().catch(console.error);
-});
-statsUnitFilterSubject?.addEventListener("change", () => {
+// Estatísticas: duas profundidades do mesmo instrumento, não duas telas —
+// alternar não recarrega dados, só troca qual workspace-grid fica visível.
+const statsViewTabs = [
+  { tab: document.querySelector("#tab-stats-subject"), panel: document.querySelector("#view-stats-subject") },
+  { tab: document.querySelector("#tab-stats-unit"), panel: document.querySelector("#view-stats-unit") },
+];
+function setStatsView(activeTab) {
+  for (const { tab, panel } of statsViewTabs) {
+    if (!tab || !panel) continue;
+    const isActive = tab === activeTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    panel.classList.toggle("is-hidden", !isActive);
+  }
+}
+for (const { tab } of statsViewTabs) {
+  tab?.addEventListener("click", () => setStatsView(tab));
+}
+
+// Global select/combobox standardization: the discipline context switcher
+// is a LOCKED, already-approved pattern (trigger = current discipline,
+// menu = alternatives only, subject-cell chip identity preserved) — never
+// redesigned here — but it used to only support click + Escape, missing
+// the arrow-key/Home-End/typeahead roving focus every select-ui.js
+// consumer already has. It now shares the exact same keyboard mechanics
+// (wireListboxKeyboard, src/select-ui.js) as every other select in the
+// app, instead of a hand-rolled subset.
+function isContentContextOpen() {
+  return disciplineSwitchList?.hidden === false;
+}
+function openContentContextMenu() {
+  if (!contentContextPlate || !disciplineSwitchList || isContentContextOpen()) return;
+  contentContextPlate.setAttribute("aria-expanded", "true");
+  disciplineSwitchList.hidden = false;
+  contentContextListKeyboard.setActiveFirst();
+  disciplineSwitchList.tabIndex = 0;
+  disciplineSwitchList.focus({ preventScroll: true });
+}
+function closeContentContextMenu(returnFocus) {
+  if (!contentContextPlate || !disciplineSwitchList || !isContentContextOpen()) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
+  if (returnFocus) contentContextPlate.focus();
+}
+function commitContentContextItem(item) {
+  const btn = item?.querySelector("button[data-subject-id]");
+  if (!btn) return;
+  selectedUnitSubjectId = Number(btn.dataset.subjectId);
+  closeContentContextMenu(true);
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
+}
+const contentContextListKeyboard = disciplineSwitchList
+  ? wireListboxKeyboard(disciplineSwitchList, {
+      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=menuitem]")),
+      onCommit: commitContentContextItem,
+      onEscape: () => closeContentContextMenu(true),
+      onTabAway: () => closeContentContextMenu(false),
+    })
+  : null;
+
+contentContextPlate?.addEventListener("click", () => {
+  if (isContentContextOpen()) closeContentContextMenu(true);
+  else openContentContextMenu();
 });
-statsUnitFilterTrend?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+contentContextPlate?.addEventListener("keydown", (event) => {
+  if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openContentContextMenu();
+  }
+});
+disciplineSwitchList?.addEventListener("click", (event) => {
+  const item = event.target.closest("li[role=menuitem]");
+  if (!item) return;
+  commitContentContextItem(item);
+});
+document.addEventListener("click", (event) => {
+  if (!contentContextPlate || !isContentContextOpen()) return;
+  if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
+  closeContentContextMenu(false);
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
@@ -3250,10 +6089,9 @@ trackingFilterPeriod?.addEventListener("change", () => {
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-});
-statsUnitSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  if (!databaseAvailable) return;
+  renderStatsBySubject().catch(console.error);
+  renderStatsByUnit().catch(console.error);
 });
 
 let newSubjectColor = "DISC-BLUE";
@@ -3308,8 +6146,35 @@ function setPlanFormMessage(msg = "", isError = false) {
   planUnitFormMessage.classList.toggle("is-error", isError);
 }
 
+// T23: one operation key per save INTENT, not per click/request. A
+// double-click or a retry after a lost response reuses the same key, so
+// the server's idempotency guard (T15) returns the original result
+// instead of creating a second unit. Only renew() on an actual new
+// intent (a prior save succeeded, or the user explicitly cancels) — never
+// on a failed attempt, since a retry of the same typed data IS the same
+// intent.
+function createOperationKeyTracker() {
+  let key = crypto.randomUUID();
+  return {
+    get key() { return key; },
+    renew() { key = crypto.randomUUID(); },
+  };
+}
+const planSaveOperation = createOperationKeyTracker();
+const studySaveOperation = createOperationKeyTracker();
+
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
+});
+
+// First run (empty Hoje): the two ways to start. "Enviar um PDF" exists only where Materiais does.
+const firstUploadBtn = todayEmptyState?.querySelector('[data-action="first-upload"]');
+const firstCreateBtn = todayEmptyState?.querySelector('[data-action="first-create"]');
+if (firstUploadBtn) firstUploadBtn.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+firstUploadBtn?.addEventListener("click", () => showScreen("materials", { focus: true }));
+firstCreateBtn?.addEventListener("click", () => {
+  showScreen("plan", { focus: false });
+  setPlanFormVisible(true);
 });
 
 planUnitCancelBtn?.addEventListener("click", () => {
@@ -3317,6 +6182,7 @@ planUnitCancelBtn?.addEventListener("click", () => {
   setPlanSubjectSubformVisible(false);
   setPlanFormMessage();
   if (planNewSubjectInput) planNewSubjectInput.value = "";
+  planSaveOperation.renew();
 });
 
 planShowSubjectForm?.addEventListener("click", () => {
@@ -3331,7 +6197,7 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
   try {
     const newSubject = await DB.subjects.create(name, "DISC-BLUE");
     await renderPlan();
-    if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
+    if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
     setPlanSubjectSubformVisible(false);
     planNewSubjectInput.value = "";
     planStudyTitle.focus();
@@ -3378,10 +6244,13 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
-      : { subjectId, sourceText, studyDate, title, summaryBody };
+      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
-    // Save succeeded — clear draft immediately; render failures below must NOT re-submit
+    // Save succeeded (or an idempotent retry returned the original result)
+    // — this intent is done, the next save is a genuinely new one.
+    planSaveOperation.renew();
+    // Clear draft immediately; render failures below must NOT re-submit
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
@@ -3390,7 +6259,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     setPlanFormMessage("Aula salva. 16 revisões criadas.");
     try {
       await renderPlan();
-      if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      if (planSubjectSelect) { planSubjectSelect.value = String(saved.subjectId); syncSelect(planSubjectSelect); }
       // AC-014: clear subject filter if it would hide the newly saved unit
       if (planFilterSubject && planFilterSubject.value && planFilterSubject.value !== String(saved.subjectId)) {
         planFilterSubject.value = '';
@@ -3402,7 +6271,15 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     } catch {
       setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
     }
-  } catch {
+  } catch (error) {
+    // Only a NetworkError (we genuinely don't know whether the server
+    // committed) keeps the same key, so a retry of the same draft
+    // resolves as an idempotent replay rather than a duplicate. A
+    // definitive rejection (validation, subject conflict) renews it —
+    // the user is expected to change something before retrying, and
+    // reusing the key there would misreport an edited resubmission as an
+    // idempotency conflict instead of validating it fresh.
+    if (!(error instanceof NetworkError)) planSaveOperation.renew();
     setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
   } finally {
     planUnitSaveBtn.disabled = false;
@@ -3421,4 +6298,122 @@ if (import.meta.env?.DEV) {
   };
 }
 
+// T11: minimal account experience. Independent of the BrowserStore-backed
+// learning screens above — see auth-ui.js header comment. Session expiry
+// here never clears any of the learning-form drafts managed elsewhere.
+const accountLoggedOutView = document.querySelector("#account-logged-out-view");
+const accountLoggedInView = document.querySelector("#account-logged-in-view");
+const accountLoginForm = document.querySelector("#account-login-form");
+const accountRegisterForm = document.querySelector("#account-register-form");
+const accountPasswordForm = document.querySelector("#account-password-form");
+const accountLogoutBtn = document.querySelector("#account-logout-btn");
+const accountLoggedInAs = document.querySelector("#account-logged-in-as");
+
+function setAccountMessage(formId, text = "", isError = false) {
+  const el = document.querySelector(`#${formId}-message`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
+
+async function renderAccount() {
+  const user = await AuthUI.bootstrap();
+  const loggedIn = !!user;
+  if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
+  if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
+  if (loggedIn && accountLoggedInAs) {
+    accountLoggedInAs.textContent = `Conectado como ${user.emailDisplay}`;
+  }
+}
+
+document.querySelector("#account-show-register")?.addEventListener("click", () => {
+  accountLoginForm.hidden = true;
+  accountRegisterForm.hidden = false;
+});
+document.querySelector("#account-show-login")?.addEventListener("click", () => {
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountLoginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-login");
+  const email = accountLoginForm.email.value.trim();
+  const password = accountLoginForm.password.value;
+  const result = await AuthUI.login(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-login", result.message, true);
+    return; // draft (email/password fields) stays as typed on failure
+  }
+  accountLoginForm.reset();
+  await renderAccount();
+  // Stays on Conta (matches the existing T11 login UX: "Conectado como X")
+  // rather than auto-navigating — only the auth-gate state changes, so a
+  // manual click on any data screen now works instead of bouncing back here.
+  if (REMOTE_MODE) {
+    authenticated = true;
+    const user = AuthUI.getCurrentUser();
+    if (user) OfflineStore.syncSnapshot(user.id).catch(() => {});
+  }
+});
+
+accountRegisterForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-register");
+  const email = accountRegisterForm.email.value.trim();
+  const password = accountRegisterForm.password.value;
+  const result = await AuthUI.register(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-register", result.message, true);
+    return;
+  }
+  setAccountMessage("account-register", "Conta criada com sucesso. Entre com suas credenciais.");
+  accountRegisterForm.reset();
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountPasswordForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-password");
+  const currentPassword = accountPasswordForm.currentPassword.value;
+  const newPassword = accountPasswordForm.newPassword.value;
+  const result = await AuthUI.changePassword(currentPassword, newPassword);
+  if (!result.ok) {
+    setAccountMessage("account-password", result.message, true);
+    return;
+  }
+  setAccountMessage("account-password", "Senha alterada com sucesso.");
+  accountPasswordForm.reset();
+});
+
+accountLogoutBtn?.addEventListener("click", async () => {
+  await AuthUI.logout();
+  if (REMOTE_MODE) {
+    authenticated = false;
+    // AC-23: the next account to log in on this device must never be able
+    // to read this account's cached agenda snapshot.
+    await OfflineStore.purgeAllAccounts();
+  }
+  await renderAccount();
+});
+
+// T41: a 401 mid-session (server-side expiry/revocation — see
+// api-client.js's handleResponse) locks protected operations and clears
+// stale identity. NOT a logout: the cached offline snapshot legitimately
+// still belongs to this same account, so it is deliberately NOT purged —
+// only OfflineStore.purgeAllAccounts() (an explicit logout/account-switch)
+// does that. Re-confirms with the server (rather than trusting the
+// dispatched event alone) before actually clearing local state.
+if (REMOTE_MODE) {
+  OfflineUI.onUnauthenticated(async () => {
+    const user = await AuthUI.bootstrap();
+    if (user) return; // a stray/transient 401 — the session is actually still valid
+    authenticated = false;
+    await renderAccount();
+    if (DATA_SCREENS.has(window.location.hash.slice(1))) showScreen("account");
+  });
+}
+
+enhanceAllSelects();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

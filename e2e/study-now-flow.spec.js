@@ -1,0 +1,220 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+
+// Closes the critical flow the TEST SHIELD goal names explicitly end to
+// end: Study Now -> attempt -> evidence -> reload -> Exercícios resolvidos
+// -> tentativa correta. "Estudar agora" (src/app.js startStudyNow) has no
+// reachable entry point in the current UI other than right after accepting
+// a Materiais draft (see the button's own construction site, app.js ~3009)
+// — so this test reaches it the same real way a user would, reusing
+// e2e/draft-acceptance.spec.js's exact real-pipeline setup (own server,
+// own port) rather than adding a test-only shortcut into product code.
+
+const SERVER_PORT = 13969;
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+let serverProcess;
+let dataDir;
+
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-study-now-'));
+  const dbPath = join(dataDir, 'e2e.db');
+  const sourcesDir = join(dataDir, 'sources');
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: {
+      ...process.env,
+      SMARTLEARN_DB_PATH: dbPath,
+      SMARTLEARN_SOURCES_DIR: sourcesDir,
+      PORT: String(SERVER_PORT),
+      HOST: 'localhost',
+      NODE_ENV: 'test',
+      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+    },
+    stdio: 'ignore',
+  });
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error('study-now-flow E2E: real server did not become ready in time');
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  const email = `study-now-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'a genuinely long test password 1';
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="account"]').click();
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(email);
+  await page.locator('#account-register-password').fill(password);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill(password);
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+});
+
+async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, sourcePages, studyDate }) {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+
+  const pdfBuffer = buildFixturePdf(sourcePages ?? [sourceText]);
+  await page.setInputFiles('#sources-file-input', { name: 'material.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+
+  const item = page.locator('.source-proposal-item').first();
+  await item.locator('[data-action="generate-draft"]').click();
+  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
+
+  const draftPanel = item.locator('.source-draft-panel');
+  await expect(draftPanel).toBeVisible();
+  const draftQuestionText = await draftPanel.locator('.source-draft-question').first().textContent();
+
+  await draftPanel.locator('.source-draft-subject-input').fill(subjectName);
+  await draftPanel.locator('.source-draft-date-input').fill(studyDate);
+  await draftPanel.locator('[data-action="accept-draft"]').click();
+  await expect(draftPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(draftPanel.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+
+  const studyNowBtn = draftPanel.locator('[data-action="study-now"]');
+  await expect(studyNowBtn).toBeVisible({ timeout: 5000 });
+  return { studyNowBtn, draftQuestionText };
+}
+
+test('Study Now -> attempt -> evidence -> reload -> Exercícios resolvidos -> tentativa correta, end to end', async ({ page }) => {
+  const { studyNowBtn, draftQuestionText } = await acceptDraftAndGetStudyNowButton(page, {
+    subjectName: 'Farmacologia Study Now E2E',
+    sourceText: 'Farmacocinética: absorção e distribuição de fármacos.',
+    studyDate: '2026-04-01',
+  });
+
+  await studyNowBtn.click();
+  await expect(page.locator('#title-study-now')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#study-now-question-text')).toHaveText(draftQuestionText.trim());
+
+  await page.locator('#study-now-reveal-btn').click();
+  await expect(page.locator('#study-now-answer-text')).toBeVisible();
+
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#study-now-result-text')).toContainText('1/1');
+
+  // Reload — the whole point of the flow: evidence must have actually
+  // persisted server-side, not just live in this session's in-memory state.
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+
+  await page.locator('[data-screen="stats"]').click();
+  const row = page.locator('#exercise-notes-body .exercise-row', { hasText: 'Farmacologia Study Now E2E' });
+  await expect(row).toBeVisible({ timeout: 5000 });
+
+  await row.click();
+  const dialog = page.locator('#exercise-detail-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(draftQuestionText.trim())).toBeVisible();
+  await expect(dialog.locator('.exercise-attempt-outcome')).toHaveText('Acertou');
+  await expect(dialog.locator('.exercise-attempt-item')).toHaveClass(/is-correct/);
+});
+
+test('Study Now with an INCORRECT judgment reaches Exercícios resolvidos showing the real wrong outcome, not a guessed one', async ({ page }) => {
+  const { studyNowBtn, draftQuestionText } = await acceptDraftAndGetStudyNowButton(page, {
+    subjectName: 'Bioquímica Study Now E2E',
+    sourceText: 'Ciclo de Krebs: etapas e enzimas envolvidas.',
+    studyDate: '2026-04-02',
+  });
+
+  await studyNowBtn.click();
+  await expect(page.locator('#title-study-now')).toBeVisible({ timeout: 5000 });
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#study-now-result-text')).toContainText('0/1');
+
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="stats"]').click();
+  const row = page.locator('#exercise-notes-body .exercise-row', { hasText: 'Bioquímica Study Now E2E' });
+  await expect(row).toBeVisible({ timeout: 5000 });
+
+  await row.click();
+  const dialog = page.locator('#exercise-detail-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(draftQuestionText.trim())).toBeVisible();
+  await expect(dialog.locator('.exercise-attempt-outcome')).toHaveText('Errou');
+  await expect(dialog.locator('.exercise-attempt-item')).toHaveClass(/is-incorrect/);
+});
+
+// SPRINT 5 (FASE D): "Refazer erros" is recovery, not a second observation of the same performance -- the
+// original INITIAL_PRACTICE evidence (1/2) must survive a corrected retest completely unchanged: never
+// overwritten, never summed into a second row, never inflated into what the retest's own outcome would imply
+// (2/2). Found already correct in the code (app.js only calls learningEvidence.create in "initial" mode); this
+// closes the one gap in existing coverage -- hoje-block-retest.spec.js proves the analogous invariant for the
+// REVIEW context, nothing proved it end to end for Estudar agora's own INITIAL_PRACTICE evidence.
+test('a corrected retest never rewrites, duplicates or inflates the original Estudar agora evidence (4/6-then-1/2 must stay 4/6, not become 5/6)', async ({ page }) => {
+  const { studyNowBtn } = await acceptDraftAndGetStudyNowButton(page, {
+    subjectName: 'Imunologia Retest Evidence E2E',
+    sourcePages: ['Complemento: cascata de proteinas do sistema imune.', 'Neutrofilos: fagocitose e granulos.'],
+    studyDate: '2026-04-03',
+  });
+
+  await studyNowBtn.click();
+  await expect(page.locator('#title-study-now')).toBeVisible({ timeout: 5000 });
+  // Question 1: correct. Question 2: wrong (this is the one retested below).
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#study-now-result-text')).toContainText('1/2');
+
+  const fetchUnitEvidence = () => page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/learning-evidence`, { credentials: 'include' });
+    return (await res.json()).evidence.filter((e) => e.type === 'INITIAL_PRACTICE');
+  }, API_BASE);
+  await expect.poll(fetchUnitEvidence, { timeout: 5000 }).toHaveLength(1);
+  const original = (await fetchUnitEvidence())[0];
+  expect({ questionsCount: original.questionsCount, correctCount: original.correctCount }).toEqual({ questionsCount: 2, correctCount: 1 });
+
+  // Corrected retest of the one wrong question.
+  await page.locator('#study-now-retest-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 5000 });
+  await page.locator('#study-now-done-btn').click();
+
+  // The retest wrote NO new row: still exactly one INITIAL_PRACTICE row, and it is the SAME row with the
+  // SAME original numbers -- not overwritten to 2/2, not a second 1/1 row summed alongside it.
+  const after = await fetchUnitEvidence();
+  expect(after).toHaveLength(1);
+  expect(after[0].id).toBe(original.id);
+  expect({ questionsCount: after[0].questionsCount, correctCount: after[0].correctCount }).toEqual({ questionsCount: 2, correctCount: 1 });
+
+  // ...and the corrected item is no longer suggested for reinforcement (it has been recovered), while the
+  // original 1/2 is still what Estatisticas/Hoje would compute weighted accuracy from -- distinct signals,
+  // reconciled, never conflated (this file's own claim about analytics.js is exercised, not asserted twice).
+  const reinforcement = await page.evaluate(async (base) => {
+    const res = await fetch(`${base}/v1/reinforcement`, { credentials: 'include' });
+    return (await res.json()).byUnit;
+  }, API_BASE);
+  expect(Object.values(reinforcement).flat()).toHaveLength(0);
+});

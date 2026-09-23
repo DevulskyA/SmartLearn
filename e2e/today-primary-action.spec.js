@@ -1,0 +1,97 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+// T30: proves the item-level attempt ledger (T29's schema, T30's service
+// wired into the existing review-exercise reveal/judge UI) is populated by
+// a real practice interaction, not just by direct service calls (already
+// covered by server/test/attempts.test.js). Same real-server-child-process
+// pattern as e2e/feature-parity.spec.js.
+
+const SERVER_PORT = 13975;
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+let serverProcess;
+let dbDir;
+
+test.beforeAll(async () => {
+  dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-primary-'));
+  const dbPath = join(dbDir, 'e2e.db');
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199' },
+    stdio: 'ignore',
+  });
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
+    await new Promise(r => setTimeout(r, 150));
+  }
+  throw new Error('practice E2E: real server did not become ready in time');
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise(r => setTimeout(r, 300));
+  rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+  }, API_BASE);
+  const email = `practice-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'a genuinely long test password 1';
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="account"]').click();
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(email);
+  await page.locator('#account-register-password').fill(password);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill(password);
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+});
+
+test('Hoje "Começar agora" goes to a review with something to retrieve, not the oldest empty one, and names it', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Prioridade Subject');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  const addUnit = async (title, date) => {
+    await page.locator('#study-date').fill(date);
+    await page.locator('#study-content').fill(title);
+    await page.locator('#study-form button[type="submit"]').click();
+    await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  };
+  await addUnit('Aula Sem Material', '2019-01-01');    // oldest reviews, nothing to practice
+  await addUnit('Aula Com Exercicio', '2019-06-01');   // newer, has an exercise
+  const row = page.locator('.study-row', { hasText: 'Aula Com Exercicio' });
+  await row.getByRole('button', { name: 'Exercícios' }).click();
+  await row.locator('.exercise-question-input').fill('Pergunta prioridade?');
+  await row.locator('.exercise-answer-input').fill('Resposta prioridade');
+  await row.getByRole('button', { name: 'Adicionar exercício' }).click();
+  await expect(row.getByText('Pergunta prioridade?')).toBeVisible({ timeout: 5000 });
+
+  await page.locator('[data-screen="today"]').click();
+  const text = page.locator('#today-primary-action-text');
+  await expect(text).toContainText('vencidas', { timeout: 5000 });
+  await expect(text).toContainText('Comece por “Aula Com Exercicio”');
+
+  // The very first overdue row IS the empty one (oldest) -- the button must not point at it.
+  const firstRowId = await page.locator('[data-review-list="overdue"] .review-row').first().getAttribute('data-review-id');
+  const targetId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  expect(targetId).not.toBe(firstRowId);
+  const target = page.locator(`.review-row[data-review-id="${targetId}"]`);
+  await expect(target).toContainText('Aula Com Exercicio');
+  await page.locator('#today-primary-action-btn').click();
+  await expect(target.locator('.review-exercise-item')).toBeVisible();
+});

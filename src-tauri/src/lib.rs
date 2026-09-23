@@ -1,8 +1,298 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{sqlite::SqliteConnectOptions, Connection, Executor, SqliteConnection};
-use std::path::Path;
-use tauri::Manager;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+const DEV_APP_ORIGIN: &str = "http://127.0.0.1:3000";
+
+// LOCAL-01A / ARCH-01 (.specs/STATE.md "ARCHITECTURE SUPERSESSION"): Desktop
+// is restored as its own local-first authority. Rather than duplicating the
+// domain/backend in Rust (explicitly rejected by the decision), this reuses
+// the EXISTING Node/Fastify/SQLite backend as a local process on 127.0.0.1 —
+// the frontend keeps talking to it exactly the way it talks to a remote
+// server (same remote-store.js/api-client.js HTTP pipeline), it's just that
+// "the server" now lives on this computer. This env var is a dev-time-only
+// opt-in switch (LOCAL-01A is an explicit runtime/dev proof, not yet a
+// packaged production mode — that is LOCAL-01B's job): unset/false keeps
+// T42's original remote-WebView behavior byte-for-byte.
+const LOCAL_AUTHORITY_ENV: &str = "SMARTLEARN_LOCAL_AUTHORITY";
+const LOCAL_BACKEND_HOST: &str = "127.0.0.1";
+const LOCAL_BACKEND_READY_TIMEOUT: Duration = Duration::from_secs(15);
+
+fn local_authority_enabled() -> bool {
+    std::env::var(LOCAL_AUTHORITY_ENV)
+        .map(|value| value == "true")
+        .unwrap_or(false)
+}
+
+/// Keeps the spawned local backend alive for the app's lifetime and kills it
+/// on drop (app exit) — never left as an orphaned process after this window
+/// closes. Held via `app.manage()`.
+struct LocalBackend {
+    child: Child,
+    origin: tauri::Url,
+}
+
+impl Drop for LocalBackend {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Picks a free TCP port by asking the OS for one and immediately releasing
+/// it — "porta livre escolhida em runtime, não porta fixa". A small
+/// bind-then-release race window exists in principle; acceptable for this
+/// dev-time proof (LOCAL-01A), same tradeoff any "ask the OS, then hand off
+/// to a child process" pattern makes without a shared-socket API.
+fn pick_free_local_port() -> Result<u16, String> {
+    let listener = TcpListener::bind((LOCAL_BACKEND_HOST, 0)).map_err(|e| e.to_string())?;
+    listener.local_addr().map(|addr| addr.port()).map_err(|e| e.to_string())
+}
+
+/// Pure, independently testable: the exact environment this local backend
+/// is launched with. Kept separate from the actual `Command::spawn` so
+/// tests can assert on it directly (loopback-only host, paths rooted under
+/// the app's own data directory, an allowed-origin set that is exactly this
+/// backend's own origin — never a wildcard) without spawning a real process.
+fn local_backend_env(app_data_dir: &Path, port: u16, static_dir: &Path) -> Vec<(String, String)> {
+    let data_root = app_data_dir.join("smartlearn-server");
+    vec![
+        ("HOST".to_string(), LOCAL_BACKEND_HOST.to_string()),
+        ("PORT".to_string(), port.to_string()),
+        (
+            "SMARTLEARN_DB_PATH".to_string(),
+            data_root.join("smartlearn.db").to_string_lossy().into_owned(),
+        ),
+        (
+            "SMARTLEARN_SOURCES_DIR".to_string(),
+            data_root.join("sources").to_string_lossy().into_owned(),
+        ),
+        (
+            "SMARTLEARN_STATIC_DIR".to_string(),
+            static_dir.to_string_lossy().into_owned(),
+        ),
+        (
+            "SMARTLEARN_ALLOWED_ORIGINS".to_string(),
+            format!("http://{LOCAL_BACKEND_HOST}:{port}"),
+        ),
+    ]
+    // Deliberately NOT NODE_ENV=production: that would ask app.js's server
+    // for a Secure/__Host- cookie, which no plain-HTTP loopback origin can
+    // ever actually set (design.md §3: Secure requires HTTPS). Loopback HTTP
+    // stays on the existing non-Secure dev-cookie path, same as any other
+    // local/dev deployment of this same server.
+}
+
+/// One raw, dependency-free HTTP/1.1 GET — avoids pulling in a full HTTP
+/// client crate for a single loopback readiness probe.
+fn http_get_ok(port: u16, path: &str, connect_timeout: Duration) -> bool {
+    let addr: SocketAddr = match format!("{LOCAL_BACKEND_HOST}:{port}").parse() {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
+    let mut stream = match TcpStream::connect_timeout(&addr, connect_timeout) {
+        Ok(stream) => stream,
+        Err(_) => return false,
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(800)));
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {LOCAL_BACKEND_HOST}:{port}\r\nConnection: close\r\n\r\n"
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+}
+
+/// Blocks (bounded by `timeout`) until the local backend answers
+/// `/health/ready` with 200, or returns an explicit `Err` — either because
+/// the process exited on its own (crash/misconfiguration — its stderr is
+/// included) or because the deadline passed. Never returns `Ok` on a guess:
+/// this is the one gate standing between "backend failed" and "window opens
+/// pretending everything is fine" (LOCAL-01A requirement: "se backend local
+/// não iniciar, mostrar falha explícita, nunca abrir UI fingindo estado
+/// vazio").
+fn wait_for_local_backend_ready(child: &mut Child, port: u16, timeout: Duration) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            let mut stderr_output = String::new();
+            if let Some(mut stderr) = child.stderr.take() {
+                let _ = stderr.read_to_string(&mut stderr_output);
+            }
+            return Err(format!(
+                "local backend process exited early ({status}) before becoming ready: {}",
+                stderr_output.trim()
+            ));
+        }
+        if http_get_ok(port, "/health/ready", Duration::from_millis(300)) {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!(
+                "local backend did not become ready on {LOCAL_BACKEND_HOST}:{port} within {timeout:?}"
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+}
+
+/// LOCAL-01B: the standalone package (`npm run package:standalone`, see
+/// scripts/package-standalone.mjs) stages a self-contained copy of the
+/// backend under the app's resource dir: a bundled Node binary
+/// (`node-runtime/node[.exe]` — copied from `process.execPath` at package
+/// time, never resolved via PATH), the server's own `src/`+`migrations/`+
+/// `node_modules/`+`package.json` (`server-runtime/`), and the built
+/// frontend (`dist-runtime/`). Pure and independently testable: given a
+/// candidate resource dir, returns the three launch paths only if ALL THREE
+/// are actually present — a partially-staged or never-packaged resource dir
+/// (e.g. only the tracked `.gitkeep` placeholders from a fresh checkout)
+/// correctly yields `None`, never a half-valid launch.
+/// Tauri's `resource_dir()` returns a canonicalized path, which on Windows
+/// carries the `\\?\` extended-length-path prefix. That prefix is normally
+/// transparent, but Node's own entry-point resolution (`resolveMainPath` ->
+/// `realpathSync`) mishandles it — confirmed directly during this task's own
+/// native proof (a `\\?\`-prefixed entry arg made Node try to `lstat` the
+/// bare string `"C:"` and crash with EISDIR before ever reading
+/// `server/src/main.js`). Stripping the prefix here (verified harmless: this
+/// project's real install paths are far under Windows' ~260-char legacy
+/// limit) is the fix — applied once, at the resource_dir source, so every
+/// path derived from it (node binary, server entry, static dir) is already
+/// a plain path by the time it reaches `Command::new`/`Command::arg`.
+fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        if let Some(stripped) = path.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
+fn standalone_backend_paths(resource_dir: &Path) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+    let node_exe = resource_dir.join("node-runtime").join(node_binary_name);
+    let server_entry = resource_dir.join("server-runtime").join("src").join("main.js");
+    let static_dir = resource_dir.join("dist-runtime");
+
+    if node_exe.is_file() && server_entry.is_file() && static_dir.is_dir() {
+        Some((node_exe, server_entry, static_dir))
+    } else {
+        None
+    }
+}
+
+/// Decides which `node` binary and which `server/src/main.js` to launch.
+/// Pure (no process spawn, no I/O beyond `Path::exists`/`is_file` checks) —
+/// independently testable for the exact invariant LOCAL-01B exists to prove:
+/// a RELEASE build (`debug_build=false`) NEVER falls back to a bare `"node"`
+/// PATH lookup. If the standalone resources aren't staged, release returns
+/// `Err` outright — it would rather fail loudly than silently pick up
+/// whatever `node` happens to be first on the end user's PATH (which,
+/// per this task, must not be assumed to exist at all). Only a DEBUG build
+/// (`cargo tauri dev`, unpackaged) may fall back to the dev-checkout-relative
+/// `node`-on-PATH behavior LOCAL-01A originally shipped — preserving the
+/// existing development workflow unchanged when nobody has run
+/// `npm run package:standalone` yet.
+fn resolve_backend_launch(
+    resource_dir: &Path,
+    manifest_dir: &Path,
+    debug_build: bool,
+) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+    if let Some(paths) = standalone_backend_paths(resource_dir) {
+        return Ok(paths);
+    }
+
+    if !debug_build {
+        return Err(format!(
+            "standalone backend resources not found under {} — run `npm run package:standalone` \
+             before building a release (this build refuses to fall back to a `node` PATH lookup)",
+            resource_dir.display()
+        ));
+    }
+
+    // Dev-time fallback: LOCAL-01A's original behavior, unchanged, so
+    // `cargo tauri dev` keeps working before anyone packages anything.
+    let server_entry = manifest_dir.join("..").join("server").join("src").join("main.js");
+    if !server_entry.exists() {
+        return Err(format!(
+            "local backend entry point not found at {}: run this from the SmartLearn project checkout",
+            server_entry.display()
+        ));
+    }
+    let static_dir = manifest_dir.join("..").join("dist");
+    if !static_dir.exists() {
+        return Err(format!(
+            "{} does not exist — build the frontend first (npm run build) before starting the local-authority backend",
+            static_dir.display()
+        ));
+    }
+    Ok((PathBuf::from("node"), server_entry, static_dir))
+}
+
+/// Spawns the local backend, launching either the standalone bundled Node
+/// binary (LOCAL-01B, production) or the dev-checkout's `node` on PATH
+/// (LOCAL-01A, unpackaged dev fallback) per `resolve_backend_launch`.
+/// Loopback-only, dynamic port, app-data-scoped DB/sources paths.
+fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<LocalBackend, String> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let (node_program, server_entry, static_dir) =
+        resolve_backend_launch(resource_dir, manifest_dir, cfg!(debug_assertions))?;
+
+    let port = pick_free_local_port()?;
+    let env = local_backend_env(app_data_dir, port, &static_dir);
+
+    let mut command = Command::new(&node_program);
+    command
+        .arg(&server_entry)
+        .envs(env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command.spawn().map_err(|e| {
+        format!("failed to spawn local backend (program: {}): {e}", node_program.display())
+    })?;
+
+    wait_for_local_backend_ready(&mut child, port, LOCAL_BACKEND_READY_TIMEOUT)?;
+
+    let origin: tauri::Url = format!("http://{LOCAL_BACKEND_HOST}:{port}/")
+        .parse()
+        .map_err(|e| format!("failed to build local backend origin URL: {e}"))?;
+
+    Ok(LocalBackend { child, origin })
+}
+
+fn configured_app_url(origin: Option<&str>) -> Result<tauri::Url, String> {
+    let raw_origin = origin
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(DEV_APP_ORIGIN);
+    let parsed: tauri::Url = raw_origin
+        .parse()
+        .map_err(|error| format!("SMARTLEARN_APP_ORIGIN is not a valid URL: {error}"))?;
+    let is_loopback = matches!(parsed.host_str(), Some("localhost") | Some("127.0.0.1") | Some("::1"));
+    let is_permitted_scheme = parsed.scheme() == "https" || (parsed.scheme() == "http" && is_loopback);
+
+    if !is_permitted_scheme
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+    {
+        return Err("SMARTLEARN_APP_ORIGIN must be an HTTPS origin without credentials, path, query, or fragment (HTTP is allowed only for loopback)".to_string());
+    }
+
+    Ok(parsed)
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +375,16 @@ async fn execute_sqlite_transaction(
     execute_sqlite_transaction_at_path(&database_path, statements).await
 }
 
+// T42: the plugins/command below (tauri-plugin-sql/dialog/fs,
+// execute_sqlite_transaction) are the OLD local-first architecture's data
+// broker — still registered so their own proven Rust test suite above stays
+// intact (nothing here was ever proven wrong; deleting it is a separate,
+// larger, explicitly-authorized decision, not this task's). They are
+// UNREACHABLE from the window this app actually opens: capabilities/
+// default.json grants only `core:default` — Tauri v2 denies any IPC call
+// a capability file doesn't explicitly list, independent of what's
+// registered here. design.md §9: "Remote content receives no generic SQL,
+// shell or filesystem capability."
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -100,6 +400,77 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // LOCAL-01A / ARCH-01: when SMARTLEARN_LOCAL_AUTHORITY=true, spawn
+            // the existing SmartLearn backend as a LOCAL process on this
+            // computer (127.0.0.1 loopback) and point the window at it —
+            // Desktop becomes its own authority for its study data without
+            // duplicating the domain. If the local backend fails to start,
+            // this returns Err from setup(), which aborts startup entirely:
+            // no window is ever built pretending an empty/working state
+            // (LOCAL-01A requirement 2's explicit-failure rule). Unset (the
+            // default): byte-for-byte T42 behavior, one configured REMOTE
+            // trusted origin, no local process spawned at all.
+            let (app_url, local_authority, local_backend) = if local_authority_enabled() {
+                let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+                let resource_dir = strip_windows_verbatim_prefix(
+                    app.path().resource_dir().map_err(|error| error.to_string())?,
+                );
+                let backend = spawn_local_backend(&resource_dir, &app_data_dir)?;
+                let origin = backend.origin.clone();
+                (origin, true, Some(backend))
+            } else {
+                let origin = configured_app_url(
+                    std::env::var("SMARTLEARN_APP_ORIGIN").ok().as_deref(),
+                )?;
+                (origin, false, None)
+            };
+
+            // LOCAL-01A discovered a real, previously-latent bug while wiring
+            // this up: src/auth-ui.js has its OWN independent API_BASE
+            // default (`window.__SMARTLEARN_API_BASE__ || 'http://
+            // localhost:3000'`), separate from src/api-client.js's (relative,
+            // same-origin). T42's fixed dev default (DEV_APP_ORIGIN, port
+            // 3000) happened to match auth-ui.js's hardcoded fallback, which
+            // masked this divergence — LOCAL-01A's dynamic, non-3000 port is
+            // the first thing to actually exercise it. Setting
+            // __SMARTLEARN_API_BASE__ explicitly here (this app's own real
+            // origin, no trailing slash) makes both modules agree, exactly
+            // like every e2e test in this repo already does via
+            // page.addInitScript.
+            let init_script = if local_authority {
+                format!(
+                    "window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; window.__SMARTLEARN_API_BASE__ = {:?};",
+                    app_url.origin().ascii_serialization()
+                )
+            } else {
+                "window.__SMARTLEARN_REMOTE_MODE__ = true;".to_string()
+            };
+
+            let window = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
+                .title("SmartLearn")
+                .inner_size(800.0, 600.0)
+                .resizable(true)
+                .initialization_script(init_script)
+                .build()?;
+
+            // Kept alive for the window's lifetime, killed explicitly on
+            // close. Relying on LocalBackend's Drop impl ALONE was proven
+            // insufficient during this task's own manual verification: the
+            // default "close last window -> exit process" path calls
+            // std::process::exit(), which does NOT run pending destructors
+            // — the local backend process was left orphaned after closing
+            // the window, discovered and confirmed live (`Get-Process`
+            // still showed the node.exe child running) before this fix.
+            if let Some(backend) = local_backend {
+                let backend_holder = std::sync::Mutex::new(Some(backend));
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { .. } = event {
+                        backend_holder.lock().unwrap().take(); // drops LocalBackend synchronously -> kills the child
+                    }
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -108,13 +479,21 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{execute_sqlite_transaction_at_path, TransactionStatement};
+    use super::{
+        configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
+        pick_free_local_port, resolve_backend_launch, standalone_backend_paths,
+        strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
+        TransactionStatement, LOCAL_BACKEND_HOST,
+    };
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::process::{Command, Stdio};
     use serde_json::json;
     use sqlx::{Connection, Row, SqliteConnection};
     use std::{
         fs,
         path::{Path, PathBuf},
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     struct TestDatabase {
@@ -144,6 +523,190 @@ mod tests {
 
     fn run_async<T>(future: impl std::future::Future<Output = T>) -> T {
         tauri::async_runtime::block_on(future)
+    }
+
+    #[test]
+    fn configured_app_url_accepts_https_and_loopback_only() {
+        assert_eq!(
+            configured_app_url(Some("https://app.smartlearn.example/"))
+                .expect("HTTPS origin should be accepted")
+                .as_str(),
+            "https://app.smartlearn.example/"
+        );
+        assert!(configured_app_url(Some("http://127.0.0.1:3000/")).is_ok());
+        assert!(configured_app_url(Some("http://example.test/")).is_err());
+    }
+
+    #[test]
+    fn configured_app_url_rejects_untrusted_url_parts() {
+        for origin in [
+            "https://user:password@app.smartlearn.example/",
+            "https://app.smartlearn.example/path",
+            "https://app.smartlearn.example/?query=value",
+            "https://app.smartlearn.example/#fragment",
+            "file:///C:/sensitive.html",
+        ] {
+            assert!(configured_app_url(Some(origin)).is_err(), "{origin} must be rejected");
+        }
+    }
+
+    #[test]
+    fn strip_windows_verbatim_prefix_removes_the_extended_length_marker() {
+        let stripped = strip_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\Projetos\SmartLearn"));
+        if cfg!(windows) {
+            assert_eq!(stripped, PathBuf::from(r"C:\Projetos\SmartLearn"));
+        } else {
+            assert_eq!(stripped, PathBuf::from(r"\\?\C:\Projetos\SmartLearn"));
+        }
+    }
+
+    #[test]
+    fn strip_windows_verbatim_prefix_is_a_no_op_without_the_marker() {
+        let plain = PathBuf::from(r"C:\Projetos\SmartLearn");
+        assert_eq!(strip_windows_verbatim_prefix(plain.clone()), plain);
+    }
+
+    // LOCAL-01B: fixture for a resource dir with the three standalone
+    // artifacts actually staged (mirrors what scripts/package-standalone.mjs
+    // produces), so tests can assert on the resolution logic without ever
+    // spawning a process or touching the real project checkout.
+    struct StagedResourceDir {
+        path: PathBuf,
+    }
+
+    impl StagedResourceDir {
+        fn create_fully_staged() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("smartlearn-standalone-test-{unique}"));
+            let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+            fs::create_dir_all(path.join("node-runtime")).expect("create node-runtime dir");
+            fs::write(path.join("node-runtime").join(node_binary_name), b"fake-node-binary")
+                .expect("write fake node binary");
+            fs::create_dir_all(path.join("server-runtime").join("src")).expect("create server-runtime/src");
+            fs::write(path.join("server-runtime").join("src").join("main.js"), b"// fake entry")
+                .expect("write fake main.js");
+            fs::create_dir_all(path.join("dist-runtime")).expect("create dist-runtime dir");
+            Self { path }
+        }
+
+        fn create_unstaged() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("smartlearn-standalone-empty-test-{unique}"));
+            fs::create_dir_all(&path).expect("create empty resource dir");
+            Self { path }
+        }
+    }
+
+    impl Drop for StagedResourceDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn standalone_backend_paths_none_when_resources_not_staged() {
+        let empty = StagedResourceDir::create_unstaged();
+        assert!(
+            standalone_backend_paths(&empty.path).is_none(),
+            "a fresh checkout (only tracked .gitkeep placeholders, no real binaries) must not \
+             be treated as a valid standalone package"
+        );
+    }
+
+    #[test]
+    fn standalone_backend_paths_some_and_exact_when_fully_staged() {
+        let staged = StagedResourceDir::create_fully_staged();
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        let (node_exe, server_entry, static_dir) = standalone_backend_paths(&staged.path)
+            .expect("fully staged resource dir must resolve");
+        assert_eq!(node_exe, staged.path.join("node-runtime").join(node_binary_name));
+        assert_eq!(server_entry, staged.path.join("server-runtime").join("src").join("main.js"));
+        assert_eq!(static_dir, staged.path.join("dist-runtime"));
+    }
+
+    #[test]
+    fn standalone_backend_paths_none_when_only_partially_staged() {
+        // node-runtime present but server-runtime/src/main.js missing --
+        // must never launch with only half the standalone package staged.
+        let staged = StagedResourceDir::create_unstaged();
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        fs::create_dir_all(staged.path.join("node-runtime")).expect("create node-runtime dir");
+        fs::write(staged.path.join("node-runtime").join(node_binary_name), b"fake").expect("write");
+        fs::create_dir_all(staged.path.join("dist-runtime")).expect("create dist-runtime dir");
+        assert!(standalone_backend_paths(&staged.path).is_none());
+    }
+
+    #[test]
+    fn resolve_backend_launch_prefers_staged_standalone_resources_in_release() {
+        let staged = StagedResourceDir::create_fully_staged();
+        let (node_program, ..) =
+            resolve_backend_launch(&staged.path, Path::new("/irrelevant"), false)
+                .expect("release build with staged resources must resolve");
+        let node_binary_name = if cfg!(windows) { "node.exe" } else { "node" };
+        assert_eq!(
+            node_program,
+            staged.path.join("node-runtime").join(node_binary_name),
+            "release must launch the exact bundled binary path, never a bare PATH-resolved name"
+        );
+    }
+
+    #[test]
+    fn resolve_backend_launch_release_never_falls_back_to_path_node() {
+        // The central LOCAL-01B invariant: a release build with no staged
+        // standalone resources must hard-fail, never silently construct a
+        // bare `Command::new("node")` that would resolve via PATH.
+        let unstaged = StagedResourceDir::create_unstaged();
+        let error = resolve_backend_launch(&unstaged.path, Path::new("/irrelevant"), false)
+            .expect_err("release build without staged resources must error, not fall back to PATH");
+        assert!(
+            error.contains("package:standalone"),
+            "error must point at the packaging step, got: {error}"
+        );
+    }
+
+    #[test]
+    fn resolve_backend_launch_debug_falls_back_to_path_node_only_when_unstaged() {
+        // Preserves LOCAL-01A's exact dev-time behavior: a debug build with
+        // no staged resources still uses the dev-checkout-relative
+        // `node` PATH lookup, so `cargo tauri dev` keeps working unchanged.
+        let unstaged = StagedResourceDir::create_unstaged();
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let result = resolve_backend_launch(&unstaged.path, manifest_dir, true);
+        match result {
+            Ok((node_program, _, _)) => {
+                assert_eq!(
+                    node_program,
+                    PathBuf::from("node"),
+                    "debug fallback must use the bare PATH-resolved `node`, matching LOCAL-01A"
+                );
+            }
+            Err(error) => {
+                // Only acceptable if this checkout genuinely has no dist/
+                // built yet (server/main.js missing is not expected in CI).
+                assert!(
+                    error.contains("dist") || error.contains("main.js"),
+                    "unexpected error shape: {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn resolve_backend_launch_debug_prefers_staged_resources_over_path_node() {
+        // Even in a debug build, once the standalone package IS staged, it
+        // must win over the PATH fallback -- proves the standalone path is
+        // exercised by `cargo tauri dev` too (matches what a real "package
+        // then dev" proof run would use), not only by release builds.
+        let staged = StagedResourceDir::create_fully_staged();
+        let (node_program, ..) = resolve_backend_launch(&staged.path, Path::new("/irrelevant"), true)
+            .expect("debug build with staged resources must resolve");
+        assert_ne!(node_program, PathBuf::from("node"));
     }
 
     #[test]
@@ -1158,5 +1721,227 @@ mod tests {
             let total: i64 = row.get("total");
             assert_eq!(total, 1, "failed transaction must not persist partial writes");
         });
+    }
+
+    // -- LOCAL-01A: Desktop local-first backend (ARCH-01) -------------------
+
+    fn spawn_immediately_exiting_process() -> std::process::Child {
+        if cfg!(windows) {
+            Command::new("cmd")
+                .args(["/C", "exit 1"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("spawn cmd /C exit 1")
+        } else {
+            Command::new("sh")
+                .args(["-c", "exit 1"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("spawn sh -c exit 1")
+        }
+    }
+
+    fn spawn_long_lived_noop_process() -> std::process::Child {
+        if cfg!(windows) {
+            Command::new("cmd")
+                .args(["/C", "ping", "127.0.0.1", "-n", "30"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn ping")
+        } else {
+            Command::new("sleep")
+                .arg("30")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn sleep")
+        }
+    }
+
+    // C + D: the local backend's env is loopback-only and every path it
+    // receives is rooted under this app's own data directory — asserted on
+    // the pure env-building function directly, no process spawn needed.
+    #[test]
+    fn local_backend_env_uses_loopback_only_and_app_data_scoped_paths() {
+        let app_data_dir = std::env::temp_dir().join("smartlearn-test-app-data");
+        let static_dir = std::env::temp_dir().join("smartlearn-test-dist");
+        let port: u16 = 54231;
+
+        let env = local_backend_env(&app_data_dir, port, &static_dir);
+        let get = |key: &str| env.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+
+        assert_eq!(
+            get("HOST").as_deref(),
+            Some(LOCAL_BACKEND_HOST),
+            "C: local backend must bind loopback only"
+        );
+        assert_eq!(get("PORT").as_deref(), Some("54231"));
+        assert_eq!(
+            get("SMARTLEARN_ALLOWED_ORIGINS").as_deref(),
+            Some(format!("http://{LOCAL_BACKEND_HOST}:54231").as_str()),
+            "allowed origin must be exactly this backend's own loopback origin, never a wildcard/remote host"
+        );
+
+        let db_path = get("SMARTLEARN_DB_PATH").expect("D: db path must be set");
+        let sources_dir = get("SMARTLEARN_SOURCES_DIR").expect("D: sources dir must be set");
+        assert!(
+            Path::new(&db_path).starts_with(&app_data_dir),
+            "D: DB path must live inside the app's own data directory, got {db_path}"
+        );
+        assert!(
+            Path::new(&sources_dir).starts_with(&app_data_dir),
+            "D: sources dir must live inside the app's own data directory, got {sources_dir}"
+        );
+        assert!(db_path.ends_with("smartlearn.db"));
+        assert_ne!(db_path, sources_dir, "DB and sources must not collide on the same path");
+
+        let static_dir_env = get("SMARTLEARN_STATIC_DIR").expect("static dir must be set");
+        assert_eq!(static_dir_env, static_dir.to_string_lossy());
+
+        // NODE_ENV is deliberately absent: a plain-HTTP loopback origin can
+        // never satisfy a Secure/__Host- cookie (design.md §3), so this must
+        // stay off the production-cookie path.
+        assert!(get("NODE_ENV").is_none(), "must not force NODE_ENV=production on loopback HTTP");
+    }
+
+    // http_get_ok's own contract: only a real 200 response counts as ready.
+    #[test]
+    fn http_get_ok_true_only_on_a_real_200_response() {
+        let port = pick_free_local_port().expect("pick a free port");
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let listener = std::net::TcpListener::bind((LOCAL_BACKEND_HOST, port)).expect("bind test listener");
+            ready_tx.send(()).ok();
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 512];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 512];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+        });
+        ready_rx.recv_timeout(Duration::from_secs(2)).expect("test listener should start");
+
+        assert!(
+            !http_get_ok(port, "/health/ready", Duration::from_millis(500)),
+            "a 404 must not count as ready"
+        );
+        assert!(
+            http_get_ok(port, "/health/ready", Duration::from_millis(500)),
+            "a real 200 must count as ready"
+        );
+    }
+
+    // E: an unreachable/never-started backend must produce an explicit
+    // error, never a silent "it's fine" — the process exits before ever
+    // answering the readiness probe.
+    #[test]
+    fn wait_for_local_backend_ready_returns_explicit_error_when_process_exits_early() {
+        let port = pick_free_local_port().expect("pick a free port — guaranteed nothing listens there");
+        let mut child = spawn_immediately_exiting_process();
+
+        let result = wait_for_local_backend_ready(&mut child, port, Duration::from_secs(3));
+
+        assert!(
+            result.is_err(),
+            "E: an early-exiting local backend process must be an explicit error, never a silent Ok"
+        );
+        let message = result.unwrap_err().to_lowercase();
+        assert!(
+            message.contains("exited"),
+            "error must explain the process exited early, got: {message}"
+        );
+    }
+
+    // The success mirror of the test above: once something real answers
+    // /health/ready with 200 on the exact port given, readiness resolves
+    // promptly rather than waiting out the full timeout.
+    #[test]
+    fn wait_for_local_backend_ready_succeeds_once_health_ready_answers_200() {
+        let port = pick_free_local_port().expect("pick a free port");
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let listener = std::net::TcpListener::bind((LOCAL_BACKEND_HOST, port)).expect("bind test listener");
+            ready_tx.send(()).ok();
+            for stream in listener.incoming() {
+                let mut stream = match stream {
+                    Ok(stream) => stream,
+                    Err(_) => continue,
+                };
+                let mut buf = [0u8; 512];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+        });
+        ready_rx.recv_timeout(Duration::from_secs(2)).expect("test listener should start");
+
+        let mut child = spawn_long_lived_noop_process();
+        let result = wait_for_local_backend_ready(&mut child, port, Duration::from_secs(5));
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert!(result.is_ok(), "expected readiness once /health/ready answers 200: {:?}", result.err());
+    }
+
+    // Regression sensor for a real bug this task's own manual verification
+    // found: relying on LocalBackend's Drop impl alone left the local
+    // backend process running after closing the app window (the "last
+    // window closed" default path calls std::process::exit(), which skips
+    // Rust destructors) — confirmed live via `Get-Process` before the fix
+    // (src-tauri/src/lib.rs's on_window_event(CloseRequested) handler).
+    // This proves the underlying mechanism the fix relies on — dropping a
+    // LocalBackend actually terminates its child process — using a real OS
+    // process holding a real port, not just Child::try_wait() bookkeeping.
+    #[test]
+    fn dropping_local_backend_actually_kills_the_child_process() {
+        let port = pick_free_local_port().expect("pick a free port");
+        let child = Command::new("node")
+            .arg("-e")
+            .arg(format!(
+                "require('http').createServer(() => {{}}).listen({port}, '127.0.0.1')"
+            ))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a real node process holding the port");
+
+        // Give it a moment to actually bind before we probe. Loaded/shared CI
+        // runners can take noticeably longer than a local machine to spawn
+        // and JIT-warm a fresh node process, so this budget is generous
+        // (10s) rather than the tighter local-only window this used to have
+        // — a slow bind is not the thing this test is trying to catch.
+        let bound_before_drop = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(100));
+            TcpListener::bind((LOCAL_BACKEND_HOST, port)).is_err()
+        });
+        assert!(bound_before_drop, "sanity: the spawned node process must actually hold the port first");
+
+        {
+            let _backend = LocalBackend {
+                child,
+                origin: format!("http://{LOCAL_BACKEND_HOST}:{port}/")
+                    .parse()
+                    .expect("valid test origin"),
+            };
+        } // <- LocalBackend dropped here: must kill the child synchronously
+
+        let port_released = (0..50).any(|_| {
+            if TcpListener::bind((LOCAL_BACKEND_HOST, port)).is_ok() {
+                true
+            } else {
+                std::thread::sleep(Duration::from_millis(100));
+                false
+            }
+        });
+        assert!(
+            port_released,
+            "dropping LocalBackend must kill its child process — the port it held must become free"
+        );
     }
 }

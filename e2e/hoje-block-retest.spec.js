@@ -1,0 +1,263 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+// T30: proves the item-level attempt ledger (T29's schema, T30's service
+// wired into the existing review-exercise reveal/judge UI) is populated by
+// a real practice interaction, not just by direct service calls (already
+// covered by server/test/attempts.test.js). Same real-server-child-process
+// pattern as e2e/feature-parity.spec.js.
+
+const SERVER_PORT = 13971;
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+let serverProcess;
+let dbDir;
+
+test.beforeAll(async () => {
+  dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-hoje-block-'));
+  const dbPath = join(dbDir, 'e2e.db');
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199' },
+    stdio: 'ignore',
+  });
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
+    await new Promise(r => setTimeout(r, 150));
+  }
+  throw new Error('practice E2E: real server did not become ready in time');
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise(r => setTimeout(r, 300));
+  rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+  }, API_BASE);
+  const email = `practice-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'a genuinely long test password 1';
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="account"]').click();
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(email);
+  await page.locator('#account-register-password').fill(password);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill(password);
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+});
+
+test('Hoje block: judgments survive leaving/reloading, the block ends with errors + "Refazer erros", the redo never touches the review evidence', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Bloco Subject');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2020-01-01');
+  await page.locator('#study-content').fill('Bloco Unit');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  const studyRow = page.locator('.study-row', { hasText: 'Bloco Unit' });
+  await studyRow.getByRole('button', { name: 'Exercícios' }).click();
+  for (const [q, a] of [['Pergunta A?', 'Resposta A'], ['Pergunta B?', 'Resposta B']]) {
+    await studyRow.locator('.exercise-question-input').fill(q);
+    await studyRow.locator('.exercise-answer-input').fill(a);
+    await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
+    await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
+  }
+
+  await page.locator('[data-screen="today"]').click();
+  await page.locator('#today-primary-action-btn').click();
+  const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  const item = (q) => page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`, { hasText: q });
+  const blockResult = page.locator(`.review-row[data-review-id="${reviewId}"] .review-block-result`);
+  // Retrieval first: the questions come before the Resumo Mestre in the review body.
+  const exercisesBeforeSummary = await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-body`).evaluate((el) => {
+    const ex = el.querySelector('.review-row-exercises');
+    const su = el.querySelector('.review-row-summary');
+    return Boolean(ex.compareDocumentPosition(su) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(exercisesBeforeSummary).toBe(true);
+
+  await item('Pergunta A?').getByRole('button', { name: 'Ver resposta' }).click();
+  await item('Pergunta A?').getByRole('button', { name: 'Errei' }).click();
+  await expect(blockResult).toBeHidden();                      // block not finished yet
+  await expect(item('Pergunta B?').getByRole('button', { name: 'Ver resposta' })).toBeFocused();   // keyboard flow continues
+  await item('Pergunta B?').getByRole('button', { name: 'Ver resposta' }).click();
+  await item('Pergunta B?').getByRole('button', { name: 'Acertei' }).click();
+  await expect(blockResult).toBeVisible();
+  await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeFocused();   // ...and lands on the next action
+
+  // Leaving Hoje and coming back must NOT drop the judgments.
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('[data-screen="today"]').click();
+  await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
+  await expect(item('Pergunta B?')).toHaveClass(/is-correct/);
+  await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toBeDisabled();
+  await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+
+  // ...nor does a full reload.
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
+  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+
+  // Redo only the wrong item, through the shared retest flow.
+  await blockResult.getByRole('button', { name: 'Refazer erros (1)' }).click();
+  await expect(page.locator('#screen-study-now')).toBeVisible();
+  await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+  await expect(page.locator('#study-now-question-text')).toHaveText('Pergunta A?');
+  await expect(page.locator('#study-now-summary-card')).toBeHidden();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
+  await page.locator('#study-now-done-btn').click();
+  // Continuity: the student lands back ON the block being worked, not at the top of Hoje.
+  await expect(blockResult).toBeInViewport({ ratio: 1, timeout: 5000 });
+
+  // Back on Hoje: the ORIGINAL judgment is still what the review recorded.
+  await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
+  await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+  // ...and the loop is closed: the redo outcome is shown, the original is
+  // not overwritten, and the next action is no longer "redo" but "finish".
+  await expect(blockResult).toContainText('Reteste: 1 de 1 erro corrigido');
+  await expect(item('Pergunta A?')).toContainText('Reteste: corrigido');
+  await expect(blockResult.getByRole('button', { name: /Refazer/ })).toHaveCount(0);
+  await expect(blockResult).toContainText('Marque a revisão como feita');
+
+  // Accessibility sensor (WCAG AA, 4.5:1 for small text) on the new secondary
+  // text: it was 4.26:1 (muted on the sunken surface) before this was fixed.
+  const contrast = (locator) => locator.evaluate((el) => {
+    const parse = (str) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = str; c.fillRect(0, 0, 1, 1); const d = c.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    let bgEl = el; let bg = parse(getComputedStyle(bgEl).backgroundColor);
+    while (bg[3] === 0 && bgEl.parentElement) { bgEl = bgEl.parentElement; bg = parse(getComputedStyle(bgEl).backgroundColor); }
+    const fg = parse(getComputedStyle(el).color);
+    const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  });
+  expect(await contrast(blockResult.locator('.review-block-note').first())).toBeGreaterThanOrEqual(4.5);
+  expect(await contrast(item('Pergunta A?').locator('.study-now-chip'))).toBeGreaterThanOrEqual(4.5);
+
+  // Ledger: original attempts untouched; the redo is extra, outside the review.
+  const judged = await page.evaluate(async ({ base, id }) => {
+    const res = await fetch(`${base}/v1/review-tasks/${id}/attempts`, { credentials: 'include' });
+    return res.json();
+  }, { base: API_BASE, id: reviewId });
+  expect(judged.attempts.map((a) => a.outcome).sort()).toEqual(['CORRECT', 'INCORRECT']);
+
+  // Completing the review records the ORIGINAL 1/2, not the redo.
+  await page.locator(`.review-row[data-review-id="${reviewId}"] input[data-action="review-done"]`).check();
+  const fetchReviewEvidence = async () => {
+    const evidence = await page.evaluate(async (base) => {
+      const res = await fetch(`${base}/v1/learning-evidence`, { credentials: 'include' });
+      return res.json();
+    }, API_BASE);
+    return evidence.evidence.filter((e) => e.type === 'REVIEW');
+  };
+  await expect.poll(async () => (await fetchReviewEvidence()).length, { timeout: 5000 }).toBe(1);
+  // Marking the review done must not wipe the block: the completed row keeps
+  // its judgments, the error, and the redo/closure state.
+  const doneRow = page.locator(`[data-review-list="doneToday"] .review-row[data-review-id="${reviewId}"]`);
+  await expect(doneRow).toBeVisible({ timeout: 5000 });
+  await expect(doneRow.locator('.review-exercise-item', { hasText: 'Pergunta A?' })).toHaveClass(/is-wrong/);
+  await expect(doneRow.locator('.review-block-result')).toContainText('Bloco concluído: 1/2 corretas');
+  const review = await fetchReviewEvidence();
+  expect(review[0].questionsCount).toBe(2);
+  expect(review[0].correctCount).toBe(1);
+});
+
+test('Retention cue: an item still wrong at its last attempt is flagged in the next review; a corrected redo clears it', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Cue Subject');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2020-01-01');
+  await page.locator('#study-content').fill('Cue Unit');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  const studyRow = page.locator('.study-row', { hasText: 'Cue Unit' });
+  await studyRow.getByRole('button', { name: 'Exercícios' }).click();
+  for (const [q, a] of [['Cue A?', 'Resp A'], ['Cue B?', 'Resp B']]) {
+    await studyRow.locator('.exercise-question-input').fill(q);
+    await studyRow.locator('.exercise-answer-input').fill(a);
+    await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
+    await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
+  }
+  await page.locator('[data-screen="today"]').click();
+  await page.locator('#today-primary-action-btn').click();
+  const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  const r1 = page.locator(`.review-row[data-review-id="${reviewId}"]`);
+  const judge = async (row, q, name) => {
+    const it = row.locator('.review-exercise-item', { hasText: q });
+    await it.getByRole('button', { name: 'Ver resposta' }).click();
+    await it.getByRole('button', { name: name }).click();
+  };
+  await judge(r1, 'Cue A?', 'Errei');
+  await judge(r1, 'Cue B?', 'Acertei');
+  await expect(r1.locator('.review-block-result')).toBeVisible();
+
+  // Another review of the same unit (R2): A was wrong last time, B was right.
+  const r2 = page.locator('.review-row', { has: page.locator('.review-marker', { hasText: /^R2$/ }) });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  // Visible WITHOUT opening the row: where the student was wrong, at a glance.
+  await expect(r2.locator('.review-reinforce-chip')).toHaveText('1 para reforçar');
+  await r2.locator('.review-row-toggle').click();
+  const cue = (q) => r2.locator('.review-exercise-item', { hasText: q }).locator('.review-exercise-prior');
+  await expect(cue('Cue A?')).toHaveText('Errou na última tentativa');
+  await expect(cue('Cue B?')).toHaveCount(0);
+
+  // Plano: the same signal at unit level, visible on the collapsed row, and per
+  // item once the row is opened. Same source as Hoje (last submitted attempt).
+  await page.locator('[data-screen="plan"]').click();
+  const planRow = page.locator('.plan-row', { hasText: 'Cue Unit' });
+  await expect(planRow.locator('.plan-reinforce-chip')).toHaveText('1 para reforçar', { timeout: 5000 });
+  await planRow.locator('.plan-expand-btn').click();
+  const planCue = (q) => planRow.locator('.plan-exercise-item', { hasText: q }).locator('.plan-exercise-prior');
+  await expect(planCue('Cue A?')).toHaveText('Errou na última tentativa');
+  await expect(planCue('Cue B?')).toHaveCount(0);
+  await page.locator('[data-screen="today"]').click();
+
+  // Redo A correctly (Refazer erros, shared flow) -> the cue is gone next time.
+  await r1.getByRole('button', { name: 'Refazer erros (1)' }).click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
+  await page.locator('#study-now-done-btn').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  await r2.locator('.review-row-toggle').click();
+  await expect(r2.locator('.review-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
+  await expect(r2.locator('.review-exercise-prior')).toHaveCount(0);
+  await expect(r2.locator('.review-reinforce-chip')).toHaveCount(0);
+
+  // ...and the Plano stops flagging the unit too (a corrected redo clears it there as well).
+  await page.locator('[data-screen="plan"]').click();
+  await expect(planRow.locator('.plan-state-badge')).toBeVisible({ timeout: 5000 });
+  await expect(planRow.locator('.plan-reinforce-chip')).toHaveCount(0);
+  await planRow.locator('.plan-expand-btn').click();
+  await expect(planRow.locator('.plan-exercise-item', { hasText: 'Cue A?' })).toBeVisible();
+  await expect(planRow.locator('.plan-exercise-prior')).toHaveCount(0);
+});
+

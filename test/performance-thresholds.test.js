@@ -8,9 +8,12 @@ import {
   SUBJECT_COLOR_KEYS,
   DEFAULT_SUBJECT_COLOR,
   colorVarForKey,
+  performanceColor,
+  PERFORMANCE_COLOR_NEUTRAL,
+  volumeBarWidth,
 } from "../src/performance-thresholds.js";
 
-import { subjectTrend, unitTrend } from "../src/analytics.js";
+import { subjectTrend, unitTrend, Analytics } from "../src/analytics.js";
 
 test("getState retorna NO_EVIDENCE quando totalQuestions é zero", () => {
   assert.equal(getState(0, 0), PERFORMANCE_STATES.NO_EVIDENCE);
@@ -93,29 +96,197 @@ test("subjectTrend retorna STABLE quando delta pequeno", () => {
 });
 
 // --- unitTrend ---
+// unitTrend takes the unit's evidence rows (ANALYTICS-2): older half of the distinct days vs
+// newer half, pooled correct/questions, min 10 questions per half. Full contract (weighting,
+// order, outliers, same-day rows): test/longitudinal-trend.test.js.
+const evRow = (evidenceDate, questionsCount, correctCount) => ({ evidenceDate, questionsCount, correctCount });
 
-test("unitTrend retorna INSUFFICIENT quando menos de minN scores", () => {
-  const result = unitTrend([70, 80], 3);
-  assert.equal(result.direction, 'INSUFFICIENT');
+test("unitTrend retorna INSUFFICIENT sem histórico comparável (< 2 dias ou metade com < minQuestions)", () => {
+  assert.equal(unitTrend([]).direction, 'INSUFFICIENT');
+  assert.equal(unitTrend([evRow('2026-01-01', 30, 20)]).direction, 'INSUFFICIENT');
+  assert.equal(unitTrend([evRow('2026-01-01', 30, 20), evRow('2026-02-01', 5, 5)]).direction, 'INSUFFICIENT');
 });
 
-test("unitTrend retorna IMPROVING quando último > primeiro em > threshold", () => {
-  const result = unitTrend([50, 60, 80], 3);
-  assert.equal(result.direction, 'IMPROVING');
+test("unitTrend retorna IMPROVING quando a metade recente supera a antiga além do threshold", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 10, 5), evRow('2026-02-01', 10, 8)]).direction, 'IMPROVING');
 });
 
-test("unitTrend retorna DECLINING quando último < primeiro em > threshold", () => {
-  const result = unitTrend([80, 70, 50], 3);
-  assert.equal(result.direction, 'DECLINING');
+test("unitTrend retorna DECLINING quando a metade recente fica abaixo da antiga além do threshold", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 10, 8), evRow('2026-02-01', 10, 5)]).direction, 'DECLINING');
 });
 
-test("unitTrend retorna STABLE quando diferença pequena", () => {
-  const result = unitTrend([70, 72, 71], 3);
-  assert.equal(result.direction, 'STABLE');
+test("unitTrend retorna STABLE quando a diferença agregada é pequena", () => {
+  assert.equal(unitTrend([evRow('2026-01-01', 40, 28), evRow('2026-02-01', 40, 29)]).direction, 'STABLE');
 });
 
-test("unitTrend usa últimos N da sequência quando há mais que minN", () => {
-  // Primeiro muito baixo, mas últimos 3 crescendo
-  const result = unitTrend([10, 10, 10, 50, 80], 3);
-  assert.equal(result.direction, 'IMPROVING');
+test("unitTrend usa TODO o histórico (metade antiga vs metade recente), não só os últimos pontos", () => {
+  // início muito baixo e depois alto: a metade antiga (1ª e 2ª datas) puxa a média para baixo
+  const rows = [evRow('2026-01-01', 10, 1), evRow('2026-01-10', 10, 1), evRow('2026-02-01', 10, 5), evRow('2026-03-01', 10, 8)];
+  assert.equal(unitTrend(rows).direction, 'IMPROVING'); // 10% -> 65%
+});
+
+// --- performanceColor (SLICE 1 — discriminant fixture A..G) ---
+
+function rgbComponents(css) {
+  const match = css.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+  assert.ok(match, `esperava um rgb(), recebi: ${css}`);
+  return match.slice(1, 4).map(Number);
+}
+
+test("performanceColor: 0% é vermelho puro (stop inicial exato)", () => {
+  assert.equal(performanceColor(0, 100), 'rgb(220, 38, 38)');
+});
+
+test("performanceColor: 60% é amarelo puro (stop exato no ponto)", () => {
+  assert.equal(performanceColor(60, 100), 'rgb(234, 179, 8)');
+});
+
+test("performanceColor: 100% é verde puro (stop final exato)", () => {
+  assert.equal(performanceColor(100, 100), 'rgb(22, 163, 74)');
+});
+
+test("performanceColor: A=20% interpola entre vermelho e amarelo", () => {
+  assert.equal(performanceColor(20, 100), 'rgb(225, 85, 28)');
+});
+
+test("performanceColor: B=49% ainda no segmento vermelho->amarelo", () => {
+  assert.equal(performanceColor(49, 100), 'rgb(231, 153, 14)');
+});
+
+test("performanceColor: D=70% interpola entre amarelo e verde", () => {
+  assert.equal(performanceColor(70, 100), 'rgb(181, 175, 25)');
+});
+
+test("performanceColor: E=80% interpola entre amarelo e verde", () => {
+  assert.equal(performanceColor(80, 100), 'rgb(128, 171, 41)');
+});
+
+test("performanceColor: F=95% próximo do verde (componente verde dominante)", () => {
+  const [r, g, b] = rgbComponents(performanceColor(95, 100));
+  assert.ok(g > r && g > b, `esperava verde dominante em 95%, recebi rgb(${r},${g},${b})`);
+});
+
+test("performanceColor: G sem evidência é neutro, nunca vermelho", () => {
+  assert.equal(performanceColor(null, 0), PERFORMANCE_COLOR_NEUTRAL);
+  assert.equal(performanceColor(50, null), PERFORMANCE_COLOR_NEUTRAL);
+  assert.doesNotMatch(PERFORMANCE_COLOR_NEUTRAL, /^rgb\(/);
+});
+
+test("performanceColor: 20% é claramente pior que 95% (componente vermelho maior, verde menor)", () => {
+  const [rA, gA] = rgbComponents(performanceColor(20, 100));
+  const [rF, gF] = rgbComponents(performanceColor(95, 100));
+  assert.ok(rA > rF, `vermelho de 20% (${rA}) deveria ser maior que o de 95% (${rF})`);
+  assert.ok(gA < gF, `verde de 20% (${gA}) deveria ser menor que o de 95% (${gF})`);
+});
+
+test("performanceColor: subjectColor não altera performanceColor (mesma accuracy, cores de disciplina diferentes)", () => {
+  const today = '2026-06-01';
+  const subjects = [
+    { id: 1, name: 'Fisiologia', color: 'DISC-RED' },
+    { id: 2, name: 'Anatomia', color: 'DISC-GREEN' },
+  ];
+  const units = [
+    { id: 1, subjectId: 1 },
+    { id: 2, subjectId: 2 },
+  ];
+  const evidence = [
+    { unitId: 1, questionsCount: 100, correctCount: 70, evidenceDate: today },
+    { unitId: 2, questionsCount: 100, correctCount: 70, evidenceDate: today },
+  ];
+  const results = Analytics.bySubject(evidence, units, subjects, today);
+  const [colorA, colorB] = results.map((r) => performanceColor(r.weightedAccuracy, r.totalQuestions));
+  assert.equal(colorA, colorB);
+  assert.notEqual(results[0].color, results[1].color);
+});
+
+// --- SLICE 2: performance x volume independence (fixture A..G, heterogeneous volume) ---
+
+test("volumeBarWidth: escala relativa ao maior volume exibido, fixture A..G", () => {
+  const maxVolume = 200; // A's volume
+  assert.equal(volumeBarWidth(200, maxVolume), 100); // A
+  assert.equal(volumeBarWidth(20, maxVolume), 10);   // B
+  assert.equal(volumeBarWidth(100, maxVolume), 50);  // C
+  assert.equal(volumeBarWidth(50, maxVolume), 25);   // D
+  assert.equal(volumeBarWidth(10, maxVolume), 5);    // E
+  assert.equal(volumeBarWidth(5, maxVolume), 2.5);   // F
+  assert.equal(volumeBarWidth(0, maxVolume), 0);     // G
+});
+
+test("volumeBarWidth: com maxVolume zero (nenhuma disciplina praticada) não divide por zero", () => {
+  assert.equal(volumeBarWidth(0, 0), 0);
+});
+
+test("performanceColor não muda com o volume: 20% com 200 questões é igual a 20% com 5 questões", () => {
+  assert.equal(performanceColor(20, 200), performanceColor(20, 5));
+});
+
+test("performanceColor não muda com o volume: 60% é amarelo puro com 1, 100 ou 100000 questões", () => {
+  const expected = performanceColor(60, 100);
+  assert.equal(performanceColor(60, 1), expected);
+  assert.equal(performanceColor(60, 100000), expected);
+});
+
+test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (95%/20q) é melhor desempenho e menor volume", () => {
+  // Fixture com questionsCount/correctCount inteiros e REALIZÁVEIS — a
+  // versão anterior derivava correctCount de um percentual via
+  // Math.round (ex.: 49% de 20 = 9,8 → arredondava para 10 = 50% real,
+  // não 49% como o nome afirmava). Aqui cada linha já é o par exato.
+  const today = '2026-06-01';
+  const fixture = [
+    { name: 'A', q: 200, correct: 40, pct: 20 },
+    { name: 'B', q: 100, correct: 49, pct: 49 },
+    { name: 'C', q: 80, correct: 48, pct: 60 },
+    { name: 'D', q: 60, correct: 42, pct: 70 },
+    { name: 'E', q: 40, correct: 32, pct: 80 },
+    { name: 'F', q: 20, correct: 19, pct: 95 },
+    { name: 'G', q: 0, correct: 0, pct: null },
+  ];
+  const subjects = fixture.map((f, i) => ({ id: i + 1, name: f.name, color: 'DISC-BLUE' }));
+  const units = fixture.map((f, i) => ({ id: i + 1, subjectId: i + 1 }));
+  const evidence = fixture
+    .filter((f) => f.q > 0)
+    .map((f, i) => ({
+      unitId: fixture.indexOf(f) + 1,
+      questionsCount: f.q,
+      correctCount: f.correct,
+      evidenceDate: today,
+    }));
+
+  const results = Analytics.bySubject(evidence, units, subjects, today);
+  const byName = Object.fromEntries(results.map((r) => [r.subjectName, r]));
+  const maxVolume = Math.max(...results.map((r) => r.totalQuestions));
+
+  // Fidelidade: o percentual calculado bate exatamente com o que o
+  // fixture afirma para cada disciplina com evidência.
+  for (const f of fixture) {
+    if (f.pct == null) continue;
+    assert.equal(byName[f.name].weightedAccuracy, f.pct, `${f.name} deveria ter exatamente ${f.pct}%`);
+  }
+
+  // A: pior desempenho, maior volume.
+  assert.equal(byName.A.totalQuestions, 200);
+  assert.ok(byName.A.weightedAccuracy < byName.F.weightedAccuracy);
+  assert.ok(volumeBarWidth(byName.A.totalQuestions, maxVolume) > volumeBarWidth(byName.F.totalQuestions, maxVolume));
+
+  // F: melhor desempenho, menor volume (exceto G, que não tem evidência).
+  const withEvidence = results.filter((r) => r.totalQuestions > 0);
+  const minVolume = Math.min(...withEvidence.map((r) => r.totalQuestions));
+  assert.equal(byName.F.totalQuestions, minVolume);
+  assert.equal(volumeBarWidth(byName.A.totalQuestions, maxVolume), 100);
+  assert.equal(volumeBarWidth(byName.F.totalQuestions, maxVolume), 10);
+
+  // C: amarelo em performance, independentemente de ter 80 questões.
+  assert.equal(performanceColor(byName.C.weightedAccuracy, byName.C.totalQuestions), 'rgb(234, 179, 8)');
+
+  // G: sem evidência, nunca "0% vermelho".
+  assert.equal(byName.G.weightedAccuracy, null);
+  assert.equal(byName.G.totalQuestions, 0);
+  assert.equal(performanceColor(byName.G.weightedAccuracy, byName.G.totalQuestions), PERFORMANCE_COLOR_NEUTRAL);
+  assert.equal(volumeBarWidth(byName.G.totalQuestions, maxVolume), 0);
+
+  // Volume não altera performanceColor: mesma accuracy de C, volumes bem
+  // diferentes, cor idêntica. performanceColor nem recebe correctCount, e
+  // volumeBarWidth nem recebe accuracy — a independência é estrutural, não
+  // só observada neste fixture.
+  assert.equal(performanceColor(60, 80), performanceColor(60, 5));
 });

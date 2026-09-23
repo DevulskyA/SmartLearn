@@ -607,10 +607,21 @@ function createBrowserStore() {
       // DEV-only seed: uses a separate key so importAll/clearAll never resets it.
       // Production build: import.meta.env.DEV = false → this block never runs.
       // Guard: only seed when BrowserStore has no subjects — never overwrite existing user data.
+      // P0 (PR #6 audit): `npm run dev:uat` (scripts/dev-uat.mjs) sets
+      // VITE_SEED_UAT_DATASET=1 to seed the rich ~9-discipline UAT fixture
+      // instead of the small 2-subject one — same DEV-only, empty-store-only
+      // guard, just a different dataset. Plain `npm run dev` (this env var
+      // unset) is completely unaffected, so every existing e2e test that
+      // depends on the small dataset's exact shape keeps working unchanged.
       if (import.meta.env?.DEV && !localStorage.getItem('smartlearn:dev-seeded')) {
         if (state.subjects.length === 0) {
-          const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-          await this.importAll(getDevDataset());
+          if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
+            const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+            await this.importAll(getUatMedicalDataset());
+          } else {
+            const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+            await this.importAll(getDevDataset());
+          }
         }
         localStorage.setItem('smartlearn:dev-seeded', '1');
       }
@@ -987,6 +998,14 @@ function createBrowserStore() {
         writeState(state);
         return evidence;
       },
+      // Local/browser store has no exercises/attempts tables at all (see the
+      // BOUNDARY note above) — there is no item-level data to ever return
+      // here, by construction, not because of a missing link. Parity method
+      // so app.js can call DB.learningEvidence.getAttempts(id) unconditionally
+      // regardless of which store is active.
+      async getAttempts() {
+        return { source: "NONE", attempts: [] };
+      },
       async getAll() {
         return [...readState().learningEvidence].sort(
           (a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id,
@@ -1231,6 +1250,10 @@ export const DB = {
 
         // DEV-only seed: _bootstrap table survives importAll/clearAll/subject deletes.
         // Production build: import.meta.env.DEV = false → never runs; app opens empty (correct).
+        // P0 (PR #6 audit): same VITE_SEED_UAT_DATASET opt-in as the
+        // BrowserStore path above (see that comment for the full rationale)
+        // — `npm run dev:uat` seeds the rich UAT fixture here too, so the
+        // Tauri/local-authority dev path shows the same rich data.
         if (import.meta.env?.DEV) {
           const rows = await database.select(
             "SELECT dev_seed_version FROM _bootstrap WHERE id = 1",
@@ -1238,8 +1261,13 @@ export const DB = {
           if (rows.length === 0 || !rows[0].dev_seed_version) {
             const [{ count }] = await database.select("SELECT COUNT(*) AS count FROM subjects");
             if (Number(count) === 0) {
-              const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-              await DB.importAll(getDevDataset());
+              if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
+                const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+                await DB.importAll(getUatMedicalDataset());
+              } else {
+                const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+                await DB.importAll(getDevDataset());
+              }
             }
             await database.execute(
               "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",

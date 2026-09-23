@@ -28,33 +28,181 @@ export function subtractDays(isoDate, days) {
   return d.toISOString().slice(0, 10);
 }
 
-// Subject trend: delta of two 30-day windows (recent vs previous), min 10 questions each
-export function subjectTrend(recentEvidence, previousEvidence, minQuestions = 10) {
+// TREND CONTRACT (operational rule, not a cognitive law). Only observable history counts
+// (learning_evidence rows: date + questions + correct; a retest right after feedback writes
+// none, so it cannot inflate a trend). A trend compares an OLDER period with a RECENT one,
+// each POOLED as total_correct / total_questions — never a mean of per-row percentages, so
+// a 1/1 row weighs 1 question and a 50/100 row weighs 100. When the comparison is not
+// honest (a period under `minQuestions`, or nothing to compare) the answer is INSUFFICIENT:
+// "I don't know", never 0%, never "stable".
+function comparePeriods(olderEvidence, recentEvidence, minQuestions, minDelta) {
+  const olderQ = sumField(olderEvidence, 'questionsCount');
   const recentQ = sumField(recentEvidence, 'questionsCount');
-  const prevQ = sumField(previousEvidence, 'questionsCount');
-  if (recentQ < minQuestions || prevQ < minQuestions) {
+  if (olderQ < minQuestions || recentQ < minQuestions) {
     return { direction: 'INSUFFICIENT', delta: null };
   }
+  const olderAcc = sumField(olderEvidence, 'correctCount') / olderQ;
   const recentAcc = sumField(recentEvidence, 'correctCount') / recentQ;
-  const prevAcc = sumField(previousEvidence, 'correctCount') / prevQ;
-  const delta = recentAcc - prevAcc;
-  const direction = delta > TREND_DELTA_MIN ? 'IMPROVING'
-    : delta < -TREND_DELTA_MIN ? 'DECLINING'
+  const delta = recentAcc - olderAcc;
+  const direction = delta > minDelta ? 'IMPROVING'
+    : delta < -minDelta ? 'DECLINING'
     : 'STABLE';
-  return { direction, delta };
+  return { direction, delta, olderAccuracy: olderAcc * 100, recentAccuracy: recentAcc * 100 };
 }
 
-// Unit trend: compare endpoints of last-N scores sequence (N >= 3)
-export function unitTrend(scoresSequence, minN = 3, threshold = 0.05) {
-  if (!scoresSequence || scoresSequence.length < minN) {
-    return { direction: 'INSUFFICIENT' };
+// Subject trend: last 30 days vs the 30 before, min 10 questions in each
+export function subjectTrend(recentEvidence, previousEvidence, minQuestions = 10) {
+  return comparePeriods(previousEvidence, recentEvidence, minQuestions, TREND_DELTA_MIN);
+}
+
+// Unit trend: a unit's evidence is sparse, so instead of calendar windows its own history is
+// split by DATE — the older half of the distinct evidence days vs the newer half (rows on the
+// same day are one moment and never straddle the split) — min 10 questions in each half.
+export function unitTrend(unitEvidence, minQuestions = 10, threshold = 0.05) {
+  const rows = (unitEvidence ?? [])
+    .filter((e) => e.evidenceDate != null && Number(e.questionsCount) > 0)
+    .slice()
+    .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || (a.id ?? 0) - (b.id ?? 0));
+  const dates = [...new Set(rows.map((e) => e.evidenceDate))];
+  if (dates.length < 2) return { direction: 'INSUFFICIENT', delta: null };
+  const firstRecentDate = dates[Math.floor(dates.length / 2)];
+  return comparePeriods(
+    rows.filter((e) => e.evidenceDate < firstRecentDate),
+    rows.filter((e) => e.evidenceDate >= firstRecentDate),
+    minQuestions,
+    threshold,
+  );
+}
+
+// "Meu estudo está funcionando?" — answered from observable evidence only. No score, no
+// mastery: how many subjects are improving / declining / stable / not comparable / without
+// evidence, plus the ONE unit that most deserves attention and why. Deterministic:
+// a DECLINING unit (largest fall first, then more recent-period questions) beats a unit that
+// merely has items still wrong at their last attempt ("para reforçar", most items first).
+// Subjects with no evidence are counted apart — never as bad performance.
+export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
+  const counts = { improving: 0, declining: 0, stable: 0, insufficient: 0, noEvidence: 0 };
+  let totalQuestions = 0;
+  for (const r of subjectRows) {
+    if (!(r.totalQuestions > 0)) { counts.noEvidence += 1; continue; }
+    totalQuestions += r.totalQuestions;
+    const d = r.trend.direction;
+    if (d === 'IMPROVING') counts.improving += 1;
+    else if (d === 'DECLINING') counts.declining += 1;
+    else if (d === 'STABLE') counts.stable += 1;
+    else counts.insufficient += 1;
   }
-  const window = scoresSequence.slice(-minN);
-  const delta = window[window.length - 1] - window[0];
-  const direction = delta > threshold * 100 ? 'IMPROVING'
-    : delta < -threshold * 100 ? 'DECLINING'
+  const compared = counts.improving + counts.declining + counts.stable;
+  const state = totalQuestions === 0 ? 'NO_EVIDENCE'
+    : compared === 0 ? 'INSUFFICIENT'
+    : counts.improving > 0 && counts.declining > 0 ? 'MIXED'
+    : counts.declining > 0 ? 'DECLINING'
+    : counts.improving > 0 ? 'IMPROVING'
     : 'STABLE';
-  return { direction, delta };
+
+  const reinforceOf = (u) => (reinforcementByUnit[u.unitId] ?? []).length;
+  const describe = (u, reason) => ({
+    reason,
+    unitId: u.unitId,
+    unitTitle: u.unitTitle,
+    subjectName: u.subjectName,
+    olderAccuracy: u.trend.olderAccuracy ?? null,
+    recentAccuracy: u.trend.recentAccuracy ?? null,
+    reinforceCount: reinforceOf(u),
+  });
+  const declining = unitRows
+    .filter((u) => u.trend.direction === 'DECLINING')
+    .sort((a, b) => a.trend.delta - b.trend.delta || b.totalQuestions - a.totalQuestions);
+  const reinforce = unitRows
+    .filter((u) => reinforceOf(u) > 0)
+    .sort((a, b) => reinforceOf(b) - reinforceOf(a) || b.totalQuestions - a.totalQuestions);
+  const attention = declining.length > 0 ? describe(declining[0], 'DECLINING')
+    : reinforce.length > 0 ? describe(reinforce[0], 'REINFORCE')
+    : null;
+
+  return { state, counts, totalQuestions, attention };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Plain-language rendering of studyVerdict (pt-BR). Never says mastery/retention/score.
+export function verdictText(v) {
+  const { counts } = v;
+  if (v.state === 'NO_EVIDENCE') {
+    return { headline: 'Ainda não há evidência para dizer se seu estudo está funcionando.', detail: 'Registre questões ou faça revisões para começar a medir.' };
+  }
+  if (v.state === 'INSUFFICIENT') {
+    return {
+      headline: 'Ainda não há histórico suficiente para comparar.',
+      detail: `Há ${plural(v.totalQuestions, 'questão registrada', 'questões registradas')}, mas cada período precisa de pelo menos 10 para indicar uma tendência.`,
+    };
+  }
+  const headline = {
+    IMPROVING: 'Seu desempenho está melhorando.',
+    DECLINING: 'Seu desempenho está piorando.',
+    STABLE: 'Seu desempenho está estável.',
+    MIXED: 'Resultado misto: melhorando em umas áreas e piorando em outras.',
+  }[v.state];
+  const parts = [];
+  if (counts.improving) parts.push(`${counts.improving} melhorando`);
+  if (counts.declining) parts.push(`${counts.declining} piorando`);
+  if (counts.stable) parts.push(`${counts.stable} ${counts.stable === 1 ? 'estável' : 'estáveis'}`);
+  if (counts.insufficient) parts.push(`${counts.insufficient} com evidência insuficiente`);
+  if (counts.noEvidence) parts.push(`${counts.noEvidence} sem evidência`);
+  return { headline, detail: `Disciplinas: ${parts.join(' · ')}.` };
+}
+
+// Rows without a lastEvidence date are excluded by a period filter (there's
+// nothing recent to include), never shown as if they matched.
+export function filterByPeriod(results, periodValue, today) {
+  if (!periodValue) return results;
+  const days = periodValue === 'last-30' ? 30 : periodValue === 'last-90' ? 90 : 365;
+  const cutoff = subtractDays(today, days);
+  return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
+}
+
+// Header-click sorting for the Estatísticas matrix tables (Por disciplina /
+// Por conteúdo). One {key,dir} pair drives every supported column.
+export function sortMatrixRows(results, { key, dir }) {
+  const cmp = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return dir === 'asc' ? av - bv : bv - av;
+  };
+  // String comparator for the two functionally-restored sort modes
+  // (P0-3: "Disciplina" alphabetical + "Última atividade" recency, both
+  // previously available via a now-removed dropdown). Nulls sort last
+  // regardless of direction, matching the numeric comparator's own
+  // established no-evidence-last convention above.
+  const cmpString = (get) => (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const result = av.localeCompare(bv, 'pt-BR', { sensitivity: 'base' });
+    return dir === 'asc' ? result : -result;
+  };
+  if (key === 'practice') return [...results].sort(cmp((r) => r.totalQuestions));
+  if (key === 'trend') {
+    const order = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
+    return [...results].sort(cmp((r) => order[r.trend.direction] ?? 1));
+  }
+  // Alphabetical identity: subjectName alone for Por disciplina rows;
+  // subjectName + unitTitle for Por conteúdo rows (unitTitle is undefined
+  // on subject rows, so this degrades to subjectName-only there).
+  if (key === 'identity') {
+    return [...results].sort(cmpString((r) => `${r.subjectName ?? ''} ${r.unitTitle ?? ''}`.trim()));
+  }
+  // Recency: most/least recent real evidence date, ISO strings sort
+  // lexicographically the same as chronologically.
+  if (key === 'recency') {
+    return [...results].sort(cmpString((r) => r.lastEvidence?.evidenceDate ?? null));
+  }
+  return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
 }
 
 export const Analytics = {
@@ -74,7 +222,10 @@ export const Analytics = {
 
     const results = [];
     for (const subject of subjects) {
-      const subjectEvidence = evidenceBySubject.get(subject.id) ?? [];
+      const subjectEvidenceSorted = (evidenceBySubject.get(subject.id) ?? [])
+        .slice()
+        .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate) || a.id - b.id);
+      const subjectEvidence = subjectEvidenceSorted;
       const totalQ = sumField(subjectEvidence, 'questionsCount');
       const totalC = sumField(subjectEvidence, 'correctCount');
       const acc = totalQ > 0 ? (totalC / totalQ) * 100 : null;
@@ -85,6 +236,9 @@ export const Analytics = {
       const recentEv = windowEvidence(subjectEvidence, recentFrom, today);
       const prevEv = windowEvidence(subjectEvidence, prevFrom, prevTo);
       const trend = subjectTrend(recentEv, prevEv);
+      const lastEvidence = subjectEvidenceSorted.length > 0
+        ? subjectEvidenceSorted[subjectEvidenceSorted.length - 1]
+        : null;
 
       results.push({
         subjectId: subject.id,
@@ -97,6 +251,7 @@ export const Analytics = {
         trend,
         recentQuestions: sumField(recentEv, 'questionsCount'),
         evidenceCount: subjectEvidence.length,
+        lastEvidence,
       });
     }
     return results.sort((a, b) => {
@@ -127,7 +282,7 @@ export const Analytics = {
       const scoresSequence = unitEvidence
         .filter((e) => e.questionsCount > 0)
         .map((e) => (e.correctCount / e.questionsCount) * 100);
-      const trend = unitTrend(scoresSequence);
+      const trend = unitTrend(unitEvidence);
       const lastEvidence = unitEvidence.length > 0 ? unitEvidence[unitEvidence.length - 1] : null;
       const subject = subjectsById.get(unit.subjectId);
 
@@ -154,4 +309,5 @@ export const Analytics = {
 
   subjectTrend,
   unitTrend,
+  studyVerdict,
 };

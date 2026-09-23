@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Stats } from "../src/stats.js";
+import { Stats, layoutEvolutionChart } from "../src/stats.js";
 
 test("Stats.calculate usa média ponderada por disciplina", () => {
   const reviewTasks = [
@@ -134,4 +134,39 @@ test("Stats.calculate conta evidence de todos os contextos (REVIEW, EXTERNAL, IN
   assert.equal(stats.totalQuestions, 70);
   assert.equal(stats.totalCorrect, 50);
   assert.ok(Math.abs(stats.avgScore - (50 / 70) * 100) < 0.01);
+});
+
+test("evolution chart X axis is proportional to TIME, not to the index of the point", () => {
+  const pts = [
+    { date: "2026-07-26", scorePercent: 55 },
+    { date: "2026-08-20", scorePercent: 60 },   // +25 days
+    { date: "2026-09-19", scorePercent: 80 },   // +30 days
+    { date: "2026-09-19", scorePercent: 40 },   // same day: same x
+  ];
+  const { points } = layoutEvolutionChart(pts, 550);
+  assert.equal(points[0].x, 0);
+  assert.equal(points[1].x, 250);        // 25/55 of the axis
+  assert.equal(points[2].x, 550);
+  assert.equal(points[3].x, points[2].x);
+  // the old index-proportional axis would have put point 1 at 550/3 = 183.3
+  assert.notEqual(Math.round(points[1].x), Math.round(550 / 3));
+});
+
+test("evolution chart date labels are unique, ordered, never overlap, and always include the last day", () => {
+  const pts = [
+    { date: "2026-07-26", scorePercent: 50 }, { date: "2026-08-20", scorePercent: 60 }, { date: "2026-09-11", scorePercent: 70 },
+    ...Array.from({ length: 12 }, () => ({ date: "2026-09-19", scorePercent: 75 })),
+  ];
+  const { labels } = layoutEvolutionChart(pts, 300);
+  const texts = labels.map((l) => l.text);
+  assert.equal(new Set(texts).size, texts.length, "no repeated label (19/09 x12 before)");
+  for (let i = 1; i < labels.length; i++) assert.ok(labels[i].x - labels[i - 1].x >= 46, "labels keep a minimum gap");
+  assert.equal(texts[0], "26/07");
+  assert.equal(texts[texts.length - 1], "19/09");
+});
+
+test("evolution chart with every point on one day falls back to index spacing (no NaN)", () => {
+  const { points, labels } = layoutEvolutionChart([{ date: "2026-09-19", scorePercent: 10 }, { date: "2026-09-19", scorePercent: 90 }, { date: "2026-09-19", scorePercent: 50 }], 200);
+  assert.deepEqual(points.map((p) => p.x), [0, 100, 200]);
+  assert.equal(labels.length, 1);
 });

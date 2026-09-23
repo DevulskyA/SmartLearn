@@ -27,6 +27,19 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* SMARTLEARN_PRODUCT_FIRST_V1: a component's own `display` rule (an
+   author rule) always beats the browser's default `[hidden]` style,
+   regardless of stylesheet order — this specific bug was independently
+   hit and manually patched three times in this file (T22's
+   `.settings-actions [hidden]`, PV1-01's `.nav-item[hidden]`, Slice 2's
+   `.study-now-errors-list[hidden]`) before being generalized here.
+   `!important` is deliberate and safe: `hidden` is an explicit
+   "not relevant right now" signal with no legitimate reason to be
+   visually overridden anywhere in this app. */
+[hidden] {
+  display: none !important;
+}
+
 /* Discipline palette — light */
 :root {
   --disc-color-disc-blue: #2563eb;
@@ -221,14 +234,16 @@
   box-sizing: border-box;
 }
 
+/* 320 CSS px is the reflow floor (WCAG 1.4.10). In rem it grew with the text size (640px at 200%) and forced a
+   horizontal scroll on every phone-width screen. */
 html {
-  min-width: 20rem;
+  min-width: 320px;
   min-height: 100%;
   background: var(--color-bg);
 }
 
 body {
-  min-width: 20rem;
+  min-width: 320px;
   min-height: 100vh;
   height: 100dvh;
   margin: 0;
@@ -304,6 +319,10 @@ button {
     border-color 140ms ease,
     color 140ms ease,
     background-color 140ms ease;
+}
+
+.nav-short {
+  display: none;
 }
 
 .nav-item:hover {
@@ -423,6 +442,44 @@ h1 {
 .review-list {
   display: grid;
   gap: 0.85rem;
+}
+
+.weak-practice-note {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.weak-practice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--color-surface);
+}
+
+.weak-practice-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.weak-practice-title {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.weak-practice-meta {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.weak-practice-row .small-button {
+  min-height: 2.75rem;
 }
 
 .review-table-head {
@@ -942,6 +999,225 @@ h1 {
   margin-top: 1rem;
 }
 
+.primary-action-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--color-primary-soft);
+  border: 1px solid color-mix(in oklch, var(--color-primary) 30%, var(--color-border));
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.primary-action-banner p {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-primary-strong);
+}
+
+.review-row.is-highlighted {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  transition: outline-color 200ms ease;
+}
+
+/* SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5 (PRODUCT-REAL-01): found using a
+   real study session with real content — the hint reused `.field-message`,
+   whose default color is `--status-overdue-text` (an alert/warning red),
+   making a helpful hint read as if something were wrong. Neutral,
+   informative styling instead. */
+.study-now-hint {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.study-result-score {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.study-result-note,
+.study-result-next {
+  margin: 0.5rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.study-result-section {
+  margin-top: 1.5rem;
+}
+
+.study-result-section > h3 {
+  margin: 0 0 0.75rem;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.study-result-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (max-width: 47.99rem) {
+  .study-result-actions > button {
+    flex: 1 1 100%;
+  }
+}
+
+.study-now-errors-list,
+.study-now-corrected-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.study-now-error-item {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  background: var(--color-surface);
+}
+
+.study-now-error-question {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.study-now-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  /* muted-on-sunken was 4.26:1 in the light theme (< AA 4.5); this mix is ~6.6:1 */
+  color: color-mix(in oklch, var(--color-muted) 60%, var(--color-text));
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.review-exercise-item > .study-now-chip.review-exercise-prior {
+  margin: 0 0 0.5rem;
+}
+
+.review-exercise-item > .study-now-chip {
+  justify-self: start;
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+.study-now-chip.is-corrected {
+  background: var(--status-done-fill);
+  border-color: transparent;
+  color: var(--status-done-text);
+}
+
+.study-now-error-answer-block {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--color-surface-sunken);
+}
+
+.study-now-error-label {
+  margin: 0 0 0.2rem;
+  color: color-mix(in oklch, var(--color-muted) 60%, var(--color-text));
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.study-now-error-answer {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.study-now-error-meta {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.study-now-source {
+  width: 100%;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.6rem;
+}
+
+.study-now-source > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  list-style: none;
+  cursor: pointer;
+  color: var(--color-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.study-now-source > summary::-webkit-details-marker {
+  display: none;
+}
+
+.study-now-source > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 0.3rem;
+}
+
+.study-now-source-text {
+  margin: 0.6rem 0 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.study-now-corrected-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+}
+
+#study-now-result-title:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 0.3rem;
+}
+
 .stats-panel-heading {
   margin-bottom: 1rem;
 }
@@ -964,6 +1240,38 @@ h1 {
   overflow-x: auto;
 }
 
+/* "Meu estudo está funcionando?": plain text inside the existing subject panel, no new component.
+   Colour is never used to grade it (evidence, not a score). */
+.stats-verdict {
+  margin: 0 0 1rem;
+}
+
+.stats-verdict p {
+  margin: 0;
+}
+
+.stats-verdict-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.stats-verdict-detail {
+  margin-top: 0.25rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.stats-verdict-attention {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.stats-verdict-attention .text-button {
+  margin-top: 0;
+  padding: 0.35rem 0;
+  min-height: 2.75rem;
+}
+
 .stats-table {
   width: 100%;
   border-collapse: collapse;
@@ -982,6 +1290,76 @@ h1 {
   text-transform: uppercase;
 }
 
+/* Header-click sort (approved pattern replacing a separate sort dropdown):
+   the whole header cell is the control, an arrow shows the active column
+   and direction, inactive columns stay quiet. */
+.th-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.th-sort-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
+}
+
+.th-sort-btn .sort-arrow {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  opacity: 0.35;
+}
+
+.th-sort-btn .sort-arrow::before {
+  content: "";
+  display: block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-top: 0.05rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.th-sort-btn.is-active {
+  color: var(--color-text);
+}
+
+.th-sort-btn.is-active .sort-arrow {
+  opacity: 1;
+}
+
+.th-sort-btn.is-active[data-dir="desc"] .sort-arrow::before {
+  transform: rotate(135deg);
+  margin-top: -0.05rem;
+}
+
+/* P0-3 (revised): restores "Recência" (last-activity) sorting without
+   adding a new column OR changing header geometry at all, at any width —
+   an earlier version shared the Prática <th> as a visually-stacked second
+   button, which changed that header cell's content shape at every
+   breakpoint including the phone width commit ff7dec2 had already fixed
+   and locked, silently re-breaking it (a confirmed regression). Recência
+   is now a second CYCLE STATE on the exact same single Prática button
+   (see wireSortableHeaders in src/app.js): clicking it steps through
+   practice-asc -> practice-desc -> recency-asc -> recency-desc -> back to
+   practice-asc, with the button's own label swapping between "Prática"
+   and "Recência" to name whichever dimension is currently active — one
+   button, one line, the same column, identical geometry to before this
+   capability existed. See .th-sort-btn-practice-recency below only for
+   the JS hook selector; it carries no layout rules of its own. */
+
 .stats-table td:last-child,
 .stats-table thead th:last-child {
   text-align: right;
@@ -998,8 +1376,50 @@ h1 {
   text-align: right;
 }
 
-.stats-table td[data-cell="avg"] {
-  text-align: right;
+.stats-table td[data-cell="performance"],
+.stats-table td[data-cell="volume"] {
+  text-align: left;
+  min-width: 9rem;
+}
+
+/* SLICE 2: performance vs volume comparison — two independent bars, never
+   sharing a color scale. subject-compare-bar-fill's background is set
+   inline per row (performanceColor() for performance, --color-primary for
+   volume) so the same track/sizing rules serve both without conflating
+   what they mean. */
+.subject-compare-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+.subject-compare-value {
+  /* The performance percentage is the row's one focal number — DESIGN.md's
+     "Review content (focal line): 1.05rem/680" role fits it exactly. It was
+     rendering smaller than the subject label and the practice count next to
+     it, inverting the hierarchy the row exists to show. */
+  font-size: 1.05rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.subject-compare-bar {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+  min-width: 6rem;
+}
+
+.subject-compare-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.subject-compare-bar-fill.is-no-evidence {
+  opacity: 0.35;
 }
 
 .performance-badge {
@@ -1209,6 +1629,19 @@ h1 {
   line-height: 1.4;
 }
 
+/* Same anti-pattern already documented above for .study-now-hint: a static
+   requirement/instruction is not an error and shouldn't read as one via
+   .field-message's alert-red default (e.g. the register password's
+   "Mínimo de 15 caracteres." hint, always visible, not a validation
+   failure). Neutral styling for informative-only field text. */
+.field-hint {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .study-form {
   margin-top: 2rem;
   padding-top: 2rem;
@@ -1250,6 +1683,18 @@ h1 {
 
 .form-message.is-error {
   color: var(--status-overdue-text);
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.empty-state-actions button {
+  min-height: 44px;
 }
 
 .empty-state {
@@ -1328,7 +1773,11 @@ h1 {
     z-index: 3;
     height: calc(4.75rem + var(--safe-area-bottom));
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* One row, however many destinations are visible (7, or 8 when Materiais
+       is shown): a fixed column count pushed the extra item onto an
+       invisible second row. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 0;
     padding: 0 0 var(--safe-area-bottom);
     border-top: 1px solid var(--color-border);
@@ -1341,11 +1790,32 @@ h1 {
     flex-direction: column;
     justify-content: center;
     gap: 0.3rem;
-    padding: 0.45rem 0.2rem 0.35rem;
+    padding: 0.45rem 0.05rem 0.35rem;
     border-radius: 0;
-    font-size: clamp(0.62rem, 2.6vw, 0.72rem);
+    font-size: clamp(0.56rem, 2.4vw, 0.68rem);
     font-weight: 600;
     text-align: center;
+  }
+
+  .nav-item span {
+    width: 100%;
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+
+  /* Eight destinations do not fit at phone width with full words: long labels show a short form (never cut in
+     the middle of a word); the full word stays in the DOM, visually hidden, as the accessible name. */
+  .nav-item .nav-long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .nav-item .nav-short {
+    display: inline;
   }
 
   .nav-item svg {
@@ -1363,6 +1833,77 @@ h1 {
     min-height: calc(100dvh - 10.5rem);
   }
 
+  /* Matrix tables (Por disciplina/Por conteúdo): auto layout let the
+     identity column's content dictate the whole table's width, forcing
+     silent horizontal scroll with no affordance once a row also carries a
+     unit title (Por conteúdo). Fixed layout + the existing column-width
+     hints make every column honor its share; header labels wrap instead of
+     overflowing since data cells (percentages/counts/badges) are short. */
+  .matrix-table {
+    table-layout: fixed;
+  }
+
+  .matrix-table th,
+  .matrix-table td {
+    overflow: hidden;
+  }
+
+  .matrix-table .th-sort-btn {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .stats-table thead th {
+    font-size: 0.64rem;
+    padding: 0.6rem 0.3rem;
+  }
+
+  .matrix-table td {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+
+  .matrix-table .practice-compact,
+  .matrix-table .practice-recent,
+  .matrix-table .subject-compare-value,
+  .matrix-table .trend-badge {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  /* Por conteúdo's identity cell packs a subject chip AND a unit title
+     side by side (unlike Por disciplina's chip-only identity) — at phone
+     width the ~30%-wide identity column doesn't have room for both on one
+     line without truncating each to an illegible 1-3 character fragment
+     ("S…", "Aus…" — a real regression found live, not caught by the
+     original ff7dec2 mobile fix because the two-line "Prática"/"Recência"
+     sort header added later shares no layout with this cell but the
+     underlying tightness was always marginal). Stack them instead: each
+     gets the column's FULL width on its own line, which comfortably fits
+     real content instead of splitting an already-narrow column in half. */
+  .unit-identity-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+  .unit-identity-cell .subject-cell--compact {
+    max-width: 100%;
+  }
+  /* .unit-title's own `flex: 1 1 auto` is a main-axis rule that stops
+     doing anything useful once the flex container above switches to a
+     column direction — cross-axis (width) sizing then defaults to the
+     text's natural content width, silently disabling the ellipsis rule
+     already on .unit-title (which needs a real bounded box to have
+     anything to truncate against). A real max-width restores it. */
+  .unit-title {
+    max-width: 100%;
+  }
+
   h1 {
     font-size: 2rem;
   }
@@ -1378,6 +1919,17 @@ h1 {
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  .metric-card {
+    min-height: 5.5rem;
+    gap: 0.5rem;
+    padding: 0.85rem;
+  }
+
+  .metric-card strong {
+    font-size: 1.5rem;
   }
 
   .screen-heading {
@@ -1418,6 +1970,32 @@ h1 {
   .subject-actions .small-button,
   .study-actions .small-button {
     flex: 1 1 6rem;
+  }
+}
+
+/* Acompanhar card header: title had min-width:0 + ellipsis, so it just
+   shrank to a sliver next to the subject chip and status badge instead of
+   the row wrapping — real unit titles ("Farmacocinética — Absorção e
+   Distribuição") were unreadable. Same fix already applied to Plano's
+   compact row (commit 5460f46): reorder via flex `order`, no HTML/JS
+   change — chip+badge share line 1, title gets its own full-width line.
+   Wider threshold than the 47.99rem nav/bottom-nav breakpoint above: the
+   sidebar layout (768–~900px) leaves the content column narrow enough for
+   this same overflow to happen even though it isn't the phone-nav case —
+   verified live, a real title still overflowed at exactly 768px. */
+@media (max-width: 60rem) {
+  .tracking-card-header .subject-chip {
+    order: 1;
+  }
+  .tracking-card-header .tracking-state-badge {
+    order: 2;
+  }
+  .tracking-card-header .tracking-unit-title {
+    order: 3;
+    flex: 1 1 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 }
 
@@ -1573,6 +2151,488 @@ h1 {
   flex-shrink: 0;
 }
 
+/* Subject identity chip — see DESIGN.md "Subject identity". Distinct from
+   .subject-chip (small uppercase inline pill used elsewhere): this is the
+   full-width row identity used in matrix tables and the subject-switch
+   trigger/list in Estatísticas. Neutral surface + hairline border + solid
+   left stripe in subjectColor — the stripe is the one place subjectColor
+   appears, never performance/status. Approved and locked this session; do
+   not swap for a dot, a fully-tinted surface, or any other marker. */
+.subject-cell {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0.56rem 0.75rem 0.56rem 1.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.7rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subject-cell::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1rem;
+  border-radius: 0.7rem 0 0 0.7rem;
+  background: var(--subject-fill, var(--subject-color, var(--disc-color-disc-blue)));
+}
+
+/* Compact variant: paired with a second label in the same cell (e.g. a
+   content/unit title next to its subject), so the chip itself carries less
+   visual weight than the full-size identity cell used alone. */
+.subject-cell--compact {
+  padding: 0.32rem 0.55rem 0.32rem 1.15rem;
+  font-size: 0.78rem;
+}
+.subject-cell--compact::before {
+  width: 0.65rem;
+  border-radius: 0.5rem 0 0 0.5rem;
+}
+
+/* Context switcher (approved pattern): trigger = current discipline (the
+   real .subject-cell chip), menu = only the alternatives — the active
+   discipline never appears twice. Menu items reuse the exact same
+   .subject-cell chip, just stacked, so the open list reads as a cut-out of
+   the discipline table itself, never a generic dropdown. */
+.content-context {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.discipline-switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.content-context-plate {
+  /* .subject-cell already sets white-space:nowrap + text-overflow:ellipsis
+     but as an inline-block-sized element with no width cap it just grows
+     to fit any content instead of ever truncating — a long discipline
+     name ("Patologia Geral, Especial e Correlações Anatomoclínicas
+     Multissistêmicas") made this trigger balloon to its full text width.
+     A real max-width is what actually makes the existing ellipsis rule
+     engage; the full name stays available via the title attribute
+     (renderContentContext, src/app.js). */
+  max-width: min(16rem, 60vw);
+  padding-right: 1.9rem;
+  cursor: pointer;
+  border: none;
+}
+
+.content-context-plate::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 1.5px solid var(--color-muted);
+  border-bottom: 1.5px solid var(--color-muted);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
+
+.content-context-plate:focus-visible {
+  /* Shared focus-visible token with .ui-select-trigger (src/styles.css)
+     instead of a one-off outline width/color — part of "share the same
+     underlying tokens as the rest" (global select standardization). */
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.content-context-plate[aria-expanded="true"] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.discipline-switch-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 13rem;
+  /* Same reasoning as .content-context-plate above: without a cap, one
+     long discipline name grows the whole popup (shrink-to-fit sizing on
+     an absolutely positioned box) instead of that one row truncating. */
+  max-width: min(20rem, 80vw);
+  max-height: 20rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.4rem;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  /* Shared elevation/radius tokens with .ui-select-menu instead of
+     one-off hardcoded values (global select standardization) — this
+     popup's own position/z-index stay different on purpose (absolutely
+     positioned within its own relative parent, not portalled to <body>
+     like select-ui.js's menu, so it doesn't need document-level
+     stacking). */
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.discipline-switch-list[hidden] {
+  display: none;
+}
+
+.discipline-switch-list:focus-visible {
+  outline: none;
+}
+
+.discipline-switch-list li {
+  margin-bottom: 0.4rem;
+}
+
+.discipline-switch-list li:last-child {
+  margin-bottom: 0;
+}
+
+.discipline-switch-list button.subject-cell {
+  width: 100%;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), background 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.discipline-switch-list button.subject-cell:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Roving-focus indicator (wireListboxKeyboard, src/select-ui.js): real DOM
+   focus stays on the <ul> itself, so keyboard navigation marks the active
+   <li> via this class instead of :focus-visible on its button — mouse
+   hover above still uses :hover/:focus-visible directly for pointer
+   users. Kept as its own approved chip treatment (border+soft background)
+   rather than switching to .ui-select-item's plain sunken-background
+   style, since these rows carry the locked subject-cell color identity a
+   plain text option doesn't have. */
+.discipline-switch-list li.is-focused button.subject-cell,
+.discipline-switch-list button.subject-cell:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.content-context-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 30rem) {
+  .content-context-meta {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+}
+
+/* ── Estatísticas: duas profundidades do mesmo instrumento ─────────────── */
+
+.view-tabs {
+  display: inline-flex;
+  gap: 0.2rem;
+  margin: 1.25rem 0 1rem;
+  padding: 0.2rem;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+}
+.view-tab {
+  height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+.view-tab:hover { color: var(--color-text); }
+.view-tab.is-active { background: var(--color-primary-soft); color: var(--color-primary); }
+.view-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.view-panel.is-hidden { display: none; }
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(280px, 0.9fr);
+  align-items: start;
+  gap: 1rem;
+}
+@media (max-width: 900px) {
+  .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.stats-panel-heading.wrap { flex-wrap: wrap; row-gap: 0.6rem; }
+.panel-heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.analysis-panel { position: sticky; top: 1rem; }
+.analysis-filters { margin-bottom: 0.85rem; }
+
+/* Select/sort controls reuse the same closed-state chrome everywhere
+   (period, sort, filter) — the native popup already renders correctly per
+   theme via :root[data-theme-mode="dark"] { color-scheme: dark } above. */
+.select-control {
+  display: inline-flex;
+  align-items: center;
+  height: 2.15rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-surface);
+  transition: border-color 140ms ease;
+}
+.select-control:hover { border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-border)); }
+.select-control:focus-within { border-color: var(--color-primary); }
+.select-control select {
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.select-control select:focus-visible { outline: 0; }
+
+/* Shared select/listbox primitive (select-ui.js). Replaces every native
+   <select>'s open menu — themed trigger already matched the app (this class
+   is reused verbatim), but the popup fell back to the browser/OS's own
+   white/native chrome once opened. The menu is appended to <body> and
+   positioned with fixed coordinates (not nested in-flow) so no scrollable
+   or overflow:hidden ancestor (table cells, card panels) can clip it, and
+   so it can flip above the trigger near the viewport's bottom edge. */
+.ui-select {
+  display: inline-flex;
+  position: relative;
+}
+
+/* Kept "visible" on purpose (not display:none/hidden): screen readers and
+   test automation (Playwright's selectOption) can still operate on the real
+   <select> directly. Sighted/pointer/keyboard users never reach it — 1px,
+   fully transparent, non-interactive to the pointer, and out of Tab order. */
+.ui-select-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ui-select-trigger {
+  appearance: none;
+  width: 100%;
+  min-width: 8rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ui-select-trigger.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-select-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.ui-select-trigger.is-open {
+  border-color: var(--color-primary);
+}
+
+.ui-select-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  transition: transform 140ms ease;
+}
+
+.ui-select-trigger.is-open .ui-select-chevron {
+  transform: rotate(180deg);
+}
+
+.ui-select-menu {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.ui-select-menu:focus-visible {
+  outline: none;
+}
+
+.ui-select-item {
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  line-height: 1.35;
+  cursor: pointer;
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.ui-select-item.is-focused {
+  background: var(--color-surface-sunken);
+}
+
+.ui-select-item.is-disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 47.99rem) {
+  .ui-select-item {
+    min-height: 2.6rem;
+  }
+}
+.sort-control { min-width: 0; }
+
+.matrix-table th:first-child { width: 30%; }
+.matrix-table th:nth-child(2) { width: 26%; }
+.matrix-table th:nth-child(3) { width: 24%; }
+
+/* P1-2: the phone-width fix above (table-layout:fixed + overflow/ellipsis,
+   under the 47.99rem breakpoint) never covered widths at or above 768px —
+   past the phone breakpoint, because the app's sidebar layout starts
+   exactly at 48rem/768px and eats real horizontal space from the table's
+   own available width even though workspace-grid is already single-column
+   there (see the 900px workspace-grid rule above). Same root cause (auto
+   table-layout lets content dictate width instead of honoring the width
+   hints above), same fix — reapplied here on purpose, WITHOUT the
+   phone-only font-size/padding compaction: at these widths there is
+   materially more room than on a phone, and shrinking type/touch targets
+   that much here would trade one problem for a worse one.
+   Originally scoped to 768-900px only (the range a prior session's report
+   flagged); a permanent regression test using the UAT fixture's
+   deliberately long discipline name (e2e/matrix-table-responsive.spec.js)
+   found the same overflow at 1200px too — an ordinary desktop width still
+   isn't infinitely wide, and there is no reason to make this protection
+   width-dependent when it costs nothing for the common case (a name that
+   already fits renders identically whether table-layout is fixed or
+   auto). Uncapped from 48rem upward for that reason.
+   MUST come after the unconditional width rules just above: equal
+   selector specificity means source order decides, and this needs to win
+   at every width it covers. Verified at 768/800/900/1200px: no more
+   silent horizontal scroll, headers stay legible, every metric (including
+   the focal performance percentage) stays on-screen without scrolling,
+   row height/touch target unchanged. */
+@media (min-width: 48rem) {
+  .matrix-table {
+    table-layout: fixed;
+  }
+  /* Slightly rebalanced vs. the unconditional 30/26/24/(~20%) split above:
+     at this width (0.75rem header font, no phone-only shrink) the plain
+     "Tendência" header needs a bit more than the default ~20% remainder
+     to stay fully legible instead of losing its last letter — reclaimed
+     from Disciplina/Desempenho, whose own cell content (a subject chip,
+     a percentage) already tolerates truncation by design. */
+  .matrix-table th:first-child { width: 26%; }
+  .matrix-table th:nth-child(2) { width: 24%; }
+  .matrix-table th:nth-child(3) { width: 24%; }
+  .matrix-table th,
+  .matrix-table td {
+    overflow: hidden;
+  }
+  /* Trim the header cells' own padding and the sort-arrow icon's footprint
+     a little (not the phone-level shrink — just enough that a plain
+     10-letter label like "Desempenho" isn't fighting its own sort icon for
+     the last few pixels of a already-narrow column). */
+  .matrix-table th {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+  .matrix-table .th-sort-btn {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    gap: 0.15rem;
+  }
+  .matrix-table .th-sort-btn .sort-arrow {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+  .matrix-table .practice-compact,
+  .matrix-table .practice-recent,
+  .matrix-table .subject-compare-value,
+  .matrix-table .trend-badge {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}
+.matrix-table tr.matrix-row {
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+.matrix-table tr.matrix-row:hover { background: var(--color-surface-sunken); }
+.matrix-table tr.matrix-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.matrix-table tr.matrix-row.is-selected {
+  background: var(--color-primary-soft);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.unit-identity-cell { display: flex; align-items: center; gap: 0.4rem; overflow: hidden; }
+.unit-identity-cell .subject-cell--compact { flex: 0 1 auto; min-width: 0; max-width: 6rem; }
+.unit-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); font-size: 0.88rem; font-weight: 600; }
+
+.practice-cell { font-size: 0.82rem; }
+.practice-compact { color: var(--color-text); font-weight: 600; }
+.practice-recent { color: var(--color-muted); font-size: 0.76rem; margin-top: 0.15rem; }
+
+.unit-detail-heading { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+.unit-detail-title { margin: 0; font-size: 1rem; font-weight: 700; }
+.unit-detail-score { font-size: 1.3rem; font-weight: 700; color: var(--color-text); letter-spacing: -0.02em; }
+.unit-detail-last { margin: 0.6rem 0 0; color: var(--color-muted); font-size: 0.82rem; }
+.unit-detail-spark { display: block; margin-top: 1rem; }
+#unit-detail-panel .trend-badge { margin-top: 0.6rem; }
+
 .review-content {
   margin: 0;
   font-size: 1.02rem;
@@ -1585,6 +2645,12 @@ h1 {
   color: var(--color-muted);
   font-size: 0.85rem;
   line-height: 1.4;
+}
+
+/* the legacy two-column grid of .review-meta (a definition list elsewhere) also caught this plain date line and
+   squeezed it into half the width */
+.review-row-heading .review-meta {
+  display: block;
 }
 
 .review-row-tags {
@@ -1664,22 +2730,144 @@ h1 {
   cursor: pointer;
 }
 
-.review-expand::after {
-  content: "\2304";
-  display: inline-block;
-  font-size: 1.05rem;
-  line-height: 1;
+/* Disclosure chevron: same geometry as select-ui's svgChevron (M6 9l6 6 6-6,
+   stroke 2, round caps), drawn as a currentColor mask so it scales with the
+   label's font-size and follows its color — never a text glyph. */
+.review-expand::after,
+.review-row-toggle::after,
+.plan-expand-btn::after,
+.study-now-source > summary::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 1.15em;
+  height: 1.15em;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
   transition: transform 0.15s ease;
 }
 
-.review-expand[aria-expanded="true"]::after {
+.review-expand[aria-expanded="true"]::after,
+.review-row-toggle[aria-expanded="true"]::after,
+.study-now-source[open] > summary::after {
   transform: rotate(180deg);
 }
 
 .review-expand:focus-visible {
-  outline: 3px solid var(--color-primary-soft);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 0.4rem;
+}
+
+.review-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.review-row-toggle:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.review-row-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.review-block-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.review-block-result[hidden] {
+  display: none;
+}
+
+.review-block-score {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.review-block-summary {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.review-block-note {
+  margin: 0;
+  color: color-mix(in oklch, var(--color-muted) 60%, var(--color-text));
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.review-block-retest {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 47.99rem) {
+  .review-block-retest {
+    flex: 1 1 100%;
+  }
+}
+
+.review-row-body {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 0.9rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.review-row-body[hidden] {
+  display: none;
+}
+
+.review-row-secondary-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.review-row-summary {
+  display: grid;
+  gap: 0.4rem;
+  align-items: start;
+}
+
+.review-summary-text {
+  color: var(--color-text);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.review-summary-placeholder {
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+.review-edit-summary {
+  justify-self: start;
 }
 
 .review-row-detail {
@@ -1938,6 +3126,188 @@ h1 {
   font-style: italic;
 }
 
+.review-exercise-explanation {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.source-draft-questions > li.is-flagged {
+  border-left: 3px solid var(--color-warning, #b45309);
+  padding-left: 0.6rem;
+}
+
+.source-draft-goto {
+  margin-top: 0.25rem;
+  padding: 0.35rem 0;
+}
+
+/* Modo Prova (EXAM-1): the taking screen shows nothing but the question, the student's own answer and navigation. */
+.exam-answer-label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  font-weight: 650;
+}
+
+#exam-answer-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.exam-nav {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.exam-nav button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.exam-nav button.is-answered {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.exam-nav button[aria-current="true"] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Modo Prova (EXAM-2): correction shown only after submitting; right and wrong are told apart by chip + border, not colour alone. */
+.exam-review-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.exam-review-item {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: 0.65rem;
+}
+
+.exam-review-item[data-outcome="CORRECT"] {
+  border-left-color: #15803d;
+}
+
+.exam-review-item[data-outcome="INCORRECT"] {
+  border-left-color: #b91c1c;
+}
+
+.exam-review-unit{margin:.1rem 0 .35rem;font-size:.8rem;color:var(--muted,#5b6478)}
+.exam-review-q {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+
+.exam-review-label {
+  margin: 0.5rem 0 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.exam-review-text {
+  margin: 0;
+}
+
+.exam-review-text.is-empty {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.exam-judge[hidden] {
+  display: none;
+}
+
+.exam-judge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.exam-judge button[aria-pressed="true"] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.exam-counts {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+}
+
+/* Reviewer's corrections to a flagged draft (CQ-6): one collapsed block, native controls. */
+.source-draft-editor {
+  margin: 0.75rem 0;
+  padding: 0.25rem 0.75rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+}
+
+.source-draft-editor > summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  font-weight: 650;
+  color: var(--color-primary);
+}
+
+.source-draft-edit-field {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.source-draft-edit-label {
+  display: block;
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--color-muted);
+}
+
+.source-draft-edit-field textarea,
+.source-draft-edit-field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.source-draft-edit-question {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.source-draft-edit-message.is-error {
+  color: var(--color-danger, #b91c1c);
+}
+
+.study-now-explanation,
+.study-now-error-why {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 .review-exercise-answer {
   margin: 0;
   font-size: 0.92rem;
@@ -2006,6 +3376,122 @@ h1 {
   gap: 0.75rem;
 }
 
+.exercise-detail-dialog {
+  border: none;
+  border-radius: 0.9rem;
+  padding: 1.5rem;
+  width: min(90vw, 34rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.exercise-detail-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.exercise-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.exercise-detail-heading h2 {
+  margin: 0.15rem 0 0;
+}
+#exercise-detail-close {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  color: var(--color-text);
+  width: 2rem;
+  height: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.exercise-detail-unavailable {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+.exercise-attempt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.exercise-attempt-item {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+.exercise-attempt-item.is-correct {
+  border-color: color-mix(in oklch, var(--status-done-text) 30%, var(--color-border));
+}
+.exercise-attempt-item.is-incorrect {
+  border-color: color-mix(in oklch, var(--status-overdue-text) 30%, var(--color-border));
+}
+.exercise-attempt-question {
+  font-weight: 650;
+  margin: 0 0 0.4rem;
+}
+.exercise-attempt-student {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.exercise-attempt-student.is-empty {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+.exercise-attempt-answer {
+  color: var(--color-muted);
+  margin: 0 0 0.5rem;
+}
+.exercise-attempt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.84rem;
+}
+.exercise-attempt-outcome {
+  font-weight: 650;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+}
+.exercise-attempt-outcome.is-correct {
+  color: var(--status-done-text);
+  background: var(--status-done-fill);
+}
+.exercise-attempt-outcome.is-incorrect {
+  color: var(--status-overdue-text);
+  background: var(--status-overdue-fill);
+}
+.exercise-attempt-outcome.is-unknown {
+  color: var(--color-muted);
+  background: color-mix(in oklch, var(--color-muted) 16%, transparent);
+}
+.exercise-attempt-assistance {
+  color: var(--color-muted);
+}
+
+.exercise-row {
+  cursor: pointer;
+}
+.exercise-row:hover,
+.exercise-row:focus-visible {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+.exercise-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 /* ── Plan screen ─────────────────────────────────────────────────────────── */
 
 .plan-filters {
@@ -2036,33 +3522,42 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem 0.5rem;
   padding: 0.75rem 1rem;
 }
 
-.plan-unit-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-  flex: 1 1 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.plan-unit-meta {
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-  flex: 2 1 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Identity + status stay on one line (chip, badges, expand); title/meta each
+   get their own full-width line below instead of truncating mid-word — a
+   compact list must stay legible, not just short (master plan §21). */
+.plan-row-compact .subject-chip {
+  order: 1;
 }
 
 .plan-row-badges {
+  order: 2;
+  margin-left: auto;
   display: flex;
   gap: 0.375rem;
   align-items: center;
   flex-shrink: 0;
+}
+
+.plan-expand-btn {
+  order: 3;
+}
+
+.plan-unit-title {
+  order: 4;
+  flex: 1 1 100%;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.plan-unit-meta {
+  order: 5;
+  flex: 1 1 100%;
+  font-size: 0.78rem;
+  color: var(--color-muted);
 }
 
 .plan-state-badge {
@@ -2135,9 +3630,14 @@ h1 {
 }
 
 .plan-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
   background: none;
   border: none;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   cursor: pointer;
   font-size: 1rem;
   padding: 0.25rem 0.5rem;
@@ -2145,8 +3645,35 @@ h1 {
   line-height: 1;
 }
 
+/* Disclosure chevron (shared mask above): points right when collapsed, down
+   when expanded, like the "▸/▾" glyphs it replaces. */
+.plan-expand-btn::after {
+  transform: rotate(-90deg);
+}
+
+.plan-expand-btn[aria-expanded="true"]::after {
+  transform: none;
+}
+
 .plan-expand-btn:hover {
   color: var(--color-text);
+}
+
+.plan-expand-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.4rem;
+}
+
+.plan-study-now {
+  margin-top: 0;
+}
+
+.plan-exercise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .plan-row-detail {
@@ -2163,7 +3690,7 @@ h1 {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   margin: 0 0 0.35rem;
 }
 
@@ -2185,6 +3712,14 @@ h1 {
   border-bottom: none;
 }
 
+/* Question + "Errou na última tentativa": side by side when it fits, chip on its own line when not. */
+.plan-exercise-item.is-reinforce {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
 .plan-evidence-list {
   list-style: none;
   margin: 0;
@@ -2199,69 +3734,8 @@ h1 {
 
 .plan-detail-empty {
   font-size: 0.875rem;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   margin: 0;
-}
-
-/* ── Subject KPI cards (WP-D1) ──────────────────────────────────────────── */
-
-.subject-kpi-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.75rem;
-}
-
-.subject-kpi {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
-}
-
-.subject-kpi-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-bottom: 0.625rem;
-}
-
-.subject-kpi-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.performance-state-badge {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.12rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-}
-
-.performance-state-badge[data-state="NO_EVIDENCE"] {
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
-  border-color: var(--color-border);
-}
-
-.performance-state-badge[data-state="CRITICAL"]  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.performance-state-badge[data-state="ATTENTION"] { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
-.performance-state-badge[data-state="ADEQUATE"]  { background: #fef9c3; color: #713f12; border-color: #fde68a; }
-.performance-state-badge[data-state="STRONG"]    { background: #dcfce7; color: #166534; border-color: #86efac; }
-
-:root[data-theme-mode="dark"] .performance-state-badge[data-state="CRITICAL"]  { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
-:root[data-theme-mode="dark"] .performance-state-badge[data-state="ATTENTION"] { background: #431407; color: #fdba74; border-color: #7c2d12; }
-:root[data-theme-mode="dark"] .performance-state-badge[data-state="ADEQUATE"]  { background: #422006; color: #fde68a; border-color: #713f12; }
-:root[data-theme-mode="dark"] .performance-state-badge[data-state="STRONG"]    { background: #14532d; color: #86efac; border-color: #166534; }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme-mode="light"]) .performance-state-badge[data-state="CRITICAL"]  { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
-  :root:not([data-theme-mode="light"]) .performance-state-badge[data-state="ATTENTION"] { background: #431407; color: #fdba74; border-color: #7c2d12; }
-  :root:not([data-theme-mode="light"]) .performance-state-badge[data-state="ADEQUATE"]  { background: #422006; color: #fde68a; border-color: #713f12; }
-  :root:not([data-theme-mode="light"]) .performance-state-badge[data-state="STRONG"]    { background: #14532d; color: #86efac; border-color: #166534; }
 }
 
 .trend-badge {
@@ -2271,12 +3745,12 @@ h1 {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
+  color: var(--color-muted);
 }
 
 .trend-badge[data-direction="IMPROVING"] { color: #166534; background: #dcfce7; border-color: #86efac; }
 .trend-badge[data-direction="DECLINING"] { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
-.trend-badge[data-direction="STABLE"]    { color: var(--color-text-muted); }
+.trend-badge[data-direction="STABLE"]    { color: var(--color-muted); }
 
 :root[data-theme-mode="dark"] .trend-badge[data-direction="IMPROVING"] { color: #86efac; background: #14532d; border-color: #166534; }
 :root[data-theme-mode="dark"] .trend-badge[data-direction="DECLINING"] { color: #fca5a5; background: #450a0a; border-color: #7f1d1d; }
@@ -2284,30 +3758,6 @@ h1 {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme-mode="light"]) .trend-badge[data-direction="IMPROVING"] { color: #86efac; background: #14532d; border-color: #166534; }
   :root:not([data-theme-mode="light"]) .trend-badge[data-direction="DECLINING"] { color: #fca5a5; background: #450a0a; border-color: #7f1d1d; }
-}
-
-.subject-kpi-acc {
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1.1;
-  margin-bottom: 0.25rem;
-}
-
-.subject-kpi-acc.is-no-evidence {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-}
-
-.subject-kpi-questions {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-.subject-kpi-recent {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 0.125rem;
 }
 
 .stats-panel-heading {
@@ -2319,63 +3769,11 @@ h1 {
   margin-bottom: 0.75rem;
 }
 
-.stats-panel-heading select {
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.8rem;
-}
-
-/* ── Unit stats rows + sparklines (WP-D2) ───────────────────────────────── */
-
-.unit-stats-row {
-  display: grid;
-  grid-template-rows: auto auto;
-  gap: 0.25rem;
-  padding: 0.6rem 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  margin-bottom: 0.375rem;
-  background: var(--color-surface);
-}
-
-.unit-stats-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  align-items: center;
-}
-
-.unit-stats-title {
-  font-weight: 600;
-  font-size: 0.875rem;
-  flex: 1 1 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.unit-stats-body {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.unit-stats-meta {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-.unit-stats-last {
-  opacity: 0.75;
-}
+/* ── Unit stats sparklines (WP-D2) ───────────────────────────────────────── */
 
 .sparkline {
   display: block;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   opacity: 0.75;
 }
 
@@ -2419,7 +3817,7 @@ h1 {
 }
 .tracking-card-meta {
   font-size: 0.8rem;
-  color: var(--color-text-secondary);
+  color: var(--color-muted);
 }
 .tracking-state-badge {
   font-size: 0.75rem;
@@ -2464,6 +3862,7 @@ h1 {
 }
 .subject-catalog-card {
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--subject-color, var(--color-border));
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
@@ -2480,13 +3879,13 @@ h1 {
 }
 .subject-catalog-meta {
   font-size: 0.8rem;
-  color: var(--color-text-secondary);
+  color: var(--color-muted);
   margin-bottom: 0.5rem;
 }
 .subject-archive-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-muted);
 }
 .subject-catalog-edit {
   border: 1px solid var(--color-border);
@@ -2546,3 +3945,90 @@ h1 {
 .small-button:hover { background: var(--color-surface-alt); }
 .small-button.is-primary { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
 .small-button.is-danger { color: var(--color-danger, #dc2626); border-color: var(--color-danger, #dc2626); }
+
+/* Phone width: the status pills ("Atrasada 20 dias", "1 para reforçar") drop under the title, so the title and
+   the date get the card width instead of a ~100px sliver (the date used to break over three lines). */
+@media (max-width: 30rem) {
+  .review-row-header {
+    flex-wrap: wrap;
+  }
+
+  .review-row-tags {
+    flex: 1 0 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: calc(2.65rem + 0.85rem);
+  }
+}
+
+/* Phone width: the chevron is pinned to the top-right corner of the row, so a long subject chip plus status pills can
+   never push it onto a line of its own. */
+@media (max-width: 30rem) {
+  .plan-row-compact {
+    position: relative;
+    padding-right: 3rem;
+  }
+
+  .plan-row-compact .plan-expand-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  .plan-row-badges {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+}
+
+/* Materiais: proposals are cards (they were bare bullets with a ~190px title box that cut the title being edited). */
+.sources-proposals-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.source-proposal-item {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.85rem;
+  background: var(--color-surface);
+}
+
+.source-proposal-range {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.source-proposal-title-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.5rem;
+}
+
+.source-proposal-title-input:focus-visible {
+  outline: 3px solid var(--color-primary-soft);
+  outline-offset: 2px;
+}
+
+/* The source text keeps the line breaks the extraction kept (sentence ends, headings, list items): without this a
+   real textbook trecho collapses into one wall of text with headings glued to the body. */
+.source-proposal-excerpt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.source-proposal-item > .small-button,
+.source-proposal-item > .text-button {
+  justify-self: start;
+}

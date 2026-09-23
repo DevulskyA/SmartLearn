@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install root dependencies (locked)
+        run: npm ci
+
+      - name: Install server dependencies (locked)
+        run: npm ci
+        working-directory: server
+
+      - name: Lint (structural: eqeqeq, no-undef; no-unused-vars is warn-only, tracked separately)
+        run: npm run lint
+
+      - name: Dependency audit (root)
+        run: npm audit --omit=dev
+
+      - name: Dependency audit (server)
+        run: npm audit
+        working-directory: server
+
+      - name: Test inventory check (no silently excluded test files)
+        run: npm run test:inventory
+
+      - name: Root unit/shared tests
+        run: npm test
+
+      - name: Server unit tests
+        run: npm test
+        working-directory: server
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Clippy (structural warnings as errors; fmt is style-only, not included)
+        run: cargo clippy --all-targets --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Rust tests (locked)
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml

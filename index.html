@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f7f3" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>SmartLearn</title>
+    <script type="module">
+      // T21: explicit, build-time default for the server-authoritative
+      // mode switch (see src/app.js's REMOTE_MODE). A pre-set value (e.g.
+      // an e2e test's page.addInitScript) always wins — this only supplies
+      // the default for real dev/production runs.
+      if (window.__SMARTLEARN_REMOTE_MODE__ === undefined) {
+        window.__SMARTLEARN_REMOTE_MODE__ = import.meta.env.VITE_REMOTE_MODE === "1";
+      }
+      // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: same pattern as REMOTE_MODE
+      // above — lets `npm run dev` exercise the LOCAL_DESKTOP_AUTHORITY
+      // path (Materiais, Estudar agora) in a plain browser tab for manual
+      // product QA, without needing the Tauri shell. A real Tauri session
+      // always sets this via its own window init script first, which wins
+      // over this default exactly like REMOTE_MODE does.
+      if (window.__SMARTLEARN_LOCAL_AUTHORITY__ === undefined) {
+        window.__SMARTLEARN_LOCAL_AUTHORITY__ = import.meta.env.VITE_LOCAL_AUTHORITY === "1";
+      }
+    </script>
     <script type="module">
       import { applyThemePreference, getStoredThemePreference } from "/src/theme.js";
 
@@ -34,6 +54,13 @@
           </svg>
           <span>Hoje</span>
         </button>
+        <button class="nav-item" type="button" data-screen="materials" aria-controls="screen-materials" hidden>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M15 3v4h4M9 13h6M9 17h6" stroke-linecap="round" />
+          </svg>
+          <span>Materiais</span>
+        </button>
         <button class="nav-item" type="button" data-screen="plan" aria-controls="screen-plan">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
@@ -44,25 +71,31 @@
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 20v-7h4v7M10 20V8h4v12M15 20V4h4v16M3 20.5h18" />
           </svg>
-          <span>Estatísticas</span>
+          <span><span class="nav-long">Estatísticas</span><span class="nav-short" aria-hidden="true">Estat.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span>Acompanhar</span>
+          <span><span class="nav-long">Acompanhar</span><span class="nav-short" aria-hidden="true">Acomp.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
-          <span>Disciplinas</span>
+          <span><span class="nav-long">Disciplinas</span><span class="nav-short" aria-hidden="true">Discipl.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <span>Configurações</span>
+          <span><span class="nav-long">Configurações</span><span class="nav-short" aria-hidden="true">Config.</span></span>
+        </button>
+        <button class="nav-item" type="button" data-screen="account" aria-controls="screen-account">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>
+          </svg>
+          <span>Conta</span>
         </button>
       </nav>
 
@@ -87,6 +120,11 @@
 
           <div class="today-load-summary" id="today-load-summary" aria-live="polite" hidden></div>
 
+          <div class="primary-action-banner" id="today-primary-action" role="region" aria-labelledby="today-primary-action-text" hidden>
+            <p id="today-primary-action-text"></p>
+            <button class="primary-button" id="today-primary-action-btn" type="button">Começar agora</button>
+          </div>
+
           <div class="review-dashboard" id="review-dashboard">
             <section class="review-block review-block-overdue" id="block-overdue" aria-labelledby="title-overdue" hidden>
               <div class="block-heading">
@@ -109,6 +147,14 @@
               </div>
               <div class="review-list" data-review-list="doneToday"></div>
             </section>
+            <section class="review-block review-block-weak" id="block-weak" aria-labelledby="title-weak" hidden>
+              <div class="block-heading">
+                <h2 id="title-weak">Vale reforçar</h2>
+                <span class="block-count" id="weak-count"></span>
+              </div>
+              <p class="weak-practice-note">Sugestões a partir do que você registrou. Não mudam suas revisões.</p>
+              <div class="review-list" id="weak-list"></div>
+            </section>
           </div>
 
           <p class="today-tomorrow" id="today-tomorrow" hidden></p>
@@ -126,7 +172,11 @@
               <path d="M6 3v3M18 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 12h2M14 12h2M8 16h2M14 16h2" />
             </svg>
             <h2>Nenhuma revisão cadastrada.</h2>
-            <p>Cadastre ou importe estudos para ver revisões.</p>
+            <p>Comece pelo material de uma aula: envie o PDF e o SmartLearn propõe um resumo e questões para você revisar antes de estudar.</p>
+            <div class="empty-state-actions">
+              <button class="primary-button" type="button" data-action="first-upload">Enviar um PDF de aula</button>
+              <button class="secondary-button" type="button" data-action="first-create">Criar uma aula</button>
+            </div>
           </div>
         </section>
 
@@ -362,6 +412,15 @@
               <p class="eyebrow">Seu desempenho</p>
               <h1 id="title-stats">Estatísticas</h1>
             </div>
+            <label class="select-control sort-control">
+              <span class="visually-hidden">Período</span>
+              <select id="stats-unit-filter-period" aria-label="Período">
+                <option value="">Qualquer período</option>
+                <option value="last-30">Últimos 30 dias</option>
+                <option value="last-90">Últimos 90 dias</option>
+                <option value="last-365">Último ano</option>
+              </select>
+            </label>
           </div>
 
           <div class="metric-grid" aria-label="Resumo de desempenho">
@@ -373,22 +432,110 @@
             <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
 
-          <section class="stats-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Por disciplina</p>
-                <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
-              </div>
-              <select id="stats-subject-sort" aria-label="Ordenar disciplinas">
-                <option value="worst-first">Pior → melhor</option>
-                <option value="best-first">Melhor → pior</option>
-                <option value="volume">Volume de questões</option>
-                <option value="trend">Tendência</option>
-              </select>
+          <div class="view-tabs" role="tablist" aria-label="Profundidade da análise">
+            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0">Por disciplina</button>
+            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1">Por conteúdo</button>
+          </div>
+
+          <div id="view-stats-subject" class="view-panel" role="tabpanel" aria-labelledby="tab-stats-subject">
+            <div class="workspace-grid">
+              <section class="stats-panel table-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
+                <div class="stats-panel-heading wrap">
+                  <div>
+                    <p class="eyebrow">Por disciplina</p>
+                    <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
+                  </div>
+                </div>
+                <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
+                  <p class="stats-verdict-headline" id="stats-verdict-headline"></p>
+                  <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
+                  <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
+                    <span id="stats-verdict-attention-text"></span>
+                    <button type="button" class="text-button" id="stats-verdict-attention-btn">Ver no Plano</button>
+                  </p>
+                </div>
+                <div class="table-scroll">
+                  <table class="stats-table matrix-table">
+                    <thead>
+                      <tr id="subject-kpi-head">
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity">Disciplina<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                      </tr>
+                    </thead>
+                    <tbody id="subject-kpi-list"></tbody>
+                  </table>
+                </div>
+                <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
+              </section>
+
+              <aside class="stats-panel analysis-panel chart-panel" aria-labelledby="evolution-title">
+                <div class="stats-panel-heading">
+                  <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
+                </div>
+                <div class="panel-heading-actions analysis-filters">
+                  <label class="select-control sort-control">
+                    <span class="visually-hidden">Filtrar disciplina no gráfico</span>
+                    <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
+                      <option value="">Todas as disciplinas</option>
+                    </select>
+                  </label>
+                  <label class="select-control sort-control">
+                    <span class="visually-hidden">Período do gráfico</span>
+                    <select id="evolution-filter-period" aria-label="Período do gráfico">
+                      <option value="3">3 meses</option>
+                      <option value="6">6 meses</option>
+                      <option value="12">12 meses</option>
+                      <option value="0">Tudo</option>
+                    </select>
+                  </label>
+                </div>
+                <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
+                <canvas id="evolution-chart" hidden></canvas>
+                <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
+              </aside>
             </div>
-            <div class="subject-kpi-list" id="subject-kpi-list" aria-live="polite"></div>
-            <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
-          </section>
+          </div>
+
+          <div id="view-stats-unit" class="view-panel is-hidden" role="tabpanel" aria-labelledby="tab-stats-unit">
+            <div class="content-context" id="content-context">
+              <div class="discipline-switch" id="discipline-switch">
+                <button type="button" class="subject-cell content-context-plate" id="content-context-plate" aria-haspopup="menu" aria-expanded="false" aria-controls="discipline-switch-list"></button>
+                <ul class="discipline-switch-list" id="discipline-switch-list" role="menu" aria-label="Trocar disciplina" tabindex="-1" hidden></ul>
+              </div>
+              <p class="content-context-meta" id="content-context-meta"></p>
+            </div>
+            <div class="workspace-grid">
+              <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
+                <div class="stats-panel-heading wrap">
+                  <div>
+                    <p class="eyebrow">Por conteúdo</p>
+                    <h2 id="unit-stats-title">Desempenho por conteúdo</h2>
+                  </div>
+                </div>
+                <div class="table-scroll">
+                  <table class="stats-table matrix-table">
+                    <thead>
+                      <tr id="unit-stats-head">
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity">Conteúdo<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                      </tr>
+                    </thead>
+                    <tbody id="unit-stats-list"></tbody>
+                  </table>
+                </div>
+                <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
+              </section>
+
+              <aside class="stats-panel analysis-panel" aria-label="Detalhe do conteúdo selecionado" id="unit-detail-panel">
+                <p class="panel-empty" id="unit-detail-empty">Selecione um conteúdo na lista para ver detalhes.</p>
+                <div id="unit-detail-body" hidden></div>
+              </aside>
+            </div>
+          </div>
 
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
@@ -413,78 +560,6 @@
             </div>
             <p class="panel-empty" id="exercise-notes-empty">Registre exercícios concluídos para ver a lista.</p>
           </section>
-
-          <section class="stats-panel" aria-labelledby="subject-averages-title">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Comparativo</p>
-                <h2 id="subject-averages-title">Nota média por disciplina</h2>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <table class="stats-table">
-                <thead><tr><th scope="col">Disciplina</th><th scope="col">Média</th><th scope="col">Q</th></tr></thead>
-                <tbody id="subject-averages-body"></tbody>
-              </table>
-            </div>
-            <p class="panel-empty" id="subject-averages-empty">Registre questões concluídas para ver as médias.</p>
-          </section>
-
-          <section class="stats-panel" aria-labelledby="unit-stats-title">
-            <div class="stats-panel-heading">
-              <div>
-                <p class="eyebrow">Por conteúdo</p>
-                <h2 id="unit-stats-title">Desempenho por aula</h2>
-              </div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-                <select id="stats-unit-filter-subject" aria-label="Filtrar por disciplina">
-                  <option value="">Todas as disciplinas</option>
-                </select>
-                <select id="stats-unit-filter-trend" aria-label="Filtrar por tendência">
-                  <option value="">Todas as tendências</option>
-                  <option value="IMPROVING">Melhorando</option>
-                  <option value="DECLINING">Caindo</option>
-                  <option value="STABLE">Estável</option>
-                  <option value="INSUFFICIENT">Insuficiente</option>
-                </select>
-                <select id="stats-unit-filter-period" aria-label="Filtrar por período">
-                  <option value="">Qualquer período</option>
-                  <option value="last-30">Últimos 30 dias</option>
-                  <option value="last-90">Últimos 90 dias</option>
-                  <option value="last-365">Último ano</option>
-                </select>
-                <select id="stats-unit-sort" aria-label="Ordenar por">
-                  <option value="worst-first">Pior score (padrão)</option>
-                  <option value="trend">Tendência</option>
-                  <option value="volume">Volume</option>
-                  <option value="subject">Disciplina</option>
-                  <option value="last-activity">Última atividade</option>
-                </select>
-              </div>
-            </div>
-            <div class="unit-stats-list" id="unit-stats-list" aria-live="polite"></div>
-            <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
-          </section>
-
-          <section class="stats-panel chart-panel" aria-labelledby="evolution-title">
-            <div class="stats-panel-heading">
-              <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-                <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
-                  <option value="">Todas as disciplinas</option>
-                </select>
-                <select id="evolution-filter-period" aria-label="Período do gráfico">
-                  <option value="3">3 meses</option>
-                  <option value="6">6 meses</option>
-                  <option value="12">12 meses</option>
-                  <option value="0">Tudo</option>
-                </select>
-              </div>
-            </div>
-            <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
-            <canvas id="evolution-chart" hidden></canvas>
-            <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
-          </section>
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
@@ -502,7 +577,7 @@
             <div class="section-heading">
               <p class="eyebrow">Segurança dos dados</p>
               <h2 id="backup-title">Backup</h2>
-              <p>Salve uma cópia de disciplinas, estudos, revisões e configurações.</p>
+              <p>Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações.</p>
             </div>
             <div class="settings-actions">
               <button class="primary-button" id="export-backup" type="button">Exportar backup</button>
@@ -524,6 +599,232 @@
             </div>
             <p class="form-message" id="reset-message" role="status" aria-live="polite"></p>
           </section>
+
+          <section class="settings-card" id="migration-card" aria-labelledby="migration-title" hidden>
+            <div class="section-heading">
+              <p class="eyebrow">Migração</p>
+              <h2 id="migration-title">Importar de um backup antigo</h2>
+              <p>Envie um arquivo de exportação local (v1, v2 ou v3) para revisar o que será migrado antes de confirmar. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="secondary-button file-button" id="migration-choose-file" type="button">Selecionar arquivo antigo</button>
+              <input class="visually-hidden" id="migration-file-input" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
+            </div>
+            <p class="form-message" id="migration-message" role="status" aria-live="polite"></p>
+            <div id="migration-preview-panel" hidden>
+              <dl class="migration-counts" id="migration-counts"></dl>
+              <ul class="migration-warnings" id="migration-warnings"></ul>
+              <ul class="migration-conflicts" id="migration-conflicts"></ul>
+              <div class="settings-actions">
+                <button class="primary-button" id="migration-confirm-btn" type="button">Confirmar importação</button>
+                <button class="secondary-button" id="migration-cancel-btn" type="button">Cancelar</button>
+              </div>
+            </div>
+            <div id="migration-result-panel" hidden>
+              <p id="migration-result-summary"></p>
+              <button class="secondary-button" id="migration-download-report" type="button">Baixar relatório</button>
+            </div>
+          </section>
+
+        </section>
+
+        <section class="screen" id="screen-materials" data-screen-panel="materials" aria-labelledby="title-materials" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Fontes</p>
+              <h1 id="title-materials">Materiais</h1>
+            </div>
+          </div>
+          <section class="settings-card" id="sources-card" aria-labelledby="sources-title">
+            <div class="section-heading">
+              <p class="eyebrow">Fontes</p>
+              <h2 id="sources-title">Fontes em PDF</h2>
+              <p>Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="secondary-button file-button" id="sources-choose-file" type="button">Selecionar PDF</button>
+              <input class="visually-hidden" id="sources-file-input" type="file" accept=".pdf,application/pdf" tabindex="-1" aria-hidden="true" />
+            </div>
+            <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
+            <div id="sources-proposals-panel" hidden>
+              <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
+            </div>
+          </section>
+        </section>
+
+        <section class="screen" id="screen-exam" data-screen-panel="exam" aria-labelledby="title-exam" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow" id="exam-unit"></p>
+              <h1 id="title-exam" tabindex="-1">Prova</h1>
+            </div>
+          </div>
+          <p class="form-message" id="exam-message" role="status" aria-live="polite"></p>
+
+          <section class="settings-card" id="exam-taking" aria-label="Fazendo a prova" hidden>
+            <p class="study-now-progress" id="exam-progress"></p>
+            <p id="exam-question-text"></p>
+            <label class="exam-answer-label" for="exam-answer-input">Sua resposta</label>
+            <textarea id="exam-answer-input" rows="5" maxlength="5000" aria-describedby="exam-progress exam-question-text"></textarea>
+            <div class="settings-actions">
+              <button class="secondary-button" id="exam-prev-btn" type="button">Anterior</button>
+              <button class="secondary-button" id="exam-next-btn" type="button">Próxima</button>
+            </div>
+            <ol class="exam-nav" id="exam-nav" aria-label="Questões da prova"></ol>
+            <div class="settings-actions">
+              <button class="primary-button" id="exam-submit-btn" type="button">Submeter prova</button>
+              <button class="primary-button" id="exam-submit-confirm-btn" type="button" hidden>Confirmar submissão</button>
+              <button class="secondary-button" id="exam-submit-cancel-btn" type="button" hidden>Continuar respondendo</button>
+            </div>
+            <p class="form-message" id="exam-submit-warning" role="status" aria-live="polite" hidden></p>
+          </section>
+
+          <section class="settings-card" id="exam-submitted" aria-label="Prova submetida" hidden>
+            <h2 id="exam-submitted-title" tabindex="-1">Correção da prova</h2>
+            <p id="exam-submitted-text"></p>
+            <p class="study-result-score" id="exam-result-score" hidden></p>
+            <p class="exam-counts" id="exam-counts" hidden></p>
+            <ol class="exam-review-list" id="exam-review-list"></ol>
+            <p class="form-message" id="exam-final-note" role="status" aria-live="polite" hidden></p>
+            <div class="settings-actions">
+              <button class="primary-button" id="exam-finalize-btn" type="button" hidden>Concluir e registrar o resultado</button>
+              <button class="primary-button" id="exam-retest-btn" type="button" hidden>Refazer erros</button>
+              <button class="secondary-button" id="exam-back-btn" type="button">Voltar para o Plano</button>
+              <button class="secondary-button" id="exam-today-btn" type="button">Ir para Hoje</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="screen" id="screen-study-now" data-screen-panel="study-now" aria-labelledby="title-study-now" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow" id="study-now-subject"></p>
+              <h1 id="title-study-now"></h1>
+            </div>
+          </div>
+
+          <section class="settings-card" id="study-now-summary-card" aria-labelledby="study-now-summary-title" hidden>
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-summary-title">Resumo Mestre</h2>
+            </div>
+            <p id="study-now-summary-body"></p>
+          </section>
+
+          <section class="settings-card" id="study-now-practice-card" aria-labelledby="study-now-practice-title">
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-practice-title">Praticar</h2>
+              <p id="study-now-progress"></p>
+            </div>
+            <div class="study-now-resume" id="study-now-resume" role="group" aria-labelledby="study-now-resume-text" hidden>
+              <p id="study-now-resume-text"></p>
+              <div class="settings-actions">
+                <button class="primary-button" id="study-now-resume-continue" type="button">Continuar de onde parei</button>
+                <button class="secondary-button" id="study-now-resume-restart" type="button">Recomeçar</button>
+              </div>
+            </div>
+            <div id="study-now-question-area">
+              <p id="study-now-question-text"></p>
+              <p id="study-now-hint-text" class="study-now-hint" hidden></p>
+              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
+              <p id="study-now-answer-text" hidden></p>
+              <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
+              <div id="study-now-judgment" class="exercise-judgment" hidden>
+                <button class="primary-button" id="study-now-correct-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Acertei</button>
+                <button class="secondary-button" id="study-now-incorrect-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Errei</button>
+              </div>
+              <p class="form-message" id="study-now-message" role="status" aria-live="polite"></p>
+            </div>
+            <p class="panel-empty" id="study-now-no-exercises" hidden>Esta aula ainda não tem exercícios.</p>
+          </section>
+
+          <section class="settings-card study-result" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
+            <div class="section-heading compact-heading">
+              <h2 id="study-now-result-title" tabindex="-1">Resultado</h2>
+            </div>
+            <p id="study-now-result-text" class="study-result-score"></p>
+            <p id="study-now-result-note" class="study-result-note" hidden></p>
+            <p id="study-now-next-review-text" class="study-result-next"></p>
+            <div class="settings-actions study-result-actions">
+              <button class="primary-button" id="study-now-retest-btn" type="button" hidden>Refazer erros</button>
+              <button class="secondary-button" id="study-now-done-btn" type="button">Voltar para Hoje</button>
+            </div>
+            <section class="study-result-section" id="study-now-errors-section" aria-labelledby="study-now-errors-title" hidden>
+              <h3 id="study-now-errors-title"></h3>
+              <ul id="study-now-errors-list" class="study-now-errors-list"></ul>
+            </section>
+            <section class="study-result-section" id="study-now-corrected-section" aria-labelledby="study-now-corrected-title" hidden>
+              <h3 id="study-now-corrected-title"></h3>
+              <ul id="study-now-corrected-list" class="study-now-corrected-list"></ul>
+            </section>
+          </section>
+        </section>
+
+        <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">Servidor central</p>
+              <h1 id="title-account">Conta</h1>
+            </div>
+          </div>
+
+          <div class="form-card" id="account-logged-out-view">
+            <form class="study-form" id="account-login-form">
+              <h2 id="account-login-title">Entrar</h2>
+              <div class="field-group">
+                <label for="account-login-email">E-mail</label>
+                <input id="account-login-email" name="email" type="email" required autocomplete="email">
+              </div>
+              <div class="field-group">
+                <label for="account-login-password">Senha</label>
+                <input id="account-login-password" name="password" type="password" required autocomplete="current-password">
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Entrar</button>
+                <button class="text-button" type="button" id="account-show-register">Ainda não tem conta? Criar uma</button>
+              </div>
+              <p class="form-message" id="account-login-message" role="status" aria-live="polite"></p>
+            </form>
+
+            <form class="study-form" id="account-register-form" hidden>
+              <h2 id="account-register-title">Criar conta</h2>
+              <div class="field-group">
+                <label for="account-register-email">E-mail</label>
+                <input id="account-register-email" name="email" type="email" required autocomplete="email">
+              </div>
+              <div class="field-group">
+                <label for="account-register-password">Senha</label>
+                <input id="account-register-password" name="password" type="password" required autocomplete="new-password" minlength="15">
+                <p class="field-hint">Mínimo de 15 caracteres.</p>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Criar conta</button>
+                <button class="text-button" type="button" id="account-show-login">Já tem conta? Entrar</button>
+              </div>
+              <p class="form-message" id="account-register-message" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+
+          <div class="form-card" id="account-logged-in-view" hidden>
+            <p id="account-logged-in-as"></p>
+            <form class="study-form" id="account-password-form">
+              <h2>Alterar senha</h2>
+              <div class="field-group">
+                <label for="account-current-password">Senha atual</label>
+                <input id="account-current-password" name="currentPassword" type="password" required autocomplete="current-password">
+              </div>
+              <div class="field-group">
+                <label for="account-new-password">Nova senha</label>
+                <input id="account-new-password" name="newPassword" type="password" required autocomplete="new-password" minlength="15">
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Alterar senha</button>
+              </div>
+              <p class="form-message" id="account-password-message" role="status" aria-live="polite"></p>
+            </form>
+            <div class="settings-actions">
+              <button class="secondary-button" id="account-logout-btn" type="button">Sair</button>
+            </div>
+          </div>
         </section>
       </main>
     </div>
@@ -534,6 +835,17 @@
         <button id="confirm-dialog-cancel" type="button" class="secondary-button">Cancelar</button>
         <button id="confirm-dialog-ok" type="button" class="small-button is-danger">Confirmar</button>
       </div>
+    </dialog>
+
+    <dialog id="exercise-detail-dialog" class="exercise-detail-dialog" aria-modal="true" aria-labelledby="exercise-detail-title">
+      <div class="exercise-detail-heading">
+        <div>
+          <p class="eyebrow" id="exercise-detail-eyebrow"></p>
+          <h2 id="exercise-detail-title"></h2>
+        </div>
+        <button type="button" id="exercise-detail-close" aria-label="Fechar">✕</button>
+      </div>
+      <div id="exercise-detail-body"></div>
     </dialog>
   </body>
 </html>

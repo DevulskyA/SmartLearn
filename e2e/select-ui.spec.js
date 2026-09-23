@@ -1,0 +1,457 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+
+// Proves the shared select/combobox primitive (src/select-ui.js) live,
+// across representative real consumers, instead of trusting the code
+// alone. Canonical rule under test for an ORDINARY select (WAI-ARIA APG
+// "Select-Only Combobox" — see DESIGN.md "Select / combobox / context-
+// switcher"): the popup lists EVERY real option, including the current
+// one (aria-selected="true" on it), DOM focus never leaves the combobox
+// element while the popup is open, aria-activedescendant lives on the
+// combobox (not the popup), arrow/Home/End/typeahead only PREVIEW a
+// value, and only Enter/Space/click COMMIT it. This intentionally does
+// NOT apply to the subject context-switcher (a different, LOCKED pattern
+// — see e2e/context-switcher-keyboard.spec.js for its own contract).
+
+// A <select>'s own textContent concatenates EVERY option's text, not just
+// the selected one — toHaveText() on the native element itself is not a
+// valid way to check "current value". This polls the actual selected
+// option's text (auto-retrying like a normal Playwright assertion).
+async function expectSelectedText(nativeEl, expected) {
+  await expect.poll(() => nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '')).toBe(expected);
+}
+
+async function locateSelectUi(page, nativeSelector) {
+  const nativeEl = page.locator(nativeSelector);
+  // mount() (src/select-ui.js) makes the native <select> a direct child of
+  // its own `.ui-select` wrapper div (wrap.append(trigger, select)) — walk
+  // to the parent directly rather than a `.ui-select', { has: nativeEl }`
+  // filter, which proved unreliable to resolve reliably in this suite.
+  const wrap = nativeEl.locator('xpath=..');
+  const trigger = wrap.locator('.ui-select-trigger');
+  await expect(trigger, `${nativeSelector}: trigger must exist`).toBeVisible();
+  const menuId = await trigger.getAttribute('aria-controls');
+  expect(menuId, `${nativeSelector}: trigger must have aria-controls pointing to its popup`).toBeTruthy();
+  const menu = page.locator(`#${menuId}`);
+  return { nativeEl, trigger, menu };
+}
+
+// Full checklist for one ORDINARY select consumer, per the corrected
+// Select-Only Combobox contract (see file header / DESIGN.md): semantic
+// roles, current value present+selected in the popup, focus-stays-on-
+// trigger the whole time, preview-vs-commit separation on every input
+// method, Escape/Tab cancel without committing, Home/End/typeahead, and
+// a real value change via both keyboard and mouse.
+async function auditSelectConsumer(page, nativeSelector) {
+  const { nativeEl, trigger, menu } = await locateSelectUi(page, nativeSelector);
+
+  await expect(trigger).toHaveAttribute('role', 'combobox');
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+
+  const currentText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+  await expect(trigger).toHaveText(currentText);
+
+  // Keyboard open: Enter. Focus stays ON the trigger — it never moves
+  // into the popup (the defining difference from a Menu Button popup).
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute('role', 'listbox');
+  await expect(trigger).toBeFocused();
+
+  const optionCount = await menu.locator('li[role="option"]').count();
+  expect(optionCount, `${nativeSelector}: expected at least one option in the menu`).toBeGreaterThan(0);
+
+  // The current value MUST be present in its own open menu (never
+  // filtered out) and correctly marked aria-selected="true" — the
+  // opposite of the context-switcher's own locked "alternatives only"
+  // rule, which does not apply to ordinary selects.
+  if (currentText) {
+    const currentOption = menu.locator('li[role="option"]', { hasText: currentText });
+    await expect(currentOption, `current value "${currentText}" must be present in its own open menu`).toHaveCount(1);
+    await expect(currentOption).toHaveAttribute('aria-selected', 'true');
+  }
+  const selectedCount = await menu.locator('li[role="option"][aria-selected="true"]').count();
+  expect(selectedCount, 'exactly one option is aria-selected=true').toBe(1);
+
+  // aria-activedescendant lives on the TRIGGER (not the popup) and
+  // previews the currently-selected option on open.
+  const activeBefore = await trigger.getAttribute('aria-activedescendant');
+  expect(activeBefore, 'trigger must own aria-activedescendant while open').toBeTruthy();
+  await expect(menu).not.toHaveAttribute('aria-activedescendant', /.+/);
+
+  // Arrow keys PREVIEW only — the underlying value must not change yet.
+  if (optionCount > 1) {
+    await page.keyboard.press('ArrowDown');
+    const activeAfter = await trigger.getAttribute('aria-activedescendant');
+    expect(activeAfter).not.toBe(activeBefore);
+    await expectSelectedText(nativeEl, currentText); // still unchanged — preview, not commit
+    await expect(trigger).toHaveText(currentText); // trigger text unchanged until commit too
+  }
+
+  // Home/End jump within the list without committing.
+  await page.keyboard.press('End');
+  const activeAtEnd = await trigger.getAttribute('aria-activedescendant');
+  await page.keyboard.press('Home');
+  const activeAtHome = await trigger.getAttribute('aria-activedescendant');
+  if (optionCount > 1) expect(activeAtHome).not.toBe(activeAtEnd);
+  await expectSelectedText(nativeEl, currentText); // Home/End never commits either
+
+  // Escape cancels: closes, does NOT commit, focus never left the trigger.
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger).toBeFocused();
+  await expectSelectedText(nativeEl, currentText);
+  await expect(trigger).toHaveText(currentText);
+
+  // Real value change via keyboard: open, deterministically navigate to a
+  // genuinely different option (Home always lands on the first option
+  // regardless of where the current value sits; if that happens to BE the
+  // current value, one ArrowDown guarantees a real move since
+  // optionCount > 1), commit with Enter.
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Home');
+  const firstOptionText = (await menu.locator('li[role="option"]').first().textContent()).trim();
+  if (firstOptionText === currentText && optionCount > 1) {
+    await page.keyboard.press('ArrowDown');
+  }
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused(); // focus returns to (never left) the trigger after commit too
+  const committedText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+  if (optionCount > 1) expect(committedText, 'keyboard commit must produce a real value change').not.toBe(currentText);
+  await expect(trigger).toHaveText(committedText);
+
+  // Real value change via mouse click on a menu item.
+  await trigger.click();
+  await expect(menu).toBeVisible();
+  const items = menu.locator('li[role="option"]:not(.is-disabled)');
+  const clickTarget = items.first();
+  const clickTargetText = (await clickTarget.textContent()).trim();
+  await clickTarget.click();
+  await expect(menu).toBeHidden();
+  await expect(trigger).toHaveText(clickTargetText);
+  await expectSelectedText(nativeEl, clickTargetText);
+
+  // Tab closes the popup without committing and does not trap focus —
+  // re-open, preview a different value, then Tab away.
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeVisible();
+  const beforeTabText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Tab');
+  await expect(menu).toBeHidden();
+  await expect(trigger).not.toBeFocused(); // focus moved on, as Tab should
+  await expectSelectedText(nativeEl, beforeTabText); // Tab never committed the preview
+  // Return focus to the trigger for whichever assertions run next.
+  await trigger.focus();
+}
+
+async function seedUatAndGoto(page, screenId) {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(async () => {
+    await window.__seedUatMedical('DESTROY_EXISTING_DATA');
+  });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  if (screenId) await page.locator(`[data-screen="${screenId}"]`).click();
+}
+
+test.describe('local BrowserStore consumers', () => {
+  test('period select (Acompanhar) — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'tracking');
+    await auditSelectConsumer(page, '#tracking-filter-period');
+  });
+
+  test('discipline select (Acompanhar) — full checklist, includes a deliberately long label', async ({ page }) => {
+    await seedUatAndGoto(page, 'tracking');
+    const { menu, trigger } = await locateSelectUi(page, '#tracking-filter-subject');
+    await trigger.click();
+    // The fixture's deliberately long discipline name must appear intact
+    // (not truncated to nothing, not duplicated) as one real menu item.
+    const longLabel = 'Patologia Geral, Especial e Correlações Anatomoclínicas Multissistêmicas';
+    await expect(menu.locator('li[role="option"]', { hasText: longLabel })).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await auditSelectConsumer(page, '#tracking-filter-subject');
+  });
+
+  test('status select (Acompanhar) — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'tracking');
+    await auditSelectConsumer(page, '#tracking-filter-state');
+  });
+
+  test('a form select (Plano — Nova aula "Disciplina") — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await page.locator('#plan-new-unit-btn').click(); // reveals the Nova aula form
+    await auditSelectConsumer(page, '#plan-subject-select');
+  });
+
+  test('a select with a disabled option is skipped by keyboard/typeahead and never committed by click', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    // No product select currently ships a disabled <option> outside a live
+    // provider/data condition, so this exercises the real, already-mounted
+    // primitive's disabled-option handling directly by disabling a real
+    // option on a real enhanced select, then re-opening the menu (which
+    // rebuilds from the live DOM on every open — see select-ui.js
+    // buildItems()) — not a mock, the same code path every consumer uses.
+    await page.evaluate(() => {
+      const select = document.querySelector('#plan-filter-subject');
+      const opt = select.options[1]; // first real discipline, not "Todas as disciplinas"
+      if (opt) opt.disabled = true;
+    });
+    const { trigger, menu } = await locateSelectUi(page, '#plan-filter-subject');
+    await trigger.click();
+    const disabledItem = menu.locator('li.is-disabled').first();
+    await expect(disabledItem).toHaveAttribute('aria-disabled', 'true');
+
+    const beforeValue = await page.locator('#plan-filter-subject').inputValue();
+    // Playwright's own actionability check refuses to click an
+    // aria-disabled element by default — force it through, since that's
+    // exactly the scenario under test (does the PRIMITIVE itself refuse
+    // the commit, not just "did the click even happen").
+    await disabledItem.click({ force: true });
+    // Clicking a disabled item must not close the menu or change the value.
+    await expect(menu).toBeVisible();
+    await expect(page.locator('#plan-filter-subject')).toHaveValue(beforeValue);
+    await page.keyboard.press('Escape');
+  });
+
+  test('mobile viewport: discipline select opens, is fully usable, and does not clip off-screen', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedUatAndGoto(page, 'tracking');
+    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    const box = await menu.boundingBox();
+    expect(box).toBeTruthy();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390 + 1); // +1 for sub-pixel rounding
+    await page.keyboard.press('Escape');
+    await auditSelectConsumer(page, '#tracking-filter-subject');
+  });
+
+  // Closing the inventory loop: every remaining real <select> consumer
+  // gets the exact same full checklist, not just a DOM/enhancement audit —
+  // "full inventory + migration of every remaining native-popup select
+  // consumer, not just the ones already covered" (global standardization
+  // follow-up). All of these were already confirmed enhanced via a DOM
+  // audit (every <select> in the app carries .ui-select-native + a
+  // .ui-select wrapper + tabIndex -1), but had no dedicated live
+  // keyboard/mouse/no-duplicate/value-change proof of their own yet.
+
+  test('Plano — status filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-filter-state');
+  });
+
+  test('Plano — "Ordenar por" sort select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-sort');
+  });
+
+  test('Cadastro rápido (legacy screen) — discipline select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, null);
+    await page.evaluate(() => { window.location.hash = '#register'; });
+    await expect(page.locator('#screen-register')).toBeVisible({ timeout: 5000 });
+    await auditSelectConsumer(page, '#subject-select');
+  });
+
+  test('Estatísticas — global period select — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#stats-unit-filter-period');
+  });
+
+  test('Estatísticas — evolution chart discipline filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#evolution-filter-subject');
+  });
+
+  test('Estatísticas — evolution chart period filter — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'stats');
+    await auditSelectConsumer(page, '#evolution-filter-period');
+  });
+
+  test('menu width is never narrower than its trigger', async ({ page }) => {
+    await seedUatAndGoto(page, 'tracking');
+    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    const triggerBox = await trigger.boundingBox();
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect(menuBox.width).toBeGreaterThanOrEqual(triggerBox.width - 1); // -1 for sub-pixel rounding
+    await page.keyboard.press('Escape');
+  });
+
+  test('viewport-collision handling: a select near the bottom edge opens its menu upward instead of overflowing the viewport', async ({ page }) => {
+    // A short viewport guarantees the trigger sits close enough to the
+    // bottom edge that the menu (several options tall) cannot fit below it.
+    await page.setViewportSize({ width: 800, height: 320 });
+    await seedUatAndGoto(page, 'tracking');
+    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await trigger.scrollIntoViewIfNeeded();
+    const triggerBox = await trigger.boundingBox();
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    // Opened upward: the menu's bottom edge sits at/above the trigger's top.
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(triggerBox.y + 1);
+    // Never escapes the viewport on either edge.
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(320 + 1);
+    await page.keyboard.press('Escape');
+  });
+});
+
+test.describe('source-draft-subject-select (Materiais) — the one flagged as "not re-tested live"', () => {
+  const SERVER_PORT = 13977;
+  const API_BASE = `http://localhost:${SERVER_PORT}`;
+  const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+  let serverProcess;
+  let dataDir;
+
+  test.beforeAll(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-select-ui-'));
+    const dbPath = join(dataDir, 'e2e.db');
+    const sourcesDir = join(dataDir, 'sources');
+    serverProcess = spawn(process.execPath, [MAIN_JS], {
+      env: {
+        ...process.env,
+        SMARTLEARN_DB_PATH: dbPath,
+        SMARTLEARN_SOURCES_DIR: sourcesDir,
+        PORT: String(SERVER_PORT),
+        HOST: 'localhost',
+        NODE_ENV: 'test',
+        SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      },
+      stdio: 'ignore',
+    });
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    throw new Error('select-ui E2E: real server did not become ready in time');
+  });
+
+  test.afterAll(async () => {
+    serverProcess?.kill();
+    await new Promise((r) => setTimeout(r, 300));
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((base) => {
+      window.__SMARTLEARN_API_BASE__ = base;
+      window.__SMARTLEARN_REMOTE_MODE__ = true;
+      window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+    }, API_BASE);
+    const email = `select-ui-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+    const password = 'a genuinely long test password 1';
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('[data-screen="account"]').click();
+    await page.locator('#account-show-register').click();
+    await page.locator('#account-register-email').fill(email);
+    await page.locator('#account-register-password').fill(password);
+    await page.locator('#account-register-form button[type="submit"]').click();
+    await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+    await page.locator('#account-login-email').fill(email);
+    await page.locator('#account-login-password').fill(password);
+    await page.locator('#account-login-form button[type="submit"]').click();
+    await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('source-draft-subject-select uses the same shared primitive correctly, live', async ({ page }) => {
+    await page.locator('[data-screen="materials"]').click();
+    await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+
+    // First material creates a real existing subject to pick from later.
+    await page.setInputFiles('#sources-file-input', {
+      name: 'materia-a.pdf', mimeType: 'application/pdf',
+      buffer: buildFixturePdf(['Conteudo da primeira materia sobre Nefrologia']),
+    });
+    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    const firstItem = page.locator('.source-proposal-item').first();
+    await firstItem.locator('[data-action="generate-draft"]').click();
+    const firstPanel = firstItem.locator('.source-draft-panel');
+    await expect(firstPanel).toBeVisible();
+    await firstPanel.locator('.source-draft-subject-input').fill('Nefrologia Select UI');
+    await firstPanel.locator('[data-action="accept-draft"]').click();
+    await expect(firstPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+    // Second material's draft panel now offers an existing-subject select
+    // with a real alternative — the exact consumer flagged as untested.
+    await page.setInputFiles('#sources-file-input', {
+      name: 'materia-b.pdf', mimeType: 'application/pdf',
+      buffer: buildFixturePdf(['Conteudo da segunda materia sobre outro assunto']),
+    });
+    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    const secondItem = page.locator('.source-proposal-item').first();
+    await secondItem.locator('[data-action="generate-draft"]').click();
+    const secondPanel = secondItem.locator('.source-draft-panel');
+    await expect(secondPanel).toBeVisible();
+
+    const nativeSelector = '.source-draft-subject-select';
+    const nativeEl = secondPanel.locator(nativeSelector);
+    await expect(nativeEl).toBeVisible();
+
+    const wrap = nativeEl.locator('xpath=..');
+    const trigger = wrap.locator('.ui-select-trigger');
+    await expect(trigger).toBeVisible();
+    const menuId = await trigger.getAttribute('aria-controls');
+    expect(menuId, 'source-draft-subject-select trigger must have aria-controls').toBeTruthy();
+    const menu = page.locator(`#${menuId}`);
+
+    // Trigger shows the current (placeholder) value; menu lists EVERY real
+    // option, including the current/placeholder one (correctly
+    // aria-selected="true" — the Select-Only Combobox contract, not the
+    // context-switcher's own "alternatives only" rule) plus the real
+    // alternative ("Nefrologia Select UI").
+    const currentText = await nativeEl.evaluate((el) => el.options[el.selectedIndex]?.text ?? '');
+    await expect(trigger).toHaveText(currentText);
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('li[role="option"]', { hasText: 'Nefrologia Select UI' })).toHaveCount(1);
+    if (currentText) {
+      const currentOption = menu.locator('li[role="option"]', { hasText: currentText });
+      await expect(currentOption).toHaveCount(1);
+      await expect(currentOption).toHaveAttribute('aria-selected', 'true');
+    }
+
+    // Keyboard select it (typeahead — deterministic regardless of where it
+    // sits in the list), focus returns to (never left) the trigger,
+    // value/state update — and the existing-subject side effect (disabling
+    // the free-text input) still fires exactly like the mouse-driven
+    // selectOption() path already covered by e2e/draft-acceptance.spec.js.
+    await page.keyboard.press('n');
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveText('Nefrologia Select UI');
+    await expectSelectedText(nativeEl, 'Nefrologia Select UI');
+    await expect(secondPanel.locator('.source-draft-subject-input')).toBeDisabled();
+
+    await secondPanel.locator('[data-action="accept-draft"]').click();
+    await expect(secondPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+    const subjectsAfter = await page.evaluate(async (base) => {
+      const res = await fetch(`${base}/v1/subjects`, { credentials: 'include' });
+      return res.json();
+    }, API_BASE);
+    expect(subjectsAfter.subjects.length).toBe(1); // reused the existing subject, no duplicate created
+  });
+});
