@@ -40,3 +40,6 @@ playwright-report/
 
 # Generated tasklist board (projection of conductor plan.md; regenerate with `node scripts/tasklist.mjs --html`)
 conductor/.view/
+
+# Per-worktree resume position: overwritten, never history (see CLAUDE.md, Continuidade de contexto)
+.specs/HANDOFF.md

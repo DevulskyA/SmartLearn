@@ -43,5 +43,18 @@ Ao iniciar/terminar/trocar tarefa, criar tarefa ou surgir/sumir bloqueio: editar
 Ao iniciar uma sessão SmartLearn, ou após perder contexto: (1) localizar o
 worktree de `claude/smartlearn-v1-complete` (`git worktree list`); (2)
 confirmar branch/HEAD/status nesse worktree; (3) ler `.specs/EXECUTION.md`;
-(4) só então executar. Se o diretório atual estiver em `main`: não
-desenvolver — `main` é base de integração, somente leitura para o agente.
+(4) se existir `.specs/HANDOFF.md`, lê-lo como POSIÇÃO e reconciliá-lo com Git,
+worktree, arquivos-alvo e o teste decisivo antes de confiar nele (em conflito,
+Git/arquivos/testes vencem); (5) só então executar. Se o diretório atual
+estiver em `main`: não desenvolver — `main` é base de integração, somente
+leitura para o agente.
+
+## Continuidade de contexto (sessão × repositório)
+
+- Sessão = memória de trabalho. Repositório (Git + `.specs/`) = fonte de verdade persistente. `.specs/HANDOFF.md` = somente a posição atual.
+- `.specs/HANDOFF.md` é local por worktree (no `.gitignore`) e é SOBRESCRITO, nunca vira diário. Esquema: `OUTCOME= POSITION= REPO_WORKTREE_BRANCH= CHANGED_FILES= DECISIONS= PROOF= BLOCKERS= NEXT=`.
+- Decisão durável vai para a fonte autoritativa (`.specs/STATE.md`, ADR, spec da feature); o handoff apenas aponta para ela.
+- Atualizar o handoff antes de trocar de fase, de runtime (Claude↔Codex), de pausa longa ou de reset deliberado de contexto. Escolher modelo/effort no começo da fase; não trocar no meio sem evidência de que a escolha não serve.
+- Carregar só o que pode mudar a decisão atual (arquivo/símbolo/diff focados); não trazer histórico, specs de outras features nem logs inteiros.
+- Subagentes devolvem conclusão + evidência (arquivo:linha, comando e resultado), não logs.
+- Caminho errado: voltar ao último checkpoint bom (revert/rewind) em vez de resumir a tentativa falha para dentro do contexto.
