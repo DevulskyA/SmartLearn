@@ -21,6 +21,7 @@ import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
+import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, enhanceSelect, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -3083,55 +3084,10 @@ function createSourceProposalItem(proposal) {
   return li;
 }
 
-// "3", "1–3", "1, 3–4": a compact page list for provenance labels.
-function formatPageList(pageIndexes) {
-  const pages = [...new Set(pageIndexes)].sort((a, b) => a - b);
-  const parts = [];
-  for (let i = 0; i < pages.length;) {
-    let j = i;
-    while (j + 1 < pages.length && pages[j + 1] === pages[j] + 1) j += 1;
-    parts.push(j > i ? `${pages[i]}–${pages[j]}` : String(pages[i]));
-    i = j + 1;
-  }
-  return parts.join(", ");
-}
-
-// A collapsed "origin" block: which source pages a piece of content came from, with the page text
-// itself so the student can check the claim. `pages` = [{pageIndex, text}] (text may be missing).
-function createSourceDetails(label, pages) {
-  const details = document.createElement("details");
-  details.className = "study-now-source summary-source";
-  const summary = document.createElement("summary");
-  summary.textContent = label;
-  details.append(summary);
-  for (const page of pages) {
-    if (!page.text) continue;
-    details.append(
-      createTextElement("p", "study-now-error-label", `Página ${page.pageIndex}`),
-      createTextElement("p", "study-now-source-text", page.text),
-    );
-  }
-  return details;
-}
-
-// Where an AI-generated unit's Resumo Mestre came from (frozen at acceptance). Manual units, units
-// accepted before this existed, and the offline store have nothing to show — and show nothing.
-async function appendSummarySources(container, unitId) {
-  if (!REMOTE_MODE || !DB.learningUnits?.summarySources || !container) return;
-  let sources;
-  try {
-    sources = await DB.learningUnits.summarySources(unitId);
-  } catch {
-    return;
-  }
-  container.querySelector(":scope > .summary-source")?.remove();
-  if (!sources.length) return;
-  const name = sources[0].sourceName;
-  const pages = sources.map((s) => s.pageIndex);
-  container.append(createSourceDetails(
-    `Origem do resumo · ${name}, ${pages.length > 1 ? "páginas" : "página"} ${formatPageList(pages)}`,
-    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
-  ));
+// Where an AI-generated unit's Resumo Mestre came from: the presentation lives in source-details-ui.js; only the remote
+// learning-units API (none in the offline store) is wired in here.
+function appendSummarySources(container, unitId) {
+  return appendSummarySourcesFrom(container, unitId, REMOTE_MODE ? DB.learningUnits : null);
 }
 
 const DRAFT_ISSUE_LABELS = {
