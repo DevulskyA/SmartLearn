@@ -5,6 +5,10 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
+INTEGRATION_CANDIDATE (2026-09-30, LOCAL ONLY, never pushed): branch `tmp/integrate-cq-into-v1` @ 2c17635 = v1-complete@afc4fd9 + content-quality@01c67f7
+  (worktree `.claude/worktrees/integrate-tmp`). Gate PASS (unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2 after one classified pre-existing
+  load-sensitive flake). Windows smoke NOT run (access denied). Detail: conductor/tracks/content-quality/plan.md INTEGRATE-9. Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle.
+  PENDING: human decision to integrate into claude/smartlearn-v1-complete. NO_PUSH / NO_MERGE / NO_DEPLOY still in force.
 CURRENT_HEAD=0d26170
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/
