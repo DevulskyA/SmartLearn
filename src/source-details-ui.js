@@ -4,13 +4,7 @@
 //
 // Moved out of src/app.js unchanged in behaviour. It owns no state and reads no globals: the only thing it
 // needs from the outside (the remote learning-units API) is passed in by the caller.
-
-function createTextElement(tagName, className, text) {
-  const element = document.createElement(tagName);
-  element.className = className;
-  element.textContent = text;
-  return element;
-}
+import { createTextElement } from "./dom-utils.js";
 
 // "3", "1–3", "1, 3–4": a compact page list for provenance labels.
 export function formatPageList(pageIndexes) {

@@ -22,6 +22,7 @@ import * as MigrationUI from "./migration-ui.js";
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+import { createTextElement } from "./dom-utils.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, enhanceSelect, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -368,13 +369,6 @@ function getTomorrowValue(today) {
   const date = new Date(`${today}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + 1);
   return date.toISOString().slice(0, 10);
-}
-
-function createTextElement(tagName, className, text) {
-  const element = document.createElement(tagName);
-  element.className = className;
-  element.textContent = text;
-  return element;
 }
 
 function setReviewMessage(message = "", isError = false) {
