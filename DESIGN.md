@@ -11,7 +11,7 @@ Neutrals are tinted toward the accent hue (~262). Never `#000` or `#fff`.
 | `--color-surface` | `oklch(0.998 0.003 262)` | cards, panels |
 | `--color-surface-sunken` | `oklch(0.955 0.01 262)` | insets, secondary fills |
 | `--color-text` | `oklch(0.29 0.035 264)` | ink |
-| `--color-muted` | `oklch(0.55 0.025 260)` | secondary text |
+| `--color-muted` | `oklch(0.52 0.025 260)` | secondary text |
 | `--color-border` | `oklch(0.905 0.013 260)` | hairlines |
 | `--color-primary` | `oklch(0.52 0.155 264)` | primary actions, active nav |
 | `--color-primary-strong` | `oklch(0.46 0.16 264)` | hover / pressed |
