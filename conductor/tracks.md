@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/app-decomposition/plan.md`** — APP-DECOMPOSITION — Decompor src/app.js em módulos coesos · Status: IN_PROGRESS · ATIVA (GUI): DECOMP-1 · próximas: DECOMP-2, DECOMP-3, DECOMP-4 · concluídas (0): — · branch `claude/smartlearn-v1-complete`@6f2e816 · sincronizado 2026-10-01
+**`conductor/tracks/app-decomposition/plan.md`** — APP-DECOMPOSITION — Decompor src/app.js em módulos coesos · Status: IN_PROGRESS · ATIVA (GUI): DECOMP-3 · próximas: DECOMP-4 · concluídas (2): DECOMP-1, DECOMP-2 · branch `claude/smartlearn-v1-complete`@0b9fe71 · sincronizado 2026-10-01
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
