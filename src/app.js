@@ -305,6 +305,7 @@ const sourcesFileInput = document.querySelector("#sources-file-input");
 const sourcesMessage = document.querySelector("#sources-message");
 const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
 const sourcesProposalsList = document.querySelector("#sources-proposals-list");
+const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
 const studyNowSubjectEl = document.querySelector("#study-now-subject");
 const studyNowTitleEl = document.querySelector("#title-study-now");
 const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
@@ -819,6 +820,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   editSummaryButton.type = "button";
   editSummaryButton.className = "text-button review-edit-summary";
   editSummaryButton.dataset.action = "edit-summary";
+  editSummaryButton.setAttribute("aria-expanded", "false"); // the editor below opens and closes: expose its state
   editSummaryButton.textContent = "Editar Resumo";
 
   const summaryEditArea = document.createElement("div");
@@ -3054,6 +3056,7 @@ function createSourceProposalItem(proposal) {
   toggleBtn.type = "button";
   toggleBtn.className = "text-button";
   toggleBtn.dataset.action = "toggle-proposal-excerpt";
+  toggleBtn.setAttribute("aria-expanded", "false"); // a disclosure: expose whether the excerpt is open
   toggleBtn.textContent = "Ver trecho da fonte";
 
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
@@ -3378,6 +3381,7 @@ sourcesFileInput?.addEventListener("change", async () => {
   if (!file) return;
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
   if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+  if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
   try {
     setSourcesMessage("Enviando PDF...");
@@ -3418,6 +3422,8 @@ sourcesFileInput?.addEventListener("change", async () => {
     renderSourceProposals(chunkResult.proposals);
     // pages with no extractable text never became a proposal: say so, or silence reads as full coverage
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
+    // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
+    if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
     setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
   } catch (error) {
     setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
@@ -3440,9 +3446,11 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       const result = await SourceProposalsUI.getProposal(proposalId);
       if (result.ok) excerptEl.textContent = result.proposal.excerpt;
       excerptEl.hidden = false;
+      toggleBtn.setAttribute("aria-expanded", "true");
       toggleBtn.textContent = "Ocultar trecho da fonte";
     } else {
       excerptEl.hidden = true;
+      toggleBtn.setAttribute("aria-expanded", "false");
       toggleBtn.textContent = "Ver trecho da fonte";
     }
     return;
@@ -3462,6 +3470,7 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
       }
     } finally {
       saveBtn.disabled = false;
+      saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
     }
     return;
   }
@@ -4386,6 +4395,8 @@ async function judgeStudyNow(isCorrect) {
   if (!state || state.index >= state.exercises.length) return;
 
   if (state.judging) return; // a double tap must not judge the same question twice
+  const tapped = isCorrect ? "CORRECT" : "INCORRECT";
+  let adoptedOutcome = null; // set when the server already held an earlier tap (see the submit below)
   // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
   // this question with the same buttons and a plain message: nothing advances or is counted that the server
   // does not have, so the result, the evidence and "para reforçar" always agree.
@@ -4400,7 +4411,24 @@ async function judgeStudyNow(isCorrect) {
         studyNowQuestionArea.dataset.attemptId = String(started.id);
         try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
       }
-      await DB.attempts.submit(state.attemptId, { outcome: isCorrect ? "CORRECT" : "INCORRECT", assessmentMethod: "SELF_REPORT" });
+      let outcome = isCorrect ? "CORRECT" : "INCORRECT";
+      try {
+        await DB.attempts.submit(state.attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+      } catch (error) {
+        // The reply to an earlier tap was lost AFTER the server had recorded it: the attempt is already SUBMITTED
+        // with what that tap said. That outcome stands (an attempt is never rewritten); adopt it instead of leaving
+        // the student stuck on a question the server already holds.
+        const earlier = state.unconfirmed;
+        if (error?.code === "ALREADY_SUBMITTED" && earlier && earlier.attemptId === state.attemptId) {
+          adoptedOutcome = earlier.outcome;
+          outcome = earlier.outcome;
+        } else {
+          state.unconfirmed = { attemptId: state.attemptId, outcome }; // unknown whether the server received it
+          throw error;
+        }
+      }
+      state.unconfirmed = null;
+      isCorrect = outcome === "CORRECT";
       // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
       // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
       state.attemptIds.push(Number(state.attemptId));
@@ -4430,6 +4458,9 @@ async function judgeStudyNow(isCorrect) {
   persistStudySnapshot(state);
   renderStudyNowQuestion();
   if (state.index < state.exercises.length) studyNowRevealBtn.focus();
+  if (adoptedOutcome && adoptedOutcome !== tapped) {
+    studyNowMessage.textContent = `Sua resposta anterior já estava registrada como ${adoptedOutcome === "CORRECT" ? "acerto" : "erro"} e foi mantida.`;
+  }
 }
 
 studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
@@ -5454,6 +5485,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     console.error("Falha ao registrar exercícios externos.", error);
   } finally {
     button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   }
 });
 
@@ -5508,6 +5540,12 @@ async function flushPendingAttempt(exItem) {
     delete exItem.dataset.pendingOutcome;
     return true;
   } catch (error) {
+    // An earlier send of THIS outcome reached the server and only its reply was lost: the attempt is already
+    // SUBMITTED with exactly that outcome (the item's buttons are locked, so it cannot differ). It is not unsent.
+    if (error?.code === "ALREADY_SUBMITTED" && exItem.dataset.attemptId) {
+      delete exItem.dataset.pendingOutcome;
+      return true;
+    }
     console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
     return false;
   }
@@ -5625,6 +5663,7 @@ reviewDashboard.addEventListener("click", (event) => {
   const editArea = row.querySelector(".review-summary-edit");
   if (!editArea) return;
   editArea.hidden = !editArea.hidden;
+  button.setAttribute("aria-expanded", String(!editArea.hidden));
   if (!editArea.hidden) {
     editArea.querySelector("textarea")?.focus();
   }
@@ -5660,12 +5699,18 @@ reviewDashboard.addEventListener("click", async (event) => {
       setTimeout(() => { messageEl.textContent = ""; }, 2000);
     }
     row.querySelector(".review-summary-edit").hidden = true;
+    // the editor closed with the focused button inside it: focus goes back to the button that opened it
+    const opener = row.querySelector('[data-action="edit-summary"]');
+    opener?.setAttribute("aria-expanded", "false");
+    opener?.focus();
   } catch (error) {
     if (messageEl) {
       messageEl.classList.add("is-error");
       messageEl.textContent = "Não foi possível salvar o resumo.";
     }
     console.error("Falha ao salvar resumo.", error);
+    button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   } finally {
     button.disabled = false;
   }

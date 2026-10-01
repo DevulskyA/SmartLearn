@@ -121,3 +121,62 @@ test('ACCESS-3 Hoje: open a review, reveal, judge and complete it with the keybo
   await expect(again).toBeChecked({ timeout: 8000 });
   await expect(again).toBeFocused();
 });
+
+async function openTodayRow(page, title) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Form ${title}`, title, studyDate: '2026-08-01' });
+  await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} pergunta?`, answer: 'Certa', provenance: 'MANUAL' });
+  await page.locator('[data-screen="today"]').click();
+  const row = page.locator('.review-row', { hasText: title }).first();
+  await expect(row).toBeVisible({ timeout: 8000 });
+  await row.locator('.review-row-toggle').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('[data-action="toggle-external"]')).toBeVisible({ timeout: 5000 });
+  return { unit, row };
+}
+
+test('ACCESS-4 Hoje: "Exercícios externos" is completed with the keyboard and focus stays on the form', async ({ page }) => {
+  const { unit, row } = await openTodayRow(page, 'Aula forms externos');
+  await row.locator('[data-action="toggle-external"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-questions-input')).toBeFocused(); // opening the form puts the cursor in it
+  await expect(row.locator('[data-action="toggle-external"]')).toHaveAttribute('aria-expanded', 'true');
+
+  // a wrong entry is explained in place and focus goes to the field to fix
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-form-message')).toContainText('Informe o número de questões');
+  await expect(row.locator('.external-questions-input')).toBeFocused();
+
+  await page.keyboard.type('10');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('7');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-form-message')).toContainText('Registrado: 10 questões, 7 acertos', { timeout: 8000 });
+  // the pressed button was disabled while sending: focus must still be on the form, not lost to the page
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  const rows = (await (await page.evaluate(async ({ base, id }) => (await fetch(`${base}/v1/learning-evidence?unitId=${id}`, { credentials: 'include' })).json(), { base: API_BASE, id: unit.id })).evidence);
+  expect(rows.filter((r) => r.type === 'EXTERNAL')).toHaveLength(1);
+});
+
+test('ACCESS-4 Hoje: "Editar Resumo" is edited and saved with the keyboard; focus returns to the button that opened it', async ({ page }) => {
+  const { row } = await openTodayRow(page, 'Aula forms resumo');
+  const edit = row.locator('[data-action="edit-summary"]');
+  await edit.focus();
+  await expect(edit).toHaveAttribute('aria-expanded', 'false'); // the state of the disclosure is exposed
+  await page.keyboard.press('Enter');
+  await expect(edit).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.locator('.review-summary-edit textarea')).toBeFocused();
+  await page.keyboard.type('Resumo escrito só com o teclado.');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="save-summary"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.review-summary-message')).toContainText('Resumo salvo', { timeout: 8000 });
+  // the editor closed with the focused button inside it: focus goes back to "Editar Resumo", not to the page
+  await expect(edit).toBeFocused();
+  await expect(edit).toHaveAttribute('aria-expanded', 'false');
+  await expect(row.locator('.review-summary-text')).toContainText('Resumo escrito só com o teclado.');
+});

@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8 concluídos; NEXT-4 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1, ACCESS-4, ACCESS-5, SCANNED-2 concluídos; INTEGRATE-9 ativa)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: NEXT-4 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: INTEGRATE-9 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -646,11 +646,71 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: contagens acima.
       NOT_PROVEN: Android/Windows nativos; o CLI ainda precisa reconciliar.
       COMMIT: fast-forward para 97f8942.
-- [>] **NEXT-4 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
+- [✓] **NEXT-4 Selecionar automaticamente a próxima sprint produtiva** — OWNER: GUI
       SPRINT_GOAL: decidir e abrir a próxima melhoria de maior valor (ganho x confiança / custo).
       DETAILS: candidatos já mapeados nos NOT_PROVEN: formulário de exercícios externos e edição de resumo da Hoje por teclado; propostas de trecho de Materiais (renomear/ocultar) por teclado; nota de páginas puladas some ao recarregar (SCANNED-1); raiz de produto do UX-1 (Plano recolhendo linha ao re-renderizar); reteste do Estudar agora sob falha de rede. Bloqueadas por decisão humana: VERDICT-1, IMPORT-1; por chave: REALMODEL-1.
       DONE_WHEN: sprint concreta aberta com SPRINT_GOAL/BEFORE/AFTER/PROOF.
       DEPENDENCIES: INTEGRATE-8.
+      EVIDENCE: escolha do usuário (2026-09-20): NEXT-4 = reteste do Estudar agora sob falha de rede; depois A) só-teclado dos formulários de Hoje, B) só-teclado das propostas de Materiais, C) persistência da nota de páginas puladas.
+      PRODUCT_DELTA: sprint definida (RETESTNET-1).
+- [✓] **RETESTNET-1 Reteste do Estudar agora sob falha de rede** — OWNER: GUI
+      SPRINT_GOAL: garantir que o que o aluno vê, o que o servidor tem e a evidência longitudinal coincidam quando a rede cai durante o reteste ("Refazer erros").
+      BEFORE: o reteste usa o mesmo caminho de julgamento do estudo (servidor primeiro, RESILIENCE-1); só o caso "o pedido nunca chegou" estava provado.
+      AFTER: também o caso "o servidor RECEBEU e gravou, mas a resposta se perdeu" fica coerente.
+      SCOPE: src/app.js (judgeStudyNow, flushPendingAttempt) + e2e novo.
+      PROOF: e2e com route.fetch()+abort() (servidor processa, resposta some).
+      DONE_WHEN: nenhum caso deixa o aluno preso nem mostra como gravado o que o servidor não tem.
+      DEPENDENCIES: NEXT-4.
+      EVIDENCE: CARACTERIZAÇÃO (e2e/study-retest-network.spec.js, servidor real, Chromium real): (1) pedido de envio ABORTADO antes de chegar: OK já hoje — a tela não avança, "para reforçar" continua 1, o retry conclui, "1/1 erros corrigidos", reforço 0, evidência agregada continua 1 (o reteste não fabrica evidência); (2) DEFEITO REAL: o servidor gravou a correção mas a resposta se perdeu -> o retry recebia ALREADY_SUBMITTED, a tela repetia "Não foi possível registrar" para sempre (aluno preso; servidor e tela discordando); vermelho provado. MESMA CLASSE em Hoje: flushPendingAttempt tratava ALREADY_SUBMITTED como falha, então concluir a revisão avisava "não consegui marcar 1 item" à toa; vermelho provado. CORREÇÃO mínima: no estudo/reteste o cliente lembra o desfecho do último envio de desfecho incerto (state.unconfirmed, por tentativa); ao receber ALREADY_SUBMITTED da MESMA tentativa adota o que o servidor tem (uma tentativa nunca é reescrita) e, se o aluno tocou o botão oposto, avisa "Sua resposta anterior já estava registrada como acerto/erro e foi mantida."; em Hoje ALREADY_SUBMITTED de um item com tentativa própria conta como enviado (botões travados = desfecho único). Sem chave de idempotência nova, sem mudança de servidor, tentativas históricas intactas, nenhuma evidência fabricada. Testes: study-retest-network (3) + resilience (+1); regressão 49/49 e2e (resilience, hoje-block-retest, keyboard-today, feature-parity, server-authority, priorities-hoje, study-resume, study-now-flow, exam-mode) e unit 398/398.
+      PRODUCT_DELTA: o aluno nunca fica preso nem vê aviso falso quando a resposta de gravação se perde; a tela adota o que o servidor tem.
+      PROOF_OBSERVED: contagens acima; vermelho -> verde.
+      NOT_PROVEN: falha de rede ao INICIAR o reteste a partir do resultado (usa dados já em memória); outros pontos que enviam desfechos (prova) com resposta perdida (a prova tem a própria idempotência, não re-medida aqui); Android/Windows nativos.
+      COMMIT: b2846d4.
+- [✓] **ACCESS-4 Formulários de Hoje só com teclado (exercícios externos e edição do resumo)** — OWNER: GUI
+      SPRINT_GOAL: repetir a auditoria só-teclado nos dois formulários da revisão de Hoje que ACCESS-3 não varreu e corrigir só o que impedir concluir.
+      BEFORE: NOT_PROVEN de ACCESS-3: "Exercícios externos" e "Editar Resumo" não foram varridos por teclado.
+      AFTER: ambos concluídos só com Tab/Enter/Space, foco nunca cai no body, erros anunciados, foco visível.
+      WHY: são a saída para quem estuda com material externo; sem teclado o aluno fica de fora.
+      SCOPE: e2e só-teclado + a menor correção em src/app.js / index.html.
+      PROOF: sonda de foco -> defeito -> teste vermelho -> correção -> verde.
+      DONE_WHEN: os dois formulários concluídos só com teclado, verdes, regressão de Hoje verde.
+      DEPENDENCIES: RETESTNET-1.
+      EVIDENCE: e2e/keyboard-today.spec.js (+2). DEFEITOS REAIS: (1) "Registrar" (exercícios externos) e "Salvar" (resumo) se desabilitavam com foco -> o foco caía no body; agora voltam ao botão, e ao salvar o resumo o foco vai para "Editar Resumo" (o editor fecha); (2) "Editar Resumo" não expunha se o editor estava aberto -> aria-expanded. SEM defeito: abrir o formulário externo leva o cursor ao campo, erro de validação explicado no lugar com foco no campo, mensagens já eram role=status, campos já tinham rótulo. Vermelho -> verde; 36/36 e2e de Hoje/relacionados, unit 398/398.
+      PRODUCT_DELTA: os dois formulários de Hoje se completam só com teclado sem perder o foco.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: leitor de tela real; falha de rede nesses dois formulários.
+      COMMIT: e33b04a.
+- [✓] **ACCESS-5 Propostas de trecho de Materiais só com teclado** — OWNER: GUI
+      SPRINT_GOAL: (item B da lista do usuário) varrer título/salvar/ver trecho das propostas por teclado.
+      DONE_WHEN: concluído só com teclado, foco nunca perdido, controles nomeados.
+      DEPENDENCIES: ACCESS-4.
+      EVIDENCE: e2e/keyboard-study-materials.spec.js (+1). DEFEITOS REAIS: campo de título sem nome acessível (várias linhas iguais) -> aria-label "Título do trecho, página N"; "Ver trecho da fonte" sem estado -> aria-expanded; "Salvar título" desabilitava com foco (foco ao body) -> foco preservado. Vermelho -> verde; 17/17 e2e de Materiais.
+      PRODUCT_DELTA: o aluno de teclado/leitor de tela renomeia trechos e lê a fonte sem perder o foco.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: leitor de tela real.
+      COMMIT: f7e2de8.
+- [✓] **SCANNED-2 A nota de páginas puladas fica junto das propostas** — OWNER: GUI
+      SPRINT_GOAL: (item C) a nota de SCANNED-1 vivia só na linha de status, que a ação seguinte sobrescreve.
+      DONE_WHEN: a nota permanece enquanto as propostas estão na tela e some no próximo envio.
+      DEPENDENCIES: ACCESS-5.
+      EVIDENCE: medição: renomear um título já apagava a nota (a mensagem de status é única). Correção: parágrafo próprio #sources-coverage-note (role=note) dentro do painel de propostas, preenchido após a extração e limpo no próximo envio (e2e/source-proposals.spec.js +1, vermelho -> verde; 16/16 e2e de Materiais). Não há tela que liste fontes já enviadas: recarregar a página descarta o painel de propostas por desenho do produto atual, então "persistir depois de recarregar" exigiria uma lista de fontes (funcionalidade nova, NÃO feita).
+      PRODUCT_DELTA: o aluno continua vendo o que o resumo não cobre enquanto trabalha nas propostas.
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: sobreviver a recarregar (precisa de lista de fontes); PDF real escaneado.
+      COMMIT: ver git log (fix(materials): coverage note stays with the proposals).
+- [>] **INTEGRATE-9 Gate completo (GUI) e decisão de integração** — OWNER: GUI
+      SPRINT_GOAL: provar o lote RETESTNET-1..SCANNED-2 com o gate completo no HEAD final, sem avançar o canônico sem autorização.
+      BEFORE: canônico em 73f4929; GUI 6 commits de código à frente.
+      AFTER: unit + server + e2e completos PASS no GUI; integração no canônico só com autorização do usuário (que pediu não fazer push/merge/deploy sem ela).
+      SCOPE: gate; sem mudança de código.
+      PROOF: `node scripts/test-live.mjs status` no GUI.
+      DONE_WHEN: gate verde e a pergunta de integração/push feita ao usuário.
+      DEPENDENCIES: SCANNED-2.
+      EVIDENCE: gate no GUI pelo wrapper, 3 rodadas completas. Rodada 1 (df988e5): unit 398, server 490, e2e 173/174 — falha em author-why.spec.js (clique em Plano depois de re-render; isolado 20/20). Rodada 2 (2982a2c, teste de author-why endurecido): unit 398, e2e 173/174 — falha diferente em exam-mode EXAM-4 (lia a mesma pergunta duas vezes: o teste lia antes da tela avançar; isolado 16/16 depois de esperar o progresso) e server 489/490 — process-smoke "occupied port" estourou o waitFor sob carga (isolado 4/4). Nenhuma das falhas toca código alterado nesta rodada (Estudar agora/Hoje/Materiais/servidor de extração); TODAS são corridas de harness, cada uma numa linha diferente — padrão recorrente (~1 flake por gate completo de ~15 min). Correções só de teste: author-why (esperar a criação da disciplina e a linha do Plano), exam-mode EXAM-4 (esperar o progresso). GATE COMPLETAMENTE VERDE NUMA ÚNICA RODADA: NÃO obtido neste lote; cada falha foi caracterizada e provada não-produto por repetição isolada, mas o critério "gate verde" exige uma rodada limpa antes de integrar.
+      PRODUCT_DELTA: nenhum novo; o lote RETESTNET-1..SCANNED-2 está provado por especificação e regressão proporcional (várias dezenas de e2e verdes por fatia).
+      PROOF_OBSERVED: acima.
+      NOT_PROVEN: uma rodada completa 100% verde do lote; canônico NÃO foi tocado (usuário exigiu autorização para push/merge). Próximo passo sugerido: uma rodada limpa no HEAD final antes de integrar, e uma tarefa FLAKE-2 para varrer helpers de teste com o padrão "ler estado antes de o Plano/tela terminar de renderizar" (já corrigido em product-value, UX-1, author-why, EXAM-4).
+      COMMIT: ver git log.
 
 ## Evidência CQ-1
 
