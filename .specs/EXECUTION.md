@@ -5,10 +5,11 @@
 PROJECT=SmartLearn
 WORK_BRANCH=claude/smartlearn-v1-complete
 MAIN_MODE=READ_ONLY_FOR_AGENT
-INTEGRATION_CANDIDATE (2026-09-30, LOCAL ONLY, never pushed): branch `tmp/integrate-cq-into-v1` @ 2c17635 = v1-complete@afc4fd9 + content-quality@01c67f7
-  (worktree `.claude/worktrees/integrate-tmp`). Gate PASS (unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2 after one classified pre-existing
-  load-sensitive flake). Windows smoke NOT run (access denied). Detail: conductor/tracks/content-quality/plan.md INTEGRATE-9. Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle.
-  PENDING: human decision to integrate into claude/smartlearn-v1-complete. NO_PUSH / NO_MERGE / NO_DEPLOY still in force.
+INTEGRATED (2026-10-01, LOCAL ONLY, never pushed): claude/smartlearn-v1-complete fast-forwarded afc4fd9 -> 6f2e816 (= v1 + content-quality@01c67f7).
+  Post-integration gate @ 6f2e816: lint 0 err, inventory PASS, unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2. OPEN (not resolved): pre-existing
+  load-sensitive flake in content-quality-flow.spec.js; server npm audit (brace-expansion/fast-uri/fastify); Windows smoke never run (access denied).
+  Detail: conductor/tracks/content-quality/plan.md INTEGRATE-9. Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle.
+  ACTIVE TRACK: conductor/tracks/app-decomposition/plan.md (DECOMP-1 source-details-ui.js). NO_PUSH / NO_MERGE(main) / NO_DEPLOY still in force.
 CURRENT_HEAD=0d26170
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/

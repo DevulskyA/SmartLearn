@@ -7,10 +7,10 @@
 
 ```
 Track:    content-quality                      Status: IN_PROGRESS
-MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1, ACCESS-4, ACCESS-5, SCANNED-2 concluídos; INTEGRATE-9 ativa)
+MARCO ATUAL: desenvolvimento contínuo por sprints produtivas (CQ-1..7, GUI-01..05 = EXAM-1..3, AUTHOR-1, EXAM-4/5, UX-1, ATTEMPT-1, INTEGRATE-1, TESTLIVE-1, FLAKE-1, INTEGRATE-5, NEXT-2, RETEST-1, ACCESS-2, INTEGRATE-6, NEXT-3, SCANNED-1, INTEGRATE-7, ACCESS-3, INTEGRATE-8, NEXT-4, RETESTNET-1, ACCESS-4, ACCESS-5, SCANNED-2, INTEGRATE-9 concluídos; sem tarefa ativa — track em espera de VERDICT-1/IMPORT-1/REALMODEL-1)
 Iniciado: 2026-09-19
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: INTEGRATE-9 (GUI). Uma ativa POR AGENTE é válido (CLI publica a dele em CLI.md).
+ATIVA AGORA: nenhuma neste track (restantes bloqueadas por decisão/chave). Trabalho ativo: track app-decomposition. Uma ativa POR AGENTE é válido.
 BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=EXAM-2 ✓ · GUI-04=EXAM-3 ✓ · GUI-05=JORNADA ✓. Depois: seleção automática (AUTHOR-1, EXAM-4, ...).
 ```
 
@@ -698,7 +698,7 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       PROOF_OBSERVED: acima.
       NOT_PROVEN: sobreviver a recarregar (precisa de lista de fontes); PDF real escaneado.
       COMMIT: ver git log (fix(materials): coverage note stays with the proposals).
-- [>] **INTEGRATE-9 Gate completo (GUI) e decisão de integração** — OWNER: GUI
+- [✓] **INTEGRATE-9 Gate completo (GUI) e decisão de integração** — OWNER: GUI
       SPRINT_GOAL: provar o lote RETESTNET-1..SCANNED-2 com o gate completo no HEAD final, sem avançar o canônico sem autorização.
       BEFORE: canônico em 73f4929; GUI 6 commits de código à frente.
       AFTER: unit + server + e2e completos PASS no GUI; integração no canônico só com autorização do usuário (que pediu não fazer push/merge/deploy sem ela).
@@ -715,7 +715,9 @@ BACKLOG AUTORIZADO (2026-09-19): GUI-01=CQ-7 ✓ · GUI-02=EXAM-1 ✓ · GUI-03=
       GATE NO HEAD 2c17635: lint 0 erros (22 avisos pré-existentes), test:inventory PASS (147 arquivos), unit 401/401, server 623/623, clippy -D warnings limpo, cargo test 29/29, build OK (CI=1 só para o guard de branch), npm audit root 0 vulnerabilidades. npm audit do server: 1 alta (brace-expansion) + 1 moderada (fast-uri), IDÊNTICO no baseline afc4fd9 e sem mudança de lockfile no delta = pré-existente, NÃO tratado aqui.
       E2E: rodada 1 = 180/181 (falha em content-quality-flow.spec.js:143, beforeEach, #account-show-register invisível por 30 s); rodadas A e B consecutivas no mesmo HEAD = 181/181 e 181/181. FLAKE CLASSIFICADO como pré-existente e sensível a carga: isolado sem carga 6/6; sob carga de CPU (14 processos) o mesmo spec falha de forma intermitente tanto no merge (2/24) quanto no baseline afc4fd9 (2/24), assinatura #sources-message preso em "Extraindo texto do PDF..." além de 10 s. Nenhum código do delta toca esse caminho. NOT_PROVEN: a causa exata da falha original (beforeEach, sem carga conhecida) não foi reproduzida; spec/retries/workers NÃO foram alterados.
       SMOKE WINDOWS dirigido: NÃO EXECUTADO. O build `tauri dev` subiu, mas o acesso de computer-use ao app foi negado pelo usuário; processos encerrados. Delta é só JS de frontend (sem Rust/IPC); superfícies tocadas já cobertas por e2e (keyboard-today, keyboard-study-materials, source-proposals, study-retest-network, resilience).
-      ESTADO: gate automatizado PASS no HEAD temporário; INTEGRATE-9 permanece [>] até a decisão humana de integração. Merge canônico, push e deploy NÃO realizados.
+      INTEGRADO (2026-10-01, usuário autorizou): fast-forward LOCAL de claude/smartlearn-v1-complete afc4fd9 -> 6f2e816 (ancestralidade e posição confirmadas antes). Sem push/deploy/merge em main.
+      GATE PÓS-INTEGRAÇÃO @ 6f2e816 (código idêntico a 2c17635; 6f2e816 só adiciona docs sobre ele): lint 0 erros, inventory PASS, unit 401/401, server 623/623, clippy limpo, cargo 29/29, build OK sem CI=1, e2e 181/181 em duas rodadas completas consecutivas (a 2ª foi refeita do zero após a sessão cair em 55/181).
+      PENDENTES NÃO RESOLVIDOS (registrados, não marcados como resolvidos): (1) flake pré-existente e sensível a carga de content-quality-flow.spec.js; (2) npm audit do server (brace-expansion alta, fast-uri x2 moderada, fastify moderada); (3) smoke Windows não executado (acesso de computer-use negado).
 
 ## Evidência CQ-1
 

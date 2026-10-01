@@ -9,6 +9,11 @@
 
 ## CURRENT STATE (compact — read this first; prose checkpoints below are supporting detail, not a substitute)
 
+INTEGRATION (2026-10-01, LOCAL ONLY): content-quality@01c67f7 integrated into claude/smartlearn-v1-complete by fast-forward afc4fd9 -> 6f2e816 (temp merge 2c17635 resolved one conflict in src/app.js,
+kept the v1 aria-label required by e2e/materials-a11y.spec.js). Gate @ 6f2e816: unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2. NOT resolved: pre-existing load-sensitive flake
+(content-quality-flow.spec.js, reproduces on baseline afc4fd9 under CPU load), server npm audit, Windows smoke (access denied). Migrations: 001-029 on v1, next free = 030.
+ACTIVE_TRACK (2026-10-01): conductor/tracks/app-decomposition/plan.md — decompose src/app.js (audit @ 6f2e816: no integration blocker; first border = source-details-ui.js, then Materiais/Drafts).
+
 CONTENT_QUALITY (2026-09-19, branch claude/content-quality, merged with v1-complete@6f32f4f; NOT yet fast-forwarded into claude/smartlearn-v1-complete): track DONE. Draft pipeline = 1 generation -> deterministic screen
 (+ live provider only: 1 model audit, <=1 targeted repair) -> DRAFT -> human accept; summary provenance frozen (mig 022 unit_summary_citations); exercise explanation (mig 023);
 SMARTLEARN_AI_API_URL endpoint override. Gate ce31b64: unit 378, server 466, e2e 119/120 (1 = production-build spec blocked by the work-branch guard; passes with CI=1). NOT_PROVEN: real-model quality.
