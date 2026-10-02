@@ -146,6 +146,9 @@ for (const { theme, width, height } of CASES) {
       const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
       const blocking = result.violations.filter((v) => ['critical', 'serious'].includes(v.impact) && !ACCEPTED[v.id]);
       for (const line of summarize(blocking)) found.push(`[${screen.name}] ${line}`);
+      if (process.env.A11Y_REPORT_ALL) {
+        for (const line of summarize(result.violations.filter((v) => !blocking.includes(v)))) console.log(`A11Y-NONBLOCKING [${theme} ${width}px ${screen.name}] ${line}`);
+      }
     }
     expect(found, found.join('\n')).toEqual([]);
   });
