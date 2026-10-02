@@ -156,6 +156,22 @@ test('duplicate intent under the same operation key (double-click) collapses int
   expect(reviewCount, 'exactly 16 reviews, not 32').toBe(16);
 });
 
+/**
+ * "Aula salva. 16 revisões criadas." is transient BY DESIGN: the save handler writes it and clears it again as
+ * soon as Plano has been redrawn. Asserting the text at one instant races that clear (it read "" whenever the
+ * redraw was fast). This records every text the message element ever shows, so the assertion is about what the
+ * student was shown, not about when the test happened to look. Call before the click that triggers the save.
+ */
+async function recordFormMessages(page) {
+  await page.evaluate(() => {
+    const el = document.querySelector('#plan-unit-form-message');
+    window.__planMessagesSeen = [];
+    new MutationObserver(() => { if (el.textContent) window.__planMessagesSeen.push(el.textContent); })
+      .observe(el, { childList: true, characterData: true, subtree: true });
+  });
+}
+const messagesSeen = (page) => page.evaluate(() => (window.__planMessagesSeen ?? []).join(' | '));
+
 test('response lost after the server already committed: a same-key retry replays the original result instead of duplicating', async ({ page }) => {
   const email = uniqueEmail('lost');
   await enableRemoteMode(page);
@@ -188,8 +204,9 @@ test('response lost after the server already committed: a same-key retry replays
   await expect(page.locator('#plan-study-title')).toHaveValue(title);
 
   await page.unroute('**/v1/learning-units');
+  await recordFormMessages(page);
   await page.locator('#plan-unit-save-btn').click();
-  await expect(page.locator('#plan-unit-form-message')).toContainText(/aula salva/i, { timeout: 15000 });
+  await expect.poll(() => messagesSeen(page), { timeout: 15000 }).toMatch(/aula salva/i);
 
   await page.reload();
   await page.waitForLoadState('networkidle');
@@ -205,8 +222,9 @@ test('a real mid-transaction failure (duplicate subject name) leaves zero partia
 
   const subjectName = 'Disciplina Colisao E2E';
   await fillNewUnitForm(page, { subjectName, title: 'Aula A Colisao E2E', studyDate: '2026-02-03' });
+  await recordFormMessages(page);
   await page.locator('#plan-unit-save-btn').click();
-  await expect(page.locator('#plan-unit-form-message')).toContainText(/aula salva/i, { timeout: 5000 });
+  await expect.poll(() => messagesSeen(page), { timeout: 5000 }).toMatch(/aula salva/i);
 
   // Same subject NAME again: resolveOrCreateSubject's own duplicate check
   // (server/src/services/learning-units.js) throws INSIDE the same
