@@ -16,7 +16,7 @@ STATE (2026-10-01, LOCAL ONLY, never pushed): claude/smartlearn-v1-complete = v1
   KNOWN LIMIT: restore refuses >5000 rows / >5 MB (SMARTLEARN_IMPORT_MAX_ROWS/BYTES) with a clean 413 at PREVIEW; nothing is written.
   HUMAN-GATED: T51 deployment, push of PR #6, merge to main. (REALMODEL-1 was unblocked on 2026-10-03 by the human decision to use a CODEX provider — the already-logged-in Codex CLI, no API key — and is DONE locally; see content-quality/plan.md.) (VERDICT-1 and IMPORT-1 were decided by the human on 2026-10-02 and are DONE locally.) Tracks: app-decomposition DONE, product-closure DONE.
   Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle. NO_PUSH / NO_MERGE(main) / NO_DEPLOY still in force.
-MASTER_ID=SMARTLEARN_PRODUCT_EVOLUTION_V3 (.specs/governance/SMARTLEARN_PRODUCT_EVOLUTION_V3.md) · ACTIVE_HORIZON=H0 · ACTIVE_TRACK=conductor/tracks/v1-validation/plan.md · ACTIVE_TASK=VALID-6 (VALID-4/5 bloqueadas: HUMAN_GATE = caminho absoluto de 1 PDF médico autorizado)
+MASTER_ID=SMARTLEARN_PRODUCT_EVOLUTION_V3 (.specs/governance/SMARTLEARN_PRODUCT_EVOLUTION_V3.md) · ACTIVE_HORIZON=H0 · ACTIVE_TRACK=conductor/tracks/v1-validation/plan.md · ACTIVE_TASK=VALID-4 BLOQUEADA no HUMAN_GATE = caminho absoluto de 1 PDF médico autorizado (VALID-6 e VALID-7 feitas; VALID-5 e VALID-8 dependem dele)
 CURRENT_HEAD=ver `git rev-parse --short HEAD` (7b54c25 ao adotar o plano mestre; o worktree tinha trabalho em andamento do VALID-2 sem commit)
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/
