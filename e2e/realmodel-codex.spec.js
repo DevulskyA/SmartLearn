@@ -16,7 +16,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 // with one deliberate prompt-injection sentence the model must treat as inert source text.
 
 test.skip(process.env.SMARTLEARN_E2E_CODEX !== '1', 'opt-in: set SMARTLEARN_E2E_CODEX=1 (spends a real Codex run)');
-test.setTimeout(900_000);
+test.setTimeout(1_500_000);
 
 const SERVER_PORT = 13956;
 const API_BASE = `http://localhost:${SERVER_PORT}`;
@@ -104,10 +104,114 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
 
   // A human accepts it: only now does study content exist.
   await draftPanel.locator('.source-draft-subject-input').fill('Fisiologia renal E2E');
-  await draftPanel.locator('.source-draft-date-input').fill('2026-04-01');
+  await draftPanel.locator('.source-draft-date-input').fill(localToday()); // a student accepts the lesson TODAY: its first review is tomorrow, so the unit is not yet due
   await draftPanel.locator('[data-action="accept-draft"]').click();
   await expect(draftPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 15000 });
 
+  // ---- VALID-6: the rest of the learner journey, now on REAL model content ----------------------------------------------
+  const noHorizontalScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+  const api = (path) => page.evaluate(async ({ base, path }) => (await fetch(`${base}${path}`, { credentials: 'include' })).json(), { base: API_BASE, path });
+
+  // PLANO: the unit is there, with where the summary came from and every accepted question
   await page.locator('[data-screen="plan"]').click();
-  await expect(page.locator('#screen-plan .plan-row-compact .subject-chip', { hasText: 'Fisiologia renal E2E' })).toBeVisible({ timeout: 5000 });
+  const row = page.locator('.plan-row', { hasText: 'fisiologia-renal' });
+  await row.locator('.plan-expand-btn').click();
+  await expect(row.locator('.summary-source')).toContainText('Origem do resumo', { timeout: 5000 });
+  const n = await row.locator('.plan-exercise-item').count();
+  expect(n).toBeGreaterThanOrEqual(5);
+  await expect(row.locator('[data-action="plan-study-now"]')).toBeVisible();
+  await expect(row.locator('[data-action="plan-exam"]')).toBeVisible();
+
+  // ESTUDAR AGORA with feedback: every question reveals the answer and the WHY; the student misses the first one
+  await row.locator('[data-action="plan-study-now"]').click();
+  await expect(page.locator('#screen-study-now')).toBeVisible();
+  // The model may leave a question's explanation empty (the schema allows it). Measure it instead of assuming: when an
+  // explanation exists the student must see it as "Por quê:"; the count without one is recorded as a content-quality fact.
+  let withoutExplanation = 0;
+  for (let i = 0; i < n; i += 1) {
+    await page.locator('#study-now-reveal-btn').click();
+    await expect(page.locator('#study-now-answer-text, #study-now-explanation-text').first()).toBeVisible();
+    const why = (await page.locator('#study-now-explanation-text').innerText()).trim();
+    if (why === '') withoutExplanation += 1;
+    else expect(why).toMatch(/^Por quê:/);
+    await page.locator(`#study-now-${i === 0 ? 'incorrect' : 'correct'}-btn`).click();
+  }
+  test.info().annotations.push({ type: 'questions-without-explanation', description: `${withoutExplanation} of ${n}` });
+  console.log(`REAL-CONTENT questions without explanation in Estudar agora: ${withoutExplanation} of ${n}`);
+  expect(withoutExplanation).toBeLessThan(n);
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 10000 });
+  const wrong = page.locator('#study-now-errors-list .study-now-error-item');
+  await expect(wrong).toHaveCount(1);
+  await expect(wrong.locator('.study-now-source')).toContainText('página');
+  await expect(page.locator('#study-now-retest-btn')).toBeVisible();
+  await expect(page.locator('#study-now-done-btn')).toBeVisible();
+  expect(await noHorizontalScroll()).toBe(true);
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await noHorizontalScroll()).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // RETESTE: redo the error right away — recovery, not evidence
+  await page.locator('#study-now-retest-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 10000 });
+  expect((await api('/v1/learning-evidence')).evidence).toHaveLength(1);
+  await page.locator('#study-now-done-btn').click();
+
+  // PROVA: measure first (no answer, no why before submitting), then correct with the gabarito beside the student's own answer
+  await page.locator('[data-screen="plan"]').click();
+  const row2 = page.locator('.plan-row', { hasText: 'fisiologia-renal' });
+  await row2.locator('.plan-expand-btn').click();
+  await row2.locator('[data-action="plan-exam"]').click();
+  await expect(page.locator('#exam-progress')).toHaveText(`Questão 1 de ${n}`);
+  for (let i = 0; i < n; i += 1) {
+    expect(await page.locator('#screen-exam').innerText()).not.toContain('Por quê');
+    await page.locator('#exam-answer-input').fill(`resposta do aluno ${i + 1}`);
+    if (i < n - 1) await page.locator('#exam-next-btn').click();
+  }
+  await page.locator('#exam-submit-btn').click();
+  await page.locator('#exam-submit-confirm-btn').click();
+  await expect(page.locator('#exam-submitted')).toBeVisible({ timeout: 10000 });
+  const items = page.locator('.exam-review-item');
+  await expect(items).toHaveCount(n);
+  await expect(items.first().locator('.exam-review-student')).toHaveText('resposta do aluno 1');
+  await expect(items.first().locator('.exam-review-correct')).not.toHaveText('');
+  await expect(items.first().locator('.exam-review-why')).not.toHaveText('');
+  await expect(page.locator('#exam-result-score')).toBeHidden();
+  for (let i = 0; i < n; i += 1) await items.nth(i).locator(i === 0 ? '.exam-wrong-btn' : '.exam-correct-btn').click();
+  await expect(page.locator('#exam-result-score')).toContainText(`${n - 1}/${n} corretas`);
+  await page.locator('#exam-finalize-btn').click();
+  await expect(page.locator('#exam-final-note')).toContainText(`Resultado registrado no seu histórico (${n - 1}/${n})`);
+
+  // EVIDÊNCIA: the study and the exam each wrote exactly one row; the missed item is "para reforçar"
+  const evidence = (await api('/v1/learning-evidence')).evidence;
+  expect(evidence).toHaveLength(2);
+  expect(evidence.map((e) => `${e.correctCount}/${e.questionsCount}`)).toEqual([`${n - 1}/${n}`, `${n - 1}/${n}`]);
+  expect(Object.values((await api('/v1/reinforcement')).byUnit).flat()).toHaveLength(1);
+
+  // PRÓXIMA AÇÃO: Hoje suggests it, Estatísticas shows the unit, and the suggestion leads back to the unit (no dead end)
+  await page.locator('[data-screen="today"]').click();
+  const weak = page.locator('#block-weak');
+  await expect(weak).toBeVisible({ timeout: 10000 });
+  await expect(weak.locator('.weak-practice-row', { hasText: 'fisiologia-renal' })).toContainText('1 exercício para reforçar');
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await noHorizontalScroll()).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('[data-screen="stats"]').click();
+  await page.locator('#tab-stats-unit').click();
+  await expect(page.locator('#unit-stats-list')).toContainText('fisiologia-renal', { timeout: 10000 });
+  await page.locator('[data-screen="today"]').click();
+  await page.locator('#block-weak .weak-practice-row', { hasText: 'fisiologia-renal' }).getByRole('button', { name: 'Ver no Plano' }).click();
+  await expect(page.locator('.plan-row', { hasText: 'fisiologia-renal' }).locator('.plan-reinforce-chip')).toHaveText('1 para reforçar', { timeout: 10000 });
+
+  // PERSISTÊNCIA: a reload keeps the whole journey; the unit, its questions and the evidence are on the server
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  expect((await api('/v1/learning-evidence')).evidence).toHaveLength(2);
+  expect((await api('/v1/learning-units')).units).toHaveLength(1);
 });
+
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
