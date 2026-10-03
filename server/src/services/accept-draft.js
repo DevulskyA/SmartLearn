@@ -80,6 +80,11 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   }
 
   const draftContent = JSON.parse(draftRow.draft_json);
+  // A question the reviewer rejected never becomes an exercise; the rest of the lesson is unaffected.
+  draftContent.questions = (draftContent.questions ?? []).filter((q) => q.status !== 'REJECTED');
+  if (draftContent.questions.length === 0) {
+    throw new AcceptDraftError('VALIDATION_FAILED', 'Todas as questões foram rejeitadas. Mantenha ao menos uma para criar a aula.', 'questions');
+  }
 
   // A1 (audit): source_pages is a mutable, recomputable projection
   // (re-extraction replaces it wholesale) — a citation is about to become

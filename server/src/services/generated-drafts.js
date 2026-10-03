@@ -204,8 +204,66 @@ function citedPagesFor(db, userId, row, draft) {
     .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP) }));
 }
 
+/**
+ * LESSON EDITOR: a lesson is SUMMARY + QUESTIONS[], each independently addressable. Every question has a stable id
+ * ("q<n>", never reused after a delete), its own `version` (bumped by each edit of THAT question) and a human review
+ * `status` (PROPOSED | ACCEPTED | REJECTED); the summary has its own `summaryVersion`. Drafts written before this existed are
+ * given ids deterministically by position, so reading twice yields the same ids; they are persisted with the next edit.
+ */
+const QUESTION_REVIEW_STATUSES = new Set(['PROPOSED', 'ACCEPTED', 'REJECTED']);
+const idNumber = (id) => { const m = /^q(\d+)$/.exec(String(id ?? '')); return m ? Number(m[1]) : 0; };
+
+export function normalizeContent(content) {
+  const questions = content.questions ?? [];
+  let seq = Math.max(Number.isInteger(content.questionSeq) ? content.questionSeq : 0, ...questions.map((q) => idNumber(q.id)));
+  const used = new Set(questions.map((q) => q.id).filter(Boolean));
+  const normalized = questions.map((q) => {
+    let id = q.id;
+    if (!id) { do { seq += 1; id = `q${seq}`; } while (used.has(id)); used.add(id); }
+    return {
+      ...q,
+      id,
+      status: QUESTION_REVIEW_STATUSES.has(q.status) ? q.status : 'PROPOSED',
+      version: Number.isInteger(q.version) ? q.version : 1,
+    };
+  });
+  return {
+    ...content,
+    summaryVersion: Number.isInteger(content.summaryVersion) ? content.summaryVersion : 1,
+    questionSeq: seq,
+    questions: normalized,
+  };
+}
+
+/** Audit findings with the entity they are about (stable id), so the UI groups them per question instead of dumping them. */
+function findingsWithEntities(audit, questions) {
+  if (!audit) return audit;
+  return {
+    ...audit,
+    findings: (audit.findings ?? []).map((f, index) => {
+      const m = /^question:(\d+)$/.exec(f.scope ?? '');
+      const target = m ? questions[Number(m[1])] : null;
+      return {
+        ...f,
+        id: `f${index + 1}`,
+        entityType: f.scope === 'summary' ? 'SUMMARY' : (target ? 'QUESTION' : 'DRAFT'),
+        entityId: f.scope === 'summary' ? 'summary' : (target ? target.id : null),
+        status: 'OPEN',
+      };
+    }),
+  };
+}
+
 function toDraftDto(row, { db, userId } = {}) {
-  const draft = JSON.parse(row.draft_json);
+  const draft = normalizeContent(JSON.parse(row.draft_json));
+  const audit = findingsWithEntities(draft.audit, draft.questions);
+  const flaggedIds = new Set((audit?.findings ?? []).filter((f) => f.severity !== 'LOW' && f.entityType === 'QUESTION').map((f) => f.entityId));
+  draft.questions = draft.questions.map((q) => ({
+    ...q,
+    status: q.status === 'PROPOSED' && flaggedIds.has(q.id) ? 'FLAGGED' : q.status,
+    findingCount: (audit?.findings ?? []).filter((f) => f.severity !== 'LOW' && f.entityId === q.id).length,
+  }));
+  draft.audit = audit;
   return {
     id: row.id,
     proposalId: row.proposal_id,
@@ -292,13 +350,13 @@ export async function createDraft(db, userId, proposalId, {
   validated = audited.draft;
 
   const nowIso = now().toISOString();
-  const draftContent = {
+  const draftContent = normalizeContent({
     summary: validated.summary,
     summarySourceSpans: validated.summarySourceSpans,
     questions: validated.questions,
     quarantinedCount: validated.quarantinedCount,
     audit: audited.audit,
-  };
+  });
   const result = db.prepare(`
     INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
     VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
@@ -334,26 +392,66 @@ export function reviseDraft(db, userId, draftId, { summary, questions } = {}, no
   const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
   if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
 
-  const current = JSON.parse(draftRow.draft_json);
+  const current = normalizeContent(JSON.parse(draftRow.draft_json));
   const candidate = {
     summary: summary !== undefined ? summary : current.summary,
     summarySourceSpans: current.summarySourceSpans,
-    questions: questions !== undefined ? questions : current.questions,
+    questions: questions !== undefined ? questions : current.questions.map(editableQuestion),
     modelVersion: draftRow.model_version,
     promptVersion: draftRow.prompt_version,
   };
 
-  let validated;
+  const validated = validateOrThrow(candidate, found.segments);
+
+  // Identity survives a whole-draft edit: while the question list keeps its length each question keeps its id and
+  // status, and only the ones whose text changed get a new version.
+  const nextQuestions = validated.questions.length === current.questions.length
+    ? validated.questions.map((q, i) => mergeIdentity(current.questions[i], q))
+    : validated.questions;
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: validated.summary,
+    summarySourceSpans: validated.summarySourceSpans,
+    questions: nextQuestions,
+    summaryVersion: validated.summary === current.summary ? current.summaryVersion : current.summaryVersion + 1,
+    quarantinedCount: validated.quarantinedCount,
+  }, now);
+}
+
+const EDITABLE_FIELDS = ['question', 'answer', 'explanation', 'questionType', 'hint', 'sourceSpans'];
+const editableQuestion = (q) => Object.fromEntries(EDITABLE_FIELDS.map((k) => [k, q[k] ?? null]));
+
+function validateOrThrow(candidate, segments) {
   try {
-    validated = validateDraft(candidate, { segments: found.segments });
+    return validateDraft(candidate, { segments });
   } catch (err) {
     if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
     throw err;
   }
+}
 
-  // A human edit changes the text, so the previous findings describe text that is gone: re-screen
-  // deterministically (no model call for an edit) and say so.
-  const rescreen = auditDraft(validated, { segments: found.segments });
+/** The validated text of a question plus the identity (id, review status, version) it already had; version moves only if the text did. */
+function mergeIdentity(previous, validatedQuestion) {
+  const changed = EDITABLE_FIELDS.some((k) => JSON.stringify(previous?.[k] ?? null) !== JSON.stringify(validatedQuestion[k] ?? null));
+  return {
+    ...validatedQuestion,
+    id: previous?.id,
+    status: previous?.status ?? 'PROPOSED',
+    version: (previous?.version ?? 1) + (changed ? 1 : 0),
+  };
+}
+
+function loadEditable(db, userId, draftId) {
+  const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
+  if (!draftRow) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (draftRow.status !== 'DRAFT') throw new DraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser editado.`);
+  const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
+  if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+  return { draftRow, found, current: normalizeContent(JSON.parse(draftRow.draft_json)) };
+}
+
+/** Re-screens deterministically (a human edit changes the text, so earlier findings describe text that is gone), writes ONE row update and bumps the draft revision. */
+function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
+  const rescreen = auditDraft({ summary: next.summary, summarySourceSpans: next.summarySourceSpans, questions: next.questions }, { segments: found.segments });
   const audit = {
     result: rescreen.result,
     findings: withSource(rescreen.findings, 'DETERMINISTIC'),
@@ -364,19 +462,80 @@ export function reviseDraft(db, userId, draftId, { summary, questions } = {}, no
     addressed: [],
     editedByHuman: true,
   };
+  const content = normalizeContent({
+    ...current,
+    summary: next.summary,
+    summarySourceSpans: next.summarySourceSpans,
+    questions: next.questions,
+    summaryVersion: next.summaryVersion,
+    quarantinedCount: next.quarantinedCount ?? current.quarantinedCount,
+    audit,
+  });
+  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+    .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+}
 
-  const nowIso = now().toISOString();
-  const draftContent = {
+function requireFresh(actual, expected, what) {
+  if (expected !== undefined && expected !== null && expected !== actual) {
+    throw new DraftError('ENTITY_CONFLICT', `${what} foi alterado desde a última leitura. Recarregue e revise a versão atual.`);
+  }
+}
+
+/** Edits ONLY the summary: questions, their ids/status/versions and citations are untouched. */
+export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  requireFresh(current.summaryVersion, expectedVersion, 'O resumo');
+  if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', 'Informe o texto do resumo.', 'summary');
+  const validated = validateOrThrow({
+    summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions.map(editableQuestion),
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments);
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: validated.summary,
     summarySourceSpans: validated.summarySourceSpans,
-    questions: validated.questions,
-    quarantinedCount: validated.quarantinedCount,
-    audit,
-  };
-  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
-    .run(JSON.stringify(draftContent), nowIso, userId, draftId);
+    questions: current.questions,
+    summaryVersion: validated.summary === current.summary ? current.summaryVersion : current.summaryVersion + 1,
+  }, now);
+}
 
-  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+/** Edits ONE question (text fields, citations and/or its review status); the summary and every other question are untouched. */
+export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  const index = current.questions.findIndex((q) => q.id === questionId);
+  if (index < 0) throw new DraftError('NOT_FOUND', 'Questão não encontrada.');
+  const previous = current.questions[index];
+  requireFresh(previous.version, patch.expectedVersion, 'A questão');
+  if (patch.status !== undefined && !QUESTION_REVIEW_STATUSES.has(patch.status)) {
+    throw new DraftError('VALIDATION_FAILED', 'Estado de questão inválido.', 'status');
+  }
+  const edited = editableQuestion(previous);
+  for (const key of EDITABLE_FIELDS) if (patch[key] !== undefined) edited[key] = patch[key];
+  const validated = validateOrThrow({
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: [edited],
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments);
+  if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
+    throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
+  }
+  const merged = mergeIdentity(previous, validated.questions[0]);
+  if (patch.status !== undefined) merged.status = patch.status;
+  const questions = current.questions.map((q, i) => (i === index ? merged : q));
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions, summaryVersion: current.summaryVersion,
+  }, now);
+}
+
+/** Removes ONE question for good (its id is never reused). The last remaining question cannot be removed: a lesson keeps at least one. */
+export function deleteQuestion(db, userId, draftId, questionId, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  const index = current.questions.findIndex((q) => q.id === questionId);
+  if (index < 0) throw new DraftError('NOT_FOUND', 'Questão não encontrada.');
+  if (current.questions.length === 1) throw new DraftError('INVALID_STATE', 'A aula precisa manter ao menos uma questão.');
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans,
+    questions: current.questions.filter((_, i) => i !== index), summaryVersion: current.summaryVersion,
+  }, now);
 }
 
 export function getDraft(db, userId, draftId) {

@@ -19,6 +19,7 @@ function handleError(err, reply) {
       INVALID_STATE: 409,
       SUBJECT_CONFLICT: 409,
       REVISION_CONFLICT: 409,
+      ENTITY_CONFLICT: 409,
       SOURCE_CHANGED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
@@ -112,6 +113,55 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { draft: drafts.reviseDraft(db, request.actor.userId, id, request.body) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // Granular edits: each touches ONE entity of the lesson (the summary, or one question by its stable id).
+  app.patch('/drafts/:id/summary', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' }, expectedVersion: { type: 'integer' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.reviseSummary(db, request.actor.userId, id, request.body) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.patch('/drafts/:id/questions/:questionId', {
+    schema: {
+      params: { type: 'object', required: ['id', 'questionId'], properties: { id: { type: 'string' }, questionId: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          question: { type: 'string' },
+          answer: { type: 'string' },
+          explanation: { type: ['string', 'null'] },
+          hint: { type: ['string', 'null'] },
+          questionType: { type: ['string', 'null'] },
+          sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
+          status: { type: 'string' },
+          expectedVersion: { type: 'integer' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.reviseQuestion(db, request.actor.userId, id, request.params.questionId, request.body ?? {}) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.delete('/drafts/:id/questions/:questionId', {
+    schema: { params: { type: 'object', required: ['id', 'questionId'], properties: { id: { type: 'string' }, questionId: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.deleteQuestion(db, request.actor.userId, id, request.params.questionId) };
     } catch (err) { return handleError(err, reply); }
   });
 
