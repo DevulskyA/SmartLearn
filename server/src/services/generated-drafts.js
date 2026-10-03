@@ -279,6 +279,36 @@ function toDraftDto(row, { db, userId } = {}) {
 }
 
 /**
+ * Everything that can be refused BEFORE a provider is involved: unknown proposal, no usable text, editorial (non-content)
+ * unit, a payload that is not inside the approved scope, an input over the size limit. Shared by the synchronous
+ * createDraft and by the background generation job, so both give the same early, 4xx-style answers.
+ */
+export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_000 } = {}) {
+  const found = findOwnedProposalWithSegments(db, userId, proposalId);
+  if (!found) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
+  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
+
+  // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
+  if ((found.proposal.kind ?? 'CONTENT') !== 'CONTENT') {
+    throw new DraftError('NOT_GENERATABLE', `Este trecho (${found.proposal.kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
+  }
+  // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
+  let scope;
+  try {
+    scope = assertPayloadWithinScope(db, userId, found.proposal, found.segments);
+  } catch (err) {
+    if (err instanceof ScopeViolation) throw new DraftError('SCOPE_VIOLATION', err.message);
+    throw err;
+  }
+
+  const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
+  if (totalChars > maxInputChars) {
+    throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
+  }
+  return { found, scope };
+}
+
+/**
  * Generates and persists one draft for a proposal. ALWAYS status='DRAFT' --
  * no learning_unit/exercise is ever created here (T38's job). Bounds the
  * total input size before calling ANY provider (design.md: "Bound request
@@ -308,27 +338,7 @@ export async function createDraft(db, userId, proposalId, {
   codex = {},
   now = () => new Date(),
 } = {}) {
-  const found = findOwnedProposalWithSegments(db, userId, proposalId);
-  if (!found) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
-  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
-
-  // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
-  if ((found.proposal.kind ?? 'CONTENT') !== 'CONTENT') {
-    throw new DraftError('NOT_GENERATABLE', `Este trecho (${found.proposal.kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
-  }
-  // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
-  let scope;
-  try {
-    scope = assertPayloadWithinScope(db, userId, found.proposal, found.segments);
-  } catch (err) {
-    if (err instanceof ScopeViolation) throw new DraftError('SCOPE_VIOLATION', err.message);
-    throw err;
-  }
-
-  const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
-  if (totalChars > maxInputChars) {
-    throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
-  }
+  const { found, scope } = prepareGeneration(db, userId, proposalId, { maxInputChars });
 
   // Bind the draft to the exact text it is generated from (SPRINT-04), fixed BEFORE the provider call.
   const inputDigest = segmentsDigest(found.segments);
