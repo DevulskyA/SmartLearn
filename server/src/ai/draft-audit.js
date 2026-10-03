@@ -10,6 +10,8 @@
 //     generatedClaim, sourceEvidence, repair }
 // Result: REPAIR when any HIGH or MEDIUM finding exists, else PASS (LOW = advisory only).
 
+import { differentLanguages } from './language-detect.js';
+
 export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -87,7 +89,7 @@ function sentenceContaining(text, index) {
   return text.slice(start).trim();
 }
 
-function auditSummary(summary, segments) {
+function auditSummary(summary, segments, { lexical = true } = {}) {
   const findings = [];
   const sourceText = segments.map((s) => s.text).join(' ');
   const sourceNumbers = new Set(numbersIn(sourceText).map((n) => n.key));
@@ -107,11 +109,11 @@ function auditSummary(summary, segments) {
     });
   }
 
-  // 2) Specific terms with no counterpart in the source (a drug, a condition, a swapped term).
+  // 2) Specific terms with no counterpart in the source (a drug, a condition, a swapped term). Word comparison: same language only.
   const srcStems = sourceStemSet(segments);
   const seen = new Set();
   const unsupportedTerms = [];
-  for (const t of tokens(summary)) {
+  for (const t of lexical ? tokens(summary) : []) {
     if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
     const s = stem(t.key);
     if (srcStems.has(s) || seen.has(s)) continue;
@@ -143,7 +145,7 @@ function auditSummary(summary, segments) {
   const central = order.filter((s) => counts.get(s).n >= 2)
     .sort((a, b) => counts.get(b).n - counts.get(a).n || order.indexOf(a) - order.indexOf(b))
     .slice(0, 5);
-  if (central.length >= 3) {
+  if (lexical && central.length >= 3) {
     const summaryStems = new Set(tokens(summary).map((t) => stem(t.key)));
     const missing = central.filter((s) => !summaryStems.has(s));
     if ((central.length - missing.length) / central.length < 0.5) {
@@ -187,7 +189,7 @@ function answerCore(answer) {
 }
 const squash = (s) => norm(s).replace(/\s+/g, ' ');
 
-function auditQuestions(questions, segments) {
+function auditQuestions(questions, segments, { lexical = true } = {}) {
   const findings = [];
   const seenQuestions = new Map();
 
@@ -262,7 +264,7 @@ function auditQuestions(questions, segments) {
     const questionStems = new Set(tokens(q.question).map((t) => stem(t.key)));
     const seen = new Set();
     const unsupported = [];
-    for (const t of tokens(teaching)) {
+    for (const t of lexical ? tokens(teaching) : []) {
       if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
       const s = stem(t.key);
       if (citedStems.has(s) || questionStems.has(s) || seen.has(s)) continue;
@@ -275,8 +277,8 @@ function auditQuestions(questions, segments) {
         'Confirme na fonte. Se for informação complementar, remova; se a citação estiver na página errada, corrija-a.');
     }
 
-    // 4) Little lexical footing on the cited page at all.
-    if (cited.length > 0) {
+    // 4) Little lexical footing on the cited page at all (same language only).
+    if (lexical && cited.length > 0) {
       const contentStems = [...new Set(tokens(teaching).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key)).map((t) => stem(t.key)))]
         .filter((s) => !questionStems.has(s));
       if (contentStems.length >= 4) {
@@ -309,7 +311,22 @@ function auditQuestions(questions, segments) {
  * @param {{segments:{pageIndex:number,text:string}[]}} context the exact source pages sent to the provider
  */
 export function auditDraft(draft, { segments }) {
-  const findings = [...auditSummary(draft.summary, segments), ...auditQuestions(draft.questions ?? [], segments)];
+  // Word overlap says nothing across languages (an English textbook, a Portuguese lesson): those checks step aside, loudly but
+  // as an advisory, and the language-independent ones — values, units, citations, duplicates, leaks — keep running.
+  const sourceText = segments.map((s) => s.text).join(' ');
+  const draftText = [draft.summary, ...(draft.questions ?? []).map((q) => `${q.question} ${q.answer} ${q.explanation ?? ''}`)].join(' ');
+  const lexical = !differentLanguages(sourceText, draftText);
+  const findings = [...auditSummary(draft.summary, segments, { lexical }), ...auditQuestions(draft.questions ?? [], segments, { lexical })];
+  if (!lexical) {
+    findings.push({
+      issue: 'LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE',
+      severity: 'LOW',
+      scope: 'draft',
+      generatedClaim: 'A fonte e o rascunho estão em idiomas diferentes.',
+      sourceEvidence: 'A comparação palavra a palavra não vale entre idiomas e foi dispensada. Valores, unidades, páginas citadas, repetições e vazamentos continuam conferidos.',
+      repair: 'O apoio de significado (tradução fiel, mecanismo, qualificadores como "geralmente", "pode", "apenas") depende da auditoria do modelo e da sua leitura da fonte.',
+    });
+  }
   const blocking = findings.some((f) => f.severity === 'HIGH' || f.severity === 'MEDIUM');
   return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
 }
