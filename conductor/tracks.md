@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/v1-validation/plan.md`** — V1-VALIDATION — H0 do SMARTLEARN_PRODUCT_EVOLUTION_V3 · Status: ACTIVE · ATIVA (GUI): VALID-2 · próximas: VALID-3, VALID-4, VALID-5, VALID-6, VALID-7, VALID-8 · concluídas (1): VALID-1 · branch `claude/smartlearn-v1-complete`@7b54c25 · sincronizado 2026-10-03
+**`conductor/tracks/v1-validation/plan.md`** — V1-VALIDATION — H0 do SMARTLEARN_PRODUCT_EVOLUTION_V3 · Status: ACTIVE · ATIVA (GUI): VALID-3 · próximas: VALID-4, VALID-5, VALID-6, VALID-7, VALID-8 · concluídas (2): VALID-1, VALID-2 · branch `claude/smartlearn-v1-complete`@de8c1c8 · sincronizado 2026-10-03
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
