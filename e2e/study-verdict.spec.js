@@ -100,7 +100,8 @@ test('mixed areas: says so, counts them apart, names the falling unit with old -
   await expect(verdict).toBeVisible({ timeout: 8000 });
   await expect(verdict).toHaveAttribute('role', 'status');
   await expect(page.locator('#stats-verdict-headline')).toHaveText(/Resultado misto/);
-  await expect(page.locator('#stats-verdict-detail')).toContainText('1 melhorando · 1 piorando');
+  // VERDICT-1: each direction shows the questions behind it.
+  await expect(page.locator('#stats-verdict-detail')).toContainText('1 melhorando (40 questões) · 1 piorando (40 questões)');
   const attention = page.locator('#stats-verdict-attention-text');
   await expect(attention).toContainText('Filtração glomerular');
   await expect(attention).toContainText('de 80% para 40%');
@@ -113,6 +114,21 @@ test('mixed areas: says so, counts them apart, names the falling unit with old -
   const row = page.locator('.plan-row', { hasText: 'Filtração glomerular' });
   await expect(row.locator('.plan-expand-btn')).toHaveAttribute('aria-expanded', 'true', { timeout: 8000 });
   await expect(row.locator('.plan-reinforce-chip')).toHaveText('1 para reforçar');
+});
+
+test('VERDICT-1: a tiny worsening area does not flip the headline of a large stable one, yet it is still named as the unit to look at', async ({ page }) => {
+  await unitWithEvidence(page, 'Estável Grande', 'Aula grande', [[45, 100, 70], [5, 100, 70]]); // 70% -> 70%, 200 questions
+  await unitWithEvidence(page, 'Piora Pequena', 'Aula pequena', [[45, 10, 8], [5, 10, 4]]); // 80% -> 40%, 20 questions
+
+  await page.locator('[data-screen="stats"]').click();
+  await expect(page.locator('#stats-verdict')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#stats-verdict-headline')).toHaveText(/Seu desempenho está estável/);
+  const detail = page.locator('#stats-verdict-detail');
+  await expect(detail).toContainText('1 piorando (20 questões)');
+  await expect(detail).toContainText('1 estável (200 questões)');
+  const attention = page.locator('#stats-verdict-attention-text');
+  await expect(attention).toContainText('Aula pequena');
+  await expect(attention).toContainText('de 80% para 40%');
 });
 
 test('low volume is "sem histórico suficiente", never a bad verdict; a subject with no data is not counted as weak', async ({ page }) => {

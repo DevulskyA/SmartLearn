@@ -114,3 +114,115 @@ test("verdictText never claims mastery, retention or a score", () => {
     assert.doesNotMatch(`${t.headline} ${t.detail}`, /dom[ií]n|mastery|reten[cç][aã]o|score|previs/i);
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// VERDICT-1 (human-approved, option B, threshold 25%): the AGGREGATE verdict weighs each subject
+// by the questions actually compared (older + recent period), not one vote per subject. A subject
+// with little evidence can no longer drag the headline; a real split is still reported as mixed.
+// "Insufficient" and "no evidence" subjects never vote for a direction. Individual classifications
+// and the unit that needs attention are unchanged.
+// ---------------------------------------------------------------------------------------------
+
+// A subject whose two comparison periods each hold `perPeriod` questions (volume = 2 * perPeriod).
+const OLDER_DAY = "2026-08-01";
+const RECENT_DAY = "2026-09-10";
+function subjectOf(id, direction, perPeriod) {
+  const def = { id, subjectId: id * 100, subjectName: `Disciplina ${id}`, title: `Aula ${id}` };
+  const acc = { improving: [0.4, 0.8], declining: [0.8, 0.4], stable: [0.7, 0.7] }[direction];
+  const rows = direction === "insufficient"
+    ? [ev(id, OLDER_DAY, 5, 2, id * 10), ev(id, RECENT_DAY, perPeriod, Math.round(perPeriod * 0.5), id * 10 + 1)]
+    : [ev(id, OLDER_DAY, perPeriod, Math.round(perPeriod * acc[0]), id * 10), ev(id, RECENT_DAY, perPeriod, Math.round(perPeriod * acc[1]), id * 10 + 1)];
+  return { def, rows };
+}
+function verdictFor(spec) {
+  const subjects = spec.map(([direction, perPeriod], i) => subjectOf(i + 1, direction, perPeriod));
+  return world(subjects.map((s) => s.def), subjects.flatMap((s) => s.rows));
+}
+
+test("VERDICT-1: one tiny worsening subject among large stable ones no longer flips the headline", () => {
+  const v = verdictFor([["declining", 10], ["stable", 100], ["stable", 100], ["stable", 100], ["stable", 100], ["stable", 100]]);
+  assert.equal(v.counts.declining, 1);
+  assert.equal(v.counts.stable, 5);
+  assert.equal(v.state, "STABLE");
+  assert.equal(v.attention.reason, "DECLINING", "the worsening unit is still surfaced as the attention unit");
+  assert.equal(v.attention.subjectName, "Disciplina 1");
+});
+
+test("VERDICT-1: the headline follows the direction that holds most of the compared volume — in both orders", () => {
+  assert.equal(verdictFor([["improving", 250], ["declining", 10]]).state, "IMPROVING");
+  assert.equal(verdictFor([["declining", 250], ["improving", 10]]).state, "DECLINING");
+});
+
+test("VERDICT-1: 'insufficient' and 'no evidence' subjects never vote for a direction", () => {
+  const v = verdictFor([["improving", 10], ["insufficient", 1000], ["insufficient", 1000], ["insufficient", 1000], ["insufficient", 1000]]);
+  assert.equal(v.state, "IMPROVING");
+  assert.equal(v.counts.insufficient, 4);
+  assert.equal(v.volumes.improving, 20);
+  assert.equal(v.volumes.compared, 20, "only comparable subjects count toward the compared volume");
+});
+
+test("VERDICT-1: 'mixed' needs BOTH improving and worsening to hold at least 25% of the compared volume (25% in, 24% out)", () => {
+  // total compared volume 400: improving 100, declining 100, stable 200 -> 25% / 25% -> mixed
+  assert.equal(verdictFor([["improving", 50], ["declining", 50], ["stable", 100]]).state, "MIXED");
+  // declining 96 of 400 = 24% -> NOT mixed; stable holds the most volume
+  const justUnder = verdictFor([["improving", 50], ["declining", 48], ["stable", 102]]);
+  assert.equal(justUnder.volumes.compared, 400);
+  assert.equal(justUnder.volumes.declining, 96);
+  assert.equal(justUnder.state, "STABLE");
+  // the same boundary on the other side: improving 24%
+  assert.equal(verdictFor([["improving", 48], ["declining", 50], ["stable", 102]]).state, "STABLE");
+  // one side below 25%, the other dominant -> the dominant direction
+  assert.equal(verdictFor([["improving", 48], ["declining", 80], ["stable", 72]]).state, "DECLINING");
+});
+
+test("VERDICT-1: a real split with no stable area is mixed; with equal volume the title never overstates improvement", () => {
+  assert.equal(verdictFor([["improving", 100], ["declining", 100]]).state, "MIXED");
+  // tie between IMPROVING and STABLE (nobody worsening): the cautious label wins
+  assert.equal(verdictFor([["improving", 100], ["stable", 100]]).state, "STABLE");
+  // tie between DECLINING and STABLE: the worsening is not hidden
+  assert.equal(verdictFor([["declining", 100], ["stable", 100]]).state, "DECLINING");
+  // tie between IMPROVING and DECLINING is mixed anyway
+  assert.equal(verdictFor([["improving", 30], ["declining", 30]]).state, "MIXED");
+});
+
+test("VERDICT-1: only stable, only improving, no evidence and nothing comparable keep their meaning", () => {
+  assert.equal(verdictFor([["stable", 50], ["stable", 10]]).state, "STABLE");
+  assert.equal(verdictFor([["improving", 50]]).state, "IMPROVING");
+  assert.equal(world([ANA, FIS], []).state, "NO_EVIDENCE");
+  assert.equal(verdictFor([["insufficient", 20]]).state, "INSUFFICIENT");
+});
+
+test("VERDICT-1: individual classifications and the attention unit are unchanged by the weighting", () => {
+  const v = verdictFor([["improving", 200], ["declining", 10], ["stable", 50]]);
+  assert.deepEqual(v.counts, { improving: 1, declining: 1, stable: 1, insufficient: 0, noEvidence: 0 });
+  assert.equal(v.attention.unitId, 2);
+  assert.equal(v.attention.reason, "DECLINING");
+});
+
+test("VERDICT-1: the detail text shows the questions behind each direction, in pt-BR, without scores", () => {
+  const v = verdictFor([["declining", 10], ["stable", 250], ["stable", 250]]);
+  const t = verdictText(v);
+  assert.match(t.headline, /estável/);
+  assert.match(t.detail, /1 piorando \(20 questões\)/);
+  assert.match(t.detail, /2 estáveis \(1\.000 questões\)/);
+  assert.doesNotMatch(t.detail, /Base de comparação/, "the parts already sum to the base; no redundant sentence");
+  assert.doesNotMatch(`${t.headline} ${t.detail}`, /dom[ií]n|mastery|reten[cç][aã]o|score|previs|%/i);
+});
+
+test("VERDICT-1: pure — the same inputs give the same verdict and the inputs are not mutated", () => {
+  const subjects = [subjectOf(1, "improving", 40), subjectOf(2, "declining", 40)];
+  const rows = subjects.flatMap((s) => s.rows);
+  const snapshot = JSON.stringify(rows);
+  assert.deepEqual(world(subjects.map((s) => s.def), rows), world(subjects.map((s) => s.def), rows));
+  assert.equal(JSON.stringify(rows), snapshot);
+});
+
+test("VERDICT-1: the weight is the volume the comparison rests on — old evidence outside both periods adds none", () => {
+  // Subject 1 worsened on 10+10 questions but also has 1000 questions from months ago (outside both periods).
+  const worsened = subjectOf(1, "declining", 10);
+  const longAgo = ev(1, "2026-05-01", 1000, 600, 990);
+  const improved = subjectOf(2, "improving", 10);
+  const v = world([worsened.def, improved.def], [...worsened.rows, longAgo, ...improved.rows]);
+  assert.equal(v.volumes.declining, 20, "only the 10 + 10 compared questions count, not the 1000 old ones");
+  assert.equal(v.state, "MIXED", "equal compared volume on both sides");
+});

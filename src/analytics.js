@@ -1,4 +1,4 @@
-import { getState, TREND_DELTA_MIN } from './performance-thresholds.js';
+import { getState, TREND_DELTA_MIN, VERDICT_MIXED_VOLUME_SHARE_MIN } from './performance-thresholds.js';
 
 function getLocalDateValue() {
   const d = new Date();
@@ -47,7 +47,8 @@ function comparePeriods(olderEvidence, recentEvidence, minQuestions, minDelta) {
   const direction = delta > minDelta ? 'IMPROVING'
     : delta < -minDelta ? 'DECLINING'
     : 'STABLE';
-  return { direction, delta, olderAccuracy: olderAcc * 100, recentAccuracy: recentAcc * 100 };
+  // olderQuestions/recentQuestions: the evidence volume this comparison actually rests on (VERDICT-1 weighs by it).
+  return { direction, delta, olderAccuracy: olderAcc * 100, recentAccuracy: recentAcc * 100, olderQuestions: olderQ, recentQuestions: recentQ };
 }
 
 // Subject trend: last 30 days vs the 30 before, min 10 questions in each
@@ -74,31 +75,56 @@ export function unitTrend(unitEvidence, minQuestions = 10, threshold = 0.05) {
   );
 }
 
+// Questions a comparable trend rests on. Every comparable trend carries both periods (each at least the
+// minimum), so this is always positive for IMPROVING / DECLINING / STABLE.
+function comparedVolume(trend) {
+  return (Number(trend.olderQuestions) || 0) + (Number(trend.recentQuestions) || 0);
+}
+
+// Cautious-first order for an exact volume tie.
+const TIE_ORDER = ['DECLINING', 'STABLE', 'IMPROVING'];
+
+function aggregateDirection(volumes) {
+  const { improving, declining, stable, compared } = volumes;
+  const min = VERDICT_MIXED_VOLUME_SHARE_MIN * compared;
+  if (improving > 0 && declining > 0 && improving >= min && declining >= min) return 'MIXED';
+  const byDirection = { DECLINING: declining, STABLE: stable, IMPROVING: improving };
+  return TIE_ORDER.reduce((best, d) => (byDirection[d] > byDirection[best] ? d : best), TIE_ORDER[0]);
+}
+
 // "Meu estudo está funcionando?" — answered from observable evidence only. No score, no
 // mastery: how many subjects are improving / declining / stable / not comparable / without
-// evidence, plus the ONE unit that most deserves attention and why. Deterministic:
+// evidence, plus the ONE unit that most deserves attention and why.
+//
+// VERDICT-1: the AGGREGATE state weighs each comparable subject by the questions its comparison
+// rests on (older + recent period), not one vote per subject. The state is "MIXED" only when
+// improving AND declining each hold at least VERDICT_MIXED_VOLUME_SHARE_MIN of the compared
+// volume; otherwise it is the direction holding the most volume, and on an exact tie the more
+// cautious label wins (DECLINING > STABLE > IMPROVING) so the headline never overstates progress.
+// "Insufficient" and "no evidence" subjects never vote for a direction. Per-subject
+// classifications (counts) and the attention unit are NOT affected by the weighting. Deterministic:
 // a DECLINING unit (largest fall first, then more recent-period questions) beats a unit that
 // merely has items still wrong at their last attempt ("para reforçar", most items first).
 // Subjects with no evidence are counted apart — never as bad performance.
 export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
   const counts = { improving: 0, declining: 0, stable: 0, insufficient: 0, noEvidence: 0 };
+  const volumes = { improving: 0, declining: 0, stable: 0, compared: 0 };
   let totalQuestions = 0;
   for (const r of subjectRows) {
     if (!(r.totalQuestions > 0)) { counts.noEvidence += 1; continue; }
     totalQuestions += r.totalQuestions;
     const d = r.trend.direction;
-    if (d === 'IMPROVING') counts.improving += 1;
-    else if (d === 'DECLINING') counts.declining += 1;
-    else if (d === 'STABLE') counts.stable += 1;
+    const volume = comparedVolume(r.trend);
+    if (d === 'IMPROVING') { counts.improving += 1; volumes.improving += volume; }
+    else if (d === 'DECLINING') { counts.declining += 1; volumes.declining += volume; }
+    else if (d === 'STABLE') { counts.stable += 1; volumes.stable += volume; }
     else counts.insufficient += 1;
   }
+  volumes.compared = volumes.improving + volumes.declining + volumes.stable;
   const compared = counts.improving + counts.declining + counts.stable;
   const state = totalQuestions === 0 ? 'NO_EVIDENCE'
     : compared === 0 ? 'INSUFFICIENT'
-    : counts.improving > 0 && counts.declining > 0 ? 'MIXED'
-    : counts.declining > 0 ? 'DECLINING'
-    : counts.improving > 0 ? 'IMPROVING'
-    : 'STABLE';
+    : aggregateDirection(volumes);
 
   const reinforceOf = (u) => (reinforcementByUnit[u.unitId] ?? []).length;
   const describe = (u, reason) => ({
@@ -120,10 +146,13 @@ export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
     : reinforce.length > 0 ? describe(reinforce[0], 'REINFORCE')
     : null;
 
-  return { state, counts, totalQuestions, attention };
+  return { state, counts, volumes, totalQuestions, attention };
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// Fixed pt-BR thousands separator ("1.020"): independent of the runtime's ICU data.
+const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const questions = (n) => `${thousands(n)} ${n === 1 ? 'questão' : 'questões'}`;
 
 // Plain-language rendering of studyVerdict (pt-BR). Never says mastery/retention/score.
 export function verdictText(v) {
@@ -143,10 +172,13 @@ export function verdictText(v) {
     STABLE: 'Seu desempenho está estável.',
     MIXED: 'Resultado misto: melhorando em umas áreas e piorando em outras.',
   }[v.state];
+  // Each direction shows the questions it rests on (VERDICT-1), so a headline carried by a few
+  // questions is visible as such.
+  const { volumes } = v;
   const parts = [];
-  if (counts.improving) parts.push(`${counts.improving} melhorando`);
-  if (counts.declining) parts.push(`${counts.declining} piorando`);
-  if (counts.stable) parts.push(`${counts.stable} ${counts.stable === 1 ? 'estável' : 'estáveis'}`);
+  if (counts.improving) parts.push(`${counts.improving} melhorando (${questions(volumes.improving)})`);
+  if (counts.declining) parts.push(`${counts.declining} piorando (${questions(volumes.declining)})`);
+  if (counts.stable) parts.push(`${counts.stable} ${counts.stable === 1 ? 'estável' : 'estáveis'} (${questions(volumes.stable)})`);
   if (counts.insufficient) parts.push(`${counts.insufficient} com evidência insuficiente`);
   if (counts.noEvidence) parts.push(`${counts.noEvidence} sem evidência`);
   return { headline, detail: `Disciplinas: ${parts.join(' · ')}.` };

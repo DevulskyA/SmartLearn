@@ -9,6 +9,10 @@ export const THRESHOLDS = {
 
 export const TREND_DELTA_MIN = 0.03;
 
+// VERDICT-1 (human-approved): the aggregate "Meu estudo está funcionando?" headline says "Resultado misto" only
+// when BOTH improving and worsening subjects each hold at least this share of the compared question volume.
+export const VERDICT_MIXED_VOLUME_SHARE_MIN = 0.25;
+
 export const PERFORMANCE_STATES = {
   STRONG: 'STRONG',
   ADEQUATE: 'ADEQUATE',
