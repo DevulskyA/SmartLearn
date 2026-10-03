@@ -1,9 +1,10 @@
 # SmartLearn — Master Product Build Plan
 
 ```
-STATUS=CANÔNICO
+STATUS=CANÔNICO (mandato de construção do V1 — registro)
 FOCO=PRODUTO_REAL
 QUALIDADE=TOP_0_1_PERCENT_COMO_PISO
+PLANEJAMENTO_ADIANTE=SMARTLEARN_PRODUCT_EVOLUTION_V3.md (este arquivo não é o plano de horizontes pós-validação do V1)
 ```
 
 /goal Construir o SmartLearn como o sistema de aprendizagem médica mais eficaz, simples e inteligente possível: transformar o material do aluno em um ambiente completo e imediatamente utilizável de estudo, acompanhar longitudinalmente sua aprendizagem por evidência real e converter continuamente desempenho, prática, erros e revisões na melhor próxima ação — reduzindo ao mínimo toda carga administrativa para que sua energia permaneça concentrada em aprender Medicina, com qualidade de produto, pedagogia e experiência top 0,1% como piso.
