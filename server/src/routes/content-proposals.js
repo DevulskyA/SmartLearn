@@ -29,6 +29,47 @@ export function registerContentProposalRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // "O que você quer estudar?": locate the sections of the document that match a topic (creates nothing).
+  app.get('/sources/:id/topics', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      querystring: { type: 'object', required: ['q'], properties: { q: { type: 'string', maxLength: 200 } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { candidates: proposals.searchTopics(db, request.actor.userId, id, request.query.q) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // The student approves ONE scope (a located section or an explicit page/offset range): the only text a provider may receive.
+  app.post('/sources/:id/scopes', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          ordinal: { type: 'integer' },
+          title: { type: 'string', maxLength: 300 },
+          topic: { type: 'string', maxLength: 300 },
+          range: {
+            type: 'object',
+            required: ['pageStart', 'pageEnd'],
+            properties: { pageStart: { type: 'integer' }, pageEnd: { type: 'integer' }, startOffset: { type: 'integer' }, endOffset: { type: 'integer' } },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      reply.status(201);
+      return { proposal: proposals.approveScope(db, request.actor.userId, id, request.body ?? {}) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.get('/sources/:id/proposals', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   }, async (request, reply) => {

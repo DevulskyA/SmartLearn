@@ -12,6 +12,7 @@ import {
   CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS,
 } from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
+import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
 
 export class DraftError extends Error {
@@ -162,12 +163,7 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
 function findOwnedProposalWithSegments(db, userId, proposalId) {
   const proposal = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
   if (!proposal) return null;
-  const segments = db.prepare(`
-    SELECT page_index as pageIndex, text FROM source_pages
-    WHERE user_id = ? AND source_id = ? AND page_status = 'OK' AND page_index BETWEEN ? AND ?
-    ORDER BY page_index
-  `).all(userId, proposal.source_id, proposal.page_start, proposal.page_end);
-  return { proposal, segments };
+  return { proposal, segments: segmentsForProposal(db, userId, proposal) };
 }
 
 /** Identity of the exact text a draft is generated from: SHA-256 over the (pageIndex, text) segments sent to the provider. */
@@ -316,6 +312,19 @@ export async function createDraft(db, userId, proposalId, {
   if (!found) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
   if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
 
+  // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
+  if ((found.proposal.kind ?? 'CONTENT') !== 'CONTENT') {
+    throw new DraftError('NOT_GENERATABLE', `Este trecho (${found.proposal.kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
+  }
+  // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
+  let scope;
+  try {
+    scope = assertPayloadWithinScope(db, userId, found.proposal, found.segments);
+  } catch (err) {
+    if (err instanceof ScopeViolation) throw new DraftError('SCOPE_VIOLATION', err.message);
+    throw err;
+  }
+
   const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
   if (totalChars > maxInputChars) {
     throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
@@ -356,6 +365,16 @@ export async function createDraft(db, userId, proposalId, {
     questions: validated.questions,
     quarantinedCount: validated.quarantinedCount,
     audit: audited.audit,
+    sourceScope: {
+      documentId: found.proposal.source_id,
+      documentName: db.prepare('SELECT original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.original_name ?? null,
+      topic: found.proposal.topic ?? found.proposal.title,
+      approvedPages: [found.proposal.page_start, found.proposal.page_end],
+      spanCount: found.proposal.spans_json ? JSON.parse(found.proposal.spans_json).length : null,
+      sourceChars: scope.sourceChars,
+      payloadChars: scope.payloadChars,
+      payloadPages: scope.pages,
+    },
   });
   const result = db.prepare(`
     INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)

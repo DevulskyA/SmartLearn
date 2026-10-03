@@ -143,5 +143,10 @@
     "version": 29,
     "name": "outline-detected",
     "checksum": "0efd47eeec07d9f0c3341afeff38272f98653c65c7ea18579228a5f9d28d0f6c"
+  },
+  {
+    "version": 30,
+    "name": "proposal-scope",
+    "checksum": "219eebb536056b09409cf3c9c3cffa3f01f5012fa9a6b8e0a3ef6e4b324e9bde"
   }
 ]

@@ -1,5 +1,8 @@
 import { listPages } from './source-extraction.js';
 import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
+import { planSectionUnits, findTopicSections, textOfSpans } from './section-spans.js';
+import { classifyUnit } from './unit-kind.js';
+import { segmentsForProposal, parseSpans } from './proposal-scope.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
@@ -26,17 +29,10 @@ function findOwnedProposal(db, userId, proposalId) {
   return db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
 }
 
-/** Concatenates the real, unmodified text of every page in [pageStart,
- * pageEnd] for one source — the proposal's "content" is always computed
- * live from source_pages, never duplicated into content_proposals itself,
- * so the source stays the one place that text is stored. */
-function chunkText(db, userId, sourceId, pageStart, pageEnd) {
-  const rows = db.prepare(`
-    SELECT text FROM source_pages
-    WHERE user_id = ? AND source_id = ? AND page_status = 'OK' AND page_index BETWEEN ? AND ?
-    ORDER BY page_index
-  `).all(userId, sourceId, pageStart, pageEnd);
-  return rows.map((r) => r.text).join('\n\n');
+/** The proposal's approved source text: its spans (or, for a legacy proposal, every page of its range), unmodified. Computed
+ * live from source_pages, never duplicated into content_proposals, so the source stays the one place that text is stored. */
+function proposalText(db, userId, row) {
+  return segmentsForProposal(db, userId, row).map((s) => s.text).join('\n\n');
 }
 
 // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found doing a real manual
@@ -55,6 +51,15 @@ function defaultTitle(source, pageStart, pageEnd) {
   return `${stripKnownExtension(source.original_name)} — ${range}`;
 }
 
+function proposalChars(db, userId, row) {
+  const spans = parseSpans(row);
+  if (spans) return spans.reduce((n, sp) => n + (sp.end - sp.start), 0);
+  return db.prepare(`
+    SELECT COALESCE(SUM(LENGTH(text)), 0) AS n FROM source_pages
+    WHERE user_id = ? AND source_id = ? AND page_status = 'OK' AND page_index BETWEEN ? AND ?
+  `).get(userId, row.source_id, row.page_start, row.page_end).n;
+}
+
 function toSummaryDto(row) {
   return {
     id: row.id,
@@ -65,6 +70,9 @@ function toSummaryDto(row) {
     title: row.title,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    kind: row.kind ?? 'CONTENT',
+    generatable: (row.kind ?? 'CONTENT') === 'CONTENT',
+    topic: row.topic ?? null,
   };
 }
 
@@ -132,7 +140,12 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
 
   // Units follow the document's own structure when it has one (its outline); page count and size are only safety bounds.
   const outline = db.prepare('SELECT level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
-  const chunks = planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk, minChars: outline.some((e) => e.detected) ? minCharsPerDetectedUnit : 0 });
+  const bounds = { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk, minChars: outline.some((e) => e.detected) ? minCharsPerDetectedUnit : 0 };
+  // With a structure the units are cut at the real heading positions (spans); without one, page-bounded safety chunks.
+  const chunks = outline.length > 0
+    ? planSectionUnits(pages.map((p) => ({ pageIndex: p.pageIndex, text: p.text ?? '' })), outline, bounds)
+    : planUnits(pages.map((p) => ({ pageIndex: p.pageIndex, chars: (p.text ?? '').length })), outline, bounds);
+  const pageTextByIndex = new Map(pages.map((p) => [p.pageIndex, p.text ?? '']));
 
   // The book's outline is often in capitals; a unit title reads like a title, keeping the document's own acronyms.
   const acronyms = acronymsIn(pages.map((p) => p.text ?? ''));
@@ -148,12 +161,14 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
     }
     db.prepare('DELETE FROM content_proposals WHERE user_id = ? AND source_id = ?').run(userId, sourceId);
     const insert = db.prepare(`
-      INSERT INTO content_proposals (user_id, source_id, chunk_index, page_start, page_end, title, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO content_proposals (user_id, source_id, chunk_index, page_start, page_end, title, created_at, updated_at, spans_json, kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     chunks.forEach((chunk, index) => {
       const title = chunk.title ? readableTitle(chunk.title, acronyms) : defaultTitle(source, chunk.pageStart, chunk.pageEnd);
-      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, title.slice(0, 300), now, now);
+      const text = chunk.spans ? textOfSpans(pageTextByIndex, chunk.spans) : '';
+      const { kind } = classifyUnit(chunk.title ?? null, text);
+      insert.run(userId, sourceId, index, chunk.pageStart, chunk.pageEnd, title.slice(0, 300), now, now, chunk.spans ? JSON.stringify(chunk.spans) : null, kind);
     });
   });
   run();
@@ -161,12 +176,118 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   return listProposals(db, userId, sourceId);
 }
 
+function outlineAndPages(db, userId, sourceId) {
+  const source = findOwnedSource(db, userId, sourceId);
+  if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (source.extraction_status !== 'EXTRACTED') {
+    throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de buscar um assunto.');
+  }
+  const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK').map((p) => ({ pageIndex: p.pageIndex, text: p.text ?? '' }));
+  const outline = db.prepare('SELECT ordinal, level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
+  return { source, pages, outline };
+}
+
+const SECTION_EXCERPT = 160;
+
+/**
+ * "O que você quer estudar?": the few sections of the document whose heading matches the words typed, each with the exact
+ * source text it would own. Nothing is created and nothing is sent anywhere: this only locates candidates.
+ */
+export function searchTopics(db, userId, sourceId, query) {
+  if (typeof query !== 'string' || query.trim().length < 2) {
+    throw new ProposalError('VALIDATION_FAILED', 'Informe ao menos duas letras do assunto.', 'q');
+  }
+  const { pages, outline } = outlineAndPages(db, userId, sourceId);
+  const pageText = new Map(pages.map((p) => [p.pageIndex, p.text]));
+  return findTopicSections(pages, outline, query).map((m) => {
+    const text = textOfSpans(pageText, m.spans);
+    const { kind, generatable } = classifyUnit(m.title, text);
+    return {
+      ordinal: m.ordinal,
+      title: m.title,
+      level: m.level,
+      pageStart: m.pageStart,
+      pageEnd: m.pageEnd,
+      chars: m.chars,
+      kind,
+      generatable,
+      exact: m.exact,
+      excerpt: text.slice(0, SECTION_EXCERPT),
+    };
+  });
+}
+
+function insertApprovedScope(db, userId, source, { title, topic, spans, kind }) {
+  const pagesTouched = spans.map((s) => s.pageIndex);
+  const pageStart = Math.min(...pagesTouched);
+  const pageEnd = Math.max(...pagesTouched);
+  const spansJson = JSON.stringify(spans);
+  const existing = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? AND spans_json = ?').get(userId, source.id, spansJson);
+  if (existing) return toDetail(db, userId, existing);
+  const now = new Date().toISOString();
+  const next = db.prepare('SELECT COALESCE(MAX(chunk_index), -1) + 1 AS n FROM content_proposals WHERE user_id = ? AND source_id = ?').get(userId, source.id).n;
+  const id = db.prepare(`
+    INSERT INTO content_proposals (user_id, source_id, chunk_index, page_start, page_end, title, created_at, updated_at, spans_json, kind, topic)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, source.id, next, pageStart, pageEnd, title.slice(0, 300), now, now, spansJson, kind, topic ?? null).lastInsertRowid;
+  return toDetail(db, userId, findOwnedProposal(db, userId, id));
+}
+
+function toDetail(db, userId, row) {
+  return { ...toSummaryDto(row), excerpt: proposalText(db, userId, row), chars: proposalChars(db, userId, row), spans: parseSpans(row) };
+}
+
+/**
+ * The student APPROVES a scope: either a located section (`ordinal`, from searchTopics) or an explicit range of pages with
+ * optional character offsets inside the first and last page. The result is an ordinary proposal whose spans are the ONLY
+ * text a provider will ever receive for it. Approving the same scope twice returns the same proposal.
+ */
+export function approveScope(db, userId, sourceId, { ordinal, range, title, topic } = {}) {
+  const { source, pages, outline } = outlineAndPages(db, userId, sourceId);
+  const pageText = new Map(pages.map((p) => [p.pageIndex, p.text]));
+
+  if (Number.isInteger(ordinal)) {
+    const entry = outline.find((e) => e.ordinal === ordinal);
+    if (!entry) throw new ProposalError('NOT_FOUND', 'Seção não encontrada neste documento.', 'ordinal');
+    const match = findTopicSections(pages, outline, entry.title, { limit: 50 }).find((m) => m.ordinal === ordinal);
+    if (!match) throw new ProposalError('NOT_FOUND', 'Esta seção não tem texto utilizável.', 'ordinal');
+    const { kind } = classifyUnit(match.title, textOfSpans(pageText, match.spans));
+    const acronyms = acronymsIn(pages.map((p) => p.text));
+    return insertApprovedScope(db, userId, source, { title: readableTitle(match.title, acronyms), topic: topic ?? match.title, spans: match.spans, kind });
+  }
+
+  if (range && Number.isInteger(range.pageStart) && Number.isInteger(range.pageEnd)) {
+    const { pageStart, pageEnd } = range;
+    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', 'A página final vem antes da inicial.', 'range');
+    const inRange = pages.filter((p) => p.pageIndex >= pageStart && p.pageIndex <= pageEnd);
+    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', 'Nenhuma página com texto neste intervalo.', 'range');
+    const first = inRange[0];
+    const last = inRange[inRange.length - 1];
+    const startOffset = range.startOffset ?? 0;
+    const endOffset = range.endOffset ?? last.text.length;
+    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição inicial fora da página.', 'startOffset');
+    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição final fora da página.', 'endOffset');
+    const spans = inRange.map((p) => ({
+      pageIndex: p.pageIndex,
+      start: p === first ? startOffset : 0,
+      end: p === last ? endOffset : p.text.length,
+    })).filter((s) => s.end > s.start);
+    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', 'O intervalo escolhido não contém texto.', 'range');
+    const chosenTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim() : defaultTitle(source, pageStart, pageEnd);
+    const { kind } = classifyUnit(chosenTitle, textOfSpans(pageText, spans));
+    return insertApprovedScope(db, userId, source, { title: chosenTitle, topic: topic ?? chosenTitle, spans, kind });
+  }
+
+  throw new ProposalError('VALIDATION_FAILED', 'Informe a seção (ordinal) ou o intervalo de páginas (range).', 'scope');
+}
+
 export function listProposals(db, userId, sourceId) {
   if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
   const rows = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? ORDER BY chunk_index').all(userId, sourceId);
   return rows.map((row) => ({
     ...toSummaryDto(row),
-    excerpt: chunkText(db, userId, sourceId, row.page_start, row.page_end).slice(0, EXCERPT_LENGTH),
+    excerpt: proposalText(db, userId, row).slice(0, EXCERPT_LENGTH),
+    chars: proposalChars(db, userId, row),
   }));
 }
 
@@ -178,7 +299,9 @@ export function getProposal(db, userId, proposalId) {
   if (!row) throw new ProposalError('NOT_FOUND', 'Proposta não encontrada.');
   return {
     ...toSummaryDto(row),
-    excerpt: chunkText(db, userId, row.source_id, row.page_start, row.page_end),
+    excerpt: proposalText(db, userId, row),
+    chars: proposalChars(db, userId, row),
+    spans: parseSpans(row),
   };
 }
 

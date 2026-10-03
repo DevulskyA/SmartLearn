@@ -20,6 +20,8 @@ function handleError(err, reply) {
       SUBJECT_CONFLICT: 409,
       REVISION_CONFLICT: 409,
       ENTITY_CONFLICT: 409,
+      SCOPE_VIOLATION: 409,
+      NOT_GENERATABLE: 409,
       SOURCE_CHANGED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
