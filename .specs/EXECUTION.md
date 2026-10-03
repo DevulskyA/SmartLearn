@@ -8,10 +8,15 @@ MAIN_MODE=READ_ONLY_FOR_AGENT
 STATE (2026-10-01, LOCAL ONLY, never pushed): claude/smartlearn-v1-complete = v1 + content-quality (ff to 6f2e816) + server npm audit fix (0 vulns) + app.js decomposition
   (source-details-ui.js, dom-utils.js, materials-ui.js; app.js 6464 -> 5855 lines) + A11Y-1 (paper --color-muted contrast fix, e2e/accessibility.spec.js axe audit).
   Last code gate @ 8dc5e65: lint 0 err/22 warn, inventory 149 files, unit 407, server 623, clippy, build, e2e 186/186, audits 0. Docs-only commits after.
-  OPEN: load-sensitive flake content-quality-flow.spec.js (pre-existing, cause of the original no-load failure not reproduced); Windows smoke never run (access denied).
-  HUMAN-GATED: VERDICT-1, IMPORT-1 (product), REALMODEL-1 (API key/cost), T51 deployment, push of PR #6, merge to main. Tracks: app-decomposition DONE, product-closure DONE.
+  2026-10-02/03 (LOCAL ONLY, 2 code commits on top of 5960f04): IMPORT-1 d7b4ccb (restore of the student's own logical export into an EMPTY account; no merge; materials/PDFs not restored) and
+  VERDICT-1 64cf979 (aggregate stats verdict weighted by compared question volume; mixed = both sides >= 25%). Gate @ 64cf979: lint 0 err/22 warn (=), inventory 152, unit 417/417, server 679/679,
+  e2e full run 187/189 (2 intermittent failures, see OPEN), restore e2e 2/2, study-verdict e2e 5/5, stats-* 24/24. NOT run: clippy/cargo, build (no Rust/build change); Windows smoke (access denied).
+  OPEN: load-sensitive flakes (pre-existing): content-quality-flow.spec.js; hoje-block-retest.spec.js ("Retention cue"/"Hoje block") fails intermittently — measured 1/20 at baseline 5960f04 vs 2/20 at 64cf979 with
+  `--repeat-each=10` (same command, same machine), 17/18 when run with keyboard-study-materials; keyboard-study-materials ACCESS-2 failed once in a full run and passed 6/6 isolated. Not caused by IMPORT-1/VERDICT-1. Windows smoke never run (access denied).
+  KNOWN LIMIT: restore refuses >5000 rows / >5 MB (SMARTLEARN_IMPORT_MAX_ROWS/BYTES) with a clean 413 at PREVIEW; nothing is written.
+  HUMAN-GATED: REALMODEL-1 (API key/cost), T51 deployment, push of PR #6, merge to main. (VERDICT-1 and IMPORT-1 were decided by the human on 2026-10-02 and are DONE locally.) Tracks: app-decomposition DONE, product-closure DONE.
   Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle. NO_PUSH / NO_MERGE(main) / NO_DEPLOY still in force.
-CURRENT_HEAD=0d26170
+CURRENT_HEAD=64cf979 (code; a docs commit follows it)
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
 REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/
   smartlearn-v1-complete = 175403e, dozens of commits behind); NOT pushed

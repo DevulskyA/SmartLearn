@@ -12,6 +12,10 @@
 INTEGRATION (2026-10-01, LOCAL ONLY): content-quality@01c67f7 integrated into claude/smartlearn-v1-complete by fast-forward afc4fd9 -> 6f2e816 (temp merge 2c17635 resolved one conflict in src/app.js,
 kept the v1 aria-label required by e2e/materials-a11y.spec.js). Gate @ 6f2e816: unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2. NOT resolved: pre-existing load-sensitive flake
 (content-quality-flow.spec.js, reproduces on baseline afc4fd9 under CPU load), server npm audit, Windows smoke (access denied). Migrations: 001-029 on v1, next free = 030.
+IMPORT-1 + VERDICT-1 (2026-10-02/03, LOCAL ONLY, human-approved option B for both): d7b4ccb restores the student's own logical export into an EMPTY account (preview -> confirm -> one atomic transaction; ids remapped;
+no merge; materials/PDFs not restored and said so in the UI; 409 RESTORE_REQUIRES_EMPTY_ACCOUNT; capacity checked at preview); 64cf979 weights the aggregate stats verdict by compared question volume (mixed only when
+improving AND declining each >= 25%; insufficient/no-evidence never vote; ties go to the cautious label). No schema change (migrations still 001-029, next free = 030). Gate and proofs: .specs/EXECUTION.md and
+conductor/tracks/content-quality/plan.md (VERDICT-1, IMPORT-1 entries). Independent read-only watchdog on IMPORT-1 (shadow mode): PASS.
 TRACKS (2026-10-01): app-decomposition DONE (Materiais extracted; Stats/Study Now/Exam/Review Dashboard deliberately left until a feature touches them), product-closure DONE (A11Y-1 contrast fix + axe spec, JOURNEY-1 already covered). Remaining work is human-gated (see EXECUTION.md).
 
 CONTENT_QUALITY (2026-09-19, branch claude/content-quality, merged with v1-complete@6f32f4f; NOT yet fast-forwarded into claude/smartlearn-v1-complete): track DONE. Draft pipeline = 1 generation -> deterministic screen
