@@ -176,8 +176,13 @@ function auditSummary(summary, segments) {
 
 // The "core" of an answer: what a student would type to get it right — the text before the first
 // clause break. Used to detect an answer given away in the question or the hint.
+// An answer may open by restating the condition the question itself names ("Quando a perfusão renal cai, a angiotensina II
+// ..."); the generation prompt asks for that. That opening gives nothing away, so the claim that follows it is the core.
+const LEADING_CONDITION = /^(quando|se|em|na|no|nos|nas|durante|caso|ao)\s/;
 function answerCore(answer) {
-  const core = norm(answer).split(/[,;:.(]| porque /)[0].replace(/\s+/g, ' ').trim();
+  const clean = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+  const clauses = norm(answer).split(/[,;:.(]| porque /).map(clean);
+  const core = LEADING_CONDITION.test(clauses[0]) && clauses.length > 1 && clauses[1] ? clauses[1] : clauses[0];
   return core.length >= 4 || /\d/.test(core) ? core : '';
 }
 const squash = (s) => norm(s).replace(/\s+/g, ' ');
@@ -215,6 +220,33 @@ function auditQuestions(questions, segments) {
     if (core && q.hint && squash(q.hint).includes(core)) {
       add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, `A dica repete a resposta ("${clip(q.answer, 60)}").`,
         'Uma dica é uma pista parcial (categoria, direção, termo relacionado), nunca a resposta.');
+    }
+
+    // 2b) A hint can also give the answer away WITHOUT repeating all of it: its value. (Numbers the question itself already
+    // states are not a leak, and one-digit numbers are too common to mean anything.)
+    if (q.hint) {
+      const questionNumbers = new Set(numbersIn(q.question).map((n) => n.key));
+      const hintNumbers = new Set(numbersIn(q.hint).map((n) => n.key));
+      const leaked = numbersIn(q.answer).find((n) => (n.key.includes('.') || n.key.length >= 2) && hintNumbers.has(n.key) && !questionNumbers.has(n.key));
+      if (leaked) {
+        add('HINT_REVEALS_VALUE', 'HIGH', q.hint, `A dica traz o valor da resposta (${leaked.raw}).`,
+          'Aponte o caminho (categoria, relação, mecanismo), sem citar o valor da resposta.');
+      }
+    }
+
+    // 2c) A circular explanation: nothing in it that the question and the answer did not already say. Deliberately narrow —
+    // zero new content terms and zero new numbers — because "does this explain WHY?" is semantic (the model audit owns it);
+    // only the exact restatement is reliable to detect.
+    if (explanationWords >= 5) {
+      const known = new Set(tokens(`${q.question} ${q.answer}`).map((t) => stem(t.key)));
+      const knownNumbers = new Set(numbersIn(`${q.question} ${q.answer}`).map((n) => n.key));
+      const contentStems = [...new Set(tokens(q.explanation).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key) && !isPhrasing(t.key)).map((t) => stem(t.key)))];
+      const addsTerm = contentStems.some((s) => !known.has(s));
+      const addsNumber = numbersIn(q.explanation).some((n) => !knownNumbers.has(n.key));
+      if (contentStems.length >= 3 && !addsTerm && !addsNumber) {
+        add('EXPLANATION_ADDS_NOTHING', 'MEDIUM', q.explanation, 'A explicação só repete o que a pergunta e a resposta já dizem: não explica por quê.',
+          'Explique o mecanismo, a condição ou a confusão a evitar, usando só o que a página citada diz.');
+      }
     }
 
     // 3) Facts the cited page does not hold — values first (the classic invented fact), then terms.

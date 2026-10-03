@@ -76,6 +76,7 @@ test('duplicate questions are flagged on the second; a verbatim copy of the sour
   const copy = audit(Q({
     question: 'O que determina a filtração glomerular?',
     answer: 'A filtração glomerular é determinada pela pressão hidrostática capilar (60 mmHg), que favorece a filtração, e pela pressão oncótica (32 mmHg) e pela pressão da cápsula de Bowman (18 mmHg), que se opõem.',
+    explanation: 'A pressão hidrostática capilar favorece a filtração; as pressões oncótica e da cápsula de Bowman se opõem e o saldo entre elas define a filtração.',
   }));
   const lit = copy.findings.find((f) => f.issue === 'QUESTION_LITERAL_COPY');
   assert.ok(lit);

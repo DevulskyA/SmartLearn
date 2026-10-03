@@ -351,7 +351,7 @@ test('pipeline: SOURCE -> CODEX -> schema validation -> audit -> DRAFT, labelled
     assert.equal(draft.provider, 'CODEX');
     assert.equal(draft.live, true);
     assert.equal(draft.modelVersion, 'codex:default', 'the model does not get to name itself');
-    assert.equal(draft.promptVersion, '4');
+    assert.equal(draft.promptVersion, '5');
     assert.equal(draft.audit.modelAudit, 'OK');
     assert.ok(draft.audit.auditedBy.includes('MODEL'));
     assert.equal(draft.audit.repaired, false);

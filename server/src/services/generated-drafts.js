@@ -239,7 +239,9 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
-  promptVersion = '4',
+  // '5' (REALMODEL-1 quality closure): explanations must add a cause, hints must not leak the answer or its value, named
+  // conditions must survive, whole-sentence copying is discouraged.
+  promptVersion = '5',
   apiKey = null,
   model = null,
   consentGranted = false,
