@@ -2984,7 +2984,8 @@ migrationConfirmBtn?.addEventListener("click", async () => {
     if (migrationResultSummary) {
       const parts = Object.entries(result.commit.counts ?? {})
         .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
-      migrationResultSummary.textContent = `Importação concluída — ${parts.join(", ")}.`;
+      const verb = result.commit.kind === "LOGICAL_RESTORE" ? "Restauração concluída" : "Importação concluída";
+      migrationResultSummary.textContent = `${verb} — ${parts.join(", ")}.`;
     }
     setMigrationMessage("");
     // Deliberately NOT re-enabling migrationConfirmBtn here: the preview

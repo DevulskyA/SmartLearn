@@ -58,6 +58,12 @@ const ENTITY_LABELS = {
   reviewTasks: 'Revisões',
   exercises: 'Exercícios',
   learningEvidence: 'Evidências de aprendizagem',
+  exerciseVersions: 'Versões de exercícios',
+  exerciseAttempts: 'Tentativas',
+  learningEvents: 'Eventos de aprendizagem',
+  exams: 'Provas',
+  examItems: 'Itens de provas',
+  examEvidence: 'Evidências de provas',
 };
 
 export function entityLabel(key) {

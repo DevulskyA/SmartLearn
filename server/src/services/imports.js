@@ -6,14 +6,11 @@ import { createHash } from 'node:crypto';
 import { normalizeLegacyExport, ImportNormalizationError } from '../../../shared/import-normalization.js';
 import { nameKey } from '../../../shared/text-validation.js';
 import { config } from '../config.js';
+import { ImportError } from './import-error.js';
+import { isLogicalExport } from '../../../shared/logical-import.js';
+import { LOGICAL_KIND, buildLogicalPreview, restoreLogical, assertWithinImportCapacity } from './logical-restore.js';
 
-export class ImportError extends Error {
-  constructor(code, message, details) {
-    super(message);
-    this.code = code;
-    this.details = details;
-  }
-}
+export { ImportError };
 
 // Same 30-minute convention as T11's reset tokens (server/src/auth/reset-tokens.js).
 export const PREVIEW_LIFETIME_MS = 30 * 60 * 1000;
@@ -105,6 +102,13 @@ function findOwned(db, userId, id) {
  * renews the existing preview (fresh report/expiry) instead of
  * accumulating a duplicate row (UNIQUE(user_id, source_checksum)). */
 export function createPreview(db, userId, rawSource, now = new Date()) {
+  // IMPORT-1: SmartLearn's own export is restored, not migrated — a different
+  // shape, different rules (empty account only), same preview/commit plumbing.
+  if (isLogicalExport(rawSource)) {
+    const { normalized: logical, report: logicalReport } = buildLogicalPreview(db, userId, rawSource);
+    return persistPreview(db, userId, rawSource, logical.exportVersion, logical, logicalReport, now);
+  }
+
   let normalized;
   try {
     normalized = normalizeLegacyExport(rawSource);
@@ -115,9 +119,14 @@ export function createPreview(db, userId, rawSource, now = new Date()) {
     throw err;
   }
 
-  const checksum = sourceChecksum(rawSource);
   const { mapping, conflicts } = buildMappingAndConflicts(db, userId, normalized);
   const report = { counts: buildCounts(normalized), warnings: normalized.warnings, conflicts, mapping };
+  return persistPreview(db, userId, rawSource, normalized.sourceVersion, normalized, report, now);
+}
+
+/** Stores (or renews) the owned preview row for these exact bytes. */
+function persistPreview(db, userId, rawSource, sourceVersion, normalized, report, now) {
+  const checksum = sourceChecksum(rawSource);
   const reportJson = JSON.stringify(report);
   const normalizedJson = JSON.stringify(normalized);
   const createdAt = now.toISOString();
@@ -126,14 +135,14 @@ export function createPreview(db, userId, rawSource, now = new Date()) {
   const existing = db.prepare('SELECT id FROM import_previews WHERE user_id = ? AND source_checksum = ?').get(userId, checksum);
   if (existing) {
     db.prepare('UPDATE import_previews SET source_version = ?, normalized_json = ?, report_json = ?, created_at = ?, expires_at = ? WHERE id = ?')
-      .run(normalized.sourceVersion, normalizedJson, reportJson, createdAt, expiresAt, existing.id);
+      .run(sourceVersion, normalizedJson, reportJson, createdAt, expiresAt, existing.id);
     return toDto(findOwned(db, userId, existing.id));
   }
 
   const result = db.prepare(`
     INSERT INTO import_previews (user_id, source_checksum, source_version, normalized_json, report_json, created_at, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, checksum, normalized.sourceVersion, normalizedJson, reportJson, createdAt, expiresAt);
+  `).run(userId, checksum, sourceVersion, normalizedJson, reportJson, createdAt, expiresAt);
 
   return toDto(findOwned(db, userId, result.lastInsertRowid));
 }
@@ -217,6 +226,7 @@ export function commitImport(db, userId, previewId, now = new Date()) {
   }
 
   const report = JSON.parse(row.report_json);
+  if (report.kind === LOGICAL_KIND) return commitLogicalRestore(db, userId, row, report, now);
   if (report.conflicts.length > 0) {
     throw new ImportError(
       'IMPORT_HAS_CONFLICTS',
@@ -337,4 +347,31 @@ export function commitImport(db, userId, previewId, now = new Date()) {
   });
 
   return run();
+}
+
+/** IMPORT-1 commit: capacity preflight, then the whole restore in ONE transaction. */
+function commitLogicalRestore(db, userId, row, report, now) {
+  assertWithinImportCapacity(report.counts, row.normalized_json);
+  const normalized = JSON.parse(row.normalized_json);
+
+  return db.transaction(() => {
+    const created = restoreLogical(db, userId, normalized, now);
+    for (const key of Object.keys(report.counts)) {
+      if (created[key] !== report.counts[key]) {
+        throw new ImportError('IMPORT_INTEGRITY_ERROR', `Contagem de ${key} divergente ao restaurar: esperado ${report.counts[key]}, inserido ${created[key]}.`);
+      }
+    }
+    const committedAt = now.toISOString();
+    const result = {
+      previewId: row.id,
+      kind: LOGICAL_KIND,
+      sourceVersion: row.source_version,
+      checksum: row.source_checksum,
+      counts: created,
+      committedAt,
+    };
+    db.prepare('UPDATE import_previews SET committed_at = ?, commit_result_json = ? WHERE id = ?')
+      .run(committedAt, JSON.stringify(result), row.id);
+    return result;
+  })();
 }

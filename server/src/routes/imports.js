@@ -1,4 +1,5 @@
 import * as imports from '../services/imports.js';
+import { config } from '../config.js';
 
 function handleError(err, reply) {
   if (err instanceof imports.ImportError) {
@@ -8,6 +9,7 @@ function handleError(err, reply) {
       PREVIEW_EXPIRED: 410,
       PREVIEW_TAMPERED: 409,
       IMPORT_HAS_CONFLICTS: 409,
+      RESTORE_REQUIRES_EMPTY_ACCOUNT: 409,
       IMPORT_TOO_LARGE: 413,
       IMPORT_INTEGRITY_ERROR: 500,
     };
@@ -18,7 +20,10 @@ function handleError(err, reply) {
 }
 
 export function registerImportRoutes(app, db) {
+  // A logical backup of a real account is routinely larger than Fastify's 1 MiB
+  // default; the same capacity ceiling the commit enforces applies here.
   app.post('/imports/preview', {
+    bodyLimit: config.importMaxBytes,
     schema: {
       body: {
         type: 'object',

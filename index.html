@@ -577,7 +577,7 @@
             <div class="section-heading">
               <p class="eyebrow">Segurança dos dados</p>
               <h2 id="backup-title">Backup</h2>
-              <p>Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações.</p>
+              <p>Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações. PDFs e fontes enviadas não entram no backup.</p>
             </div>
             <div class="settings-actions">
               <button class="primary-button" id="export-backup" type="button">Exportar backup</button>
@@ -603,11 +603,11 @@
           <section class="settings-card" id="migration-card" aria-labelledby="migration-title" hidden>
             <div class="section-heading">
               <p class="eyebrow">Migração</p>
-              <h2 id="migration-title">Importar de um backup antigo</h2>
-              <p>Envie um arquivo de exportação local (v1, v2 ou v3) para revisar o que será migrado antes de confirmar. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
+              <h2 id="migration-title">Restaurar ou migrar backup</h2>
+              <p>Envie um backup exportado pelo SmartLearn, ou um arquivo antigo (v1, v2 ou v3), para revisar o que será gravado antes de confirmar. Um backup do SmartLearn só pode ser restaurado em uma conta vazia e não traz PDFs nem fontes. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
             </div>
             <div class="settings-actions">
-              <button class="secondary-button file-button" id="migration-choose-file" type="button">Selecionar arquivo antigo</button>
+              <button class="secondary-button file-button" id="migration-choose-file" type="button">Selecionar arquivo de backup</button>
               <input class="visually-hidden" id="migration-file-input" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
             </div>
             <p class="form-message" id="migration-message" role="status" aria-live="polite"></p>

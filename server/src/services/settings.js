@@ -32,14 +32,8 @@ export function get(db, userId) {
 
 const IANA_TIMEZONE_PATTERN = /^[A-Za-z_]+\/[A-Za-z_]+$/;
 
-/**
- * Only `timezone` is user-editable. design.md/tasks.md are explicit that
- * the fixed review schedule is a product decision, not a per-account
- * preference — there is deliberately no field here to change it, so an
- * account settings edit can never be read as consent to adaptive
- * rescheduling.
- */
-export function updateTimezone(db, userId, timezone) {
+/** The single timezone rule: used by the settings edit and by a logical-backup restore. */
+export function assertValidTimezone(timezone) {
   if (typeof timezone !== 'string' || !IANA_TIMEZONE_PATTERN.test(timezone)) {
     throw new SettingsError('VALIDATION_FAILED', 'timezone deve ser um identificador IANA válido (ex.: America/Sao_Paulo).', 'timezone');
   }
@@ -48,6 +42,17 @@ export function updateTimezone(db, userId, timezone) {
   } catch {
     throw new SettingsError('VALIDATION_FAILED', 'timezone não é reconhecido pelo runtime.', 'timezone');
   }
+}
+
+/**
+ * Only `timezone` is user-editable. design.md/tasks.md are explicit that
+ * the fixed review schedule is a product decision, not a per-account
+ * preference — there is deliberately no field here to change it, so an
+ * account settings edit can never be read as consent to adaptive
+ * rescheduling.
+ */
+export function updateTimezone(db, userId, timezone) {
+  assertValidTimezone(timezone);
 
   const now = new Date().toISOString();
   const scheduleJson = JSON.stringify(REVIEW_DAY_OFFSETS);
