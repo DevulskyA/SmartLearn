@@ -45,19 +45,27 @@ export function validateProductionConfig(env = process.env, { fileExists = exist
   if (env.PORT !== undefined && !(isPositiveInt(env.PORT) && Number(env.PORT) <= 65535)) problems.push(problem('PORT_INVALID', `PORT inválida: ${env.PORT}`));
 
   // Upload/import budgets: NaN or <= 0 would silently disable a limit.
-  for (const name of ['SMARTLEARN_SOURCE_MAX_BYTES', 'SMARTLEARN_SOURCE_QUOTA_BYTES', 'SMARTLEARN_IMPORT_MAX_ROWS', 'SMARTLEARN_IMPORT_MAX_BYTES', 'SMARTLEARN_AI_TIMEOUT_MS', 'SMARTLEARN_AI_MAX_INPUT_CHARS']) {
+  for (const name of ['SMARTLEARN_SOURCE_MAX_BYTES', 'SMARTLEARN_SOURCE_QUOTA_BYTES', 'SMARTLEARN_IMPORT_MAX_ROWS', 'SMARTLEARN_IMPORT_MAX_BYTES', 'SMARTLEARN_AI_TIMEOUT_MS', 'SMARTLEARN_AI_MAX_INPUT_CHARS', 'SMARTLEARN_CODEX_TIMEOUT_MS']) {
     if (env[name] !== undefined && !isPositiveInt(env[name])) problems.push(problem('LIMIT_INVALID', `${name} deve ser um inteiro positivo (recebido: ${env[name]}).`));
   }
 
   // The real AI provider needs key + model + consent together (config.js falls back to the FAKE provider
   // otherwise). A half-configured production must fail loudly, not quietly serve fake drafts.
-  const aiParts = [env.SMARTLEARN_AI_API_KEY, env.SMARTLEARN_AI_MODEL, env.SMARTLEARN_AI_CONSENT === 'true' ? 'yes' : ''];
-  if (aiParts.some(Boolean) && !aiParts.every(Boolean)) {
-    problems.push(problem('AI_CONFIG_INCOMPLETE', 'SMARTLEARN_AI_API_KEY, SMARTLEARN_AI_MODEL e SMARTLEARN_AI_CONSENT=true devem ser definidos juntos (ou nenhum).'));
-  }
-  if (env.SMARTLEARN_AI_API_KEY) {
-    const cap = Number(env.SMARTLEARN_AI_BUDGET_CAP_USD);
-    if (!(Number.isFinite(cap) && cap > 0)) problems.push(problem('AI_BUDGET_REQUIRED', 'Com provedor real, SMARTLEARN_AI_BUDGET_CAP_USD deve ser um número positivo.'));
+  // CODEX authenticates through the operator's own Codex CLI login: no API key, model or USD cap is required (or
+  // meaningful), only the explicit consent.
+  if (String(env.SMARTLEARN_AI_PROVIDER ?? '').trim().toUpperCase() === 'CODEX') {
+    if (env.SMARTLEARN_AI_CONSENT !== 'true') {
+      problems.push(problem('AI_CONSENT_REQUIRED', 'Com SMARTLEARN_AI_PROVIDER=CODEX, SMARTLEARN_AI_CONSENT=true é obrigatório.'));
+    }
+  } else {
+    const aiParts = [env.SMARTLEARN_AI_API_KEY, env.SMARTLEARN_AI_MODEL, env.SMARTLEARN_AI_CONSENT === 'true' ? 'yes' : ''];
+    if (aiParts.some(Boolean) && !aiParts.every(Boolean)) {
+      problems.push(problem('AI_CONFIG_INCOMPLETE', 'SMARTLEARN_AI_API_KEY, SMARTLEARN_AI_MODEL e SMARTLEARN_AI_CONSENT=true devem ser definidos juntos (ou nenhum).'));
+    }
+    if (env.SMARTLEARN_AI_API_KEY) {
+      const cap = Number(env.SMARTLEARN_AI_BUDGET_CAP_USD);
+      if (!(Number.isFinite(cap) && cap > 0)) problems.push(problem('AI_BUDGET_REQUIRED', 'Com provedor real, SMARTLEARN_AI_BUDGET_CAP_USD deve ser um número positivo.'));
+    }
   }
 
   // Nothing development-only may ride along.

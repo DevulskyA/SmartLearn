@@ -7,6 +7,10 @@ import {
 import {
   generateDraft as openaiGenerateDraft, auditDraftWithModel as openaiAudit, repairDraftWithModel as openaiRepair, OPENAI_PROVIDER_NAME,
 } from '../ai/openai-provider.js';
+import {
+  generateDraft as codexGenerateDraft, auditDraftWithModel as codexAudit, repairDraftWithModel as codexRepair,
+  CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS,
+} from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
 
@@ -26,7 +30,7 @@ export class DraftError extends Error {
  * cap"). Pure and side-effect-free so it is directly unit-testable
  * without touching config.js or the network.
  */
-export function selectProvider({ provider: declared = null, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl }) {
+export function selectProvider({ provider: declared = null, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex = {} }) {
   const liveAvailable = Boolean(apiKey) && Boolean(model) && consentGranted === true && typeof budgetCapUsd === 'number' && budgetCapUsd > 0;
   const options = { apiKey, model, ...(fetchImpl ? { fetchImpl } : {}), ...(apiUrl ? { apiUrl } : {}) };
   const anthropic = () => ({
@@ -51,6 +55,25 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
   if (declared) {
     const name = String(declared).toUpperCase();
     if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
+    // CODEX authenticates through the operator's own Codex CLI login, not an API key, and has no per-request price to
+    // cap — so the key/model/budget gate does not apply. Explicit consent still does, and a Codex that is missing or not
+    // logged in is an explicit error raised by the provider itself (never fake/other-provider content).
+    if (name === CODEX_PROVIDER_NAME) {
+      if (consentGranted !== true) {
+        throw new DraftError('MISSING_CREDENTIALS', 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.');
+      }
+      // One options object per selected provider: it also carries the per-draft call counters.
+      const codexOptions = { ...codex, state: {} };
+      return {
+        name: CODEX_PROVIDER_NAME,
+        live: true,
+        // The outer deadline sits just above the child-process deadline so the child is killed first.
+        timeoutMs: (codex.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS) + 5_000,
+        generate: (input) => codexGenerateDraft(input, codexOptions),
+        audit: (input) => codexAudit(input, codexOptions),
+        repair: (input) => codexRepair(input, codexOptions),
+      };
+    }
     if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
       throw new DraftError('UNKNOWN_PROVIDER', `Provedor de IA desconhecido: ${declared}.`);
     }
@@ -226,6 +249,7 @@ export async function createDraft(db, userId, proposalId, {
   fetchImpl = null,
   apiUrl = null,
   provider: declaredProvider = null,
+  codex = {},
   now = () => new Date(),
 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
@@ -241,11 +265,13 @@ export async function createDraft(db, userId, proposalId, {
   const inputDigest = segmentsDigest(found.segments);
   const inputGeneration = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
 
-  const provider = selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl });
+  const provider = selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
+  // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
+  const deadlineMs = provider.timeoutMs ?? timeoutMs;
 
   let raw;
   try {
-    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion }), timeoutMs, 'TIMEOUT');
+    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion }), deadlineMs, 'TIMEOUT');
   } catch (err) {
     if (err instanceof DraftError) throw err;
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
@@ -260,7 +286,7 @@ export async function createDraft(db, userId, proposalId, {
     throw err;
   }
 
-  const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs });
+  const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs: deadlineMs });
   validated = audited.draft;
 
   const nowIso = now().toISOString();

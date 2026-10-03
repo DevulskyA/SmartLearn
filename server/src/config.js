@@ -43,7 +43,7 @@ export const config = {
   // becomes a fabricated "live" pass (design.md/T37).
   aiApiKey: process.env.SMARTLEARN_AI_API_KEY || null,
   aiModel: process.env.SMARTLEARN_AI_MODEL || null,
-  // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | FAKE. Declared = honoured exactly, never silently replaced.
+  // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | CODEX | FAKE. Declared = honoured exactly, never silently replaced.
   aiProvider: process.env.SMARTLEARN_AI_PROVIDER ? process.env.SMARTLEARN_AI_PROVIDER.trim().toUpperCase() : null,
   aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
   aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,
@@ -51,4 +51,10 @@ export const config = {
   aiApiUrl: process.env.SMARTLEARN_AI_API_URL || null,
   aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
   aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
+  // CODEX provider (SMARTLEARN_AI_PROVIDER=CODEX): runs the operator's already-logged-in Codex CLI (ChatGPT account).
+  // No API key and no USD budget cap apply; explicit consent (SMARTLEARN_AI_CONSENT=true) still does.
+  codexCommand: process.env.SMARTLEARN_CODEX_COMMAND || 'codex',
+  codexModel: process.env.SMARTLEARN_CODEX_MODEL || null,
+  codexTimeoutMs: Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS ?? 240_000),
+  codexReasoningEffort: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'high',
 };
