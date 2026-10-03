@@ -88,22 +88,24 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
   // ONE bounded section only: the model never sees the rest of the book.
   // The title lives in an <input> and several items merely MENTION the section in their (hidden) excerpt: select by the
   // visible page range, which is unique, and verify the title afterwards.
-  const item = page.locator('.source-proposal-item', { has: page.locator('.source-proposal-range', { hasText: new RegExp(`^Páginas ${pageStart}–${pageEnd}$`) }) });
-  await expect(item).toHaveCount(1);
-  await expect(item.locator('.source-proposal-title-input')).toHaveValue(section);
-  await expect(item).toBeVisible({ timeout: 10_000 });
-  await item.scrollIntoViewIfNeeded();
-  await item.locator('[data-action="generate-draft"]').click();
+  // The student says WHAT to study; the located section (heading text + exact spans) is the only thing sent to the model.
+  await page.locator('#sources-topic-input').fill(section);
+  await page.locator('#sources-topic-form button[type="submit"]').click();
+  const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const item = page.locator('.source-topic-item', { has: page.locator('.source-topic-title', { hasText: new RegExp(`^${escapeRegExp(section)}$`) }) }).first();
+  await expect(item).toBeVisible({ timeout: 30_000 });
+  await item.locator('[data-action="generate-topic"]').click();
   // Either outcome ends the wait: an error message must fail the test now, not after the full timeout.
   await expect(page.locator('#sources-message')).toContainText(/Rascunho gerado|Tempo limite|Não foi possível|Erro|erro|falh/i, { timeout: 1_200_000 });
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
 
-  const panel = item.locator('.source-draft-panel');
+  const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('.source-draft-caveat')).toContainText('não verificado');
-  expect(await panel.locator('.source-draft-question').count()).toBeGreaterThanOrEqual(3);
-  await expect(panel.locator('.source-draft-audit')).toContainText('Conferência automática');
-  await item.locator('.source-draft-panel .summary-source summary').first().click().catch(() => {});
+  await expect(panel).toContainText('não verificado');
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  expect(await panel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(3);
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(panel.locator('[data-panel="review"]')).toContainText('Conferência automática');
 
   // Hand the draft (exactly what the reviewer sees, from the server) and the section's own text to the comparison.
   const proposals = await page.evaluate(async (base) => {
@@ -117,7 +119,7 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
   }, API_BASE);
   // Several proposals may share the title (the section name can appear in more than one chapter): the one that was
   // generated is the one that has a draft.
-  const candidates = proposals.filter((p) => p.title === section && Number(p.pageStart ?? p.page_start) === pageStart && Number(p.pageEnd ?? p.page_end) === pageEnd);
+  const candidates = proposals.filter((p) => p.title === section);
   expect(candidates.length, 'the section has at least one proposal').toBeGreaterThan(0);
   let proposal = null;
   let drafts = [];

@@ -78,6 +78,7 @@ test('sending the same PDF again lands on its existing trechos and their rascunh
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').click();
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
+  await page.locator('[data-action="lesson-back"]').click();
 
   // Same bytes again: the server has a rascunho on this source's trechos and refuses to replace them.
   await page.setInputFiles('#sources-file-input', file);

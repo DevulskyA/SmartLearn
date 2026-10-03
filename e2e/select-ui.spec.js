@@ -387,11 +387,12 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
     await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
     const firstItem = page.locator('.source-proposal-item').first();
     await firstItem.locator('[data-action="generate-draft"]').click();
-    const firstPanel = firstItem.locator('.source-draft-panel');
+    const firstPanel = page.locator('.lesson-editor');
     await expect(firstPanel).toBeVisible();
     await firstPanel.locator('.source-draft-subject-input').fill('Nefrologia Select UI');
     await firstPanel.locator('[data-action="accept-draft"]').click();
     await expect(firstPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+    await firstPanel.locator('[data-action="lesson-back"]').click();
 
     // Second material's draft panel now offers an existing-subject select
     // with a real alternative — the exact consumer flagged as untested.
@@ -402,7 +403,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
     await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
     const secondItem = page.locator('.source-proposal-item').first();
     await secondItem.locator('[data-action="generate-draft"]').click();
-    const secondPanel = secondItem.locator('.source-draft-panel');
+    const secondPanel = page.locator('.lesson-editor');
     await expect(secondPanel).toBeVisible();
 
     const nativeSelector = '.source-draft-subject-select';

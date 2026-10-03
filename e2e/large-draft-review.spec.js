@@ -125,57 +125,69 @@ test('a 50-question draft: find the flagged items from the findings, fix them, k
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'grande.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES) });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 15000 });
-  const item = page.locator('.source-proposal-item').first();
   const started = Date.now();
-  await item.locator('[data-action="generate-draft"]').click();
-  const panel = item.locator('.source-draft-panel');
-  await expect(panel.locator('.source-draft-audit')).toBeVisible({ timeout: 20000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  const panel = page.locator('.lesson-editor');
+  await expect(panel).toBeVisible({ timeout: 20000 });
   console.log(`[CQ-7] generate -> reviewable draft (50 questions): ${Date.now() - started} ms`);
 
   // everything arrived: 50 questions, 2 flagged, and each flag says WHICH question
-  await expect(panel.locator('.source-draft-questions > li')).toHaveCount(N);
-  await expect(panel.locator('.source-draft-audit-head')).toContainText('para verificar antes de aceitar');
-  await expect(panel.locator('.source-draft-audit-issue', { hasText: `Questão ${FLAG_THIN} ·` }).first()).toBeVisible();
-  await expect(panel.locator('.source-draft-audit-issue', { hasText: `Questão ${FLAG_VALUE} ·` }).first()).toBeVisible();
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  await expect(panel.locator('.lesson-qitem')).toHaveCount(N);
+  await expect(panel.locator('.lesson-qitem[data-state="flagged"]')).toHaveCount(2);
+  await expect(panel.locator('.lesson-qitem').nth(FLAG_THIN - 1)).toContainText('Sinalizada');
+  await expect(panel.locator('.lesson-qitem').nth(FLAG_VALUE - 1)).toContainText('Sinalizada');
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  const review = panel.locator('[data-panel="review"]');
+  await expect(review.locator('.lesson-review-name', { hasText: `Questão ${FLAG_THIN}` })).toBeVisible();
+  await expect(review.locator('.lesson-review-name', { hasText: `Questão ${FLAG_VALUE}` })).toBeVisible();
 
-  // the reviewer must be able to REACH a flagged item without scrolling through 50 blocks
-  const goThin = panel.locator('[data-action="goto-draft-question"][data-index="' + (FLAG_THIN - 1) + '"]').first();
-  await expect(goThin).toBeVisible();
-  await goThin.click();
-  const thinGroup = panel.locator(`.source-draft-edit-question[data-index="${FLAG_THIN - 1}"]`);
-  await expect(thinGroup.locator('.source-draft-edit-a')).toBeFocused();
-  expect(await inViewport(thinGroup.locator('.source-draft-edit-a'))).toBe(true);
-  // and the flagged question is marked where it is read, so a skim finds it too
-  await expect(panel.locator('.source-draft-questions > li.is-flagged')).toHaveCount(2);
+  // the reviewer must be able to REACH a flagged item without scrolling through 50 blocks: one click from the review
+  await review.locator('summary', { hasText: `Questão ${FLAG_THIN}` }).click();
+  await review.locator('[data-action="goto-entity"]', { hasText: `questão ${FLAG_THIN}` }).first().click();
+  await expect(panel.locator('[role="tab"][aria-selected="true"]')).toContainText('Questões');
+  await expect(panel.locator('.lesson-qitem').nth(FLAG_THIN - 1)).toHaveAttribute('aria-current', 'true');
+  await expect(panel.locator('.lesson-qeditor textarea').first()).toBeFocused();
+  expect(await inViewport(panel.locator('.lesson-qeditor textarea').first())).toBe(true);
+  // and the flagged question's own findings are shown WITH it, not poured into the content
+  await expect(panel.locator('.lesson-qeditor .lesson-findings')).toContainText('Resposta sem explicação suficiente');
 
   // fix #1 (bare answer -> real answer + explanation), and ALSO edit an unflagged question in the middle to prove nothing is lost
-  await thinGroup.locator('.source-draft-edit-a').fill(`O parâmetro Omega${FLAG_THIN}.`);
-  await thinGroup.locator('.source-draft-edit-e').fill(`O marcador Zeta${FLAG_THIN} eleva o parâmetro Omega${FLAG_THIN} durante a fase experimental.`);
-  const midGroup = panel.locator('.source-draft-edit-question[data-index="9"]');
-  await midGroup.locator('.source-draft-edit-q').fill('O que o marcador Zeta10 eleva, segundo a página?');
-  await panel.locator('[data-action="save-draft"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Correções salvas', { timeout: 15000 });
-  // the fixed question's findings are gone; the other flagged question's remain
-  await expect(panel.locator('.source-draft-audit-issue', { hasText: `Questão ${FLAG_THIN} ·` })).toHaveCount(0);
-  await expect(panel.locator('.source-draft-audit-issue', { hasText: `Questão ${FLAG_VALUE} ·` }).first()).toBeVisible();
-  await expect(panel.locator('.source-draft-questions > li')).toHaveCount(N);
+  await panel.locator('.lesson-qeditor textarea').nth(1).fill(`O parâmetro Omega${FLAG_THIN}.`);
+  await panel.locator('.lesson-qeditor textarea').nth(2).fill(`O marcador Zeta${FLAG_THIN} eleva o parâmetro Omega${FLAG_THIN} durante a fase experimental.`);
+  await panel.locator('[data-action="save-question"]').click();
+  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  await panel.locator('.lesson-qitem').nth(9).click();
+  await panel.locator('.lesson-qeditor textarea').first().fill('O que o marcador Zeta10 eleva, segundo a página?');
+  await panel.locator('[data-action="save-question"]').click();
+  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  // the fixed question is no longer flagged; the other flagged question still is; nothing else moved
+  await expect(panel.locator('.lesson-qitem[data-state="flagged"]')).toHaveCount(1);
+  await expect(panel.locator('.lesson-qitem').nth(FLAG_VALUE - 1)).toContainText('Sinalizada');
+  await expect(panel.locator('.lesson-qitem')).toHaveCount(N);
 
-  // the edit made BEFORE the re-render is still there, and the editor for the remaining flag is one click away
-  await expect(panel.locator('.source-draft-questions > li').nth(9)).toContainText('O que o marcador Zeta10 eleva, segundo a página?');
-  await panel.locator('[data-action="goto-draft-question"][data-index="' + (FLAG_VALUE - 1) + '"]').first().click();
-  const valueGroup = panel.locator(`.source-draft-edit-question[data-index="${FLAG_VALUE - 1}"]`);
-  await expect(valueGroup.locator('.source-draft-edit-a')).toBeFocused();
-  await valueGroup.locator('.source-draft-edit-e').fill(`O marcador Zeta${FLAG_VALUE} eleva o parâmetro Omega${FLAG_VALUE} durante a fase experimental.`);
-  await panel.locator('[data-action="save-draft"]').click();
-  // the summary was flagged too (words the source never uses): same one-step path to it
-  await expect(panel.locator('.source-draft-audit-issue', { hasText: 'Resumo ·' }).first()).toBeVisible({ timeout: 15000 });
-  await panel.locator('[data-action="goto-draft-question"][data-index="summary"]').first().click();
-  await expect(panel.locator('.source-draft-edit-summary')).toBeFocused();
-  await panel.locator('.source-draft-edit-summary').fill('O marcador Zeta eleva o parâmetro Omega durante a fase experimental em cada uma das páginas.');
-  await panel.locator('[data-action="save-draft"]').click();
-  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'PASS', { timeout: 15000 });
+  // the edit made BEFORE the next save is still there, and the remaining flag is one click away
+  await panel.locator('.lesson-qitem').nth(9).click();
+  await expect(panel.locator('.lesson-qeditor textarea').first()).toHaveValue('O que o marcador Zeta10 eleva, segundo a página?');
+  await panel.locator('.lesson-qitem').nth(FLAG_VALUE - 1).click();
+  await panel.locator('.lesson-qeditor textarea').nth(2).fill(`O marcador Zeta${FLAG_VALUE} eleva o parâmetro Omega${FLAG_VALUE} durante a fase experimental.`);
+  await panel.locator('[data-action="save-question"]').click();
+  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  await expect(panel.locator('.lesson-qitem[data-state="flagged"]')).toHaveCount(0);
 
-  // mobile: the reviewed panel at 375px has no horizontal page scroll
+  // the summary was flagged too (words the source never uses): fixed in its own area, without touching a question
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(review.locator('.lesson-review-name', { hasText: 'Resumo' })).toBeVisible({ timeout: 15000 });
+  await review.locator('summary', { hasText: 'Resumo' }).click();
+  await review.locator('[data-action="goto-entity"]', { hasText: 'resumo' }).first().click();
+  await expect(panel.locator('.lesson-summary-input')).toBeFocused();
+  await panel.locator('.lesson-summary-input').fill('O marcador Zeta eleva o parâmetro Omega durante a fase experimental em cada uma das páginas.');
+  await panel.locator('[data-action="save-summary"]').click();
+  await expect(panel.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo', { timeout: 15000 });
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(review).toContainText('Nada sinalizado', { timeout: 15000 });
+
+  // mobile: the reviewed lesson at 375px has no horizontal page scroll
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await noHorizontalScroll(page)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });

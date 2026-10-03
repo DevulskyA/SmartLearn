@@ -1,18 +1,31 @@
-// Materiais: upload a PDF, review the proposed trechos, generate/inspect/correct an AI draft and accept it into
-// normal study. Moved out of src/app.js unchanged in behaviour (DECOMP-2): the DOM, the events and the rendering
-// of this screen live here; what belongs to other screens is passed in once through configureMaterialsUI.
+// Materiais: upload a PDF, say WHAT to study, approve the source scope, generate an AI draft and edit it as a lesson.
+// The flow is topic-first (the student does not walk 165 cards): upload -> "O que você quer estudar?" -> located sections ->
+// generate -> the lesson editor (Resumo / Questões / Fonte / Revisão), which REPLACES the list on screen — the rest of the
+// book is never a vertical continuation of the lesson being edited. What belongs to other screens is passed in once through
+// configureMaterialsUI.
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
-import { formatPageList, createSourceDetails } from "./source-details-ui.js";
 import { createTextElement } from "./dom-utils.js";
-import { enhanceSelect } from "./select-ui.js";
+import { createLessonEditor } from "./lesson-editor-ui.js";
+import { elapsedLabel } from "./lesson-view-model.js";
 
+const sourcesCard = document.querySelector("#sources-card");
 const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
 const sourcesFileInput = document.querySelector("#sources-file-input");
 const sourcesMessage = document.querySelector("#sources-message");
 const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
 const sourcesProposalsList = document.querySelector("#sources-proposals-list");
 const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
+const topicForm = document.querySelector("#sources-topic-form");
+const topicInput = document.querySelector("#sources-topic-input");
+const topicResults = document.querySelector("#sources-topic-results");
+const indexDetails = document.querySelector("#sources-index");
+const indexSummary = document.querySelector("#sources-index-summary");
+const editorialDetails = document.querySelector("#sources-editorial");
+const editorialSummary = document.querySelector("#sources-editorial-summary");
+const editorialList = document.querySelector("#sources-editorial-list");
+const generationBox = document.querySelector("#sources-generation");
+const editorView = document.querySelector("#sources-editor-view");
 
 // What Materiais needs from the rest of the app (set once at start-up, before any user event can fire):
 //   listActiveSubjects()  -> Promise<subject[]>   disciplines offered when accepting a draft
@@ -24,15 +37,121 @@ export function configureMaterialsUI(next) {
   deps = next;
 }
 
+let currentSourceId = null;
+let activeEditor = null;
+let generating = false;
+// Index sections up to this size are shown open; a whole book stays collapsed behind the topic search.
+const INDEX_OPEN_UP_TO = 12;
+
 function setSourcesMessage(message = "", isError = false) {
   if (!sourcesMessage) return;
   sourcesMessage.classList.toggle("is-error", isError);
   sourcesMessage.textContent = message;
-  // The list of proposals can be long (a 150-page PDF = 15 items): an error raised far below must not be
-  // left off-screen, or the student clicks and sees nothing happen.
+  // An error raised far below must not be left off-screen, or the student clicks and sees nothing happen.
   if (isError && message) sourcesMessage.scrollIntoView({ block: "nearest" });
 }
 
+const nf = new Intl.NumberFormat("pt-BR");
+const rangeLabel = (a, b) => (a === b ? `PDF página ${a}` : `PDF páginas ${a}–${b}`);
+const KIND_LABELS = {
+  FRONT_MATTER: "Página de abertura", COPYRIGHT: "Direitos autorais", DEDICATION: "Dedicatória", PREFACE: "Prefácio",
+  ACKNOWLEDGMENTS: "Agradecimentos", SUMMARY: "Resumo do próprio livro", EXERCISE: "Exercícios do próprio livro",
+  ANSWER_KEY: "Gabarito do próprio livro", REFERENCE: "Referências", APPENDIX: "Apêndice", OTHER: "Outro",
+};
+const notStudyNote = (kind) => `${KIND_LABELS[kind] ?? "Não é conteúdo de estudo"} — não gera rascunho.`;
+
+// ---- views -------------------------------------------------------------------------------------------------------------
+async function showBrowse() {
+  activeEditor?.destroy();
+  activeEditor = null;
+  editorView?.replaceChildren();
+  if (editorView) editorView.hidden = true;
+  if (sourcesCard) sourcesCard.hidden = false;
+  // The list must tell the truth about what exists now (a draft was just created or an accept happened).
+  if (currentSourceId) {
+    const refreshed = await SourceProposalsUI.listProposals(currentSourceId);
+    if (refreshed.ok) renderSourceProposals(refreshed.proposals);
+  }
+  sourcesChooseFileButton?.focus({ preventScroll: false });
+}
+
+async function openEditor(draft, title) {
+  const subjects = await deps.listActiveSubjects().catch(() => []);
+  activeEditor?.destroy();
+  const editor = createLessonEditor({
+    draft,
+    title,
+    subjects,
+    today: deps.getLocalDateValue(),
+    deps: {
+      reviseSummary: DraftReviewUI.reviseSummary,
+      reviseQuestion: DraftReviewUI.reviseQuestion,
+      deleteQuestion: DraftReviewUI.deleteQuestion,
+      acceptDraft: DraftReviewUI.acceptDraft,
+      getDraft: DraftReviewUI.getDraft,
+      onBack: showBrowse,
+      startStudyNow: (unit, subjectName) => deps.startStudyNow(unit, subjectName),
+      refreshAfterAccept: () => deps.refreshAfterAccept(),
+    },
+  });
+  activeEditor = editor;
+  editorView.replaceChildren(editor.element);
+  editorView.hidden = false;
+  if (sourcesCard) sourcesCard.hidden = true;
+  editor.focusTitle();
+  editorView.scrollIntoView({ block: "start" });
+}
+
+// ---- generation (the server reports no progress: elapsed time is the one real measure, and it is shown as such) -----------
+function startGenerationProgress(label) {
+  generationBox.replaceChildren();
+  const title = createTextElement("p", "sources-generation-title", `Gerando rascunho com IA — ${label}`);
+  const timer = createTextElement("p", "sources-generation-timer", "00:00");
+  timer.setAttribute("aria-hidden", "true"); // ticks every second: not announced
+  const live = createTextElement("p", "visually-hidden", "Gerando. Isso leva vários minutos.");
+  live.setAttribute("role", "status");
+  const note = createTextElement("p", "lesson-hint", "O servidor não informa o andamento: o tempo decorrido é a única medida real. Uma geração pode levar vários minutos; não feche o aplicativo.");
+  const slow = createTextElement("p", "form-message is-error", "Está demorando mais que o normal. A geração continua no servidor; se passar de 20 minutos, algo provavelmente deu errado.");
+  slow.hidden = true;
+  generationBox.append(title, timer, live, note, slow);
+  generationBox.hidden = false;
+  const started = Date.now();
+  const tick = setInterval(() => {
+    const ms = Date.now() - started;
+    timer.textContent = elapsedLabel(ms);
+    if (ms > 10 * 60_000) slow.hidden = false;
+    if (Math.floor(ms / 60_000) !== Math.floor((ms - 1000) / 60_000) && ms >= 60_000) live.textContent = `Gerando há ${Math.floor(ms / 60_000)} minutos.`;
+  }, 1000);
+  return () => { clearInterval(tick); generationBox.hidden = true; generationBox.replaceChildren(); };
+}
+
+async function generateFor(proposal) {
+  if (generating) return;
+  generating = true;
+  setSourcesMessage("");
+  const stop = startGenerationProgress(`${proposal.title} (${rangeLabel(proposal.pageStart, proposal.pageEnd)})`);
+  setBusy(true);
+  let result;
+  try {
+    result = await DraftReviewUI.generateDraft(proposal.id);
+  } finally {
+    stop();
+    setBusy(false);
+    generating = false;
+  }
+  if (!result.ok) {
+    setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
+    return;
+  }
+  await openEditor(result.draft, proposal.title);
+  setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+}
+
+function setBusy(busy) {
+  for (const control of sourcesProposalsPanel?.querySelectorAll("button, input") ?? []) control.disabled = busy;
+}
+
+// ---- proposal index ----------------------------------------------------------------------------------------------------
 function createSourceProposalItem(proposal) {
   const li = document.createElement("li");
   li.className = "source-proposal-item";
@@ -65,274 +184,136 @@ function createSourceProposalItem(proposal) {
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
   excerpt.hidden = true;
 
-  const generateDraftBtn = document.createElement("button");
-  generateDraftBtn.type = "button";
-  generateDraftBtn.className = "small-button";
-  generateDraftBtn.dataset.action = "generate-draft";
-  generateDraftBtn.textContent = "Gerar rascunho com IA";
+  // The same buttons repeat in every trecho: the pages of the trecho they belong to are their description.
+  const described = [saveBtn, toggleBtn];
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt);
 
-  const draftPanel = document.createElement("div");
-  draftPanel.className = "source-draft-panel";
-  // A focus target for when the draft appears or is re-rendered (the button that was pressed is gone or disabled).
-  draftPanel.tabIndex = -1;
-  draftPanel.setAttribute("role", "group");
-  draftPanel.setAttribute("aria-label", "Rascunho para revisar");
-  draftPanel.hidden = true;
-
-  // The same three buttons repeat in every trecho: the pages of the trecho they belong to are their description.
-  for (const button of [saveBtn, toggleBtn, generateDraftBtn]) button.setAttribute("aria-describedby", range.id);
-
-  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, generateDraftBtn, draftPanel);
+  if (!proposal.generatable) {
+    li.classList.add("is-editorial");
+    li.append(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
+  } else if (proposal.latestDraft?.status === "ACCEPTED") {
+    li.append(createTextElement("p", "lesson-hint", "Aula já criada a partir deste trecho."));
+  } else if (proposal.latestDraft) {
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "small-button";
+    open.dataset.action = "open-draft";
+    open.dataset.draftId = String(proposal.latestDraft.id);
+    open.textContent = "Abrir rascunho";
+    described.push(open);
+    li.append(open);
+  } else {
+    const generate = document.createElement("button");
+    generate.type = "button";
+    generate.className = "small-button";
+    generate.dataset.action = "generate-draft";
+    generate.textContent = "Gerar rascunho com IA";
+    described.push(generate);
+    li.append(generate);
+  }
+  for (const button of described) button.setAttribute("aria-describedby", range.id);
   return li;
-}
-
-const DRAFT_ISSUE_LABELS = {
-  SUMMARY_UNSUPPORTED_VALUE: "Valor que a fonte não traz",
-  SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
-  SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
-  SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
-  QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
-  QUESTION_NO_EXPLANATION: "Falta explicar por quê",
-  QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
-  HINT_REVEALS_ANSWER: "A dica entrega a resposta",
-  QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",
-  QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
-  QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
-  QUESTION_DUPLICATE: "Questão repetida",
-  QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
-};
-
-const DRAFT_QUESTION_TYPE_LABELS = {
-  RECALL: "Recordação",
-  CONCEPT: "Conceito",
-  MECHANISM: "Mecanismo",
-  APPLICATION: "Aplicação",
-  DISCRIMINATION: "Discriminação",
-  CLINICAL_REASONING: "Raciocínio clínico",
-  TRANSFER: "Transferência",
-};
-
-function draftFindingScopeLabel(scope) {
-  if (scope === "summary") return "Resumo";
-  const m = /^question:(\d+)$/.exec(scope ?? "");
-  return m ? `Questão ${Number(m[1]) + 1}` : "Rascunho";
-}
-
-// The automatic check is a screen, not a verdict: it says where to look. "No flags" is never "verified".
-function createDraftAudit(audit) {
-  const box = document.createElement("div");
-  box.className = "source-draft-audit";
-  const flagged = (audit.findings ?? []).filter((f) => f.severity !== "LOW");
-  box.dataset.result = flagged.length > 0 ? "REPAIR" : "PASS";
-  const head = flagged.length > 0
-    ? `Conferência automática: ${flagged.length} ${flagged.length === 1 ? "ponto" : "pontos"} para verificar antes de aceitar`
-    : "Conferência automática: nada sinalizado. Isso não é validação médica — confira a fonte.";
-  box.append(createTextElement("p", "source-draft-audit-head", head));
-  if (audit.repaired) {
-    box.append(createTextElement("p", "source-draft-audit-note", "O rascunho foi corrigido uma vez automaticamente a partir dos pontos apontados."));
-  }
-  if (audit.modelAudit === "UNAVAILABLE" || audit.modelAudit === "MALFORMED") {
-    box.append(createTextElement("p", "source-draft-audit-note", "A auditoria por modelo não pôde ser concluída; só a conferência automática básica foi feita."));
-  }
-  const list = document.createElement("ul");
-  list.className = "source-draft-audit-list";
-  for (const f of flagged) {
-    const item = document.createElement("li");
-    item.append(createTextElement("p", "source-draft-audit-issue", `${draftFindingScopeLabel(f.scope)} · ${DRAFT_ISSUE_LABELS[f.issue] ?? f.issue}`));
-    if (f.generatedClaim) item.append(createTextElement("p", "source-draft-audit-claim", `No rascunho: ${f.generatedClaim}`));
-    if (f.sourceEvidence) item.append(createTextElement("p", "source-draft-audit-evidence", `Na fonte: ${f.sourceEvidence}`));
-    if (f.repair) item.append(createTextElement("p", "source-draft-audit-repair", f.repair));
-    // In a long draft the reviewer must reach the flagged item in one step, not hunt through 50 blocks.
-    const target = /^question:(\d+)$/.exec(f.scope ?? "");
-    const goto = document.createElement("button");
-    goto.type = "button";
-    goto.className = "text-button source-draft-goto";
-    goto.dataset.action = "goto-draft-question";
-    goto.dataset.index = target ? target[1] : "summary";
-    goto.textContent = target ? `Corrigir a questão ${Number(target[1]) + 1}` : "Corrigir o resumo";
-    item.append(goto);
-    list.append(item);
-  }
-  if (flagged.length > 0) box.append(list);
-  return box;
-}
-
-// The reviewer's own corrections to a flagged draft (CQ-6). One collapsed block: summary plus, per question,
-// the wording, answer, explanation and hint — exactly the fields the screen can flag. Saving re-runs the
-// screen on the server, so a fixed point disappears and a remaining one stays visible.
-function createDraftEditor(draft) {
-  const details = document.createElement("details");
-  details.className = "source-draft-editor";
-  const summaryEl = document.createElement("summary");
-  summaryEl.textContent = "Corrigir o rascunho";
-  details.append(summaryEl);
-
-  const field = (labelText, tag, className, value, rows) => {
-    const label = document.createElement("label");
-    label.className = "source-draft-edit-field";
-    label.append(createTextElement("span", "source-draft-edit-label", labelText));
-    const input = document.createElement(tag);
-    input.className = className;
-    if (tag === "textarea") input.rows = rows ?? 3;
-    else input.type = "text";
-    input.value = value ?? "";
-    label.append(input);
-    return label;
-  };
-
-  details.append(field("Resumo Mestre", "textarea", "source-draft-edit-summary", draft.summary, 7));
-  (draft.questions ?? []).forEach((q, index) => {
-    const group = document.createElement("div");
-    group.className = "source-draft-edit-question";
-    group.dataset.index = String(index);
-    group.append(
-      createTextElement("p", "source-draft-edit-label", `Questão ${index + 1}`),
-      field("Enunciado", "textarea", "source-draft-edit-q", q.question, 2),
-      field("Resposta", "textarea", "source-draft-edit-a", q.answer, 2),
-      field("Por quê (explicação)", "textarea", "source-draft-edit-e", q.explanation, 3),
-      field("Dica (opcional)", "input", "source-draft-edit-h", q.hint),
-    );
-    details.append(group);
-  });
-
-  const save = document.createElement("button");
-  save.type = "button";
-  save.className = "primary-button";
-  save.dataset.action = "save-draft";
-  save.textContent = "Salvar correções";
-  const editMessage = createTextElement("p", "source-draft-edit-message", "");
-  editMessage.setAttribute("role", "status"); // an error on save is announced, not only painted
-  details.append(save, editMessage);
-  return details;
-}
-
-// The draft object each panel currently shows (spans, types and pages are not editable, so a save sends them back untouched).
-const draftByPanel = new WeakMap();
-
-// T38: renders one generated draft for inspection/acceptance. Every
-// rendering carries the same explicit caveat — this is unverified AI
-// output, not a medical/scientific claim (design.md/T37/T38).
-// PRODUCT-REAL-01 P1_PRODUCT A: before this, accepting a draft could only
-// ever create a NEW subject (free-text name) — a returning student adding
-// more material to a discipline they already created had no way to pick
-// it, and typing the existing name outright failed ("Já existe uma
-// disciplina com esse nome."). The server already supports accepting
-// with either `subjectId` (existing) or `newSubjectName` (create) — see
-// accept-draft.js — this was a client-only gap. Mirrors the exact same
-// existing-vs-new pattern Plano's own new-unit form already uses.
-function renderDraftPanel(draftPanel, draft, subjects = []) {
-  draftPanel.dataset.draftId = String(draft.id);
-  draftPanel.dataset.revision = String(draft.revision);
-  draftByPanel.set(draftPanel, draft);
-  draftPanel.replaceChildren();
-
-  const caveat = createTextElement(
-    "p",
-    "source-draft-caveat",
-    "Rascunho gerado por IA — não verificado. Revise cada questão antes de aceitar; isto não é uma validação científica ou médica do conteúdo.",
-  );
-  const summary = createTextElement("p", "source-draft-summary", draft.summary);
-  const pagesByIndex = new Map((draft.pages ?? []).map((p) => [p.pageIndex, p]));
-  const pagesFor = (spans) => (spans ?? []).map((s) => pagesByIndex.get(s.pageIndex) ?? { pageIndex: s.pageIndex, text: null });
-  const summaryOrigin = draft.summarySourceSpans?.length
-    ? createSourceDetails(`Fonte do resumo · ${draft.summarySourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(draft.summarySourceSpans.map((s) => s.pageIndex))}`, pagesFor(draft.summarySourceSpans))
-    : null;
-  const auditBox = draft.audit ? createDraftAudit(draft.audit) : null;
-  const flaggedQuestions = new Set();
-  for (const f of draft.audit?.findings ?? []) {
-    const m = f.severity !== "LOW" ? /^question:(\d+)$/.exec(f.scope ?? "") : null;
-    if (m) flaggedQuestions.add(Number(m[1]));
-  }
-
-  const questionsList = document.createElement("ul");
-  questionsList.className = "source-draft-questions";
-  for (const question of draft.questions ?? []) {
-    const item = document.createElement("li");
-    item.append(
-      createTextElement("p", "source-draft-question", question.question),
-      createTextElement("p", "source-draft-answer", question.answer),
-    );
-    if (question.explanation) item.append(createTextElement("p", "source-draft-explanation", `Por quê: ${question.explanation}`));
-    if (flaggedQuestions.has(draft.questions.indexOf(question))) {
-      item.classList.add("is-flagged");
-      item.prepend(createTextElement("span", "study-now-chip source-draft-flag-chip", "Sinalizada"));
-    }
-    if (question.questionType && DRAFT_QUESTION_TYPE_LABELS[question.questionType]) {
-      item.prepend(createTextElement("span", "study-now-chip source-draft-question-type", DRAFT_QUESTION_TYPE_LABELS[question.questionType]));
-    }
-    if (question.sourceSpans?.length) {
-      item.append(createSourceDetails(
-        `Fonte da questão · ${question.sourceSpans.length > 1 ? "páginas" : "página"} ${formatPageList(question.sourceSpans.map((s) => s.pageIndex))}`,
-        pagesFor(question.sourceSpans),
-      ));
-    }
-    questionsList.append(item);
-  }
-
-  const subjectSelect = document.createElement("select");
-  subjectSelect.className = "source-draft-subject-select";
-  subjectSelect.setAttribute("aria-label", "Disciplina existente");
-  const newSubjectOption = document.createElement("option");
-  newSubjectOption.value = "";
-  newSubjectOption.textContent = "+ Nova disciplina (usar campo abaixo)";
-  subjectSelect.append(newSubjectOption);
-  for (const subject of subjects) {
-    const opt = document.createElement("option");
-    opt.value = String(subject.id);
-    opt.textContent = subject.name;
-    subjectSelect.append(opt);
-  }
-
-  const subjectInput = document.createElement("input");
-  subjectInput.type = "text";
-  subjectInput.className = "source-draft-subject-input";
-  subjectInput.placeholder = "Nome da disciplina";
-  subjectInput.setAttribute("aria-label", "Nome da disciplina");
-
-  subjectSelect.addEventListener("change", () => {
-    const pickedExisting = subjectSelect.value !== "";
-    subjectInput.disabled = pickedExisting;
-    if (pickedExisting) subjectInput.value = "";
-  });
-
-  const dateInput = document.createElement("input");
-  dateInput.type = "date";
-  dateInput.className = "source-draft-date-input";
-  dateInput.value = deps.getLocalDateValue();
-  dateInput.setAttribute("aria-label", "Data da aula");
-
-  const acceptBtn = document.createElement("button");
-  acceptBtn.type = "button";
-  acceptBtn.className = "primary-button";
-  acceptBtn.dataset.action = "accept-draft";
-  acceptBtn.textContent = "Aceitar e criar aula";
-
-  const resultMessage = createTextElement("p", "source-draft-result", "");
-  resultMessage.setAttribute("role", "status"); // "Aula criada" / an accept error is announced, not only painted
-
-  draftPanel.append(caveat, ...(auditBox ? [auditBox] : []), summary, ...(summaryOrigin ? [summaryOrigin] : []), questionsList, ...(draft.status === "DRAFT" ? [createDraftEditor(draft)] : []), subjectSelect, subjectInput, dateInput, acceptBtn, resultMessage);
-  draftPanel.hidden = false;
-  enhanceSelect(subjectSelect);
 }
 
 function renderSourceProposals(proposals) {
   if (!sourcesProposalsList) return;
   sourcesProposalsList.replaceChildren();
-  for (const proposal of proposals) {
-    sourcesProposalsList.append(createSourceProposalItem(proposal));
+  editorialList?.replaceChildren();
+  const content = proposals.filter((p) => p.generatable);
+  const editorial = proposals.filter((p) => !p.generatable);
+  for (const proposal of content) sourcesProposalsList.append(createSourceProposalItem(proposal));
+  for (const proposal of editorial) editorialList?.append(createSourceProposalItem(proposal));
+  if (indexSummary) indexSummary.textContent = `Índice do documento (${content.length} ${content.length === 1 ? "unidade" : "unidades"})`;
+  if (indexDetails) indexDetails.open = content.length <= INDEX_OPEN_UP_TO;
+  if (editorialDetails) {
+    editorialDetails.hidden = editorial.length === 0;
+    editorialDetails.open = false;
+    if (editorialSummary) editorialSummary.textContent = `Páginas editoriais (${editorial.length}) — não geram conteúdo`;
   }
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+  topicResults?.replaceChildren();
 }
 
+// ---- topic search ------------------------------------------------------------------------------------------------------
+function createTopicItem(candidate, query) {
+  const li = document.createElement("li");
+  li.className = "source-topic-item";
+  li.dataset.ordinal = String(candidate.ordinal);
+  li.append(createTextElement("p", "source-topic-title", candidate.title));
+  li.append(createTextElement("p", "source-proposal-range", `${rangeLabel(candidate.pageStart, candidate.pageEnd)} · ${nf.format(candidate.chars)} caracteres`));
+  if (candidate.excerpt) li.append(createTextElement("p", "source-topic-excerpt", candidate.excerpt));
+  if (candidate.generatable) {
+    const generate = document.createElement("button");
+    generate.type = "button";
+    generate.className = "small-button";
+    generate.dataset.action = "generate-topic";
+    generate.dataset.query = query;
+    generate.textContent = "Gerar rascunho com IA";
+    li.append(generate);
+  } else {
+    li.append(createTextElement("p", "lesson-hint", notStudyNote(candidate.kind)));
+  }
+  return li;
+}
+
+topicForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentSourceId) return;
+  const query = topicInput.value.trim();
+  if (query.length < 2) {
+    setSourcesMessage("Digite ao menos duas letras do assunto.", true);
+    return;
+  }
+  setSourcesMessage("Procurando no documento…");
+  const result = await SourceProposalsUI.searchTopics(currentSourceId, query);
+  if (!result.ok) {
+    setSourcesMessage(result.message || "Não foi possível buscar o assunto.", true);
+    return;
+  }
+  topicResults.replaceChildren();
+  if (result.candidates.length === 0) {
+    setSourcesMessage("Nenhuma seção com esse assunto no índice do PDF. Tente outras palavras do título, ou use o índice do documento.", true);
+    return;
+  }
+  for (const candidate of result.candidates) topicResults.append(createTopicItem(candidate, query));
+  setSourcesMessage(`${result.candidates.length} ${result.candidates.length === 1 ? "seção encontrada" : "seções encontradas"}. Confira as páginas antes de gerar.`);
+});
+
+topicResults?.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="generate-topic"]');
+  if (!button) return;
+  const item = button.closest(".source-topic-item");
+  const ordinal = Number(item.dataset.ordinal);
+  button.disabled = true;
+  const approved = await SourceProposalsUI.approveScope(currentSourceId, { ordinal, topic: button.dataset.query });
+  button.disabled = false;
+  if (!approved.ok) {
+    setSourcesMessage(approved.message || "Não foi possível aprovar este trecho.", true);
+    button.focus({ preventScroll: true });
+    return;
+  }
+  await generateFor(approved.proposal);
+});
+
+// ---- upload ------------------------------------------------------------------------------------------------------------
 sourcesChooseFileButton?.addEventListener("click", () => {
   sourcesFileInput?.click();
 });
+
+async function showExistingProposals(sourceId, extraction, prefix = "") {
+  const existing = await SourceProposalsUI.listProposals(sourceId);
+  if (!existing.ok) return false;
+  renderSourceProposals(existing.proposals);
+  setSourcesMessage(prefix || SourceProposalsUI.alreadyProcessedMessage(existing.proposals.length, extraction));
+  return true;
+}
 
 sourcesFileInput?.addEventListener("change", async () => {
   const [file] = sourcesFileInput.files ?? [];
   if (!file) return;
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
   if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+  topicResults?.replaceChildren();
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
   try {
@@ -342,6 +323,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
       return;
     }
+    currentSourceId = uploadResult.source.id;
 
     setSourcesMessage("Extraindo texto do PDF...");
     const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
@@ -359,12 +341,7 @@ sourcesFileInput?.addEventListener("change", async () => {
     // The same PDF sent again: its trechos (and any rascunho or accepted content on them) already exist and are never
     // replaced silently. Land on them instead of a dead-end error.
     if (!chunkResult.ok && SourceProposalsUI.isAlreadyProcessed(chunkResult.code)) {
-      const existing = await SourceProposalsUI.listProposals(uploadResult.source.id);
-      if (existing.ok) {
-        renderSourceProposals(existing.proposals);
-        setSourcesMessage(SourceProposalsUI.alreadyProcessedMessage(existing.proposals.length, extractResult.extraction));
-        return;
-      }
+      if (await showExistingProposals(uploadResult.source.id, extractResult.extraction)) return;
     }
     if (!chunkResult.ok) {
       setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
@@ -376,7 +353,8 @@ sourcesFileInput?.addEventListener("change", async () => {
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
     // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
     if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
-    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Revise e ajuste os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
+    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
+    topicInput?.focus({ preventScroll: true });
   } catch (error) {
     setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
     console.error("Falha ao processar fonte enviada.", error);
@@ -385,7 +363,8 @@ sourcesFileInput?.addEventListener("change", async () => {
   }
 });
 
-sourcesProposalsList?.addEventListener("click", async (event) => {
+// ---- index list actions ------------------------------------------------------------------------------------------------
+async function onIndexClick(event) {
   const item = event.target.closest(".source-proposal-item");
   if (!item) return;
   const proposalId = item.dataset.proposalId;
@@ -427,160 +406,30 @@ sourcesProposalsList?.addEventListener("click", async (event) => {
     return;
   }
 
-  const generateDraftBtn = event.target.closest('[data-action="generate-draft"]');
-  if (generateDraftBtn) {
-    const draftPanel = item.querySelector(".source-draft-panel");
-    if (!draftPanel) return;
-    generateDraftBtn.disabled = true; // a disabled button drops keyboard focus: it is put back below
-    setSourcesMessage("Gerando rascunho com IA...");
-    let generated = false;
-    try {
-      const result = await DraftReviewUI.generateDraft(proposalId);
-      if (!result.ok) {
-        setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
-        return;
-      }
-      // P1_PRODUCT A: existing subjects, so the accept form can offer
-      // reusing one instead of only ever creating a new one.
-      const existingSubjects = await deps.listActiveSubjects().catch(() => []);
-      renderDraftPanel(draftPanel, result.draft, existingSubjects);
-      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
-      generated = true;
-    } finally {
-      generateDraftBtn.disabled = false;
-      // success: keyboard/screen-reader focus goes to the draft to review; failure: back to the button that was pressed
-      // (on failure the button was just pressed, so it is on screen: do not scroll, or the error message scrolls away)
-      if (generated) draftPanel.focus(); else generateDraftBtn.focus({ preventScroll: true });
+  const openBtn = event.target.closest('[data-action="open-draft"]');
+  if (openBtn) {
+    openBtn.disabled = true;
+    const result = await DraftReviewUI.getDraft(openBtn.dataset.draftId);
+    openBtn.disabled = false;
+    if (!result.ok) {
+      setSourcesMessage(result.message || "Não foi possível abrir o rascunho.", true);
+      return;
     }
+    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? "Rascunho");
     return;
   }
 
-  const gotoBtn = event.target.closest('[data-action="goto-draft-question"]');
-  if (gotoBtn) {
-    const draftPanel = item.querySelector(".source-draft-panel");
-    const editor = draftPanel?.querySelector(".source-draft-editor");
-    if (!draftPanel || !editor) return;
-    editor.open = true;
-    const target = gotoBtn.dataset.index === "summary"
-      ? editor.querySelector(".source-draft-edit-summary")
-      : editor.querySelector(`.source-draft-edit-question[data-index="${gotoBtn.dataset.index}"] .source-draft-edit-a`);
-    if (target) {
-      target.scrollIntoView({ block: "center" });
-      target.focus({ preventScroll: true });
-    }
-    return;
-  }
-
-  const saveDraftBtn = event.target.closest('[data-action="save-draft"]');
-  if (saveDraftBtn) {
-    const draftPanel = item.querySelector(".source-draft-panel");
-    const current = draftPanel ? draftByPanel.get(draftPanel) : null;
-    if (!draftPanel || !current) return;
-    const message = draftPanel.querySelector(".source-draft-edit-message");
-    const questions = (current.questions ?? []).map((q, index) => {
-      const group = draftPanel.querySelector(`.source-draft-edit-question[data-index="${index}"]`);
-      const read = (selector) => group?.querySelector(selector)?.value.trim() ?? "";
-      return {
-        question: read(".source-draft-edit-q"),
-        answer: read(".source-draft-edit-a"),
-        explanation: read(".source-draft-edit-e") || null,
-        questionType: q.questionType ?? null,
-        hint: read(".source-draft-edit-h") || null,
-        sourceSpans: q.sourceSpans,
-      };
-    });
-    const summary = draftPanel.querySelector(".source-draft-edit-summary")?.value.trim() ?? "";
-    // keep what the student already typed in the accept form across the re-render
-    const kept = {
-      subjectId: draftPanel.querySelector(".source-draft-subject-select")?.value ?? "",
-      subjectName: draftPanel.querySelector(".source-draft-subject-input")?.value ?? "",
-      date: draftPanel.querySelector(".source-draft-date-input")?.value ?? "",
+  const generateBtn = event.target.closest('[data-action="generate-draft"]');
+  if (generateBtn) {
+    const proposal = {
+      id: Number(proposalId),
+      title: item.querySelector(".source-proposal-title-input")?.value ?? "Trecho",
+      pageStart: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.[0]),
+      pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
     };
-    saveDraftBtn.disabled = true;
-    let saved = false;
-    try {
-      const result = await DraftReviewUI.reviseDraft(draftPanel.dataset.draftId, { summary, questions });
-      if (!result.ok) {
-        if (message) { message.classList.add("is-error"); message.textContent = result.message || "Não foi possível salvar as correções."; }
-        return;
-      }
-      const existingSubjects = await deps.listActiveSubjects().catch(() => []);
-      renderDraftPanel(draftPanel, result.draft, existingSubjects);
-      const select = draftPanel.querySelector(".source-draft-subject-select");
-      const nameInput = draftPanel.querySelector(".source-draft-subject-input");
-      const dateInput = draftPanel.querySelector(".source-draft-date-input");
-      if (select && kept.subjectId) { select.value = kept.subjectId; select.dispatchEvent(new Event("change")); }
-      if (nameInput && !kept.subjectId) nameInput.value = kept.subjectName;
-      if (dateInput && kept.date) dateInput.value = kept.date;
-      setSourcesMessage("Correções salvas. A conferência automática foi refeita.");
-      saved = true;
-    } finally {
-      saveDraftBtn.disabled = false;
-      // the panel was re-rendered on success (the button no longer exists): focus the draft, whose check just re-ran
-      if (saved) draftPanel.focus(); else saveDraftBtn.focus({ preventScroll: true });
-    }
-    return;
+    await generateFor(proposal);
+    if (!activeEditor) generateBtn.focus({ preventScroll: true });
   }
-
-  const acceptDraftBtn = event.target.closest('[data-action="accept-draft"]');
-  if (acceptDraftBtn) {
-    const draftPanel = item.querySelector(".source-draft-panel");
-    if (!draftPanel) return;
-    const draftId = draftPanel.dataset.draftId;
-    const subjectSelect = draftPanel.querySelector(".source-draft-subject-select");
-    const subjectInput = draftPanel.querySelector(".source-draft-subject-input");
-    const dateInput = draftPanel.querySelector(".source-draft-date-input");
-    const resultMessage = draftPanel.querySelector(".source-draft-result");
-
-    // P1_PRODUCT A: an existing subject picked in the select wins over the
-    // free-text field — the server's own contract already distinguishes
-    // subjectId (reuse) from newSubjectName (create); this was only ever
-    // a client gap.
-    const pickedSubjectId = subjectSelect?.value ? Number(subjectSelect.value) : null;
-
-    acceptDraftBtn.disabled = true;
-    try {
-      const result = await DraftReviewUI.acceptDraft(draftId, {
-        subjectId: pickedSubjectId ?? undefined,
-        newSubjectName: pickedSubjectId ? undefined : subjectInput?.value,
-        studyDate: dateInput?.value,
-        expectedRevision: Number(draftPanel.dataset.revision),
-      });
-      if (!result.ok) {
-        if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = result.message || "Não foi possível aceitar o rascunho."; }
-        acceptDraftBtn.disabled = false;
-        acceptDraftBtn.focus({ preventScroll: true });
-        return;
-      }
-      if (resultMessage) {
-        resultMessage.classList.remove("is-error");
-        resultMessage.textContent = `Aula criada: ${result.acceptance.exerciseCount} exercício(s), ${result.acceptance.reviewCount} revisões agendadas.`;
-      }
-      acceptDraftBtn.textContent = "Aceito";
-      // PV1-01: continuity after accept — the acceptance response already
-      // carries the created unit (real contract field: `acceptance.unit`,
-      // confirmed in server/src/services/accept-draft.js's `unitDto`), so
-      // "Estudar agora" needs no extra fetch. The user should never have
-      // to go find the just-created unit in Plano/Hoje themselves.
-      if (!draftPanel.querySelector('[data-action="study-now"]')) {
-        const studyNowBtn = document.createElement("button");
-        studyNowBtn.type = "button";
-        studyNowBtn.className = "primary-button";
-        studyNowBtn.dataset.action = "study-now";
-        studyNowBtn.textContent = "Estudar agora";
-        studyNowBtn.addEventListener("click", () => {
-          deps.startStudyNow(result.acceptance.unit, result.acceptance.subject?.name);
-        });
-        draftPanel.append(studyNowBtn);
-      }
-      // the pressed button is now disabled ("Aceito"): the one obvious next action takes the focus
-      draftPanel.querySelector('[data-action="study-now"]')?.focus();
-      await deps.refreshAfterAccept();
-    } catch (error) {
-      if (resultMessage) { resultMessage.classList.add("is-error"); resultMessage.textContent = "Não foi possível aceitar o rascunho."; }
-      console.error("Falha ao aceitar rascunho.", error);
-      acceptDraftBtn.disabled = false;
-      acceptDraftBtn.focus({ preventScroll: true });
-    }
-  }
-});
+}
+sourcesProposalsList?.addEventListener("click", onIndexClick);
+editorialList?.addEventListener("click", onIndexClick);

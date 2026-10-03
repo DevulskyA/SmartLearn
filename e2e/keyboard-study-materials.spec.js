@@ -171,15 +171,15 @@ test('ACCESS-2 Materiais: generate a draft, review it and accept it with the key
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').focus();
   await page.keyboard.press('Enter');
-  const panel = item.locator('.source-draft-panel');
+  const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 10000 });
-  await expect(panel).toBeFocused(); // the pressed button was disabled while working: focus must not fall to the page
-  await expect(panel).toHaveAttribute('aria-label', 'Rascunho para revisar');
+  await expect(panel.locator('.lesson-title')).toBeFocused(); // the pressed button is gone with the list: focus goes to the lesson, not to the page
+  await expect(panel).toHaveAttribute('aria-labelledby', /lesson-\d+-title/);
 
-  // Tab from the draft reaches the accept button (with a visible ring); focus never falls out of the page on the way
+  // Tab from the lesson reaches the accept button (with a visible ring); focus never falls out of the page on the way
   const accept = panel.locator('[data-action="accept-draft"]');
   let reached = false;
-  for (let i = 0; i < 25 && !reached; i++) {
+  for (let i = 0; i < 60 && !reached; i++) {
     await page.keyboard.press('Tab');
     reached = await accept.evaluate((el) => el === document.activeElement);
     expect(await page.evaluate(() => document.activeElement !== document.body), 'focus never falls out of the page mid-draft').toBe(true);

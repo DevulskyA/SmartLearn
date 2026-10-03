@@ -21,6 +21,7 @@ import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
 import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
+import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";

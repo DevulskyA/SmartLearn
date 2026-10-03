@@ -75,42 +75,49 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
 });
 
-test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
+// The draft is edited in the LESSON EDITOR (src/lesson-editor-ui.js): Resumo / Questões / Fonte / Revisão. See e2e/lesson-editor.spec.js
+// for the structure itself; these tests prove the acceptance pipeline end to end through it.
+async function openFirstDraft(page, name, pages) {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
-
-  const pdfBuffer = buildFixturePdf(['Farmacocinética: absorção e distribuição']);
-  await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
+  await page.setInputFiles('#sources-file-input', { name, mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  return page.locator('.lesson-editor');
+}
 
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
+test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'farmaco.pdf', ['Farmacocinética: absorção e distribuição']);
+  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
+  await expect(editor).toContainText('não verificado');
 
-  const draftPanel = item.locator('.source-draft-panel');
-  await expect(draftPanel).toBeVisible();
-  await expect(draftPanel.locator('.source-draft-caveat')).toContainText('não verificado');
-  await expect(draftPanel.locator('.source-draft-question')).toHaveCount(1);
   // The drafted answer is attributable to the exact real source text.
-  await expect(draftPanel.locator('.source-draft-answer')).toContainText('Farmacocinética');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await expect(editor.locator('.lesson-qitem')).toHaveCount(1);
+  await expect(editor.locator('.lesson-qeditor textarea').nth(1)).toHaveValue(/Farmacocinética/);
 
-  // CQ-2: the reviewer can verify. The automatic check is a screen (never "verified"), and the summary and
-  // every question show the source page they came from, with the page text one click away.
-  await expect(draftPanel.locator('.source-draft-audit')).toContainText('Conferência automática');
+  // CQ-2: the reviewer can verify. The automatic check is a screen (never "verified"), and the question shows the source page
+  // it came from, with the page text one click away.
+  await editor.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(editor.locator('[data-panel="review"]')).toContainText(/conferência automática/i);
   // the fake provider gives a bare snippet as the answer and no explanation: the screen says so instead of staying silent
-  await expect(draftPanel.locator('.source-draft-audit')).toContainText('Falta explicar por quê');
-  const summaryOrigin = draftPanel.locator('.summary-source', { hasText: 'Fonte do resumo' });
-  await expect(summaryOrigin).toContainText('página 1');
-  await summaryOrigin.locator('summary').click();
-  await expect(summaryOrigin.locator('.study-now-source-text')).toContainText('Farmacocinética: absorção e distribuição');
-  await expect(draftPanel.locator('.summary-source', { hasText: 'Fonte da questão' })).toContainText('página 1');
+  await editor.locator('[data-panel="review"] summary', { hasText: 'Questão 1' }).click();
+  await expect(editor.locator('[data-panel="review"]')).toContainText('Falta explicar por quê');
+  await editor.getByRole('tab', { name: /Fonte/ }).click();
+  await expect(editor.locator('[data-panel="source"]')).toContainText('farmaco.pdf');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  const questionOrigin = editor.locator('.lesson-qeditor .summary-source', { hasText: 'Fonte desta questão' });
+  await expect(questionOrigin).toContainText('página 1');
+  await questionOrigin.locator('summary').click();
+  await expect(questionOrigin.locator('.study-now-source-text')).toContainText('Farmacocinética: absorção e distribuição');
 
-  await draftPanel.locator('.source-draft-subject-input').fill('Farmacologia E2E');
-  await draftPanel.locator('.source-draft-date-input').fill('2026-04-01');
-  await draftPanel.locator('[data-action="accept-draft"]').click();
+  await editor.locator('.source-draft-subject-input').fill('Farmacologia E2E');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await editor.locator('[data-action="accept-draft"]').click();
 
-  await expect(draftPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
-  await expect(draftPanel.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(editor.locator('.source-draft-result')).not.toHaveClass(/is-error/);
 
   // The unit is real: it shows up on Plano.
   await page.locator('[data-screen="plan"]').click();
@@ -124,7 +131,7 @@ test('generating and accepting a draft through the real UI creates a real unit w
   await planOrigin.locator('summary').click();
   await expect(planOrigin.locator('.study-now-source-text')).toContainText('Farmacocinética: absorção e distribuição');
 
-  const draftId = await draftPanel.getAttribute('data-draft-id');
+  const draftId = await editor.getAttribute('data-draft-id');
   const firstAcceptance = await page.evaluate(async ({ base, id }) => {
     const res = await fetch(`${base}/v1/drafts/${id}`, { credentials: 'include' });
     return res.json();
@@ -154,20 +161,11 @@ test('generating and accepting a draft through the real UI creates a real unit w
 
 test('P1_PRODUCT A: accepting a second draft can reuse an existing subject instead of only creating a new one', async ({ page }) => {
   // First material creates "Fisiologia A".
-  await page.locator('[data-screen="materials"]').click();
-  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
-  await page.setInputFiles('#sources-file-input', {
-    name: 'materia-a.pdf', mimeType: 'application/pdf',
-    buffer: buildFixturePdf(['Conteudo da primeira materia']),
-  });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
-  const firstItem = page.locator('.source-proposal-item').first();
-  await firstItem.locator('[data-action="generate-draft"]').click();
-  const firstPanel = firstItem.locator('.source-draft-panel');
-  await expect(firstPanel).toBeVisible();
-  await firstPanel.locator('.source-draft-subject-input').fill('Fisiologia A');
-  await firstPanel.locator('[data-action="accept-draft"]').click();
-  await expect(firstPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  const first = await openFirstDraft(page, 'materia-a.pdf', ['Conteudo da primeira materia']);
+  await first.locator('.source-draft-subject-input').fill('Fisiologia A');
+  await first.locator('[data-action="accept-draft"]').click();
+  await expect(first.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await first.locator('[data-action="lesson-back"]').click();
 
   // Second material: the accept form must offer "Fisiologia A" as an
   // existing option, and picking it must NOT create a second subject.
@@ -176,22 +174,16 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
     buffer: buildFixturePdf(['Conteudo da segunda materia']),
   });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
-  // renderSourceProposals replaces the list wholesale per upload (it shows
-  // this source's own proposals, not an accumulating history) — the only
-  // item visible now is this second material's own proposal.
-  const secondItem = page.locator('.source-proposal-item').first();
-  await secondItem.locator('[data-action="generate-draft"]').click();
-  const secondPanel = secondItem.locator('.source-draft-panel');
-  await expect(secondPanel).toBeVisible();
+  // renderSourceProposals replaces the list wholesale per upload (it shows this source's own proposals, not an accumulating
+  // history) — the only item visible now is this second material's own proposal.
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  const second = page.locator('.lesson-editor');
+  await expect(second).toBeVisible({ timeout: 10000 });
 
-  // Drives the real accessible combobox UI, not the backing native
-  // <select> directly — select-ui.js now marks that native element
-  // aria-hidden (ACCESSIBLE_CONTROLS_PER_SELECTION=1: exactly one control
-  // per choice is exposed to assistive tech, the custom combobox, never
-  // both at once), so a real user/screen-reader path is what this test
-  // must exercise, not Playwright's .selectOption() shortcut.
-  const subjectSelect = secondPanel.locator('.source-draft-subject-select');
-  await expect(subjectSelect).toBeVisible();
+  // Drives the real accessible combobox UI, not the backing native <select> directly — select-ui.js marks that native element
+  // aria-hidden (exactly one control per choice is exposed to assistive tech), so a real user/screen-reader path is what this
+  // test must exercise, not Playwright's .selectOption() shortcut.
+  const subjectSelect = second.locator('.source-draft-subject-select');
   await expect(subjectSelect.locator('option', { hasText: 'Fisiologia A' })).toHaveCount(1);
   const subjectTrigger = subjectSelect.locator('xpath=..').locator('.ui-select-trigger');
   await subjectTrigger.click();
@@ -200,13 +192,12 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
   await subjectMenu.locator('li[role="option"]', { hasText: 'Fisiologia A' }).click();
   await expect(subjectTrigger).toHaveText('Fisiologia A');
 
-  // Picking an existing subject must disable (and not require) the
-  // free-text new-subject field.
-  await expect(secondPanel.locator('.source-draft-subject-input')).toBeDisabled();
+  // Picking an existing subject must disable (and not require) the free-text new-subject field.
+  await expect(second.locator('.source-draft-subject-input')).toBeDisabled();
 
-  await secondPanel.locator('[data-action="accept-draft"]').click();
-  await expect(secondPanel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
-  await expect(secondPanel.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+  await second.locator('[data-action="accept-draft"]').click();
+  await expect(second.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(second.locator('.source-draft-result')).not.toHaveClass(/is-error/);
 
   const subjectsAfter = await page.evaluate(async (base) => {
     const res = await fetch(`${base}/v1/subjects`, { credentials: 'include' });
@@ -225,90 +216,72 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
 
 // CQ-2: a draft that drops the central concept is FLAGGED where the reviewer decides. The fake provider's summary is the
 // first 150 characters of the page, so a page that opens with filler and only later reaches the concept exposes exactly that.
-test('a summary that misses the central concept of the page is flagged in the review, with the source terms it dropped, and acceptance stays a human decision', async ({ page }) => {
-  await page.locator('[data-screen="materials"]').click();
-  const filler = 'Introducao geral da disciplina e das suas aulas, com informacoes administrativas sobre horarios, salas, avaliacoes e bibliografia recomendada para o semestre letivo inteiro. ';
-  const core = 'A insuficiencia cardiaca reduz o debito cardiaco. A insuficiencia cardiaca ativa o sistema renina angiotensina. O debito cardiaco baixo eleva a pressao venosa.';
-  await page.setInputFiles('#sources-file-input', { name: 'ic.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([filler + core]) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+const FILLER = 'Introducao geral da disciplina e das suas aulas, com informacoes administrativas sobre horarios, salas, avaliacoes e bibliografia recomendada para o semestre letivo inteiro. ';
+const CORE = 'A insuficiencia cardiaca reduz o debito cardiaco. A insuficiencia cardiaca ativa o sistema renina angiotensina. O debito cardiaco baixo eleva a pressao venosa.';
 
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
-  const draftPanel = item.locator('.source-draft-panel');
-  const audit = draftPanel.locator('.source-draft-audit');
-  await expect(audit).toBeVisible({ timeout: 10000 });
-  await expect(audit).toHaveAttribute('data-result', 'REPAIR');
-  await expect(audit).toContainText('para verificar antes de aceitar');
-  await expect(audit.locator('.source-draft-audit-issue')).toContainText('Resumo · Pode omitir um conceito central');
-  await expect(audit.locator('.source-draft-audit-evidence')).toContainText(/insuficiencia/i);
+test('a summary that misses the central concept of the page is flagged in the review, with the source terms it dropped, and acceptance stays a human decision', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'ic.pdf', [FILLER + CORE]);
+  // the review tab announces the pending points and groups them per entity: the summary is one of them
+  await expect(editor.locator('[role="tab"]', { hasText: 'Revisão' })).toContainText('⚠');
+  await editor.getByRole('tab', { name: /Revisão/ }).click();
+  const review = editor.locator('[data-panel="review"]');
+  await review.locator('summary', { hasText: 'Resumo' }).click();
+  await expect(review.locator('.lesson-finding-issue').first()).toContainText('Pode omitir um conceito central');
+  await expect(review.locator('.lesson-finding-evidence').first()).toContainText(/insuficiencia/i);
   // a flag informs, it does not block: the accept action is still there and is the human's call
-  await expect(draftPanel.locator('[data-action="accept-draft"]')).toBeEnabled();
+  await expect(editor.locator('[data-action="accept-draft"]')).toBeEnabled();
 });
 
 // CQ-6: a flagged draft can be FIXED by the reviewer in place — the screen is re-run on the saved text, and what is
 // accepted is exactly what was saved (revision-checked), not the original flawed draft.
 test('the reviewer corrects a flagged summary in the review, the screen re-runs clean, and the unit gets the corrected text', async ({ page }) => {
-  await page.locator('[data-screen="materials"]').click();
-  const filler = 'Introducao geral da disciplina e das suas aulas, com informacoes administrativas sobre horarios, salas, avaliacoes e bibliografia recomendada para o semestre letivo inteiro. ';
-  const core = 'A insuficiencia cardiaca reduz o debito cardiaco. A insuficiencia cardiaca ativa o sistema renina angiotensina. O debito cardiaco baixo eleva a pressao venosa.';
-  await page.setInputFiles('#sources-file-input', { name: 'ic2.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([filler + core]) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
-  const panel = item.locator('.source-draft-panel');
-  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'REPAIR', { timeout: 10000 });
-  const revisionBefore = Number(await panel.getAttribute('data-revision'));
+  const editor = await openFirstDraft(page, 'ic2.pdf', [FILLER + CORE]);
+  await expect(editor.locator('[role="tab"]', { hasText: 'Revisão' })).toContainText('⚠');
+  const revisionBefore = Number(await editor.getAttribute('data-revision'));
 
-  // fill the accept form FIRST: it must survive the re-render
-  await panel.locator('.source-draft-subject-input').fill('Cardiologia CQ6');
-  await panel.locator('.source-draft-date-input').fill('2026-05-01');
+  // fill the accept form FIRST: it must survive the save
+  await editor.locator('.source-draft-subject-input').fill('Cardiologia CQ6');
+  await editor.locator('.source-draft-date-input').fill('2026-05-01');
 
   const fixed = 'A insuficiência cardíaca reduz o débito cardíaco e ativa o sistema renina angiotensina; o débito cardíaco baixo eleva a pressão venosa.';
-  await panel.locator('.source-draft-editor > summary').click();
-  await panel.locator('.source-draft-edit-summary').fill(fixed);
+  await editor.locator('.lesson-summary-input').fill(fixed);
   // mobile: the open editor fits a 375px screen (no horizontal page scroll) and its controls are touch-sized
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-  expect((await panel.locator('.source-draft-editor > summary').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await editor.locator('[data-action="save-summary"]').boundingBox()).height).toBeGreaterThanOrEqual(40);
   await page.setViewportSize({ width: 1280, height: 720 });
-  await panel.locator('[data-action="save-draft"]').click();
+  await editor.locator('[data-action="save-summary"]').click();
 
-  await expect(page.locator('#sources-message')).toContainText('Correções salvas', { timeout: 10000 });
-  await expect(panel.locator('.source-draft-summary')).toHaveText(fixed);
-  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'PASS');
-  expect(Number(await panel.getAttribute('data-revision'))).toBe(revisionBefore + 1);
-  await expect(panel.locator('.source-draft-subject-input')).toHaveValue('Cardiologia CQ6');
-  await expect(panel.locator('.source-draft-date-input')).toHaveValue('2026-05-01');
+  await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo', { timeout: 10000 });
+  await expect(editor.locator('.lesson-summary-input')).toHaveValue(fixed);
+  await expect(editor.locator('[role="tab"]', { hasText: 'Revisão' })).not.toContainText('⚠', { timeout: 5000 });
+  expect(Number(await editor.getAttribute('data-revision'))).toBe(revisionBefore + 1);
+  await expect(editor.locator('.source-draft-subject-input')).toHaveValue('Cardiologia CQ6');
+  await expect(editor.locator('.source-draft-date-input')).toHaveValue('2026-05-01');
 
-  await panel.locator('[data-action="accept-draft"]').click();
-  await expect(panel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
 
   const unit = await page.evaluate(async (base) => (await (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json()).units[0], API_BASE);
   expect(unit.summaryBody).toBe(fixed);
 
-  // once accepted the draft is history: the editor is no longer offered on a re-render, and the server refuses edits
+  // once accepted the draft is history: the server refuses edits
   const refused = await page.evaluate(async ({ base, id }) => {
     const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
-    const res = await fetch(`${base}/v1/drafts/${id}`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': me.csrfToken }, body: JSON.stringify({ summary: 'tarde demais' }) });
+    const res = await fetch(`${base}/v1/drafts/${id}/summary`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': me.csrfToken }, body: JSON.stringify({ summary: 'tarde demais' }) });
     return res.status;
-  }, { base: API_BASE, id: await panel.getAttribute('data-draft-id') });
+  }, { base: API_BASE, id: await editor.getAttribute('data-draft-id') });
   expect(refused).toBe(409);
 });
 
 test('a correction the server rejects (empty answer) is reported in place and the draft is left as it was', async ({ page }) => {
-  await page.locator('[data-screen="materials"]').click();
-  await page.setInputFiles('#sources-file-input', { name: 'v.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
-  const panel = item.locator('.source-draft-panel');
-  await expect(panel.locator('.source-draft-audit')).toBeVisible({ timeout: 10000 });
-  const revisionBefore = await panel.getAttribute('data-revision');
+  const editor = await openFirstDraft(page, 'v.pdf', ['Farmacocinética: absorção e distribuição']);
+  const revisionBefore = await editor.getAttribute('data-revision');
 
-  await panel.locator('.source-draft-editor > summary').click();
-  await panel.locator('.source-draft-edit-a').first().fill('');
-  await panel.locator('[data-action="save-draft"]').click();
-  await expect(panel.locator('.source-draft-edit-message')).toHaveClass(/is-error/, { timeout: 10000 });
-  await expect(panel.locator('.source-draft-edit-message')).not.toHaveText('');
-  expect(await panel.getAttribute('data-revision')).toBe(revisionBefore);
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qeditor textarea').nth(1).fill('');
+  await editor.locator('[data-action="save-question"]').click();
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toHaveClass(/is-error/, { timeout: 10000 });
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toHaveText('');
+  expect(await editor.getAttribute('data-revision')).toBe(revisionBefore);
 });

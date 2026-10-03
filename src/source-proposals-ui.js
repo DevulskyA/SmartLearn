@@ -86,6 +86,23 @@ export async function renameProposal(proposalId, title) {
   } catch (err) { return fail(err); }
 }
 
+/** "O que você quer estudar?": the sections of the document whose heading matches the words typed. Creates nothing. */
+export async function searchTopics(sourceId, query) {
+  try {
+    const { candidates } = await apiRequest(`/v1/sources/${sourceId}/topics?q=${encodeURIComponent(query)}`);
+    return { ok: true, candidates };
+  } catch (err) { return fail(err); }
+}
+
+/** The student approves ONE scope — a located section ({ordinal}) or an explicit {range} — and gets back the proposal
+ * whose spans are the only text a provider may ever receive. */
+export async function approveScope(sourceId, scope) {
+  try {
+    const { proposal } = await apiRequest(`/v1/sources/${sourceId}/scopes`, { method: 'POST', body: scope });
+    return { ok: true, proposal };
+  } catch (err) { return fail(err); }
+}
+
 const PAGES_SHOWN = 8;
 
 /** "p. 2, 5" — long lists are shortened, the count in front stays exact. */

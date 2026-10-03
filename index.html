@@ -97,6 +97,7 @@
           </svg>
           <span>Conta</span>
         </button>
+        <p class="build-identity" id="build-identity" hidden></p>
       </nav>
 
       <main class="app-main" tabindex="-1">
@@ -648,9 +649,27 @@
             <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
             <div id="sources-proposals-panel" hidden>
               <p id="sources-coverage-note" class="form-message" role="note" hidden></p>
-              <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
+              <div class="sources-topic">
+                <h3 class="sources-subheading" id="sources-topic-title">O que você quer estudar?</h3>
+                <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-topic-title">
+                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Measurement of Glomerular Filtration Rate" aria-describedby="sources-topic-hint" />
+                  <button class="primary-button" type="submit">Buscar</button>
+                </form>
+                <p class="lesson-hint" id="sources-topic-hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
+                <ul class="sources-topic-results" id="sources-topic-results"></ul>
+              </div>
+              <details class="sources-index" id="sources-index">
+                <summary id="sources-index-summary">Índice do documento</summary>
+                <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
+              </details>
+              <details class="sources-index" id="sources-editorial" hidden>
+                <summary id="sources-editorial-summary">Páginas editoriais</summary>
+                <ul id="sources-editorial-list" class="sources-proposals-list"></ul>
+              </details>
             </div>
+            <div class="sources-generation" id="sources-generation" role="group" aria-label="Geração em andamento" hidden></div>
           </section>
+          <section class="settings-card lesson-view" id="sources-editor-view" aria-label="Aula em edição" hidden></section>
         </section>
 
         <section class="screen" id="screen-exam" data-screen-panel="exam" aria-labelledby="title-exam" hidden>

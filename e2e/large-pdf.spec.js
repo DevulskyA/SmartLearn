@@ -82,6 +82,7 @@ test('a 150-page lecture PDF: extracted in bounded time, 15 proposals covering e
   console.log(`[LARGEPDF] 150 pages, ${(pdf.length / 1024).toFixed(0)} KB -> proposals in ${elapsedMs} ms`);
   expect(elapsedMs).toBeLessThan(45000);
 
+  await page.locator('#sources-index > summary').click(); // a whole book keeps the index collapsed behind the topic search
   const proposals = page.locator('.source-proposal-item');
   await expect(proposals).toHaveCount(15);
   // every page belongs to exactly one proposal: 1-10, 11-20, ..., 141-150
@@ -97,7 +98,8 @@ test('a 150-page lecture PDF: extracted in bounded time, 15 proposals covering e
   // a chunk from the middle becomes a reviewable draft
   const item = proposals.nth(7);
   await item.locator('[data-action="generate-draft"]').click();
-  await expect(item.locator('.source-draft-panel .source-draft-question').first()).toBeVisible({ timeout: 20000 });
+  await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
+  await expect(page.locator('.lesson-editor .lesson-qitem').first()).toBeVisible({ timeout: 20000 });
 });
 
 test('dense pages: chunks close before the model input limit, so every proposal can become a draft; only one absurdly dense page gets a plain-language explanation', async ({ page }) => {
@@ -110,14 +112,17 @@ test('dense pages: chunks close before the model input limit, so every proposal 
   expect(await proposals.count()).toBeGreaterThanOrEqual(2); // split by size, not one impossible chunk
   const first = proposals.first();
   await first.locator('[data-action="generate-draft"]').click();
-  await expect(first.locator('.source-draft-panel .source-draft-question').first()).toBeVisible({ timeout: 20000 });
+  await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
+  await expect(page.locator('.lesson-editor .lesson-qitem').first()).toBeVisible({ timeout: 20000 });
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
+  await page.locator('[data-action="lesson-back"]').click();
 
   // a single page above the limit cannot be split: the student is told plainly (not a raw engineering message),
   // and the message is brought into view even though it sits far above a long list of proposals
   const longList = Array.from({ length: 150 }, (_, n) => pageText(n + 1, n === 149 ? 60000 : 300));
   await page.setInputFiles('#sources-file-input', { name: 'aula-com-pagina-gigante.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(longList) });
   await expect(page.locator('.source-proposal-item')).toHaveCount(16, { timeout: 30000 }); // 15 by pages + the giant page alone
+  await page.locator('#sources-index > summary').click();
   const last = page.locator('.source-proposal-item').last();
   await last.scrollIntoViewIfNeeded();
   expect(await page.locator('#sources-message').isVisible()).toBe(true);

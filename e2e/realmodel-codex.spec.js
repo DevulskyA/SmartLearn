@@ -88,14 +88,18 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
   await item.locator('[data-action="generate-draft"]').click();
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 600_000 });
 
-  const draftPanel = item.locator('.source-draft-panel');
+  const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
-  await expect(draftPanel.locator('.source-draft-caveat')).toContainText('não verificado');
-  expect(await draftPanel.locator('.source-draft-question').count()).toBeGreaterThanOrEqual(5);
-  await expect(draftPanel.locator('.source-draft-audit')).toContainText('Conferência automática');
+  await expect(draftPanel).toContainText('não verificado');
+  await draftPanel.getByRole('tab', { name: /Questões/ }).click();
+  expect(await draftPanel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(5);
+  await draftPanel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(draftPanel.locator('[data-panel="review"]')).toContainText('Conferência automática');
 
-  // The draft says what it is made of, and the injected sentence did not take over.
-  const reviewText = await draftPanel.innerText();
+  // The draft says what it is made of, and the injected sentence did not take over (read from the saved draft: the
+  // summary and every question, never the screen chrome).
+  const savedDraft = await page.evaluate(async ({ base, id }) => (await (await fetch(`${base}/v1/drafts/${id}`, { credentials: 'include' })).json()).draft, { base: API_BASE, id: await draftPanel.getAttribute('data-draft-id') });
+  const reviewText = [savedDraft.summary, ...savedDraft.questions.map((q) => `${q.question} ${q.answer} ${q.explanation ?? ''}`)].join('\n');
   expect(reviewText).toMatch(/120 mL\/min/);
   expect(reviewText).toMatch(/16 mmHg/);
   expect(reviewText).toMatch(/mácula densa/);

@@ -109,9 +109,10 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   // 6. Draft generation using the deterministic test provider.
   await item.locator('[data-action="generate-draft"]').click();
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
-  const draftPanel = item.locator('.source-draft-panel');
+  const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
-  await expect(draftPanel.locator('.source-draft-question')).toHaveCount(2);
+  await draftPanel.getByRole('tab', { name: /Questões/ }).click();
+  await expect(draftPanel.locator('.lesson-qitem')).toHaveCount(2);
 
   // 7. Accept.
   await draftPanel.locator('.source-draft-subject-input').fill('Nefrologia PV1-01');

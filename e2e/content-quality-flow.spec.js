@@ -145,33 +145,41 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
-  const panel = item.locator('.source-draft-panel');
-  await expect(panel.locator('.source-draft-audit')).toBeVisible({ timeout: 15000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  const panel = page.locator('.lesson-editor');
+  await expect(panel).toBeVisible({ timeout: 15000 });
 
   // 2) the production gate ran exactly: generate -> independent audit -> ONE repair (never a loop)
   expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);
 
   // 3) what the reviewer sees is the REPAIRED draft, marked as such, still a DRAFT for a human
-  await expect(panel.locator('.source-draft-caveat')).toContainText('não verificado');
-  await expect(panel.locator('.source-draft-audit')).toContainText('corrigido uma vez automaticamente');
-  await expect(panel.locator('.source-draft-audit')).toHaveAttribute('data-result', 'PASS'); // the repaired draft re-screens clean
-  await expect(panel.locator('.source-draft-summary')).toContainText('10 mmHg');
-  await expect(panel.locator('.source-draft-summary')).not.toContainText('25 mmHg');
-  await expect(panel.locator('.source-draft-answer').nth(1)).toContainText('Contrai a arteríola eferente');
-  await expect(panel.locator('.source-draft-question')).toHaveCount(3);
-  await expect(panel.locator('.source-draft-question-type').first()).toHaveText('Recordação');
-  await expect(panel.locator('.source-draft-explanation').first()).toContainText('Por quê: Resulta do balanço');
+  await expect(panel).toContainText('não verificado');
+  await expect(panel.locator('.lesson-summary-input')).toHaveValue(/10 mmHg/);
+  await expect(panel.locator('.lesson-summary-input')).not.toHaveValue(/25 mmHg/);
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(panel.locator('[data-panel="review"]')).toContainText('corrigido automaticamente uma vez');
+  await expect(panel.locator('[data-panel="review"]')).toContainText('Nada sinalizado'); // the repaired draft re-screens clean
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  await expect(panel.locator('.lesson-qitem')).toHaveCount(3);
+  await panel.locator('.lesson-qitem').nth(1).click();
+  await expect(panel.locator('.lesson-qeditor textarea').nth(1)).toHaveValue(/Contrai a arteríola eferente/);
+  await panel.locator('.lesson-qitem').nth(0).click();
+  await expect(panel.locator('.lesson-qtype')).toHaveText('Recordação');
+  await expect(panel.locator('.lesson-qeditor textarea').nth(2)).toHaveValue(/Resulta do balanço/);
 
   await shot(panel, '1280-draft-review');
 
   // 4) the reviewer can verify: source pages beside the summary and each question, text one click away
+  await panel.getByRole('tab', { name: /Resumo/ }).click();
   const summaryOrigin = panel.locator('.summary-source', { hasText: 'Fonte do resumo' });
   await expect(summaryOrigin).toContainText('páginas 1–2');
   await summaryOrigin.locator('summary').click();
   await expect(summaryOrigin.locator('.study-now-source-text').first()).toContainText('pressão efetiva de filtração resulta em 10 mmHg');
-  await expect(panel.locator('.summary-source', { hasText: 'Fonte da questão' })).toHaveCount(3);
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  for (let q = 0; q < 3; q += 1) {
+    await panel.locator('.lesson-qitem').nth(q).click();
+    await expect(panel.locator('.lesson-qeditor .summary-source', { hasText: 'Fonte desta questão' })).toHaveCount(1);
+  }
 
   // 5) mobile: the review panel fits a 375px screen without horizontal page scroll
   await page.setViewportSize({ width: 375, height: 800 });

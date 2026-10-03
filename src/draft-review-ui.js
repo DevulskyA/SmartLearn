@@ -44,6 +44,29 @@ export async function reviseDraft(draftId, { summary, questions }) {
   } catch (err) { return fail(err); }
 }
 
+/** Saves ONLY the summary (the questions are untouched). `expectedVersion` = summaryVersion the caller read. */
+export async function reviseSummary(draftId, { summary, expectedVersion }) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/summary`, { method: 'PATCH', body: { summary, expectedVersion } });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
+/** Saves ONE question by its stable id (text, citation and/or review status); nothing else in the lesson changes. */
+export async function reviseQuestion(draftId, questionId, patch) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/questions/${encodeURIComponent(questionId)}`, { method: 'PATCH', body: patch });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
+export async function deleteQuestion(draftId, questionId) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/questions/${encodeURIComponent(questionId)}`, { method: 'DELETE' });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
 /**
  * The one real, definitive action in this module: creates a unit +
  * exercises + 16 reviews from the draft's current content. Idempotent by

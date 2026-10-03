@@ -86,9 +86,10 @@ async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, 
   await item.locator('[data-action="generate-draft"]').click();
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
 
-  const draftPanel = item.locator('.source-draft-panel');
+  const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
-  const draftQuestionText = await draftPanel.locator('.source-draft-question').first().textContent();
+  await draftPanel.getByRole('tab', { name: /Questões/ }).click();
+  const draftQuestionText = await draftPanel.locator('.lesson-qeditor textarea').first().inputValue();
 
   await draftPanel.locator('.source-draft-subject-input').fill(subjectName);
   await draftPanel.locator('.source-draft-date-input').fill(studyDate);
