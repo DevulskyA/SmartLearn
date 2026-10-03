@@ -1,7 +1,7 @@
 import { listPages } from './source-extraction.js';
 import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
 import { planSectionUnits, findTopicSections, textOfSpans } from './section-spans.js';
-import { classifyUnit } from './unit-kind.js';
+import { classifyUnit, effectiveKind } from './unit-kind.js';
 import { segmentsForProposal, parseSpans } from './proposal-scope.js';
 
 export class ProposalError extends Error {
@@ -60,8 +60,20 @@ function proposalChars(db, userId, row) {
   `).get(userId, row.source_id, row.page_start, row.page_end).n;
 }
 
-function toSummaryDto(row) {
+/** The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again. */
+function latestDraftsByProposal(db, userId, sourceId) {
+  const rows = db.prepare(`
+    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision
+    FROM generated_drafts d
+    WHERE d.user_id = ? AND d.proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
+    ORDER BY d.id ASC
+  `).all(userId, userId, sourceId);
+  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision }]));
+}
+
+function toSummaryDto(row, latestDraft = null) {
   return {
+    latestDraft,
     id: row.id,
     sourceId: row.source_id,
     chunkIndex: row.chunk_index,
@@ -70,8 +82,8 @@ function toSummaryDto(row) {
     title: row.title,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    kind: row.kind ?? 'CONTENT',
-    generatable: (row.kind ?? 'CONTENT') === 'CONTENT',
+    kind: effectiveKind(row),
+    generatable: effectiveKind(row) === 'CONTENT',
     topic: row.topic ?? null,
   };
 }
@@ -284,8 +296,9 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 export function listProposals(db, userId, sourceId) {
   if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
   const rows = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? ORDER BY chunk_index').all(userId, sourceId);
+  const drafts = latestDraftsByProposal(db, userId, sourceId);
   return rows.map((row) => ({
-    ...toSummaryDto(row),
+    ...toSummaryDto(row, drafts.get(row.id) ?? null),
     excerpt: proposalText(db, userId, row).slice(0, EXCERPT_LENGTH),
     chars: proposalChars(db, userId, row),
   }));

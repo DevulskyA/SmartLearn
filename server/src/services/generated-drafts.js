@@ -13,6 +13,7 @@ import {
 } from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
+import { effectiveKind } from './unit-kind.js';
 import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
 
 export class DraftError extends Error {
@@ -289,8 +290,8 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
   if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
 
   // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
-  if ((found.proposal.kind ?? 'CONTENT') !== 'CONTENT') {
-    throw new DraftError('NOT_GENERATABLE', `Este trecho (${found.proposal.kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
+  if (effectiveKind(found.proposal) !== 'CONTENT') {
+    throw new DraftError('NOT_GENERATABLE', `Este trecho (${effectiveKind(found.proposal)}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
   }
   // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
   let scope;

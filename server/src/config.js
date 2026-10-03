@@ -44,6 +44,9 @@ export const config = {
   aiApiKey: process.env.SMARTLEARN_AI_API_KEY || null,
   aiModel: process.env.SMARTLEARN_AI_MODEL || null,
   // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | CODEX | FAKE. Declared = honoured exactly, never silently replaced.
+  // Build identity, set by the Desktop DEV launcher (scripts/launch-desktop-dev.ps1) so a human can tell WHICH build is in front of them.
+  buildHead: process.env.SMARTLEARN_BUILD_HEAD || null,
+  buildMode: process.env.SMARTLEARN_BUILD_MODE || null,
   aiProvider: process.env.SMARTLEARN_AI_PROVIDER ? process.env.SMARTLEARN_AI_PROVIDER.trim().toUpperCase() : null,
   aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
   aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,

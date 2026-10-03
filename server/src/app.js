@@ -45,6 +45,14 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     return { status: 'alive' };
   });
 
+  // Which build is this? Public and minimal on purpose (a commit id, a mode and the declared provider name — no secret, no path).
+  // Only meaningful when the DEV launcher set it; a packaged release reports mode null and the UI shows nothing.
+  app.get('/health/build', async () => ({
+    head: config.buildHead,
+    mode: config.buildMode,
+    provider: config.aiProvider ?? null,
+  }));
+
   app.get('/health/ready', async (request, reply) => {
     try {
       db.prepare('SELECT 1').get();

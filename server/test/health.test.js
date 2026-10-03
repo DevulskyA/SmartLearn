@@ -74,3 +74,13 @@ test('/health/ready returns 503 when foreign_keys OFF', async () => {
     cleanup();
   }
 });
+
+test('/health/build reports the stamped build identity (commit, mode, declared provider) and nothing else', async () => {
+  const app = await buildApp(null);
+  await app.ready();
+  const res = await app.inject({ method: 'GET', url: '/health/build' });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.deepEqual(Object.keys(body).sort(), ['head', 'mode', 'provider']);
+  await app.close();
+});

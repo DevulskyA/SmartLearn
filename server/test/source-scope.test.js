@@ -154,3 +154,16 @@ test('PAYLOAD: a generated draft records the approved scope and the payload size
     assert.deepEqual(draft.sourceScope.payloadPages, [12, 13]);
   } finally { cleanup(); }
 });
+
+test('LEGACY: an old proposal (no spans) that is a copyright page is still not generatable', async () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const now = new Date().toISOString();
+    const id = db.prepare(`INSERT INTO content_proposals (user_id, source_id, chunk_index, page_start, page_end, title, created_at, updated_at)
+      VALUES (?, ?, 0, 1, 1, 'Copyright Page', ?, ?)`).run(userId, sourceId, now, now).lastInsertRowid;
+    const [row] = proposals.listProposals(db, userId, sourceId).filter((p) => p.id === Number(id));
+    assert.equal(row.kind, 'COPYRIGHT');
+    assert.equal(row.generatable, false);
+    await assert.rejects(() => drafts.createDraft(db, userId, Number(id), {}), (e) => e.code === 'NOT_GENERATABLE');
+  } finally { cleanup(); }
+});

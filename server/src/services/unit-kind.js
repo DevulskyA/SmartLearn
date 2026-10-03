@@ -59,6 +59,17 @@ export function classifyUnit(title, text = '') {
   return verdict(UNIT_KIND.CONTENT, 'default');
 }
 
+/**
+ * The kind a stored proposal really has. Proposals created before classification existed carry the column default
+ * ('CONTENT') even when they are a copyright page: those (no spans_json) are classified by their title on read, so an old
+ * proposal is not a loophole around the front-matter filter.
+ */
+export function effectiveKind(row) {
+  if (row.kind && row.kind !== UNIT_KIND.CONTENT) return row.kind;
+  if (!row.spans_json) return classifyUnit(row.title).kind;
+  return UNIT_KIND.CONTENT;
+}
+
 function verdict(kind, reason) {
   return { kind, generatable: kind === UNIT_KIND.CONTENT, reason };
 }
