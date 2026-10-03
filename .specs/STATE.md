@@ -12,6 +12,10 @@
 INTEGRATION (2026-10-01, LOCAL ONLY): content-quality@01c67f7 integrated into claude/smartlearn-v1-complete by fast-forward afc4fd9 -> 6f2e816 (temp merge 2c17635 resolved one conflict in src/app.js,
 kept the v1 aria-label required by e2e/materials-a11y.spec.js). Gate @ 6f2e816: unit 401, server 623, clippy, cargo 29, build, e2e 181/181 x2. NOT resolved: pre-existing load-sensitive flake
 (content-quality-flow.spec.js, reproduces on baseline afc4fd9 under CPU load), server npm audit, Windows smoke (access denied). Migrations: 001-029 on v1, next free = 030.
+CODEX PROVIDER / REALMODEL-1 (2026-10-03, LOCAL ONLY, human decision: REALMODEL_PROVIDER=CODEX, USE_EXISTING_CODEX_LOGIN=YES, OPENAI_API_KEY_REQUIRED=NO): SMARTLEARN_AI_PROVIDER=CODEX runs `codex exec` as pure inference
+(server/src/ai/codex-provider.js); OPENAI/ANTHROPIC/FAKE unchanged. Needs SMARTLEARN_AI_CONSENT=true only; optional SMARTLEARN_CODEX_COMMAND / _MODEL / _TIMEOUT_MS / _REASONING_EFFORT. Fail-closed:
+CODEX_NOT_FOUND / CODEX_NOT_AUTHENTICATED (503), never FAKE. Real canary and real-UI e2e passed (opt-in e2e/realmodel-codex.spec.js, SMARTLEARN_E2E_CODEX=1); findings are didactic only (circular explanations, leaky hints) —
+see conductor/tracks/content-quality/plan.md REALMODEL-1. No schema change.
 IMPORT-1 + VERDICT-1 (2026-10-02/03, LOCAL ONLY, human-approved option B for both): d7b4ccb restores the student's own logical export into an EMPTY account (preview -> confirm -> one atomic transaction; ids remapped;
 no merge; materials/PDFs not restored and said so in the UI; 409 RESTORE_REQUIRES_EMPTY_ACCOUNT; capacity checked at preview); 64cf979 weights the aggregate stats verdict by compared question volume (mixed only when
 improving AND declining each >= 25%; insufficient/no-evidence never vote; ties go to the cautious label). No schema change (migrations still 001-029, next free = 030). Gate and proofs: .specs/EXECUTION.md and

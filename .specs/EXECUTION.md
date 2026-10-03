@@ -14,7 +14,7 @@ STATE (2026-10-01, LOCAL ONLY, never pushed): claude/smartlearn-v1-complete = v1
   OPEN: load-sensitive flakes (pre-existing): content-quality-flow.spec.js; hoje-block-retest.spec.js ("Retention cue"/"Hoje block") fails intermittently — measured 1/20 at baseline 5960f04 vs 2/20 at 64cf979 with
   `--repeat-each=10` (same command, same machine), 17/18 when run with keyboard-study-materials; keyboard-study-materials ACCESS-2 failed once in a full run and passed 6/6 isolated. Not caused by IMPORT-1/VERDICT-1. Windows smoke never run (access denied).
   KNOWN LIMIT: restore refuses >5000 rows / >5 MB (SMARTLEARN_IMPORT_MAX_ROWS/BYTES) with a clean 413 at PREVIEW; nothing is written.
-  HUMAN-GATED: REALMODEL-1 (API key/cost), T51 deployment, push of PR #6, merge to main. (VERDICT-1 and IMPORT-1 were decided by the human on 2026-10-02 and are DONE locally.) Tracks: app-decomposition DONE, product-closure DONE.
+  HUMAN-GATED: T51 deployment, push of PR #6, merge to main. (REALMODEL-1 was unblocked on 2026-10-03 by the human decision to use a CODEX provider — the already-logged-in Codex CLI, no API key — and is DONE locally; see content-quality/plan.md.) (VERDICT-1 and IMPORT-1 were decided by the human on 2026-10-02 and are DONE locally.) Tracks: app-decomposition DONE, product-closure DONE.
   Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle. NO_PUSH / NO_MERGE(main) / NO_DEPLOY still in force.
 CURRENT_HEAD=64cf979 (code; a docs commit follows it)
 WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
