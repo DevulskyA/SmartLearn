@@ -48,6 +48,6 @@ for (const [name, script] of [['launcher', 'scripts/launch-desktop-dev.ps1'], ['
 }
 
 test('the launcher survives a CLEAN working tree (git prints nothing; a bare .Trim() on null crashed it)', () => {
-  assert.doesNotMatch(launcher, /\(git status[^)]*\)\.Trim\(\)/);
+  assert.doesNotMatch(launcher, /--untracked-files=no\)\.Trim/);
   assert.match(launcher, /git status[^)]*\|\s*Out-String\)\.Trim\(\)/);
 });
