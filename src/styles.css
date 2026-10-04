@@ -4450,6 +4450,25 @@ h1 {
   color: var(--color-muted);
 }
 
+.lesson-view {
+  container-type: inline-size;
+}
+
+/* The Desktop window is often ~800 px wide and the sidebar takes a third of it: judge the room the editor really has. */
+@container (max-width: 640px) {
+  .lesson-questions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lesson-qlist {
+    max-height: 12rem;
+  }
+
+  .lesson-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 720px) {
   .lesson-questions {
     grid-template-columns: minmax(0, 1fr);

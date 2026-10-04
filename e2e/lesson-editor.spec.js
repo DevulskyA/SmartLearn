@@ -323,3 +323,18 @@ test('a legacy draft (no stored scope) still names its document and pages in the
   await expect(panel).toContainText('legado.pdf');
   await expect(panel).toContainText('Páginas da unidade');
 });
+
+test('at a typical Desktop window width (800 px, sidebar included) the question editor stacks under the list and stays comfortable', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 650 });
+  await openLesson(page, 'janela.pdf');
+  const editor = page.locator('.lesson-editor');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').first().click();
+  const list = await editor.locator('.lesson-qlist').boundingBox();
+  const form = await editor.locator('.lesson-qeditor').boundingBox();
+  const field = await editor.locator('.lesson-qeditor textarea').nth(1).boundingBox();
+  expect(form.y).toBeGreaterThanOrEqual(list.y + list.height - 2); // stacked: the editor starts below the list
+  expect(field.width).toBeGreaterThanOrEqual(300); // wide enough to read and edit a sentence
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
