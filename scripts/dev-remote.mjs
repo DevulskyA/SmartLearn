@@ -9,7 +9,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { devDbPaths, snapshotDevDbIfNeeded, acquireDevLock } from './dev-data.mjs';
+import { devDbPaths, snapshotDevDbIfNeeded, assertDevLockFree } from './dev-data.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SERVER_DIR = path.join(ROOT, 'server');
@@ -56,11 +56,10 @@ const dev = devDbPaths();
 const dbPath = process.env.SMARTLEARN_DB_PATH || dev.dbPath;
 const sourcesDir = process.env.SMARTLEARN_SOURCES_DIR || dev.sourcesDir;
 mkdirSync(dev.dir, { recursive: true });
-// Only the default persistent DB is single-writer guarded (an explicit SMARTLEARN_DB_PATH is the operator's choice).
-let releaseLock = () => {};
+// Only the default persistent DB is single-writer guarded (an explicit SMARTLEARN_DB_PATH is the operator's choice). The lock itself
+// is held by the server process that writes the database (server/src/main.js); this only fails fast, readable, before spawning.
 if (!process.env.SMARTLEARN_DB_PATH) {
-  try { releaseLock = acquireDevLock(dev.dir, { root: ROOT }); } catch (err) { console.error(err.message); process.exit(1); }
-  process.on('exit', () => releaseLock());
+  try { assertDevLockFree(dev.dir); } catch (err) { console.error(err.message); process.exit(1); }
 }
 const snap = snapshotDevDbIfNeeded(dbPath, dev.snapshotsDir);
 console.log(`SMARTLEARN_DEV_DB=${dbPath}`);

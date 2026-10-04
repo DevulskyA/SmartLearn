@@ -3,7 +3,8 @@ import { openDb } from './db.js';
 import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { acquireDevLock, isDevDatastoreDb } from './dev-datastore.js';
 import { assertTestDbIsDisposable } from './db-safety.js';
 import { validateProductionConfig } from './production-config.js';
 
@@ -27,6 +28,18 @@ try {
 }
 // A relative default silently creates an EMPTY database per working directory
 // (per git worktree, in dev): always say which file this process is using.
+// T-F1-01: the process that really writes the persistent DEV database holds its single-writer lock for exactly as long as it
+// lives (the Desktop's backend child included), so a second writer (dev:remote, another Desktop) is refused naming the holder,
+// even when the Desktop is force-closed. Any other database (every test and e2e database) takes no lock.
+if (isDevDatastoreDb(config.dbPath)) {
+  try {
+    const releaseDevLock = acquireDevLock(dirname(resolve(config.dbPath)), { root: process.cwd() });
+    process.on('exit', releaseDevLock);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
 const dbExisted = existsSync(config.dbPath);
 console.log(`SmartLearn database: ${resolve(config.dbPath)} (${dbExisted ? 'existing' : 'NEW, empty'})`);
 

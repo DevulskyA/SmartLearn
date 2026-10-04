@@ -99,7 +99,7 @@ Checklist: baseline reproduzido; `git status` das três worktrees explicado; STA
 Objetivo: tornar impossível perder ou corromper o banco humano e impossível acumular processos órfãos sem ver.
 
 ### T-F1-01 — Lock de escritor único também para o Desktop · M
-- Status: `[ ]` · Requisitos: R-01 (AC-01.1) · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `b57ebf9` (backend real segura o lock via `server/src/dev-datastore.js`, chamado por `server/src/main.js` quando `SMARTLEARN_DB_PATH` é o datastore DEV; `dev-remote` só confere; criação exclusiva `wx`; RED→GREEN em `server/test/dev-lock.test.js` com 2 backends reais; prova manual no Desktop real pendente para o checkpoint F1, pois o Desktop aberto agora roda código anterior) · Requisitos: R-01 (AC-01.1) · Dependências: T-F0-01
 - Superfície: `scripts/dev-data.mjs` (reuso de `acquireDevLock`), `scripts/launch-desktop-dev.ps1`, `server/src/main.js` (aquisição quando `SMARTLEARN_DB_PATH` aponta para o datastore DEV), testes.
 - Decisão de desenho: o backend Node (processo filho do Desktop) adquire o lock com o PID do próprio backend e a raiz da worktree; o launcher continua apenas conferindo. Assim o lock vive exatamente enquanto o escritor vive, mesmo com fechamento forçado do Rust.
 - RED: teste que sobe dois backends no mesmo banco temporário e exige recusa do segundo com mensagem contendo pid e raiz do detentor.
