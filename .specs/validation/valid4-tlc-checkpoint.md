@@ -48,3 +48,10 @@ Human test on the canonical Desktop (`SmartLearn DEV`): open the existing Costan
 - Desktop DEV opens via `Desktop\SmartLearn DEV.lnk`. To see the new screen without Codex: login with the test account
   (`%TEMP%\claude\valid4-test-account.txt`), Materiais → "Documentos já enviados" → Abrir → "Abrir rascunho".
 - CODEX calls this phase: 0 (one trivial diagnostic probe before the instruction, no PDF text).
+
+## Closure of the UI-architecture phase (resumed session)
+
+- server 766/766, frontend 432/432, full e2e 198 passed + 2 opt-in skipped (1 axe failure was a Playwright trace-artifact ENOENT after a killed orphan run; `accessibility.spec.js` 5/5 on rerun); after the last fix the materials/lesson subset reran 32/32.
+- New proof: 4-question sequence re-read from the DB (Q3 edit, summary edit, Q2 reject, accept), content/audit/UI separation, UI reload persistence.
+- Defects found and fixed: launcher crashed on a clean tree (null `.Trim()`); whole-list revise silently reset REJECTED questions when the count changed.
+- Codex calls this phase: 0. Visual validation: AWAITING_HUMAN (Desktop DEV open). VALID-4 stays NOT_PROVEN.
