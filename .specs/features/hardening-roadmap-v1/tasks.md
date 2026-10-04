@@ -368,12 +368,12 @@ Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Code
 Objetivo: suíte rápida, determinística e que de fato fica vermelha quando algo importante quebra. Pode andar em paralelo com F2–F4 (superfície: `playwright.config.js`, `scripts/`, `e2e/` metadados).
 
 ### T-F6-01 — Definir e etiquetar a suíte "materiais" · S
-- Status: `[ ]` · Requisitos: R-07 (AC-07.1) · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 (em vez de editar títulos, a suíte é definida POR ARQUIVO em `e2e/support/suites.js`: 9 specs, 36 testes, `npm run test:e2e:materials`; o "45/45" histórico não é reproduzível e fica formalmente substituído por 36; opt-in Codex/PDF real fora; 36/36 verdes em 1,9 min com 2 workers; registro na `TEST_COVERAGE_MATRIX.md` em T-F6-07) · Requisitos: R-07 (AC-07.1) · Dependências: nenhuma
 - Fazer: tag `@materials` nos testes de Materiais/Fonte/Rascunho/Editor (`lesson-editor`, `draft-acceptance`, `source-proposals`, `source-reupload`, `large-pdf`, `large-draft-review`, `materials-a11y`, `keyboard-study-materials`, ...); `npm run test:e2e:materials`; contagem registrada em `TEST_COVERAGE_MATRIX.md`; o "45/45" histórico passa a ser reproduzível ou formalmente substituído.
 - Gate: comando roda e a contagem coincide com a matriz; inventário de testes PASS.
 
 ### T-F6-02 — Portas dinâmicas e saída única por execução · M
-- Status: `[ ]` · Requisitos: R-02 (AC-02.3), F-41 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 (`scripts/e2e.mjs`: porta Vite livre, bloco de portas de servidor reservado de forma atômica em `os.tmpdir()` (arquivo `wx`, dono morto é retomado), `outputDir` `test-results/<run>`; os 42 specs derivam portas/origem de `e2e/support/ports.js`; `npx playwright test` direto mantém os padrões históricos; prova: 2 execuções simultâneas do mesmo spec passaram 5/5 cada em offsets 0 e +4000; antes da reserva atômica a 2ª execução colidiu (3 falhas), registrado como RED real; `test/e2e-ports.test.js`) · Requisitos: R-02 (AC-02.3), F-41 · Dependências: nenhuma
 - Fazer: Playwright escolhe porta livre (config com função), `outputDir` com sufixo por execução; specs que fixam portas de servidor (`139xx`) passam a alocar livre; falha limpa quando faltar porta.
 - RED: duas execuções simultâneas da mesma suíte não colidem.
 - Gate: duas execuções paralelas curtas verdes; e2e completo verde.

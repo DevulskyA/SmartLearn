@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // CONTENT-QUALITY CQ-4: one medical unit through the WHOLE product, on the LIVE-provider code path
 // (real server, real UI, real PDF extraction) with the model endpoint replaced by a local stub that
@@ -17,8 +18,8 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 //   -> reviewer sees flags + sources -> accept -> Plano shows the summary origin -> Study Now with
 //   the WHY -> a wrong item -> error card -> redo -> exactly ONE evidence row (a redo is not evidence)
 
-const SERVER_PORT = 13983;
-const STUB_PORT = 13984;
+const SERVER_PORT = serverPort(13983);
+const STUB_PORT = serverPort(13984);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -89,7 +90,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
       // the live path is gated on ALL of these; the endpoint is the local stub, never the network
       SMARTLEARN_AI_API_KEY: 'stub-key',
       SMARTLEARN_AI_MODEL: 'stub-model',

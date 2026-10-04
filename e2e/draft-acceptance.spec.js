@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T38: proves the real draft-review UI (src/draft-review-ui.js, wired into
 // the same "Fontes" card as T36) drives the full T34-T38 pipeline end to
@@ -13,7 +14,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 // with reviews and exercises exists afterward, and a second click on the
 // same accepted draft does not create anything twice.
 
-const SERVER_PORT = 13965;
+const SERVER_PORT = serverPort(13965);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -32,7 +33,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

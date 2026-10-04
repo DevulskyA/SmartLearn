@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // CQ-7: a REALISTICALLY LARGE draft (50 questions, 2 of them flagged) can be reviewed, corrected and accepted without
 // losing context or edits. The content is deliberately synthetic (Zeta/Omega terms): this measures the review
 // experience at scale, not medical quality. The model endpoint is a local stub on the live-provider path.
 
-const SERVER_PORT = 13985;
-const STUB_PORT = 13986;
+const SERVER_PORT = serverPort(13985);
+const STUB_PORT = serverPort(13986);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -69,7 +70,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
       SMARTLEARN_AI_API_KEY: 'stub-key',
       SMARTLEARN_AI_MODEL: 'stub-model',
       SMARTLEARN_AI_CONSENT: 'true',

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // FIX_PLAN P1-1: a failed Arquivar/Excluir on Disciplinas must never fail silently. Found by the
 // final engineering audit (.specs/quick/final-engineering-audit-v1/AUDIT.md F-02): both handlers
@@ -11,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 // worked. Real server, real route abort (not a product-code mock) so this proves the actual
 // network-failure path a user can hit.
 
-const SERVER_PORT = 13962;
+const SERVER_PORT = serverPort(13962);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -27,7 +28,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

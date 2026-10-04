@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T28: migrates a representative legacy fixture end-to-end through the
 // real UI (src/migration-ui.js) against the real T25-T27 server pipeline
@@ -18,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 // it does NOT constitute authorization to run a real user's own legacy
 // export through this flow; that is a separate, explicit human gate.
 
-const SERVER_PORT = 13962;
+const SERVER_PORT = serverPort(13962);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const FIXTURE_PATH = fileURLToPath(new URL('../server/test/import-fixtures/v3-schema.json', import.meta.url));
@@ -30,7 +31,7 @@ test.beforeAll(async () => {
   dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-migration-'));
   const dbPath = join(dbDir, 'e2e.db');
   serverProcess = spawn(process.execPath, [MAIN_JS], {
-    env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199' },
+    env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 8000;

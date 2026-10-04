@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // IMPORT-1: the student's own backup, restored into a NEW account through the real UI.
 //   account A (has data) -> "Exportar backup" (a real browser download) -> account B (empty)
@@ -12,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 // And the safety side: A cannot restore its own file back into itself (the account is not empty).
 // Same real-server-child-process pattern as e2e/migration.spec.js; synthetic accounts only.
 
-const SERVER_PORT = 13968;
+const SERVER_PORT = serverPort(13968);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const FIXTURE_PATH = fileURLToPath(new URL('../server/test/import-fixtures/v3-schema.json', import.meta.url));
@@ -23,7 +24,7 @@ let dbDir;
 test.beforeAll(async () => {
   dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-restore-'));
   serverProcess = spawn(process.execPath, [MAIN_JS], {
-    env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199' },
+    env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 8000;

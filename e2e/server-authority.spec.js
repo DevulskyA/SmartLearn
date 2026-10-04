@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T21: proves the server-authoritative cutover with a real server, a real
 // browser, and the REMOTE_MODE flag actually flipped on (never the default
@@ -14,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 // server restart persistence, and a network-loss write failure with no
 // silent BrowserStore fallback.
 
-const SERVER_PORT = 13960;
+const SERVER_PORT = serverPort(13960);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -42,7 +43,7 @@ function startServer() {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

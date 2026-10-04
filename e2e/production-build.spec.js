@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { serverPort } from './support/ports.js';
 
 // T24: the dev-server e2e suite (playwright.config.js's webServer runs
 // `vite --port 5199`, a dev server) never exercises the real production
@@ -22,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const DIST_DIR = fileURLToPath(new URL('../dist', import.meta.url));
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
-const SERVER_PORT = 13961;
+const SERVER_PORT = serverPort(13961);
 const SERVER_ORIGIN = `http://localhost:${SERVER_PORT}`;
 
 let serverProcess;

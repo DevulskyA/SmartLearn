@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // Sending the SAME PDF again (a normal thing to do) dedupes to the same source, whose trechos already carry a
 // rascunho. The server refuses to replace them (HAS_EXISTING_DRAFT). The student must land on those trechos with
 // an honest message, not on a dead-end error. Same real-server-child-process + REMOTE_MODE pattern as
 // e2e/source-proposals.spec.js.
 
-const SERVER_PORT = 13977;
+const SERVER_PORT = serverPort(13977);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -28,7 +29,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

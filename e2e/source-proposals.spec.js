@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T36: proves the real inspection UI (src/source-proposals-ui.js, wired
 // into a new "Fontes" card on Configurações) drives the actual T34-T36
@@ -13,7 +14,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 // (subjects/units/exercises) ever created by this flow. Same real-
 // server-child-process + REMOTE_MODE pattern as e2e/feature-parity.spec.js.
 
-const SERVER_PORT = 13964;
+const SERVER_PORT = serverPort(13964);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -32,7 +33,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

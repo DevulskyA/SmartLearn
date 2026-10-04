@@ -15,13 +15,14 @@
     "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/e2e.mjs",
     "lint": "eslint .",
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "package:standalone": "node scripts/package-standalone.mjs",
     "prepreview": "node scripts/require-work-branch.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e:materials": "node scripts/e2e.mjs --suite materials"
   },
   "repository": {
     "type": "git",

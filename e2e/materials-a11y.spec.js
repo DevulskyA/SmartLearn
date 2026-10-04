@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // Real keyboard / screen-reader / text-size sweep of Materiais with a multi-trecho PDF (found running a real 28-page
 // textbook chapter with 11 trechos): the title field of every trecho had NO accessible name, the repeated
 // "Salvar título" / "Ver trecho da fonte" / "Gerar rascunho" buttons could not be told apart, the field was a 27px
 // target, and with the browser text size at 200% the whole page scrolled horizontally (html/body min-width in rem).
 
-const SERVER_PORT = 13978;
+const SERVER_PORT = serverPort(13978);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OUTLINE = [{ title: 'Definicao clinica', page: 1 }, { title: 'Epidemiologia', page: 3 }];
@@ -30,7 +31,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

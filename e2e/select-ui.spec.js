@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // Proves the shared select/combobox primitive (src/select-ui.js) live,
 // across representative real consumers, instead of trusting the code
@@ -317,7 +318,7 @@ test.describe('local BrowserStore consumers', () => {
 });
 
 test.describe('source-draft-subject-select (Materiais) — the one flagged as "not re-tested live"', () => {
-  const SERVER_PORT = 13977;
+  const SERVER_PORT = serverPort(13977);
   const API_BASE = `http://localhost:${SERVER_PORT}`;
   const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
   let serverProcess;
@@ -335,7 +336,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
         PORT: String(SERVER_PORT),
         HOST: 'localhost',
         NODE_ENV: 'test',
-        SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+        SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
       },
       stdio: 'ignore',
     });

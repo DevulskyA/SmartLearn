@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // Closes the critical flow the TEST SHIELD goal names explicitly end to
 // end: Study Now -> attempt -> evidence -> reload -> Exercícios resolvidos
@@ -15,7 +16,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 // e2e/draft-acceptance.spec.js's exact real-pipeline setup (own server,
 // own port) rather than adding a test-only shortcut into product code.
 
-const SERVER_PORT = 13969;
+const SERVER_PORT = serverPort(13969);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -34,7 +35,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

@@ -6,12 +6,13 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // LESSON EDITOR (VALID-4 defect register): a draft is SUMMARY + QUESTIONS[] + SOURCE + REVIEW, each its own area, each saved on
 // its own, and the rest of the book is never a vertical continuation of the lesson being edited. Real server, FAKE provider:
 // no model is ever called by this spec.
 
-const SERVER_PORT = 13971;
+const SERVER_PORT = serverPort(13971);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const UI_WORDS = /Corrigir|Salvar|Ver trecho|Gerar rascunho|Aceitar e criar|Criar nova disciplina|Voltar às unidades/;
@@ -31,7 +32,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

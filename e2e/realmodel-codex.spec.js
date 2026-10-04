@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // REALMODEL-1 (CODEX): the whole content pipeline with a REAL model, through the real UI:
 //   PDF upload -> extraction -> proposal -> "Gerar rascunho com IA" -> Codex (generation, model audit, at most one
@@ -18,7 +19,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 test.skip(process.env.SMARTLEARN_E2E_CODEX !== '1', 'opt-in: set SMARTLEARN_E2E_CODEX=1 (spends a real Codex run)');
 test.setTimeout(1_500_000);
 
-const SERVER_PORT = 13956;
+const SERVER_PORT = serverPort(13956);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -38,7 +39,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
       // CODEX: authenticates through the operator's own Codex CLI login — no API key, no USD cap; explicit consent only.
       SMARTLEARN_AI_PROVIDER: 'CODEX',
       SMARTLEARN_AI_CONSENT: 'true',

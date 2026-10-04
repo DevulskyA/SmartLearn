@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T40: PWA shell + private cache lifecycle, proved against a real spawned
 // server and a real browser (mirrors e2e/server-authority.spec.js's own
@@ -13,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 // never replaces a good old snapshot; a second account never sees the
 // first's data, including offline.
 
-const SERVER_PORT = 13961;
+const SERVER_PORT = serverPort(13961);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -41,7 +42,7 @@ function startServer() {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });
@@ -198,7 +199,7 @@ test('a reachable network but a dead SmartLearn server still falls back to the c
   // or navigator.onLine) so the failure the app sees is a genuine fetch()
   // rejection — the same NetworkError path a real dead/restarting/firewalled
   // server produces — while the Vite shell server on :5199 stays up.
-  const port = 13962;
+  const port = serverPort(13962);
   const base = `http://localhost:${port}`;
   const dir = mkdtempSync(join(tmpdir(), 'sl-e2e-serverdown-'));
   const path = join(dir, 'e2e.db');
@@ -209,7 +210,7 @@ test('a reachable network but a dead SmartLearn server still falls back to the c
       PORT: String(port),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

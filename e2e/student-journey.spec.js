@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // GUI-05: ONE student journey through the whole product, in one profile and one database (real server,
 // real UI, real PDF extraction; the model endpoint is a scripted local stub on the live-provider code
@@ -15,8 +16,8 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 //   material -> unit draft (Resumo Mestre + questions) -> review/accept -> Plano -> study (feedback)
 //   -> redo -> prova (no feedback) -> correction -> registered result -> Estatisticas -> next action
 
-const SERVER_PORT = 13985;
-const STUB_PORT = 13986;
+const SERVER_PORT = serverPort(13985);
+const STUB_PORT = serverPort(13986);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -81,7 +82,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
       SMARTLEARN_AI_API_KEY: 'stub-key',
       SMARTLEARN_AI_MODEL: 'stub-model',
       SMARTLEARN_AI_CONSENT: 'true',

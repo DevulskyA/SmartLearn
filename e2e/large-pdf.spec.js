@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // LARGEPDF-1: a realistic lecture PDF (dozens to ~150 pages) goes from upload to reviewable drafts without
 // hanging, dropping pages, or failing silently. The provider is the default deterministic one (this proves the
 // SCALE of extraction / proposals / limits, not the quality of a model).
 
-const SERVER_PORT = 13990;
+const SERVER_PORT = serverPort(13990);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -27,7 +28,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

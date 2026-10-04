@@ -4,13 +4,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // T11: real server + real browser end-to-end auth journey. Boots the actual
 // central server as a child process (not app.inject) against a TempDir DB,
 // on a port distinct from other E2E suites, with CORS configured for the
 // Playwright webServer origin (localhost:5199, per playwright.config.js).
 
-const SERVER_PORT = 13950;
+const SERVER_PORT = serverPort(13950);
 // Same hostname as the Playwright webServer origin (localhost:5199) is
 // required: browsers treat 127.0.0.1 and localhost as different sites for
 // cookie purposes even though they resolve to the same loopback address —
@@ -35,7 +36,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

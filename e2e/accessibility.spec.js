@@ -5,13 +5,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // A11Y-1: an automated accessibility audit (axe-core, WCAG 2.0/2.1 A + AA) of every main screen, on the REAL
 // server and UI, at phone and desktop width. It fails on any critical or serious violation; the few findings
 // that are not defects of this product are listed in ACCEPTED with the reason. Automated checks catch roughly
 // a third of accessibility problems: keyboard, focus and reading order stay covered by their own specs.
 
-const SERVER_PORT = 13990;
+const SERVER_PORT = serverPort(13990);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -42,7 +43,7 @@ test.beforeAll(async () => {
       PORT: String(SERVER_PORT),
       HOST: 'localhost',
       NODE_ENV: 'test',
-      SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
     },
     stdio: 'ignore',
   });

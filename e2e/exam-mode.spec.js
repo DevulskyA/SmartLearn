@@ -4,12 +4,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
 
 // EXAM-1: Modo Prova. A whole exam can be taken without EVER receiving or seeing the gabarito, explanation,
 // hint or a score before submitting. The proof is at the wire (every /v1/exams response while in progress)
 // AND in the DOM, and the correction data exists on the server only after the submit.
 
-const SERVER_PORT = 13987;
+const SERVER_PORT = serverPort(13987);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 
@@ -21,7 +22,7 @@ let dbDir;
 test.beforeAll(async () => {
   dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-exam-'));
   serverProcess = spawn(process.execPath, [MAIN_JS], {
-    env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: 'http://localhost:5199' },
+    env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 8000;
