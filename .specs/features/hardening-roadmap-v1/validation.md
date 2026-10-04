@@ -5,7 +5,11 @@ Estados: `PASS` evidência suficiente · `FAIL` · `NOT_PROVEN`. Nenhuma exclus�
 ## F0 — Reconciliação e higiene de estado
 
 ### T-F0-01 — Baseline congelado (reproduzido por execução em 2026-10-04)
-BASELINE_PENDING — preenchido ao fim do gate completo desta sessão (HEAD `ff83d20` + docs; sem mudança de código de produto desde `169ec2d`). Números do handoff anterior (NÃO copiados como prova): servidor 775, frontend 453, cargo 30, e2e 203 + 2 skipped, lint 0 erros.
+Gate completo reproduzido por execução em 2026-10-04 (HEAD `d562dc8`; executor Haiku mecânico; sem mudança de código de produto desde `169ec2d`; as 12 rotas/arquivos novos não rastreados entraram no gate só como arquivos novos):
+- servidor `npm --prefix server test`: 775/775 · cargo `cargo test --lib`: 30/30 · lint: 0 erros, 23 avisos · inventário de testes: PASS (174 arquivos) · e2e `npx playwright test`: 203 passaram, 2 skipped (opt-in Codex/PDF real), ~19,6 min.
+- frontend `npm test`: 465 passaram, **1 FALHOU** — `test/test-db-isolation.test.js`: `test/prompt-lab-runner.test.js` (commit `8fb8e9f`, sessão anterior) nomeia os caminhos protegidos para provar a recusa e o sensor o listava como infrator. O handoff anterior dizia "verdes"; NÃO estava. Correção (decisão técnica local): o arquivo entra na allowlist do sensor com justificativa (só passa os caminhos a um guarda puro que lança antes de abrir; nunca resolve o datastore real). Reexecução: `npm test` 466/466 (inclui 5 testes novos desta sessão).
+- Estado "vermelho antes, verde depois" registrado: o baseline real de frontend em `8fb8e9f` era 461 passando + 1 falha (= 462 testes).
+- `CODEX_CALL_COUNT` deste gate: 0.
 
 ### T-F0-02 — STATE compactado: PASS
 `.specs/STATE.md` 2815 → 36 linhas; `.specs/archive/STATE-ate-2026-10-04.md` é byte a byte igual ao STATE anterior (sha256 `f99b806e8f4dfb390be4591d82f83b660237adfe9c8f21832b8d8c84d384420e`). Sensor `node scripts/check-state-ids.mjs <rev>`: 364 tokens de decisão/invariante no STATE antigo, 0 ausentes em STATE novo + arquivo (e teste `test/check-state-ids.test.js` prova que o sensor falha quando um token some).

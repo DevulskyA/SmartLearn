@@ -9,7 +9,14 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 // dev-data.test.js and desktop-entrypoint.test.js legitimately talk ABOUT those paths (they test the pinning); this file names them to forbid them.
-const ALLOWED = new Set(['test/dev-data.test.js', 'test/desktop-entrypoint.test.js', 'test/test-db-isolation.test.js']);
+// The others below only PROVE a refusal or exercise the lock/snapshot/restore code on throwaway directories under os.tmpdir():
+// prompt-lab-runner passes the protected paths to a pure guard that must throw before opening anything; the dev-* server tests
+// build a fake datastore (SMARTLEARN_DEV_DATA_DIR) inside a temp directory and never resolve the real one.
+const ALLOWED = new Set([
+  'test/dev-data.test.js', 'test/desktop-entrypoint.test.js', 'test/test-db-isolation.test.js',
+  'test/prompt-lab-runner.test.js',
+  'server/test/dev-lock.test.js', 'server/test/dev-snapshot.test.js', 'server/test/dev-restore.test.js',
+]);
 const FORBIDDEN = [/SmartLearn-DevData/, /com\.devulsky\.smartlearn/, /smartlearn-dev\.db/, /\bdevDbPaths\b/, /\bdevDataDir\b/];
 
 function specFiles(dir) {
