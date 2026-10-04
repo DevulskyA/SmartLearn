@@ -60,7 +60,7 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Done quando: Memento cabe em ≤ 60 linhas e um leitor novo reconstrói o estado sem o chat.
 
 ### T-F0-02 — Compactar `STATE.md` (~2,8 mil linhas) sem perder decisões canônicas · M
-- Status: `[ ]` · Requisitos: R-08 · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 (STATE 2815 → 36 linhas; arquivo morto `.specs/archive/STATE-ate-2026-10-04.md`, ASCII no nome, byte a byte igual ao HEAD anterior, sha256 f99b806e…; PREMISSA CORRIGIDA: não existem IDs `DEC-/AD-/INV-` no STATE, então o sensor compara TODOS os tokens `MAIÚSCULAS_COM-SEPARADOR`: `node scripts/check-state-ids.mjs <rev>` = 364 antigos, 0 ausentes em STATE+arquivo; teste `test/check-state-ids.test.js`) · Requisitos: R-08 · Dependências: T-F0-01
 - Superfície: `.specs/STATE.md`; histórico antigo movido para `.specs/archive/STATE-até-2026-10-04.md` (cópia íntegra, nada apagado).
 - Fazer: manter no STATE só decisões `CANONICAL` (AD/DEC), invariantes e o handoff; o restante vira arquivo morto referenciado.
 - Sensor: script que lista IDs de decisão (`DEC-*`, `AD-*`, `INV-*`) antes/depois e falha se algum sumir.
@@ -68,7 +68,7 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Risco: perda de decisão. Mitigação: arquivo morto íntegro e comparação por ID.
 
 ### T-F0-03 — Reconciliar painel mestre e planos de track · S
-- Status: `[ ]` · Requisitos: R-08 · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 (track `conductor/tracks/hardening-roadmap-v1/plan.md` criado e ativo; painel mestre de 07/09 marcado como histórico; `agent-tasklist.mjs` regenerou o bloco ACTIVE-TRACK e os painéis; EXECUTION.md reconciliado: provedor ativo CODEX, track ativo, VALID-4/5) · Requisitos: R-08 · Dependências: T-F0-01
 - Superfície: `conductor/tracks.md` (bloco não gerado), `conductor/tracks/v1-validation/plan.md`, criação de `conductor/tracks/hardening-roadmap-v1/plan.md` apontando para esta pasta.
 - Fazer: marcar o painel de 07/09 como histórico apontando para o STATE; incluir VALID-4/5/8 como `NOT_PROVEN` com ponteiro para F5; gerar o bloco ACTIVE-TRACK com `node scripts/agent-tasklist.mjs`.
 - Gate: `node scripts/agent-tasklist.mjs` termina sem erro e o bloco gerado reflete o track novo.

@@ -17,8 +17,9 @@ STATE (2026-10-01, LOCAL ONLY, never pushed): claude/smartlearn-v1-complete = v1
   HUMAN-GATED: T51 deployment, push of PR #6, merge to main. (REALMODEL-1 was unblocked on 2026-10-03 by the human decision to use a CODEX provider — the already-logged-in Codex CLI, no API key — and is DONE locally; see content-quality/plan.md.) (VERDICT-1 and IMPORT-1 were decided by the human on 2026-10-02 and are DONE locally.) Tracks: app-decomposition DONE, product-closure DONE.
   Backup: C:\Projetos\SmartLearn-backups\smartlearn-cq-v1-20260930.bundle. NO_PUSH / NO_MERGE(main) / NO_DEPLOY still in force.
 MASTER_ID=SMARTLEARN_PRODUCT_EVOLUTION_V3 (.specs/governance/SMARTLEARN_PRODUCT_EVOLUTION_V3.md) · ACTIVE_HORIZON=H0 · ACTIVE_TRACK=conductor/tracks/v1-validation/plan.md · ACTIVE_TASK=VALID-4 INTERRUPTED_BY_USER / NOT_PROVEN (PDF real recebido; canário cancelado pelo usuário; NÃO retomar sem ordem) — VALID-6/7 feitas; VALID-5 e VALID-8 dependem dele
-CURRENT_HEAD=ver `git rev-parse --short HEAD` (7b54c25 ao adotar o plano mestre; o worktree tinha trabalho em andamento do VALID-2 sem commit)
-WORKTREE_CLEAN=YES (.impeccable/ untracked, local hook cache, not product code)
+2026-10-04 (reconciliação F0): VALID-4=PASS e VALID-5=PASS de fidelidade (3 gerações reais, escopo por seção; `.specs/features/prompt-lab/valid4-span-rerun.md`); VALID-8 aguarda humano (HG-06). ACTIVE_TRACK atual = `conductor/tracks/hardening-roadmap-v1/plan.md` (ledger causal em `.specs/features/hardening-roadmap-v1/tasks.md`). Memento: `.specs/STATE.md`; histórico: `.specs/archive/`. O bloco ACTIVE_TASK acima é histórico.
+CURRENT_HEAD=ver `git rev-parse --short HEAD`
+WORKTREE_CLEAN=ver `git status --short` (não rastreados conhecidos: `.impeccable/`, `.specs/benchmarks/`; decisão proposta em T-F0-04)
 REMOTE_MATCH=NO — local is far ahead of origin (origin/claude/
   smartlearn-v1-complete = 175403e, dozens of commits behind); NOT pushed
   this session, no push requested by the user. Do not push without
@@ -495,7 +496,7 @@ EXECUTION_POLICY:
 
 CANONICAL_DECISIONS:
 - local-first desktop (app funciona standalone sem servidor)
-- Luna Alto (gpt-5.6-luna, reasoning_effort=high) permanece decisão canônica — ver STATE.md AI_PROVIDER_DECISION
+- Provedor ativo = CODEX (decisão humana 2026-10-03, login existente do Codex CLI, sem API key). Luna Alto (gpt-5.6-luna, reasoning_effort=high; `AI_PROVIDER_DECISION` de 2026-09-12 no arquivo morto `.specs/archive/STATE-ate-2026-10-04.md`) segue implementado e selecionável, mas não é o provedor ativo. Prompt do produto v5 inalterado sem decisão humana.
 - main não é worktree de desenvolvimento
 
 RECOVERY (se perdeu contexto):

@@ -3,16 +3,15 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/v1-validation/plan.md`** — V1-VALIDATION — H0 do SMARTLEARN_PRODUCT_EVOLUTION_V3 · Status: ACTIVE · ATIVA (GUI): VALID-8 · concluídas (7): VALID-1, VALID-2, VALID-3, VALID-4, VALID-5, VALID-6, VALID-7 · branch `claude/smartlearn-v1-complete`@8fb8e9f · sincronizado 2026-10-04
+**`conductor/tracks/hardening-roadmap-v1/plan.md`** — HARDENING-ROADMAP-V1 — endurecimento da V1 (correções e melhorias) · Status: ACTIVE · ATIVA (GUI): HR-0 · próximas: HR-1, HR-2, HR-3, HR-4, HR-5, HR-6, HR-7, HR-8, HR-9 · concluídas (0): — · branch `claude/smartlearn-v1-complete`@ff83d20 · sincronizado 2026-10-04
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
 A tasklist mostrada ao usuário é uma projeção do plan.md.
 
-> PAINEL MESTRE ABAIXO DEFASADO: snapshot de 2026-09-07 (T28). Os 143 commits seguintes
-> (T29–T44, PV1, LOCAL, CI, TEST SHIELD, produto de erro→reteste) estão registrados em
-> `.specs/STATE.md`, que é a referência de continuidade até a reconciliação deste painel
-> (tarefa adiada no plan ativo).
+> PAINEL MESTRE ABAIXO = HISTÓRICO (snapshot de 2026-09-07, T28; reconciliado em 2026-10-04 como arquivo morto, não como estado).
+> Estado atual: Git + `.specs/STATE.md` (Memento) + o track ativo acima. Tracks encerrados: `v1-validation` (VALID-1..7 feitas;
+> VALID-8 aguarda decisão humana, HG-06), `ops-dev-data-and-tasklist`, `app-decomposition`, `product-closure`, `content-quality`.
 
 > Reconciliar contra Git + `.specs/STATE.md` antes de confiar neste arquivo
 > (regra 12, `workflow.md`). Snapshot gerado em 2026-09-07 a partir de HEAD
