@@ -250,3 +250,38 @@ test('a processed document is reopened from "Documentos já enviados" without se
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
 });
+
+test('RELOAD: a saved question and a saved summary survive a full page reload; untouched questions are unchanged', async ({ page }) => {
+  await openLesson(page, 'recarga.pdf');
+  const editor = page.locator('.lesson-editor');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  const list = editor.locator('.lesson-qitem');
+  const answers = async () => {
+    const out = [];
+    for (let i = 0; i < await list.count(); i += 1) { await list.nth(i).click(); out.push(await editor.locator('.lesson-qeditor textarea').nth(1).inputValue()); }
+    return out;
+  };
+  const before = await answers();
+  await list.nth(1).click();
+  await editor.locator('.lesson-qeditor textarea').nth(1).fill('Resposta 2 persistida');
+  await editor.locator('[data-action="save-question"]').click();
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await editor.getByRole('tab', { name: /Resumo/ }).click();
+  await editor.locator('.lesson-summary-input').fill('Resumo persistido após recarga');
+  await editor.locator('[data-action="save-summary"]').click();
+  await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo');
+
+  await page.locator('[data-action="lesson-back"]').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="materials"]').click();
+  await page.locator('#sources-existing-list .source-existing-item', { hasText: 'recarga.pdf' }).locator('[data-action="open-source"]').click();
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await expect(editor).toBeVisible({ timeout: 10000 });
+  await expect(editor.locator('.lesson-summary-input')).toHaveValue('Resumo persistido após recarga');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  const after = await answers();
+  expect(after[1]).toBe('Resposta 2 persistida');
+  expect(after.filter((_, i) => i !== 1)).toEqual(before.filter((_, i) => i !== 1));
+});

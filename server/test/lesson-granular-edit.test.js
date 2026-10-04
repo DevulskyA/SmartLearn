@@ -159,3 +159,57 @@ test('a legacy draft (no ids) gets deterministic ids that do not change between 
     assert.deepEqual(first, ['q1', 'q2', 'q3']);
   } finally { cleanup(); }
 });
+
+test('critical sequence on 4 questions, each step re-read from the database: Q3 edit, summary edit, Q2 rejected then accepted', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId } = await lessonWithThreeQuestions(db, sourcesDir);
+    const spans = [{ pageIndex: 1 }];
+    const base = drafts.reviseDraft(db, userId, draftId, {
+      summary: 'Resumo inicial',
+      questions: ['A', 'B', 'C', 'D'].map((x) => ({ question: `Pergunta ${x}?`, answer: `Resposta ${x}`, explanation: null, hint: null, sourceSpans: spans })),
+    });
+    const [q1, q2, q3, q4] = base.questions;
+
+    drafts.reviseQuestion(db, userId, draftId, q3.id, { answer: 'Resposta C editada' });
+    let fresh = drafts.getDraft(db, userId, draftId);
+    assert.equal(snapshot(fresh.questions[0]), snapshot(q1));
+    assert.equal(snapshot(fresh.questions[1]), snapshot(q2));
+    assert.equal(snapshot(fresh.questions[3]), snapshot(q4));
+    assert.equal(fresh.questions[2].id, q3.id);
+    assert.equal(fresh.questions[2].answer, 'Resposta C editada');
+    assert.equal(fresh.summary, base.summary);
+    assert.equal(fresh.summaryVersion, base.summaryVersion);
+
+    const q3After = snapshot(fresh.questions[2]);
+    drafts.reviseSummary(db, userId, draftId, { summary: 'Resumo editado' });
+    fresh = drafts.getDraft(db, userId, draftId);
+    assert.equal(fresh.summary, 'Resumo editado');
+    assert.equal(snapshot(fresh.questions[0]), snapshot(q1));
+    assert.equal(snapshot(fresh.questions[1]), snapshot(q2));
+    assert.equal(snapshot(fresh.questions[2]), q3After);
+    assert.equal(snapshot(fresh.questions[3]), snapshot(q4));
+
+    drafts.reviseQuestion(db, userId, draftId, q2.id, { status: 'REJECTED' });
+    fresh = drafts.getDraft(db, userId, draftId);
+    assert.equal(fresh.questions[1].status, 'REJECTED');
+    const result = acceptDraft(db, userId, draftId, { newSubjectName: 'Fisiologia', studyDate: '2026-10-03', expectedRevision: fresh.revision });
+    assert.equal(result.exerciseCount, 3);
+    const texts = db.prepare('SELECT * FROM exercises').all().map((r) => JSON.stringify(r)).join('|');
+    assert.ok(!texts.includes('Pergunta B?'), 'rejected question must not become an exercise');
+    assert.equal(drafts.getDraft(db, userId, draftId).questions[1].status, 'REJECTED');
+  } finally { cleanup(); }
+});
+
+test('persisted pedagogical content carries no audit text and no UI text', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    const after = drafts.reviseQuestion(db, userId, draftId, draft.questions[0].id, { answer: 'Resposta com valor 999 mg que a fonte não tem' });
+    assert.ok(after.audit.findings.length > 0);
+    const content = JSON.stringify({ summary: after.summary, questions: after.questions.map(({ question, answer, explanation, hint }) => ({ question, answer, explanation, hint })) });
+    for (const f of after.audit.findings) assert.ok(!content.includes(f.message ?? '\u0000'), 'audit message leaked into content');
+    assert.ok(!/Sinalizada|Conceito|Recordação|Rejeitar|Salvar/.test(content), 'UI label leaked into content');
+    assert.ok(!('audit' in after.questions[0]) && !('findings' in after.questions[0]));
+  } finally { cleanup(); }
+});
