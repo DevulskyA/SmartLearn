@@ -346,6 +346,16 @@ Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Code
 - Status: `[H]` · Dependências: T-F5-03, T-F5-04
 - Fazer: decisão humana registrada com evidência: `REALMODEL_CONTENT_QUALITY_PROVEN` sim/não/condicional e riscos aceitos.
 
+### T-F5-08 — Ordem de leitura por colunas na extração de PDF (achado D1 de VALID-4/5) · M
+- Status: `[ ]` · Requisitos: R-05 (fidelidade de escopo) · Dependências: nenhuma (sem Codex, sem HG; pode ser antecipada para logo após F6)
+- Causa CONFIRMADA (2026-10-04, `getTextContent` do Costanzo, pág. 267, somente leitura): a página tem duas colunas (esquerda x≈60, direita x≈318) e o PDF emite o texto na ordem de fluxo do conteúdo, que nem sempre é a ordem de leitura. Na pág. 267 a coluna DIREITA (início de "Glomerular Filtration") é emitida antes da ESQUERDA (cauda do tópico anterior: FSR/PAH); `pageTextFromItems` (`server/src/pdf/page-text.js`) preserva a ordem do fluxo, então a cauda cai no meio de uma frase de podócitos e entra no escopo por seção → D1 (2 de 3 gerações). Varredura das 496 páginas: em ~390 de 488 páginas de duas colunas o primeiro item da coluna direita precede o da esquerda no fluxo (heurística grosseira; só dimensiona o problema, não é o critério de aceite).
+- Fazer: ordenar os itens por geometria (colunas detectadas por vão estável entre blocos; esquerda → direita; dentro da coluna, por y decrescente), SÓ quando a página é de duas colunas com vão claro; página de coluna única, tabelas e figuras mantêm o comportamento atual. Cabeçalho/rodapé correntes (y fora do corpo) continuam tratados por `stripRunningHeaders`.
+- Escudo (antes de editar): `pdf-extraction.test.js`, `extraction-text-fidelity.test.js` e a suíte de unidades/headings (`headings.js`, `outline.js`) devem continuar verdes; a pergunta "se isto destruir o texto bom, qual sensor fica vermelho?" exige um fixture sintético de duas colunas com ordem de fluxo invertida (RED) e outro de coluna única (não regressão).
+- RED: fixture sintético de 2 colunas com fluxo direita→esquerda: o texto extraído hoje mistura a cauda da coluna esquerda no meio da direita; após a mudança, a esquerda precede a direita e nenhuma frase é partida. Não usar o livro no repositório; só medir no PDF real fora do Git.
+- Gate: `npm --prefix server test` (extração, unidades, headings) + `npm test`; prova real SOMENTE LEITURA: reextrair as págs. 267–273 do Costanzo e confirmar que o termo "PAH" não aparece dentro do span "Glomerular Filtration" (sem gerar com o Codex; sem tocar o banco DEV).
+- Risco: reordenação errada em páginas com figuras/tabelas largas ou colunas desiguais. Mitigação: detecção conservadora, medir em uma amostra de páginas (texto antes × depois), reverter se o número de frases partidas aumentar.
+- Fora de escopo: reextrair fontes já gravadas no banco DEV (decisão separada, exige backup e reupload; INV-06/07).
+
 ### Checkpoint F5
 - Todas as chamadas ao Codex contadas e dentro do orçamento; nenhuma saída do lab no repositório; produto inalterado (diff vazio em prompt/provedor até decisão); `VALID_4/5/8` com estado justificado por evidência.
 
