@@ -213,3 +213,17 @@ test('persisted pedagogical content carries no audit text and no UI text', async
     assert.ok(!('audit' in after.questions[0]) && !('findings' in after.questions[0]));
   } finally { cleanup(); }
 });
+
+test('a whole-list revise that changes the question count never silently re-activates a rejected question', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    const rejected = drafts.reviseQuestion(db, userId, draftId, draft.questions[1].id, { status: 'REJECTED' });
+    const spans = [{ pageIndex: 1 }];
+    const twoOnly = rejected.questions.slice(0, 2).map((q) => ({ question: q.question, answer: q.answer, explanation: null, hint: null, sourceSpans: spans }));
+    assert.throws(() => drafts.reviseDraft(db, userId, draftId, { questions: twoOnly }), (e) => e.code === 'ENTITY_CONFLICT');
+    const after = drafts.getDraft(db, userId, draftId);
+    assert.equal(after.questions[1].status, 'REJECTED');
+    assert.equal(after.revision, rejected.revision);
+  } finally { cleanup(); }
+});

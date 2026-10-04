@@ -435,6 +435,11 @@ export function reviseDraft(db, userId, draftId, { summary, questions } = {}, no
 
   // Identity survives a whole-draft edit: while the question list keeps its length each question keeps its id and
   // status, and only the ones whose text changed get a new version.
+  // A different count cannot be matched to the old questions, so their review status would be lost: a REJECTED question would
+  // silently come back as PROPOSED. Refuse and point to the per-question edits instead.
+  if (validated.questions.length !== current.questions.length && current.questions.some((q) => q.status === 'REJECTED')) {
+    throw new DraftError('ENTITY_CONFLICT', 'Há questões rejeitadas: altere a lista por questão (editar ou excluir), não substituindo todas de uma vez.');
+  }
   const nextQuestions = validated.questions.length === current.questions.length
     ? validated.questions.map((q, i) => mergeIdentity(current.questions[i], q))
     : validated.questions;
