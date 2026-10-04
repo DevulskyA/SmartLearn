@@ -52,7 +52,7 @@ Ordem recomendada de execução: F0, F1, F6(T-F6-01..03), F2, F4, F3, F8, F5, F7
 Objetivo: partir de um estado em que Git, documentação e árvores de trabalho dizem a mesma coisa; sem isso, medir o resto não tem valor.
 
 ### T-F0-01 — Congelar o baseline e registrar o Memento · S
-- Status: `[ ]` · Requisitos: R-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 (baseline reproduzido por execução e registrado em `validation.md`; Memento = `.specs/STATE.md` de 36+ linhas; achado: 1 teste de isolamento vermelho desde `8fb8e9f`, corrigido em `11372c1`) · Requisitos: R-08 · Dependências: nenhuma
 - Superfície: `.specs/STATE.md` (seção Handoff), `.specs/features/hardening-roadmap-v1/validation.md` (novo, só baseline).
 - Fazer: registrar HEAD, contagens de teste, banco canônico, esquema v30, versão `0.1.0`, hashes de backup (`SmartLearn-db-backups\p0-*`), `NOT_PROVEN` vigentes.
 - Sensores: nenhum de código; verificação cruzada manual contra Git (`git rev-parse`, `git status`) e `last-launch.json`.
@@ -83,12 +83,13 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Cuidado: não ignorar nada que o empacotador precise ver em checkout limpo (provar com `package:standalone` em worktree descartável).
 
 ### T-F0-05 — Higiene do checkout principal e das worktrees auxiliares · S
-- Status: `[H]` · Requisitos: R-08 · Dependências: HG-05 (para destino das branches)
+- Status: `[H]` relatório somente-leitura ENTREGUE em `validation.md` (2026-10-04); execução de qualquer limpeza aguarda HG-05 · Requisitos: R-08 · Dependências: HG-05 (para destino das branches)
 - Superfície: nenhuma automática. Gerar relatório somente-leitura: 19 arquivos de skill rastreados deletados no checkout principal, diretórios não rastreados (`.codex`, `.codex-temp`, `.skill-backups`, `stats-prototype`, `test-results`), worktrees `content-quality` e `integrate-tmp`.
 - Fazer: classificar cada item (descartável regenerável / pertence a outra ferramenta / incerto) com evidência; propor comandos, sem executar.
 - Gate: relatório no `validation.md`; nenhuma exclusão feita nesta tarefa.
 
 ### Checkpoint F0
+- FECHADO 2026-10-04: baseline reproduzido (`validation.md`), `git status` das três worktrees explicado, STATE 36 linhas sem token perdido (364/364), painel reconciliado, gate completo reproduzido (server 775, frontend 466, cargo 30, e2e 203+2 skipped, lint 0 erros) — sem mudança de código de produto.
 Checklist: baseline reproduzido; `git status` das três worktrees explicado; STATE ≤ meta de tamanho; nenhum ID de decisão perdido; painel reconciliado. Gate completo verde (sem mudança de código, deve ser idêntico ao baseline).
 
 ---

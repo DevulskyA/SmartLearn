@@ -6,17 +6,17 @@
 
 ```
 Track:    hardening-roadmap-v1                 Status: ACTIVE
-MARCO ATUAL: F0 — reconciliação e higiene de estado
+MARCO ATUAL: F1 — integridade do datastore e ciclo de vida de processos
 Iniciado: 2026-10-04
 Legenda:  [✓] concluída  [>] ativa (EXATAMENTE UMA)  [ ] pendente  [!] bloqueada  [-] adiada
-ATIVA AGORA: HR-0 (F0; T-F0-01..04, T-F0-05 aguarda HG-05)
+ATIVA AGORA: HR-1 (F1; T-F1-01..08; T-F1-05 [H] aguarda HG-03)
 ```
 
 ## Tarefas
 
-- [>] **HR-0 F0 Reconciliação e higiene de estado** — OWNER: GUI
+- [✓] **HR-0 F0 Reconciliação e higiene de estado** — OWNER: GUI
       DETAILS: T-F0-01 baseline/Memento, T-F0-02 STATE compactado (arquivo morto íntegro + sensor de tokens), T-F0-03 painel/track, T-F0-04 placeholders de `src-tauri/resources` (feito, ff83d20). T-F0-05 é [H] (HG-05), relatório somente-leitura.
-- [ ] **HR-1 F1 Integridade do datastore e ciclo de vida de processos** — OWNER: GUI
+- [>] **HR-1 F1 Integridade do datastore e ciclo de vida de processos** — OWNER: GUI
       DETAILS: lock de escritor único no Desktop, snapshot diário e pré-migração, restore drill, Job Object, purga de sessões, build por conteúdo, título/diagnóstico. T-F1-05 é [H] (HG-03).
 - [ ] **HR-2 F6a Plataforma de teste (T-F6-01..03)** — OWNER: GUI
       DETAILS: suíte `@materials`, portas dinâmicas e saída única por execução, partição do e2e. As demais tarefas de F6 seguem depois (T-F6-04..07).
