@@ -91,3 +91,11 @@ test('DEV persistent session is switched on ONLY by the DEV launcher and never b
   const main = read('server/src/main.js');
   assert.match(main, /process\.env\.SMARTLEARN_DEV_PERSISTENT_SESSION === 'true'/);
 });
+
+test('the launcher takes (and prints) a verified snapshot of the DEV datastore before it opens the Desktop', () => {
+  assert.match(launcher, /scripts\/dev-snapshot\.mjs/);
+  assert.match(launcher, /Write-Host \$snapshotOutput/);
+  const at = (needle) => launcher.indexOf(needle);
+  assert.ok(at('scripts/dev-snapshot.mjs') > 0 && at('scripts/dev-snapshot.mjs') < at('npm run tauri dev'), 'the snapshot comes before the app is opened');
+  assert.match(launcher, /dev-snapshot\.mjs[^\n]*\n[^\n]*LASTEXITCODE/, 'a snapshot that could not be verified stops the launch');
+});

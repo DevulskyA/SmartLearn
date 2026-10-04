@@ -4,7 +4,8 @@ import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { acquireDevLock, isDevDatastoreDb } from './dev-datastore.js';
+import { acquireDevLock, devDbPaths, isDevDatastoreDb } from './dev-datastore.js';
+import { dailySnapshotIfNeeded, snapshotBeforeMigration } from './dev-snapshot.js';
 import { assertTestDbIsDisposable } from './db-safety.js';
 import { validateProductionConfig } from './production-config.js';
 
@@ -44,6 +45,24 @@ const dbExisted = existsSync(config.dbPath);
 console.log(`SmartLearn database: ${resolve(config.dbPath)} (${dbExisted ? 'existing' : 'NEW, empty'})`);
 
 const db = openDb(config.dbPath);
+// T-F1-02: the human's data is never migrated without a verified backup taken first, and gets one verified snapshot per day.
+if (isDevDatastoreDb(config.dbPath)) {
+  const { snapshotsDir } = devDbPaths();
+  try {
+    const daily = dailySnapshotIfNeeded(config.dbPath, snapshotsDir);
+    if (daily) console.log(`SmartLearn daily snapshot: ${daily.dir}`);
+  } catch (err) {
+    console.error(`WARNING: daily snapshot failed (continuing): ${err.message}`);
+  }
+  try {
+    const pre = snapshotBeforeMigration(db, config.dbPath, snapshotsDir);
+    if (pre) console.log(`SmartLearn pre-migration snapshot: ${pre.dir}`);
+  } catch (err) {
+    console.error(`REFUSING to migrate: the pre-migration snapshot failed (${err.message}). Nothing was changed.`);
+    db.close();
+    process.exit(1);
+  }
+}
 runMigrations(db);
 const app = await buildApp(db, undefined, {
   isProduction: config.isProduction,

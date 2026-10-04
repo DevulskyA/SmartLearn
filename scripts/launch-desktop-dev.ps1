@@ -84,6 +84,11 @@ if (Test-Path $lockPath) {
 $env:SMARTLEARN_DB_PATH = $devDb
 $env:SMARTLEARN_SOURCES_DIR = $devSources
 
+# A verified snapshot of the human's data (once per day) exists BEFORE the app can touch it; a snapshot that cannot be verified stops the launch.
+$snapshotOutput = (node scripts/dev-snapshot.mjs 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "O snapshot verificado do datastore DEV falhou: $snapshotOutput. Nada foi aberto." }
+Write-Host $snapshotOutput
+
 # The Desktop starts its own local backend (loopback, dynamic port) and inherits these.
 $env:SMARTLEARN_LOCAL_AUTHORITY = 'true'
 $env:SMARTLEARN_AI_PROVIDER = $Provider

@@ -96,6 +96,17 @@ export function runMigrations(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   }
 }
 
+/**
+ * Read-only: which migrations on disk are not yet recorded in this database, and the highest version it already has
+ * (0 when it has none). Used to take a verified backup BEFORE the first pending migration runs (T-F1-02); creates nothing.
+ */
+export function pendingMigrations(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
+  const hasTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
+  const applied = new Set(hasTable ? db.prepare('SELECT version FROM schema_migrations').all().map((r) => r.version) : []);
+  const pending = listMigrations(migrationsDir).filter((mig) => !applied.has(mig.version)).map((mig) => mig.version);
+  return { fromVersion: applied.size ? Math.max(...applied) : 0, pending };
+}
+
 function loadManifest(migrationsDir) {
   const manifestPath = join(migrationsDir, 'manifest.json');
   if (!existsSync(manifestPath)) return null;

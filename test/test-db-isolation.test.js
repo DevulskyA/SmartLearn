@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const ALLOWED = new Set([
   'test/dev-data.test.js', 'test/desktop-entrypoint.test.js', 'test/test-db-isolation.test.js',
   'test/prompt-lab-runner.test.js',
-  'server/test/dev-lock.test.js', 'server/test/dev-snapshot.test.js', 'server/test/dev-restore.test.js',
+  'server/test/dev-lock.test.js', 'server/test/dev-snapshot.test.js', 'server/test/dev-restore.test.js', 'server/test/dev-datastore-startup.test.js',
 ]);
 const FORBIDDEN = [/SmartLearn-DevData/, /com\.devulsky\.smartlearn/, /smartlearn-dev\.db/, /\bdevDbPaths\b/, /\bdevDataDir\b/];
 

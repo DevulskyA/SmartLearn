@@ -108,7 +108,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Risco: lock órfão impedindo abrir. Mitigação: verificação de vida do PID e mensagem com instrução de recuperação.
 
 ### T-F1-02 — Snapshot diário e antes de migração no caminho do Desktop · M
-- Status: `[ ]` · Requisitos: R-01 (AC-01.2, AC-01.3) · Dependências: T-F1-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `833762f` (snapshot consistente por `VACUUM INTO` — não cópia crua de db+wal+shm —, verificado por `integrity_check`/`foreign_key_check`/contagens/sha256 + manifesto; diário 1x/dia e `pre-migrate-v<N>` ANTES da migração no `server/src/main.js` (falha de backup aborta a migração, banco intacto); launcher imprime `Snapshot: <caminho>` e para se não verificar; retenção 7 dias sem nunca deixar zero snapshot válido, `pre-migrate-*` nunca podados; testes `dev-snapshot`, `dev-datastore-startup` com backend real, `desktop-entrypoint`) · Requisitos: R-01 (AC-01.2, AC-01.3) · Dependências: T-F1-01
 - Superfície: `scripts/launch-desktop-dev.ps1` (chamada), `scripts/dev-data.mjs` (`snapshotDevDbIfNeeded` já existe), CLI pequeno `scripts/dev-snapshot.mjs`, retenção.
 - Fazer: antes de abrir o app, snapshot do dia de banco+WAL+SHM em `SmartLearn-DevData\snapshots\<data>`; antes de qualquer migração pendente (comparar `max(version)` com migrações no disco), snapshot nomeado `pre-migrate-v<N>` com checksum e verificação de leitura; retenção: 7 dias + último `pre-migrate` de cada versão.
 - RED: teste com banco temporário em v29 e migrações até v30: o snapshot `pre-migrate-v29` existe, tem checksum igual e `integrity_check ok` ANTES de a migração rodar; falha de snapshot aborta a migração.
@@ -116,7 +116,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: testes novos + `test/dev-data.test.js`; verificação manual de que o launcher mostra `Snapshot: <caminho>`.
 
 ### T-F1-03 — Ensaio de restauração (restore drill) documentado e automatizado · M
-- Status: `[ ]` · Requisitos: R-01 (AC-01.4) · Dependências: T-F1-02
+- Status: `[✓]` 2026-10-04 (`server/src/dev-restore.js` + `scripts/dev-restore.mjs`; nunca escreve no datastore vivo; ensaio REAL em CÓPIA temporária de `SmartLearn-db-backupsp0-devdata-20261004-005048` (v29, 10 unidades, 160 revisões): 7/7 PASS. INCIDENTE: uma tentativa anterior abriu o backup original em somente-leitura e recriou seu `-shm` volátil; `.db` e `-wal` seguem com o hash de `SHA256.txt` — daqui em diante só em cópias) · Requisitos: R-01 (AC-01.4) · Dependências: T-F1-02
 - Superfície: `scripts/dev-restore.mjs` (novo, sempre para um DESTINO diferente do banco vivo), teste.
 - Fazer: restaurar um snapshot em diretório temporário, abrir com o servidor, rodar `integrity_check`, `foreign_key_check` e comparar contagens com o manifesto do snapshot.
 - Regra: o script nunca sobrescreve o banco canônico; trocar o canônico exige comando separado, confirmação e backup do atual (fora do escopo automático).
