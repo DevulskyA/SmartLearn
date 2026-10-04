@@ -74,7 +74,8 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Gate: `node scripts/agent-tasklist.mjs` termina sem erro e o bloco gerado reflete o track novo.
 
 ### T-F0-04 — Regra de ignore para artefatos regeneráveis e decisão sobre não rastreados · S
-- Status: `[ ]` · Requisitos: R-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `7c6ee21`/`d562dc8` · Requisitos: R-08 · Dependências: nenhuma
+- CORREÇÃO DA PREMISSA (evidência): `.gitignore` já ignora o conteúdo gerado de `src-tauri/resources/*` com exceção dos `.gitkeep`, mas os 4 `.gitkeep` NÃO estavam rastreados — o commit `ae81f67` os removeu do índice por engano, o que deixava `src-tauri/resources/` como não rastreado e um checkout limpo sem os diretórios que `tauri.conf.json` exige (invariante LOCAL-01B). Correção: restaurar o rastreamento dos 4 `.gitkeep` (sem mudar `.gitignore`) + sensor `test/resources-placeholders.test.js` (RED antes: `git ls-files` vazio; GREEN depois). Decisão sobre `.impeccable/` e `.specs/benchmarks/`: proposta registrada no STATE, não aplicada.
 - Superfície: `.gitignore`, `src-tauri/.gitignore`.
 - Fazer: ignorar `src-tauri/resources/` (artefato de `package:standalone`, ~208 MB) com exceção dos `.gitkeep` já rastreados; propor, sem aplicar, destino para `.impeccable/` e `.specs/benchmarks/` (rastrear ou ignorar) — decisão registrada no STATE.
 - Sensor: teste que roda `git check-ignore` nos caminhos esperados e `git ls-files src-tauri/resources` só com `.gitkeep`.
