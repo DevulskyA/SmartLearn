@@ -10,6 +10,8 @@
     "dev:remote": "node scripts/dev-remote.mjs",
     "dev:uat": "node scripts/dev-uat.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
+    "dev:sanitize": "node scripts/dev-sanitize.mjs",
+    "dev:desktop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launch-desktop-dev.ps1",
     "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",
