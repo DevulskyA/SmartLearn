@@ -28,6 +28,14 @@ export async function uploadSource(file) {
   } catch (err) { return fail(err); }
 }
 
+/** The documents this account already uploaded (so a processed PDF is reopened, not sent again). */
+export async function listSources() {
+  try {
+    const { sources } = await apiRequest('/v1/sources');
+    return { ok: true, sources };
+  } catch (err) { return fail(err); }
+}
+
 /** Step 2: extract text with page provenance (T35). Awaits the full
  * bounded worker run server-side — the caller sees one of EXTRACTED,
  * ENCRYPTED, TIMEOUT, IMAGE_ONLY_OR_UNREADABLE or EXTRACTION_FAILED, never

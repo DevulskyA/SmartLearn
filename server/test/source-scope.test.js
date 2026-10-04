@@ -167,3 +167,14 @@ test('LEGACY: an old proposal (no spans) that is a copyright page is still not g
     await assert.rejects(() => drafts.createDraft(db, userId, Number(id), {}), (e) => e.code === 'NOT_GENERATABLE');
   } finally { cleanup(); }
 });
+
+test('the sources list tells which documents are ready (extraction status and page count)', async () => {
+  const { db, userId, cleanup } = setup();
+  try {
+    const { list } = await import('../src/services/source-storage.js');
+    const sources = list(db, userId);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].extractionStatus, 'EXTRACTED');
+    assert.equal(sources[0].pageCount, 14);
+  } finally { cleanup(); }
+});

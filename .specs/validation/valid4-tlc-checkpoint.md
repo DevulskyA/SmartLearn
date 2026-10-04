@@ -35,3 +35,16 @@ cycle: **no more Codex work and no text sent to Codex while fixing the interface
 
 Human test on the canonical Desktop (`SmartLearn DEV`): open the existing Costanzo draft in the new lesson editor, topic-search
 "Measurement of Glomerular Filtration Rate", inspect the approved scope — without generating.
+
+## Handoff state (end of session)
+
+- Full e2e suite was running in the background, output in `C:\tmp\e2e-full.txt` (Git Bash `/tmp/e2e-full.txt`); partial: 1 failure so far
+  (`exam-mode.spec.js:413` UX-1, Plano — likely the known PRE_EXISTING_FLAKE; confirm against the VALID-3 baseline). If the file has no
+  final "N passed / N failed" line, the run was interrupted: rerun `npx playwright test`.
+- Last commit before this note: `54eea47`. The commit after it adds "Documentos já enviados" (reopen a processed PDF without
+  re-sending it): `GET /v1/sources` now carries `extractionStatus` and `pageCount`; UI in `materials-ui.js`. Its e2e
+  (`lesson-editor.spec.js`, last test) has NOT been run yet. Server tests for it pass.
+- MATERIALS_FULL_E2E_REGRESSION = NOT_YET_PROVEN; VISUAL_UI_VALIDATION = NOT_PROVEN (computer control was disabled).
+- Desktop DEV opens via `Desktop\SmartLearn DEV.lnk`. To see the new screen without Codex: login with the test account
+  (`%TEMP%\claude\valid4-test-account.txt`), Materiais → "Documentos já enviados" → Abrir → "Abrir rascunho".
+- CODEX calls this phase: 0 (one trivial diagnostic probe before the instruction, no PDF text).

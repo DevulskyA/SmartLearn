@@ -26,6 +26,8 @@ const editorialSummary = document.querySelector("#sources-editorial-summary");
 const editorialList = document.querySelector("#sources-editorial-list");
 const generationBox = document.querySelector("#sources-generation");
 const editorView = document.querySelector("#sources-editor-view");
+const existingBox = document.querySelector("#sources-existing");
+const existingList = document.querySelector("#sources-existing-list");
 
 // What Materiais needs from the rest of the app (set once at start-up, before any user event can fire):
 //   listActiveSubjects()  -> Promise<subject[]>   disciplines offered when accepting a draft
@@ -295,6 +297,52 @@ topicResults?.addEventListener("click", async (event) => {
   await generateFor(approved.proposal);
 });
 
+// ---- documents already uploaded: reopen instead of sending the same PDF again ------------------------------------------------
+async function loadExistingSources() {
+  if (!existingBox) return;
+  const result = await SourceProposalsUI.listSources();
+  if (!result.ok) return;
+  const ready = result.sources.filter((s) => s.extractionStatus === "EXTRACTED");
+  existingList.replaceChildren();
+  for (const source of ready) {
+    const li = document.createElement("li");
+    li.className = "source-existing-item";
+    li.append(createTextElement("span", "source-existing-name", source.originalName));
+    if (source.pageCount) li.append(document.createTextNode(" "), createTextElement("span", "source-existing-pages", `${nf.format(source.pageCount)} páginas`));
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "small-button";
+    open.dataset.action = "open-source";
+    open.dataset.sourceId = String(source.id);
+    open.textContent = "Abrir";
+    open.setAttribute("aria-label", `Abrir ${source.originalName}`);
+    li.append(document.createTextNode(" "), open);
+    existingList.append(li);
+  }
+  existingBox.hidden = ready.length === 0;
+}
+
+existingList?.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="open-source"]');
+  if (!button) return;
+  button.disabled = true;
+  currentSourceId = Number(button.dataset.sourceId);
+  setSourcesMessage("Abrindo o documento…");
+  const listed = await SourceProposalsUI.listProposals(currentSourceId);
+  button.disabled = false;
+  if (!listed.ok) {
+    setSourcesMessage(listed.message || "Não foi possível abrir o documento.", true);
+    return;
+  }
+  if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; }
+  renderSourceProposals(listed.proposals);
+  setSourcesMessage(`${listed.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.`);
+  topicInput?.focus({ preventScroll: true });
+});
+
+// The list is refreshed whenever the student opens Materiais (an upload elsewhere, another window, a first visit).
+document.querySelector('[data-screen="materials"]')?.addEventListener("click", () => { loadExistingSources(); });
+
 // ---- upload ------------------------------------------------------------------------------------------------------------
 sourcesChooseFileButton?.addEventListener("click", () => {
   sourcesFileInput?.click();
@@ -355,6 +403,7 @@ sourcesFileInput?.addEventListener("change", async () => {
     if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
     setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
     topicInput?.focus({ preventScroll: true });
+    loadExistingSources();
   } catch (error) {
     setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
     console.error("Falha ao processar fonte enviada.", error);

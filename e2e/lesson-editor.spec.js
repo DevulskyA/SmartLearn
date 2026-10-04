@@ -235,3 +235,18 @@ test('an unknown topic says so and offers the index instead of inventing a scope
   await expect(page.locator('#sources-message')).toContainText('Nenhuma seção');
   await expect(page.locator('.source-topic-item')).toHaveCount(0);
 });
+
+test('a processed document is reopened from "Documentos já enviados" without sending the PDF again, and its draft opens in the editor', async ({ page }) => {
+  await openLesson(page, 'reaberto.pdf');
+  await page.locator('[data-action="lesson-back"]').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="materials"]').click();
+  const existing = page.locator('#sources-existing-list .source-existing-item', { hasText: 'reaberto.pdf' });
+  await expect(existing).toBeVisible({ timeout: 10000 });
+  await existing.locator('[data-action="open-source"]').click();
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
+});

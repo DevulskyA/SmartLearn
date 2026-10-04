@@ -81,6 +81,8 @@ function toDto(row) {
     byteSize: row.byte_size,
     checksum: row.checksum,
     status: row.status,
+    extractionStatus: row.extraction_status ?? null,
+    pageCount: row.page_count ?? null,
     createdAt: row.created_at,
   };
 }
