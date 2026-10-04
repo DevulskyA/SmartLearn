@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { buildApp } from '../src/app.js';
+import { readFileSync } from 'node:fs';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -75,12 +76,20 @@ test('/health/ready returns 503 when foreign_keys OFF', async () => {
   }
 });
 
-test('/health/build reports the stamped build identity (commit, mode, declared provider) and nothing else', async () => {
+test('/health/build reports the stamped build identity (version, commit, mode, declared provider) and nothing else', async () => {
   const app = await buildApp(null);
   await app.ready();
   const res = await app.inject({ method: 'GET', url: '/health/build' });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.body);
-  assert.deepEqual(Object.keys(body).sort(), ['head', 'mode', 'provider']);
+  assert.deepEqual(Object.keys(body).sort(), ['head', 'mode', 'provider', 'version']);
+  await app.close();
+});
+
+test('/health/build reports the server version (equal to the root package.json) next to head, mode and provider', async () => {
+  const expected = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+  const app = await buildApp(null);
+  const res = await app.inject({ method: 'GET', url: '/health/build' });
+  assert.equal(res.json().version, expected);
   await app.close();
 });

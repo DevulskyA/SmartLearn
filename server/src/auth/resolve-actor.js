@@ -8,7 +8,7 @@ import * as sessions from '../repositories/sessions.js';
  * last_seen so it's testable with an injected clock), and touches
  * last_seen on every successful resolution.
  */
-export function createSessionActorResolver(db, { isProduction, now = () => new Date() }) {
+export function createSessionActorResolver(db, { isProduction, now = () => new Date(), policy = null }) {
   const cookieName = sessionCookieName(isProduction);
 
   return async function resolveActor(request) {
@@ -21,7 +21,7 @@ export function createSessionActorResolver(db, { isProduction, now = () => new D
     const session = sessions.findActiveByTokenHash(db, tokenHash, nowIso);
     if (!session) return null;
 
-    if (isSessionInactive(session.lastSeen, nowDate.getTime())) {
+    if (isSessionInactive(session.lastSeen, nowDate.getTime(), policy?.inactivityMs)) {
       sessions.revoke(db, session.id);
       return null;
     }

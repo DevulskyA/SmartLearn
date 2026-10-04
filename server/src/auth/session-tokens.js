@@ -22,13 +22,27 @@ export const SESSION_COOKIE_NAME_DEV = 'sl_session_dev';
  * only on loopback dev. `isProduction` must reflect the actual serving
  * scheme, not just NODE_ENV, if a caller ever serves prod over HTTP.
  */
-export function sessionCookieOptions(isProduction) {
+export function sessionCookieOptions(isProduction, policy = null) {
   return {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
     secure: isProduction,
+    // Only the DEV persistent policy sets a Max-Age; otherwise this stays a browser-session cookie, exactly as before.
+    ...(policy?.cookieMaxAgeSeconds ? { maxAge: policy.cookieMaxAgeSeconds } : {}),
   };
+}
+
+export const DEV_SESSION_LIFETIME_MS = 10 * 365 * 24 * 60 * 60 * 1000; // ~10 years: "until the user clicks Sair"
+
+/**
+ * Session lifetimes. The ONLY way to get anything other than the production policy is the explicit DEV flag
+ * (SMARTLEARN_DEV_PERSISTENT_SESSION=true, set by the human Desktop DEV launcher), and it is refused in production.
+ */
+export function resolveSessionPolicy({ isProduction, devPersistent = false } = {}) {
+  if (devPersistent && isProduction) throw new Error('SMARTLEARN_DEV_PERSISTENT_SESSION cannot be enabled in production.');
+  if (!devPersistent) return { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: null };
+  return { absoluteMs: DEV_SESSION_LIFETIME_MS, inactivityMs: DEV_SESSION_LIFETIME_MS, cookieMaxAgeSeconds: DEV_SESSION_LIFETIME_MS / 1000 };
 }
 
 export function sessionCookieName(isProduction) {
@@ -42,6 +56,6 @@ export function sessionCookieName(isProduction) {
  * inactivity window is re-derived here from last_seen so it can be tested
  * with an injected clock instead of relying on wall-clock timing).
  */
-export function isSessionInactive(lastSeenIso, nowMs) {
-  return nowMs - new Date(lastSeenIso).getTime() > SESSION_INACTIVITY_LIFETIME_MS;
+export function isSessionInactive(lastSeenIso, nowMs, inactivityMs = SESSION_INACTIVITY_LIFETIME_MS) {
+  return nowMs - new Date(lastSeenIso).getTime() > inactivityMs;
 }

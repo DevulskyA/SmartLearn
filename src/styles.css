@@ -4531,3 +4531,21 @@ h1 {
 .sources-drafts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .source-draft-item { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line, rgba(127, 127, 127, 0.25)); }
 .source-draft-item-title { font-weight: 600; flex: 1 1 14rem; }
+
+.about-identity {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1.25rem;
+  margin: 0;
+}
+
+.about-identity dt {
+  color: var(--color-muted);
+}
+
+.about-identity dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}

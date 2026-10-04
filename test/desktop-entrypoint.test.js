@@ -69,3 +69,25 @@ test('the Tauri backend honours the pinned datastore (SMARTLEARN_DB_PATH / SMART
   assert.match(lib, /std::env::var\("SMARTLEARN_SOURCES_DIR"\)/);
   assert.match(lib, /fn data_overrides_pin_the_dev_datastore_and_default_to_app_data/);
 });
+
+test('the launcher announces exactly which instance it opens (executable, database, sources, version, HEAD, branch) and verifies the running path', () => {
+  for (const label of ['SMARTLEARN DEV', 'Executable:', 'Database:', 'Sources:', 'App version:', 'Git HEAD:', 'Branch:']) assert.ok(launcher.includes(label), `missing log line ${label}`);
+  assert.ok(launcher.includes(['src-tauri', 'target', 'debug', 'smartlearn.exe'].join('\\')));
+  assert.match(launcher, /last-launch\.json/);
+  assert.match(launcher, /pathVerified/);
+});
+
+test('the launcher refuses a stale build: the packaged bundle must carry the identity of the current commit', () => {
+  assert.match(launcher, /node scripts\/build-identity\.mjs/);
+  assert.ok(launcher.includes(['dist-runtime', 'build-info.json'].join('\\')));
+  assert.match(launcher, /distIsCurrent/);
+  assert.match(launcher, /SMARTLEARN_BUILD_MODE\s*=\s*'DEV'/);
+});
+
+test('DEV persistent session is switched on ONLY by the DEV launcher and never by production code paths', () => {
+  assert.match(launcher, /SMARTLEARN_DEV_PERSISTENT_SESSION\s*=\s*'true'/);
+  const lib = read('src-tauri/src/lib.rs');
+  assert.ok(!lib.includes('SMARTLEARN_DEV_PERSISTENT_SESSION'), 'the packaged Desktop must not enable it by itself');
+  const main = read('server/src/main.js');
+  assert.match(main, /process\.env\.SMARTLEARN_DEV_PERSISTENT_SESSION === 'true'/);
+});

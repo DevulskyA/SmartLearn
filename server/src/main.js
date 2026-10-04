@@ -36,6 +36,7 @@ const app = await buildApp(db, undefined, {
   isProduction: config.isProduction,
   allowedOrigins: config.allowedOrigins,
   trustProxy: config.trustProxy,
+  devPersistentSession: process.env.SMARTLEARN_DEV_PERSISTENT_SESSION === 'true',
   staticDir: config.staticDir,
   sources: { sourcesDir: config.sourcesDir, maxBytes: config.sourceMaxBytes, quotaBytes: config.sourceQuotaBytes },
 });

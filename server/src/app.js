@@ -25,10 +25,17 @@ import { registerGeneratedDraftRoutes } from './routes/generated-drafts.js';
 import { registerAgendaSnapshotRoutes } from './routes/agenda-snapshot.js';
 import { registerPriorityRoutes } from './routes/priorities.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
+import { resolveSessionPolicy } from './auth/session-tokens.js';
+import { readFileSync } from 'node:fs';
+
+// Reported by /health/build; the repo keeps this equal to the root package.json version (guarded by a test).
+const SERVER_VERSION = (() => { try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, ai = {} } = {}) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, ai = {}, devPersistentSession = false } = {}) {
+  // Throws when the DEV flag is combined with production.
+  const sessionPolicy = resolveSessionPolicy({ isProduction, devPersistent: devPersistentSession });
   const app = Fastify({ logger: false, trustProxy });
   await app.register(fastifyCookie);
   // No wildcard credentialed CORS (design.md §3): exact configured origins
@@ -48,6 +55,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
   // Which build is this? Public and minimal on purpose (a commit id, a mode and the declared provider name — no secret, no path).
   // Only meaningful when the DEV launcher set it; a packaged release reports mode null and the UI shows nothing.
   app.get('/health/build', async () => ({
+    version: SERVER_VERSION,
     head: config.buildHead,
     mode: config.buildMode,
     provider: config.aiProvider ?? null,
@@ -82,7 +90,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
   // /health's public minimal behavior does not leak into /v1.
   app.register(async (v1) => {
     applyDomainEnvelope(v1, {
-      resolveActor: createSessionActorResolver(db, { isProduction }),
+      resolveActor: createSessionActorResolver(db, { isProduction, policy: sessionPolicy }),
       allowedOrigins,
     });
     // T34: registered inside /v1 (not the root app) so a multipart body is
@@ -90,7 +98,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     // every other mutating route already requires — there is no unscoped
     // upload surface on this server.
     await v1.register(fastifyMultipart, { limits: { files: 1, fileSize: sources.maxBytes ?? config.sourceMaxBytes } });
-    registerAuthRoutes(v1, db, { isProduction });
+    registerAuthRoutes(v1, db, { isProduction, policy: sessionPolicy });
     registerSubjectRoutes(v1, db);
     registerLearningUnitRoutes(v1, db);
     registerReviewRoutes(v1, db);

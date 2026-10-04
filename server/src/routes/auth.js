@@ -2,7 +2,7 @@ import { hashPassword, verifyPassword, validatePasswordShape, runDecoyHash } fro
 import { normalizeEmail, validateEmailShape } from '../auth/email.js';
 import {
   generateSessionToken, hashToken, sessionCookieName, sessionCookieOptions,
-  SESSION_ABSOLUTE_LIFETIME_MS,
+  resolveSessionPolicy,
 } from '../auth/session-tokens.js';
 import { generateCsrfToken } from '../auth/csrf.js';
 import { createRateLimiter, DEFAULT_ACCOUNT_MAX_ATTEMPTS, DEFAULT_IP_MAX_ATTEMPTS } from '../auth/rate-limit.js';
@@ -23,18 +23,18 @@ const registerBodySchema = {
 
 const DEFAULT_REGISTER_IP_MAX_ATTEMPTS = 20;
 
-function issueSession(db, userId, isProduction) {
+function issueSession(db, userId, policy) {
   const rawToken = generateSessionToken();
   const tokenHash = hashToken(rawToken);
   const csrfToken = generateCsrfToken();
   const issuedAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + SESSION_ABSOLUTE_LIFETIME_MS).toISOString();
+  const expiresAt = new Date(Date.now() + policy.absoluteMs).toISOString();
   const session = sessions.createSession(db, { tokenHash, userId, issuedAt, expiresAt, csrfToken });
   return { rawToken, session };
 }
 
-function setSessionCookie(reply, rawToken, isProduction) {
-  reply.setCookie(sessionCookieName(isProduction), rawToken, sessionCookieOptions(isProduction));
+function setSessionCookie(reply, rawToken, isProduction, policy) {
+  reply.setCookie(sessionCookieName(isProduction), rawToken, sessionCookieOptions(isProduction, policy));
 }
 
 function clearSessionCookie(reply, isProduction) {
@@ -46,7 +46,7 @@ function clearSessionCookie(reply, isProduction) {
  * /v1 sub-context with applyDomainEnvelope already applied). `isProduction`
  * controls cookie Secure/name per design.md §3.
  */
-export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
+export function registerAuthRoutes(app, db, { isProduction = false, policy = resolveSessionPolicy({ isProduction }) } = {}) {
   // Scoped to this call (one per real server process in production, one
   // per test's buildApp() call in tests) rather than module-level — a
   // module singleton here would leak rate-limit state across independently
@@ -169,8 +169,8 @@ export function registerAuthRoutes(app, db, { isProduction = false } = {}) {
     loginRateLimiter.reset(accountKey);
     loginRateLimiter.reset(ipKey);
 
-    const { rawToken } = issueSession(db, record.id, isProduction);
-    setSessionCookie(reply, rawToken, isProduction);
+    const { rawToken } = issueSession(db, record.id, policy);
+    setSessionCookie(reply, rawToken, isProduction, policy);
 
     return { user: users.findById(db, record.id) };
   });
