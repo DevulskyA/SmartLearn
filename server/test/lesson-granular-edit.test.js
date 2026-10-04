@@ -243,3 +243,19 @@ test('opening a draft never recalculates or writes anything (a stale stored audi
     assert.deepEqual(db.prepare('SELECT draft_json, revision, updated_at FROM generated_drafts WHERE id = ?').get(draftId), before, 'reading wrote nothing');
   } finally { cleanup(); }
 });
+
+test('the draft DTO names the document and pages of its unit, also for a legacy draft without sourceScope (read-only)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId } = await lessonWithThreeQuestions(db, sourcesDir);
+    const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);
+    const content = JSON.parse(row.draft_json);
+    delete content.sourceScope;
+    db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), draftId);
+    const dto = drafts.getDraft(db, userId, draftId);
+    assert.equal(dto.sourceScope, undefined);
+    assert.equal(dto.sourceUnit.documentName, 'aula.pdf');
+    assert.ok(Number.isInteger(dto.sourceUnit.pageStart) && dto.sourceUnit.pageEnd >= dto.sourceUnit.pageStart);
+    assert.ok(typeof dto.sourceUnit.title === 'string' && dto.sourceUnit.title.length > 0);
+  } finally { cleanup(); }
+});

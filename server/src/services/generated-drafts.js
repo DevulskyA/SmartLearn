@@ -251,6 +251,13 @@ function findingsWithEntities(audit, questions) {
   };
 }
 
+/** Read-only: which document and pages the unit this draft hangs on covers (shown even for drafts generated before sourceScope existed). */
+function sourceUnitFor(db, userId, proposalId) {
+  const r = db.prepare(`SELECT p.title, p.page_start AS pageStart, p.page_end AS pageEnd, s.original_name AS documentName
+    FROM content_proposals p JOIN sources s ON s.user_id = p.user_id AND s.id = p.source_id WHERE p.user_id = ? AND p.id = ?`).get(userId, proposalId);
+  return r ?? null;
+}
+
 function toDraftDto(row, { db, userId } = {}) {
   const draft = normalizeContent(JSON.parse(row.draft_json));
   const audit = findingsWithEntities(draft.audit, draft.questions);
@@ -275,6 +282,7 @@ function toDraftDto(row, { db, userId } = {}) {
     acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
     sourceStale: db ? isDraftStale(db, userId, row) : false,
+    sourceUnit: db ? sourceUnitFor(db, userId, row.proposal_id) : null,
     pages: db ? citedPagesFor(db, userId, row, draft) : [],
   };
 }

@@ -297,3 +297,29 @@ test('a draft in progress is listed under "Rascunhos em andamento", outside the 
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
 });
+
+test('a legacy draft (no stored scope) still names its document and pages in the Fonte tab', async ({ page }) => {
+  await openLesson(page, 'legado.pdf');
+  await page.locator('[data-action="lesson-back"]').click();
+  const db = new Database(dbPath);
+  try {
+    for (const row of db.prepare('SELECT id, draft_json FROM generated_drafts').all()) {
+      const content = JSON.parse(row.draft_json);
+      delete content.sourceScope;
+      db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), row.id);
+    }
+  } finally { db.close(); }
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="materials"]').click();
+  await page.locator('#sources-existing-list .source-existing-item', { hasText: 'legado.pdf' }).locator('[data-action="open-source"]').click();
+  await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
+  const editor = page.locator('.lesson-editor');
+  await expect(editor).toBeVisible({ timeout: 10000 });
+  await editor.getByRole('tab', { name: /Fonte/ }).click();
+  const panel = editor.locator('[data-panel="source"]');
+  await expect(panel).toContainText('antes de o escopo da fonte');
+  await expect(panel).toContainText('Documento');
+  await expect(panel).toContainText('legado.pdf');
+  await expect(panel).toContainText('Páginas da unidade');
+});

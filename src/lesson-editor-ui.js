@@ -408,6 +408,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       fact("Enviado ao modelo", Number.isFinite(scope.payloadChars) ? `${nf.format(scope.payloadChars)} caracteres${scope.payloadChars === scope.sourceChars ? " — exatamente a fonte aprovada" : ""}` : null);
     } else {
       sourcePanel.append(createTextElement("p", "lesson-hint", "Este rascunho foi gerado antes de o escopo da fonte ser registrado."));
+      const unit = draft.sourceUnit;
+      if (unit) {
+        fact("Documento", unit.documentName);
+        fact("Unidade", unit.title);
+        fact("Páginas da unidade", unit.pageStart === unit.pageEnd ? `PDF página ${unit.pageStart}` : `PDF páginas ${unit.pageStart}–${unit.pageEnd}`);
+      }
     }
     sourcePanel.append(dl);
     const pages = (draft.pages ?? []).filter((p) => p.text);
