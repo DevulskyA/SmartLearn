@@ -24,7 +24,7 @@ $expectedBranch = 'claude/smartlearn-v1-complete'
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne $expectedBranch) { Fail "Esta pasta esta na branch '$branch', nao em '$expectedBranch'. Nada foi aberto." }
 $head = (git rev-parse --short HEAD).Trim()
-$dirty = if ((git status --porcelain --untracked-files=no).Trim()) { '+local' } else { '' }
+$dirty = if ((git status --porcelain --untracked-files=no | Out-String).Trim()) { '+local' } else { '' }
 
 # Only this worktree's own DEV processes are replaced; nothing else is touched.
 Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force
