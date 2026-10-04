@@ -227,3 +227,19 @@ test('a whole-list revise that changes the question count never silently re-acti
     assert.equal(after.revision, rejected.revision);
   } finally { cleanup(); }
 });
+
+test('opening a draft never recalculates or writes anything (a stale stored audit stays exactly as stored)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId } = await lessonWithThreeQuestions(db, sourcesDir);
+    const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);
+    const content = JSON.parse(row.draft_json);
+    content.audit = { ...content.audit, findings: [{ severity: 'MEDIUM', scope: 'question:0', message: 'achado antigo gravado', source: 'DETERMINISTIC' }] };
+    db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), draftId);
+    const before = db.prepare('SELECT draft_json, revision, updated_at FROM generated_drafts WHERE id = ?').get(draftId);
+    const shown = drafts.getDraft(db, userId, draftId);
+    drafts.getDraft(db, userId, draftId);
+    assert.ok(shown.audit.findings.some((f) => f.message === 'achado antigo gravado'), 'the stored finding is still shown');
+    assert.deepEqual(db.prepare('SELECT draft_json, revision, updated_at FROM generated_drafts WHERE id = ?').get(draftId), before, 'reading wrote nothing');
+  } finally { cleanup(); }
+});
