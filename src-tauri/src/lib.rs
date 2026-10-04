@@ -89,6 +89,25 @@ fn local_backend_env(app_data_dir: &Path, port: u16, static_dir: &Path) -> Vec<(
     // local/dev deployment of this same server.
 }
 
+/// DEV datastore pin: the human DEV launcher sets SMARTLEARN_DB_PATH / SMARTLEARN_SOURCES_DIR so the Desktop opens the persistent
+/// DEV datastore instead of the app-data default. Empty values are ignored; the default stays for the packaged app.
+fn with_data_overrides(
+    env: Vec<(String, String)>,
+    db_path: Option<String>,
+    sources_dir: Option<String>,
+) -> Vec<(String, String)> {
+    let pick = |value: Option<String>| value.filter(|v| !v.trim().is_empty());
+    let db_path = pick(db_path);
+    let sources_dir = pick(sources_dir);
+    env.into_iter()
+        .map(|(key, value)| match key.as_str() {
+            "SMARTLEARN_DB_PATH" => (key, db_path.clone().unwrap_or(value)),
+            "SMARTLEARN_SOURCES_DIR" => (key, sources_dir.clone().unwrap_or(value)),
+            _ => (key, value),
+        })
+        .collect()
+}
+
 /// One raw, dependency-free HTTP/1.1 GET — avoids pulling in a full HTTP
 /// client crate for a single loopback readiness probe.
 fn http_get_ok(port: u16, path: &str, connect_timeout: Duration) -> bool {
@@ -249,7 +268,11 @@ fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<Local
         resolve_backend_launch(resource_dir, manifest_dir, cfg!(debug_assertions))?;
 
     let port = pick_free_local_port()?;
-    let env = local_backend_env(app_data_dir, port, &static_dir);
+    let env = with_data_overrides(
+        local_backend_env(app_data_dir, port, &static_dir),
+        std::env::var("SMARTLEARN_DB_PATH").ok(),
+        std::env::var("SMARTLEARN_SOURCES_DIR").ok(),
+    );
 
     let mut command = Command::new(&node_program);
     command
@@ -481,7 +504,7 @@ pub fn run() {
 mod tests {
     use super::{
         configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
-        pick_free_local_port, resolve_backend_launch, standalone_backend_paths,
+        pick_free_local_port, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
         strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
         TransactionStatement, LOCAL_BACKEND_HOST,
     };
@@ -1943,5 +1966,22 @@ mod tests {
             port_released,
             "dropping LocalBackend must kill its child process — the port it held must become free"
         );
+    }
+
+    #[test]
+    fn data_overrides_pin_the_dev_datastore_and_default_to_app_data() {
+        let base = vec![
+            ("SMARTLEARN_DB_PATH".to_string(), "appdata/smartlearn.db".to_string()),
+            ("SMARTLEARN_SOURCES_DIR".to_string(), "appdata/sources".to_string()),
+            ("PORT".to_string(), "1".to_string()),
+        ];
+        let get = |env: &Vec<(String, String)>, k: &str| env.iter().find(|(key, _)| key == k).unwrap().1.clone();
+        let pinned = with_data_overrides(base.clone(), Some("C:/dev/smartlearn-dev.db".into()), Some("C:/dev/sources".into()));
+        assert_eq!(get(&pinned, "SMARTLEARN_DB_PATH"), "C:/dev/smartlearn-dev.db");
+        assert_eq!(get(&pinned, "SMARTLEARN_SOURCES_DIR"), "C:/dev/sources");
+        assert_eq!(get(&pinned, "PORT"), "1");
+        let default = with_data_overrides(base.clone(), None, Some("  ".into()));
+        assert_eq!(get(&default, "SMARTLEARN_DB_PATH"), "appdata/smartlearn.db");
+        assert_eq!(get(&default, "SMARTLEARN_SOURCES_DIR"), "appdata/sources");
     }
 }

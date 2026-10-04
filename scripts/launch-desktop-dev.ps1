@@ -52,6 +52,22 @@ if (-not $NoBuild) {
   }
 }
 
+# HUMAN DEV DATA != TEST DATA. The human Desktop DEV always opens ONE persistent datastore under the user profile, independent of
+# branch/worktree, never created empty by accident and never reset. Automated tests use their own throwaway databases.
+$devData = if ($env:SMARTLEARN_DEV_DATA_DIR) { $env:SMARTLEARN_DEV_DATA_DIR } else { Join-Path $env:USERPROFILE 'SmartLearn-DevData' }
+$devDb = Join-Path $devData 'smartlearn-dev.db'
+$devSources = Join-Path $devData 'sources'
+if (-not (Test-Path $devDb)) { Fail "O datastore DEV persistente nao existe: $devDb. Nada foi aberto (o Desktop nao cria um banco vazio no lugar dele)." }
+$lockPath = Join-Path $devData 'dev.lock'
+if (Test-Path $lockPath) {
+  try { $holder = Get-Content $lockPath -Raw | ConvertFrom-Json } catch { $holder = $null }
+  if ($holder -and $holder.pid -and (Get-Process -Id $holder.pid -ErrorAction SilentlyContinue)) {
+    Fail "O datastore DEV esta em uso pelo processo $($holder.pid) ($($holder.root)). Feche-o antes de abrir o Desktop."
+  }
+}
+$env:SMARTLEARN_DB_PATH = $devDb
+$env:SMARTLEARN_SOURCES_DIR = $devSources
+
 # The Desktop starts its own local backend (loopback, dynamic port) and inherits these.
 $env:SMARTLEARN_LOCAL_AUTHORITY = 'true'
 $env:SMARTLEARN_AI_PROVIDER = $Provider
@@ -62,5 +78,6 @@ $env:SMARTLEARN_BUILD_MODE = 'DEV'
 
 Write-Host "SmartLearn DEV  commit $head$dirty  provedor $Provider"
 Write-Host "Raiz: $root"
+Write-Host "Datastore DEV: $devDb"
 $host.UI.RawUI.WindowTitle = "SmartLearn DEV $head - feche esta janela para encerrar"
 npm run tauri dev

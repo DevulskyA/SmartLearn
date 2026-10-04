@@ -51,3 +51,21 @@ test('the launcher survives a CLEAN working tree (git prints nothing; a bare .Tr
   assert.doesNotMatch(launcher, /--untracked-files=no\)\.Trim/);
   assert.match(launcher, /git status[^)]*\|\s*Out-String\)\.Trim\(\)/);
 });
+
+test('the launcher PINS the persistent DEV datastore (never the app-data default), refuses a missing or busy one', () => {
+  assert.match(launcher, /SmartLearn-DevData/);
+  assert.match(launcher, /smartlearn-dev\.db/);
+  assert.match(launcher, /\$env:SMARTLEARN_DB_PATH\s*=\s*\$devDb/);
+  assert.match(launcher, /\$env:SMARTLEARN_SOURCES_DIR\s*=\s*\$devSources/);
+  assert.match(launcher, /Test-Path \$devDb/);
+  assert.match(launcher, /dev\.lock/);
+  assert.doesNotMatch(launcher, /AppData|worktrees|\$root\data|\$PSScriptRoot\.*\.db/i);
+});
+
+test('the Tauri backend honours the pinned datastore (SMARTLEARN_DB_PATH / SMARTLEARN_SOURCES_DIR) and covers it with a unit test', () => {
+  const lib = read('src-tauri/src/lib.rs');
+  assert.match(lib, /fn with_data_overrides/);
+  assert.match(lib, /std::env::var\("SMARTLEARN_DB_PATH"\)/);
+  assert.match(lib, /std::env::var\("SMARTLEARN_SOURCES_DIR"\)/);
+  assert.match(lib, /fn data_overrides_pin_the_dev_datastore_and_default_to_app_data/);
+});
