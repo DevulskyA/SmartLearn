@@ -1,5 +1,9 @@
 # Prompt Lab — especificação (v1, harness + baseline)
 
+Status: HARNESS E BASELINE ENTREGUES; CONGELADO. Nova execução só por ordem explícita (ver abaixo).
+
+> **SEM AUTORIZAÇÃO PARA EXECUTAR (decisão humana 2026-10-04).** O Prompt Lab NÃO é próxima tarefa, nem etapa implícita de nenhum plano, /goal ou /loop. Nenhuma geração (Codex, Prompt Lab, variante ou modelo externo) roda sem ordem explícita da pessoa, dada para aquela execução. "Próxima etapa possível" != "etapa autorizada".
+
 Status: ATIVO desde 2026-10-04 (autorizado pelo usuário: "avance para o Prompt Lab"). Estado do produto: INALTERADO (prompt v5, provedor Codex). Este laboratório NÃO conecta nenhum resultado ao produto.
 
 ## Objetivo

@@ -29,7 +29,7 @@ ATIVA AGORA: HR-1 (F1; T-F1-01..08; T-F1-05 [H] aguarda HG-03)
 - [ ] **HR-6 F8 Segurança e empacotamento** — OWNER: GUI
       DETAILS: inspeção do artefato empacotado, PDFs adversariais, segredos e consentimento, auditoria de dependências. T-F8-04 é [H] (HG-04).
 - [ ] **HR-7 F5 Qualidade de conteúdo médico e Prompt Lab** — OWNER: GUI
-      DETAILS: baseline e VALID-4/5 já feitos (valid4-span-rerun.md); falta T-F5-08 (ordem de leitura por colunas na extração), T-F5-05 (sensores) e as tarefas [H] com Codex (HG-06/07/08, VALID-8).
+      DETAILS: VALID-4/5 fechados com evidência já existente (valid4-span-rerun.md). Pendentes: T-F5-08 (ordem de leitura por colunas na extração, determinística) e T-F5-05 (sensores determinísticos). Tudo que envolve gerar com Codex/Prompt Lab (T-F5-01..04, 06, 07, VALID-8) está [H] e NÃO AUTORIZADO sem ordem explícita.
 - [ ] **HR-8 F7 Produto de estudo** — OWNER: GUI
       DETAILS: recuperação de atraso reversível, onboarding, decisão FSRS por dados; todas [H] (HG-09).
 - [ ] **HR-9 F9 Integração e entrega** — OWNER: GUI

@@ -1,5 +1,7 @@
 # Prompt Lab — variantes propostas (NÃO executadas; produto inalterado)
 
+> **SEM AUTORIZAÇÃO PARA EXECUTAR (decisão humana 2026-10-04).** O Prompt Lab NÃO é próxima tarefa, nem etapa implícita de nenhum plano, /goal ou /loop. Nenhuma geração (Codex, Prompt Lab, variante ou modelo externo) roda sem ordem explícita da pessoa, dada para aquela execução. "Próxima etapa possível" != "etapa autorizada".
+
 Origem: defeitos D2–D7 de `valid4-span-rerun.md` (baseline prompt v5, escopo por seção, 3 gerações). Cada variante é um ADENDO ao prompt v5 (nunca substitui o prompt do produto), medida sobre a MESMA unidade e a mesma entrada, com ≥ 2 gerações por variante e comparação cega por defeito (rubrica de `spec.md`). Uma variante só vira candidata se reduzir defeitos materiais sem introduzir erro crítico e sem piorar fidelidade; adotar é decisão humana e vira tarefa própria (T-F5-06).
 
 | ID | Defeito-alvo | Adendo (essência) | Medida de sucesso | Risco a vigiar |

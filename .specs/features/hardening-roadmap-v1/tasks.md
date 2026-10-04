@@ -16,7 +16,7 @@ Cada tarefa é uma unidade causal: um entregável, verificável de forma indepen
 5. Nunca mutar dado humano para testar. Testes usam banco temporário; scripts que tocam o banco humano só rodam com backup verificado e por tarefa explícita.
 6. Dois remendos seguidos na mesma região que geram nova regressão ⇒ parar, voltar ao último estado bom e remodelar.
 7. Gate = comando exato listado na tarefa + regressão relevante + diff sem mudança não autorizada. Sem gate verde, a tarefa não fecha.
-8. `CODEX_CALL_COUNT=0` em tudo, exceto fase F5 e somente com HG-07 aprovado.
+8. `CODEX_CALL_COUNT=0` em tudo. Nenhuma chamada ao Codex, ao Prompt Lab ou a qualquer geração/modelo externo sem ORDEM EXPLÍCITA da pessoa para aquela execução; HG-07 aprovado não basta, e nenhuma tarefa deste ledger (inclusive F5) autoriza gerar. Modelos: Sonnet 5.5 High para todo trabalho intelectual; Haiku só para executar testes.
 9. Proibido sem ordem explícita: push, merge, deploy, release, force-push, apagar backups.
 
 Comando-base do gate completo (usado nos checkpoints de fase):
