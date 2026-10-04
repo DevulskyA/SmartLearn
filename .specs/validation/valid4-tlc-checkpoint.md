@@ -55,3 +55,9 @@ Human test on the canonical Desktop (`SmartLearn DEV`): open the existing Costan
 - New proof: 4-question sequence re-read from the DB (Q3 edit, summary edit, Q2 reject, accept), content/audit/UI separation, UI reload persistence.
 - Defects found and fixed: launcher crashed on a clean tree (null `.Trim()`); whole-list revise silently reset REJECTED questions when the count changed.
 - Codex calls this phase: 0. Visual validation: AWAITING_HUMAN (Desktop DEV open). VALID-4 stays NOT_PROVEN.
+
+## Data continuity (P0, resolved)
+
+- Cause: two datastores by design. `dev:remote` used `C:\Users\Ariel\SmartLearn-DevData\smartlearn-dev.db`; the Desktop (Tauri, local authority) used `%APPDATA%\com.devulsky.smartlearn\smartlearn-server\smartlearn.db`. The DEV launcher created in the UI phase pinned neither, so the Desktop opened the app-data database. No data was deleted (no sqlite_sequence gaps).
+- Fix: launcher pins `SmartLearn-DevData\smartlearn-dev.db` + `sources`, refuses a missing or busy datastore; Tauri honours `SMARTLEARN_DB_PATH`/`SMARTLEARN_SOURCES_DIR` (`with_data_overrides`, Rust test). `scripts/dev-import-sources.mjs` imported the Costanzo subgraph (1 source, 496 pages, 898 outline, 165 proposals, 1 draft) into the DEV database under `dev@smartlearn.local` with remapped ids; idempotent; originals and backups under `C:\Projetos\SmartLearn-db-backups\` untouched.
+- Rule: HUMAN DEV DATA != TEST DATA (`test/test-db-isolation.test.js` forbids tests from naming the human datastore).
