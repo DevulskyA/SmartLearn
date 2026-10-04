@@ -138,7 +138,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: checksums antes/depois idênticos; teste de launcher.
 
 ### T-F1-06 — Purga de sessões expiradas/revogadas · S
-- Status: `[ ]` · Requisitos: R-01/INV-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 (`purgeStaleSessions` em `server/src/repositories/sessions.js`, chamada na subida após as migrações; remove revogadas/expiradas há > 30 dias; sessão ativa — inclusive DEV de ~10 anos — intocada; durações de produção inalteradas; `server/test/session-purge.test.js`; auth existente `session-security`/`dev-persistent-session` verdes) · Requisitos: R-01/INV-08 · Dependências: nenhuma
 - Superfície: `server/src/repositories/sessions.js`, rotina na subida do servidor, testes.
 - Fazer: remover linhas revogadas há > 30 dias e expiradas há > 30 dias; sessões ativas (inclusive as DEV de ~10 anos) nunca são tocadas; produção mantém as mesmas durações.
 - RED: sessão ativa DEV intacta; sessão expirada antiga removida; contagem antes/depois registrada.

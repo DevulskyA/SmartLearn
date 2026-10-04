@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { openDb } from './db.js';
 import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
+import { purgeStaleSessions } from './repositories/sessions.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { acquireDevLock, devDbPaths, isDevDatastoreDb } from './dev-datastore.js';
@@ -64,6 +65,9 @@ if (isDevDatastoreDb(config.dbPath)) {
   }
 }
 runMigrations(db);
+// T-F1-06: rows that can never authenticate again (revoked or expired > 30 days ago) are housekeeping, active sessions are untouched.
+const purgedSessions = purgeStaleSessions(db);
+if (purgedSessions > 0) console.log(`SmartLearn purged ${purgedSessions} stale session row(s)`);
 const app = await buildApp(db, undefined, {
   isProduction: config.isProduction,
   allowedOrigins: config.allowedOrigins,

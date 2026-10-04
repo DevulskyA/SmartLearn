@@ -64,3 +64,13 @@ export function revokeAllForUser(db, userId, { exceptId } = {}) {
       .run(now, userId);
   }
 }
+
+/**
+ * T-F1-06: housekeeping for the sessions table. Removes sessions that were revoked, or that expired, more than `olderThanDays`
+ * ago (default 30) - rows that can never authenticate again. An active session (including the ~10-year DEV session) is never
+ * touched, and the session durations themselves are unchanged. Returns the number of rows removed.
+ */
+export function purgeStaleSessions(db, nowIso = new Date().toISOString(), { olderThanDays = 30 } = {}) {
+  const cutoff = new Date(Date.parse(nowIso) - olderThanDays * 86_400_000).toISOString();
+  return db.prepare('DELETE FROM sessions WHERE (revoked_at IS NOT NULL AND revoked_at < ?) OR expires_at < ?').run(cutoff, cutoff).changes;
+}
