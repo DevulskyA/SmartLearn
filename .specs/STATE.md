@@ -9,7 +9,7 @@
 - HEAD de código: `169ec2d`; depois só docs/Prompt Lab (`git log -1` manda). Esquema do banco v30 (migrações 001–030; próxima livre 031). Versão do app `0.1.0`.
 - Baseline de testes (T-F0-01, reproduzido por execução em 2026-10-04): ver `.specs/features/hardening-roadmap-v1/validation.md`.
 - Plano ativo: `.specs/features/hardening-roadmap-v1/{spec.md,tasks.md}` (ordem: F0, F1, F6 [T-F6-01..03], F2, F4, F3, F8, F5, F7, F9). Track macro: `conductor/tracks/v1-validation/plan.md`; painel: `node scripts/agent-tasklist.mjs`.
-- Prompt Lab: harness e baseline entregues; CONGELADO e FORA do fluxo (não é próxima tarefa; só por ordem explícita). Evidência já existente em `.specs/features/prompt-lab/` (VALID-4 PASS e VALID-5 PASS de fidelidade, com limites); saídas reais fora do Git em `C:\Users\Ariel\SmartLearn-PromptLab\`.
+- **`PROMPT_LAB=MANUAL_GATE`** (decisão humana 2026-10-04): o Prompt Lab permanece documentado como capacidade/etapa futura (harness e baseline entregues; planos e variantes H1–H5 preservados em `.specs/features/prompt-lab/`), mas NUNCA entra automaticamente na fila de execução. `READY_FOR_PROMPT_LAB=YES` significa só "pré-condições satisfeitas". Só uma instrução explícita da pessoa autoriza iniciar Prompt Lab, Codex ou qualquer geração associada. Evidência existente: VALID-4 PASS e VALID-5 PASS de fidelidade, com limites; saídas em `C:UsersArielSmartLearn-PromptLab`.
 
 ## Decisões canônicas em vigor (não reabrir sem decisão humana)
 - **Arquitetura (ARCH-01, 2026-09-11):** Desktop local-first; backend Node local em loopback (LOCAL-01A/01B); servidor central só é autoridade no modo remoto/Companion. Seção "ARCHITECTURE SUPERSESSION" do arquivo morto.

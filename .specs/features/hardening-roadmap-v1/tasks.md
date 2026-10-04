@@ -123,7 +123,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: teste de ponta a ponta com banco sintético; ensaio real sobre `SmartLearn-db-backups\p0-devdata-*` registrado no `validation.md`.
 
 ### T-F1-04 — Ciclo de vida de processos: Job Object e limpeza do launcher · M
-- Status: `[ ]` · Requisitos: R-02 (AC-02.1, AC-02.2) · Dependências: nenhuma (paralelizável com T-F1-01)
+- Status: `[✓]` 2026-10-04 (código; prova manual de `Stop-Process -Force` no `smartlearn.exe` real pendente para o checkpoint F1) · BASE_SHA `a6b9645`: `src-tauri/src/kill_on_close_job.rs` (windows-sys, KILL_ON_JOB_CLOSE; falha = degradação reportada, nunca fatal), backend colocado no job logo após o spawn; testes Rust: fechar o job mata o processo e o neto sem `kill()` (mutação: com `LimitFlags=0` os processos sobrevivem → testes vermelhos); cargo 32/32; launcher encerra e imprime só `node` cujo caminho está na própria worktree · Requisitos: R-02 (AC-02.1, AC-02.2) · Dependências: nenhuma (paralelizável com T-F1-01)
 - Superfície: `src-tauri/src/lib.rs` (`LocalBackend`), `scripts/launch-desktop-dev.ps1`.
 - Fazer: associar o backend filho a um Job Object do Windows com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, de modo que morte forçada do Rust leve o `node` e seus filhos (`codex`); launcher passa a listar e encerrar apenas processos cujo caminho pertence à própria worktree (`node` de `server-runtime`, `smartlearn.exe`) e a imprimir o que encerrou.
 - RED (Rust): teste que cria o backend, mata o processo pai com `TerminateProcess` e espera a porta livre.

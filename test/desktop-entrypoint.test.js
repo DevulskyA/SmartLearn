@@ -99,3 +99,8 @@ test('the launcher takes (and prints) a verified snapshot of the DEV datastore b
   assert.ok(at('scripts/dev-snapshot.mjs') > 0 && at('scripts/dev-snapshot.mjs') < at('npm run tauri dev'), 'the snapshot comes before the app is opened');
   assert.match(launcher, /dev-snapshot\.mjs[^\n]*\n[^\n]*LASTEXITCODE/, 'a snapshot that could not be verified stops the launch');
 });
+
+test('the launcher also cleans orphaned backends of THIS worktree only, and says what it stopped', () => {
+  assert.match(launcher, /Get-Process -Name node[^\n]*StartsWith\(\$root/);
+  assert.match(launcher, /Write-Host "Encerrado/);
+});

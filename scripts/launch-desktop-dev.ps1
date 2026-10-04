@@ -34,6 +34,8 @@ function BuildSha($id) { if ($id) { ([string]$id).Split('+')[0] } else { '' } }
 
 # Only this worktree's own DEV processes are replaced; nothing else is touched.
 Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force
+# T-F1-04: leftovers of THIS worktree only (the bundled backend node-runtime), reported by name; nothing outside the worktree is touched.
+Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Write-Host "Encerrado (backend orfao desta worktree): pid $($_.Id) $($_.Path)"; Stop-Process -Id $_.Id -Force }
 Start-Sleep -Milliseconds 500
 
 function Newest($paths) {

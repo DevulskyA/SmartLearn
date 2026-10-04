@@ -8,6 +8,8 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod kill_on_close_job;
+
 const DEV_APP_ORIGIN: &str = "http://127.0.0.1:3000";
 
 // LOCAL-01A / ARCH-01 (.specs/STATE.md "ARCHITECTURE SUPERSESSION"): Desktop
@@ -36,6 +38,9 @@ fn local_authority_enabled() -> bool {
 struct LocalBackend {
     child: Child,
     origin: tauri::Url,
+    // Kill-on-close job holding the backend (and its descendants): closed by the OS when this process dies by any route, even a
+    // forced kill that skips Drop. None only if the job could not be created/assigned (reported, never fatal).
+    _job: Option<kill_on_close_job::KillOnCloseJob>,
 }
 
 impl Drop for LocalBackend {
@@ -285,13 +290,16 @@ fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<Local
         format!("failed to spawn local backend (program: {}): {e}", node_program.display())
     })?;
 
+    // Contain the process tree BEFORE waiting for readiness, so even a Desktop killed during start-up leaves nothing behind.
+    let job = kill_on_close_job::contain(&child);
+
     wait_for_local_backend_ready(&mut child, port, LOCAL_BACKEND_READY_TIMEOUT)?;
 
     let origin: tauri::Url = format!("http://{LOCAL_BACKEND_HOST}:{port}/")
         .parse()
         .map_err(|e| format!("failed to build local backend origin URL: {e}"))?;
 
-    Ok(LocalBackend { child, origin })
+    Ok(LocalBackend { child, origin, _job: job })
 }
 
 fn configured_app_url(origin: Option<&str>) -> Result<tauri::Url, String> {
@@ -1951,6 +1959,7 @@ mod tests {
                 origin: format!("http://{LOCAL_BACKEND_HOST}:{port}/")
                     .parse()
                     .expect("valid test origin"),
+                _job: None,
             };
         } // <- LocalBackend dropped here: must kill the child synchronously
 
