@@ -145,7 +145,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: `server/test/*session*`; `PRODUCTION_AUTH_UNCHANGED` revalidado (testes de auth existentes).
 
 ### T-F1-07 — Critério de build por conteúdo, não por commit · S
-- Status: `[ ]` · Requisitos: R-02 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 (`inputsHash` sha256 de `src/`, `shared/`, `server/src`, `server/migrations`, `index.html`, `package.json`, com CRLF→LF e sem `node_modules`; entra em `readBuildIdentity` e no `build-info.json`; o launcher decide rebuild/`distIsCurrent` e a recusa de build defasada pelo hash e imprime `Build: content <hash12> (built at commit X), opened at Y`; a identidade exibida segue verdadeira: commit = onde o conteúdo foi construído. Testes em `version-identity.test.js`; docs-only não muda o hash) · Requisitos: R-02 · Dependências: nenhuma
 - Superfície: `scripts/build-identity.mjs`, `scripts/launch-desktop-dev.ps1`, `vite.config.js`.
 - Fazer: além do SHA, calcular `inputsHash` (hash de `src/`, `index.html`, `shared/`, `server/src`, `server/migrations`, `package.json`) embutido no `build-info.json`; o launcher só rebuilda se `inputsHash` mudar, mas o SHA exibido continua sendo o do HEAD em uso (commit só de documentação não rebuilda e continua identificável).
 - Cuidado: a identidade mostrada deve continuar verdadeira — documentar que "build = conteúdo X, aberto no commit Y". Não exibir um SHA que não corresponda ao conteúdo.

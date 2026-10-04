@@ -46,7 +46,8 @@ if (-not $NoBuild) {
   $srcNewest = Newest @("$root\src", "$root\index.html", "$root\shared")
   $distInfoPath = Join-Path $root 'dist\build-info.json'
   $distInfo = if (Test-Path $distInfoPath) { try { Get-Content $distInfoPath -Raw | ConvertFrom-Json } catch { $null } } else { $null }
-  $distIsCurrent = $distInfo -and ((BuildSha $distInfo.id) -eq (BuildSha $identity.id)) -and ($distInfo.channel -eq 'DEV')
+  # Current = same CONTENT (inputsHash of src/, shared/, server/, index.html, package.json), not the same commit: a docs-only commit does not rebuild.
+  $distIsCurrent = $distInfo -and ($distInfo.inputsHash -eq $identity.inputsHash) -and ($distInfo.channel -eq 'DEV')
   if (-not (Test-Path $dist) -or (Get-Item $dist).LastWriteTime -lt $srcNewest -or -not $distIsCurrent) {
     Write-Host 'Compilando o frontend...'
     npm run build | Out-Host
@@ -64,9 +65,11 @@ if (-not $NoBuild) {
 # The build the Desktop will serve must be the one for THIS commit: never open a stale identity by mistake.
 $stagedInfoPath = Join-Path $root 'src-tauri\resources\dist-runtime\build-info.json'
 $stagedInfo = if (Test-Path $stagedInfoPath) { try { Get-Content $stagedInfoPath -Raw | ConvertFrom-Json } catch { $null } } else { $null }
-if (-not $stagedInfo -or (BuildSha $stagedInfo.id) -ne (BuildSha $identity.id)) {
-  Fail "A build empacotada ($($stagedInfo.id)) nao e a do commit atual ($($identity.id)). Rode o launcher sem -NoBuild. Nada foi aberto."
+if (-not $stagedInfo -or $stagedInfo.inputsHash -ne $identity.inputsHash) {
+  Fail "A build empacotada (conteudo $($stagedInfo.inputsHash), commit $($stagedInfo.id)) nao tem o conteudo atual ($($identity.inputsHash)). Rode o launcher sem -NoBuild. Nada foi aberto."
 }
+# Honest identity: the app shows the commit its content was BUILT at; the launcher says which content is open and at which commit it was opened.
+Write-Host "Build: content $($identity.inputsHash.Substring(0, 12)) (built at commit $($stagedInfo.id)), opened at $head$dirty"
 
 # HUMAN DEV DATA != TEST DATA. The human Desktop DEV always opens ONE persistent datastore under the user profile, independent of
 # branch/worktree, never created empty by accident and never reset. Automated tests use their own throwaway databases.

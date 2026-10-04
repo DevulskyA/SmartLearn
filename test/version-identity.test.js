@@ -47,3 +47,62 @@ test('a real Vite build embeds the identity in the bundle and emits build-info.j
     assert.ok(has('commit', expected.commit) && has('version', rootVersion) && has('channel', 'DEV'), 'the bundle carries the identity it was built with');
   } finally { rmSync(out, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+// ---- T-F1-07: a build is identified by the CONTENT of its inputs, so a docs-only commit does not force a rebuild ----
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { inputsHash } from '../scripts/build-identity.mjs';
+
+function inputsTree() {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-inputs-'));
+  for (const d of ['src', 'shared', 'server/src', 'server/migrations', '.specs', 'docs']) mkdirSync(join(dir, d), { recursive: true });
+  writeFileSync(join(dir, 'package.json'), '{"version":"0.1.0"}');
+  writeFileSync(join(dir, 'index.html'), '<html></html>');
+  writeFileSync(join(dir, 'src', 'app.js'), 'console.log(1);\n');
+  writeFileSync(join(dir, 'shared', 'x.js'), 'export const x = 1;\n');
+  writeFileSync(join(dir, 'server', 'src', 'main.js'), 'start();\n');
+  writeFileSync(join(dir, 'server', 'migrations', '001-a.sql'), 'CREATE TABLE a (id INTEGER);\n');
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
+}
+
+test('inputsHash: stable, ignores documentation and non-input files, but changes with any input that ends up in the app', () => {
+  const t = inputsTree();
+  try {
+    const base = inputsHash(t.dir);
+    assert.match(base, /^[0-9a-f]{64}$/);
+    assert.equal(inputsHash(t.dir), base, 'deterministic');
+    writeFileSync(join(t.dir, '.specs', 'STATE.md'), 'a docs-only change\n');
+    writeFileSync(join(t.dir, 'docs', 'note.md'), 'notes\n');
+    assert.equal(inputsHash(t.dir), base, 'a docs-only change does not change the build');
+    for (const [file, content] of [['src/app.js', 'console.log(2);\n'], ['shared/x.js', 'export const x = 2;\n'], ['server/src/main.js', 'start2();\n'], ['server/migrations/001-a.sql', 'CREATE TABLE b (id INTEGER);\n'], ['index.html', '<html><body></body></html>'], ['package.json', '{"version":"0.1.1"}']]) {
+      const before = readFileSync(join(t.dir, file), 'utf8');
+      writeFileSync(join(t.dir, file), content);
+      assert.notEqual(inputsHash(t.dir), base, `${file} is an input`);
+      writeFileSync(join(t.dir, file), before);
+      assert.equal(inputsHash(t.dir), base, `restoring ${file} restores the hash`);
+    }
+    writeFileSync(join(t.dir, 'src', 'new.js'), '// a new input file\n');
+    assert.notEqual(inputsHash(t.dir), base, 'adding an input file changes it');
+  } finally { t.cleanup(); }
+});
+
+test('inputsHash does not depend on line endings (CRLF checkout vs LF) or on a file the build never sees (node_modules)', () => {
+  const t = inputsTree();
+  try {
+    const base = inputsHash(t.dir);
+    writeFileSync(join(t.dir, 'src', 'app.js'), 'console.log(1);\r\n');
+    assert.equal(inputsHash(t.dir), base);
+    mkdirSync(join(t.dir, 'server', 'src', 'node_modules'), { recursive: true });
+    writeFileSync(join(t.dir, 'server', 'src', 'node_modules', 'junk.js'), 'x');
+    assert.equal(inputsHash(t.dir), base);
+  } finally { t.cleanup(); }
+});
+
+test('the identity carries the inputs hash, the Vite build-info records it, and the launcher rebuilds by content, not by commit', () => {
+  const id = readBuildIdentity({ env: {} });
+  assert.match(id.inputsHash, /^[0-9a-f]{64}$/);
+  assert.equal(id.inputsHash, inputsHash(root));
+  const launcher = read('scripts/launch-desktop-dev.ps1');
+  assert.match(launcher, /inputsHash/);
+  assert.doesNotMatch(launcher, /BuildSha \$distInfo\.id\) -eq/, 'dist currency is no longer decided by the commit');
+  assert.match(launcher, /Build: content/, 'the launcher says which content is open and at which commit');
+});
