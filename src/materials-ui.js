@@ -19,6 +19,8 @@ const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
 const topicForm = document.querySelector("#sources-topic-form");
 const topicInput = document.querySelector("#sources-topic-input");
 const topicResults = document.querySelector("#sources-topic-results");
+const draftsBox = document.querySelector("#sources-drafts");
+const draftsList = document.querySelector("#sources-drafts-list");
 const indexDetails = document.querySelector("#sources-index");
 const indexSummary = document.querySelector("#sources-index-summary");
 const editorialDetails = document.querySelector("#sources-editorial");
@@ -217,6 +219,44 @@ function createSourceProposalItem(proposal) {
   return li;
 }
 
+// Units with an unaccepted draft are listed apart from the (often collapsed) index: work in progress must never hide inside a 100-unit list.
+function renderDraftsInProgress(proposals) {
+  if (!draftsList) return;
+  draftsList.replaceChildren();
+  const open = proposals.filter((p) => p.generatable && p.latestDraft && p.latestDraft.status !== "ACCEPTED");
+  for (const proposal of open) {
+    const li = document.createElement("li");
+    li.className = "source-draft-item";
+    const rangeText = proposal.pageStart === proposal.pageEnd ? `página ${proposal.pageStart}` : `páginas ${proposal.pageStart}–${proposal.pageEnd}`;
+    const title = createTextElement("span", "source-draft-item-title", proposal.title);
+    const range = createTextElement("span", "lesson-hint", rangeText);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "small-button";
+    button.dataset.action = "open-draft-in-progress";
+    button.dataset.draftId = String(proposal.latestDraft.id);
+    button.dataset.title = proposal.title;
+    button.textContent = "Abrir rascunho";
+    button.setAttribute("aria-label", `Abrir rascunho: ${proposal.title}, ${rangeText}`);
+    li.append(title, range, button);
+    draftsList.append(li);
+  }
+  if (draftsBox) draftsBox.hidden = open.length === 0;
+}
+
+draftsList?.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="open-draft-in-progress"]');
+  if (!button) return;
+  button.disabled = true;
+  const result = await DraftReviewUI.getDraft(button.dataset.draftId);
+  button.disabled = false;
+  if (!result.ok) {
+    setSourcesMessage(result.message || "Não foi possível abrir o rascunho.", true);
+    return;
+  }
+  await openEditor(result.draft, button.dataset.title ?? "Rascunho");
+});
+
 function renderSourceProposals(proposals) {
   if (!sourcesProposalsList) return;
   sourcesProposalsList.replaceChildren();
@@ -233,6 +273,7 @@ function renderSourceProposals(proposals) {
     if (editorialSummary) editorialSummary.textContent = `Páginas editoriais (${editorial.length}) — não geram conteúdo`;
   }
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+  renderDraftsInProgress(proposals);
   topicResults?.replaceChildren();
 }
 

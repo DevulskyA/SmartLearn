@@ -4526,3 +4526,8 @@ h1 {
   color: var(--color-muted);
   font-size: 0.85rem;
 }
+
+.sources-drafts { margin: 0 0 var(--space-4, 1rem); }
+.sources-drafts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.source-draft-item { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line, rgba(127, 127, 127, 0.25)); }
+.source-draft-item-title { font-weight: 600; flex: 1 1 14rem; }

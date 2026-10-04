@@ -285,3 +285,15 @@ test('RELOAD: a saved question and a saved summary survive a full page reload; u
   expect(after[1]).toBe('Resposta 2 persistida');
   expect(after.filter((_, i) => i !== 1)).toEqual(before.filter((_, i) => i !== 1));
 });
+
+test('a draft in progress is listed under "Rascunhos em andamento", outside the index, and opens the editor', async ({ page }) => {
+  await openLesson(page, 'andamento.pdf');
+  await page.locator('[data-action="lesson-back"]').click();
+  const box = page.locator('#sources-drafts');
+  await expect(box).toBeVisible();
+  await expect(box.locator('.source-draft-item')).toHaveCount(1);
+  await expect(page.locator('#sources-index').locator('#sources-drafts')).toHaveCount(0);
+  await box.getByRole('button', { name: /Abrir rascunho/ }).click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
+});
