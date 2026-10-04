@@ -33,9 +33,9 @@ test('mismatch is decided by build CONTENT when both sides carry it, so a docs-o
 test('the diagnostic text has version, channel, build, schema, database file and counts, and nothing else', async () => {
   const { diagnosticText } = await import('../src/build-identity-ui.js');
   const identity = { version: '0.1.0', channel: 'DEV', id: 'a1b2c3d', inputsHash: 'abcdef0123456789ffff' };
-  const server = { mode: 'DEV', head: 'a1b2c3d+local', provider: 'CODEX', diagnostics: { schemaVersion: 30, dbPath: 'C:/Users/x/SmartLearn-DevData/smartlearn-dev.db', counts: { subjects: 9, learning_units: 12 } } };
+  const server = { mode: 'DEV', head: 'a1b2c3d+local', provider: 'CODEX', diagnostics: { schemaVersion: 30, dbPath: 'C:/data/dev/app-data.db', counts: { subjects: 9, learning_units: 12 } } };
   const text = diagnosticText(identity, server);
-  for (const part of ['SmartLearn 0.1.0', 'DEV', 'a1b2c3d', 'abcdef012345', 'Esquema: 30', 'smartlearn-dev.db', 'subjects=9', 'learning_units=12', 'CODEX']) assert.ok(text.includes(part), `missing ${part}`);
+  for (const part of ['SmartLearn 0.1.0', 'DEV', 'a1b2c3d', 'abcdef012345', 'Esquema: 30', 'app-data.db', 'subjects=9', 'learning_units=12', 'CODEX']) assert.ok(text.includes(part), `missing ${part}`);
   assert.equal(diagnosticText(null, null).includes('indisponível'), true);
   assert.ok(!/email|password|senha/i.test(text));
 });
