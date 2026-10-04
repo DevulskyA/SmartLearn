@@ -33,7 +33,7 @@ export default [
   },
   {
     files: browserFiles,
-    languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.browser, ...globals.node } },
+    languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.browser, ...globals.node, __APP_IDENTITY__: 'readonly' } },
     rules: baseRules,
   },
   {

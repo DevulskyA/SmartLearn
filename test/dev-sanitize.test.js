@@ -20,8 +20,8 @@ function machine() {
     otherDebugExe: put('wt-other/src-tauri/target/debug/smartlearn.exe', 400),
     otherAndroid: put('wt-other/src-tauri/target/aarch64-linux-android/debug/a.rlib', 500),
     otherBundle: put('wt-other/src-tauri/target/release/bundle/msi/s.msi', 60),
-    humanDb: put('SmartLearn-DevData/smartlearn-dev.db', 70),
-    humanSource: put('SmartLearn-DevData/sources/book.pdf', 80),
+    humanDb: put('FakeHumanData/human-fake.db', 70),
+    humanSource: put('FakeHumanData/sources/book.pdf', 80),
     backup: put('SmartLearn-db-backups/p0/smartlearn.db', 90),
     sourceCode: put('wt-canonical/src/app.js', 5),
     tauriRust: put('wt-canonical/src-tauri/src/lib.rs', 5),
@@ -78,7 +78,7 @@ test('the canonical root must be a known worktree, and a symlink at a candidate 
     assert.throws(() => planSanitize({ roots: m.roots, canonicalRoot: join(m.base, 'somewhere-else') }), /canonical root/);
     // replace a candidate with a link to the human datastore: it must never be followed or deleted
     rmSync(join(m.roots[1], 'src-tauri', 'target', 'aarch64-linux-android'), { recursive: true, force: true });
-    try { symlinkSync(join(m.base, 'SmartLearn-DevData'), join(m.roots[1], 'src-tauri', 'target', 'aarch64-linux-android'), 'junction'); } catch { return; /* no permission to link on this machine */ }
+    try { symlinkSync(join(m.base, 'FakeHumanData'), join(m.roots[1], 'src-tauri', 'target', 'aarch64-linux-android'), 'junction'); } catch { return; /* no permission to link on this machine */ }
     const plan = planSanitize({ roots: m.roots, canonicalRoot: m.canonical });
     assert.ok(plan.skipped.some((s) => /symlink|junction/.test(s.reason)));
     applySanitize(plan, { roots: m.roots });
