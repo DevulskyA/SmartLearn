@@ -27,6 +27,7 @@ import { registerPriorityRoutes } from './routes/priorities.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
 import { resolveSessionPolicy } from './auth/session-tokens.js';
 import { readFileSync } from 'node:fs';
+import { devDiagnostics } from './dev-diagnostics.js';
 
 // Reported by /health/build; the repo keeps this equal to the root package.json version (guarded by a test).
 const SERVER_VERSION = (() => { try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
@@ -54,12 +55,21 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
 
   // Which build is this? Public and minimal on purpose (a commit id, a mode and the declared provider name — no secret, no path).
   // Only meaningful when the DEV launcher set it; a packaged release reports mode null and the UI shows nothing.
-  app.get('/health/build', async () => ({
-    version: SERVER_VERSION,
-    head: config.buildHead,
-    mode: config.buildMode,
-    provider: config.aiProvider ?? null,
-  }));
+  app.get('/health/build', async () => {
+    const body = {
+      version: SERVER_VERSION,
+      head: config.buildHead,
+      // sha256 of the build inputs (T-F1-07): what the app bundle and this server are compared by, not the commit they were opened at
+      content: config.buildContent,
+      mode: config.buildMode,
+      provider: config.aiProvider ?? null,
+    };
+    // T-F1-08: counts-only diagnostics for a bug report, DEV channel only (a release build never reports its database path)
+    if (config.buildMode === 'DEV' && db) {
+      try { body.diagnostics = devDiagnostics(db, config.dbPath); } catch { /* diagnostics are best effort */ }
+    }
+    return body;
+  });
 
   app.get('/health/ready', async (request, reply) => {
     try {

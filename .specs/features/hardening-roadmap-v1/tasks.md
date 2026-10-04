@@ -153,7 +153,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: `test/version-identity.test.js`, `test/desktop-entrypoint.test.js`.
 
 ### T-F1-08 — Versão na barra de título e comando de diagnóstico · S
-- Status: `[ ]` · Requisitos: R-09/F-08 · Dependências: T-F1-07
+- Status: `[✓]` 2026-10-04 (título via `SMARTLEARN_WINDOW_TITLE` do launcher + `window_title` testado em Rust; "Copiar diagnóstico" em Configurações > Sobre com versão/canal/build/esquema/banco/contagens — só contagens, só canal DEV, nunca caminho em release; `/health/build` ganhou `content`; CORREÇÃO de consequência de T-F1-07: o aviso de divergência app×servidor passa a comparar o hash de conteúdo, senão um commit só de docs geraria alarme falso; verificação via CDP do título real pendente para o checkpoint) · Requisitos: R-09/F-08 · Dependências: T-F1-07
 - Superfície: `src-tauri/src/lib.rs` (título da janela via env `SMARTLEARN_WINDOW_TITLE` definido pelo launcher), `src/build-identity-ui.js` (botão "Copiar diagnóstico").
 - Fazer: título `SmartLearn DEV · v0.1.0 · <commit>` só no DEV; "Copiar diagnóstico" copia versão, canal, build, esquema, caminho do banco e contagens (sem dados pessoais).
 - Gate: teste Rust do título; teste de frontend do conteúdo copiado; verificação via CDP do título real.

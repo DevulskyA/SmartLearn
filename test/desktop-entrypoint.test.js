@@ -104,3 +104,9 @@ test('the launcher also cleans orphaned backends of THIS worktree only, and says
   assert.match(launcher, /Get-Process -Name node[^\n]*StartsWith\(\$root/);
   assert.match(launcher, /Write-Host "Encerrado/);
 });
+
+test('the launcher names the build in the window title and gives the local server the content hash it is compared by', () => {
+  assert.match(launcher, /SMARTLEARN_WINDOW_TITLE\s*=\s*"SmartLearn DEV - v/);
+  assert.match(launcher, /SMARTLEARN_BUILD_CONTENT\s*=\s*\$identity\.inputsHash/);
+  assert.match(read('src-tauri/src/lib.rs'), /window_title\(std::env::var\("SMARTLEARN_WINDOW_TITLE"\)/);
+});

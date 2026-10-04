@@ -4,6 +4,8 @@
 // Configurações > Sobre, and asks the local server which build IT is: a mismatch is shown, never hidden.
 const line = document.querySelector("#build-identity");
 const about = document.querySelector("#about-identity");
+const copyButton = document.querySelector("#copy-diagnostics");
+const copyMessage = document.querySelector("#copy-diagnostics-message");
 const API_BASE = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
 
 /** The identity embedded in THIS bundle at build time (undefined outside a Vite build, e.g. in plain Node tests). */
@@ -27,8 +29,26 @@ export function buildIdentityText(build) {
 
 /** True when the app bundle and the local server were NOT built from the same commit. */
 export function identityMismatch(identity, server) {
-  if (!identity || !server || !server.head) return false;
+  if (!identity || !server) return false;
+  // Both sides know their build CONTENT (sha256 of the inputs): that is what must match, not the commit the app was opened at.
+  if (identity.inputsHash && server.content) return identity.inputsHash !== server.content;
+  if (!server.head) return false;
   return shaOf(identity.id) !== shaOf(server.head);
+}
+
+/** The text a person pastes into a bug report: build identity, schema, database file and row COUNTS (never row content). */
+export function diagnosticText(identity, server) {
+  const d = server?.diagnostics;
+  const lines = [
+    `Versão: ${identity ? `SmartLearn ${identity.version}` : "indisponível"}`,
+    `Canal: ${identity?.channel ?? "indisponível"}`,
+    `Build: ${identity?.id ?? "indisponível"}${identity?.inputsHash ? ` (conteúdo ${identity.inputsHash.slice(0, 12)})` : ""}`,
+  ];
+  if (server) lines.push(`Servidor local: ${[server.mode, server.head, server.provider].filter(Boolean).join(" · ") || "sem identificação"}`);
+  if (d) {
+    lines.push(`Esquema: ${d.schemaVersion ?? "indisponível"}`, `Banco: ${d.dbPath}`, `Contagens: ${Object.entries(d.counts ?? {}).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+  }
+  return lines.join("\n");
 }
 
 function renderAbout(identity, server) {
@@ -67,6 +87,16 @@ async function show() {
     }
   }
   renderAbout(identity, server);
+  if (copyButton) {
+    copyButton.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(diagnosticText(identity, server));
+        if (copyMessage) copyMessage.textContent = "Diagnóstico copiado.";
+      } catch {
+        if (copyMessage) copyMessage.textContent = "Não foi possível copiar automaticamente.";
+      }
+    };
+  }
 }
 
 if (typeof window !== "undefined") show();

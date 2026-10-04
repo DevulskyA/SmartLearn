@@ -302,6 +302,15 @@ fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<Local
     Ok(LocalBackend { child, origin, _job: job })
 }
 
+/// T-F1-08: the DEV launcher names the build in the title bar ("SmartLearn DEV - v0.1.0 - <commit>") through SMARTLEARN_WINDOW_TITLE;
+/// a build nobody stamped (every release) keeps the plain product name. Blank or oversized values are ignored.
+fn window_title(requested: Option<&str>) -> String {
+    match requested.map(str::trim) {
+        Some(title) if !title.is_empty() && title.chars().count() <= 120 => title.to_string(),
+        _ => "SmartLearn".to_string(),
+    }
+}
+
 fn configured_app_url(origin: Option<&str>) -> Result<tauri::Url, String> {
     let raw_origin = origin
         .filter(|value| !value.trim().is_empty())
@@ -479,7 +488,7 @@ pub fn run() {
             };
 
             let window = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
-                .title("SmartLearn")
+                .title(window_title(std::env::var("SMARTLEARN_WINDOW_TITLE").ok().as_deref()))
                 .inner_size(800.0, 600.0)
                 .resizable(true)
                 .initialization_script(init_script)
@@ -511,7 +520,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
+        window_title, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
         pick_free_local_port, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
         strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
         TransactionStatement, LOCAL_BACKEND_HOST,
@@ -1975,6 +1984,15 @@ mod tests {
             port_released,
             "dropping LocalBackend must kill its child process — the port it held must become free"
         );
+    }
+
+    #[test]
+    fn window_title_uses_the_stamped_name_and_falls_back_to_the_product_name() {
+        assert_eq!(window_title(Some("SmartLearn DEV - v0.1.0 - a1b2c3d")), "SmartLearn DEV - v0.1.0 - a1b2c3d");
+        assert_eq!(window_title(Some("  SmartLearn DEV  ")), "SmartLearn DEV");
+        assert_eq!(window_title(None), "SmartLearn");
+        assert_eq!(window_title(Some("   ")), "SmartLearn");
+        assert_eq!(window_title(Some(&"x".repeat(121))), "SmartLearn");
     }
 
     #[test]

@@ -46,6 +46,7 @@ export const config = {
   // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | CODEX | FAKE. Declared = honoured exactly, never silently replaced.
   // Build identity, set by the Desktop DEV launcher (scripts/launch-desktop-dev.ps1) so a human can tell WHICH build is in front of them.
   buildHead: process.env.SMARTLEARN_BUILD_HEAD || null,
+  buildContent: process.env.SMARTLEARN_BUILD_CONTENT || null,
   buildMode: process.env.SMARTLEARN_BUILD_MODE || null,
   aiProvider: process.env.SMARTLEARN_AI_PROVIDER ? process.env.SMARTLEARN_AI_PROVIDER.trim().toUpperCase() : null,
   aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',

@@ -76,13 +76,13 @@ test('/health/ready returns 503 when foreign_keys OFF', async () => {
   }
 });
 
-test('/health/build reports the stamped build identity (version, commit, mode, declared provider) and nothing else', async () => {
+test('/health/build reports the stamped build identity (version, commit, content hash, mode, declared provider) and nothing else outside DEV', async () => {
   const app = await buildApp(null);
   await app.ready();
   const res = await app.inject({ method: 'GET', url: '/health/build' });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.body);
-  assert.deepEqual(Object.keys(body).sort(), ['head', 'mode', 'provider', 'version']);
+  assert.deepEqual(Object.keys(body).sort(), ['content', 'head', 'mode', 'provider', 'version']);
   await app.close();
 });
 
@@ -92,4 +92,38 @@ test('/health/build reports the server version (equal to the root package.json) 
   const res = await app.inject({ method: 'GET', url: '/health/build' });
   assert.equal(res.json().version, expected);
   await app.close();
+});
+
+test('/health/build adds counts-only diagnostics (schema, database file, row counts) in the DEV channel only', async () => {
+  const { config } = await import('../src/config.js');
+  const { openDb } = await import('../src/db.js');
+  const { runMigrations } = await import('../src/migrations.js');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'sl-diag-'));
+  const dbPath = join(dir, 'd.db');
+  const db = openDb(dbPath);
+  runMigrations(db);
+  db.prepare("INSERT INTO users (email, email_display, password_hash, password_salt, password_params, created_at, updated_at) VALUES ('p@x.com','p@x.com','h','s','p','t','t')").run();
+  const saved = { mode: config.buildMode, path: config.dbPath };
+  try {
+    config.dbPath = dbPath;
+    config.buildMode = 'DEV';
+    let app = await buildApp(db);
+    const dev = (await app.inject({ method: 'GET', url: '/health/build' })).json();
+    await app.close();
+    assert.ok(dev.diagnostics.schemaVersion >= 30);
+    assert.equal(dev.diagnostics.dbPath.toLowerCase(), dbPath.toLowerCase());
+    assert.equal(dev.diagnostics.counts.subjects, 0);
+    assert.ok(!JSON.stringify(dev.diagnostics).includes('p@x.com'), 'no row content, only counts');
+    config.buildMode = null;
+    app = await buildApp(db);
+    const prod = (await app.inject({ method: 'GET', url: '/health/build' })).json();
+    await app.close();
+    assert.equal(prod.diagnostics, undefined, 'an unstamped (release) build exposes no database path');
+  } finally {
+    config.buildMode = saved.mode; config.dbPath = saved.path;
+    db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });

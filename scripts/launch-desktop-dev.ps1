@@ -100,6 +100,9 @@ $env:SMARTLEARN_AI_PROVIDER = $Provider
 $env:SMARTLEARN_AI_CONSENT = 'true'
 $env:SMARTLEARN_CODEX_TIMEOUT_MS = '1200000'
 $env:SMARTLEARN_BUILD_HEAD = "$head$dirty"
+$env:SMARTLEARN_BUILD_CONTENT = $identity.inputsHash
+# DEV only: the title bar names the build (ASCII only in this file).
+$env:SMARTLEARN_WINDOW_TITLE = "SmartLearn DEV - v$($identity.version) - $head$dirty"
 # DEV only: the signed-in session survives closing the app until "Sair". The server refuses this flag in production.
 $env:SMARTLEARN_DEV_PERSISTENT_SESSION = 'true'
 
