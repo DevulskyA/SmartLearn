@@ -22,8 +22,8 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 ## AGORA — TAREFA ATIVA
 
 - T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 0/0
-  Objetivo: Separar specs independentes em grupos, mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes
-  Próximo passo: Ler scripts/e2e.mjs e playwright.config.* e a medição de 2026-10-04 em validation.md
+  Resultado: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
+  Próximo passo: DECISÃO de como atingir ≤ 8 min
 
 ## PRÓXIMO
 

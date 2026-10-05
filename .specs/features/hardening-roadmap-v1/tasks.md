@@ -395,7 +395,8 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 
 ### T-F6-03 — Partição e tempo-alvo do e2e completo · M
 - Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
-- Próximo passo: ler `scripts/e2e.mjs` e `playwright.config.*` (workers/projetos) e a medição de 2026-10-04 em `validation.md` (`grep -n "T-F6-03" validation.md`); definir a partição antes de medir.
+- Resultado: medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados (491 s × 490 s), então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers (evidência em `validation.md`, T-F6-03).
+- Próximo passo: DECISÃO de como atingir ≤ 8 min: (a) acelerar os testes mais lentos sem perder cobertura (accessibility axe 5×15 s, select-ui, stats-responsive, lesson-editor), (b) medir 3 workers com atenção ao `0xC0000142`, ou (c) redefinir a meta; depois 3 execuções consecutivas.
 - Comando: `npm run test:e2e` (suíte completa, 2 workers, cronometrar; 3 execuções consecutivas só depois da partição).
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
