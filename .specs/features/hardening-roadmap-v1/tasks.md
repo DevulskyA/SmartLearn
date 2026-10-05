@@ -526,7 +526,7 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 - Gate: `server/test/generation-budget.test.js` + inventário + migração (`migrations*.test.js`).
 
 ### T-F10-04b — Integrar escopo + orçamento + idioma no caminho de geração · M
-- Status: `[ ]` · Requisitos: R-12, R-13 · Dependências: T-F10-02a, T-F10-03, T-F10-04a
+- Status: `[✓]` 2026-10-05 · BASE_SHA `40255d6` · IMPLEMENTATION_SHA `e4e482c` (evidência em `validation.md`) · Requisitos: R-12, R-13 · Dependências: T-F10-02a, T-F10-03, T-F10-04a
 - Fazer: `createDraft` percorre, nesta ordem: reuso (T-F10-03) → escopo aprovado e tamanho (já existente: `SCOPE_VIOLATION`/`INPUT_TOO_LARGE`) → `generationLocale` → estimativa → reserva → provedor → validação de idioma/esquema → `settle`/`release`; erro após o envio debita a estimativa (conservador) e fica registrado; nenhum caminho chama o provedor sem passar por todos os passos.
 - Proof targets (RED): espião de provedor prova a ordem e a contagem de chamadas em cada recusa; falha de idioma/esquema não deixa reserva ativa; "caminho que pula a reserva" fica vermelho (teste de inventário de chamadas ao provedor).
 - Gate: `server/test/generation-pipeline-guards.test.js` + `ai-drafts.test.js` + `draft-input-binding.test.js`.
