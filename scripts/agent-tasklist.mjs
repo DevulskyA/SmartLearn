@@ -106,7 +106,7 @@ export function validationFor(wt) {
 /** "TESTES AO VIVO" for the worktree whose board this is: ITS artifacts judged against ITS current head. */
 function testsFor(wt) {
   const head = gitOut(wt, ['rev-parse', 'HEAD']);
-  const docsOnlySince = (from, to) => onlyConductorDocs(gitOut(wt, ['diff', '--name-only', from, to]).split('\n'));
+  const docsOnlySince = (from, to, suite) => onlyConductorDocs(gitOut(wt, ['diff', '--name-only', from, to]).split('\n'), suite);
   return renderTestsSection(readArtifacts(artifactDir(wt)), { currentHead: head, docsOnlySince }) + HEARTBEAT_SCRIPT;
 }
 

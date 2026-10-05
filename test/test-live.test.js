@@ -111,6 +111,14 @@ test('commits after a run that only touch conductor/ keep the result valid; any 
   // unit tests READ conductor/**/plan.md, so a plan change is a change of what was tested
   assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor/tracks/hardening-roadmap-v1/plan.md']), false);
   assert.equal(onlyConductorDocs(['conductor/tracks/content-quality/plan.md']), false);
+  // server and e2e never read conductor/, so ANY conductor/ change keeps them valid — but a code change never does
+  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'server'), true);
+  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'e2e'), true);
+  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md', 'server/src/app.js'], 'server'), false);
+  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'unit'), false);
+  const srvArt = { suite: 'server', state: 'PASS', headTested: 'aaaaaaa1' };
+  assert.equal(effectiveState(srvArt, { currentHead: 'bbbbbbb2', docsOnlySince: (_f, _t, suite) => onlyConductorDocs(['conductor/tracks/x/plan.md'], suite) }).state, 'PASS');
+  assert.equal(effectiveState({ ...srvArt, suite: 'unit' }, { currentHead: 'bbbbbbb2', docsOnlySince: (_f, _t, suite) => onlyConductorDocs(['conductor/tracks/x/plan.md'], suite) }).state, 'STALE');
   assert.equal(onlyConductorDocs(['conductor/tracks.md']), true);
   assert.equal(onlyConductorDocs(['conductor/tracks.md', 'src/app.js']), false);
   assert.equal(onlyConductorDocs([]), false); // nothing changed => not "docs only" (heads differ for another reason)

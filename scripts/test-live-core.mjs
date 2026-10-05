@@ -115,7 +115,7 @@ export function effectiveState(artifact, { currentHead, alive = pidAlive, now = 
   const sameHead = !!currentHead && artifact.headTested === currentHead;
   // Commits made after the run that touch ONLY conductor/ (the plan, tracks, notes that record the result) cannot
   // change what was tested: the result still holds. Any other changed file makes it STALE.
-  const docsOnly = !sameHead && !!currentHead && !!docsOnlySince && docsOnlySince(artifact.headTested, currentHead) === true;
+  const docsOnly = !sameHead && !!currentHead && !!docsOnlySince && docsOnlySince(artifact.headTested, currentHead, artifact.suite) === true;
   const headMatches = sameHead || docsOnly;
   if (stored === 'RUNNING') {
     if (!alive(artifact.runnerPid)) return { state: 'ABORTED', note: 'processo do runner não existe mais (sem estado final)', headMatches };
@@ -131,8 +131,11 @@ export function effectiveState(artifact, { currentHead, alive = pidAlive, now = 
  * True when every changed path is a GENERATED view (conductor/.view/** or conductor/tracks.md) and there is at least one — pure, the
  * caller supplies the list. Other conductor/ files (plan.md, ...) are READ by unit tests, so changing them invalidates a result.
  */
-export function onlyConductorDocs(paths) {
+export function onlyConductorDocs(paths, suite) {
   const list = (paths ?? []).map((x) => String(x).trim().replace(/\\/g, '/')).filter(Boolean);
+  // the server and e2e suites never read conductor/ (nothing in server/ or e2e/ references it), so ANY conductor/ change keeps them
+  // valid; unit tests read conductor/**/plan.md, so for them only the generated views are exempt
+  if (suite === 'server' || suite === 'e2e') return list.length > 0 && list.every((f) => f.startsWith('conductor/'));
   return list.length > 0 && list.every((f) => f === 'conductor/tracks.md' || f.startsWith('conductor/.view/'));
 }
 
@@ -153,7 +156,7 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
 /** headValidation() for the worktree `wt`: ITS recorded results judged against ITS current git head (reads files and runs git). */
 export function headValidationFor(wt) {
   const git = (args) => { try { return execFileSync('git', args, { cwd: wt, encoding: 'utf8' }).trim(); } catch { return ''; } };
-  const docsOnlySince = (from, to) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'));
+  const docsOnlySince = (from, to, suite) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'), suite);
   return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince });
 }
 

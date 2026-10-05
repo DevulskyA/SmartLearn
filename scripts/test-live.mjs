@@ -26,7 +26,7 @@ const [, , suiteName, ...extra] = process.argv;
 if (suiteName === 'status') {
   const head = git(['rev-parse', 'HEAD']);
   for (const a of readArtifacts(dir)) {
-    const docsOnlySince = (from, to) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'));
+    const docsOnlySince = (from, to, suite) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'), suite);
     const eff = effectiveState(a, { currentHead: head, docsOnlySince });
     console.log(`${a.suite.padEnd(7)} ${eff.state.padEnd(8)} ${a.counts.done}/${a.counts.total ?? '?'} ok=${a.counts.passed} fail=${a.counts.failed} skip=${a.counts.skipped} exit=${a.exitCode ?? '-'} head=${a.headTested.slice(0, 7)}${eff.note ? ` (${eff.note})` : ''}`);
   }
