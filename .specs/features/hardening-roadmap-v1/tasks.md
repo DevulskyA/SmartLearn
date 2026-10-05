@@ -238,7 +238,7 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 ### T-F3-01 — Tabela e máquina de estados de jobs · M
 - Status: `[ ]` · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
 - Contrato adicional (decisão 2026-10-04): o job conhece, direta ou por referência coesa, usuário, unidade/`sourceScope` aprovado, `sourceLanguage`, `generationLocale`, estimativa/reserva de consumo, estado/fase e consumo final; um job NUNCA amplia o escopo depois de criado sem nova validação de custo e autorização de domínio (INV-13).
-- Superfície: nova migração `031-generation-jobs.sql` (somente adição), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
+- Superfície: nova migração aditiva (próxima livre: `033-generation-jobs.sql`; 031 e 032 já usadas por F10), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
 - Segurança de dados: migração aditiva, backup `pre-migrate` (T-F1-02) obrigatório.
