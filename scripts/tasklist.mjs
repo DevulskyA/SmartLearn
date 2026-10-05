@@ -97,8 +97,8 @@ export function viewHtml(model, { title = '', marco = '', validationLine = '' } 
   const decisoes = `<h2>DECISÕES HUMANAS PENDENTES (${model.decisions.length})</h2><ul>${model.decisions.map((d) => ptr(d.id, `${d.title} · ${d.text}${d.after.length ? ` (após ${d.after.join(', ')})` : ''}`)).join('') || none}</ul>`;
   const g = model.progress;
   const activeSub = g.active ? ` · subtarefas da ativa ${esc(g.active.id)} ${g.active.done}/${g.active.total}` : '';
-  return `<p class="hdr"><strong>TRACK:</strong> ${esc(title)}<br><strong>MARCO ATUAL:</strong> ${esc(marco || model.marco)}<br><strong>PROGRESSO:</strong> tarefas ${g.tasksDone}/${g.tasksTotal}${activeSub} · horizonte preparado ${g.horizon.prepared}/${g.horizon.total}</p>
-<p class="muted legend">Tarefa: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] decisão humana · [=] dividida (as filhas contam como tarefas) — Subtarefa (só da ativa e das READY): [x] feita · [>] atual · [ ] pendente (itens de checklist dentro de um bloco de tarefa) — Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas · [!] nada executável</p>
+  return `<p class="hdr"><strong>TRACK:</strong> ${esc(title)}<br><strong>MARCO ATUAL:</strong> ${esc(marco || model.marco)}<br><strong>PROGRESSO:</strong> tarefas ${g.tasksDone}/${g.tasksTotal}${activeSub}</p>
+<p class="muted legend">Tarefa: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] decisão humana · [=] dividida (as filhas contam como tarefas) — Subtarefa (só da ativa e da próxima): [x] feita · [>] atual · [ ] pendente (itens de checklist dentro de um bloco de tarefa) — Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas · [!] nada executável</p>
 ${agora}${proximo}<h2>ROADMAP</h2>${phases}${bloqueadas}${decisoes}<h2>VALIDAÇÃO</h2><p class="hdr val">${esc(validationLine || '—')}</p>`;
 }
 

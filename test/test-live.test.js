@@ -105,31 +105,34 @@ test('SUITES run the same tests as the project scripts (a narrower discovery wou
   assert.ok(!SUITES.e2e.args.some((a) => /@playwright\/test\/cli\.js/.test(a)), 'the live runner must not bypass scripts/e2e.mjs');
 });
 
-test('commits after a run that only touch conductor/ keep the result valid; any code change makes it STALE', async () => {
-  const { onlyConductorDocs } = await import('../scripts/test-live-core.mjs');
-  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor\\.view\\tasklist.html']), true);
-  // unit tests READ conductor/**/plan.md, so a plan change is a change of what was tested
-  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor/tracks/hardening-roadmap-v1/plan.md']), true);
-  assert.equal(onlyConductorDocs(['conductor/tracks/content-quality/plan.md']), false);
-  // server and e2e never read conductor/, so ANY conductor/ change keeps them valid — but a code change never does
-  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'server'), true);
-  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'e2e'), true);
-  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md', 'server/src/app.js'], 'server'), false);
-  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md'], 'unit'), true);
-  assert.equal(onlyConductorDocs(['conductor/tracks/hardening-roadmap-v1/plan.md', 'scripts/context-check.mjs'], 'unit'), false);
-  const srvArt = { suite: 'server', state: 'PASS', headTested: 'aaaaaaa1' };
-  assert.equal(effectiveState(srvArt, { currentHead: 'bbbbbbb2', docsOnlySince: (_f, _t, suite) => onlyConductorDocs(['conductor/tracks/x/plan.md'], suite) }).state, 'PASS');
-  assert.equal(effectiveState({ ...srvArt, suite: 'unit' }, { currentHead: 'bbbbbbb2', docsOnlySince: (_f, _t, suite) => onlyConductorDocs(['conductor/tracks/x/plan.md'], suite) }).state, 'STALE');
-  assert.equal(onlyConductorDocs(['conductor/tracks.md']), true);
-  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'src/app.js']), false);
-  assert.equal(onlyConductorDocs([]), false); // nothing changed => not "docs only" (heads differ for another reason)
-  const art = { suite: 'unit', state: 'PASS', headTested: 'aaaaaaa1', runnerPid: 1, exitCode: 0, updatedAt: new Date().toISOString(), counts: { total: 1, done: 1, passed: 1, failed: 0, skipped: 0 } };
-  const docs = effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true });
-  assert.equal(docs.state, 'PASS');
-  assert.equal(docs.docsOnly, true);
-  assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => false }).state, 'STALE');
-  assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false }).state, 'STALE'); // no resolver => strict
-  assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /só views geradas depois/);
+test('FRESHNESS BY REAL SURFACE: a later change makes a suite STALE only when it can affect what that suite proved (docs-only never does)', async () => {
+  const { unaffectedBy, suitesAffectedBy } = await import('../scripts/test-live-core.mjs');
+  const SUITE = ['unit', 'server', 'e2e'];
+  const stale = (paths) => SUITE.filter((s) => !unaffectedBy(paths, s));
+  // DOCS_ONLY_PATH: plan, validation, specs, docs, status, generated views, any .md: no suite goes stale
+  assert.deepEqual(stale(['conductor/tracks.md', 'conductor\\.view\\tasklist.html', 'conductor/tracks/hardening-roadmap-v1/plan.md', '.specs/features/x/validation.md', '.specs/STATE.md', 'docs/a.md', 'CLAUDE.md']), []);
+  // LOW_RISK_PATH: a tooling-only change invalidates the unit suite alone; server and e2e keep their PASS
+  assert.deepEqual(stale(['scripts/context-check.mjs', 'test/context-check.test.js', '.specs/features/x/validation.md']), ['unit']);
+  // product surfaces
+  assert.deepEqual(stale(['src/app.js']), ['unit', 'e2e']);
+  assert.deepEqual(stale(['public/index.html', 'e2e/a.spec.js']), ['unit', 'e2e']);
+  assert.deepEqual(stale(['server/src/app.js']), ['unit', 'server', 'e2e']);
+  assert.deepEqual(stale(['package.json']), SUITE, 'shared/unknown surfaces invalidate everything');
+  assert.deepEqual(stale(['conductor/tracks.md', 'server/src/app.js']), ['unit', 'server', 'e2e'], 'one product file in a docs commit still counts');
+  assert.deepEqual(suitesAffectedBy('scripts/e2e.mjs').sort(), SUITE.slice().sort(), 'a runner script is not "tooling only"');
+  assert.equal(unaffectedBy([], 'unit'), false, 'nothing changed => heads differ for another reason: not "unaffected"');
+  // the pure state function uses it: a docs-only commit after the run keeps PASS, a product commit makes it STALE
+  const art = { suite: 'server', state: 'PASS', headTested: 'aaaaaaa1', runnerPid: 1, exitCode: 0, updatedAt: new Date().toISOString(), counts: { total: 1, done: 1, passed: 1, failed: 0, skipped: 0 } };
+  const at = (paths, suite = 'server') => effectiveState({ ...art, suite }, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: (_f, _t, s) => unaffectedBy(paths, s) });
+  assert.equal(at(['.specs/features/x/validation.md', 'conductor/tracks/x/plan.md']).state, 'PASS');
+  assert.equal(at(['.specs/features/x/validation.md', 'conductor/tracks/x/plan.md'], 'unit').state, 'PASS');
+  assert.equal(at(['scripts/plan-sync.mjs']).state, 'PASS', 'tooling does not stale server');
+  assert.equal(at(['scripts/plan-sync.mjs'], 'unit').state, 'STALE');
+  assert.equal(at(['server/src/app.js']).state, 'STALE');
+  assert.equal(effectiveState({ ...art, suite: 'e2e' }, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: (_f, _t, s) => unaffectedBy(['src/app.js'], s) }).state, 'STALE');
+  assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false }).state, 'STALE', 'no resolver => strict');
+  assert.equal(at(['.specs/a.md']).docsOnly, true);
+  assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /sem efeito nesta suíte/);
 });
 
 test('VALIDAÇÃO DO HEAD ATUAL: an old PASS never reads as PASS of the current head; nothing recorded is not proven either', () => {
@@ -149,7 +152,7 @@ test('VALIDAÇÃO DO HEAD ATUAL: an old PASS never reads as PASS of the current 
   // one suite at an old head, or failing, spoils the whole answer
   assert.equal(headValidation([art('unit', 'bbbbbbb2'), art('server', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
   assert.equal(headValidation([art('unit', 'bbbbbbb2', 'FAIL')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
-  // commits after the run that only touch conductor/ do not invalidate it; anything else does
+  // later commits that cannot affect the suite do not invalidate it; anything else does
   assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => true }).proven, true);
   assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => false }).proven, false);
 });

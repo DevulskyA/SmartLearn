@@ -2,7 +2,7 @@
 // PLAN SYNC. conductor/tracks/hardening-roadmap-v1/plan.md is a PURE PROJECTION of the normalized execution model (scripts/context-core.mjs
 // buildModel), which is derived from tasks.md (+ PROGRAM.md for the order, spec.md for gate titles). Nothing is hand-written: deleting
 // plan.md and running `npm run plan:sync` recreates it byte-identical, and `context:check` fails on any drift.
-// PROGRESSIVE ELABORATION: AGORA (the active task, full subtask tree) · PRÓXIMO (execution-ready tasks with their subtasks) · ROADMAP
+// PROGRESSIVE ROADMAP: AGORA (the active task, full subtask tree) · PRÓXIMO (the ONE next execution-ready task) · ROADMAP
 // (every task, one line each, nothing disappears) · BLOQUEADAS · DECISÕES HUMANAS PENDENTES · VALIDAÇÃO.
 //   node scripts/plan-sync.mjs           rewrites (or creates) plan.md when stale
 //   node scripts/plan-sync.mjs --check   exits 1 when plan.md differs from what tasks.md implies
@@ -20,7 +20,7 @@ export const END = '<!-- PLAN:END -->';
 const REGION = /<!-- PLAN:BEGIN[^\n]*-->[\s\S]*?<!-- PLAN:END -->/;
 export const NO_VALIDATION_LINE = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)';
 
-const LEGEND = 'Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.';
+const LEGEND = 'Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Roadmap progressivo: AGORA = o resultado ativo com a árvore completa; PRÓXIMO = SÓ o próximo resultado pronto (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e a próxima; o progresso global é só de tarefas.';
 
 const subLines = (subtasks, base, mark = true) => subtasks.map((r) => `${' '.repeat(base + r.depth * 2)}- [${r.mark}] ${r.text}${mark && r.mark === '>' ? '  ← EM EXECUÇÃO' : ''}`);
 
@@ -31,7 +31,6 @@ export function renderRegion(model, validationLine = NO_VALIDATION_LINE) {
   out.push(`ATIVA AGORA: ${active ? `${active.id} (${active.group})` : 'nenhuma'}`
     + ` · PRÓXIMA: ${model.next ?? 'nenhuma elegível'} · TAREFAS: ${progress.tasksDone}/${progress.tasksTotal}`
     + ` · SUBTAREFAS DA ATIVA: ${progress.active ? `${progress.active.id} ${progress.active.done}/${progress.active.total}` : '—'}`
-    + ` · HORIZONTE PREPARADO: ${progress.horizon.prepared}/${progress.horizon.total}`
     + ` · BLOQUEADAS: ${blocked.length} · DECISÕES HUMANAS: ${decisions.length}`, '');
   out.push(LEGEND, '');
   out.push('## AGORA', '');

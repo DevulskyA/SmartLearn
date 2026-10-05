@@ -10,8 +10,8 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit, nextReady, executionReady, genericSubtasks, missingMinimum, buildModel, readinessGaps, classifyTasks, safeWorkRemaining, norm as normText } from './context-core.mjs';
-import { planDrift, renderPlanFile, readInputs } from './plan-sync.mjs';
+import { FEATURE, FILES, STATE_NAME, taskBlocks, resumeCockpit, nextReady, genericSubtasks, buildModel, readinessGaps, safeWorkRemaining, norm as normText } from './context-core.mjs';
+import { planDrift, readInputs } from './plan-sync.mjs';
 import { headValidationFor } from './test-live-core.mjs';
 export const CANONICAL = [
   'CLAUDE.md',
@@ -38,7 +38,6 @@ const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
 /** @param io {read(path)->string|null, tracked(path)->bool, ignored(path)->bool} */
 export function checkContext(io) {
   const problems = [];
-  const warnings = [];
   const fail = (msg) => problems.push(msg);
   const text = {};
   for (const f of CANONICAL) {
@@ -83,7 +82,6 @@ export function checkContext(io) {
   // ---- task queue
   let active = null;
   let idle = false; // no active task AND no safe work left: every remaining task is a human decision or waits for one
-  const context = { minimum: { noOutcome: [], noGate: [] } };
   if (tasks) {
     const blocks = taskBlocks(tasks);
     const ids = new Set(blocks.map((b) => b.id));
@@ -123,36 +121,16 @@ export function checkContext(io) {
       // "Comando:" is optional; "Próximo passo:" belongs to the active task only
     }
 
-    // ---- PROGRESSIVE ELABORATION: detail just in time. A task is worked only when it is EXECUTION_READY (a "Subtarefas:" list
-    // with at least one verifiable leaf); the next ready task must be ready BEFORE it is promoted; distant tasks stay one line.
-    const programText = text[`${FEATURE}/PROGRAM.md`] ?? '';
-    const ready = nextReady(blocks, programText);
-    const lacks = (b) => !executionReady(b);
-    if (active && lacks(active)) fail(`EXECUTION_READY: the active task ${active.id} has no "Subtarefas:" list with at least one verifiable leaf`);
-    if (ready[0] && lacks(ready[0])) fail(`EXECUTION_READY: ${ready[0].id} is the next ready task but has no "Subtarefas:" list; elaborate it before promoting it`);
-    if (ready[0] && !lacks(ready[0])) { const gaps = readinessGaps(ready[0], blocks); if (gaps.length) fail(`EXECUTION_READY: ${ready[0].id} is the next ready task but lacks: ${gaps.join(', ')}`); }
-    if (!active && ready[0] && lacks(ready[0])) fail(`PROMOTION: the active task was closed but the next ready task ${ready[0].id} has no "Subtarefas:"; elaborate it first`);
-    for (const b of ready.slice(1)) if (lacks(b)) warnings.push(`${b.id} is shown in PRÓXIMO without subtasks (SEM SUBTAREFAS)`);
-    const shownIds = new Set([...(active ? [active.id] : []), ...ready.map((b) => b.id)]);
-    for (const b of blocks) {
+    // ---- READINESS (Outcome-Driven Lean, progressive roadmap): only the ACTIVE outcome and the ONE next ready outcome need detail
+    // (Outcome/Fazer, Gate, known dependencies, >= 1 verifiable leaf subtask). Everything else stays one line and is never linted.
+    const next = nextReady(blocks, text[`${FEATURE}/PROGRAM.md`] ?? '')[0] ?? null;
+    for (const [role, b] of [['active', active], ['next', next]]) {
+      if (!b) continue;
+      const gaps = readinessGaps(b, blocks);
+      if (gaps.length) fail(`EXECUTION_READY: ${role} task ${b.id} lacks: ${gaps.join(', ')}`);
       const generic = genericSubtasks(b);
-      if (!generic.length) continue;
-      if (shownIds.has(b.id)) fail(`${b.id}: generic subtask(s) cannot be verified: ${generic.map((r) => `"${r.text}"`).join(', ')}`);
-      else warnings.push(`${b.id}: generic subtask(s): ${generic.map((r) => `"${r.text}"`).join(', ')}`);
+      if (generic.length) fail(`${b.id}: generic subtask(s) cannot be verified: ${generic.map((r) => `"${r.text}"`).join(', ')}`);
     }
-    // premature elaboration is reported, never hidden: a task with subtasks that is neither active nor shown in PRÓXIMO
-    const premature = blocks.filter((b) => b.subtasks.length && b.status !== '✓' && !shownIds.has(b.id)).map((b) => b.id);
-    if (premature.length) warnings.push(`premature subtask lists (distant tasks should stay one line): ${premature.join(', ')}`);
-    // minimum for a deterministic state: Outcome/Fazer and Gate; fails only for the active and the shown (READY) tasks
-    const min = missingMinimum(blocks);
-    for (const b of blocks.filter((x) => shownIds.has(x.id))) {
-      if (min.noOutcome.includes(b.id)) fail(`${b.id}: no Outcome/Fazer line (the active and READY tasks need one)`);
-      if (min.noGate.includes(b.id)) fail(`${b.id}: no Gate line (the active and READY tasks need one)`);
-    }
-    const otherNoOutcome = min.noOutcome.filter((id) => !shownIds.has(id));
-    const otherNoGate = min.noGate.filter((id) => !shownIds.has(id));
-    if (otherNoOutcome.length || otherNoGate.length) warnings.push(`task blocks below the minimum: ${otherNoOutcome.length} without Outcome/Fazer, ${otherNoGate.length} without Gate`);
-    context.minimum = { noOutcome: otherNoOutcome, noGate: otherNoGate };
     const previous = io.previousTasks?.() ?? null;
     if (previous) for (const m of preservationProblems(previous, tasks)) fail(m);
   }
@@ -208,7 +186,7 @@ export function checkContext(io) {
       if (!locations.some((l) => l.startsWith(p) || p.startsWith(l))) fail(`external path without an ARTIFACTS.md entry: ${m[0]} (in ${f})`);
     }
   }
-  return { ok: problems.length === 0, problems, warnings, minimum: context.minimum, active: active?.id ?? null, idle };
+  return { ok: problems.length === 0, problems, active: active?.id ?? null, idle };
 }
 
 /** Cold-start answers resolved ONLY from tracked canonical files. */
@@ -254,8 +232,9 @@ export function preservationProblems(previousText, currentText) {
 }
 
 /**
- * The named properties of the progressive-elaboration contract, each PASS or FAIL (gating ones fail context:check; the horizon and the
- * premature-expansion lint are reported but never block). Derived from tasks.md (+ PROGRAM/spec) and compared with plan.md.
+ * The named properties that guard REAL STATE (each one gates context:check): no task lost or duplicated, a next task exists while safe
+ * work remains, completed work preserved, human gates classified correctly, honest progress, plan == projection of tasks.md.
+ * (Readiness and visibility of the plan view are covered by CONTEXT_CHECK and PLAN_SYNC, not restated as extra properties.)
  */
 export function contextReport(io) {
   const base = checkContext(io);
@@ -267,7 +246,7 @@ export function contextReport(io) {
   const eff = model.eff;
   const section = (name) => new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(plan)?.[1] ?? '';
   const results = [];
-  const add = (name, pass, detail = '', gating = true) => results.push({ name, pass: !!pass, detail, gating });
+  const add = (name, pass, detail = '') => results.push({ name, pass: !!pass, detail });
 
   const planIds = [...plan.matchAll(/^ *- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
   const want = blocks.map((b) => b.id);
@@ -275,40 +254,16 @@ export function contextReport(io) {
   const extra = planIds.filter((id) => !want.includes(id));
   add('ALL_TASKS_VISIBLE', missing.length === 0 && extra.length === 0, `${planIds.length} rows for ${want.length} tasks${missing.length ? `; missing/duplicated: ${missing.join(' ')}` : ''}${extra.length ? `; unknown: ${extra.join(' ')}` : ''}`);
 
-  const activeBlock = blocks.find((b) => b.status === '>');
-  const leaves = activeBlock?.subtasks.filter((r) => r.leaf) ?? [];
-  const current = leaves.filter((r) => r.mark === '>');
-  const idle = !activeBlock && !safeWorkRemaining(blocks, eff); // nothing active and nothing safe left: the gaps below do not apply
-  const gaps = idle ? [] : activeBlock ? [...(leaves.length ? [] : ['subtasks']), ...(current.length === 1 ? [] : [`exactly one current subtask (found ${current.length})`]), ...(genericSubtasks(activeBlock).length ? ['generic subtasks'] : []), ...readinessGaps(activeBlock, blocks).filter((g) => /Outcome|Gate/.test(g))] : ['no active task'];
-  add('ACTIVE_TASK_FULLY_DECOMPOSED', gaps.length === 0, activeBlock ? `${activeBlock.id}: ${gaps.join(', ') || `${leaves.length} leaves, current subtask marked`}` : idle ? 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO' : 'no active task');
-
-  const agora = section('AGORA');
-  add('ACTIVE_SUBTASK_VISIBLE', idle || current.length === 1 && agora.includes(`- [>] ${current[0].text}  ← EM EXECUÇÃO`), current.length === 1 ? `"${current[0].text.slice(0, 50)}"` : idle ? 'none (idle)' : 'no single current subtask');
-
+  const activeBlock = blocks.find((b) => b.status === '>') ?? null;
   const open = blocks.filter((b) => b.status !== '✓' && b.status !== '=');
   const next = model.ready[0] ?? null;
   // a next task is only required while safe work OTHER than the active task remains (the last executable task has no successor)
   const othersSafe = safeWorkRemaining(blocks.filter((b) => b.id !== activeBlock?.id), eff);
   add('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !othersSafe, next ? next.id : othersSafe ? 'no ready task' : 'none: the active task is the last executable one');
-  const nextBlock = next ? model.byId.get(next.id) : null;
-  const nextGaps = nextBlock ? readinessGaps(nextBlock, blocks) : [];
-  add('NEXT_TASK_EXECUTION_READY', !nextBlock || nextGaps.length === 0, nextBlock ? `${nextBlock.id}${nextGaps.length ? ` lacks: ${nextGaps.join(', ')}` : ' ready'}` : 'nothing to promote');
-  const near = model.ready.slice(1).filter((r) => !r.ready).map((r) => r.id);
-  add('NEAR_HORIZON_PREPARED', near.length === 0, `${model.progress.horizon.prepared}/${model.progress.horizon.total} prepared${near.length ? `; without subtasks: ${near.join(' ')}` : ''}`, false);
-  const shownIds = new Set([...(activeBlock ? [activeBlock.id] : []), ...model.ready.map((r) => r.id)]);
-  const premature = open.filter((b) => b.subtasks.length && !shownIds.has(b.id)).map((b) => b.id);
-  add('DISTANT_TASKS_NOT_PREMATURELY_EXPANDED', premature.length === 0, premature.length ? `beyond NEXT 3 with subtasks: ${premature.join(' ')}` : 'distant tasks are one line', false);
 
   const previous = io.previousTasks?.() ?? null;
   const lost = previous ? preservationProblems(previous, read(FILES.tasks) ?? '') : [];
   add('COMPLETED_TASKS_PRESERVED', lost.length === 0, previous ? (lost[0] ?? 'compared with the previous committed tasks.md') : 'no previous version to compare');
-
-  const subLine = /^ +- \[(?:x|>| |!)\] (?!\*\*).+$/;
-  const planSubs = (name) => section(name).split('\n').filter((l) => subLine.test(l));
-  const rendered = normText(renderPlanFile({ ...inputs, validationLine: undefined }));
-  const renderedSub = (name) => (new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(rendered)?.[1] ?? '').split('\n').filter((l) => subLine.test(l));
-  const durable = ['AGORA', 'PRÓXIMO'].every((n) => JSON.stringify(planSubs(n)) === JSON.stringify(renderedSub(n)));
-  add('SUBTASK_STATE_DURABLE', durable, durable ? 'plan subtasks == tasks.md subtasks (plan.md can be deleted and regenerated)' : 'plan.md carries subtask state that tasks.md does not imply');
 
   const plannedDecisions = [...section('DECISÕES HUMANAS PENDENTES').matchAll(/^- (T-[A-Z0-9]+-\d+[a-z]?) ·/gm)].map((m) => m[1]);
   const badDecisions = plannedDecisions.filter((id) => eff.get(id) !== 'D');
@@ -323,16 +278,16 @@ export function contextReport(io) {
   let cockpit = '';
   try { cockpit = resumeCockpit(read, { head: 'check' }).join('\n'); } catch { cockpit = ''; }
   const fake = /SUBTAREFAS: \d|SUBTASKS=\d|^### \[.\] .* subtarefas \d/m.test(plan) || /SUBTASKS=\d/.test(cockpit);
-  add('NO_FAKE_GLOBAL_SUBTASK_PROGRESS', !fake, fake ? 'a global subtask total appears in the plan or the cockpit' : 'subtask counts only for the active and READY tasks');
+  add('NO_FAKE_GLOBAL_SUBTASK_PROGRESS', !fake, fake ? 'a global subtask total appears in the plan or the cockpit' : 'subtask counts only for the active and next tasks');
 
   const drift = planDrift(read(FILES.plan) ?? '', inputs);
   add('PLAN_SYNC', !drift.drift, drift.drift ? drift.reason : 'plan.md equals the projection of tasks.md');
   add('CONTEXT_CHECK', base.ok, base.ok ? (base.idle ? 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO' : `active ${base.active}`) : `${base.problems.length} problem(s): ${base.problems[0]}`);
-  return { results, base, ok: base.ok && results.every((r) => r.pass || !r.gating) };
+  return { results, base, ok: base.ok && results.every((r) => r.pass) };
 }
 
 export function printReport(report) {
-  for (const r of report.results) console.log(`${r.name}=${r.pass ? 'PASS' : 'FAIL'}${r.gating ? '' : ' (aviso)'} · ${r.detail}`);
+  for (const r of report.results) console.log(`${r.name}=${r.pass ? 'PASS' : 'FAIL'} · ${r.detail}`);
   return report.ok;
 }
 
@@ -369,12 +324,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   else console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
   console.log('--- named properties (PASS/FAIL) ---');
   const allOk = printReport(report);
-  if (result.warnings.length) {
-    console.log(`CONTEXT_WARN (${result.warnings.length}, not failures):`);
-    for (const w of result.warnings) console.log(`  - ${w}`);
-    const m = result.minimum;
-    if (m.noOutcome.length) console.log(`  · without Outcome/Fazer: ${m.noOutcome.join(' ')}`);
-    if (m.noGate.length) console.log(`  · without Gate: ${m.noGate.join(' ')}`);
-  }
   if (!result.ok || !allOk) { if (result.ok) console.error('CONTEXT_CHECK=FAIL: a gating named property failed'); process.exit(1); }
 }

@@ -113,8 +113,7 @@ const HEARTBEAT_STALE_MS = 15000;
 export function effectiveState(artifact, { currentHead, alive = pidAlive, now = Date.now(), docsOnlySince = null } = {}) {
   const stored = artifact.state;
   const sameHead = !!currentHead && artifact.headTested === currentHead;
-  // Commits made after the run that touch ONLY conductor/ (the plan, tracks, notes that record the result) cannot
-  // change what was tested: the result still holds. Any other changed file makes it STALE.
+  // Commits made after the run that cannot affect this suite (see suitesAffectedBy) leave the result valid; any other changed file makes it STALE.
   const docsOnly = !sameHead && !!currentHead && !!docsOnlySince && docsOnlySince(artifact.headTested, currentHead, artifact.suite) === true;
   const headMatches = sameHead || docsOnly;
   if (stored === 'RUNNING') {
@@ -124,26 +123,37 @@ export function effectiveState(artifact, { currentHead, alive = pidAlive, now = 
     return { state: 'RUNNING', note, headMatches, docsOnly };
   }
   if (!headMatches) return { state: 'STALE', note: `último resultado ${stored}`, headMatches };
-  return { state: stored, note: docsOnly ? 'commits posteriores só mudam conductor/ (docs)' : '', headMatches, docsOnly };
+  return { state: stored, note: docsOnly ? 'commits posteriores sem efeito nesta suíte (docs/ferramentas)' : '', headMatches, docsOnly };
 }
 
 /**
- * True when every changed path is a GENERATED view (conductor/.view/** or conductor/tracks.md) and there is at least one — pure, the
- * caller supplies the list. Other conductor/ files (plan.md, ...) are READ by unit tests, so changing them invalidates a result.
+ * FRESHNESS BY REAL SURFACE (Outcome-Driven Lean Execution, rule 11): a recorded result is stale only when a later change can affect what
+ * that suite proved. The suites a changed path can affect:
+ *   docs, specs, validation, plan, status (*.md, docs/, .specs/, conductor/)  none  (no executable effect; drift is caught by context:check)
+ *   tooling scripts and test files                                            unit
+ *   e2e/, src/, public/                                                       e2e + unit
+ *   server/                                                                   server + e2e + unit (unit tests import server modules)
+ *   anything else (package.json, shared contracts, config, native)            every suite
  */
-export function onlyConductorDocs(paths, suite) {
-  const list = (paths ?? []).map((x) => String(x).trim().replace(/\\/g, '/')).filter(Boolean);
-  // the server and e2e suites never read conductor/ (nothing in server/ or e2e/ references it), so ANY conductor/ change keeps them
-  // valid; unit tests read conductor/**/plan.md, so for them only the generated views are exempt
-  if (suite === 'server' || suite === 'e2e') return list.length > 0 && list.every((f) => f.startsWith('conductor/'));
-  // the GENERATED plan of the active track is exempt for unit too: it is derived output whose drift is caught by plan-sync --check and
-  // context:check (run at every head), and its validation line would otherwise make every recorded PASS stale the moment it is committed
-  return list.length > 0 && list.every((f) => f === 'conductor/tracks.md' || f.startsWith('conductor/.view/') || f === 'conductor/tracks/hardening-roadmap-v1/plan.md');
+const TOOLING = /^(scripts\/(context-[a-z]+|plan-sync|agent-tasklist|tasklist|test-live[a-z-]*)\.mjs|test\/[^/]+\.test\.js)$/;
+export function suitesAffectedBy(file) {
+  const f = String(file).trim().replace(/\\/g, '/');
+  if (/^(docs|\.specs|conductor)\//.test(f) || /\.md$/.test(f)) return [];
+  if (TOOLING.test(f)) return ['unit'];
+  if (/^(e2e|src|public)\//.test(f)) return ['e2e', 'unit'];
+  if (f.startsWith('server/')) return ['server', 'e2e', 'unit'];
+  return ['unit', 'server', 'e2e'];
+}
+
+/** True when at least one path changed and none of them can affect `suite` — pure, the caller supplies the list. */
+export function unaffectedBy(paths, suite) {
+  const list = (paths ?? []).map((x) => String(x).trim()).filter(Boolean);
+  return list.length > 0 && list.every((f) => !suitesAffectedBy(f).includes(suite));
 }
 
 /**
  * The one-line answer to "was the CURRENT head validated?". An old PASS is never PASS of this head: every recorded suite must be
- * PASS for the current head (docs-only commits after the run keep it valid); anything else, or nothing recorded, is NOT PROVEN.
+ * PASS for the current head (later commits that cannot affect the suite keep it valid); anything else, or nothing recorded, is NOT PROVEN.
  */
 export function headValidation(artifacts, { currentHead, alive, now, docsOnlySince } = {}) {
   const prefix = 'VALIDAÇÃO DO HEAD ATUAL:';
@@ -158,7 +168,7 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
 /** headValidation() for the worktree `wt`: ITS recorded results judged against ITS current git head (reads files and runs git). */
 export function headValidationFor(wt) {
   const git = (args) => { try { return execFileSync('git', args, { cwd: wt, encoding: 'utf8' }).trim(); } catch { return ''; } };
-  const docsOnlySince = (from, to, suite) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'), suite);
+  const docsOnlySince = (from, to, suite) => unaffectedBy(git(['diff', '--name-only', from, to]).split('\n'), suite);
   return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince });
 }
 
@@ -183,7 +193,7 @@ export function renderTestsSection(artifacts, { currentHead, alive, now, docsOnl
     const eff = effectiveState(a, { currentHead, alive, now, docsOnlySince });
     const c = a.counts ?? emptyCounts();
     const total = c.total ?? '?';
-    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (só views geradas depois)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ HEAD atual`;
+    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (depois, só mudanças sem efeito nesta suíte)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ HEAD atual`;
     const running = eff.state === 'RUNNING';
     summaries.push(`${a.suite} ${stateLabel(eff.state)} ${c.done}/${c.total ?? '?'}`);
     const dur = running ? fmtDuration(Date.now() - Date.parse(a.startedAt)) : fmtDuration(a.durationMs ?? Date.parse(a.updatedAt) - Date.parse(a.startedAt));

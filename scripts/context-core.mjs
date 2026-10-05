@@ -158,7 +158,7 @@ export function blockNote(b, blocks, eff) {
   return waits.length ? `aguarda ${waits.join(', ')}` : 'marcada bloqueada';
 }
 
-// PROGRESSIVE ELABORATION: detail just in time, visibility all the time. Only the active task and the next ready ones carry a
+// PROGRESSIVE ROADMAP: detail just in time, visibility all the time. Only the active task and the ONE next ready task carry a
 // subtask list; a task may be worked only when it is EXECUTION_READY (a "Subtarefas:" list with at least one verifiable leaf).
 const GENERIC_SUBTASKS = [
   'trabalhar na implementação', 'trabalhar na tarefa', 'revisar código', 'revisar o código', 'testar tudo', 'testar', 'revisar', 'implementar',
@@ -171,10 +171,10 @@ export const executionReady = (b) => !!b?.subtasks?.some((r) => r.leaf);
 export const genericSubtasks = (b) => (b?.subtasks ?? []).filter((r) => r.leaf && isGenericSubtask(r.text));
 
 /**
- * The next tasks, in PROGRAM.md order, that the plan shows as PRÓXIMO: runnable (class ' '), not the active one, and predictable: every
- * open dependency is the active task or an earlier task of this same list. NEXT 1 is the first; at most `limit` are returned.
+ * The next outcome(s), in PROGRAM.md order, that the plan shows as PRÓXIMO: runnable (class ' '), not the active one, and predictable: every
+ * open dependency is the active task or an earlier task of this same list. Only ONE is prepared by default (progressive roadmap).
  */
-export function nextReady(blocks, programText, limit = 3) {
+export function nextReady(blocks, programText, limit = 1) {
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const eff = classifyTasks(blocks);
   const active = blocks.find((b) => b.status === '>') ?? null;
@@ -187,15 +187,6 @@ export function nextReady(blocks, programText, limit = 3) {
     if (b.deps.every((d) => !open(d) || d === active?.id)) shown.push(b);
   }
   return shown;
-}
-
-/** Tasks that lack the minimum for a deterministic state: an Outcome/Fazer and a Gate. */
-export function missingMinimum(blocks) {
-  return {
-    // 'Outcome' or an equivalent statement of what the task delivers (Objetivo, Fazer, Contrato adicional)
-    noOutcome: blocks.filter((b) => !/^- (Outcome|Objetivo|Fazer|Contrato adicional)\b/m.test(b.body)).map((b) => b.id),
-    noGate: blocks.filter((b) => !/^- Gate\b/m.test(b.body)).map((b) => b.id),
-  };
 }
 
 /** The numbers shown everywhere (plan, panel, cockpit): tasks exclude split parents. There is NO global subtask total (subtasks exist only for the active and READY tasks). */
@@ -249,57 +240,47 @@ export function programOrder(programText) {
   return order;
 }
 
+export const EXECUTION_MODEL = 'OUTCOME_DRIVEN_LEAN';
+export const POLICY = '.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution';
+
 /** @param read (path) => string|null   @returns {string[]} the cockpit lines (derived, never authority) */
 export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada)' } = {}) {
   const tasksText = read(FILES.tasks) ?? '';
   const blocks = taskBlocks(tasksText);
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const active = blocks.find((b) => b.status === '>') ?? null;
-  const count = (s) => blocks.filter((b) => b.status === s).length;
   const pc = progressCounts(blocks);
   const model = buildModel({ tasksText, programText: read(FILES.program) ?? '', specText: read(FILES.spec) ?? '' });
-  const spec = norm(read(FILES.spec));
-  const gateName = (hg) => (new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').trim().replace(/\s*\(.*$/, '');
-  const next3 = model.ready.map((r) => model.byId.get(r.id));
-  const blockers = active ? active.deps.filter((d) => byId.get(d)?.status !== '✓').map((d) => `${d}[${STATE_NAME[byId.get(d)?.status] ?? 'MISSING'}]`) : [];
-  const relevantGates = [...new Set([...(active?.gates ?? []), ...next3.flatMap((b) => b.gates)])];
   // the standing prohibitions are rules 8 and 9 of tasks.md "Regras de execução" (derived here, never restated by hand)
   const ruleText = (n) => new RegExp(`^${n}\\. (.+)$`, 'm').exec(norm(tasksText))?.[1] ?? '';
   // long values are cut at a sentence/word boundary and point to where the whole text lives
   const where = active ? ` [completo: tasks.md, bloco ${active.id}]` : '';
   const fit = (v, n = 230) => (v == null ? null : v.length > n ? `${boundaryCut(v, n)}${where}` : v);
   const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => r.replace(/`/g, '')).join(' | '); // whole rules: a cut prohibition is worse than a long line
-  const lines = [
+  const safe = safeWorkRemaining(blocks);
+  const current = active?.subtasks.find((r) => r.leaf && r.mark === '>')?.text;
+  const step = active ? [current, field(active, 'Próximo passo'), field(active, 'Comando') && `cmd: ${field(active, 'Comando')}`].filter(Boolean).join(' · ') : '';
+  const unmet = active ? active.deps.filter((d) => byId.get(d)?.status !== '✓').map((d) => `${d}[${STATE_NAME[byId.get(d)?.status] ?? 'MISSING'}]`) : model.blocked.slice(0, 3).map((b) => `${b.id} → ${b.chain}`);
+  const next = model.ready[0];
+  const decisions = model.decisions.map((d) => d.id);
+  const id = active?.id ?? '<ACTIVE_TASK>';
+  return [
+    `EXECUTION_MODEL=${EXECUTION_MODEL}`,
+    `POLICY=${POLICY}`,
     `HEAD=${head}`,
-    `PHASE=${model.marco}`,
-    `ACTIVE_TASK=${active ? `${active.id} — ${active.heading}` : (safeWorkRemaining(blocks) ? '(none: tasks.md must mark exactly one task [>])' : '(none)')}`,
-    `SAFE_WORK_REMAINING=${safeWorkRemaining(blocks) ? 'YES' : 'NO'}`,
-    `ACTIVE_STATUS=${active ? STATE_NAME[active.status] : 'NONE'}`,
-    `DONE_COUNT=${count('✓')}  OPEN_COUNT=${count(' ') + count('>')}  BLOCKED_COUNT=${pc.blockedByDep}  HUMAN_GATE_COUNT=${pc.decisions}`,
-    `TASKS=${pc.tasksDone}/${pc.tasksTotal}  (BLOCKED_COUNT = waits for a dependency; HUMAN_GATE_COUNT = needs the user's decision)`,
-    `ACTIVE_SUBTASKS=${model.progress.active ? `${model.progress.active.id} ${model.progress.active.done}/${model.progress.active.total}` : '(none)'}`,
-    `NEXT_READY=${model.ready.length ? model.ready.map((r) => `${r.id} ${r.ready ? `READY ${r.counts.done}/${r.counts.total}` : 'SEM SUBTAREFAS'}`).join(' | ') : '(none)'}  HORIZONTE_PREPARADO=${model.progress.horizon.prepared}/${model.progress.horizon.total}`,
+    `CURRENT_OUTCOME=${active ? `${active.id} — ${active.heading}${field(active, 'Outcome') ?? field(active, 'Fazer') ? ` — ${fit(field(active, 'Outcome') ?? field(active, 'Fazer'))}` : ''}` : `(none${safe ? ': tasks.md must mark exactly one task [>]' : ': SAFE_WORK_REMAINING=NO'})`}`,
+    `ACCEPTANCE=${fit(field(active, 'Gate')) ?? '(none)'}`,
+    `CURRENT_STEP=${fit(step || null, 300) ?? '(none)'}`,
+    `NEXT_OUTCOME=${next ? `${next.id} — ${next.title}${next.ready ? '' : ' (SEM SUBTAREFAS: elaborar antes de promover)'}` : '(none ready)'}`,
+    `BLOCKERS=${unmet.length ? unmet.join(', ') : 'none'}`,
+    `HUMAN_DECISIONS=${decisions.length}${decisions.length ? ` (${decisions.slice(0, 8).join(' ')}${decisions.length > 8 ? ' …' : ''}; detalhe: spec.md §8 / plan.md)` : ''}`,
+    `TASKS=${pc.tasksDone}/${pc.tasksTotal} · PHASE=${model.marco} · BLOCKED=${pc.blockedByDep} (waits for a task) · HUMAN_GATES=${pc.decisions} (needs the user)`,
     validationLine,
-    '',
-    `CURRENT_GOAL=${fit(field(active, 'Outcome') ?? field(active, 'Fazer')) ?? '(none)'}`,
-    `CURRENT_PROOF_REQUIRED=${fit(field(active, 'Gate')) ?? '(none)'}`,
-    `NEXT_STEP=${fit(field(active, 'Próximo passo')) ?? '(none)'}`,
-    `NEXT_COMMAND=${fit(field(active, 'Comando')) ?? '(none)'}`,
-    '',
-    `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${b.heading})`).join(' | ') : '(none ready)'}`,
-    `BLOCKERS_FOR_CURRENT=${blockers.length ? blockers.join(', ') : 'none'}`,
-    `OPEN_HUMAN_GATES_RELEVANT=${relevantGates.length ? relevantGates.map((g) => `${g} ${gateName(g)}`.trim()).join(' | ') : 'none for the current and next tasks'}`,
     `PROHIBITIONS=${prohibitions || '(see tasks.md "Regras de execução" 8-9)'}`,
-    '',
-    'READ_NOW:',
-    `  ${FILES.tasks}: grep -n "${active?.id ?? '<ACTIVE_TASK>'}" (read that block only)`,
-    `  ${FILES.validation}: grep -n "${active?.id ?? '<ACTIVE_TASK>'}"`,
-    ...(active?.requirements.length ? [`  ${FILES.spec}: ${active.requirements.map((r) => `"### ${r}"`).join(', ')} (only those)`] : []),
-    '  the code the task names',
+    `READ_NOW: ${FILES.tasks} grep -n "${id}" (that block only) · ${FILES.validation} grep -n "${id}"${active?.requirements.length ? ` · ${FILES.spec} ${active.requirements.map((r) => `"### ${r}"`).join(', ')}` : ''} · the code the task names`,
     'DO_NOT_READ_NOW: whole PROGRAM/tasks/spec/validation, .specs/archive/**, .specs/benchmarks, .specs/HANDOFF.md (derived, may not exist)',
-    '(cockpit is DERIVED from tasks.md/PROGRAM.md/spec.md/plan.md and recomputed on every run; it is never authority)',
+    '(cockpit is DERIVED from tasks.md/PROGRAM.md/spec.md and recomputed on every run; it is never authority)',
   ];
-  return lines;
 }
 
 // ======================================================================================================================
@@ -486,8 +467,6 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
     tasksDone: realBlocks.filter((b) => b.status === '✓').length,
     tasksTotal: realBlocks.length,
     active: active ? { id: active.id, ...sc(active) } : null,
-    ready: ready.map((r) => ({ id: r.id, label: r.label, ...r.counts })),
-    horizon: { prepared: ready.filter((r) => r.ready).length, total: ready.length },
   };
   return {
     blocks, eff, byId, active: activeModel, ready, blocked, decisions, phases, progress,

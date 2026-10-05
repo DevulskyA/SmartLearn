@@ -71,7 +71,9 @@ test('three densities: AGORA = active task (Estado/Resultado atual/Próximo pass
   const prox = section(region, 'PRÓXIMO');
   assert.match(prox, /^### T-F1-03 — READY — Follow-up with subtasks$/m);
   assert.match(prox, /^ {2}Subtarefas 1\/2:\n {2}- \[x\] one\n {2}- \[ \] two$/m);
-  assert.match(prox, /^### T-F6-06a — SEM SUBTAREFAS \(não pronta\) — Child A$/m, 'a shown task without subtasks is visible and labelled, never hidden');
+  assert.doesNotMatch(prox, /T-F6-06a/, 'ONE next outcome only: the following ready task stays in ROADMAP, one line');
+  const bare = section(renderPlanRegion({ ...inputs, tasksText: tasksText.replace('- Subtarefas:\n  - [x] one\n  - [ ] two\n', '') }), 'PRÓXIMO');
+  assert.match(bare, /^### T-F1-03 — SEM SUBTAREFAS \(não pronta\) — Follow-up with subtasks$/m, 'a next task without subtasks is visible and labelled, never hidden');
   const roadmap = region.slice(region.indexOf('## ROADMAP'), region.indexOf('## BLOQUEADAS'));
   assert.equal(taskRows(roadmap).length, taskBlocks(tasksText).length, 'every task is one ROADMAP line');
   assert.doesNotMatch(roadmap, /step a1|\[ \] two|\[x\] one/, 'ROADMAP never expands subtasks');
@@ -82,16 +84,17 @@ test('three densities: AGORA = active task (Estado/Resultado atual/Próximo pass
 
 test('metrics: global TAREFAS only; subtasks only for the active task and the READY ones; no global subtask total anywhere', () => {
   const region = renderPlanRegion(inputs);
-  assert.match(region, /^ATIVA AGORA: T-F1-02 \(S1\) · PRÓXIMA: T-F1-03 · TAREFAS: \d+\/\d+ · SUBTAREFAS DA ATIVA: T-F1-02 2\/4 · HORIZONTE PREPARADO: 1\/2 · /m);
+  assert.match(region, /^ATIVA AGORA: T-F1-02 \(S1\) · PRÓXIMA: T-F1-03 · TAREFAS: \d+\/\d+ · SUBTAREFAS DA ATIVA: T-F1-02 2\/4 · BLOQUEADAS: /m);
+  assert.doesNotMatch(region, /HORIZONTE/);
   assert.doesNotMatch(region, /SUBTAREFAS: \d/);
   const model = buildModel(inputs);
-  assert.deepEqual(model.progress.ready.map((r) => [r.id, r.done, r.total]), [['T-F1-03', 1, 2], ['T-F6-06a', 0, 0]]);
+  assert.deepEqual(model.ready.map((r) => r.id), ['T-F1-03'], 'PRÓXIMO is ONE prepared outcome');
   assert.equal('subDone' in progressCounts(model.blocks), false);
   const files = { [FILES.tasks]: tasksText, [FILES.program]: programText, [FILES.spec]: specText };
   const cockpit = resumeCockpit((p) => files[p] ?? null, { head: 'h' }).join('\n');
   assert.doesNotMatch(cockpit, /SUBTASKS=\d/);
-  assert.match(cockpit, /^ACTIVE_SUBTASKS=T-F1-02 2\/4$/m);
-  assert.match(cockpit, /^NEXT_READY=T-F1-03 READY 1\/2 \| T-F6-06a SEM SUBTAREFAS {2}HORIZONTE_PREPARADO=1\/2$/m);
+  assert.match(cockpit, /^CURRENT_STEP=Step B \(current\) · /m);
+  assert.match(cockpit, /^NEXT_OUTCOME=T-F1-03 — Follow-up with subtasks$/m);
 });
 
 test('ONE projection: plan.md, the HTML board and the cockpit show the same numbers because they render the same model', () => {
@@ -104,7 +107,7 @@ test('ONE projection: plan.md, the HTML board and the cockpit show the same numb
   assert.match(md, new RegExp(`TAREFAS: ${d}/${t} `));
   assert.match(html, new RegExp(`tarefas ${d}/${t} · subtarefas da ativa T-F1-02 2/4`));
   assert.match(cockpit, new RegExp(`^TASKS=${d}/${t} `, 'm'));
-  assert.match(cockpit, /^PHASE=S1 — First$/m);
+  assert.match(cockpit, /^TASKS=\d+\/\d+ · PHASE=S1 — First · /m);
   assert.deepEqual(parsePlan(md).tasks.map((x) => x.id), model.phases.map((p) => p.id), 'the legacy phase list also comes out of the same plan');
 });
 
@@ -179,8 +182,7 @@ test('the HTML renders the same model in the same order: AGORA tree once, READY 
   assert.equal((html.match(/step a1/g) ?? []).length, 1);
   assert.match(html, /<li class="t s0 now"><span class="m">\[>\]<\/span><span class="x">Step B \(current\) <span class="muted">← em execução<\/span>/);
   assert.match(html, /<h3>T-F1-03 — READY · subtarefas 1\/2 — Follow-up with subtasks<\/h3>/);
-  assert.match(html, /<h3>T-F6-06a — SEM SUBTAREFAS \(não pronta\) — Child A<\/h3>/);
-  assert.match(html, /PROGRESSO:<\/strong> tarefas \d+\/\d+ · subtarefas da ativa T-F1-02 2\/4 · horizonte preparado 1\/2/);
+  assert.match(html, /PROGRESSO:<\/strong> tarefas \d+\/\d+ · subtarefas da ativa T-F1-02 2\/4<\/p>/);
   assert.match(html, /<h3>\[>\] S1 — First · tarefas 1\/4<\/h3>/);
   assert.match(html, /<p class="hdr val">VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/);
   assert.match(html, /class="muted legend"/);
@@ -307,7 +309,7 @@ test('a split task says what its children are; the legend says subtarefas are ch
   assert.match(renderChecklistHtml({ tasks: [], view: buildModel(inputs), title: 'T' }), /as filhas contam como tarefas/);
 });
 
-test('PRÓXIMO says why each task is ready (Por quê): NEXT 1 + the next dependency-ready ones, never a task behind an unfinished task; explains a task that passes ahead', () => {
+test('PRÓXIMO is ONE outcome and says why it is ready (Por quê); a task behind an unfinished task is never offered; it explains a task that passes ahead', () => {
   const t = [
     '### T-F1-01 — Foundation · S', '- Status: `[✓]` IMPLEMENTATION_SHA `abc1234` · Dependências: nenhuma', '',
     '### T-F1-02 — Active · S', '- Status: `[>]` · Dependências: T-F1-01', '- Subtarefas:', '  - [>] only step', '',
@@ -318,8 +320,9 @@ test('PRÓXIMO says why each task is ready (Por quê): NEXT 1 + the next depende
   ].join('\n');
   const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-02 → T-F1-09 |\n| **S4** Jobs | y | T-F2-01 → T-F2-02 → T-F2-03 |\n';
   const prox = section(renderPlanRegion({ tasksText: t, programText: prog, specText: '' }), 'PRÓXIMO');
-  assert.deepEqual([...prox.matchAll(/^### (T-\S+) — READY/gm)].map((m) => m[1]), ['T-F1-09', 'T-F2-01', 'T-F2-03'], 'T-F2-02 waits for an unfinished task that is not the active one: not in the window');
-  assert.match(prox, /### T-F1-09 — READY — After the active one\n {2}Por quê: S1 · dependências concluídas: ?.*depois de T-F1-02|### T-F1-09 — READY — After the active one\n {2}Por quê: S1 · sem dependência pendente · depois de T-F1-02/);
-  assert.match(prox, /### T-F2-01 — READY — Jobs base\n {2}Por quê: S4 · independente de S1 · dependências concluídas: T-F1-01$/m);
-  assert.match(prox, /### T-F2-03 — READY — Independent explanation\n {2}Por quê: S4 · independente de S1 · sem dependência pendente · passa à frente de T-F2-02 \(aguardam T-F2-01\)$/m);
+  assert.deepEqual([...prox.matchAll(/^### (T-\S+) — READY/gm)].map((m) => m[1]), ['T-F1-09'], 'ONE next outcome; T-F2-02 waits for an unfinished task that is not the active one');
+  assert.match(prox, /### T-F1-09 — READY — After the active one\n {2}Por quê: S1 · sem dependência pendente · depois de T-F1-02/);
+  // the first sprint has nothing runnable: the independent task passes ahead of the ones that wait, and says so
+  const ahead = section(renderPlanRegion({ tasksText: t.replace('### T-F1-09', '### T-F1-09x').replace('- Status: `[ ]` · Dependências: T-F1-02\n- Subtarefas:\n  - [ ] RED: depois da ativa', '- Status: `[!]` · Dependências: T-F1-02\n- Subtarefas:\n  - [ ] RED: depois da ativa').replace('### T-F2-01 — Jobs base · S\n- Status: `[ ]`', '### T-F2-01 — Jobs base · S\n- Status: `[!]`'), programText: prog, specText: '' }), 'PRÓXIMO');
+  assert.match(ahead, /### T-F2-03 — READY — Independent explanation\n {2}Por quê: S4 · independente de S1 · sem dependência pendente · passa à frente de T-F2-01, T-F2-02 /);
 });
