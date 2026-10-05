@@ -13,7 +13,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-08 (S3) · PRÓXIMA: T-F6-03 · TAREFAS: 24/70 · SUBTAREFAS: 13/14 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 25/70 · SUBTAREFAS: 14/14 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
 
 VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a); HEAD atual ≠ HEAD testado
 
@@ -21,32 +21,15 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## AGORA — TAREFA ATIVA
 
-- T-F6-08 · Causa da falha funcional do run 2 do e2e completo · S3 · subtarefas 13/14
-  Estado: Execução concluída; nada em execução agora; falta só a decisão de fechamento
-  Resultado: Sintoma #account-show-register oculto não reproduzido em 10 rodadas; causa NOT_PROVEN; nenhuma correção feita
-  Próximo passo: Decidir o fechamento de T-F6-08 ou a próxima ação
-  - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
-    - [x] w1-r1 — PASS 38/38 (208 s)
-    - [x] w1-r2 — PASS 38/38 (207 s)
-    - [x] w1-r3 — PASS 38/38 (208 s)
-    - [x] w1-r4 — PASS 38/38 (199 s)
-    - [x] w1-r5 — FAIL 7 passaram / 8 falharam (50 s): `Target crashed`, não é o sintoma
-  - [x] Rodadas com workers=2 (5): 5 PASS
-    - [x] w2-r1 — PASS 38/38 (131 s)
-    - [x] w2-r2 — PASS 38/38 (127 s)
-    - [x] w2-r3 — PASS 38/38 (132 s)
-    - [x] w2-r4 — PASS 38/38 (126 s)
-    - [x] w2-r5 — PASS 38/38 (126 s)
-  - [x] Coletar os traces das falhas (`trace.zip` do run da w1-r5)
-  - [x] Analisar a taxa de falha por workers (1 × 2)
-  - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
-  - [>] Decidir o fechamento ou a próxima ação
+- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 0/0
+  Objetivo: Separar specs independentes em grupos, mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes
+  Próximo passo: Ler scripts/e2e.mjs e playwright.config.* e a medição de 2026-10-04 em validation.md
 
 ## PRÓXIMO
 
-- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · depois de T-F6-08 · dependências concluídas: T-F6-02
 - T-F3-01 · Tabela e máquina de estados de jobs · S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
 - T-F3-05 · Explicação obrigatória por validação · S4 · independente de S3 · sem dependência pendente · passa à frente de T-F3-02, T-F3-03, T-F3-04 (aguardam T-F3-01)
+- T-F4-03 · Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S5a · independente de S3 · sem dependência pendente
 
 ## BLOQUEADAS POR DEPENDÊNCIA
 
@@ -103,10 +86,26 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F2-05** — Pré-visualização do aceite
 
-### [>] S3 · Verdade do runner — tarefas 0/3 · subtarefas 13/14
+### [>] S3 · Verdade do runner — tarefas 1/3 · subtarefas 14/14
 
-- [>] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo — subtarefas 13/14
-- [ ] **T-F6-03** — Partição e tempo-alvo do e2e completo
+- [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo — subtarefas 14/14
+  - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
+    - [x] w1-r1 — PASS 38/38 (208 s)
+    - [x] w1-r2 — PASS 38/38 (207 s)
+    - [x] w1-r3 — PASS 38/38 (208 s)
+    - [x] w1-r4 — PASS 38/38 (199 s)
+    - [x] w1-r5 — FAIL 7 passaram / 8 falharam (50 s): `Target crashed`, não é o sintoma
+  - [x] Rodadas com workers=2 (5): 5 PASS
+    - [x] w2-r1 — PASS 38/38 (131 s)
+    - [x] w2-r2 — PASS 38/38 (127 s)
+    - [x] w2-r3 — PASS 38/38 (132 s)
+    - [x] w2-r4 — PASS 38/38 (126 s)
+    - [x] w2-r5 — PASS 38/38 (126 s)
+  - [x] Coletar os traces das falhas (`trace.zip` do run da w1-r5)
+  - [x] Analisar a taxa de falha por workers (1 × 2)
+  - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
+  - [x] Decidir o fechamento ou a próxima ação (fechada sem correção; reabrir só se o sintoma reaparecer com trace)
+- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo
 - [ ] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
 ### [ ] S4 · Jobs observáveis — tarefas 0/5

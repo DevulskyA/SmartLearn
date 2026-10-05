@@ -394,19 +394,21 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Gate: duas execuções paralelas curtas verdes; e2e completo verde.
 
 ### T-F6-03 — Partição e tempo-alvo do e2e completo · M
-- Status: `[ ]` · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
+- Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
+- Próximo passo: ler `scripts/e2e.mjs` e `playwright.config.*` (workers/projetos) e a medição de 2026-10-04 em `validation.md` (`grep -n "T-F6-03" validation.md`); definir a partição antes de medir.
+- Comando: `npm run test:e2e` (suíte completa, 2 workers, cronometrar; 3 execuções consecutivas só depois da partição).
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
 - Medição 2026-10-04 @`3608048` em `validation.md` (gate NÃO atingido; a causa da falha do run 2 e a do `0xC0000142` NÃO estão provadas — ver T-F6-08).
 
 ### T-F6-08 — Causa da falha funcional do run 2 do e2e completo · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02 (independente de T-F6-03, que depende do resultado)
+- Status: `[✓]` 2026-10-05 · BASE_SHA `414eb83` · IMPLEMENTATION_SHA nenhum (só evidência, sem código; registro em `23bbb98`) · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02 (independente de T-F6-03, que depende do resultado)
 - Outcome: a causa de `product-value.spec.js:86` (`#account-show-register` oculto após o retry de 20 s) está DISCRIMINADA com evidência; correção SOMENTE se houver defeito demonstrado (produto ou teste); se for carga do ambiente, isso fica provado, não presumido. Proibido subir timeout/retry antes da causa.
 - Hipóteses concorrentes (nenhuma assumida): (a) corrida de inicialização do app: o clique em `[data-screen="account"]` chega antes de a navegação estar ligada; (b) colisão de estado/porta/lane entre workers; (c) backend do worker ainda não pronto; (d) pressão de memória/handles da máquina (compatível com o `0xC0000142` do run 3, que é fato distinto).
 - Evidência anterior (NÃO é prova desta falha): `conductor/tracks/content-quality/plan.md` (~l.724) registra falha com o MESMO sintoma (`#account-show-register` invisível por 30 s, `content-quality-flow.spec.js:143`) classificada como "sensível a carga" por reprodução sob CPU saturada (2/24 no merge e 2/24 no baseline; isolado 6/6), com a causa exata da falha original NÃO reproduzida; `EXECUTION.md` lista também `hoje-block-retest.spec.js` como flake pré-existente. Serve para ordenar as hipóteses, não para concluir a do run 2.
 - Menor discriminador: reexecutar só esse spec N vezes com 1 worker e com 2, com o ambiente descrito (processos alheios contados antes), guardando trace/console/rede da falha; comparar taxa de falha entre as condições.
 - Gate: causa registrada em `validation.md` com contagens; se defeito: RED → GREEN → mesma repetição sem falha.
-- Estado: execução concluída; nada em execução agora; falta só a decisão de fechamento.
+- Estado: concluída; fechada como "sintoma não reproduzido, causa NOT_PROVEN, sem defeito demonstrado".
 - Resultado: sintoma `#account-show-register` oculto não reproduzido em 10 rodadas (0/10); causa NOT_PROVEN; nenhuma correção feita.
 - Subtarefas:
   - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
@@ -424,11 +426,11 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
   - [x] Coletar os traces das falhas (`trace.zip` do run da w1-r5)
   - [x] Analisar a taxa de falha por workers (1 × 2)
   - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
-  - [>] Decidir o fechamento ou a próxima ação
+  - [x] Decidir o fechamento ou a próxima ação (fechada sem correção; reabrir só se o sintoma reaparecer com trace)
 - Execução: CONCLUÍDA em 2026-10-05; o driver terminou (`DONE` em `summary.txt`) e NADA está em execução agora. Driver: `.specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` (rodou sequencialmente `npm run test:e2e:materials` com `E2E_WORKERS` 1 e depois 2). Fatos de `summary.txt`: 10 rodadas, 38 testes cada; workers=1: w1-r1..r4 PASS, w1-r5 FAIL (`Target crashed`, 7 passaram / 8 falharam em 50 s); workers=2: w2-r1..r5 PASS. Análise já registrada em `validation.md` (seção T-F6-08): sintoma `#account-show-register` 0/10, causa NOT_PROVEN, nenhuma correção feita.
 - Resultados em ARQUIVO (não só no terminal): `test-results/t-f6-08/` na worktree (gitignored, mas em disco; espelho a cada 10 s do scratchpad por `test-results/t-f6-08/mirror.sh`): `summary.txt` = uma linha por rodada (exit, segundos, processos antes, id do run, passed/failed) + linhas `FAIL` com o teste + `DONE` no fim; `<tag>.log` = log completo da rodada. Traces de falha: `test-results/<run-id>/**/trace.zip` (o id do run está na linha da rodada em `summary.txt`).
 - Andamento: 10/10 rodadas concluídas (`grep -c "^w[12]-r" test-results/t-f6-08/summary.txt` = 10; última linha `DONE`). Resta só a decisão de fechamento ou de próxima ação (última subtarefa).
-- Próximo passo: decidir o fechamento de T-F6-08 ou a próxima ação (subtarefa `[>]`); qualquer correção só com defeito demonstrado (proibido subir timeout, retry ou sleep antes da causa). Não reexecutar as 10 rodadas sem hipótese nova.
+- Próximo passo: nenhum; tarefa fechada. Reabrir só se o sintoma reaparecer com trace; qualquer correção só com defeito demonstrado (proibido subir timeout, retry ou sleep antes da causa). Não reexecutar as 10 rodadas sem hipótese nova.
 - Comando: `cat test-results/t-f6-08/summary.txt` (RESULTADO FINAL: 10 rodadas, última linha `DONE`); só reexecutar `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` com HIPÓTESE NOVA (grava em `test-results/t-f6-08/`).
 
 ### T-F6-09 — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S
