@@ -532,7 +532,7 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 - Gate: `server/test/generation-pipeline-guards.test.js` + `ai-drafts.test.js` + `draft-input-binding.test.js`.
 
 ### T-F10-05 — "Importar ≠ gerar": guardas de escopo na fronteira · S
-- Status: `[ ]` · Requisitos: R-12 (AC-12.1, 12.6), INV-13 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `742ceb8` · IMPLEMENTATION_SHA `8b09e24` (só testes: as guardas já existiam; evidência em `validation.md`) · Requisitos: R-12 (AC-12.1, 12.6), INV-13 · Dependências: nenhuma
 - Fazer: testes de domínio/HTTP: (a) importar e estruturar um livro de ~300 páginas (fixture) = zero chamadas ao provedor e zero reservas; (b) unidade acima do limite → `INPUT_TOO_LARGE` com orientação, sem chamada nem débito; (c) o corpo de `POST /proposals/:id/drafts` aceita só campos conhecidos (um campo "gere tudo"/lista de propostas é recusado); (d) inventário de rotas: o único caminho até o provedor é a geração por UMA proposta (futuro job herda a mesma guarda).
 - Gate: `server/test/generation-scope-guards.test.js`.
 
