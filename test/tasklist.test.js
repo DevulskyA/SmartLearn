@@ -65,3 +65,9 @@ test('a task line whose id the parser rejects is reported instead of vanishing f
   assert.deepEqual(plan.skipped, ['A11Y-1']);
   assert.match(checkInvariants(plan).join(' '), /A11Y-1/);
 });
+
+test('an IDLE track (every remaining task waits for a human) has no active task; an active one inside it is refused', () => {
+  const idle = parsePlan(SAMPLE.replace('Status: IN_PROGRESS', 'Status: IDLE').replace('[>]', '[H]'));
+  assert.deepEqual(checkInvariants(idle), []);
+  assert.match(checkInvariants(parsePlan(SAMPLE.replace('Status: IN_PROGRESS', 'Status: IDLE')))[0], /IDLE track must have no active/);
+});

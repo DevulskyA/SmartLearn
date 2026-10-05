@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit, nextReady, executionReady, genericSubtasks, missingMinimum, buildModel, readinessGaps, classifyTasks, norm as normText } from './context-core.mjs';
+import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit, nextReady, executionReady, genericSubtasks, missingMinimum, buildModel, readinessGaps, classifyTasks, safeWorkRemaining, norm as normText } from './context-core.mjs';
 import { planDrift, renderPlanFile, readInputs } from './plan-sync.mjs';
 import { headValidationFor } from './test-live-core.mjs';
 export const CANONICAL = [
@@ -82,6 +82,7 @@ export function checkContext(io) {
 
   // ---- task queue
   let active = null;
+  let idle = false; // no active task AND no safe work left: every remaining task is a human decision or waits for one
   const context = { minimum: { noOutcome: [], noGate: [] } };
   if (tasks) {
     const blocks = taskBlocks(tasks);
@@ -113,7 +114,9 @@ export function checkContext(io) {
       }
     }
     const inProgress = blocks.filter((b) => b.status === '>');
-    if (inProgress.length !== 1) fail(`exactly ONE task must be in progress ([>]) in tasks.md, found ${inProgress.length}`);
+    idle = inProgress.length === 0 && !safeWorkRemaining(blocks);
+    if (inProgress.length === 0 && idle) { /* legitimate: ACTIVE_TASK=NONE, SAFE_WORK_REMAINING=NO */ }
+    else if (inProgress.length !== 1) fail(`exactly ONE task must be in progress ([>]) in tasks.md while safe work remains, found ${inProgress.length}`);
     else {
       active = inProgress[0];
       if (!/^- Próximo passo:/m.test(active.body)) fail(`${active.id}: active task has no "Próximo passo:" line`);
@@ -155,9 +158,10 @@ export function checkContext(io) {
   }
   if (plan) {
     const actives = plan.match(/^### \[>\]/gm) ?? [];
-    if (actives.length !== 1) fail(`conductor plan must have exactly ONE active phase ([>]), found ${actives.length}`);
+    const wantActive = idle ? 0 : 1; // an idle program (nothing safe left) has no active phase or row
+    if (actives.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active phase ([>]), found ${actives.length}`);
     const activeRows = plan.match(/^\s*- \[>\] \*\*T-/gm) ?? [];
-    if (activeRows.length !== 1) fail(`conductor plan must have exactly ONE active task row ([>]), found ${activeRows.length}`);
+    if (activeRows.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active task row ([>]), found ${activeRows.length}`);
     const taskIds = [...plan.matchAll(/^\s*- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
     if (new Set(taskIds).size !== taskIds.length) fail('conductor plan lists a task more than once (FASES must hold each task exactly once)');
     const line = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
@@ -204,7 +208,7 @@ export function checkContext(io) {
       if (!locations.some((l) => l.startsWith(p) || p.startsWith(l))) fail(`external path without an ARTIFACTS.md entry: ${m[0]} (in ${f})`);
     }
   }
-  return { ok: problems.length === 0, problems, warnings, minimum: context.minimum, active: active?.id ?? null };
+  return { ok: problems.length === 0, problems, warnings, minimum: context.minimum, active: active?.id ?? null, idle };
 }
 
 /** Cold-start answers resolved ONLY from tracked canonical files. */
@@ -272,15 +276,16 @@ export function contextReport(io) {
   const activeBlock = blocks.find((b) => b.status === '>');
   const leaves = activeBlock?.subtasks.filter((r) => r.leaf) ?? [];
   const current = leaves.filter((r) => r.mark === '>');
-  const gaps = activeBlock ? [...(leaves.length ? [] : ['subtasks']), ...(current.length === 1 ? [] : [`exactly one current subtask (found ${current.length})`]), ...(genericSubtasks(activeBlock).length ? ['generic subtasks'] : []), ...readinessGaps(activeBlock, blocks).filter((g) => /Outcome|Gate/.test(g))] : ['no active task'];
-  add('ACTIVE_TASK_FULLY_DECOMPOSED', gaps.length === 0, activeBlock ? `${activeBlock.id}: ${gaps.join(', ') || `${leaves.length} leaves, current subtask marked`}` : 'no active task');
+  const idle = !activeBlock && !safeWorkRemaining(blocks, eff); // nothing active and nothing safe left: the gaps below do not apply
+  const gaps = idle ? [] : activeBlock ? [...(leaves.length ? [] : ['subtasks']), ...(current.length === 1 ? [] : [`exactly one current subtask (found ${current.length})`]), ...(genericSubtasks(activeBlock).length ? ['generic subtasks'] : []), ...readinessGaps(activeBlock, blocks).filter((g) => /Outcome|Gate/.test(g))] : ['no active task'];
+  add('ACTIVE_TASK_FULLY_DECOMPOSED', gaps.length === 0, activeBlock ? `${activeBlock.id}: ${gaps.join(', ') || `${leaves.length} leaves, current subtask marked`}` : idle ? 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO' : 'no active task');
 
   const agora = section('AGORA');
-  add('ACTIVE_SUBTASK_VISIBLE', current.length === 1 && agora.includes(`- [>] ${current[0].text}  ← EM EXECUÇÃO`), current.length === 1 ? `"${current[0].text.slice(0, 50)}"` : 'no single current subtask');
+  add('ACTIVE_SUBTASK_VISIBLE', idle || current.length === 1 && agora.includes(`- [>] ${current[0].text}  ← EM EXECUÇÃO`), current.length === 1 ? `"${current[0].text.slice(0, 50)}"` : idle ? 'none (idle)' : 'no single current subtask');
 
   const open = blocks.filter((b) => b.status !== '✓' && b.status !== '=');
   const next = model.ready[0] ?? null;
-  add('NEXT_TASK_IDENTIFIED', next || open.length === 0, next ? next.id : 'no ready task');
+  add('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !safeWorkRemaining(blocks, eff), next ? next.id : safeWorkRemaining(blocks, eff) ? 'no ready task' : 'none: SAFE_WORK_REMAINING=NO');
   const nextBlock = next ? model.byId.get(next.id) : null;
   const nextGaps = nextBlock ? readinessGaps(nextBlock, blocks) : [];
   add('NEXT_TASK_EXECUTION_READY', !nextBlock || nextGaps.length === 0, nextBlock ? `${nextBlock.id}${nextGaps.length ? ` lacks: ${nextGaps.join(', ')}` : ' ready'}` : 'nothing to promote');
@@ -318,7 +323,7 @@ export function contextReport(io) {
 
   const drift = planDrift(read(FILES.plan) ?? '', inputs);
   add('PLAN_SYNC', !drift.drift, drift.drift ? drift.reason : 'plan.md equals the projection of tasks.md');
-  add('CONTEXT_CHECK', base.ok, base.ok ? `active ${base.active}` : `${base.problems.length} problem(s): ${base.problems[0]}`);
+  add('CONTEXT_CHECK', base.ok, base.ok ? (base.idle ? 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO' : `active ${base.active}`) : `${base.problems.length} problem(s): ${base.problems[0]}`);
   return { results, base, ok: base.ok && results.every((r) => r.pass || !r.gating) };
 }
 
@@ -356,7 +361,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (!result.ok) {
     console.error(`CONTEXT_CHECK=FAIL (${result.problems.length})`);
     for (const p of result.problems) console.error(`  - ${p}`);
-  } else console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
+  } else if (result.idle) console.log(`CONTEXT_CHECK=PASS · ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO · ${CANONICAL.length} canonical files tracked`);
+  else console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
   console.log('--- named properties (PASS/FAIL) ---');
   const allOk = printReport(report);
   if (result.warnings.length) {

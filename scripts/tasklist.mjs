@@ -105,11 +105,11 @@ ${agora}${proximo}<h2>ROADMAP</h2>${phases}${bloqueadas}${decisoes}<h2>VALIDAÃ‡Ã
 export function checkInvariants({ tasks, status, skipped = [] }) {
   const errors = [];
   const active = tasks.filter((t) => t.state === '>');
-  // An open track has exactly one active task; a CLOSED (DONE) track has none.
-  const expected = status === 'DONE' ? 0 : 1;
+  // An open track has exactly one active task; a CLOSED (DONE) track has none, and so has an IDLE one (every remaining task waits for a human).
+  const expected = status === 'DONE' || status === 'IDLE' ? 0 : 1;
   if (active.length !== expected) {
-    errors.push(status === 'DONE'
-      ? `a DONE track must have no active task ([>]), found ${active.length}`
+    errors.push(status === 'DONE' || status === 'IDLE'
+      ? `a ${status} track must have no active task ([>]), found ${active.length}`
       : `exactly ONE active task ([>]) is required, found ${active.length}`);
   }
   if (tasks.length === 0) errors.push('no tasks parsed from the plan');

@@ -119,6 +119,14 @@ export function classifyTasks(blocks) {
 }
 
 /**
+ * Is there work an agent may safely do without a human? True while a task is active or pending-and-runnable (class ' ').
+ * False when every remaining task is a human decision, blocked by one, or done: the program then legitimately has NO active task.
+ */
+export function safeWorkRemaining(blocks, eff = classifyTasks(blocks)) {
+  return blocks.some((b) => eff.get(b.id) === '>' || eff.get(b.id) === ' ');
+}
+
+/**
  * Why a task is blocked, when the cause is a human decision: [{hg:[HG-xx], task, via}] — own HG ids in its Dependências, and the
  * decisions its open dependencies are (or chain to). Empty when it only waits for ordinary tasks.
  */
@@ -264,7 +272,8 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const lines = [
     `HEAD=${head}`,
     `PHASE=${model.marco}`,
-    `ACTIVE_TASK=${active ? `${active.id} — ${active.heading}` : '(none: tasks.md must mark exactly one task [>])'}`,
+    `ACTIVE_TASK=${active ? `${active.id} — ${active.heading}` : (safeWorkRemaining(blocks) ? '(none: tasks.md must mark exactly one task [>])' : '(none)')}`,
+    `SAFE_WORK_REMAINING=${safeWorkRemaining(blocks) ? 'YES' : 'NO'}`,
     `ACTIVE_STATUS=${active ? STATE_NAME[active.status] : 'NONE'}`,
     `DONE_COUNT=${count('✓')}  OPEN_COUNT=${count(' ') + count('>')}  BLOCKED_COUNT=${pc.blockedByDep}  HUMAN_GATE_COUNT=${pc.decisions}`,
     `TASKS=${pc.tasksDone}/${pc.tasksTotal}  (BLOCKED_COUNT = waits for a dependency; HUMAN_GATE_COUNT = needs the user's decision)`,

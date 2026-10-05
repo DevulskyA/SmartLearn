@@ -156,8 +156,15 @@ test('THIS repository passes its own persistence gate and its cockpit names an a
   assert.deepEqual(result.problems, []);
   const lines = resumeCockpit(io.read, { head: 'test' });
   assert.ok(lines.length <= 40);
-  assert.match(lines.join('\n'), /^ACTIVE_TASK=T-[A-Z0-9]+-\d+[a-z]? — /m);
-  assert.match(lines.join('\n'), /^NEXT_COMMAND=\S/m);
+  const cockpit = lines.join('\n');
+  if (result.idle) {
+    // only human decisions remain: no active task is legitimate
+    assert.match(cockpit, /^ACTIVE_TASK=\(none\)$/m);
+    assert.match(cockpit, /^SAFE_WORK_REMAINING=NO$/m);
+  } else {
+    assert.match(cockpit, /^ACTIVE_TASK=T-[A-Z0-9]+-\d+[a-z]? — /m);
+    assert.match(cockpit, /^NEXT_COMMAND=\S/m);
+  }
   assert.ok(CANONICAL.includes('.specs/ARTIFACTS.md') && CANONICAL.includes('.specs/STATE.md'));
 });
 
@@ -288,4 +295,50 @@ test('NAMED PROPERTIES: a gating FAIL fails the report; the two advisory propert
   assert.equal(advisoryOnly.results.filter((x) => x.gating && !x.pass).length > 0, true, 'T-F1-04 is also checked by the gating minimum, so this report fails for that reason');
   const premature = report(mutate((f) => { f[TASKSP] = f[TASKSP].replace(/(### T-F1-05 — Needs a human · S\n- Status:[^\n]*\n)/, '$1- Subtarefas:\n  - [ ] RED: premature detail\n'); }));
   assert.equal(get(premature, 'DISTANT_TASKS_NOT_PREMATURELY_EXPANDED').pass, false);
+});
+
+// IDLE PROGRAM: when every remaining task is a human decision (or waits for one), there is legitimately NO active task. The gate must
+// pass with ACTIVE_TASK=NONE and SAFE_WORK_REMAINING=NO; it must still refuse "no active task" while runnable work remains.
+function idleFixture() {
+  const files = fixture();
+  const k = `${FEATURE}/tasks.md`;
+  files[k] = files[k]
+    .replace('- Status: `[>]` · Requisitos: R-01 · Dependências: T-F1-01', '- Status: `[✓]` · BASE_SHA `a` · IMPLEMENTATION_SHA `b` · Requisitos: R-01 · Dependências: T-F1-01')
+    .replace('  - [>] RED: o teste da coisa falha pelo motivo certo\n  - [ ] GREEN: a coisa funciona', '  - [x] RED: o teste da coisa falha pelo motivo certo\n  - [x] GREEN: a coisa funciona')
+    .replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-02', '- Status: `[H]` · Requisitos: R-01 · Dependências: HG-01')
+    .replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-01 (anotação', '- Status: `[H]` · Requisitos: R-01 · Dependências: HG-01 (anotação');
+  files[`${FEATURE}/validation.md`] += '\n### T-F1-02 — Active work: PASS\n- proved\n';
+  files['conductor/tracks/hardening-roadmap-v1/plan.md'] = renderPlanFile({ tasksText: files[k], programText: files[`${FEATURE}/PROGRAM.md`], specText: files[`${FEATURE}/spec.md`] });
+  return files;
+}
+
+test('an idle program (only human decisions left) passes with ACTIVE_TASK=NONE and SAFE_WORK_REMAINING=NO', () => {
+  const files = idleFixture();
+  const r = run(files);
+  assert.deepEqual(r.problems, []);
+  assert.equal(r.ok, true);
+  assert.equal(r.active, null);
+  assert.equal(r.idle, true);
+  const rep = report(files);
+  assert.equal(rep.ok, true, JSON.stringify(rep.results.filter((x) => !x.pass)));
+  const text = resumeCockpit(ioOf(files).read).join('\n');
+  assert.match(text, /^ACTIVE_TASK=\(none\)$/m);
+  assert.match(text, /^SAFE_WORK_REMAINING=NO$/m);
+});
+
+test('with runnable work left, "no active task" is still refused and the cockpit says SAFE_WORK_REMAINING=YES', () => {
+  const files = mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace('`[>]`', '`[ ]`'); });
+  const r = run(files);
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => /exactly ONE task must be in progress/.test(p)));
+  assert.match(resumeCockpit(ioOf(files).read).join('\n'), /^SAFE_WORK_REMAINING=YES$/m);
+});
+
+test('an idle program with a stray active row in the plan is refused', () => {
+  const files = idleFixture();
+  const k = 'conductor/tracks/hardening-roadmap-v1/plan.md';
+  files[k] = files[k].replace('- [x] **T-F1-02**', '- [>] **T-F1-02**');
+  const r = run(files);
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => /NO active (phase|task row)/.test(p)), JSON.stringify(r.problems));
 });
