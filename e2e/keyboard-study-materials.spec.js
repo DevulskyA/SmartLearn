@@ -227,7 +227,7 @@ test('ACCESS-5 Materiais: a proposal title is named, renamed and its source exce
   await page.keyboard.press('Tab');
   await expect(item.locator('[data-action="save-proposal-title"]')).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#sources-message')).toContainText('Título atualizado', { timeout: 8000 });
+  await expect(item.getByRole('status')).toHaveText('Título salvo', { timeout: 8000 });
   await expect(item.locator('[data-action="save-proposal-title"]')).toBeFocused(); // not lost while the button was disabled
 
   // the excerpt is a disclosure: its state is exposed and it works with Enter

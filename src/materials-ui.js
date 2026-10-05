@@ -390,7 +390,12 @@ function createSourceProposalItem(proposal) {
   // What comes after is what the trecho DOES now (generate / generating / ready / failed): it is redrawn when the server says its job moved.
   const slot = document.createElement("div");
   slot.className = "source-proposal-slot";
-  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, slot);
+  // The save confirmation lives next to the field it is about (the page-level line can be far off-screen). The live region exists
+  // empty BEFORE the save: a region inserted together with its text is not announced.
+  const saved = createTextElement("p", "source-proposal-saved", "");
+  saved.setAttribute("role", "status");
+  titleInput.addEventListener("input", () => { saved.textContent = ""; }); // an edit makes "Título salvo" stale
+  li.append(range, titleInput, saveBtn, saved, toggleBtn, excerpt, slot);
   if (!proposal.generatable) li.classList.add("is-editorial");
   renderActionSlot(li, proposal);
   return li;
@@ -761,11 +766,13 @@ async function onIndexClick(event) {
   if (saveBtn) {
     const input = item.querySelector(".source-proposal-title-input");
     if (!input) return;
+    const saved = item.querySelector(".source-proposal-saved");
+    if (saved) saved.textContent = "";
     saveBtn.disabled = true;
     try {
       const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
       if (result.ok) {
-        setSourcesMessage("Título atualizado.");
+        if (saved) saved.textContent = "Título salvo";
       } else {
         setSourcesMessage(result.message || "Não foi possível salvar o título.", true);
       }

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -102,7 +103,7 @@ test('uploading a real PDF through the Fontes card produces inspectable proposal
   const titleInput = firstItem.locator('.source-proposal-title-input');
   await titleInput.fill('Fisiologia renal: aula revisada');
   await firstItem.locator('[data-action="save-proposal-title"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Título atualizado', { timeout: 5000 });
+  await expect(firstItem.getByRole('status')).toHaveText('Título salvo', { timeout: 5000 });
 
   // Confirm the correction actually persisted server-side, not just in the DOM.
   const proposalId = await firstItem.getAttribute('data-proposal-id');
@@ -160,7 +161,7 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
   // the status line is overwritten by the very next action; the coverage note must not be
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="save-proposal-title"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Título atualizado', { timeout: 8000 });
+  await expect(item.getByRole('status')).toHaveText('Título salvo', { timeout: 8000 });
   await expect(note).toBeVisible();
   await expect(note).toContainText('O resumo não cobre essa página');
 
@@ -169,4 +170,64 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
   await page.setInputFiles('#sources-file-input', { name: 'limpo.pdf', mimeType: 'application/pdf', buffer: clean });
   await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
   await expect(note).toBeHidden();
+});
+
+// T-F4-03 (R-06 AC-06.3, F-32/F-33)
+const TWO_UNITS = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos'], { outline: [{ title: 'Filtração', page: 1 }, { title: 'Barreira', page: 2 }] });
+
+test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft exists; with none it stays out of the way', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'ordem.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  // no draft yet: the block is not there and the search is the first thing of the panel
+  await expect(page.locator('#sources-drafts')).toBeHidden();
+  await expect(page.locator('#sources-topic-form')).toBeVisible();
+
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await page.locator('[data-action="lesson-back"]').click();
+
+  const drafts = page.locator('#sources-drafts');
+  await expect(drafts).toBeVisible();
+  const order = await page.evaluate(() => {
+    const d = document.querySelector('#sources-drafts');
+    const form = document.querySelector('#sources-topic-form');
+    const index = document.querySelector('#sources-index');
+    return {
+      beforeSearch: Boolean(d.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING),
+      beforeIndex: Boolean(d.compareDocumentPosition(index) & Node.DOCUMENT_POSITION_FOLLOWING),
+      draftsTop: d.getBoundingClientRect().top,
+      searchTop: form.getBoundingClientRect().top,
+    };
+  });
+  expect(order.beforeSearch).toBe(true);
+  expect(order.beforeIndex).toBe(true);
+  expect(order.draftsTop).toBeLessThan(order.searchTop);
+});
+
+test('F-33: "Salvar título" confirms with "Título salvo" in a role=status next to the field, keeps the focus, and the confirmation clears when the title is edited again', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'salvar.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('.source-proposal-item')).toHaveCount(2, { timeout: 10000 });
+  await page.locator('#sources-index').evaluate((el) => { el.open = true; });
+  const item = page.locator('.source-proposal-item').first();
+  const status = item.getByRole('status');
+  await expect(status).toHaveCount(1); // the live region exists BEFORE the save, so the announcement is not lost
+  await expect(status).toHaveText('');
+  await item.locator('.source-proposal-title-input').fill('Filtração glomerular revisada');
+  const save = item.locator('[data-action="save-proposal-title"]');
+  await save.focus();
+  await page.keyboard.press('Enter');
+  await expect(status).toHaveText('Título salvo', { timeout: 5000 });
+  await expect(status).toBeVisible();
+  await expect(save).toBeFocused();
+  // a second item is untouched
+  await expect(page.locator('.source-proposal-item').nth(1).getByRole('status')).toHaveText('');
+  const axe = await new AxeBuilder({ page }).include('#sources-card').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(axe.violations.filter((v) => ['critical', 'serious'].includes(v.impact)).map((v) => v.id)).toEqual([]);
+  // editing again withdraws a confirmation that no longer describes the field
+  await item.locator('.source-proposal-title-input').fill('Outro título');
+  await expect(status).toHaveText('');
 });

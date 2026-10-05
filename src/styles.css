@@ -4033,6 +4033,21 @@ h1 {
   justify-self: start;
 }
 
+/* "Título salvo": a live region next to the field. Empty, it takes no grid row (absolute, 1px, clipped) but stays in the accessibility tree. */
+.source-proposal-saved {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.source-proposal-saved:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 /* ---- Materiais: topic search, generation progress and the LESSON EDITOR ------------------------------------------------ */
 .sources-subheading,
 .lesson-subheading {
