@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { generateDraft as fakeGenerateDraft, FAKE_PROVIDER_NAME } from '../ai/fake-provider.js';
 import { detectSourceLanguage, checkDraftLanguage, LanguageMismatch } from '../ai/language-contract.js';
 import { ensureGenerationLocale } from './settings.js';
+import { estimateCostUnits, reserve, settle, release, BudgetError } from './generation-budget.js';
 import {
   generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
   ANTHROPIC_PROVIDER_NAME, ProviderRequestError,
@@ -352,6 +353,9 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
  * draft-schema.js regardless of which provider produced it -- "the real
  * one" gets no special trust.
  */
+/** Provider failures that prove no request left the machine: nothing was spent, so the reservation is released. */
+const PRE_SEND_FAILURES = new Set(['MISSING_CREDENTIALS', 'CODEX_NOT_FOUND', 'CODEX_NOT_AUTHENTICATED', 'CALL_LIMIT_EXCEEDED', 'UNKNOWN_PROVIDER']);
+
 export async function createDraft(db, userId, proposalId, {
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 1: bumped from '1' -- the real
   // provider's prompt (anthropic-provider.js) changed materially (varied
@@ -374,6 +378,8 @@ export async function createDraft(db, userId, proposalId, {
   // Test/ops seam: an already-built provider ({name, live, generate, audit?, repair?}) used instead of selectProvider, so a
   // spy can prove how many calls would have reached a model.
   providerImpl = null,
+  // Credit limits for this call (tests); undefined = the configured limits (services/generation-budget.js).
+  budgetLimits = undefined,
   // System/Accept-Language hint, used ONLY to initialize the student's generationLocale the first time (never afterwards).
   localeHint = null,
   // Generation is JIT and reuses what is valid: a repeat request returns the existing draft/lesson with NO provider call.
@@ -400,10 +406,39 @@ export async function createDraft(db, userId, proposalId, {
   // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
   const deadlineMs = provider.timeoutMs ?? timeoutMs;
 
+  // CREDIT (R-12): a provider that reaches an external model never runs without a reservation inside the limits. The
+  // estimate counts every call this provider may make (generate, independent audit, one repair). Refused here = nothing was
+  // sent and nothing is debited. The deterministic test double (live:false) spends nothing external and skips the ledger.
+  const plannedCalls = 1 + (provider.audit ? 1 : 0) + (provider.repair ? 1 : 0);
+  const payloadChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
+  let reservation = null;
+  if (provider.live === true) {
+    try {
+      reservation = reserve(db, userId, { proposalId, estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }), limits: budgetLimits, now });
+    } catch (err) {
+      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', err.message);
+      throw err;
+    }
+  }
+  let callsMade = 1;
+  let budgetClosed = reservation === null;
+  // Exactly one of settle/release, once. Release = nothing external happened; settle = it may have, charged at the estimate of
+  // the calls actually made (no provider reports a measurable cost yet, so the basis is ESTIMATED).
+  const closeBudget = ({ refund = false } = {}) => {
+    if (budgetClosed) return;
+    budgetClosed = true;
+    if (refund) release(db, reservation.id, { now });
+    else settle(db, reservation.id, { consumedUnits: estimateCostUnits({ payloadChars, calls: callsMade }), basis: 'ESTIMATED', now });
+  };
+  try {
+
   let raw;
   try {
     raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion, sourceLanguage, generationLocale }), deadlineMs, 'TIMEOUT');
   } catch (err) {
+    // Failures that happen BEFORE a request can leave (no credentials, CLI absent or not logged in, the local call limit)
+    // spent nothing; any other failure may have happened after the model was reached and is charged.
+    closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
     if (err instanceof DraftError) throw err;
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
     throw new DraftError('PROVIDER_ERROR', String(err.message || err));
@@ -433,8 +468,10 @@ export async function createDraft(db, userId, proposalId, {
 
   const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs: deadlineMs });
   validated = audited.draft;
+  callsMade = 1 + (audited.audit.modelAudit !== 'NOT_RUN' ? 1 : 0) + (audited.audit.repaired || audited.audit.repairRejected ? 1 : 0);
   // A repair may have rewritten text: the final content is what must be in the target language.
   const languageCheck = languageCheckOf(validated);
+  closeBudget();
 
   const nowIso = now().toISOString();
   const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };
@@ -467,6 +504,10 @@ export async function createDraft(db, userId, proposalId, {
   );
 
   return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid), { db, userId }), live: provider.live };
+  } finally {
+    // Whatever happened above (validation, language, an unexpected error), no reservation is ever left open.
+    closeBudget();
+  }
 }
 
 /**

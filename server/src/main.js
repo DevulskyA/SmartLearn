@@ -3,6 +3,7 @@ import { openDb } from './db.js';
 import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
 import { purgeStaleSessions } from './repositories/sessions.js';
+import { reconcileOrphans } from './services/generation-budget.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { acquireDevLock, devDbPaths, isDevDatastoreDb } from './dev-datastore.js';
@@ -68,6 +69,9 @@ runMigrations(db);
 // T-F1-06: rows that can never authenticate again (revoked or expired > 30 days ago) are housekeeping, active sessions are untouched.
 const purgedSessions = purgeStaleSessions(db);
 if (purgedSessions > 0) console.log(`SmartLearn purged ${purgedSessions} stale session row(s)`);
+// R-12: a generation reservation left open by a crash may already have reached the model, so it is charged at its estimate (never refunded).
+const orphanReservations = reconcileOrphans(db, { maxAgeMs: 30 * 60 * 1000 });
+if (orphanReservations > 0) console.log(`SmartLearn settled ${orphanReservations} orphaned generation reservation(s) at their estimate`);
 const app = await buildApp(db, undefined, {
   isProduction: config.isProduction,
   allowedOrigins: config.allowedOrigins,

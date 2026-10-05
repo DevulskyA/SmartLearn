@@ -9,6 +9,7 @@ function handleError(err, reply) {
       INPUT_TOO_LARGE: 413, NO_USABLE_TEXT: 409,
       INVALID_DRAFT: 502,
       LANGUAGE_MISMATCH: 502,
+      BUDGET_EXCEEDED: 429,
       MISSING_CREDENTIALS: 409,
       TIMEOUT: 504,
       PROVIDER_ERROR: 502,
