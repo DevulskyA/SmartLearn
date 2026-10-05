@@ -24,6 +24,7 @@ export const ISSUE_LABELS = {
   QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
   QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
   QUESTION_DUPLICATE: "Questão repetida",
+  QUESTION_VOLUME_OUT_OF_RANGE: "Quantidade de questões fora do esperado",
   QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
 };
 

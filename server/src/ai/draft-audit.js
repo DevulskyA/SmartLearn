@@ -309,6 +309,28 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
   return findings;
 }
 
+// T-F2-06 (HG-01, reversible default): how many questions a source supports is a function of its SIZE, judged here and not in the prompt.
+// Proportional with a cap: at most one question per ~300 characters (never fewer than 5, never more than 40) and, for large units, at
+// least one per ~4000 characters. Out of range is an ADVISORY (LOW): it never blocks acceptance, never triggers a model repair, and
+// nothing is cut silently — the reviewer decides.
+export const QUESTION_VOLUME_POLICY = Object.freeze({ charsPerMaxQuestion: 300, charsPerMinQuestion: 4000, floorMax: 5, capMax: 40 });
+export function expectedQuestionRange(sourceChars, policy = QUESTION_VOLUME_POLICY) {
+  const max = Math.min(policy.capMax, Math.max(policy.floorMax, Math.ceil(sourceChars / policy.charsPerMaxQuestion)));
+  const min = Math.max(1, Math.floor(sourceChars / policy.charsPerMinQuestion));
+  return { min: Math.min(min, max), max };
+}
+function auditQuestionVolume(count, sourceChars) {
+  const { min, max } = expectedQuestionRange(sourceChars);
+  if (count >= min && count <= max) return null;
+  return {
+    issue: 'QUESTION_VOLUME_OUT_OF_RANGE',
+    severity: 'LOW',
+    scope: 'draft',
+    generatedClaim: `${count} questão(ões) para uma fonte desse tamanho.`,
+    sourceEvidence: `Para o tamanho desta fonte (${sourceChars.toLocaleString('pt-BR')} caracteres) o esperado é entre ${min} e ${max} questões.`,
+    repair: count > max ? 'Considere remover as questões menos importantes ou repetitivas; nada foi cortado automaticamente.' : 'Considere acrescentar questões sobre os conceitos que ficaram sem pergunta.',
+  };
+}
 /**
  * @param {{summary:string, questions:object[]}} draft an already schema-validated draft
  * @param {{segments:{pageIndex:number,text:string}[]}} context the exact source pages sent to the provider
@@ -330,6 +352,8 @@ export function auditDraft(draft, { segments }) {
       repair: 'O apoio de significado (tradução fiel, mecanismo, qualificadores como "geralmente", "pode", "apenas") depende da auditoria do modelo e da sua leitura da fonte.',
     });
   }
+  const volume = auditQuestionVolume((draft.questions ?? []).length, sourceText.length);
+  if (volume) findings.push(volume);
   const blocking = findings.some((f) => f.severity === 'HIGH' || f.severity === 'MEDIUM');
   return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
 }

@@ -116,3 +116,23 @@ test('draft-schema: questionType is optional and clamped to the menu; explanatio
   assert.throws(() => validateDraft({ ...base, questions: [Q({ explanation: 42 })] }, { segments: SEGMENTS }), DraftValidationError);
   assert.throws(() => validateDraft({ ...base, questions: [Q({ explanation: 'x'.repeat(2001) })] }, { segments: SEGMENTS }), DraftValidationError);
 });
+
+// T-F2-06 (HG-01 default, reversible): question volume is judged against the SIZE of the source, outside the prompt. A draft whose
+// count is out of the range for its source gets ONE advisory (LOW: never blocks, never triggers a model repair); nothing is cut.
+const bigSource = (chars) => [{ pageIndex: 1, text: 'Texto médico de apoio sobre filtração glomerular. '.repeat(Math.ceil(chars / 50)).slice(0, chars) }];
+const withN = (n) => Array.from({ length: n }, (_, i) => Q({ question: `Pergunta ${i + 1} sobre a filtração glomerular?` }));
+const volume = (segments, n) => auditDraft(draftOf(...withN(n)), { segments }).findings.filter((f) => f.issue === 'QUESTION_VOLUME_OUT_OF_RANGE');
+
+test('a small unit with 35 questions is flagged, as advisory only; a large unit with 35 is not', () => {
+  const small = volume(bigSource(1500), 35);
+  assert.equal(small.length, 1);
+  assert.equal(small[0].severity, 'LOW', 'advisory: never blocks acceptance nor spends a model repair');
+  assert.equal(small[0].scope, 'draft');
+  assert.equal(volume(bigSource(12000), 35).length, 0);
+});
+
+test('too few questions for a large unit is flagged; a proportionate count and a tiny unit with one question are not', () => {
+  assert.equal(volume(bigSource(24000), 2).length, 1);
+  assert.equal(volume(bigSource(24000), 12).length, 0);
+  assert.equal(volume(bigSource(600), 1).length, 0);
+});
