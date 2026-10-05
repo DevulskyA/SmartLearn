@@ -7,7 +7,10 @@ import * as SourceProposalsUI from "./source-proposals-ui.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
-import { elapsedLabel } from "./lesson-view-model.js";
+import * as GenerationJobsUI from "./generation-jobs-ui.js";
+import {
+  elapsedLabel, jobIsActive, latestJobsByProposal, jobPhaseLabel, jobElapsedMs, jobFailureMessage, jobListStatus,
+} from "./lesson-view-model.js";
 
 const sourcesCard = document.querySelector("#sources-card");
 const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
@@ -43,7 +46,15 @@ export function configureMaterialsUI(next) {
 
 let currentSourceId = null;
 let activeEditor = null;
-let generating = false;
+// The proposals as last shown (each with its newest generation job as `latestJob`), and the one generation whose progress panel
+// is open (`watched`). The server owns every state: this is only what the screen last read.
+let currentProposals = [];
+let watched = null;
+let pollTimer = null;
+let pollRunning = false;
+const POLL_WATCHING_MS = 1000; // the progress panel is open: the student is waiting for it
+const POLL_BACKGROUND_MS = 3000; // only the list shows it
+const POLL_FIRST_MS = 300;
 // Index sections up to this size are shown open; a whole book stays collapsed behind the topic search.
 const INDEX_OPEN_UP_TO = 12;
 
@@ -72,14 +83,12 @@ async function showBrowse() {
   if (editorView) editorView.hidden = true;
   if (sourcesCard) sourcesCard.hidden = false;
   // The list must tell the truth about what exists now (a draft was just created or an accept happened).
-  if (currentSourceId) {
-    const refreshed = await SourceProposalsUI.listProposals(currentSourceId);
-    if (refreshed.ok) renderSourceProposals(refreshed.proposals);
-  }
+  await refreshProposals();
   sourcesChooseFileButton?.focus({ preventScroll: false });
 }
 
 async function openEditor(draft, title) {
+  closeProgressPanel();
   const subjects = await deps.listActiveSubjects().catch(() => []);
   activeEditor?.destroy();
   const editor = createLessonEditor({
@@ -107,49 +116,233 @@ async function openEditor(draft, title) {
   editorView.scrollIntoView({ block: "start" });
 }
 
-// ---- generation (the server reports no progress: elapsed time is the one real measure, and it is shown as such) -----------
-function startGenerationProgress(label) {
-  generationBox.replaceChildren();
-  const title = createTextElement("p", "sources-generation-title", `Gerando rascunho com IA — ${label}`);
-  const timer = createTextElement("p", "sources-generation-timer", "00:00");
-  timer.setAttribute("aria-hidden", "true"); // ticks every second: not announced
-  const live = createTextElement("p", "visually-hidden", "Gerando. Isso leva vários minutos.");
-  live.setAttribute("role", "status");
-  const note = createTextElement("p", "lesson-hint", "O servidor não informa o andamento: o tempo decorrido é a única medida real. Uma geração pode levar vários minutos; não feche o aplicativo.");
-  const slow = createTextElement("p", "form-message is-error", "Está demorando mais que o normal. A geração continua no servidor; se passar de 20 minutos, algo provavelmente deu errado.");
-  slow.hidden = true;
-  generationBox.append(title, timer, live, note, slow);
-  generationBox.hidden = false;
-  const started = Date.now();
-  const tick = setInterval(() => {
-    const ms = Date.now() - started;
-    timer.textContent = elapsedLabel(ms);
-    if (ms > 10 * 60_000) slow.hidden = false;
-    if (Math.floor(ms / 60_000) !== Math.floor((ms - 1000) / 60_000) && ms >= 60_000) live.textContent = `Gerando há ${Math.floor(ms / 60_000)} minutos.`;
-  }, 1000);
-  return () => { clearInterval(tick); generationBox.hidden = true; generationBox.replaceChildren(); };
+// ---- generation (a job on the server: the student can leave and come back; every state shown is read from the server) ---------
+const progressTitle = (title) => `Gerando rascunho com IA — ${title}`;
+
+/** The trechos with their newest generation job as `latestJob`. A job list that cannot be read leaves them without one (never invents one). */
+async function withJobs(proposals) {
+  const result = await GenerationJobsUI.listJobs();
+  const latest = result.ok ? latestJobsByProposal(result.jobs) : new Map();
+  return proposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
 }
 
-async function generateFor(proposal) {
-  if (generating) return;
-  generating = true;
-  setSourcesMessage("");
-  const stop = startGenerationProgress(`${proposal.title} (${rangeLabel(proposal.pageStart, proposal.pageEnd)})`);
-  setBusy(true);
-  let result;
+async function showProposals(proposals) {
+  renderSourceProposals(await withJobs(proposals));
+  ensurePolling();
+}
+
+/** Reads the open document's trechos and jobs again from the server and shows them. */
+async function refreshProposals() {
+  if (!currentSourceId) return;
+  const listed = await SourceProposalsUI.listProposals(currentSourceId);
+  if (listed.ok) await showProposals(listed.proposals);
+}
+
+// -- polling: one timer at a time, only while something is generating and Materiais is on screen --------------------------------
+const cardVisible = () => Boolean(sourcesCard) && sourcesCard.getClientRects().length > 0;
+const wantsPolling = () => watched !== null || currentProposals.some((p) => jobIsActive(p.latestJob));
+
+function stopPolling() {
+  clearTimeout(pollTimer);
+  pollTimer = null;
+}
+
+function ensurePolling(delay = POLL_FIRST_MS) {
+  if (pollTimer !== null || pollRunning || activeEditor || !wantsPolling()) return;
+  pollTimer = setTimeout(runPoll, delay);
+}
+
+async function runPoll() {
+  pollTimer = null;
+  // Nothing to update while the student is elsewhere or in the editor: coming back to the list starts it again.
+  if (activeEditor || !cardVisible()) return;
+  pollRunning = true;
   try {
-    result = await DraftReviewUI.generateDraft(proposal.id);
+    await pollJobs();
   } finally {
-    stop();
-    setBusy(false);
-    generating = false;
+    pollRunning = false;
   }
-  if (!result.ok) {
-    setSourcesMessage(result.message || "Não foi possível gerar o rascunho.", true);
+  ensurePolling(watched ? POLL_WATCHING_MS : POLL_BACKGROUND_MS);
+}
+
+async function pollJobs() {
+  const result = await GenerationJobsUI.listJobs();
+  if (!result.ok) return; // a network blip: the screen keeps what it last knew and tries again at the next tick
+  const latest = latestJobsByProposal(result.jobs);
+  const finished = [];
+  for (const proposal of currentProposals) {
+    const job = latest.get(proposal.id) ?? null;
+    if (jobIsActive(proposal.latestJob) && !jobIsActive(job) && proposal.id !== watched?.proposalId) finished.push({ proposal, job });
+  }
+  let proposals = currentProposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
+  if (finished.length > 0 && currentSourceId) {
+    // a job ended: its draft (or nothing, if it failed) is a fact of the trecho, read it from the server
+    const listed = await SourceProposalsUI.listProposals(currentSourceId);
+    if (listed.ok) proposals = listed.proposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
+  }
+  applyProposals(proposals);
+  for (const { proposal, job } of finished) {
+    if (job?.state === "SUCCEEDED") setSourcesMessage(`Rascunho pronto: ${proposal.title}. Abra-o na lista para revisar antes de aceitar.`);
+    else if (job?.state === "FAILED") setSourcesMessage(jobFailureMessage(job), true);
+  }
+  if (watched) {
+    const job = result.jobs.find((candidate) => candidate.id === watched.job.id);
+    if (!job) return;
+    if (jobIsActive(job)) {
+      watched.job = job;
+      renderProgress();
+    } else {
+      await concludeWatched(job);
+    }
+  }
+}
+
+// -- the progress panel of the generation the student is waiting for ------------------------------------------------------------
+function openProgressPanel(job, proposalId, title) {
+  closeProgressPanel();
+  const heading = createTextElement("p", "sources-generation-title", progressTitle(title));
+  heading.tabIndex = -1;
+  const timer = createTextElement("p", "sources-generation-timer", elapsedLabel(jobElapsedMs(job, Date.now())));
+  timer.setAttribute("aria-hidden", "true"); // ticks every second: not announced
+  const phase = createTextElement("p", "sources-generation-phase", jobPhaseLabel(job));
+  phase.setAttribute("role", "status"); // announced when the REAL phase changes, not every second
+  const stalled = createTextElement("p", "lesson-hint sources-generation-stalled", "");
+  stalled.setAttribute("role", "status");
+  const note = createTextElement("p", "lesson-hint", "A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o rascunho aparece na lista quando ficar pronto.");
+  const actions = document.createElement("div");
+  actions.className = "sources-generation-actions";
+  const background = createTextElement("button", "small-button", "Continuar em segundo plano");
+  background.type = "button";
+  background.dataset.action = "generation-background";
+  const cancel = createTextElement("button", "small-button is-danger", "Cancelar geração");
+  cancel.type = "button";
+  cancel.dataset.action = "generation-cancel";
+  actions.append(background, cancel);
+  generationBox.replaceChildren(heading, timer, phase, stalled, note, actions);
+  generationBox.hidden = false;
+  const ticker = setInterval(() => { timer.textContent = elapsedLabel(jobElapsedMs(watched?.job ?? job, Date.now())); }, 1000);
+  watched = { job, proposalId, title, ticker, elements: { timer, phase, stalled, cancel } };
+  setBusy(true);
+  heading.focus({ preventScroll: false });
+  stopPolling();
+  ensurePolling(POLL_FIRST_MS);
+}
+
+function renderProgress() {
+  if (!watched) return;
+  const { job, elements } = watched;
+  const phaseText = watched.cancelling ? "Cancelando a geração…" : jobPhaseLabel(job);
+  if (elements.phase.textContent !== phaseText) elements.phase.textContent = phaseText;
+  const stalledText = job.state === "STALLED"
+    ? "O serviço de IA está em silêncio há algum tempo. Isso nem sempre é problema: o modelo pode estar pensando. A geração continua; você pode esperar ou cancelar."
+    : "";
+  if (elements.stalled.textContent !== stalledText) elements.stalled.textContent = stalledText;
+}
+
+function closeProgressPanel() {
+  if (watched) clearInterval(watched.ticker);
+  watched = null;
+  generationBox.hidden = true;
+  generationBox.replaceChildren();
+  setBusy(false);
+}
+
+/** The job the panel was waiting for ended: the draft opens, or the student is told why not. */
+async function concludeWatched(job) {
+  const { title, proposalId } = watched;
+  closeProgressPanel();
+  if (job.state === "SUCCEEDED") {
+    const draft = await DraftReviewUI.getDraft(job.draftId);
+    if (draft.ok) {
+      await openEditor(draft.draft, title);
+      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+      return;
+    }
+    setSourcesMessage(draft.message || "Não foi possível abrir o rascunho.", true);
+  } else if (job.state === "FAILED") {
+    setSourcesMessage(jobFailureMessage(job), true);
+  } else {
+    setSourcesMessage("A geração foi cancelada. O trecho está livre para gerar de novo.");
+  }
+  await refreshProposals();
+  focusProposalAction(proposalId);
+}
+
+function focusProposalAction(proposalId) {
+  const item = sourcesProposalsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
+  (item?.querySelector('[data-action="generate-draft"], [data-action="open-draft"]') ?? topicInput)?.focus({ preventScroll: true });
+}
+
+async function continueInBackground() {
+  if (!watched) return;
+  const { proposalId } = watched;
+  closeProgressPanel();
+  await refreshProposals();
+  setSourcesMessage("A geração continua em segundo plano. Quando ficar pronta, o trecho mostra Pronto na lista.");
+  const item = sourcesProposalsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
+  (item?.querySelector('[data-action="show-generation"]') ?? sourcesChooseFileButton)?.focus({ preventScroll: true });
+}
+
+async function cancelWatched() {
+  if (!watched) return;
+  const { cancel } = watched.elements;
+  if (!window.confirm("Cancelar esta geração? Nada será salvo e o trecho fica livre para gerar de novo.")) {
+    cancel.focus({ preventScroll: true });
     return;
   }
-  await openEditor(result.draft, proposal.title);
-  setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+  const { job } = watched;
+  cancel.disabled = true;
+  watched.cancelling = true; // the server answers once the provider has really stopped, which can take a few seconds
+  renderProgress();
+  const result = await GenerationJobsUI.cancelJob(job.id);
+  if (watched?.job.id !== job.id) return; // it ended some other way while the student was confirming
+  if (!result.ok) {
+    watched.cancelling = false;
+    renderProgress();
+    cancel.disabled = false;
+    setSourcesMessage(result.message || "Não foi possível cancelar a geração.", true);
+    return;
+  }
+  await concludeWatched(result.job);
+}
+
+generationBox?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "generation-background") continueInBackground();
+  else if (button.dataset.action === "generation-cancel") cancelWatched();
+});
+
+let starting = false;
+async function generateFor(proposal) {
+  if (watched || starting) return;
+  starting = true;
+  setSourcesMessage("");
+  setBusy(true);
+  let created;
+  try {
+    created = await GenerationJobsUI.createJob(proposal.id);
+  } finally {
+    starting = false;
+  }
+  if (!created.ok) {
+    setBusy(false);
+    setSourcesMessage(created.message || "Não foi possível gerar o rascunho.", true);
+    focusProposalAction(proposal.id);
+    return;
+  }
+  openProgressPanel(created.job, proposal.id, proposal.title);
+}
+
+/** "Ver andamento": reopens the progress panel of a trecho that is generating in the background. */
+async function showGenerationOf(proposalId, title) {
+  if (watched || starting) return;
+  const proposal = currentProposals.find((p) => p.id === Number(proposalId));
+  if (!jobIsActive(proposal?.latestJob)) {
+    await refreshProposals(); // it ended meanwhile: the list says how
+    return;
+  }
+  openProgressPanel(proposal.latestJob, proposal.id, title ?? proposal.title);
 }
 
 function setBusy(busy) {
@@ -190,62 +383,142 @@ function createSourceProposalItem(proposal) {
   excerpt.hidden = true;
 
   // The same buttons repeat in every trecho: the pages of the trecho they belong to are their description.
-  const described = [saveBtn, toggleBtn];
-  li.append(range, titleInput, saveBtn, toggleBtn, excerpt);
-
-  if (!proposal.generatable) {
-    li.classList.add("is-editorial");
-    li.append(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
-  } else if (proposal.latestDraft?.status === "ACCEPTED") {
-    li.append(createTextElement("p", "lesson-hint", "Aula já criada a partir deste trecho."));
-  } else if (proposal.latestDraft) {
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "small-button";
-    open.dataset.action = "open-draft";
-    open.dataset.draftId = String(proposal.latestDraft.id);
-    open.textContent = "Abrir rascunho";
-    described.push(open);
-    li.append(open);
-  } else {
-    const generate = document.createElement("button");
-    generate.type = "button";
-    generate.className = "small-button";
-    generate.dataset.action = "generate-draft";
-    generate.textContent = "Gerar rascunho com IA";
-    described.push(generate);
-    li.append(generate);
-  }
-  for (const button of described) button.setAttribute("aria-describedby", range.id);
+  for (const button of [saveBtn, toggleBtn]) button.setAttribute("aria-describedby", range.id);
+  // What comes after is what the trecho DOES now (generate / generating / ready / failed): it is redrawn when the server says its job moved.
+  const slot = document.createElement("div");
+  slot.className = "source-proposal-slot";
+  li.append(range, titleInput, saveBtn, toggleBtn, excerpt, slot);
+  if (!proposal.generatable) li.classList.add("is-editorial");
+  renderActionSlot(li, proposal);
   return li;
 }
 
-// Units with an unaccepted draft are listed apart from the (often collapsed) index: work in progress must never hide inside a 100-unit list.
+/** Everything that tells two states of a trecho apart on screen: when it changes, its slot is redrawn. */
+const proposalSignature = (p) => JSON.stringify([p.generatable, p.latestDraft?.id, p.latestDraft?.status, p.latestJob?.id, p.latestJob?.state, p.latestJob?.phase]);
+
+function statusLine(status) {
+  const line = createTextElement("p", `source-job-status is-${status.kind}`, status.label);
+  line.dataset.jobStatus = status.kind;
+  return line;
+}
+
+function actionButton(label, action, rangeId) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "small-button";
+  button.dataset.action = action;
+  button.textContent = label;
+  if (rangeId) button.setAttribute("aria-describedby", rangeId);
+  return button;
+}
+
+function renderActionSlot(li, proposal) {
+  const slot = li.querySelector(".source-proposal-slot");
+  const rangeId = li.querySelector(".source-proposal-range")?.id;
+  const hadFocus = slot.contains(document.activeElement);
+  const job = proposal.latestJob ?? null;
+  const status = jobListStatus(job);
+  const parts = [];
+  if (!proposal.generatable) {
+    parts.push(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
+  } else if (proposal.latestDraft?.status === "ACCEPTED") {
+    parts.push(createTextElement("p", "lesson-hint", "Aula já criada a partir deste trecho."));
+  } else if (status?.kind === "generating") {
+    parts.push(statusLine(status));
+    if (status.stalled) parts.push(createTextElement("p", "lesson-hint", "Sem sinal do serviço de IA há algum tempo. Isso nem sempre é problema; a geração continua."));
+    const show = actionButton("Ver andamento", "show-generation", rangeId);
+    show.dataset.jobId = String(job.id);
+    parts.push(show);
+  } else if (proposal.latestDraft) {
+    if (status?.kind === "ready" && job.draftId === proposal.latestDraft.id) parts.push(statusLine(status));
+    const open = actionButton("Abrir rascunho", "open-draft", rangeId);
+    open.dataset.draftId = String(proposal.latestDraft.id);
+    parts.push(open);
+  } else {
+    if (status?.kind === "failed") {
+      parts.push(statusLine(status), createTextElement("p", "lesson-hint", jobFailureMessage(job)));
+    }
+    parts.push(actionButton(status?.kind === "failed" ? "Tentar de novo" : "Gerar rascunho com IA", "generate-draft", rangeId));
+  }
+  slot.replaceChildren(...parts);
+  li.dataset.signature = proposalSignature(proposal);
+  if (hadFocus) slot.querySelector("button")?.focus({ preventScroll: true }); // a redrawn button must not drop keyboard focus
+}
+
+/** The server moved a job: only the trechos whose state changed are redrawn (an open excerpt or an edited title elsewhere stays as it is). */
+function applyProposals(proposals) {
+  currentProposals = proposals;
+  const byId = new Map(proposals.map((p) => [String(p.id), p]));
+  for (const li of sourcesProposalsPanel?.querySelectorAll(".source-proposal-item") ?? []) {
+    const proposal = byId.get(li.dataset.proposalId);
+    if (proposal && li.dataset.signature !== proposalSignature(proposal)) renderActionSlot(li, proposal);
+  }
+  renderDraftsInProgress(proposals);
+  if (watched) setBusy(true);
+}
+
+// Units with an unaccepted draft, or a generation going on or failed, are listed apart from the (often collapsed) index:
+// work in progress must never hide inside a 100-unit list.
 function renderDraftsInProgress(proposals) {
   if (!draftsList) return;
+  const focused = draftsList.contains(document.activeElement) ? document.activeElement : null;
+  const wasFocused = focused ? { proposalId: focused.closest("li")?.dataset.proposalId } : null;
   draftsList.replaceChildren();
-  const open = proposals.filter((p) => p.generatable && p.latestDraft && p.latestDraft.status !== "ACCEPTED");
+  const open = proposals.filter((p) => {
+    if (!p.generatable || p.latestDraft?.status === "ACCEPTED") return false;
+    const kind = jobListStatus(p.latestJob)?.kind;
+    return Boolean(p.latestDraft) || kind === "generating" || kind === "failed";
+  });
   for (const proposal of open) {
     const li = document.createElement("li");
     li.className = "source-draft-item";
+    li.dataset.proposalId = String(proposal.id);
     const rangeText = proposal.pageStart === proposal.pageEnd ? `página ${proposal.pageStart}` : `páginas ${proposal.pageStart}–${proposal.pageEnd}`;
     const title = createTextElement("span", "source-draft-item-title", proposal.title);
     const range = createTextElement("span", "lesson-hint", rangeText);
+    const status = jobListStatus(proposal.latestJob);
+    const generating = status?.kind === "generating";
+    const failed = !generating && !proposal.latestDraft && status?.kind === "failed";
+    const ready = !generating && status?.kind === "ready" && proposal.latestJob.draftId === proposal.latestDraft?.id;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "small-button";
-    button.dataset.action = "open-draft-in-progress";
-    button.dataset.draftId = String(proposal.latestDraft.id);
     button.dataset.title = proposal.title;
-    button.textContent = "Abrir rascunho";
-    button.setAttribute("aria-label", `Abrir rascunho: ${proposal.title}, ${rangeText}`);
-    li.append(title, range, button);
+    if (generating) {
+      button.dataset.action = "show-generation";
+      button.textContent = "Ver andamento";
+      button.setAttribute("aria-label", `Ver andamento da geração: ${proposal.title}, ${rangeText}`);
+    } else if (failed) {
+      button.dataset.action = "retry-generation";
+      button.textContent = "Tentar de novo";
+      button.setAttribute("aria-label", `Tentar gerar de novo: ${proposal.title}, ${rangeText}`);
+    } else {
+      button.dataset.action = "open-draft-in-progress";
+      button.dataset.draftId = String(proposal.latestDraft.id);
+      button.textContent = "Abrir rascunho";
+      button.setAttribute("aria-label", `Abrir rascunho: ${proposal.title}, ${rangeText}`);
+    }
+    li.append(title, range);
+    if (generating || failed || ready) li.append(statusLine(status));
+    li.append(button);
     draftsList.append(li);
   }
   if (draftsBox) draftsBox.hidden = open.length === 0;
+  if (wasFocused) draftsList.querySelector(`[data-proposal-id="${wasFocused.proposalId}"] [data-action]`)?.focus({ preventScroll: true });
 }
 
 draftsList?.addEventListener("click", async (event) => {
+  const show = event.target.closest('[data-action="show-generation"]');
+  if (show) {
+    await showGenerationOf(show.closest("li").dataset.proposalId, show.dataset.title);
+    return;
+  }
+  const retry = event.target.closest('[data-action="retry-generation"]');
+  if (retry) {
+    const proposal = currentProposals.find((p) => p.id === Number(retry.closest("li").dataset.proposalId));
+    if (proposal) await generateFor(proposal);
+    return;
+  }
   const button = event.target.closest('[data-action="open-draft-in-progress"]');
   if (!button) return;
   button.disabled = true;
@@ -259,6 +532,7 @@ draftsList?.addEventListener("click", async (event) => {
 });
 
 function renderSourceProposals(proposals) {
+  currentProposals = proposals;
   if (!sourcesProposalsList) return;
   sourcesProposalsList.replaceChildren();
   editorialList?.replaceChildren();
@@ -276,6 +550,7 @@ function renderSourceProposals(proposals) {
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
   renderDraftsInProgress(proposals);
   topicResults?.replaceChildren();
+  if (watched) setBusy(true);
 }
 
 // ---- topic search ------------------------------------------------------------------------------------------------------
@@ -377,13 +652,14 @@ existingList?.addEventListener("click", async (event) => {
     return;
   }
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; }
-  renderSourceProposals(listed.proposals);
+  await showProposals(listed.proposals);
   setSourcesMessage(`${listed.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.`);
   topicInput?.focus({ preventScroll: true });
 });
 
 // The list is refreshed whenever the student opens Materiais (an upload elsewhere, another window, a first visit).
-document.querySelector('[data-screen="materials"]')?.addEventListener("click", () => { loadExistingSources(); });
+// A generation that went on while the student was elsewhere is read from the server again as soon as the list is on screen.
+document.querySelector('[data-screen="materials"]')?.addEventListener("click", () => { loadExistingSources(); ensurePolling(); });
 
 // ---- upload ------------------------------------------------------------------------------------------------------------
 sourcesChooseFileButton?.addEventListener("click", () => {
@@ -393,7 +669,7 @@ sourcesChooseFileButton?.addEventListener("click", () => {
 async function showExistingProposals(sourceId, extraction, prefix = "") {
   const existing = await SourceProposalsUI.listProposals(sourceId);
   if (!existing.ok) return false;
-  renderSourceProposals(existing.proposals);
+  await showProposals(existing.proposals);
   setSourcesMessage(prefix || SourceProposalsUI.alreadyProcessedMessage(existing.proposals.length, extraction));
   return true;
 }
@@ -438,7 +714,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       return;
     }
 
-    renderSourceProposals(chunkResult.proposals);
+    await showProposals(chunkResult.proposals);
     // pages with no extractable text never became a proposal: say so, or silence reads as full coverage
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
     // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
@@ -510,6 +786,12 @@ async function onIndexClick(event) {
     return;
   }
 
+  const showBtn = event.target.closest('[data-action="show-generation"]');
+  if (showBtn) {
+    await showGenerationOf(proposalId, item.querySelector(".source-proposal-title-input")?.value);
+    return;
+  }
+
   const generateBtn = event.target.closest('[data-action="generate-draft"]');
   if (generateBtn) {
     const proposal = {
@@ -519,7 +801,6 @@ async function onIndexClick(event) {
       pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
     };
     await generateFor(proposal);
-    if (!activeEditor) generateBtn.focus({ preventScroll: true });
   }
 }
 sourcesProposalsList?.addEventListener("click", onIndexClick);

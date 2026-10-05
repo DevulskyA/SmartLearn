@@ -4122,6 +4122,37 @@ h1 {
   font-weight: 700;
 }
 
+.sources-generation-phase {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+/* silence is a warning to read calmly, not an error: no alarm colour, and nothing at all while there is nothing to say */
+.sources-generation-stalled:empty {
+  display: none;
+}
+
+.sources-generation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* what a trecho does now lives in one slot that is redrawn when the server moves its job; it must not change the item's layout */
+.source-proposal-slot {
+  display: contents;
+}
+
+.source-job-status {
+  margin: 0;
+  font-weight: 650;
+}
+
+.source-job-status.is-failed {
+  color: var(--status-overdue-text);
+}
+
 .lesson-hint {
   margin: 0.4rem 0;
   color: var(--color-muted);

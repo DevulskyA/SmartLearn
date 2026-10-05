@@ -245,7 +245,14 @@ test('the reviewer corrects a flagged summary in the review, the screen re-runs 
 
   await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo', { timeout: 10000 });
   await expect(editor.locator('.lesson-summary-input')).toHaveValue(fixed);
-  await expect(editor.locator('[role="tab"]', { hasText: 'Revisão' })).not.toContainText('⚠', { timeout: 5000 });
+  // the summary's flag is gone; the ONE point left is the fake provider's question having no "Por quê" (F-15 / T-F3-05: a finding for
+  // every question without an explanation, shown in the review, never blocking), which a summary correction cannot clear
+  await expect(editor.locator('[role="tab"]', { hasText: 'Revisão' })).toContainText('⚠ 1', { timeout: 5000 });
+  await editor.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(editor.locator('[data-panel="review"] .lesson-findings-list li')).toHaveCount(1);
+  await expect(editor.locator('[data-panel="review"] .lesson-finding-issue')).toHaveText('Falta explicar por quê');
+  await expect(editor.locator('[data-panel="review"] summary', { hasText: 'Resumo' })).toHaveCount(0);
+  await editor.getByRole('tab', { name: /Resumo/ }).click();
   expect(Number(await editor.getAttribute('data-revision'))).toBe(revisionBefore + 1);
   await expect(editor.locator('.source-draft-subject-input')).toHaveValue('Cardiologia CQ6');
   await expect(editor.locator('.source-draft-date-input')).toHaveValue('2026-05-01');

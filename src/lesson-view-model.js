@@ -117,3 +117,69 @@ export function copyTextOf(draft, part) {
   if (!question) return "";
   return [question.question, question.answer, question.explanation].filter(Boolean).join("\n\n");
 }
+
+// ---- generation jobs (T-F3-04) -------------------------------------------------------------------------------------------
+// The server owns the state of a generation (QUEUED / CALLING_PROVIDER / STALLED / SUCCEEDED / FAILED / CANCELLED) and its real
+// phase; this only words it for the student. STALLED is a warning (silence), never a failure.
+const ACTIVE_JOB_STATES = ["QUEUED", "CALLING_PROVIDER", "STALLED"];
+export const jobIsActive = (job) => ACTIVE_JOB_STATES.includes(job?.state);
+
+/** The newest job of each proposal, from a list in any order (the student can retry a failed or cancelled unit). */
+export function latestJobsByProposal(jobs) {
+  const latest = new Map();
+  for (const job of jobs ?? []) {
+    const known = latest.get(job.proposalId);
+    if (!known || job.id > known.id) latest.set(job.proposalId, job);
+  }
+  return latest;
+}
+
+const PHASE_LABELS = {
+  QUEUED: "Na fila para começar",
+  PREPARING: "Preparando o trecho aprovado",
+  GENERATING: "Gerando resumo e questões",
+  AUDITING: "Conferindo com a fonte",
+  REPAIRING: "Corrigindo o que a conferência encontrou",
+  SAVING: "Salvando o rascunho",
+};
+/** The real phase the server reports; one it does not know yet reads as the generic "Gerando", never as raw text. */
+export function jobPhaseLabel(job) {
+  if (job?.state === "QUEUED") return PHASE_LABELS.QUEUED;
+  return PHASE_LABELS[job?.phase] ?? "Gerando resumo e questões";
+}
+
+/** Milliseconds since the job started running (since it was created while it still waits in the queue); never negative. */
+export function jobElapsedMs(job, nowMs) {
+  const from = Date.parse(job?.startedAt ?? "") || Date.parse(job?.createdAt ?? "");
+  return Number.isFinite(from) ? Math.max(0, nowMs - from) : 0;
+}
+
+const FAILURE_REASONS = {
+  PROVIDER_ERROR: "O serviço de IA não respondeu como esperado.",
+  TIMEOUT: "A geração passou do tempo limite e foi interrompida.",
+  SERVER_RESTARTED: "O servidor foi reiniciado durante a geração.",
+  INTERNAL_ERROR: "Houve um erro interno.",
+  BUDGET_EXCEEDED: "O limite de uso da geração foi atingido.",
+  LANGUAGE_MISMATCH: "O rascunho veio em um idioma diferente do pedido.",
+  SCOPE_CHANGED: "O texto do trecho mudou desde que a geração foi pedida.",
+};
+// Codes whose server text is already an actionable sentence for the student (it says what to do), kept as the reason.
+const SERVER_TEXT_CODES = new Set(["BUDGET_EXCEEDED"]);
+
+/** A failed job in plain Portuguese: what happened (from the typed code), that nothing was saved, and that the unit can be tried again. */
+export function jobFailureMessage(job) {
+  const server = typeof job?.errorMessage === "string" ? job.errorMessage.trim() : "";
+  const reason = SERVER_TEXT_CODES.has(job?.errorCode) && /^[\p{Lu}][^\n]{8,300}[.!]$/u.test(server)
+    ? server
+    : FAILURE_REASONS[job?.errorCode] ?? "A geração não terminou.";
+  return `Não foi possível gerar o rascunho. ${reason} Nada foi salvo; você pode tentar de novo.`;
+}
+
+/** What a trecho in the list says about its newest job; null when there is nothing to say (no job, or one the student cancelled). */
+export function jobListStatus(job) {
+  if (!job) return null;
+  if (jobIsActive(job)) return { kind: "generating", label: `Gerando… ${jobPhaseLabel(job)}`, stalled: job.state === "STALLED" };
+  if (job.state === "SUCCEEDED") return { kind: "ready", label: "Pronto", stalled: false };
+  if (job.state === "FAILED") return { kind: "failed", label: "Falhou", stalled: false };
+  return null;
+}

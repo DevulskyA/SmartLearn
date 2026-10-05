@@ -83,3 +83,64 @@ test("issue labels fall back to the code for an unknown issue", () => {
   assert.equal(issueLabel("QUESTION_DUPLICATE"), "Questão repetida");
   assert.equal(issueLabel("SOMETHING_NEW"), "SOMETHING_NEW");
 });
+
+// T-F3-04: what the student is told about a generation job (pure; the server owns the state, this only words it).
+import { jobIsActive, latestJobsByProposal, jobPhaseLabel, jobElapsedMs, jobFailureMessage, jobListStatus } from "../src/lesson-view-model.js";
+
+const job = (over) => ({ id: 1, proposalId: 10, state: "CALLING_PROVIDER", phase: "GENERATING", createdAt: "2026-10-05T10:00:00.000Z", startedAt: "2026-10-05T10:00:01.000Z", errorCode: null, errorMessage: null, draftId: null, ...over });
+
+test("jobIsActive: QUEUED, CALLING_PROVIDER and STALLED are active; the three final states are not", () => {
+  for (const state of ["QUEUED", "CALLING_PROVIDER", "STALLED"]) assert.equal(jobIsActive(job({ state })), true, state);
+  for (const state of ["SUCCEEDED", "FAILED", "CANCELLED"]) assert.equal(jobIsActive(job({ state })), false, state);
+  assert.equal(jobIsActive(null), false);
+});
+
+test("latestJobsByProposal keeps the newest job of each proposal, whatever the order of the list", () => {
+  const map = latestJobsByProposal([job({ id: 3, proposalId: 10 }), job({ id: 5, proposalId: 11 }), job({ id: 4, proposalId: 10, state: "FAILED" }), job({ id: 1, proposalId: 10 })]);
+  assert.equal(map.get(10).id, 4);
+  assert.equal(map.get(11).id, 5);
+  assert.equal(map.size, 2);
+});
+
+test("jobPhaseLabel names the real phase in plain Portuguese; an unknown phase falls back to a generic one, never to raw text", () => {
+  assert.match(jobPhaseLabel(job({ state: "QUEUED", phase: "QUEUED" })), /fila/i);
+  assert.match(jobPhaseLabel(job({ phase: "PREPARING" })), /Preparando/);
+  assert.match(jobPhaseLabel(job({ phase: "GENERATING" })), /Gerando/);
+  assert.match(jobPhaseLabel(job({ phase: "AUDITING" })), /Conferindo/);
+  assert.match(jobPhaseLabel(job({ phase: "REPAIRING" })), /Corrigindo/);
+  assert.match(jobPhaseLabel(job({ phase: "SAVING" })), /Salvando/);
+  assert.match(jobPhaseLabel(job({ phase: "SOMETHING_NEW" })), /Gerando/);
+  assert.doesNotMatch(jobPhaseLabel(job({ phase: "SOMETHING_NEW" })), /SOMETHING_NEW/);
+});
+
+test("jobElapsedMs counts from when the job started running (or was created while queued) and never goes negative", () => {
+  const now = Date.parse("2026-10-05T10:02:01.000Z");
+  assert.equal(jobElapsedMs(job(), now), 120_000);
+  assert.equal(jobElapsedMs(job({ startedAt: null }), now), 121_000);
+  assert.equal(jobElapsedMs(job({ startedAt: "2026-10-05T11:00:00.000Z" }), now), 0);
+  assert.equal(jobElapsedMs(job({ startedAt: "garbage", createdAt: "garbage" }), now), 0);
+});
+
+test("jobFailureMessage: a typed error code becomes plain Portuguese; the raw server text is never the only thing shown", () => {
+  for (const errorCode of ["PROVIDER_ERROR", "TIMEOUT", "SERVER_RESTARTED", "INTERNAL_ERROR", "BUDGET_EXCEEDED", "LANGUAGE_MISMATCH", "SCOPE_CHANGED", "WHATEVER_NEW"]) {
+    const text = jobFailureMessage(job({ state: "FAILED", errorCode, errorMessage: "ProviderRequestError: boom" }));
+    assert.match(text, /^Não foi possível gerar o rascunho/, errorCode);
+    assert.doesNotMatch(text, /ProviderRequestError|boom|undefined|null/, errorCode);
+    assert.match(text, /Nada foi salvo/, errorCode);
+  }
+  assert.match(jobFailureMessage(job({ state: "FAILED", errorCode: "TIMEOUT" })), /tempo limite/);
+  assert.match(jobFailureMessage(job({ state: "FAILED", errorCode: "SERVER_RESTARTED" })), /reiniciad|encerrad/);
+  assert.match(jobFailureMessage(job({ state: "FAILED", errorCode: "BUDGET_EXCEEDED", errorMessage: "Limite de crédito da semana atingido." })), /Limite de crédito da semana atingido\./, "an actionable server message in Portuguese is kept");
+});
+
+test("jobListStatus: active = Gerando (with the phase), STALLED stays Gerando but is flagged calm, SUCCEEDED = Pronto, FAILED = Falhou, CANCELLED/none = nothing", () => {
+  assert.deepEqual(jobListStatus(job({ phase: "AUDITING" })), { kind: "generating", label: "Gerando… Conferindo com a fonte", stalled: false });
+  assert.equal(jobListStatus(job({ state: "STALLED" })).kind, "generating");
+  assert.equal(jobListStatus(job({ state: "STALLED" })).stalled, true);
+  assert.equal(jobListStatus(job({ state: "QUEUED", phase: "QUEUED" })).kind, "generating");
+  assert.deepEqual(jobListStatus(job({ state: "SUCCEEDED", draftId: 7 })), { kind: "ready", label: "Pronto", stalled: false });
+  assert.equal(jobListStatus(job({ state: "FAILED", errorCode: "TIMEOUT" })).kind, "failed");
+  assert.match(jobListStatus(job({ state: "FAILED", errorCode: "TIMEOUT" })).label, /^Falhou/);
+  assert.equal(jobListStatus(job({ state: "CANCELLED" })), null);
+  assert.equal(jobListStatus(undefined), null);
+});
