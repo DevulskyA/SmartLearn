@@ -56,7 +56,7 @@ export function renderAgentBoard({ gui, cli, testsHtml = '' }) {
   const c = cli.tasks[0];
   const cliState = c.state === '>' ? 'executando' : c.state === '-' ? 'pausado' : c.state === '!' ? 'bloqueado' : c.state === '✓' ? 'parado (fatia concluída)' : 'sem tarefa';
   const cliLine = `CLI (outro agente): ${cliState} — ${String(c.title).slice(0, 110)}`;
-  return renderChecklistHtml({ tasks: gui.tasks, extraLines: [cliLine], testsHtml });
+  return renderChecklistHtml({ tasks: gui.tasks, view: gui.view ?? null, extraLines: [cliLine], testsHtml });
 }
 
 function gitOut(cwd, args) {
@@ -121,7 +121,7 @@ function regenerate(root, coordDir) {
   if (plan.skipped.length) console.error(`[agent-tasklist] ERRO: tarefa(s) fora do padrão de id NÃO aparecem no painel: ${plan.skipped.join(', ')} (use LETRAS-NÚMERO, ex.: ACCESS-1)`);
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
   const cliCoord = existsSync(join(coordDir, 'CLI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'CLI.md'), 'utf8')) : {};
-  const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
+  const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', view: plan.view, tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
   // ONE command refreshes EVERY copy of the board the user might have open: the shared coordination copy and
   // conductor/.view/tasklist.html of every worktree of this repo (a stale copy that says "all done" while work
   // continues leaves the user lost). --out writes only that single file.

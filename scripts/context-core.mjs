@@ -42,12 +42,23 @@ const field = (block, name) => new RegExp(`^- ${name}:\\s*(.+)$`, 'm').exec(bloc
 export const taskField = field;
 const clip = (s, n = 230) => (s && s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
+/** "T-F3-01..05" -> "T-F3-01 T-F3-02 ... T-F3-05" (a range in PROGRAM.md means every id in it, in order). */
+export function expandRanges(text) {
+  return text.replace(/(T-[A-Z0-9]+-)(\d+)\.\.(\d+)/g, (_m, pre, a, b) => {
+    const out = [];
+    for (let n = Number(a); n <= Number(b); n++) out.push(`${pre}${String(n).padStart(a.length, '0')}`);
+    return out.join(' ');
+  });
+}
+
 /** Task ids in the order PROGRAM.md says the work happens (first appearance across the sprint table). */
 export function programOrder(programText) {
   const order = [];
   for (const line of norm(programText).split('\n')) {
     if (!/^\| \*\*S/.test(line)) continue;
-    for (const id of line.match(new RegExp(ID.source, 'g')) ?? []) if (!order.includes(id)) order.push(id);
+    // only the "Tarefas" column (4th cell) sequences work; ids in the dependency column are annotations
+    const cells = line.split('|');
+    for (const id of expandRanges(cells.length > 4 ? cells[3] : line).match(new RegExp(ID.source, 'g')) ?? []) if (!order.includes(id)) order.push(id);
   }
   return order;
 }

@@ -9,23 +9,36 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FILES, taskBlocks, programOrder, norm } from './context-core.mjs';
+import { FILES, taskBlocks, programOrder, expandRanges, norm } from './context-core.mjs';
 
 export const BEGIN = '<!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->';
 export const END = '<!-- PLAN:END -->';
 const REGION = /<!-- PLAN:BEGIN[^\n]*-->[\s\S]*?<!-- PLAN:END -->/;
 
-// HR-n identifies a phase of the macro plan; it does NOT define execution order (PROGRAM.md does).
-const HR = { F0: 0, F1: 1, F6: 2, F2: 3, F4: 4, F3: 5, F8: 6, F5: 7, F7: 8, F9: 9, F10: 10 };
-const hrId = (code) => `HR-${HR[code] ?? code}`;
-const hrNum = (code) => HR[code] ?? 999;
-const phaseOf = (id) => /^T-(F\d+)-/.exec(id)?.[1] ?? null;
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
-function phaseTitles(tasksText) {
-  const out = {};
-  for (const m of norm(tasksText).matchAll(/^## (F\d+) — (.+)$/gm)) out[m[1]] = m[2].replace(/\s*—\s*(após|por último).*$/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+/** [{id, title, ids}] from the sprint table of PROGRAM.md, in file order; ids = the "Tarefas" column (ranges expanded). */
+export function programSprints(programText) {
+  const out = [];
+  for (const line of norm(programText).split('\n')) {
+    const m = /^\| \*\*(S[\w-]+)\*\* ([^|]*)\|/.exec(line);
+    if (!m) continue;
+    const cells = line.split('|');
+    const col = expandRanges(cells[3] ?? '');
+    out.push({ id: m[1], title: m[2].trim(), ids: [...new Set(col.match(/T-[A-Z0-9]+-\d+[a-z]?/g) ?? [])] });
+  }
   return out;
+}
+
+/** Order problems: a task that PROGRAM.md sequences before one of its own dependencies (that is also sequenced). */
+export function orderProblems({ tasksText, programText = '' }) {
+  const order = programOrder(programText);
+  const pos = new Map(order.map((id, n) => [id, n]));
+  const problems = [];
+  for (const b of taskBlocks(tasksText).filter((t) => t.id && pos.has(t.id))) {
+    for (const d of b.deps) if (pos.has(d) && pos.get(d) > pos.get(b.id)) problems.push(`PROGRAM.md sequences ${b.id} before its dependency ${d}`);
+  }
+  return problems;
 }
 
 /** The panel state of a phase, derived (never hand-set): one active task -> '>', all done -> '✓', nothing runnable -> '!', else ' '. */
@@ -52,18 +65,42 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   const title = (b) => clip(b.heading.replace(/\s*·\s*[—-]?\s*$/, ''), 90);
   const line = (b, tag = '') => `- [${b.status === '✓' ? 'x' : ' '}] **${b.id}** — ${title(b)}${tag}`;
 
-  const phases = new Map();
-  for (const b of blocks) { const c = phaseOf(b.id) ?? 'F?'; if (!phases.has(c)) phases.set(c, []); phases.get(c).push(b); }
-  const codes = [...phases.keys()].sort((a, b) => hrNum(a) - hrNum(b));
-  const titles = phaseTitles(tasksText);
-  const activePhase = active ? phaseOf(active.id) : null;
+  // PHASES = the sprints of PROGRAM.md in their canonical order (S0, S1, S2, S2G-a, ...); tasks keep the order PROGRAM.md gives.
+  // Tasks no sprint lists: finished ones form the "BASE" group (delivered before the sprint plan), the rest "SEM-SPRINT".
+  const sprints = programSprints(programText);
+  const rank = new Map();
+  order.forEach((id, n) => rank.set(id, n));
+  blocks.forEach((b, n) => { if (!rank.has(b.id)) rank.set(b.id, 10000 + n); });
+  const placed = new Set();
+  const groups = [];
+  const childOf = (b) => blocks.find((p) => p.status === '=' && b.id !== p.id && b.id.startsWith(p.id) && /^[a-z]$/.test(b.id.slice(p.id.length))) ?? null;
+  const addGroup = (id, title, ids) => {
+    const members = [];
+    for (const tid of ids) {
+      const b = byId.get(tid);
+      if (!b || placed.has(tid)) continue;
+      placed.add(tid);
+      const parent = childOf(b);
+      if (parent && !placed.has(parent.id)) { members.push(parent); placed.add(parent.id); } // a split parent appears once, in the group of its first child
+      members.push(b);
+    }
+    if (members.length) groups.push({ id, title, members });
+  };
+  for (const sp of sprints) addGroup(sp.id, sp.title, sp.ids.filter((tid) => byId.has(tid)));
+  const rest = blocks.filter((b) => !placed.has(b.id) && b.status !== '=');
+  addGroup('BASE', 'Entregue antes das sprints (F0/F1)', rest.filter((b) => b.status === '✓').map((b) => b.id));
+  const base = groups.pop();
+  if (base?.id === 'BASE') groups.unshift(base); else if (base) groups.push(base);
+  addGroup('SEM-SPRINT', 'Fora da sequência de sprints (human gate ou ainda não sequenciadas)', rest.filter((b) => b.status !== '✓').map((b) => b.id));
+  const activeGroup = active ? groups.find((g) => g.members.includes(active))?.id ?? '-' : null;
+  const byRank = (a, b) => rank.get(a.id) - rank.get(b.id);
 
   const blocked = blocks.filter((b) => b.status === '!'
-    || (b.status === ' ' && b.deps.some((d) => byId.get(d)?.status === 'H' || byId.get(d)?.status === '!')));
-  const humans = blocks.filter((b) => b.status === 'H');
+    || (b.status === ' ' && b.deps.some((d) => byId.get(d)?.status === 'H' || byId.get(d)?.status === '!'))).sort(byRank);
+  const humans = blocks.filter((b) => b.status === 'H').sort(byRank);
 
   const out = [BEGIN, ''];
-  out.push(`ATIVA AGORA: ${active ? `${active.id} (${hrId(activePhase)})` : 'nenhuma'}`
+  out.push(`ATIVA AGORA: ${active ? `${active.id} (${activeGroup})` : 'nenhuma'}`
     + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'}`
     + ` · BLOQUEADAS: ${blocked.length} · HUMAN GATE: ${humans.length}`, '');
   out.push('## EM EXECUÇÃO', '');
@@ -83,16 +120,13 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
     out.push(`- [ ] **${b.id}** — ${title(b)}${gates ? ` — ${gates}` : ''}`);
   }
   out.push('', '## FASES', '');
-  for (const code of codes) {
-    const bs = phases.get(code);
-    const children = (b) => bs.filter((c) => c.id !== b.id && c.id.startsWith(b.id) && /^[a-z]$/.test(c.id.slice(b.id.length)));
-    const childIds = new Set(bs.flatMap((b) => (b.status === '=' ? children(b).map((c) => c.id) : [])));
-    out.push(`### [${phaseState(bs, byId)}] ${hrId(code)} · ${code} — ${titles[code] ?? code}`, '');
-    for (const b of bs) {
-      if (childIds.has(b.id)) continue;
+  for (const g of groups) {
+    const parents = new Set(g.members.filter((b) => b.status === '=').map((b) => b.id));
+    out.push(`### [${phaseState(g.members, byId)}] ${g.id} · ${g.title}`, '');
+    for (const b of g.members) {
+      const nested = childOf(b) && parents.has(childOf(b).id);
       const tag = b.status === '>' ? '  ← EM EXECUÇÃO' : b.status === 'H' ? '  — HUMAN GATE' : b.status === '!' ? '  — BLOQUEADA' : b.status === '=' ? '  — DIVIDIDA em subtarefas' : '';
-      out.push(line(b, tag));
-      if (b.status === '=') for (const c of children(b)) out.push(`  ${line(c, c.status === 'H' ? '  — HUMAN GATE' : c.status === '>' ? '  ← EM EXECUÇÃO' : '')}`);
+      out.push(`${nested ? '  ' : ''}${line(b, tag)}`);
     }
     out.push('');
   }
@@ -111,6 +145,8 @@ export function planDrift(planText, inputs) {
   const lf = planText.replace(/\r\n/g, '\n');
   const have = REGION.exec(lf)?.[0] ?? null;
   if (have === null) return { drift: true, reason: 'plan.md has no PLAN:BEGIN/PLAN:END generated region' };
+  const bad = orderProblems(inputs);
+  if (bad.length) return { drift: true, reason: `execution order violates dependencies: ${bad.join('; ')}` };
   return have === renderPlanRegion(inputs) ? { drift: false } : { drift: true, reason: 'generated region differs from tasks.md (run: npm run plan:sync)' };
 }
 
