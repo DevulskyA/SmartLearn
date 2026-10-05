@@ -178,6 +178,50 @@ test('a rejected question does not become an exercise when the lesson is accepte
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada: 2 exercício(s)', { timeout: 10000 });
 });
 
+test('PREVIEW before accepting: shows what will be created, writes nothing, is dropped when the lesson changes, and matches the real acceptance', async ({ page }) => {
+  await openLesson(page);
+  const editor = page.locator('.lesson-editor');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').nth(1).click();
+  await editor.locator('[data-action="toggle-reject-question"]').click();
+  await expect(editor.locator('.lesson-accept-note')).toContainText('2 questões viram exercícios');
+  await editor.locator('.source-draft-subject-input').fill('Fisiologia');
+
+  const db = new Database(dbPath, { readonly: true });
+  const rows = () => ({ units: db.prepare('SELECT COUNT(*) AS n FROM learning_units').get().n, exercises: db.prepare('SELECT COUNT(*) AS n FROM exercises').get().n, subjects: db.prepare('SELECT COUNT(*) AS n FROM subjects').get().n });
+  const before = rows();
+  try {
+    await editor.locator('[data-action="preview-accept"]').click();
+    const panel = editor.locator('.lesson-accept-preview');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('Disciplina: Fisiologia (será criada)');
+    await expect(panel).toContainText('2 exercícios e 16 revisões agendadas');
+    await expect(panel).toContainText('Ficam de fora (rejeitadas): 1');
+    await expect(panel.locator('.lesson-accept-preview-exercises li')).toHaveCount(2);
+    await expect(panel).toBeFocused();
+    expect(rows(), 'the preview wrote nothing').toEqual(before);
+
+    // the lesson changes -> the preview no longer describes it and is dropped
+    await editor.locator('.lesson-qitem').nth(1).click();
+    await editor.locator('[data-action="toggle-reject-question"]').click();
+    await expect(panel).toBeHidden();
+    await expect(editor.locator('.lesson-accept-note')).toContainText('3 questões viram exercícios');
+
+    await editor.locator('[data-action="preview-accept"]').click();
+    await expect(panel.locator('.lesson-accept-preview-exercises li')).toHaveCount(3);
+    await editor.locator('[data-action="accept-draft"]').click();
+    await expect(editor.locator('.source-draft-result')).toContainText('Aula criada: 3 exercício(s)', { timeout: 10000 });
+  } finally { db.close(); }
+});
+
+test('PREVIEW refuses what accepting refuses, with the server message and no panel', async ({ page }) => {
+  await openLesson(page);
+  const editor = page.locator('.lesson-editor');
+  await editor.locator('[data-action="preview-accept"]').click(); // a new subject without a name
+  await expect(editor.locator('.lesson-accept-preview')).toBeHidden();
+  await expect(editor.locator('.source-draft-result')).toHaveClass(/is-error/);
+});
+
 test('unsaved typing is never lost silently: accepting asks to save first', async ({ page }) => {
   await openLesson(page);
   const editor = page.locator('.lesson-editor');

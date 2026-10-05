@@ -63,7 +63,7 @@ function setMessage(el, text, isError = false) {
  *   title      the unit title
  *   subjects   disciplines offered when accepting
  *   today      "YYYY-MM-DD"
- *   deps       { reviseSummary, reviseQuestion, deleteQuestion, acceptDraft, getDraft, onBack, startStudyNow, refreshAfterAccept }
+ *   deps       { reviseSummary, reviseQuestion, deleteQuestion, acceptDraft, previewAcceptance, getDraft, onBack, startStudyNow, refreshAfterAccept }
  */
 export function createLessonEditor({ draft: initialDraft, title, subjects = [], today, deps }) {
   const uid = `lesson-${(editorSeq += 1)}`;
@@ -187,12 +187,20 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const dateField = labelledField(`${uid}-date`, "Data da aula", "input", today);
   dateField.input.type = "date";
   dateField.input.classList.add("source-draft-date-input");
+  // Read-only preview of what accepting creates, shown BEFORE the final button; it writes nothing and is dropped as soon as the lesson changes.
+  const previewBtn = button("secondary-button", "Ver o que será criado", "preview-accept");
+  const previewPanel = document.createElement("div");
+  previewPanel.className = "lesson-accept-preview";
+  previewPanel.setAttribute("role", "region");
+  previewPanel.setAttribute("aria-label", "Pré-visualização do aceite");
+  previewPanel.tabIndex = -1;
+  previewPanel.hidden = true;
   const acceptBtn = button("primary-button", "Aceitar e criar aula", "accept-draft");
   const acceptMessage = statusMessage();
   acceptMessage.classList.add("source-draft-result");
   const afterAccept = document.createElement("div");
   afterAccept.className = "lesson-actions";
-  footer.append(acceptNote, subjectField, nameField.wrap, dateField.wrap, acceptBtn, acceptMessage, afterAccept);
+  footer.append(acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, acceptBtn, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     nameField.input.disabled = picked;
@@ -468,6 +476,38 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const rejected = draft.questions.length - kept;
     acceptNote.textContent = `${kept} ${kept === 1 ? "questão vira exercício" : "questões viram exercícios"}${rejected > 0 ? `; ${rejected} rejeitada${rejected === 1 ? "" : "s"} não entra${rejected === 1 ? "" : "m"}` : ""}. Revisões são agendadas ao aceitar.`;
     acceptBtn.disabled = accepted || kept === 0;
+    previewBtn.disabled = accepted || kept === 0 || !deps.previewAcceptance;
+    previewPanel.hidden = true;
+    previewPanel.replaceChildren();
+  }
+
+  const clip = (text, max = 110) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+  const pagesLabel = (pages) => (pages.length === 0 ? "" : ` — ${pages.length === 1 ? "página" : "páginas"} ${pages.join(", ")}`);
+
+  function renderPreview(preview) {
+    const summary = document.createElement("ul");
+    summary.className = "lesson-accept-preview-summary";
+    for (const line of [
+      `Disciplina: ${preview.subject.name}${preview.subject.isNew ? " (será criada)" : ""}`,
+      `Aula: ${preview.unit.title}, estudo em ${preview.unit.studyDate}`,
+      `${preview.exercises.length} ${preview.exercises.length === 1 ? "exercício" : "exercícios"} e ${preview.reviews.count} revisões agendadas`,
+    ]) summary.append(createTextElement("li", "", line));
+    const exercises = document.createElement("ol");
+    exercises.className = "lesson-accept-preview-exercises";
+    for (const e of preview.exercises) {
+      const tag = e.origin === "HUMAN_ADDED" ? " (adicionada por você)" : e.origin === "HUMAN_EDITED" ? " (editada por você)" : "";
+      exercises.append(createTextElement("li", "", `${clip(e.question)}${tag}${pagesLabel(e.pages)}`));
+    }
+    const parts = [createTextElement("p", "lesson-accept-preview-title", "Ao aceitar, será criado:"), summary, exercises];
+    if (preview.excluded.length > 0) {
+      parts.push(createTextElement("p", "lesson-accept-preview-excluded", `Ficam de fora (rejeitadas): ${preview.excluded.length}`));
+      const excluded = document.createElement("ul");
+      for (const e of preview.excluded) excluded.append(createTextElement("li", "", clip(e.question)));
+      parts.push(excluded);
+    }
+    previewPanel.replaceChildren(...parts);
+    previewPanel.hidden = false;
+    previewPanel.focus();
   }
 
   function renderAll() {
@@ -576,6 +616,29 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const unsaved = summaryBuffer !== null || questionBuffers.size > 0;
     if (unsaved && !window.confirm("Há alterações não salvas nesta aula. Sair mesmo assim?")) return;
     deps.onBack();
+  });
+
+  previewBtn.addEventListener("click", async () => {
+    if (summaryBuffer !== null || questionBuffers.size > 0) {
+      setMessage(acceptMessage, "Salve as alterações pendentes (resumo ou questões) antes de ver o que será criado.", true);
+      return;
+    }
+    const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
+    previewBtn.disabled = true;
+    const result = await deps.previewAcceptance(draft.id, {
+      subjectId: pickedSubjectId ?? undefined,
+      newSubjectName: pickedSubjectId ? undefined : nameField.input.value,
+      studyDate: dateField.input.value,
+      expectedRevision: draft.revision,
+    });
+    previewBtn.disabled = accepted;
+    if (!result.ok) {
+      previewPanel.hidden = true;
+      setMessage(acceptMessage, result.message || "Não foi possível pré-visualizar o aceite.", true);
+      return;
+    }
+    setMessage(acceptMessage, "");
+    renderPreview(result.preview);
   });
 
   acceptBtn.addEventListener("click", async () => {

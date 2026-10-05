@@ -46,7 +46,12 @@ function unitDto(row) {
  * transaction-aware and this resolution must commit atomically with the
  * unit + review rows it's part of (AC-03/AC-04).
  */
-export function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, newSubjectColor }) {
+/**
+ * Validates a subject input exactly as accepting a lesson does, WITHOUT writing: returns the existing active subject, or the
+ * subject that would be created. Shared by resolveOrCreateSubject and by the acceptance preview, so what the preview says
+ * about the subject is what the acceptance then does.
+ */
+export function describeSubject(db, userId, { subjectId, newSubjectName, newSubjectColor }) {
   if (newSubjectName) {
     const error = validateNamingField(newSubjectName, 'o nome da disciplina');
     if (error) throw new LearningUnitError('VALIDATION_FAILED', error, 'newSubjectName');
@@ -59,13 +64,7 @@ export function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, 
         : 'Já existe uma disciplina arquivada com esse nome. Reative-a em vez de criar uma nova.', 'newSubjectName');
     }
 
-    const now = new Date().toISOString();
-    const { next } = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM subjects WHERE user_id = ?').get(userId);
-    const result = db.prepare(`
-      INSERT INTO subjects (user_id, name, color, is_active, sort_order, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?, ?)
-    `).run(userId, normalizeEntityName(newSubjectName), newSubjectColor || 'DISC-BLUE', next, now, now);
-    return db.prepare('SELECT * FROM subjects WHERE id = ?').get(result.lastInsertRowid);
+    return { existing: null, create: { name: normalizeEntityName(newSubjectName), color: newSubjectColor || 'DISC-BLUE' } };
   }
 
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: found in a real manual journey —
@@ -75,7 +74,19 @@ export function resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, 
   const subject = db.prepare('SELECT * FROM subjects WHERE user_id = ? AND id = ?').get(userId, subjectId);
   if (!subject) throw new LearningUnitError('NOT_FOUND', 'Disciplina não encontrada.', 'subjectId');
   if (!subject.is_active) throw new LearningUnitError('VALIDATION_FAILED', 'Selecione uma disciplina ativa.', 'subjectId');
-  return subject;
+  return { existing: subject, create: null };
+}
+
+export function resolveOrCreateSubject(db, userId, input) {
+  const { existing, create } = describeSubject(db, userId, input);
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  const { next } = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM subjects WHERE user_id = ?').get(userId);
+  const result = db.prepare(`
+    INSERT INTO subjects (user_id, name, color, is_active, sort_order, created_at, updated_at)
+    VALUES (?, ?, ?, 1, ?, ?, ?)
+  `).run(userId, create.name, create.color, next, now, now);
+  return db.prepare('SELECT * FROM subjects WHERE id = ?').get(result.lastInsertRowid);
 }
 
 /**

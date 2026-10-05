@@ -77,3 +77,18 @@ export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubje
     return { ok: true, acceptance };
   } catch (err) { return fail(err); }
 }
+
+/**
+ * READ-ONLY: what accepting this draft would create (subject, unit, exercises with the question each came from, the
+ * rejected questions that stay out), computed by the server with the same preparation as the acceptance. Nothing is written.
+ */
+export async function previewAcceptance(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision }) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries({ subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision })) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  try {
+    const { preview } = await apiRequest(`/v1/drafts/${draftId}/accept-preview?${params.toString()}`);
+    return { ok: true, preview };
+  } catch (err) { return fail(err); }
+}

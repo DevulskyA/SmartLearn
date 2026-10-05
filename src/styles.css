@@ -4450,6 +4450,35 @@ h1 {
   color: var(--color-muted);
 }
 
+.lesson-accept-preview {
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.lesson-accept-preview[hidden] {
+  display: none;
+}
+
+.lesson-accept-preview ul,
+.lesson-accept-preview ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.lesson-accept-preview-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.lesson-accept-preview-excluded {
+  margin: 0;
+  color: var(--color-muted);
+}
+
 .lesson-view {
   container-type: inline-size;
 }

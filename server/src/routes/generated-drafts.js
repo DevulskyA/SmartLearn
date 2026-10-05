@@ -1,5 +1,5 @@
 import * as drafts from '../services/generated-drafts.js';
-import { acceptDraft, AcceptDraftError } from '../services/accept-draft.js';
+import { acceptDraft, previewAcceptance, AcceptDraftError } from '../services/accept-draft.js';
 import { config } from '../config.js';
 
 function handleError(err, reply) {
@@ -187,6 +187,41 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { draft: drafts.deleteQuestion(db, request.actor.userId, id, request.params.questionId) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // Read-only: what accepting would create, computed by the same preparation as the acceptance (nothing is written).
+  app.get('/drafts/:id/accept-preview', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      querystring: {
+        type: 'object',
+        properties: {
+          subjectId: { type: 'string' }, newSubjectName: { type: 'string' }, newSubjectColor: { type: 'string' },
+          studyDate: { type: 'string' }, expectedRevision: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    const q = request.query;
+    const asInteger = (value, field) => {
+      if (value === undefined) return undefined;
+      const n = Number(value);
+      if (!Number.isInteger(n)) throw new AcceptDraftError('VALIDATION_FAILED', `${field} deve ser um número inteiro.`, field);
+      return n;
+    };
+    try {
+      return {
+        preview: previewAcceptance(db, request.actor.userId, id, {
+          subjectId: asInteger(q.subjectId, 'subjectId'),
+          newSubjectName: q.newSubjectName,
+          newSubjectColor: q.newSubjectColor,
+          studyDate: q.studyDate,
+          expectedRevision: asInteger(q.expectedRevision, 'expectedRevision'),
+        }),
+      };
     } catch (err) { return handleError(err, reply); }
   });
 
