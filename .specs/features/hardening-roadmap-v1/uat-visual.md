@@ -21,4 +21,6 @@ Registro: para cada passo, responda **claro? confortável? o que incomodou?** (u
 | 14 | Teclado: Tab pelas abas e por uma questão | Foco sempre visível; ordem lógica | | | |
 | 15 | Fechar o app e reabrir | Mesmo estado (sessão e dados) | | | |
 
+Fronteira de autonomia: os passos MECÂNICOS (1, 2, 9, 10, 11, 15 — abre, build/commit, salvar/rejeitar e recarregar, fonte nomeada, restart mantém estado) podem ser provados sem humano por CDP/Desktop quando o runtime permite, e não são HUMAN_GATE. Somente o JULGAMENTO PERCEPTIVO (colunas "Claro?" e "Confortável?", e os passos 3–8, 12–14) é HUMAN_GATE. Os resultados esperados dos passos 7, 12, 13 e 14 descrevem alvos de F4 (T-F4-02..05); o roteiro só faz sentido após essa fase local (S5), e T-F4-02 depende de T-F2-03/HG-02.
+
 Ao terminar: envie a tabela preenchida (ou só os incômodos). Os achados P0/P1 são corrigidos antes do checkpoint F4; P2/P3 entram priorizados no ledger.

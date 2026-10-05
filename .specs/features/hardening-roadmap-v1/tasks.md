@@ -1,7 +1,8 @@
 # Ledger de tarefas — Roadmap de endurecimento V1
 
-Spec: `spec.md` (mesma pasta). Status inicial de todas as tarefas: `[ ]` PLANEJADA. Nada aqui foi executado; este arquivo é um plano.
-Baseline de referência: HEAD `620307d`; servidor 773/773; frontend 453/453; cargo 30/30; e2e 201 passaram / 2 skipped; lint 0 erros; `CODEX_CALL_COUNT=0`.
+Spec: `spec.md` (mesma pasta). Ordem de sprints e critérios de fechamento: `PROGRAM.md`. Posição corrente: `.specs/HANDOFF.md`. Evidência: `validation.md`.
+**O campo `Status:` de cada tarefa é a ÚNICA fonte autoritativa de estado** (tarefas nascem `[ ]`; várias já estão `[✓]`/`[H]`). O ledger executa-se tarefa a tarefa; não há "status inicial" a presumir.
+Baseline de referência histórico (partida, não estado atual): HEAD `620307d`; servidor 773/773; frontend 453/453; cargo 30/30; e2e 201 passaram / 2 skipped; lint 0 erros; `CODEX_CALL_COUNT=0`. Medições atuais ficam em `validation.md`.
 
 Legenda do status: `[ ]` planejada · `[>]` em andamento · `[✓]` feita com evidência · `[!]` bloqueada · `[H]` depende de decisão humana.
 Tamanho: S (≤ meio dia) · M (≤ 2 dias) · L (> 2 dias; dividir antes de iniciar).
@@ -21,9 +22,12 @@ Cada tarefa é uma unidade causal: um entregável, verificável de forma indepen
 
 Comando-base do gate completo (usado nos checkpoints de fase):
 ```
-npm --prefix server test ; npm test ; npm run lint ; npm run test:inventory ; (cd src-tauri && cargo test --lib) ; npx playwright test
+npm --prefix server test ; npm test ; npm run lint ; npm run test:inventory ; (cd src-tauri && cargo test --lib) ; npm run test:e2e
 ```
-(e2e exige as portas livres e o Desktop DEV fechado até T-F6-02 tornar isso desnecessário.)
+Autoridade do runner e2e (PROVISÓRIA até S2/T-F6-03 declarar uma só):
+- **CANDIDATO canônico:** `npm run test:e2e` = `node scripts/e2e.mjs` (portas livres por execução, reserva atômica, saída própria por execução; T-F6-02). Não exige o Desktop DEV fechado.
+- **LEGADO:** `npx playwright test` direto (mantém os padrões históricos de porta; exige portas livres e Desktop DEV fechado). Aparece em `validation.md` como o comando das medições antigas e em `test/test-live.test.js`/`scripts/test-live-core.mjs`.
+- S2 deve deixar uma única autoridade e remover a outra deste arquivo, de `validation.md` (como comando vigente) e do runner "ao vivo".
 
 ---
 
@@ -41,9 +45,10 @@ F7 Produto de estudo (HG-09) — após F4
 F8 Segurança e empacotamento — após F1; antes de F9
 F9 Integração e entrega (HG-05/10) — por último
 ```
-Caminho crítico: F0 → F1 → F2 → F3 → F5 → F9. F4, F6 e F8 são paralelizáveis com ressalva de não mexer nas mesmas superfícies ao mesmo tempo (ver "conflitos de superfície" no fim).
+As dependências POR ID em cada tarefa prevalecem sobre este diagrama de fases (ex.: F3 não espera "F2 fechada", espera as tarefas nomeadas). Ordem de execução vigente: `PROGRAM.md`.
+Caminho crítico (histórico): F0 → F1 → F2 → F3 → F5 → F9. F4, F6 e F8 são paralelizáveis com ressalva de não mexer nas mesmas superfícies ao mesmo tempo (ver "conflitos de superfície" no fim).
 
-Ordem recomendada de execução: F0, F1, F6(T-F6-01..03), F2, F4, F3, F8, F5, F7, F9.
+Ordem recomendada original (superada por `PROGRAM.md`): F0, F1, F6(T-F6-01..03), F2, F4, F3, F8, F5, F7, F9.
 
 ---
 
@@ -170,14 +175,13 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 Objetivo: remover as últimas ambiguidades de identidade e preparar a medição sem violar a decisão "abrir não recalcula".
 
 ### T-F2-01 — Substituir a edição posicional da lista inteira por operações por id · M
-- Status: `[x]` · Requisitos: R-03 (AC-03.1) · Dependências: F1 fechada
+- Status: `[✓]` 2026-10-04 · BASE_SHA `3608048` · IMPLEMENTATION_SHA `532aa39` (rota `PATCH /drafts/:id` → 410 `ENDPOINT_REMOVED`; `reviseDraft` → `replaceDraftContent`, só fixtures; evidência em `validation.md`) · Requisitos: R-03 (AC-03.1) · Dependências: T-F1-01, T-F1-02 (escritor único e snapshot verificado antes de tocar dados do rascunho)
 - Superfície: `server/src/services/generated-drafts.js` (`reviseDraft`, `mergeIdentity`), `server/src/routes/generated-drafts.js` (`PUT /drafts/:id`), `src/draft-review-ui.js` (função `reviseDraft` do cliente, hoje sem uso na UI atual), testes.
 - DECISÃO DE DESENHO (2026-10-04, verificada: nenhum cliente de produção chama `PUT /drafts/:id` — `src/draft-review-ui.js:reviseDraft` é código morto e nenhum e2e usa a rota): a rota `PUT` é REMOVIDA (responde 410 com orientação para PATCH/DELETE/POST por entidade); o service que substitui a lista inteira deixa de ter nome genérico e vira `replaceDraftContent`, só para fixtures, nunca ligado a rota (teste-guarda).
 - Pergunta do escudo: "se reordenar trocar status entre conteúdos, o que fica vermelho?" Hoje: nada. Criar sensor primeiro.
 - RED: (a) reordenar 4 questões com Q2 REJECTED preserva REJECTED na MESMA questão de conteúdo; (b) enviar ids desconhecidos é erro; (c) tamanho diferente com REJECTED continua protegido (ver teste atual); (d) o cliente legado sem ids é recusado com orientação.
 - Desenho: aceitar `questions[]` com `id` obrigatório para as existentes; novas sem `id` recebem id novo; ausentes nunca são apagadas implicitamente (apagar é `DELETE` explícito). Alternativa mais simples e preferida se nenhum cliente usa a rota: remover `PUT` e manter `PATCH`/`DELETE`/`POST` por entidade. Verificar uso real (busca de chamadas, e2e) antes de decidir.
 - Gate: `server/test/lesson-granular-edit.test.js` + novos; e2e `lesson-editor.spec.js`, `draft-acceptance.spec.js`.
-- FEITO 2026-10-04: rota passou a 410 ENDPOINT_REMOVED (na verdade era PATCH /drafts/:id, não PUT); reviseDraft→replaceDraftContent; cliente morto removido; sensor server/test/draft-whole-list-replace.test.js (RED 3/3 antes, GREEN depois). Prova: server 810/810, e2e lesson-editor+draft-acceptance 19/19. Achado fora de escopo: root test/test-live.test.js:99 espera `playwright test` mas o script é `node scripts/e2e.mjs` (herdado de T-F6-02).
 
 ### T-F2-02 — Adicionar questão e reordenar como operações próprias · M
 - Status: `[ ]` · Requisitos: R-03 · Dependências: T-F2-01
@@ -225,7 +229,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa processo ou rascunho parcial para trás. Sem alterar prompt nem provedor.
 
 ### T-F3-01 — Tabela e máquina de estados de jobs · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.1) · Dependências: F2 fechada
+- Status: `[ ]` · Requisitos: R-04 (AC-04.1) · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
 - Superfície: nova migração `031-generation-jobs.sql` (somente adição), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
@@ -270,7 +274,7 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "funcionar". Esta fase depende de olhos humanos.
 
 ### T-F4-01 — Roteiro de validação visual humana e registro · M
-- Status: `[H]` · Requisitos: R-06 (AC-06.1) · Dependências: F1 fechada (banco/identidade estáveis)
+- Status: `[H]` · Requisitos: R-06 (AC-06.1) · Dependências: T-F1-01, T-F1-07, T-F1-08 (banco único e identidade/build inequívocos). A execução é UAT humano; os passos MECÂNICOS (ver `uat-visual.md`) podem ser provados sem humano
 - Fazer: preparar roteiro curto (≤ 15 min) em `.specs/features/hardening-roadmap-v1/uat-visual.md`: abrir `npm run dev:desktop`; Hoje/Plano/Estatísticas/Disciplinas com o histórico; Materiais → Rascunhos em andamento → editor; editar Q, salvar, recarregar; Revisão; "Sobre". Cada passo com resultado esperado e campo para "claro? confortável? o que incomodou?".
 - Resultado: o humano devolve achados; cada um vira F-xx priorizado. `VISUAL_VALIDATION` só vira PASS por declaração humana ou por checagem de instrumento equivalente declarada.
 - Gate: arquivo do roteiro revisado; resultado registrado.
@@ -336,7 +340,7 @@ Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Code
 - Fazer: repetir a mesma unidade 3 vezes; medir erros críticos, fatos sem suporte, qualificadores perdidos, achados e reparos por geração. Erro médico sério não detectado em qualquer geração bloqueia `REALMODEL_CONTENT_QUALITY_PROVEN`.
 
 ### T-F5-05 — Sensores determinísticos de qualificadores entre idiomas · L (dividir)
-- Status: `[ ]` · Requisitos: R-05 (AC-05.3) · Dependências: T-F5-03 (para exemplos reais de falha)
+- Status: `[ ]` · Requisitos: R-05 (AC-05.3) · Dependências: T-F5-03 (`[H]`, para exemplos reais de falha) — por isso fica BLOCKED_HUMAN, fora de qualquer sprint autônoma de extração
 - Subtarefas: (a) extrair do texto-fonte qualificadores numéricos/temporais/condicionais ("in 80% of", "within 24 h", "only if") e doses; (b) verificar presença/equivalência no rascunho PT por dicionário curto controlado (não tradução geral); (c) novo achado `QUALIFIER_LOST` com severidade; (d) o que não é determinístico fica rotulado na UI como "exige conferência humana".
 - RED: corpora pequenos sintéticos (EN→PT) com perda de qualificador injetada; falso positivo medido contra o rascunho real (alvo: o 67→0 já obtido para sobreposição não regride).
 - Gate: `draft-audit-cross-language.test.js` ampliado; revisão humana de amostra de achados reais.
@@ -351,7 +355,7 @@ Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Code
 - Fazer: decisão humana registrada com evidência: `REALMODEL_CONTENT_QUALITY_PROVEN` sim/não/condicional e riscos aceitos.
 
 ### T-F5-08 — Ordem de leitura por colunas na extração de PDF (achado D1 de VALID-4/5) · M
-- Status: `[ ]` · Requisitos: R-05 (fidelidade de escopo) · Dependências: nenhuma (sem Codex, sem HG; pode ser antecipada para logo após F6)
+- Status: `[ ]` · Requisitos: R-05 (fidelidade de escopo) · Dependências: nenhuma (sem Codex, sem HG). Fecha ISOLADA na sprint S1 (`PROGRAM.md`). WIP existente NÃO commitado: `server/src/pdf/column-order.js` + `server/test/column-order.test.js` (ainda sem ligar ao `extract-worker.js`)
 - Causa CONFIRMADA (2026-10-04, `getTextContent` do Costanzo, pág. 267, somente leitura): a página tem duas colunas (esquerda x≈60, direita x≈318) e o PDF emite o texto na ordem de fluxo do conteúdo, que nem sempre é a ordem de leitura. Na pág. 267 a coluna DIREITA (início de "Glomerular Filtration") é emitida antes da ESQUERDA (cauda do tópico anterior: FSR/PAH); `pageTextFromItems` (`server/src/pdf/page-text.js`) preserva a ordem do fluxo, então a cauda cai no meio de uma frase de podócitos e entra no escopo por seção → D1 (2 de 3 gerações). Varredura das 496 páginas: em ~390 de 488 páginas de duas colunas o primeiro item da coluna direita precede o da esquerda no fluxo (heurística grosseira; só dimensiona o problema, não é o critério de aceite).
 - Fazer: ordenar os itens por geometria (colunas detectadas por vão estável entre blocos; esquerda → direita; dentro da coluna, por y decrescente), SÓ quando a página é de duas colunas com vão claro; página de coluna única, tabelas e figuras mantêm o comportamento atual. Cabeçalho/rodapé correntes (y fora do corpo) continuam tratados por `stripRunningHeaders`.
 - Escudo (antes de editar): `pdf-extraction.test.js`, `extraction-text-fidelity.test.js` e a suíte de unidades/headings (`headings.js`, `outline.js`) devem continuar verdes; a pergunta "se isto destruir o texto bom, qual sensor fica vermelho?" exige um fixture sintético de duas colunas com ordem de fluxo invertida (RED) e outro de coluna única (não regressão).
@@ -384,7 +388,14 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[ ]` · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
-- MEDIÇÃO 2026-10-04 @3608048 (2 workers, `npm run test:e2e` x3): run1 PASS 203/0/2 em 9m27s (> meta 8 min); run2 FAIL 202/1/2 em 9m12s (`product-value.spec.js:86`, `#account-show-register` oculto mesmo após retry de 20 s); run3 INTERROMPIDA (workers com exit 3221225794 = 0xC0000142, falha de inicialização de processo, típica de pressão de recursos do Windows; máquina 16 GB, dezenas de msedge/webview2 abertos). Gate NÃO atingido. Causa não provada: falta distinguir carga do ambiente de defeito do app. Próximo: repetir com o ambiente quieto (fechar msedge/webview2 alheios) e comparar 1 vs 2 workers.
+- Medição 2026-10-04 @`3608048` em `validation.md` (gate NÃO atingido; a causa da falha do run 2 e a do `0xC0000142` NÃO estão provadas — ver T-F6-08).
+
+### T-F6-08 — Causa da falha funcional do run 2 do e2e completo · M
+- Status: `[ ]` · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02 (independente de T-F6-03, que depende do resultado)
+- Outcome: a causa de `product-value.spec.js:86` (`#account-show-register` oculto após o retry de 20 s) está DISCRIMINADA com evidência; correção SOMENTE se houver defeito demonstrado (produto ou teste); se for carga do ambiente, isso fica provado, não presumido. Proibido subir timeout/retry antes da causa.
+- Hipóteses concorrentes (nenhuma assumida): (a) corrida de inicialização do app: o clique em `[data-screen="account"]` chega antes de a navegação estar ligada; (b) colisão de estado/porta/lane entre workers; (c) backend do worker ainda não pronto; (d) pressão de memória/handles da máquina (compatível com o `0xC0000142` do run 3, que é fato distinto).
+- Menor discriminador: reexecutar só esse spec N vezes com 1 worker e com 2, com o ambiente descrito (processos alheios contados antes), guardando trace/console/rede da falha; comparar taxa de falha entre as condições.
+- Gate: causa registrada em `validation.md` com contagens; se defeito: RED → GREEN → mesma repetição sem falha.
 
 ### T-F6-04 — Comando de discriminação (mutação) repetível · M
 - Status: `[ ]` · Requisitos: R-07 (AC-07.3), F-45 · Dependências: nenhuma
@@ -396,9 +407,17 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Fazer: corrigir ou justificar os 23 avisos (variáveis não usadas, diretiva eslint-disable sem efeito) e o aviso de linker; `npm run lint` passa a falhar com avisos NOVOS (`--max-warnings` fixado no valor corrigido).
 - Gate: lint com limite; sem mudança de comportamento (diff revisado por tipo).
 
-### T-F6-06 — Contrato de persistência entre adaptadores (DEBT-006, parte 1) · L (dividir)
-- Status: `[ ]` · Dependências: nenhuma
-- Subtarefas: (a) levantar adaptadores vivos hoje (servidor SQLite é a autoridade; legado local/BrowserStore); (b) suíte de contrato executável contra o que ainda for suportado; (c) decisão de aposentadoria do legado. IndexedDB e sincronização ficam fora (spec, seção 7).
+### T-F6-06 — Contrato de persistência entre adaptadores (DEBT-006, parte 1) · L → DIVIDIDA em 06a/06b/06c (cada uma ≤ M, fecha sozinha)
+- Subtarefas originais: (a) levantar adaptadores vivos hoje (servidor SQLite é a autoridade; legado local/BrowserStore); (b) suíte de contrato executável contra o que ainda for suportado; (c) decisão de aposentadoria do legado. IndexedDB e sincronização ficam fora (spec, seção 7).
+
+### T-F6-06a — Levantamento dos adaptadores de persistência vivos · S
+- Status: `[ ]` · Dependências: nenhuma · Fazer: lista verificada por código/uso (quem chama, em que modo: Web, REMOTE_MODE, legado) em `validation.md`; sem alterar código. Gate: cada adaptador listado tem referência `arquivo:linha` de uso real e marcação VIVO/MORTO.
+
+### T-F6-06b — Suíte de contrato executável contra os adaptadores vivos · M
+- Status: `[ ]` · Dependências: T-F6-06a · Fazer: testes de contrato idênticos rodados contra cada adaptador VIVO (criar/ler/atualizar/apagar, ordem, ids estáveis). Gate: suíte nova verde; mutação simples (trocar a ordem num adaptador) deixa ≥ 1 teste vermelho.
+
+### T-F6-06c — Decisão de aposentadoria do legado · S
+- Status: `[H]` · Dependências: T-F6-06a, T-F6-06b · Decisão de produto/arquitetura sobre remover o adaptador legado; sem remoção de código sem ordem.
 
 ### T-F6-07 — Matriz de cobertura reconciliada · S
 - Status: `[ ]` · Dependências: T-F6-01
@@ -435,7 +454,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 ## F8 — Segurança e empacotamento (F-60..F-63)
 
 ### T-F8-01 — Inspeção do artefato empacotado · M
-- Status: `[ ]` · Requisitos: R-09 (AC-09.1, AC-09.2) · Dependências: F1
+- Status: `[ ]` · Requisitos: R-09 (AC-09.1, AC-09.2) · Dependências: T-F1-01 (variáveis/caminhos DEV que não podem vazar), T-F1-08 (identidade de build)
 - Fazer: `npm run package:standalone` em diretório temporário e teste que varre `server-runtime`, `dist-runtime` e configuração Tauri: nenhuma ocorrência de `SMARTLEARN_DEV_PERSISTENT_SESSION`, da senha de fixture, de caminhos `SmartLearn-DevData`; confirma `NODE_ENV` não-produção só no que já é decidido (cookie sem `Secure` em loopback — registrar como decisão existente, não alterar).
 - RED: injetar a variável num arquivo empacotado e ver o teste falhar.
 - Gate: teste novo + `desktop-entrypoint.test.js`.
@@ -450,7 +469,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Fazer: confirmar por teste que consentimento de IA e provedor só chegam por configuração explícita; que logs não imprimem texto de fonte nem credenciais; revisar `SMARTLEARN_AI_CONSENT=true` do launcher como exclusivo do DEV.
 
 ### T-F8-04 — Caminho único de abertura e retirada do release antigo · S
-- Status: `[H]` · Requisitos: R-09 (AC-09.4) · Dependências: HG-04, F1
+- Status: `[H]` · Requisitos: R-09 (AC-09.4) · Dependências: HG-04, T-F1-07, T-F1-08
 - Fazer (após decisão): desinstalar `AppData\Local\SmartLearn` pelo desinstalador; atalhos já aposentados permanecem em `retired-shortcuts`; documentar `npm run dev:desktop` como a única entrada.
 - Sensor: `desktop-entrypoint.test.js` confirma que o atalho "SmartLearn DEV" aponta para o launcher.
 
@@ -466,12 +485,12 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 ## F9 — Integração e entrega (F-50) — por último, sempre com decisão humana
 
 ### T-F9-01 — Mapa de integração e ensaio sem publicar · M
-- Status: `[H]` · Requisitos: R-10 (AC-10.1) · Dependências: HG-05, F0..F8
+- Status: `[H]` · Requisitos: R-10 (AC-10.1) · Dependências: HG-05; cada fase F0..F8 com checkpoint `[✓]` ou com seus `[H]` registrados em `validation.md`
 - Fazer: inventário dos 53+ commits locais agrupados por fase; relação com `claude/content-quality` e `tmp/integrate-cq-into-v1` (merge temporário marcado "not for push"); ensaio de integração em worktree descartável com gate completo; lista de conflitos previstos.
 - Saída: proposta de série de PRs (um por fase), com descrição e evidência por PR. Nada é enviado.
 
 ### T-F9-02 — `validation.md` por fase e validador de estado · S
-- Status: `[ ]` · Requisitos: R-10 (AC-10.2) · Dependências: fases fechadas
+- Status: `[ ]` · Requisitos: R-10 (AC-10.2) · Dependências: ao menos uma tarefa `[✓]` na fase que a seção de `validation.md` descreve (executa-se por fase, não no fim)
 - Fazer: `validation.md` com evidência-ou-zero por critério; rodar `scripts/validate_state.py` da skill quando aplicável.
 
 ### T-F9-03 — Entrega (push/merge/deploy) · —

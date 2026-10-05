@@ -1,6 +1,6 @@
 # SmartLearn — Plano de correção e melhorias (Roadmap de endurecimento V1)
 
-Status: PROPOSTO (aguarda aprovação humana dos HUMAN_GATES da seção 8)
+Status: EM EXECUÇÃO desde 2026-10-04 (F0 fechada; F1 com código completo; demais fases conforme `tasks.md`, cujo `Status:` por tarefa é autoritativo). HUMAN_GATES HG-01..HG-10 (seção 8) permanecem PENDENTES: nenhum está registrado como decidido, e a coluna "Recomendação do plano" é sugestão, não decisão. Ordem de sprints: `PROGRAM.md`.
 Data-base: 2026-10-04 · Branch `claude/smartlearn-v1-complete` · HEAD de referência `620307d`
 Metodologia: `tlc-spec-driven-strict` (GOV-2 = opção A, sem segunda governança). Este arquivo é a SPEC; o ledger executável está em `tasks.md`.
 Hierarquia de autoridade (nesta ordem): Git/código/dados reais > evidência de validação > decisão humana registrada > spec > STATE/handoff > plano > narrativa de agente.
@@ -234,7 +234,7 @@ Regra do Cardboard Test: para cada tarefa de risco médio/alto, perguntar "qual 
 | HG-05 | Estratégia de integração (merge vs squash vs série de PRs), destino de `content-quality` e do merge temporário | F9 | série de PRs pequenos, um por fase, preservando história |
 | HG-06 | Avaliação humana de VALID-4/5 (PDF real, rubrica) e decisão VALID-8 | F5 | humano avalia 1 unidade por rodada com rubrica fixa |
 | HG-07 | Orçamento de chamadas ao Codex do Prompt Lab | F5 | teto por rodada e por dia, configurável |
-| HG-08 | Política de dados de teste com PDF real (nunca no repositório; onde guardar) | F5 | diretório fora do repositório, listado em `.gitignore` global |
+| HG-08 | Política de ARMAZENAMENTO de PDF/dados reais usados em teste (nunca no repositório; onde ficam e como são referenciados). Não é pedido de outro PDF: o Costanzo já existe localmente e não deve ser solicitado de novo | F5 | diretório fora do repositório, listado em `.gitignore` global |
 | HG-09 | Decisão de produto sobre recuperação de atraso e onboarding | F7 | começar por "reagendar atrasadas" reversível |
 | HG-10 | Push, merge, deploy, release | F9 | só por ordem explícita, uma ação por vez |
 
@@ -246,3 +246,12 @@ R-C Regressão ao mexer em `PUT`/identidade — mitigado por sensores granulares
 R-D Gasto/lentidão do Codex no Prompt Lab — mitigado por orçamento (HG-07) e jobs com cancelamento.
 R-E Deriva de documentação — mitigado por reconciliação em F0 e Memento.
 R-F Integração difícil (53 commits + `content-quality`) — mitigado por série de PRs e prova de integração antecipada.
+
+## 10. Definição de fechamento (critério; o estado vive em `tasks.md`, `validation.md` e `HANDOFF.md`)
+
+Dois fechamentos distintos; o primeiro NÃO implica o segundo:
+
+- **ENGINEERING_LOCAL_CLOSURE** — no HEAD final: todo trabalho local não-`[H]` das sprints do `PROGRAM.md` está `[✓]` (ou OBSOLETE/DUPLICATE com motivo); gates de fechamento verdes no mesmo snapshot; banco canônico íntegro; skips, avisos, gates humanos e resíduos explícitos. Resultados possíveis: `ENGINEERING_LOCAL_PROVEN`, `ENGINEERING_LOCAL_PROVEN_WITH_HUMAN_GATES`, `ENGINEERING_LOCAL_NOT_PROVEN`.
+- **V1_VALIDATED** — exige, além do anterior, a decisão humana VALID-8 (HG-06) com `REALMODEL_CONTENT_QUALITY_PROVEN=PROVEN` e a validação visual humana (T-F4-01) registrada com autoria e data. Enquanto VALID-8 estiver `NOT_PROVEN` (estado em `conductor/tracks/v1-validation/plan.md`; VALID-4 e VALID-5 constam ali como PASS de escopo limitado, o que NÃO é o mesmo que a decisão VALID-8), o fechamento local com gates humanos NÃO equivale a V1 integralmente validada.
+
+Fronteira de autonomia no Desktop/CDP: verificações MECÂNICAS (abre, build/commit, persistência após restart, salvar/rejeitar/recarregar, ausência de órfãos, título) são autônomas quando o runtime permite. Somente o JULGAMENTO PERCEPTIVO (claro? confortável?) é HUMAN_GATE. Reabrir o Desktop não é gate.
