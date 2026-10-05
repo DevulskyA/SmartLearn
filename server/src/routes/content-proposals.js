@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import * as proposals from '../services/content-proposals.js';
+import { generationState } from '../services/generated-drafts.js';
 
 function handleError(err, reply) {
   if (err instanceof proposals.ProposalError) {
@@ -76,7 +77,7 @@ export function registerContentProposalRoutes(app, db) {
     const id = Number(request.params.id);
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
-      return { proposals: proposals.listProposals(db, request.actor.userId, id) };
+      return { proposals: proposals.listProposals(db, request.actor.userId, id).map((p) => ({ ...p, generationState: generationState(db, request.actor.userId, p.id) })) };
     } catch (err) { return handleError(err, reply); }
   });
 
@@ -86,7 +87,8 @@ export function registerContentProposalRoutes(app, db) {
     const id = Number(request.params.id);
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
-      return { proposal: proposals.getProposal(db, request.actor.userId, id) };
+      const proposal = proposals.getProposal(db, request.actor.userId, id);
+      return { proposal: { ...proposal, generationState: generationState(db, request.actor.userId, proposal.id) } };
     } catch (err) { return handleError(err, reply); }
   });
 

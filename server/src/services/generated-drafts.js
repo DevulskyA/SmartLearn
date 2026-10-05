@@ -366,15 +366,25 @@ export async function createDraft(db, userId, proposalId, {
   apiUrl = null,
   provider: declaredProvider = null,
   codex = {},
+  // Test/ops seam: an already-built provider ({name, live, generate, audit?, repair?}) used instead of selectProvider, so a
+  // spy can prove how many calls would have reached a model.
+  providerImpl = null,
+  // Generation is JIT and reuses what is valid: a repeat request returns the existing draft/lesson with NO provider call.
+  // Making a new one is an explicit act.
+  regenerate = false,
   now = () => new Date(),
 } = {}) {
+  if (!regenerate) {
+    const existing = reusableDraftRow(db, userId, proposalId);
+    if (existing) return { ...toDraftDto(existing, { db, userId }), live: existing.provider !== FAKE_PROVIDER_NAME, reused: true };
+  }
   const { found, scope } = prepareGeneration(db, userId, proposalId, { maxInputChars });
 
   // Bind the draft to the exact text it is generated from (SPRINT-04), fixed BEFORE the provider call.
   const inputDigest = segmentsDigest(found.segments);
   const inputGeneration = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
 
-  const provider = selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
+  const provider = providerImpl ?? selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
   // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
   const deadlineMs = provider.timeoutMs ?? timeoutMs;
 
@@ -426,6 +436,30 @@ export async function createDraft(db, userId, proposalId, {
   );
 
   return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid), { db, userId }), live: provider.live };
+}
+
+/**
+ * The newest draft of this unit that is still worth keeping: an accepted lesson, or a draft whose source text has not
+ * changed. A stale draft is not reusable (its text no longer matches what it was generated from). NOT_FOUND when the unit is
+ * not this user's, so reuse never reveals another user's content.
+ */
+function reusableDraftRow(db, userId, proposalId) {
+  const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
+  if (!proposal) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
+  const rows = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId);
+  for (const row of rows) {
+    if (row.status === 'ACCEPTED') return row;
+    if (row.status === 'DRAFT' && !isDraftStale(db, userId, row)) return row;
+  }
+  return null;
+}
+
+/** Where a unit is in its life: NOT_GENERATED | DRAFT | ACCEPTED | STALE (only stale drafts exist). GENERATING arrives with the jobs. */
+export function generationState(db, userId, proposalId) {
+  const reusable = reusableDraftRow(db, userId, proposalId);
+  if (reusable) return reusable.status === 'ACCEPTED' ? 'ACCEPTED' : 'DRAFT';
+  const any = db.prepare("SELECT 1 FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND status = 'DRAFT' LIMIT 1").get(userId, proposalId);
+  return any ? 'STALE' : 'NOT_GENERATED';
 }
 
 /**

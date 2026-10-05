@@ -39,29 +39,29 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
   app.post('/proposals/:id/drafts', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-      body: { type: 'object', properties: { promptVersion: { type: 'string' } } },
+      body: { type: 'object', properties: { promptVersion: { type: 'string' }, regenerate: { type: 'boolean' } } },
     },
   }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
-      reply.status(201);
-      return {
-        draft: await drafts.createDraft(db, request.actor.userId, id, {
-          // undefined -> createDraft's own default (the CURRENT prompt version), so a stored draft is labelled with the prompt that really produced it
-          promptVersion: request.body?.promptVersion,
-          apiUrl: config.aiApiUrl,
-          apiKey: config.aiApiKey,
-          model: config.aiModel,
-          provider: config.aiProvider,
-          consentGranted: config.aiConsentGranted,
-          budgetCapUsd: config.aiBudgetCapUsd,
-          codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
-          timeoutMs: config.aiRequestTimeoutMs,
-          maxInputChars: config.aiMaxInputChars,
-          ...aiOptions,
-        }),
-      };
+      const draft = await drafts.createDraft(db, request.actor.userId, id, {
+        regenerate: request.body?.regenerate === true,
+        // undefined -> createDraft's own default (the CURRENT prompt version), so a stored draft is labelled with the prompt that really produced it
+        promptVersion: request.body?.promptVersion,
+        apiUrl: config.aiApiUrl,
+        apiKey: config.aiApiKey,
+        model: config.aiModel,
+        provider: config.aiProvider,
+        consentGranted: config.aiConsentGranted,
+        budgetCapUsd: config.aiBudgetCapUsd,
+        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
+        timeoutMs: config.aiRequestTimeoutMs,
+        maxInputChars: config.aiMaxInputChars,
+        ...aiOptions,
+      });
+      reply.status(draft.reused ? 200 : 201);
+      return { draft };
     } catch (err) { return handleError(err, reply); }
   });
 

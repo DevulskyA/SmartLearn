@@ -129,7 +129,7 @@ test('end to end: createDraft with provider OPENAI stores an OPENAI draft, calls
       assert.deepEqual(call.body.reasoning, { effort: 'high' });
     }
 
-    await assert.rejects(() => drafts.createDraft(db, userId, proposal.id, { provider: 'OPENAI', model: 'gpt-5.6-luna', fetchImpl }), (err) => err.code === 'MISSING_CREDENTIALS');
+    await assert.rejects(() => drafts.createDraft(db, userId, proposal.id, { provider: 'OPENAI', model: 'gpt-5.6-luna', fetchImpl, regenerate: true }), (err) => err.code === 'MISSING_CREDENTIALS');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM generated_drafts WHERE user_id = ?').get(userId).n, 1, 'the refused call stored nothing and produced no substitute content');
   } finally { db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
