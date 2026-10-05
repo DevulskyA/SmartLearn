@@ -662,7 +662,7 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 - Gate: `server/test/generation-language.test.js` + `draft-audit*.test.js` + `ai-drafts.test.js`.
 
 ### T-F10-02b — Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo · S
-- Status: `[H]` · Requisitos: R-13 (AC-13.3) · Dependências: T-F10-02a, HG-13
+- Status: `[✓]` 2026-10-05 · BASE_SHA `c29ef10` · IMPLEMENTATION_SHA `a793591` (diretiva OUTPUT LANGUAGE no prompt + campo `language` + promptVersion 5→6; HG-13 reclassificado como decisão técnica reversível; só o escopo de UI es/en segue em T-F10-06) · Requisitos: R-13 (AC-13.3) · Dependências: T-F10-02a
 - Fazer (após autorização): bloco OUTPUT LANGUAGE no `draft-prompt.js` + campo `language` no esquema do modelo + bump de `promptVersion`, para os adaptadores Codex/Anthropic/OpenAI; SEM Prompt Lab e SEM chamada real. A prova com modelo real fica `NOT_PROVEN` até execução manual.
 
 ### T-F10-03 — Reuso, estado da unidade e política de prefetch (JIT) · M

@@ -12,7 +12,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 48/71 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 49/71 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 5 · DECISÕES HUMANAS: 17
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Roadmap progressivo: AGORA = o resultado ativo com a árvore completa; PRÓXIMO = SÓ o próximo resultado pronto (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e a próxima; o progresso global é só de tarefas.
 
@@ -54,11 +54,11 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [H] **T-F2-03** — Auditoria versionada e reauditoria explícita — HG-02
 - [H] **T-F2-06** — Política de volume de questões (aplicação) — HG-01
 
-### [H] S2G-a · Geração segura: idiomas — tarefas 2/3
+### [✓] S2G-a · Geração segura: idiomas — tarefas 3/3
 
 - [x] **T-F10-01** — Preferências de idioma: `uiLocale` e `generationLocale` independentes
 - [x] **T-F10-02a** — Contrato de idioma na geração (domínio, sem mudar o texto do prompt)
-- [H] **T-F10-02b** — Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo — HG-13
+- [x] **T-F10-02b** — Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo
 
 ### [✓] S2G-b · Geração segura: escopo, reuso e créditos — tarefas 4/4
 
@@ -164,7 +164,6 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - T-F2-03 · Auditoria versionada e reauditoria explícita · HG-02 "Reauditar" como ação explícita é aceitável dado que abrir não recalcula?
 - T-F2-06 · Política de volume de questões (aplicação) · HG-01 Política de volume de questões
-- T-F10-02b · Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo · HG-13 Autorizar a diretiva mínima de idioma no prompt e confirmar o alcance de uiLocale em es/en no V1
 - T-F8-05 · Dependências e auditoria · Falta cargo audit — decisão humana
 - T-F8-04 · Caminho único de abertura e retirada do release antigo · HG-04 Retirar o release instalado de 10/09
 - T-F0-05 · Higiene do checkout principal e das worktrees auxiliares · HG-05 Estratégia de integração, destino de content-quality e do merge temporário
