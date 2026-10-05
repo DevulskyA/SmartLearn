@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { CANONICAL, checkContext, gitIo } from '../scripts/context-check.mjs';
-import { resumeCockpit, taskBlocks, programOrder } from '../scripts/context-core.mjs';
+import { resumeCockpit, taskBlocks, programOrder, boundaryCut } from '../scripts/context-core.mjs';
 import { renderPlanRegion } from '../scripts/plan-sync.mjs';
 
 // PERSISTENCE GATE + COLD-START COCKPIT. After /clear a new session must find position, active task, next command and blockers
@@ -173,4 +173,21 @@ test('the plan validation line is part of the gate: an old PASS in plan.md fails
   assert.deepEqual(check(withLine(stale), 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)').problems, [], 'not proven stays not proven');
   assert.ok(check(withLine(pass), stale).problems.some((m) => /validation line is stale/.test(m)), 'old PASS in the plan, head no longer proven');
   assert.ok(check(withLine(stale), pass).problems.some((m) => /validation line is stale/.test(m)), 'head proven but the plan still says not proven');
+});
+
+test('the cockpit never cuts a sentence mid-way with an ellipsis: long values end at a boundary and point to the tasks.md block', () => {
+  const files = fixture();
+  const longGoal = 'o primeiro resultado esperado é claro e completo; o segundo resultado esperado também é descrito com bastante detalhe para ultrapassar o limite do cockpit, e continua ainda mais, descrevendo condições, exceções, provas e riscos até passar de duzentos e trinta caracteres no total.';
+  files[`${FEATURE}/tasks.md`] = files[`${FEATURE}/tasks.md`].replace('- Outcome: the thing works', `- Outcome: ${longGoal}`).replace('- Comando: `npm test`', '- Comando: `node scripts/a.mjs` (resultado final conhecido); só reexecutar `bash scripts/muito-longo-nome-de-script-para-forçar-o-corte.sh --com --varios --argumentos --que --passam --do --limite --de --duzentos --e --trinta --caracteres --no --total --da --linha` com hipótese nova');
+  const text = resumeCockpit(ioOf(files).read).join('\n');
+  assert.doesNotMatch(text, /…/);
+  const goal = /^CURRENT_GOAL=(.*)$/m.exec(text)[1];
+  assert.match(goal, /\[completo: tasks\.md, bloco T-F1-02\]$/);
+  assert.match(goal, /o primeiro resultado esperado é claro e completo; o segundo/);
+  const cmd = /^NEXT_COMMAND=(.*)$/m.exec(text)[1];
+  assert.equal((cmd.match(/`/g) ?? []).length % 2, 0, 'backticks stay balanced');
+  assert.match(cmd, /\[completo: tasks\.md, bloco T-F1-02\]$/);
+  assert.equal(boundaryCut('abc def ghi', 100), 'abc def ghi');
+  assert.equal(boundaryCut('primeira frase inteira. segunda frase que passa do limite', 30), 'primeira frase inteira');
+  assert.equal(boundaryCut('texto (com parêntese que não fecha antes do limite aqui', 30), 'texto');
 });

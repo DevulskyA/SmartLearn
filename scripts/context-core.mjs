@@ -165,7 +165,22 @@ export function progressCounts(blocks) {
 
 const field = (block, name) => new RegExp(`^- ${name}:\\s*(.+)$`, 'm').exec(block?.body ?? '')?.[1]?.trim() ?? null;
 export const taskField = field;
-const clip = (s, n = 230) => (s && s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+/** Cuts at a sentence or word boundary (never mid-word, no ellipsis); backticks and parentheses are left balanced. */
+export function boundaryCut(text, n) {
+  const t = String(text ?? '');
+  if (t.length <= n) return t;
+  const head = t.slice(0, n + 1);
+  let at = Math.max(head.lastIndexOf('; '), head.lastIndexOf('. '), head.lastIndexOf('? '));
+  if (at < n * 0.4) at = head.lastIndexOf(' ');
+  let out = t.slice(0, at > 0 ? at : n).trimEnd();
+  for (let guard = 0; guard < 8; guard++) {
+    const ticks = (out.match(/`/g) ?? []).length % 2;
+    const parens = (out.match(/\(/g) ?? []).length > (out.match(/\)/g) ?? []).length;
+    if (!ticks && !parens) break;
+    out = out.slice(0, Math.max(ticks ? out.lastIndexOf('`') : -1, parens ? out.lastIndexOf('(') : -1)).trimEnd();
+  }
+  return out.replace(/[\s,;:(—-]+$/, '');
+}
 
 /** "T-F3-01..05" -> "T-F3-01 T-F3-02 ... T-F3-05" (a range in PROGRAM.md means every id in it, in order). */
 export function expandRanges(text) {
@@ -207,7 +222,10 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const relevantGates = [...new Set([...(active?.gates ?? []), ...next3.flatMap((b) => b.gates)])];
   // the standing prohibitions are rules 8 and 9 of tasks.md "Regras de execução" (derived here, never restated by hand)
   const ruleText = (n) => new RegExp(`^${n}\\. (.+)$`, 'm').exec(norm(tasksText))?.[1] ?? '';
-  const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => clip(r.replace(/`/g, ''), 120)).join(' | ');
+  // long values are cut at a sentence/word boundary and point to where the whole text lives
+  const where = active ? ` [completo: tasks.md, bloco ${active.id}]` : '';
+  const fit = (v, n = 230) => (v == null ? null : v.length > n ? `${boundaryCut(v, n)}${where}` : v);
+  const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => r.replace(/`/g, '')).join(' | '); // whole rules: a cut prohibition is worse than a long line
   const lines = [
     `HEAD=${head}`,
     `PHASE=${/^MARCO ATUAL:\s*(.+)$/m.exec(plan)?.[1] ?? '(none)'}`,
@@ -217,12 +235,12 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
     `TASKS=${pc.tasksDone}/${pc.tasksTotal}  SUBTASKS=${pc.subDone}/${pc.subTotal}  (BLOCKED_COUNT = waits for a dependency; HUMAN_GATE_COUNT = needs the user's decision)`,
     validationLine,
     '',
-    `CURRENT_GOAL=${clip(field(active, 'Outcome') ?? field(active, 'Fazer')) ?? '(none)'}`,
-    `CURRENT_PROOF_REQUIRED=${clip(field(active, 'Gate')) ?? '(none)'}`,
-    `NEXT_STEP=${clip(field(active, 'Próximo passo')) ?? '(none)'}`,
-    `NEXT_COMMAND=${clip(field(active, 'Comando')) ?? '(none)'}`,
+    `CURRENT_GOAL=${fit(field(active, 'Outcome') ?? field(active, 'Fazer')) ?? '(none)'}`,
+    `CURRENT_PROOF_REQUIRED=${fit(field(active, 'Gate')) ?? '(none)'}`,
+    `NEXT_STEP=${fit(field(active, 'Próximo passo')) ?? '(none)'}`,
+    `NEXT_COMMAND=${fit(field(active, 'Comando')) ?? '(none)'}`,
     '',
-    `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${clip(b.heading, 60)})`).join(' | ') : '(none eligible)'}`,
+    `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${b.heading})`).join(' | ') : '(none eligible)'}`,
     `BLOCKERS_FOR_CURRENT=${blockers.length ? blockers.join(', ') : 'none'}`,
     `OPEN_HUMAN_GATES_RELEVANT=${relevantGates.length ? relevantGates.map((g) => `${g} ${gateName(g)}`.trim()).join(' | ') : 'none for the current and next tasks'}`,
     `PROHIBITIONS=${prohibitions || '(see tasks.md "Regras de execução" 8-9)'}`,

@@ -142,10 +142,10 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
   const prefix = 'VALIDAÇÃO DO HEAD ATUAL:';
   if (!artifacts?.length) return { proven: false, line: `${prefix} ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)` };
   const rows = artifacts.map((a) => ({ suite: a.suite, eff: effectiveState(a, { currentHead, alive, now, docsOnlySince }), tested: a.headTested }));
-  if (rows.every((r) => r.eff.state === 'PASS')) return { proven: true, line: `${prefix} ✓ PASS (${rows.map((r) => r.suite).join(', ')}) em ${(currentHead ?? '').slice(0, 7)}` };
+  if (rows.every((r) => r.eff.state === 'PASS')) return { proven: true, line: `${prefix} ✓ PASS (${rows.map((r) => r.suite).join(', ')}) no HEAD atual` };
   const label = (st) => (st === 'STALE' ? 'DESATUALIZADO' : st);
   const detail = rows.map((r) => `${r.suite} ${label(r.eff.state)}${r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : ''}`).join(' · ');
-  return { proven: false, line: `${prefix} ⚠ NÃO PROVADA / DESATUALIZADA — ${detail}; HEAD atual ${(currentHead ?? '?').slice(0, 7)}` };
+  return { proven: false, line: `${prefix} ⚠ NÃO PROVADA / DESATUALIZADA — ${detail}; HEAD atual ≠ HEAD testado` };
 }
 
 /** headValidation() for the worktree `wt`: ITS recorded results judged against ITS current git head (reads files and runs git). */
@@ -176,7 +176,7 @@ export function renderTestsSection(artifacts, { currentHead, alive, now, docsOnl
     const eff = effectiveState(a, { currentHead, alive, now, docsOnlySince });
     const c = a.counts ?? emptyCounts();
     const total = c.total ?? '?';
-    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (atual ${short(currentHead)}, só docs depois)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ atual ${short(currentHead)}`;
+    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (só views geradas depois)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ HEAD atual`;
     const running = eff.state === 'RUNNING';
     summaries.push(`${a.suite} ${stateLabel(eff.state)} ${c.done}/${c.total ?? '?'}`);
     const dur = running ? fmtDuration(Date.now() - Date.parse(a.startedAt)) : fmtDuration(a.durationMs ?? Date.parse(a.updatedAt) - Date.parse(a.startedAt));

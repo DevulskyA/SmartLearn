@@ -58,7 +58,7 @@ test('the board is a SIMPLE checklist: [✓] finished, [>] doing now, [ ] next, 
   assert.match(html, /class="t now"><span class="m">\[>\]<\/span> EXAM-1 — Prova sem feedback/);
   assert.match(html, /\[ \]<\/span> EXAM-2 — Resultado/);
   assert.match(html, /\[!\]<\/span> BLK-1 — Depende de chave/);
-  assert.match(html, /EXECUTANDO AGORA:<\/strong><p>EXAM-1 — fazer prova completa sem feedback antes de submeter\./);
+  assert.match(html, /TAREFA ATIVA AGORA:<\/strong><p>EXAM-1 — fazer prova completa sem feedback antes de submeter\./);
   assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt;'), 'CLI line escaped');
   // no dashboard furniture
   for (const forbidden of ['<details', 'class="badge"', '<dl>', 'aria-label="GUI"', 'pode estar desatualizado']) assert.ok(!html.includes(forbidden), forbidden);

@@ -15,13 +15,16 @@ Iniciado: 2026-10-04
 
 ATIVA AGORA: T-F6-08 (S3) · PRÓXIMA: T-F6-03 · TAREFAS: 24/70 · SUBTAREFAS: 13/14 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
 
-VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a)
+VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a); HEAD atual ≠ HEAD testado
 
-Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.
+Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.
 
-## AGORA — EM EXECUÇÃO
+## AGORA — TAREFA ATIVA
 
 - T-F6-08 · Causa da falha funcional do run 2 do e2e completo · S3 · subtarefas 13/14
+  Estado: Execução concluída; nada em execução agora; falta só a decisão de fechamento
+  Resultado: Sintoma #account-show-register oculto não reproduzido em 10 rodadas; causa NOT_PROVEN; nenhuma correção feita
+  Próximo passo: Decidir o fechamento de T-F6-08 ou a próxima ação
   - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
     - [x] w1-r1 — PASS 38/38 (208 s)
     - [x] w1-r2 — PASS 38/38 (207 s)
@@ -41,9 +44,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## PRÓXIMO
 
-- T-F6-03 · Partição e tempo-alvo do e2e completo
-- T-F3-01 · Tabela e máquina de estados de jobs
-- T-F3-05 · Explicação obrigatória por validação
+- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · depois de T-F6-08 · dependências concluídas: T-F6-02
+- T-F3-01 · Tabela e máquina de estados de jobs · S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
+- T-F3-05 · Explicação obrigatória por validação · S4 · independente de S3 · sem dependência pendente · passa à frente de T-F3-02, T-F3-03, T-F3-04 (aguardam T-F3-01)
 
 ## BLOQUEADAS POR DEPENDÊNCIA
 
@@ -136,7 +139,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ### [ ] S6B · Confiança: persistência — tarefas 0/3
 
-- [=] **T-F6-06** — Contrato de persistência entre adaptadores (DEBT-006, parte 1) — dividida em subtarefas
+- [=] **T-F6-06** — Contrato de persistência entre adaptadores (DEBT-006, parte 1) — dividida em T-F6-06a/b/c (tarefas)
   - [ ] **T-F6-06a** — Levantamento dos adaptadores de persistência vivos
   - [ ] **T-F6-06b** — Suíte de contrato executável contra os adaptadores vivos
   - [H] **T-F6-06c** — Decisão de aposentadoria do legado

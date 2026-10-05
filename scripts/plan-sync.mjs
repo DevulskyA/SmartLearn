@@ -26,11 +26,12 @@ export function cut(text, n) {
 }
 
 /** The first COMPLETE sentence of a text (parentheticals and backticks dropped); never cut by character count. */
-export function firstSentence(text) {
+export function firstSentence(text, { clauses = true } = {}) {
   const t = String(text ?? '').replace(/`/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
   const m = /^(.+?[.?!])(?:\s|$)/.exec(t);
   let out = (m ? m[1] : t);
-  out = out.split(/[;:]\s/)[0].trim().replace(/[.,;:]+$/, '');
+  if (clauses) out = out.split(/[;:]\s/)[0];
+  out = out.trim().replace(/[.,;:]+$/, '');
   return out;
 }
 
@@ -95,7 +96,8 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '', v
   const subNote = (b) => (b.subtasks.length ? ` — subtarefas ${sc(b).done}/${sc(b).total}` : '');
   const row = (b, indent = '') => {
     const cls = eff.get(b.id);
-    const note = b.status === '=' ? ' — dividida em subtarefas' : cls === 'B' ? ` — ${blockNote(b, blocks, eff)}` : cls === 'D' && gatesOf(b).length ? ` — ${gatesOf(b).join(', ')}` : '';
+    const kids = b.status === '=' ? blocks.filter((c) => childOf(c)?.id === b.id) : [];
+    const note = b.status === '=' ? ` — dividida em ${b.id}${kids.map((c) => c.id.slice(b.id.length)).join('/')} (tarefas)` : cls === 'B' ? ` — ${blockNote(b, blocks, eff)}` : cls === 'D' && gatesOf(b).length ? ` — ${gatesOf(b).join(', ')}` : '';
     return `${indent}- [${MARK[cls]}] **${b.id}** — ${title(b)}${note}${subNote(b)}`;
   };
   const pointer = (b, why = '') => `- ${b.id} · ${title(b)}${why ? ` · ${why}` : ''}`;
@@ -139,14 +141,31 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '', v
     + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · TAREFAS: ${pc.tasksDone}/${pc.tasksTotal} · SUBTAREFAS: ${pc.subDone}/${pc.subTotal}`
     + ` · BLOQUEADAS POR DEPENDÊNCIA: ${pc.blockedByDep} · DECISÕES HUMANAS: ${pc.decisions}`, '');
   // the current-HEAD sha is NOT written to the tracked plan (it would change on every commit); 'testado <sha>' of recorded results stays
-  out.push(validationLine.replace(/;\s*HEAD atual \S+/, '').replace(/ em [0-9a-f]{7,40}$/, ''), '');
-  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
-  out.push('## AGORA — EM EXECUÇÃO', '');
-  if (active) out.push(pointer(active, `${activeGroup} · subtarefas ${sc(active).done}/${sc(active).total}`), ...subLines(active, 2));
+  out.push(validationLine.replace(/;\s*HEAD atual [0-9a-f]{7,40}/, '').replace(/ em [0-9a-f]{7,40}$/, ''), '');
+  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
+  out.push('## AGORA — TAREFA ATIVA', '');
+  // derived from the task block (never copied logs): Estado, Resultado (or Objetivo), Próximo passo
+  const capital = (t) => (t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}` : t);
+  const factLines = (b) => {
+    const estado = firstSentence(taskField(b, 'Estado') ?? '', { clauses: false }) || firstSentence(taskField(b, 'Execução') ?? '');
+    const resultado = firstSentence(taskField(b, 'Resultado') ?? '', { clauses: false });
+    const objetivo = resultado ? '' : firstSentence(taskField(b, 'Outcome') ?? taskField(b, 'Fazer') ?? '', { clauses: false });
+    const proximo = firstSentence(taskField(b, 'Próximo passo') ?? '');
+    return [estado && `  Estado: ${capital(estado)}`, resultado && `  Resultado: ${capital(resultado)}`, objetivo && `  Objetivo: ${capital(objetivo)}`, proximo && `  Próximo passo: ${capital(proximo)}`].filter(Boolean);
+  };
+  if (active) out.push(pointer(active, `${activeGroup} · subtarefas ${sc(active).done}/${sc(active).total}`), ...factLines(active), ...subLines(active, 2));
   else out.push('- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)');
   out.push('', '## PRÓXIMO', '');
   if (queue.length === 0) out.push('- (nenhuma elegível pela ordem de PROGRAM.md)');
-  for (const b of queue.slice(0, 3)) out.push(pointer(b));
+  const groupOf = (b) => groups.find((g) => g.members.includes(b))?.id ?? '-';
+  const why = (b, at) => {
+    const g = groupOf(b);
+    const skipped = (groups.find((x) => x.id === g)?.members ?? []).filter((m) => m !== b && m !== active && m.status !== '✓' && m.status !== '=' && rank.get(m.id) < rank.get(b.id) && !queue.slice(0, at).includes(m));
+    const parts = [g, active && g !== activeGroup ? `independente de ${activeGroup}` : active ? `depois de ${active.id}` : '', b.deps.length ? `dependências concluídas: ${b.deps.join(', ')}` : 'sem dependência pendente'];
+    if (skipped.length) parts.push(`passa à frente de ${skipped.map((m) => m.id).join(', ')} (aguardam ${[...new Set(skipped.flatMap((m) => m.deps.filter((d) => open(d) && !skipped.some((k) => k.id === d))))].join(', ') || 'dependência'})`);
+    return parts.filter(Boolean).join(' · ');
+  };
+  queue.slice(0, 3).forEach((b, at) => out.push(pointer(b, why(b, at))));
   out.push('', '## BLOQUEADAS POR DEPENDÊNCIA', '');
   if (blockedDep.length === 0) out.push('- (nenhuma)');
   for (const b of blockedDep) out.push(pointer(b, blockNote(b, blocks, eff)));

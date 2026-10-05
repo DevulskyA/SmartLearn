@@ -78,7 +78,7 @@ test('the section shows tested vs current head, counts, exit code, pid and log p
   assert.match(html, /DESATUALIZADO/);
   assert.doesNotMatch(html, /STALE/);
   assert.match(html, /<details class="tl-box"><summary><strong>TESTES AO VIVO:<\/strong> [^<]*DESATUALIZADO/);
-  assert.match(html, /HEAD testado aaaaaaa ≠ atual bbbbbbb/);
+  assert.match(html, /HEAD testado aaaaaaa ≠ HEAD atual/);
   assert.match(html, /3\/3 feitos/);
   assert.match(html, /exit 0/);
   assert.match(html, /pid 4242/);
@@ -117,7 +117,7 @@ test('commits after a run that only touch conductor/ keep the result valid; any 
   assert.equal(docs.docsOnly, true);
   assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => false }).state, 'STALE');
   assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false }).state, 'STALE'); // no resolver => strict
-  assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /só docs depois/);
+  assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /só views geradas depois/);
 });
 
 test('VALIDAÇÃO DO HEAD ATUAL: an old PASS never reads as PASS of the current head; nothing recorded is not proven either', () => {
@@ -133,11 +133,20 @@ test('VALIDAÇÃO DO HEAD ATUAL: an old PASS never reads as PASS of the current 
   assert.doesNotMatch(old.line, /✓|PASS/);
   const same = headValidation([art('unit', 'bbbbbbb2'), art('server', 'bbbbbbb2')], { currentHead: 'bbbbbbb2', alive: dead });
   assert.equal(same.proven, true);
-  assert.match(same.line, /^VALIDAÇÃO DO HEAD ATUAL: ✓ PASS \(unit, server\) em bbbbbbb/);
+  assert.match(same.line, /^VALIDAÇÃO DO HEAD ATUAL: ✓ PASS \(unit, server\) no HEAD atual$/);
   // one suite at an old head, or failing, spoils the whole answer
   assert.equal(headValidation([art('unit', 'bbbbbbb2'), art('server', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
   assert.equal(headValidation([art('unit', 'bbbbbbb2', 'FAIL')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
   // commits after the run that only touch conductor/ do not invalidate it; anything else does
   assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => true }).proven, true);
   assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => false }).proven, false);
+});
+
+test('no text printed to the board or the plan carries the current head sha (it would be stale at the next commit)', () => {
+  const art = { suite: 'unit', headTested: 'aaaaaaa1', state: 'PASS', exitCode: 0, updatedAt: new Date().toISOString(), cmd: 'x', log: 'l', startedAt: new Date().toISOString(), durationMs: 1, counts: { done: 1, total: 1, passed: 1, failed: 0, skipped: 0 } };
+  const html = renderTestsSection([art], { currentHead: 'ccccccc9', alive: () => false });
+  assert.doesNotMatch(html, /ccccccc/);
+  assert.doesNotMatch(headValidation([art], { currentHead: 'ccccccc9', alive: () => false }).line, /ccccccc/);
+  assert.doesNotMatch(headValidation([{ ...art, headTested: 'ccccccc9' }], { currentHead: 'ccccccc9', alive: () => false }).line, /ccccccc/);
+  assert.match(headValidation([art], { currentHead: 'ccccccc9', alive: () => false }).line, /HEAD atual ≠ HEAD testado/);
 });

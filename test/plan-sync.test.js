@@ -10,8 +10,8 @@ import { parsePlan, checkInvariants, renderChecklistHtml } from '../scripts/task
 
 const tasksText = [
   '### T-F1-01 — Foundation · S', '- Status: `[✓]` IMPLEMENTATION_SHA `abc1234` · Dependências: nenhuma', '',
-  '### T-F1-02 — Active work · M', '- Status: `[>]` · Dependências: T-F1-01', '- Subtarefas:',
-  '  - [x] Group A', '    - [x] step a1', '    - [x] step a2', '  - [>] Step B (current)', '  - [ ] Step C', '- Próximo passo: x', '',
+  '### T-F1-02 — Active work · M', '- Status: `[>]` · Dependências: T-F1-01', '- Estado: execução concluída; nada em execução agora.', '- Resultado: causa NOT_PROVEN; nenhuma correção feita. Depois segue.', '- Subtarefas:',
+  '  - [x] Group A', '    - [x] step a1', '    - [x] step a2', '  - [>] Step B (current)', '  - [ ] Step C', '- Próximo passo: decidir o fechamento (subtarefa `[>]`); nada além disso.', '',
   '### T-F1-03 — Follow-up with subtasks · S', '- Status: `[ ]` · Dependências: T-F1-01', '- Subtarefas:', '  - [x] one', '  - [ ] two', '',
   '### T-F1-04 — Needs a human · S', '- Status: `[H]` · Dependências: HG-01', '',
   '### T-F1-05 — After the human · S', '- Status: `[ ]` · Dependências: T-F1-04', '',
@@ -51,7 +51,7 @@ test('AGORA holds the active task with its full nested tree; PRÓXIMO is next; p
   assert.match(agora, /^ {4}- \[x\] step a1$/m);
   assert.match(agora, /^ {2}- \[>\] Step B \(current\)$/m);
   assert.match(agora, /^ {2}- \[ \] Step C$/m);
-  assert.match(section(region, 'PRÓXIMO'), /^- T-F1-03 · Follow-up with subtasks$/m);
+  assert.match(section(region, 'PRÓXIMO'), /^- T-F1-03 · Follow-up with subtasks · S1 · depois de T-F1-02 · dependências concluídas: T-F1-01$/m);
   assert.match(region, /^ATIVA AGORA: T-F1-02 \(S1\) · PRÓXIMA: T-F1-03 · TAREFAS: \d+\/\d+ · SUBTAREFAS: 3\/6/m);
   const before = region.slice(0, region.indexOf('## FASES'));
   assert.equal(taskRows(before).length, 0, 'no checkbox task rows above FASES');
@@ -235,4 +235,50 @@ test('the tracked plan never embeds the current HEAD sha (no churn per commit); 
   assert.match(a, /unit DESATUALIZADO \(testado aaaaaaa\)$/m);
   assert.doesNotMatch(a, /HEAD atual \d/);
   assert.doesNotMatch(renderPlanRegion({ ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit) em bbbbbbb2' }), /bbbbbbb/);
+});
+
+test('AGORA — TAREFA ATIVA shows derived Estado / Resultado / Próximo passo (from the task block, drift-checked); nothing is framed as "running"', () => {
+  const region = renderPlanRegion(inputs);
+  const agora = section(region, 'AGORA');
+  assert.match(region, /^## AGORA — TAREFA ATIVA$/m);
+  assert.doesNotMatch(region, /EM EXECUÇÃO|EXECUTANDO/);
+  assert.match(agora, /^ {2}Estado: Execução concluída; nada em execução agora$/m);
+  assert.match(agora, /^ {2}Resultado: Causa NOT_PROVEN; nenhuma correção feita$/m, 'one full sentence, not cut at the clause');
+  assert.match(agora, /^ {2}Próximo passo: Decidir o fechamento$/m);
+  assert.ok(agora.indexOf('Estado:') < agora.indexOf('- [x] Group A'), 'facts come before the subtask tree');
+  const plan = `h\n${region}\n`;
+  assert.equal(planDrift(plan, inputs).drift, false);
+  assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('- Resultado: causa NOT_PROVEN', '- Resultado: causa PROVADA') }).drift, true, 'a changed Resultado is drift');
+  assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('- Estado: execução concluída', '- Estado: execução em andamento') }).drift, true);
+  const md = `# TRACK: T\n\nStatus: ACTIVE\nMARCO ATUAL: S1\n\n${region}\n`;
+  const plan2 = parsePlan(md);
+  const html = renderChecklistHtml({ tasks: plan2.tasks, view: plan2.view });
+  assert.match(html, /<li class="t f"><span class="m"><\/span><span class="x"><strong>Estado:<\/strong> Execução concluída; nada em execução agora<\/span><\/li>/);
+  assert.match(html, /<strong>Próximo passo:<\/strong> Decidir o fechamento/);
+  assert.match(html, /TAREFA ATIVA AGORA:/);
+  assert.doesNotMatch(html, /EXECUTANDO AGORA|EM EXECUÇÃO/);
+  assert.equal((html.match(/Estado:/g) ?? []).length, 1, 'the facts are shown once');
+});
+
+test('a split task says what its children are; the legend says subtarefas are checklist items, children count as tarefas', () => {
+  const region = renderPlanRegion(inputs);
+  assert.match(region, /^- \[=\] \*\*T-F6-06\*\* — Split parent — dividida em T-F6-06a\/b \(tarefas\)$/m);
+  assert.match(region, /subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas/);
+  const html = renderChecklistHtml({ tasks: [], view: parsePlan(`# TRACK: T\n\nStatus: ACTIVE\n\n${region}\n`).view });
+  assert.match(html, /itens de checklist dentro de um bloco de tarefa; filhas de tarefa dividida contam como tarefas/);
+});
+
+test('PRÓXIMO says why each task is ready, and explains a task that passes ahead of earlier ones of its sprint', () => {
+  const t = [
+    '### T-F1-01 — Foundation · S', '- Status: `[✓]` IMPLEMENTATION_SHA `abc1234` · Dependências: nenhuma', '',
+    '### T-F1-02 — Active · S', '- Status: `[>]` · Dependências: T-F1-01', '- Subtarefas:', '  - [>] only step', '',
+    '### T-F2-01 — Jobs base · S', '- Status: `[ ]` · Dependências: T-F1-01', '',
+    '### T-F2-02 — Needs the base · S', '- Status: `[ ]` · Dependências: T-F2-01', '',
+    '### T-F2-03 — Independent explanation · S', '- Status: `[ ]` · Dependências: nenhuma', '',
+  ].join('\n');
+  const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-02 |\n| **S4** Jobs | y | T-F2-01 → T-F2-02 → T-F2-03 |\n';
+  const next = section(renderPlanRegion({ tasksText: t, programText: prog, specText: '' }), 'PRÓXIMO');
+  assert.match(next, /^- T-F2-01 · Jobs base · S4 · independente de S1 · dependências concluídas: T-F1-01$/m);
+  assert.match(next, /^- T-F2-03 · Independent explanation · S4 · independente de S1 · sem dependência pendente · passa à frente de T-F2-02 \(aguardam T-F2-01\)$/m);
+  assert.doesNotMatch(next, /T-F2-02 ·/, 'a task behind an unfinished dependency is not offered');
 });

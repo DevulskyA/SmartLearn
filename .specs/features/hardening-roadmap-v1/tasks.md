@@ -406,6 +406,8 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Evidência anterior (NÃO é prova desta falha): `conductor/tracks/content-quality/plan.md` (~l.724) registra falha com o MESMO sintoma (`#account-show-register` invisível por 30 s, `content-quality-flow.spec.js:143`) classificada como "sensível a carga" por reprodução sob CPU saturada (2/24 no merge e 2/24 no baseline; isolado 6/6), com a causa exata da falha original NÃO reproduzida; `EXECUTION.md` lista também `hoje-block-retest.spec.js` como flake pré-existente. Serve para ordenar as hipóteses, não para concluir a do run 2.
 - Menor discriminador: reexecutar só esse spec N vezes com 1 worker e com 2, com o ambiente descrito (processos alheios contados antes), guardando trace/console/rede da falha; comparar taxa de falha entre as condições.
 - Gate: causa registrada em `validation.md` com contagens; se defeito: RED → GREEN → mesma repetição sem falha.
+- Estado: execução concluída; nada em execução agora; falta só a decisão de fechamento.
+- Resultado: sintoma `#account-show-register` oculto não reproduzido em 10 rodadas (0/10); causa NOT_PROVEN; nenhuma correção feita.
 - Subtarefas:
   - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
     - [x] w1-r1 — PASS 38/38 (208 s)
