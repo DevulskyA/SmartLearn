@@ -28,7 +28,7 @@ jobs:
         run: npm ci
         working-directory: server
 
-      - name: Lint (structural: eqeqeq, no-undef; no-unused-vars is warn-only, tracked separately)
+      - name: "Lint (structural: eqeqeq, no-undef; no-unused-vars is warn-only, tracked separately)"
         run: npm run lint
 
       - name: Dependency audit (root)
