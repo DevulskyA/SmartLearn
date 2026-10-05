@@ -190,7 +190,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 - Gate: `server/test/lesson-granular-edit.test.js` + novos; e2e `lesson-editor.spec.js`, `draft-acceptance.spec.js`.
 
 ### T-F2-02 — Adicionar questão e reordenar como operações próprias · M
-- Status: `[ ]` · Requisitos: R-03 · Dependências: T-F2-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `ff52c0b` · IMPLEMENTATION_SHA `a13bc29` (evidência em `validation.md`; sem UI de reordenar, por desenho da tarefa) · Requisitos: R-03 · Dependências: T-F2-01
 - Fazer: `POST /drafts/:id/questions` (id novo, `origin=HUMAN_ADDED`, versão 1) e `PATCH /drafts/:id/questions/order` (lista de ids; erro se faltar/sobrar id).
 - RED: ids nunca reutilizados após DELETE+POST; ordem persiste após recarga; auditoria referencia `entityId`.
 - Gate: testes de servidor + e2e de reordenar/adicionar.

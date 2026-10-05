@@ -91,6 +91,12 @@ Fontes lidas: `conductor/tracks/{v1-validation,product-closure,content-quality}/
 
 Resultado S0: classificação completa sem "não sei"; 1 tarefa nova (T-F1-09), justificada por trabalho material sem tarefa; nenhum requisito do `spec.md` ficou sem tarefa por esta leitura.
 
+### T-F2-02 — Adicionar e reordenar questões por id: PASS (2026-10-04, BASE `ff52c0b`, IMPL `a13bc29`)
+- Rotas novas: `POST /v1/drafts/:id/questions` (201; id novo, versão 1, status PROPOSED, `origin=HUMAN_ADDED`, citação validada como qualquer questão) e `PATCH /v1/drafts/:id/questions/order` (`{ order: [ids], expectedRevision? }`; recusa id faltando, sobrando, repetido ou desconhecido com `VALIDATION_FAILED` e não grava nada; `expectedRevision` velho → `REVISION_CONFLICT`). Serviços `addQuestion`/`reorderQuestions` em `generated-drafts.js`.
+- Sensor `server/test/lesson-add-reorder.test.js` (10 testes): RED 10/10 antes (funções/rotas inexistentes), GREEN 10/10 depois. Discrimina: REJECTED permanece na MESMA questão após reordenar (comparação byte a byte por id); id removido nunca é reutilizado (sequência persistida); ordem sobrevive a releitura do banco; achados de auditoria acompanham a questão por id ao mover/adicionar; rascunho aceito não é editável; HTTP: sessão obrigatória e 404 para outro usuário.
+- Gate: `npm --prefix server test` 822/822 (812 + 10); lint dos 3 arquivos sem problemas; inventário OK; e2e `lesson-editor` + `draft-acceptance` 19/19 (1,3 min, árvore com a mudança, HEAD base `ff52c0b`).
+- Limite conhecido: reordenar/adicionar re-roda a triagem DETERMINÍSTICA e regrava a auditoria como as demais edições humanas (`editedByHuman`, sem auditoria por modelo); a auditoria versionada e a reauditoria explícita são T-F2-03 (`[H]`, HG-02). `origin` só existe nas questões adicionadas; a proveniência completa é T-F2-04.
+
 ## F5 — Qualidade de conteúdo médico
 
 ### T-F5-08 — Ordem de leitura por colunas: PASS (2026-10-04, BASE `5dc75b7`, IMPL `21aedd1`)
