@@ -32,5 +32,7 @@ ATIVA AGORA: HR-1 (F1; T-F1-01..08; T-F1-05 [H] aguarda HG-03)
       DETAILS: VALID-4/5 fechados com evidência já existente (valid4-span-rerun.md). T-F5-08 (ordem de leitura por colunas) feita em 2026-10-04 (21aedd1). Pendente determinística: nenhuma autônoma; T-F5-05 depende de T-F5-03 (HG). Tudo que envolve gerar com Codex/Prompt Lab (T-F5-01..04, 06, 07, VALID-8) está [H] e NÃO AUTORIZADO sem ordem explícita.
 - [ ] **HR-8 F7 Produto de estudo** — OWNER: GUI
       DETAILS: recuperação de atraso reversível, onboarding, decisão FSRS por dados; todas [H] (HG-09).
+- [ ] **HR-10 F10 Geração segura: escopo, reuso, créditos e idiomas (R-12/R-13)** — OWNER: GUI
+      DETAILS: importar ≠ gerar; JIT/reuso; reserva atômica de crédito; `uiLocale`/`generationLocale`/`sourceLanguage` independentes; entra antes de estabilizar F3 (jobs). Valores de franquia (HG-11), prefetch (HG-12) e diretiva de prompt/alcance es-en (HG-13) são [H]. Sequência: `PROGRAM.md` (S2G-a/b).
 - [ ] **HR-9 F9 Integração e entrega** — OWNER: GUI
       DETAILS: mapa de integração (HG-05), validation.md por fase, entrega só por ordem explícita (HG-10).

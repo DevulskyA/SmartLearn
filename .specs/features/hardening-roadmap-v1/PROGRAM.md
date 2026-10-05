@@ -24,7 +24,8 @@ Se este arquivo divergir do repositório, o repositório vence. Nenhum número, 
 6. **Papéis:** Sonnet 5.5 High faz todo trabalho intelectual; Haiku só executa testes e devolve `COMMAND/HEAD/EXIT/PASSED/FAILED/SKIPPED/DURATION` (+ primeira falha). Haiku não diagnostica nem decide.
 7. **Proibido sem ordem explícita:** Codex, Prompt Lab, gasto de API, push, merge, deploy, release, rebase, squash, force, tocar o banco DEV humano, editar migração histórica.
 8. **Bug:** observação → hipóteses concorrentes → menor discriminador → causa → patch mínimo → regressão. Duas tentativas falhas na mesma hipótese = reabrir a hipótese. Falha sem causa provada nunca é rotulada (ambiental, flake) por inferência.
-9. **Anti-pergunta:** antes de perguntar, registrar o que foi buscado e por que não se deriva nem se contorna. Reabrir o Desktop e verificações mecânicas por CDP não são gate.
+9. **Geração:** `IMPORTAR != GERAR`. Qualquer chamada ao provedor passa por escopo aprovado → reuso → idioma alvo → estimativa → reserva atômica; nenhum teste chama modelo real (provedor simulado/espiões); valores de franquia não são inventados (HG-11).
+10. **Anti-pergunta:** antes de perguntar, registrar o que foi buscado e por que não se deriva nem se contorna. Reabrir o Desktop e verificações mecânicas por CDP não são gate.
 
 ## 2. Sprints (uma ACTIVE por vez; estado de cada tarefa em `tasks.md`)
 
@@ -32,10 +33,14 @@ Se este arquivo divergir do repositório, o repositório vence. Nenhum número, 
 |---|---|---|---|---|
 | **S0** Reconciliação | O que o ledger não cobre fica classificado com evidência (`VERDICT-1`, `IMPORT-1`, `VALID-8`, abertos de `v1-validation`/`product-closure`, skips do e2e); `IMPLEMENTATION_SHA` das tarefas `[✓]` que só têm `BASE_SHA` preenchido via `git log`; resultado em `validation.md`/`HANDOFF.md`. **Sem gate de código.** Tarefa nova só se descobrir trabalho material sem tarefa | (nenhuma nova) | P0/P4 | — |
 | **S1** Extração por colunas | Texto extraído de página de duas colunas sai na ordem de leitura, sem partir frases; coluna única e tabelas inalteradas; prova read-only no PDF real (págs. 267–273): "PAH" fora do span "Glomerular Filtration" | T-F5-08 (isolada) | P1 | — |
-| **S2** F2 local | Edição só por entidade com adicionar/reordenar por id, proveniência por questão e pré-visualização do aceite idêntica ao aceite real | T-F2-02, T-F2-04, T-F2-05 (T-F2-03 e T-F2-06 `[H]`) | P2 | T-F2-01 |
+| **S2** F2 local (edição e proveniência) | Edição só por entidade com adicionar/reordenar por id e proveniência por questão/resumo | T-F2-02, T-F2-04 (T-F2-03 e T-F2-06 `[H]`) | P2 | T-F2-01 |
+| **S2G-a** Geração segura: idiomas | `uiLocale`, `generationLocale` e `sourceLanguage` independentes; a geração valida o idioma do conteúdo contra o alvo; aulas existentes intactas | T-F10-01, T-F10-02a (T-F10-02b `[H]`, HG-13) | P1 | — |
+| **S2G-b** Geração segura: escopo, reuso e créditos | Importar ≠ gerar; reuso sem nova chamada; reserva atômica de crédito dentro de limites configuráveis; caminho único até o provedor com todas as guardas | T-F10-05, T-F10-03, T-F10-04a, T-F10-04b (valores: HG-11) | P0/P1 | T-F10-02a (para 04b) |
+| **S2b** Pré-visualização do aceite | Pré-visualização somente-leitura idêntica ao aceite real, mostrada antes do botão final | T-F2-05 (sensor RED guardado fora da árvore; retoma o desenho já feito) | P2 | T-F2-01 |
 | **S3** Verdade do runner | Uma única autoridade de e2e; o runner "ao vivo" expressa esse contrato; sensor falha se o runner for contornado; causa da falha do run 2 discriminada; T-F6-03 só fecha com 3 execuções consecutivas sem falha e meta ≤ 8 min com 2 workers | T-F6-08 → T-F6-03; correção do contrato de `test-live` | P4 | T-F6-02 |
-| **S4** Jobs observáveis | Geração em segundo plano com estado, sinal de vida e cancelamento, sem Codex | T-F3-01..05 | P1/P2 | T-F1-01, T-F1-02, T-F2-04 (para T-F3-01); demais por ID no ledger |
+| **S4** Jobs observáveis | Geração em segundo plano com estado, sinal de vida e cancelamento, sem Codex; o job carrega escopo, idiomas e reserva e nunca amplia o escopo | T-F3-01..05 | P1/P2 | T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a (para T-F3-01); demais por ID no ledger |
 | **S5a** UI local da aula | Posição de "Rascunhos em andamento", editor em tela estreita, acessibilidade do editor, cópia/i18n, provados em viewport Desktop | T-F4-03, T-F4-04, T-F4-05, T-F4-07 | P3 | por ID no ledger |
+| **S5c** UI de idioma e consumo | Idioma da interface e do conteúdo em controles separados; estado da unidade e recusa clara por limite; cenário 5 provado | T-F10-06 (alcance es/en: HG-13) | P3 | T-F10-01, T-F10-03, T-F10-04b |
 | **S5b** Hierarquia da Revisão | Revisão com achados ordenados e sem ruído | T-F4-02 | P3 | T-F2-03 (`[H]`, HG-02) → `BLOCKED_HUMAN` até a decisão; não segura S5a |
 | **S6A** Confiança: discriminação e cobertura | Mutações repetíveis em worktree descartável; matriz de cobertura reconciliada | T-F6-04, T-F6-07 | P4 | T-F6-01 |
 | **S6B** Confiança: persistência | Contrato de persistência executável contra os adaptadores vivos | T-F6-06a, T-F6-06b (T-F6-06c `[H]`) | P2 | — |
@@ -77,6 +82,9 @@ E2E completo só em S3 (medição) e S9. Por tarefa, apenas as specs da superfí
 | HG-08 política de armazenamento de PDF/dados reais (o Costanzo já existe; não pedir outro) | F5 geração | sim |
 | HG-09 produto de estudo | F7 | sim |
 | HG-10 push/merge/deploy/release | T-F9-03 | sim |
+| HG-11 valores e unidade de custo das franquias | T-F10-04a (valores), produção com provedor real | sim (estrutura configurável) |
+| HG-12 política de prefetch | execução de prefetch (T-F10-03 já traz o parâmetro, padrão 0) | sim |
+| HG-13 diretiva mínima de idioma no prompt; alcance de `uiLocale` es/en | T-F10-02b, T-F10-06 | sim (DECISION_CONFLICT-1/2 em `spec.md` §11) |
 | Julgamento perceptivo do UAT (`uat-visual.md`) | T-F4-01, `VISUAL_VALIDATION` | sim |
 
 Reabrir o Desktop e provas mecânicas por CDP NÃO são gate.

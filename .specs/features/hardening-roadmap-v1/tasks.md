@@ -39,6 +39,7 @@ F0 Reconciliação e higiene de estado
      ├─ F2 Contrato da aula (identidade, proveniência, auditoria versionada)
      │   └─ F3 Jobs de geração observáveis
      │       └─ F5 Qualidade de conteúdo médico + Prompt Lab   (HG-06/07/08)
+     ├─ F10 Geração segura: escopo, reuso, créditos e idiomas (R-12/R-13) — ANTES de estabilizar F3
      ├─ F4 UI/UX da aula, Materiais e acessibilidade           (validação humana)
      └─ F6 Plataforma de teste (pode andar em paralelo com F2–F4)
 F7 Produto de estudo (HG-09) — após F4
@@ -235,7 +236,8 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa processo ou rascunho parcial para trás. Sem alterar prompt nem provedor.
 
 ### T-F3-01 — Tabela e máquina de estados de jobs · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.1) · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
+- Status: `[ ]` · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
+- Contrato adicional (decisão 2026-10-04): o job conhece, direta ou por referência coesa, usuário, unidade/`sourceScope` aprovado, `sourceLanguage`, `generationLocale`, estimativa/reserva de consumo, estado/fase e consumo final; um job NUNCA amplia o escopo depois de criado sem nova validação de custo e autorização de domínio (INV-13).
 - Superfície: nova migração `031-generation-jobs.sql` (somente adição), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
@@ -313,7 +315,7 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Observação: exige contrato de questão única com o modelo = mudança de prompt/provedor. NÃO executar antes do Prompt Lab aprovar (INV-09). Subtarefas futuras: (a) contrato `regenerateQuestion(question, sourceSpans)`; (b) UI com comparação lado a lado e aceite explícito; (c) proveniência `generatedBy` da nova versão.
 
 ### T-F4-07 — Cópia de estados e i18n (T46/T47) com guarda de acentuação · M
-- Status: `[ ]` · Requisitos: F-36 · Dependências: nenhuma
+- Status: `[ ]` · Requisitos: F-36 · Dependências: nenhuma · Nota (2026-10-04): i18n de INTERFACE e idioma PEDAGÓGICO são problemas diferentes; `uiLocale`/`generationLocale` pertencem a R-13/F10, não a esta tarefa
 - Fazer: varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`); mensagens de vazio/erro/carregando padronizadas. Seguir a skill `codex-portuguese-i18n-repair` se aparecer corrupção.
 - Gate: teste de guarda + `npm test`.
 
@@ -488,6 +490,56 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Inspeção do pacote verde com mutação; testes adversariais verdes; decisão do release antigo executada ou registrada.
 
 ---
+
+## F10 — Geração segura: escopo, reuso, créditos e idiomas (R-12, R-13; decisão de produto 2026-10-04)
+
+Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está estudando, uma unidade por vez, dentro de limites de consumo que o servidor garante; conteúdo pedagógico no idioma escolhido pelo aluno, sem perder a fonte original. Entra ANTES de estabilizar F3 (jobs). Zero chamada real a modelo em qualquer teste (INV-09); provedor simulado/espiões.
+
+### T-F10-01 — Preferências de idioma: `uiLocale` e `generationLocale` independentes · M
+- Status: `[ ]` · Requisitos: R-13 (AC-13.1, 13.2, 13.6) · Dependências: nenhuma
+- Superfície: migração aditiva em `user_settings` (colunas `ui_locale`, `generation_locale`, ambas `NULL` = ainda não inicializadas; backup `pre-migrate` conforme T-F1-02), `shared/locales.js` (lista extensível BCP 47: `pt-BR`, `es`, `en`), `server/src/services/settings.js`, `server/src/routes/settings.js`.
+- Fazer: ler devolve `uiLocale`/`generationLocale` efetivos SEM gravar (GET nunca escreve); `ensureGenerationLocale(db, userId, hint)` inicializa UMA vez a partir de `hint` (`uiLocale` suportado ou locale do sistema; senão `pt-BR`) e daí em diante ignora `hint`; alteração só por ação explícita (`PATCH` de cada campo separado); locale não suportado → `VALIDATION_FAILED`.
+- Proof targets (RED): trocar `uiLocale` não altera `generationLocale`; o segundo `ensure` com outro `hint` não muda nada; ler não grava; locale desconhecido é recusado; dado histórico (usuário sem linha) continua válido. Sensor sobrevive à mutação "gravar `generationLocale` junto com `uiLocale`".
+- Gate: `server/test/language-preferences.test.js` + `settings*.test.js` + inventário.
+
+### T-F10-02a — Contrato de idioma na geração (domínio, sem mudar o texto do prompt) · M
+- Status: `[ ]` · Requisitos: R-13 (AC-13.1, 13.3, 13.4, 13.5) · Dependências: T-F10-01
+- Fazer: `sourceLanguage` da unidade por detecção determinística conservadora sobre o payload aprovado (`language-detect.js`; `unknown` permanece `unknown`); a geração resolve `generationLocale` das preferências (nunca da fonte nem do `uiLocale` do momento), passa `{sourceLanguage, generationLocale}` ao provedor e persiste ambos no rascunho; validação `validateDraftLanguage`: idioma detectado do conteúdo (resumo + questões) conhecido e diferente do alvo, ou `language` declarado diferente → `LANGUAGE_MISMATCH` (o rascunho NÃO é gravado como válido); detecção `unknown` sem declaração = não verificável, registrado (não promovido como verificado); o provedor simulado produz conteúdo por locale; mudar `generationLocale` não toca rascunhos/aulas existentes.
+- Proof targets (RED): saída em idioma errado é recusada e nada é gravado; fonte `es` + `generationLocale=pt-BR` pede pt-BR (um inferidor "alvo = idioma da fonte" fica vermelho); mudar `uiLocale` não muda o alvo; aula aceita permanece byte-idêntica ao mudar `generationLocale`; citações continuam apontando para páginas da fonte original.
+- Gate: `server/test/generation-language.test.js` + `draft-audit*.test.js` + `ai-drafts.test.js`.
+
+### T-F10-02b — Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo · S
+- Status: `[H]` · Requisitos: R-13 (AC-13.3) · Dependências: T-F10-02a, HG-13
+- Fazer (após autorização): bloco OUTPUT LANGUAGE no `draft-prompt.js` + campo `language` no esquema do modelo + bump de `promptVersion`, para os adaptadores Codex/Anthropic/OpenAI; SEM Prompt Lab e SEM chamada real. A prova com modelo real fica `NOT_PROVEN` até execução manual.
+
+### T-F10-03 — Reuso, estado da unidade e política de prefetch (JIT) · M
+- Status: `[ ]` · Requisitos: R-12 (AC-12.1, 12.2, 12.3) · Dependências: nenhuma
+- Fazer: `createDraft` torna-se idempotente por unidade: rascunho válido e não obsoleto existente (ou aula já aceita) é devolvido SEM chamada ao provedor; nova geração exige `regenerate: true` explícito (e o mesmo caminho de limites); estado derivado da unidade (`NOT_GENERATED` | `DRAFT` | `ACCEPTED` | `STALE`; `GENERATING` entra com os jobs) exposto na lista de propostas; `planPrefetch(...)` função pura: dado a lista ordenada de unidades, a atual, estados, orçamento restante e política, devolve no máximo `policy.depth` unidades seguintes `NOT_GENERATED`, nunca a atual, nunca já geradas, vazio sem orçamento confortável; padrão `depth = 0` (JIT puro) até HG-12.
+- Proof targets (RED): repetir/navegar = zero chamadas (espião de provedor); `regenerate` = exatamente uma; livro de 100+ unidades, atual = 1 → o plano tem ≤ `depth` e o resto permanece `NOT_GENERATED`; plano vazio com orçamento insuficiente; plano nunca contém unidade gerada/aceita. Um prefetch que "gera a fila toda" deixa o sensor vermelho.
+- Gate: `server/test/generation-reuse.test.js`, `ai-drafts.test.js`, e2e `draft-acceptance`/`materials` (o botão "gerar" não pode regenerar sem querer).
+
+### T-F10-04a — Livro-razão de crédito, estimativa e reserva atômica (domínio) · M
+- Status: `[ ]` · Requisitos: R-12 (AC-12.4, 12.5, 12.6) · Dependências: T-F1-02 (backup pre-migrate), HG-11 (VALORES; a estrutura não espera)
+- Superfície: migração aditiva (reservas/consumo por usuário e período), `server/src/services/generation-budget.js`, configuração dos limites (`null` = sem limite NAQUELA dimensão, registrado como decisão pendente; nunca um número inventado).
+- Fazer: unidade de custo provider-agnóstica (tokens estimados a partir dos caracteres do payload aprovado + teto de saída); `reserve` atômico em transação (verifica máximo por job, restante semanal e mensal contando reservas ativas + consumo; grava a reserva); `settle` reconcilia com o consumo medido (ou marca `ESTIMATED` quando o provedor não mede); `release` devolve sem débito quando falha antes de qualquer chamada externa.
+- Proof targets (RED): N pedidos concorrentes com saldo para 1 → exatamente 1 reserva e N−1 `BUDGET_EXCEEDED` (a corrida passa por `await`; um check-then-write fora da transação fica vermelho); saldo insuficiente semanal/mensal/por job → recusa ANTES da chamada, zero chamadas, nenhuma reserva residual; falha pré-chamada não debita; reconciliação sobe/desce o consumo; batch de 20 pedidos sequenciais continua limitado pelo período.
+- Gate: `server/test/generation-budget.test.js` + inventário + migração (`migrations*.test.js`).
+
+### T-F10-04b — Integrar escopo + orçamento + idioma no caminho de geração · M
+- Status: `[ ]` · Requisitos: R-12, R-13 · Dependências: T-F10-02a, T-F10-03, T-F10-04a
+- Fazer: `createDraft` percorre, nesta ordem: reuso (T-F10-03) → escopo aprovado e tamanho (já existente: `SCOPE_VIOLATION`/`INPUT_TOO_LARGE`) → `generationLocale` → estimativa → reserva → provedor → validação de idioma/esquema → `settle`/`release`; erro após o envio debita a estimativa (conservador) e fica registrado; nenhum caminho chama o provedor sem passar por todos os passos.
+- Proof targets (RED): espião de provedor prova a ordem e a contagem de chamadas em cada recusa; falha de idioma/esquema não deixa reserva ativa; "caminho que pula a reserva" fica vermelho (teste de inventário de chamadas ao provedor).
+- Gate: `server/test/generation-pipeline-guards.test.js` + `ai-drafts.test.js` + `draft-input-binding.test.js`.
+
+### T-F10-05 — "Importar ≠ gerar": guardas de escopo na fronteira · S
+- Status: `[ ]` · Requisitos: R-12 (AC-12.1, 12.6), INV-13 · Dependências: nenhuma
+- Fazer: testes de domínio/HTTP: (a) importar e estruturar um livro de ~300 páginas (fixture) = zero chamadas ao provedor e zero reservas; (b) unidade acima do limite → `INPUT_TOO_LARGE` com orientação, sem chamada nem débito; (c) o corpo de `POST /proposals/:id/drafts` aceita só campos conhecidos (um campo "gere tudo"/lista de propostas é recusado); (d) inventário de rotas: o único caminho até o provedor é a geração por UMA proposta (futuro job herda a mesma guarda).
+- Gate: `server/test/generation-scope-guards.test.js`.
+
+### T-F10-06 — UI: idioma da interface × idioma do conteúdo, estado da unidade e consumo · M
+- Status: `[ ]` · Requisitos: R-13 (AC-13.6), R-12 · Dependências: T-F10-01, T-F10-03, T-F10-04b, HG-13 (alcance de `uiLocale` es/en)
+- Fazer: em Configurações, dois controles separados e rotulados ("Idioma da interface", "Idioma do conteúdo gerado") e texto que explica a diferença; catálogos es/en para as chaves existentes com fallback pt-BR; no fluxo de gerar: mostrar idioma alvo, estado da unidade (`NOT_GENERATED`/`DRAFT`/`ACCEPTED`) e recusa clara com orientação quando o limite impede; "Gerar de novo" passa `regenerate` e mostra o custo; nenhuma ação em massa.
+- Gate: e2e responsivo + axe; mudar `uiLocale` muda a interface e mantém o idioma do conteúdo (cenário 5).
 
 ## F9 — Integração e entrega (F-50) — por último, sempre com decisão humana
 

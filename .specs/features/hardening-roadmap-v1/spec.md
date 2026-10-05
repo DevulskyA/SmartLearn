@@ -178,6 +178,22 @@ Cada requisito é verificável por sensor. IDs `R-xx`; tarefas em `tasks.md` apo
 - AC-10.1: Há um plano de integração com ordem, estratégia (merge/squash/rebase) e série de PRs aprovados por humano; nada é enviado sem autorização.
 - AC-10.2: Cada fase fecha com `validation.md` baseado em evidência, e `validate_state.py` roda quando aplicável.
 
+### R-12 — Geração progressiva e segura: escopo, reuso e créditos (decisão de produto 2026-10-04)
+- AC-12.1: `IMPORTAR != GERAR`. Importar, extrair e estruturar um PDF inteiro nunca autoriza geração pedagógica de todo o documento. Toda chamada ao provedor tem `sourceScope` explícito, validado e com tamanho calculado pelo servidor antes da chamada; "gere o livro inteiro/todos os capítulos" é recusado com orientação para a unidade permitida (nunca vira geração em massa); a API direta obedece às mesmas regras da UI.
+- AC-12.2: A geração é JIT por padrão (quando a unidade passa a ser necessária). Conteúdo já gerado e válido é reutilizado: navegar de novo ou repetir o pedido NÃO faz nova chamada externa; regenerar é ação explícita, sujeita aos mesmos limites.
+- AC-12.3: Prefetch é opcional e subordinado à unidade atual: janela mínima definida por política (HG-12), só com orçamento confortável, omissível sem degradar o fluxo, nunca fila/capítulo/livro inteiro e nunca batch que contorne limites; o restante da fonte permanece `NOT_GENERATED`.
+- AC-12.4: Fronteiras de consumo: máximo por job, franquia semanal, franquia mensal, saldo disponível, saldo reservado por jobs em andamento, consumo efetivo e reconciliação reserva × consumo. Antes da chamada: custo estimado ≤ máximo por job E ≤ restante semanal E ≤ restante mensal; a reserva é atômica (jobs concorrentes nunca gastam o mesmo saldo); falha antes de consumo externo não debita; após a execução reconcilia-se com o consumo medido quando confiável. Quota de armazenamento de PDF, limite de geração, quantidade de questões (R-05/HG-01) e orçamento de modelo são controles distintos.
+- AC-12.5: Os valores das franquias e do limite por job são decisão pendente (HG-11): a estrutura é configurável; sem dado medido, não se inventam números.
+- AC-12.6: Essas regras vivem no servidor/domínio e não dependem de UI, de texto do pedido nem de cliente alternativo.
+
+### R-13 — Idiomas: fonte, interface e conteúdo gerado (decisão de produto 2026-10-04)
+- AC-13.1: `sourceLanguage` (idioma da fonte/unidade), `uiLocale` (interface) e `generationLocale` (conteúdo pedagógico) são estados independentes; nenhum é alias nem sobrescreve outro em silêncio.
+- AC-13.2: `generationLocale` é preferência persistente do aluno: inicializada UMA vez, no primeiro uso, a partir do melhor dado disponível (preferencialmente o `uiLocale` suportado ou o locale do sistema); depois nunca muda sozinha (nem por trocar `uiLocale`, importar PDF em outro idioma ou mudar região do sistema) — só por ação explícita do aluno.
+- AC-13.3: A geração é direta no idioma alvo (fonte + `sourceLanguage` → conteúdo em `generationLocale`), sem etapa obrigatória de tradução; idioma diferente de `generationLocale` é falha de contrato e o rascunho não é promovido como válido.
+- AC-13.4: A evidência original continua rastreável (páginas/spans da fonte, `sourceLanguage`); a localização pedagógica não a apaga.
+- AC-13.5: Mudar `generationLocale` afeta só novas gerações; aulas/rascunhos já aceitos permanecem intactos. Traduzir/regenerar conteúdo existente é ação explícita, com custo visível.
+- AC-13.6: A UI separa "Idioma da interface" de "Idioma do conteúdo gerado" (nunca um "Idioma" ambíguo). Locales extensíveis (BCP 47); alvo V1: `pt-BR`, espanhol e inglês.
+
 ### R-11 — Produto de estudo (melhorias)
 - AC-11.1: O aluno com atraso grande tem uma ação de recuperação ("reagendar atrasadas") que preserva histórico e é reversível.
 - AC-11.2: Primeira abertura em produção tem onboarding/estado vazio decididos (DEBT-007).
@@ -197,6 +213,8 @@ Cada requisito é verificável por sensor. IDs `R-xx`; tarefas em `tasks.md` apo
 - INV-10 Nada de push, merge, deploy ou release sem autorização humana explícita por ação.
 - INV-11 `UNKNOWN != PASS`: ausência de prova vira `NOT_PROVEN`.
 - INV-12 Fontes importadas e backups nunca são apagados por rotinas automáticas.
+- INV-13 `IMPORTAR != GERAR`: nenhum caminho (rota, job, prefetch, batch) chama o provedor sem `sourceScope` validado, estimativa dentro dos limites e reserva atômica; nenhum job amplia seu escopo depois de criado sem nova validação.
+- INV-14 `sourceLanguage`, `uiLocale` e `generationLocale` são independentes; `generationLocale` só muda por ação explícita do aluno.
 
 ## 6. Estratégia de proteção de regressão (brownfield)
 
@@ -217,7 +235,7 @@ Regra do Cardboard Test: para cada tarefa de risco médio/alto, perguntar "qual 
 
 ## 7. Fora de escopo deste plano (explícito)
 
-- Qualquer mudança de prompt ou provedor pedagógico alternativo antes do Prompt Lab aprovado.
+- Qualquer mudança de prompt ou provedor pedagógico alternativo antes do Prompt Lab aprovado — EXCETO a diretiva mínima de idioma de saída exigida por R-13, que depende de HG-13 (ver §11).
 - Sincronização multi-dispositivo (DEBT-006 item 3) — exige ADR e decisão de produto próprias.
 - FSRS completo (DEBT-003) — só a decisão baseada em dados está no plano.
 - Reescrita de `app.js` por estilo; extrações só quando um sensor exigir (DEBT-002).
@@ -237,6 +255,9 @@ Regra do Cardboard Test: para cada tarefa de risco médio/alto, perguntar "qual 
 | HG-08 | Política de ARMAZENAMENTO de PDF/dados reais usados em teste (nunca no repositório; onde ficam e como são referenciados). Não é pedido de outro PDF: o Costanzo já existe localmente e não deve ser solicitado de novo | F5 | diretório fora do repositório, listado em `.gitignore` global |
 | HG-09 | Decisão de produto sobre recuperação de atraso e onboarding | F7 | começar por "reagendar atrasadas" reversível |
 | HG-10 | Push, merge, deploy, release | F9 | só por ordem explícita, uma ação por vez |
+| HG-11 | Valores e unidade de custo: máximo por job, franquia semanal e mensal (R-12). A estrutura é configurável; faltam dados medidos | T-F10-04 (valores), produção com provedor real | experimento mínimo: medir custo real de 3–5 unidades de tamanhos diferentes por provedor e propor franquias com folga; até lá, limites configuráveis e produção com provedor real recusa subir sem eles |
+| HG-12 | Política de prefetch (janela e condição de orçamento) | T-F10-03 (parâmetro), execução de prefetch | JIT puro (janela 0) até medir latência de geração e consumo; janela 1 só com orçamento ≥ 3× a estimativa da unidade seguinte e sem job em andamento |
+| HG-13 | Autorizar a diretiva mínima de idioma no prompt (e a mudança de versão do prompt) e confirmar o alcance de `uiLocale` em es/en no V1 (catálogos das chaves existentes + fallback pt-BR, sem tradução completa do app) | T-F10-02b, T-F10-06 | autorizar a diretiva aditiva sem rodar o Prompt Lab; prova com modelo real fica `NOT_PROVEN` até execução manual; UI es/en só nas chaves do catálogo |
 
 ## 9. Riscos (resumo; detalhes em `tasks.md`)
 
@@ -255,3 +276,17 @@ Dois fechamentos distintos; o primeiro NÃO implica o segundo:
 - **V1_VALIDATED** — exige, além do anterior, a decisão humana VALID-8 (HG-06) com `REALMODEL_CONTENT_QUALITY_PROVEN=PROVEN` e a validação visual humana (T-F4-01) registrada com autoria e data. Enquanto VALID-8 estiver `NOT_PROVEN` (estado em `conductor/tracks/v1-validation/plan.md`; VALID-4 e VALID-5 constam ali como PASS de escopo limitado, o que NÃO é o mesmo que a decisão VALID-8), o fechamento local com gates humanos NÃO equivale a V1 integralmente validada.
 
 Fronteira de autonomia no Desktop/CDP: verificações MECÂNICAS (abre, build/commit, persistência após restart, salvar/rejeitar/recarregar, ausência de órfãos, título) são autônomas quando o runtime permite. Somente o JULGAMENTO PERCEPTIVO (claro? confortável?) é HUMAN_GATE. Reabrir o Desktop não é gate.
+
+## 11. DECISION_CONFLICT registrados (decisões de produto novas × decisões canônicas anteriores)
+
+DECISION_CONFLICT-1
+DECISION=`uiLocale` é uma preferência do aluno com alvo V1 pt-BR, espanhol e inglês (R-13).
+EVIDENCE=`.specs/features/smartlearn-v1-consolidated-v2/design.md` §10 e `src/i18n/index.js`: pt-BR é o único locale da V1; T46 (catálogo i18n completo) foi DEFERIDA por não ter efeito observável (`product-closure/plan.md`).
+IMPACT=Médio: trocar `uiLocale` só muda a interface onde houver catálogo; hoje só o módulo de conta usa `t()`; o resto do app tem texto fixo em pt-BR.
+MINIMUM_RESOLUTION=HG-13: confirmar que na V1 o `uiLocale` es/en cobre apenas as chaves do catálogo (com fallback pt-BR) e que a tradução completa do app continua adiada (T46). Não bloqueia: o domínio, a preferência e o contrato entram já.
+
+DECISION_CONFLICT-2
+DECISION=A geração recebe `generationLocale` e o conteúdo sai direto nesse idioma (R-13).
+EVIDENCE=`spec.md` §7 ("nenhuma mudança de prompt antes do Prompt Lab aprovado"), `PROMPT_LAB=MANUAL_GATE` e a política de não mudar o prompt do produto. O prompt atual (`server/src/ai/draft-prompt.js`, promptVersion 5) não tem nenhuma diretiva de idioma de saída.
+IMPACT=Alto para a qualidade real: sem a diretiva o idioma de saída do modelo é indeterminado; com o contrato de idioma ativo, saída em idioma diferente do alvo é recusada (fail-closed), o que expõe o problema em vez de escondê-lo.
+MINIMUM_RESOLUTION=HG-13: autorizar a diretiva aditiva mínima (bloco OUTPUT LANGUAGE + campo `language` + bump de promptVersion), SEM rodar Prompt Lab/Codex. Enquanto isso o domínio, o contrato de validação, as preferências e o provedor simulado entram (T-F10-01/02a); T-F10-02b fica `[H]`. Não bloqueia.
