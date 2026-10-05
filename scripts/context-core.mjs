@@ -67,6 +67,9 @@ export function resumeCockpit(read, { head = '(unknown)' } = {}) {
   const next3 = order.map((id) => byId.get(id)).filter(eligible).slice(0, 3);
   const blockers = active ? active.deps.filter((d) => byId.get(d)?.status !== '✓').map((d) => `${d}[${STATE_NAME[byId.get(d)?.status] ?? 'MISSING'}]`) : [];
   const relevantGates = [...new Set([...(active?.gates ?? []), ...next3.flatMap((b) => b.gates)])];
+  // the standing prohibitions are rules 8 and 9 of tasks.md "Regras de execução" (derived here, never restated by hand)
+  const ruleText = (n) => new RegExp(`^${n}\\. (.+)$`, 'm').exec(norm(tasksText))?.[1] ?? '';
+  const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => clip(r.replace(/`/g, ''), 120)).join(' | ');
   const lines = [
     `HEAD=${head}`,
     `PHASE=${/^MARCO ATUAL:\s*(.+)$/m.exec(plan)?.[1] ?? '(none)'}`,
@@ -82,6 +85,7 @@ export function resumeCockpit(read, { head = '(unknown)' } = {}) {
     `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${clip(b.heading, 60)})`).join(' | ') : '(none eligible)'}`,
     `BLOCKERS_FOR_CURRENT=${blockers.length ? blockers.join(', ') : 'none'}`,
     `OPEN_HUMAN_GATES_RELEVANT=${relevantGates.length ? relevantGates.map((g) => `${g} ${gateName(g)}`.trim()).join(' | ') : 'none for the current and next tasks'}`,
+    `PROHIBITIONS=${prohibitions || '(see tasks.md "Regras de execução" 8-9)'}`,
     '',
     'READ_NOW:',
     `  ${FILES.tasks}: grep -n "${active?.id ?? '<ACTIVE_TASK>'}" (read that block only)`,
