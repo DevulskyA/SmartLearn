@@ -3,6 +3,7 @@
 Autoridades: Git/código/testes = realidade · `.specs/features/hardening-roadmap-v1/` (`PROGRAM.md` ordem, `tasks.md` tarefas/estados/SHAs, `spec.md` requisitos e portões humanos, `validation.md` evidência, `uat-visual.md`) · `conductor/tracks/hardening-roadmap-v1/plan.md` macro · `.specs/ARTIFACTS.md` externos.
 Este arquivo NÃO copia lista de tarefas nem evidência. Para a posição exata: `npm run context:resume`.
 
+EXECUTION_MODEL=OUTCOME_DRIVEN_LEAN (2026-10-05; política em `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md`, seção "Outcome-Driven Lean Execution"; o roadmap legado T-F* segue como está e é reclassificado só quando tocado).
 CURRENT_PHASE=hardening-roadmap-v1 · sprint S3 (verdade do runner e2e). Fechadas: S0, S1, S2, S2G-a/b (geração segura), S2b.
 ACTIVE_TASK=resolvida por `npm run context:resume` (a tarefa `[>]` em `tasks.md`); não é repetida aqui para não envelhecer.
 LAST_PROVEN_MILESTONE=S2b / T-F2-05 (pré-visualização do aceite) e S2G (idiomas, reuso, créditos): evidência em `validation.md`; servidor 901/901, e2e materiais 38/38.

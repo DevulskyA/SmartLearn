@@ -209,9 +209,11 @@ objetivo
 → implementação
 → teste discriminante
 → regressão
-→ inspeção adversarial do produto real
+→ inspeção adversarial do produto real (quando o risco justificar)
 → persistência da evidência
-→ commit atômico
+→ commit(s) causalmente coerente(s)
+
+`SUPERSEDED (2026-10-05, Outcome-Driven Lean Execution)`: a inspeção adversarial e a regressão ampla por unidade de trabalho; valem por risco (`00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution`, regras 7–8). Os princípios e dimensões deste padrão não mudam.
 
 Procure a hipótese adversária mais forte antes de aceitar uma conclusão importante.
 

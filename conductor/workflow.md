@@ -1,135 +1,30 @@
 # CONDUCTOR + TLC EXECUTION CONTRACT
 
-Conductor is the persistent project cockpit.
-TLC Strict + ECC Engineering is the execution and verification authority.
+`EXECUTION_MODEL=OUTCOME_DRIVEN_LEAN`. Policy canônica: `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution`.
+Este arquivo guarda só o que é específico do Conductor: onde vive a autoridade, como o trabalho é mostrado, estados e sincronização.
+Conductor é o cockpit persistente; TLC Strict + ECC Engineering é a autoridade de execução e verificação.
 
-1. Existing governed `.specs` requirements outrank Conductor summaries.
-2. Never regenerate or overwrite approved architecture merely to conform to Conductor.
-3. `conductor/tracks.md` shows project-level status.
-4. `conductor/tracks/smartlearn-v1/plan.md` shows sprints/tasks/subtasks.
-5. Every formal Txx retains its stable ID (T01-T54, `.specs/features/smartlearn-v1-consolidated-v2/tasks.md`).
-6. A task becomes **PROVEN** only after its TLC gate and evidence pass.
-7. Partial implementation stays **IN_PROGRESS**.
-8. **BLOCKED** is distinct from failed and **UNVERIFIED**.
-9. After every formal task: record evidence; local atomic commit; update plan status.
-10. At sprint closure: run proportional closure gate; synchronize Conductor + STATE.
-11. Before session termination: persist exact active sprint/task/subtask/HEAD/dirty/blocker/next action.
-12. Resume always reconciles Git before trusting status files.
-13. Never weaken a test to obtain green.
-14. Verifier must not fix what it judges.
-15. No push/merge/deploy/destructive real-data operation without explicit authorization.
-16. One controller writes the main worktree (`smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`). Sibling worktrees are read-only unless specifically assigned (ver `SIBLING_WORKTREE_DIRTY` em STATE.md).
-
-## Regra fundamental
+1. Os requisitos governados em `.specs` vencem qualquer resumo do Conductor; nunca regenerar nem sobrescrever arquitetura aprovada só para caber no Conductor.
+2. Cada fato vive em UM lugar: `tasks.md` da feature ativa = IDs, estados, dependências, SHAs e subtarefas; `PROGRAM.md` = ordem; `spec.md` = requisitos e portões humanos; `validation.md` = evidência; `.specs/STATE.md` = fase atual; Git/testes = realidade.
+3. `conductor/tracks/<track>/plan.md`, o bloco ACTIVE TRACK de `conductor/tracks.md`, o painel HTML e o cockpit (`npm run context:resume`) são PROJEÇÕES GERADAS de `tasks.md` (`npm run plan:sync`, `node scripts/agent-tasklist.mjs`): nunca editar à mão; `context:check` falha se divergirem. Os IDs formais (T-F*, T-*) são estáveis e nunca renumerados.
+4. Roadmap progressivo: AGORA = o outcome ativo (exatamente UMA tarefa `[>]`, com árvore de subtarefas) · PRÓXIMO = SÓ o próximo outcome pronto · ROADMAP = o resto, uma linha cada.
+5. Estados (um só por tarefa): `[✓]` PROVEN (prova em `validation.md` + `IMPLEMENTATION_SHA`) · `[>]` IN_PROGRESS (implementação parcial fica aqui) · `[ ]` PENDING · `[!]` BLOCKED por dependência (diferente de falha e de não verificado) · `[H]` HUMAN_GATE (decisão do usuário, não bloqueia trabalho independente) · `[=]` SPLIT (contêiner, nunca executado). `DONE` não existe; só PROVEN.
+6. Retomada sempre reconcilia o Git antes de confiar em qualquer arquivo de status: Git → `context:resume` → bloco da tarefa ativa → evidência → working tree → continuar o primeiro outcome não provado com dependências satisfeitas.
+7. Um controlador escreve a worktree principal (`smartlearn-v1-complete`, branch `claude/smartlearn-v1-complete`); worktrees irmãs são só leitura salvo atribuição explícita (ver `SIBLING_WORKTREE_DIRTY` em STATE.md).
+8. Nunca enfraquecer um teste para obter verde; o verificador não corrige o que julga; push/merge/deploy/operação destrutiva em dado real só com autorização explícita.
 
 ```
-.specs      = o que deve ser verdadeiro
-Git         = o que realmente existe
-TLC         = como provar
-Conductor   = onde estamos
+.specs      = o que deve ser verdadeiro      Git       = o que realmente existe
+TLC         = como provar                    Conductor = onde estamos
 ```
 
-Conductor nunca substitui `.specs`. É projeção operacional e visual.
+## Tasklist visível (DECISÃO HUMANA 2026-09-19, preservada)
 
-## Estados universais
-
-```
-✅ PROVEN        — gate TLC + evidência passaram
-🔄 IN_PROGRESS   — implementação parcial, não gateada
-⬜ TODO          — não iniciada
-⛔ BLOCKED       — dependência ou HUMAN_GATE impede início
-⚠️ UNVERIFIED    — implementado mas sem gate/evidência rodado
-➖ SUPERSEDED    — substituída por decisão posterior (ver STATE.md DEC-xxx)
-```
-
-`DONE` não existe como estado — apenas `PROVEN`.
-
-## Checkpoint de tarefa (Txx)
-
-```
-TASK START → mark IN_PROGRESS → capture HEAD → inspect → sensor →
-implement → tests → narrow gate → regression gate → discrimination (se material) →
-record evidence → atomic local commit → mark PROVEN →
-update conductor/tracks.md + tracks/smartlearn-v1/plan.md →
-update .specs/STATE.md se continuidade mudou → next task
-```
-
-## Checkpoint de sprint
-
-```
-SPRINT_CHECKPOINT
-Sprint: / Tasks: / PROVEN: / BLOCKED: / UNVERIFIED:
-HEAD: / Working tree: / Tests: / Closure gate:
-Product capability gained: / Regression risk:
-Next sprint: / Next task:
-STATE synchronized: YES/NO / Conductor synchronized: YES/NO
-```
-
-## Resume (sempre nesta ordem)
-
-```
-Git → conductor/tracks.md → .specs/STATE.md → tasks.md (status formal) →
-evidence → working tree → reconcile discrepâncias → continuar primeira
-tarefa não-provada com dependências satisfeitas
-```
-
-## Tasklist visível e relação Conductor × TLC (adendo 2026-09-19 — track ops-dev-data-and-tasklist)
-
-> **GOV-2 (2026-09-19): RECONCILIADO SEM SEGUNDA GOVERNANÇA (opção A). Execução de tarefa = mecanismo canônico da skill
-> `tlc-spec-driven-strict` (tarefa causal por feature em `.specs/features/<f>/tasks.md`, checkpoint de fase, Memento em `.specs/STATE.md`,
-> recuperação). O `plan.md` do track é só o LEDGER MACRO de marcos que alimenta a tasklist visual (a skill não tem visão macro nem
-> projeção). Mapa de símbolos: ✓=[x] DONE · >=[~] IN_PROGRESS (exatamente UMA) · [ ]=PENDING · !=[!] BLOCKED · -=adiada (extensão local).
-> Não criar track novo sem objetivo aprovado; não expandir o Conductor; skill global NÃO alterada.
->
-> DECISÃO HUMANA (2026-09-19) — TASKLIST VISUAL PRESERVADA: a capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`,
-> `tasklist.html`, painel, estados ✓ > [ ] ! -, detalhes expansíveis, tarefa ativa inequívoca) é CANÔNICA COMO CAPACIDADE e não pode
-> ser removida, mesmo que `conductor/` deixe de ser a fonte. Se a fonte mudar após a auditoria GOV-1, adapta-se o GERADOR para ler a
-> nova fonte; a UI permanece. NÃO autoriza expandir o Conductor. Fonte interna definitiva = pendente da auditoria.
-
-Estado real verificado no disco (não pelo nome): a skill em uso é `tlc-spec-driven-strict` (integração original, sem versão,
-instalada 2026-09-15); **"TLC-ECC Engineering V3" não existe como skill instalada**. A skill global NÃO é modificada; este
-adendo é a correção LOCAL e reversível (SKILL_CONFLICT registrado em `tracks/ops-dev-data-and-tasklist/plan.md`).
-
-```
-CONDUCTOR envolve o TLC:
-  track/plan.md → tarefa ATIVA (exatamente uma) → TLC: outcome → guardrails → menor slice → executar → PROVAR →
-  atualizar plan.md (primeiro) → tracks.md (se o status do track mudou) → projetar a lista → próxima tarefa
-Conductor decide QUAL tarefa está ativa. TLC decide a menor implementação correta dela.
-```
-
-- Fonte única: o `plan.md` do track ativo (apontado em `tracks.md`, seção ACTIVE TRACK). Chat/UI/painel = PROJEÇÕES.
-- Projetar sempre com o script (nunca lista escrita à mão): `node scripts/tasklist.mjs` (texto compacto) e
-  `node scripts/tasklist.mjs --html conductor/.view/tasklist.html` (painel para o usuário; atualiza a cada 10 s).
-  O script sai com erro se não houver EXATAMENTE UMA tarefa `[>]`.
-- Símbolos: `[✓]` concluída · `[>]` ativa · `[ ]` pendente · `[!]` bloqueada · `[-]` adiada.
-- Sem UI nativa de checklist no runtime (o painel "tasks" do app mostra só processos em segundo plano): usar o painel HTML +
-  a lista compacta em cada checkpoint.
-- Conductor NÃO cria segunda Constitution: intenção = Product Constitution §0.1; estado = Git/testes.
+A capacidade "tasklist visual persistente" (`scripts/tasklist.mjs`, `tasklist.html`, painel, estados, tarefa ativa inequívoca) é CANÔNICA e não pode ser removida, mesmo que a fonte mude: adapta-se o GERADOR, a UI permanece. Não autoriza expandir o Conductor nem criar segunda governança (GOV-2: execução de tarefa = mecanismo da skill `tlc-spec-driven-strict`; o plan.md é só o ledger macro projetado).
+- Projeção: `node scripts/tasklist.mjs` (texto compacto) e `node scripts/tasklist.mjs --html conductor/.view/tasklist.html` (painel; exige EXATAMENTE UMA `[>]`, ou nenhuma quando o programa está ocioso). Painel velho é bug; `--watch` o mantém fresco.
+- Sem UI nativa de checklist no runtime: usar o painel HTML + a lista compacta quando o usuário precisar ver a posição.
 
 ## Autonomia contínua (regra canônica humana, 2026-09-19)
 
-```
-CONTINUOUS_AUTONOMY=REQUIRED
-USER_IS_NOT_AGENT_MANAGER=TRUE
-CONCURRENT_WRITER_ACTION=ISOLATE_AND_CONTINUE
-CURRENT_GOAL_OVERRIDES_STALE_PLAN=TRUE
-```
-
-Outro agente/branch/worktree/arquivo inesperado NÃO é motivo para parar: isolar em worktree/branch próprio, preservar o trabalho alheio
-(sem reset/stash/overwrite), continuar o GOAL vigente e reconciliar depois com estado estável. Tarefa antiga descoberta = histórico/paralela.
-Só interromper por: decisão nova de produto, risco real de dados, operação irreversível, conflito canônico sem resolução pela hierarquia,
-bloqueio técnico sem caminho seguro, ou contexto no limite (após handoff persistido).
-
-## Sprint produtiva (regra canônica humana, 2026-09-19)
-
-```
-PRODUCTIVITY_WITH_QUALITY=REQUIRED
-TASK_COMPLETION_IS_NOT_PRODUCT_SUCCESS=TRUE
-PROVABLE_PRODUCT_DELTA_REQUIRED=TRUE
-```
-
-Antes de executar uma sprint, registrar: `SPRINT_GOAL` (comportamento/valor OBSERVÁVEL, nunca atividade), `BEFORE`, `AFTER`, `PROOF`, `DONE_WHEN`.
-Proibido como objetivo final: implementar módulo, refatorar, criar arquitetura, adicionar testes, atualizar documentação, investigar, melhorar código
-(são meios). Fechamento exige `PRODUCT_DELTA`, `PROOF_OBSERVED`, `USER_VALUE`, `NOT_PROVEN` e a resposta concreta e comprovada a
-"O que o SmartLearn consegue fazer melhor agora que não conseguia antes?". Sem resposta: `SPRINT_NOT_PRODUCTIVE=TRUE` e a sprint NÃO está concluída.
-Infra/segurança/testes/dívida só justificam sprint própria se produzem ou protegem valor material demonstrável. Preferir a menor mudança com maior ganho comprovável.
+`CONTINUOUS_AUTONOMY=REQUIRED` · `USER_IS_NOT_AGENT_MANAGER=TRUE` · `CONCURRENT_WRITER_ACTION=ISOLATE_AND_CONTINUE` · `CURRENT_GOAL_OVERRIDES_STALE_PLAN=TRUE`.
+Outro agente/branch/worktree/arquivo inesperado NÃO é motivo para parar: isolar em worktree/branch próprio, preservar o trabalho alheio (sem reset/stash/overwrite), continuar o GOAL vigente e reconciliar depois. Só interromper pelos critérios de escalonamento da regra 10 da policy canônica (ou contexto no limite, após o estado persistido).

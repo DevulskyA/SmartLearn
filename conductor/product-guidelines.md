@@ -14,4 +14,4 @@ Invariantes que mais afetam o cockpit (não duplicar o texto completo aqui):
 - **INV-26**: todo gate de closure futuro inclui gate por plataforma ou
   SPEC_DEVIATION aprovado.
 - **DONE não existe. Existe PROVEN** — uma task só fica verde após gate TLC
-  com evidência (ver `workflow.md` regra 6).
+  com evidência (ver `workflow.md` regra 5).

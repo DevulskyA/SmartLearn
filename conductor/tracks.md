@@ -14,7 +14,7 @@ A tasklist mostrada ao usuário é uma projeção do plan.md.
 > VALID-8 aguarda decisão humana, HG-06), `ops-dev-data-and-tasklist`, `app-decomposition`, `product-closure`, `content-quality`.
 
 > Reconciliar contra Git + `.specs/STATE.md` antes de confiar neste arquivo
-> (regra 12, `workflow.md`). Snapshot gerado em 2026-09-07 a partir de HEAD
+> (regra 6, `workflow.md`). Snapshot gerado em 2026-09-07 a partir de HEAD
 > `a51725f`, branch `claude/smartlearn-v1-complete`.
 
 ```

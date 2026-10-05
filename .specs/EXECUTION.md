@@ -4,7 +4,7 @@ PROJECT=SmartLearn · WORK_BRANCH=claude/smartlearn-v1-complete · MAIN_MODE=REA
 
 Depois de /clear ou em sessão nova, nesta ordem:
 1. `git worktree list`, `git status`, `git log --oneline -5` (o Git vence qualquer texto).
-2. `npm run context:resume` (cockpit derivado, ~25 linhas: fase, tarefa ativa, próximo comando, bloqueios).
+2. `npm run context:resume` (cockpit derivado, ~15 linhas: modelo e policy, outcome ativo, aceite, passo atual, próximo outcome, bloqueios, decisões humanas).
 3. Ler SOMENTE o bloco da tarefa ativa em `.specs/features/hardening-roadmap-v1/tasks.md` (grep pelo ID), a seção do mesmo ID em `validation.md`, os requisitos que o bloco cita em `spec.md`, e o código necessário. Não ler os documentos inteiros por rotina.
 4. Só ampliar a leitura se surgir dependência ou conflito: `PROGRAM.md` (ordem e regras), `uat-visual.md` (prova visual), `conductor/tracks/hardening-roadmap-v1/plan.md` (macro), `.specs/STATE.md` (fase).
 5. O que vive fora do Git (PDF real, banco DEV, backups, instruções do usuário, skills): `.specs/ARTIFACTS.md`.

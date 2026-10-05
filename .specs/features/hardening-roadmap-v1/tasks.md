@@ -7,21 +7,21 @@ Baseline de referência histórico (partida, não estado atual): HEAD `620307d`;
 Legenda do status (UM estado inequívoco por tarefa): `[✓]` DONE (feita com evidência em `validation.md`) · `[>]` IN_PROGRESS (exatamente UMA em todo o ledger; é a tarefa ativa e carrega `Próximo passo:` e `Comando:`) · `[ ]` PENDING · `[!]` BLOCKED (por dependência técnica) · `[H]` HUMAN_GATE (depende de decisão humana) · `[=]` SPLIT (tarefa-contêiner dividida em subtarefas; nunca é executada em si).
 Ao concluir uma tarefa: (1) `Status` aqui; (2) prova em `validation.md` com seção `### <ID>`; (3) `BASE_SHA`/`IMPLEMENTATION_SHA`; (4) `npm run context:resume` passa a apontar a próxima tarefa sozinho. Nenhum cockpit é atualizado à mão.
 Tamanho: S (≤ meio dia) · M (≤ 2 dias) · L (> 2 dias; dividir antes de iniciar).
-Cada tarefa é uma unidade causal: um entregável, verificável de forma independente, commitável sozinha (`1 tarefa = 1 commit causal`, trailer `Co-Authored-By` conforme política do repositório). Registrar `BASE_SHA` e `IMPLEMENTATION_SHA` ao fechar.
+Cada tarefa é um OUTCOME observável (policy: `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md`, "Outcome-Driven Lean Execution"); commits causalmente coerentes, sem um commit por microtarefa (`SUPERSEDED (2026-10-05)`: "1 tarefa = 1 commit causal"); trailer `Co-Authored-By` conforme política do repositório. Registrar `BASE_SHA` e `IMPLEMENTATION_SHA` ao fechar.
 
 ## Regras de execução (valem para todas as tarefas)
 
 1. Reconciliar antes de agir: Git, HEAD, estado sujo, worktree, banco em uso (caminho real). Em retomada, Git/evidência vencem handoff.
 2. Escrever a pergunta do escudo antes de editar: "se esta mudança destruir o comportamento bom, qual sensor fica vermelho?". Sem resposta, criar o sensor primeiro.
 3. Novo comportamento: RED → GREEN → REFACTOR. Comportamento legado: caracterizar o verde, mudar, manter o antigo verde.
-4. Superfície autorizada declarada na tarefa; qualquer arquivo fora dela exige nova tarefa. Defeitos alheios viram achado, não "aproveitar que estou aqui".
+4. Superfície autorizada declarada na tarefa; arquivo fora dela só entra se for causal ao outcome (amplia-se a superfície declarada; nova tarefa só nos casos da regra 2 da policy). Defeito alheio segue a triagem de achados da policy (bloqueante: corrige dentro; material: DEBT; resto: só se houver risco de esquecer), não "aproveitar que estou aqui".
 5. Nunca mutar dado humano para testar. Testes usam banco temporário; scripts que tocam o banco humano só rodam com backup verificado e por tarefa explícita.
 6. Dois remendos seguidos na mesma região que geram nova regressão ⇒ parar, voltar ao último estado bom e remodelar.
 7. Gate = comando exato listado na tarefa + regressão relevante + diff sem mudança não autorizada. Sem gate verde, a tarefa não fecha.
 8. `CODEX_CALL_COUNT=0` em tudo. Nenhuma chamada ao Codex, ao Prompt Lab ou a qualquer geração/modelo externo sem ORDEM EXPLÍCITA da pessoa para aquela execução; HG-07 aprovado não basta, e nenhuma tarefa deste ledger (inclusive F5) autoriza gerar. Modelos: Sonnet 5.5 High para todo trabalho intelectual; Haiku só para executar testes.
 9. Proibido sem ordem explícita: push, merge, deploy, release, force-push, apagar backups.
 
-Comando-base do gate completo (usado nos checkpoints de fase):
+Comando-base do gate completo (só quando o risco ou o fechamento de fase o justificar; validação proporcional ao risco, policy regra 7):
 ```
 npm --prefix server test ; npm test ; npm run lint ; npm run test:inventory ; (cd src-tauri && cargo test --lib) ; npm run test:e2e
 ```
