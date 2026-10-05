@@ -210,22 +210,43 @@ function citedPagesFor(db, userId, row, draft) {
 const QUESTION_REVIEW_STATUSES = new Set(['PROPOSED', 'ACCEPTED', 'REJECTED']);
 const idNumber = (id) => { const m = /^q(\d+)$/.exec(String(id ?? '')); return m ? Number(m[1]) : 0; };
 
-export function normalizeContent(content) {
+const QUESTION_ORIGINS = new Set(['GENERATED', 'HUMAN_EDITED', 'HUMAN_ADDED']);
+
+/** Who generated a draft, as stored in its row. Used to presume the generator of questions written before provenance existed. */
+const generatorOf = (row) => ({ provider: row.provider, modelVersion: row.model_version, promptVersion: row.prompt_version });
+
+/**
+ * PROVENANCE (T-F2-04). Each question carries `origin` (GENERATED | HUMAN_EDITED | HUMAN_ADDED), `generatedBy`
+ * ({provider, modelVersion, promptVersion}; null for a human-added question) and `editedAt`; the summary carries
+ * `summaryOrigin`/`summaryEditedAt`. A human edit moves origin to HUMAN_EDITED and never erases `generatedBy`. Content stored
+ * before this existed has none of it: reading presumes GENERATED from the draft row and marks the question `legacy: true`
+ * (presumed, not recorded). That presumption is derived on read and written only when a later edit persists the draft.
+ */
+export function normalizeContent(content, generatedByDefault = null) {
   const questions = content.questions ?? [];
   let seq = Math.max(Number.isInteger(content.questionSeq) ? content.questionSeq : 0, ...questions.map((q) => idNumber(q.id)));
   const used = new Set(questions.map((q) => q.id).filter(Boolean));
   const normalized = questions.map((q) => {
     let id = q.id;
     if (!id) { do { seq += 1; id = `q${seq}`; } while (used.has(id)); used.add(id); }
+    const recorded = QUESTION_ORIGINS.has(q.origin);
+    const origin = recorded ? q.origin : 'GENERATED';
+    const { legacy: _storedLegacy, ...rest } = q;
     return {
-      ...q,
+      ...rest,
       id,
       status: QUESTION_REVIEW_STATUSES.has(q.status) ? q.status : 'PROPOSED',
       version: Number.isInteger(q.version) ? q.version : 1,
+      origin,
+      generatedBy: origin === 'HUMAN_ADDED' ? null : (q.generatedBy ?? generatedByDefault ?? null),
+      editedAt: q.editedAt ?? null,
+      ...(!recorded || q.legacy === true ? { legacy: true } : {}),
     };
   });
   return {
     ...content,
+    summaryOrigin: content.summaryOrigin === 'HUMAN_EDITED' ? 'HUMAN_EDITED' : 'GENERATED',
+    summaryEditedAt: content.summaryEditedAt ?? null,
     summaryVersion: Number.isInteger(content.summaryVersion) ? content.summaryVersion : 1,
     questionSeq: seq,
     questions: normalized,
@@ -259,7 +280,7 @@ function sourceUnitFor(db, userId, proposalId) {
 }
 
 function toDraftDto(row, { db, userId } = {}) {
-  const draft = normalizeContent(JSON.parse(row.draft_json));
+  const draft = normalizeContent(JSON.parse(row.draft_json), generatorOf(row));
   const audit = findingsWithEntities(draft.audit, draft.questions);
   const flaggedIds = new Set((audit?.findings ?? []).filter((f) => f.severity !== 'LOW' && f.entityType === 'QUESTION').map((f) => f.entityId));
   draft.questions = draft.questions.map((q) => ({
@@ -378,10 +399,11 @@ export async function createDraft(db, userId, proposalId, {
   validated = audited.draft;
 
   const nowIso = now().toISOString();
+  const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };
   const draftContent = normalizeContent({
     summary: validated.summary,
     summarySourceSpans: validated.summarySourceSpans,
-    questions: validated.questions,
+    questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
     quarantinedCount: validated.quarantinedCount,
     audit: audited.audit,
     sourceScope: {
@@ -432,7 +454,7 @@ export function replaceDraftContent(db, userId, draftId, { summary, questions } 
   const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
   if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
 
-  const current = normalizeContent(JSON.parse(draftRow.draft_json));
+  const current = normalizeContent(JSON.parse(draftRow.draft_json), generatorOf(draftRow));
   const candidate = {
     summary: summary !== undefined ? summary : current.summary,
     summarySourceSpans: current.summarySourceSpans,
@@ -451,7 +473,7 @@ export function replaceDraftContent(db, userId, draftId, { summary, questions } 
     throw new DraftError('ENTITY_CONFLICT', 'Há questões rejeitadas: altere a lista por questão (editar ou excluir), não substituindo todas de uma vez.');
   }
   const nextQuestions = validated.questions.length === current.questions.length
-    ? validated.questions.map((q, i) => mergeIdentity(current.questions[i], q))
+    ? validated.questions.map((q, i) => mergeIdentity(current.questions[i], q, now().toISOString()))
     : validated.questions;
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: validated.summary,
@@ -475,13 +497,19 @@ function validateOrThrow(candidate, segments) {
 }
 
 /** The validated text of a question plus the identity (id, review status, version) it already had; version moves only if the text did. */
-function mergeIdentity(previous, validatedQuestion) {
+function mergeIdentity(previous, validatedQuestion, nowIso) {
   const changed = EDITABLE_FIELDS.some((k) => JSON.stringify(previous?.[k] ?? null) !== JSON.stringify(validatedQuestion[k] ?? null));
+  const origin = previous?.origin ?? 'GENERATED';
   return {
     ...validatedQuestion,
     id: previous?.id,
     status: previous?.status ?? 'PROPOSED',
     version: (previous?.version ?? 1) + (changed ? 1 : 0),
+    // Provenance moves only when the TEXT moved: a status change or a no-op edit keeps it. Who generated it is never erased.
+    origin: changed && origin === 'GENERATED' ? 'HUMAN_EDITED' : origin,
+    generatedBy: previous?.generatedBy ?? null,
+    editedAt: changed ? nowIso : (previous?.editedAt ?? null),
+    ...(previous?.legacy ? { legacy: true } : {}),
   };
 }
 
@@ -491,7 +519,7 @@ function loadEditable(db, userId, draftId) {
   if (draftRow.status !== 'DRAFT') throw new DraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser editado.`);
   const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
   if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
-  return { draftRow, found, current: normalizeContent(JSON.parse(draftRow.draft_json)) };
+  return { draftRow, found, current: normalizeContent(JSON.parse(draftRow.draft_json), generatorOf(draftRow)) };
 }
 
 /** Re-screens deterministically (a human edit changes the text, so earlier findings describe text that is gone), writes ONE row update and bumps the draft revision. */
@@ -513,6 +541,8 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     summarySourceSpans: next.summarySourceSpans,
     questions: next.questions,
     summaryVersion: next.summaryVersion,
+    summaryOrigin: next.summaryOrigin ?? current.summaryOrigin,
+    summaryEditedAt: next.summaryEditedAt ?? current.summaryEditedAt,
     quarantinedCount: next.quarantinedCount ?? current.quarantinedCount,
     audit,
   });
@@ -541,6 +571,7 @@ export function reviseSummary(db, userId, draftId, { summary, expectedVersion } 
     summarySourceSpans: validated.summarySourceSpans,
     questions: current.questions,
     summaryVersion: validated.summary === current.summary ? current.summaryVersion : current.summaryVersion + 1,
+    ...(validated.summary === current.summary ? {} : { summaryOrigin: 'HUMAN_EDITED', summaryEditedAt: now().toISOString() }),
   }, now);
 }
 
@@ -563,7 +594,7 @@ export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now 
   if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
     throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
   }
-  const merged = mergeIdentity(previous, validated.questions[0]);
+  const merged = mergeIdentity(previous, validated.questions[0], now().toISOString());
   if (patch.status !== undefined) merged.status = patch.status;
   const questions = current.questions.map((q, i) => (i === index ? merged : q));
   return persistEdit(db, userId, draftId, draftRow, found, current, {
@@ -597,7 +628,7 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
   if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
     throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
   }
-  const added = { ...validated.questions[0], id: `q${current.questionSeq + 1}`, status: 'PROPOSED', version: 1, origin: 'HUMAN_ADDED' };
+  const added = { ...validated.questions[0], id: `q${current.questionSeq + 1}`, status: 'PROPOSED', version: 1, origin: 'HUMAN_ADDED', generatedBy: null, editedAt: null };
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,
     questions: [...current.questions, added], summaryVersion: current.summaryVersion,
