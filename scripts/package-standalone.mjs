@@ -26,14 +26,18 @@
 // dev loop fast).
 
 import { existsSync, cpSync, rmSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SERVER_DIR = join(ROOT, 'server');
 const SHARED_DIR = join(ROOT, 'shared');
 const DIST_DIR = join(ROOT, 'dist');
-const RESOURCES_DIR = join(ROOT, 'src-tauri', 'resources');
+// T-F8-01: SMARTLEARN_PACKAGE_RESOURCES_DIR stages into another directory (the artifact inspection test uses a temp dir, so it never
+// touches the checkout's src-tauri/resources); with it set, SMARTLEARN_PACKAGE_SKIP_NODE=1 also skips copying the ~90 MB node binary.
+const RESOURCES_OVERRIDE = process.env.SMARTLEARN_PACKAGE_RESOURCES_DIR;
+const RESOURCES_DIR = RESOURCES_OVERRIDE ? resolve(RESOURCES_OVERRIDE) : join(ROOT, 'src-tauri', 'resources');
+const SKIP_NODE_BINARY = Boolean(RESOURCES_OVERRIDE) && process.env.SMARTLEARN_PACKAGE_SKIP_NODE === '1';
 
 function fail(message) {
   console.error(`[package-standalone] ${message}`);
@@ -88,7 +92,7 @@ cpSync(DIST_DIR, distRuntimeDir, { recursive: true });
 // node-runtime: the exact binary currently running this script -- not a
 // PATH lookup. `process.execPath` is Node's own resolved path to itself.
 const nodeBinaryName = process.platform === 'win32' ? 'node.exe' : 'node';
-copyFileSync(process.execPath, join(nodeRuntimeDir, nodeBinaryName));
+if (!SKIP_NODE_BINARY) copyFileSync(process.execPath, join(nodeRuntimeDir, nodeBinaryName));
 
 for (const dir of [serverRuntimeDir, sharedDir, distRuntimeDir, nodeRuntimeDir]) {
   writeFileSync(join(dir, '.gitkeep'), '');
