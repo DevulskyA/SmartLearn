@@ -51,6 +51,7 @@ const GOOD_SUMMARY = 'A filtracao glomerular resulta do balanco entre a pressao 
 const GOOD_Q = {
   question: 'Qual e a taxa de filtracao glomerular normal?',
   answer: 'Cerca de 125 mL/min, resultado do balanco entre a pressao hidrostatica capilar, que favorece a filtracao, e as pressoes oncotica e da capsula de Bowman, que se opoem.',
+  explanation: 'A filtracao glomerular e determinada por essas pressoes: 60 mmHg a favor e 32 mmHg mais 18 mmHg contra.',
   hint: null,
   sourceSpans: [{ pageIndex: 1 }],
 };

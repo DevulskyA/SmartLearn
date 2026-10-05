@@ -17,7 +17,7 @@ export const ISSUE_LABELS = {
   SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
   SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
   QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
-  QUESTION_NO_EXPLANATION: "Falta explicar por quê",
+  EXPLANATION_MISSING: "Falta explicar por quê",
   QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
   HINT_REVEALS_ANSWER: "A dica entrega a resposta",
   QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",

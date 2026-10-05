@@ -46,6 +46,21 @@ async function makeDraft(db, userId, sourcesDir, pagesText) {
   return { source, proposal, draft };
 }
 
+test('F-15: a draft whose questions have no Por quê shows EXPLANATION_MISSING in the review data and is still accepted (the finding never blocks)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'f15@example.com');
+    const { draft } = await makeDraft(db, userId, sourcesDir, ['Farmacocinética básica', 'Farmacodinâmica básica']);
+    const review = drafts.getDraft(db, userId, draft.id); // what the Revisão screen loads
+    const missing = review.audit.findings.filter((f) => f.issue === 'EXPLANATION_MISSING');
+    assert.ok(missing.length > 0, 'the test double writes no explanation, so the review data must carry the finding');
+    assert.ok(missing.every((f) => f.entityType === 'QUESTION' && Boolean(f.entityId)), 'tied to the question entity the review shows');
+
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
+    assert.equal(result.exerciseCount, 2);
+  } finally { cleanup(); }
+});
+
 test('accepting a draft creates exactly one subject/unit/16 reviews/N exercises with AI_GENERATED provenance and resolvable citations', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {

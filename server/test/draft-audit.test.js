@@ -13,7 +13,7 @@ const SEGMENTS = [
 ];
 
 const GOOD_SUMMARY = 'A filtração glomerular resulta do balanço entre a pressão hidrostática capilar (60 mmHg), que favorece a filtração, e as pressões oncótica (32 mmHg) e da cápsula de Bowman (18 mmHg), que se opõem. A taxa de filtração glomerular normal é cerca de 125 mL/min. A arteríola eferente, contraída pela angiotensina II, mantém a pressão glomerular.';
-const Q = (o = {}) => ({ question: 'Qual é a taxa de filtração glomerular normal?', answer: 'Cerca de 125 mL/min: resulta do balanço entre a pressão hidrostática que favorece a filtração e as pressões oncótica e da cápsula de Bowman que se opõem.', hint: null, sourceSpans: [{ pageIndex: 1 }], ...o });
+const Q = (o = {}) => ({ question: 'Qual é a taxa de filtração glomerular normal?', answer: 'Cerca de 125 mL/min: resulta do balanço entre a pressão hidrostática que favorece a filtração e as pressões oncótica e da cápsula de Bowman que se opõem.', explanation: 'A filtração glomerular é determinada por essas pressões: 60 mmHg a favor e 32 mmHg mais 18 mmHg contra.', hint: null, sourceSpans: [{ pageIndex: 1 }], ...o });
 const draft = (o = {}) => ({ summary: GOOD_SUMMARY, questions: [Q()], ...o });
 const issues = (r, scope) => r.findings.filter((f) => !scope || f.scope === scope).map((f) => f.issue);
 

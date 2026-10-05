@@ -33,11 +33,27 @@ test('valid questions of different kinds raise no flag: simple recall, conceptua
 
 test('feedback must teach: a bare answer is HIGH; a short answer with no explanation is flagged; with an explanation it is fine', () => {
   assert.ok(issues(audit(Q({ answer: '125', explanation: null })), 0).includes('QUESTION_ANSWER_TOO_THIN'));
-  assert.ok(issues(audit(Q({ answer: 'Cerca de 125 mL/min.', explanation: null })), 0).includes('QUESTION_NO_EXPLANATION'));
+  assert.ok(issues(audit(Q({ answer: 'Cerca de 125 mL/min.', explanation: null })), 0).includes('EXPLANATION_MISSING'));
   assert.deepEqual(issues(audit(Q({ answer: 'Cerca de 125 mL/min.' })), 0), []);
-  // an older draft with no explanation field whose answer itself teaches is not penalised
+});
+
+// T-F3-05 (F-15): the "Por quê" is required of EVERY question, not only of those with a short answer.
+test('EXPLANATION_MISSING: every question without a Por quê is flagged (short or long answer, null, absent or blank), none with one', () => {
   const teachingAnswer = 'Cerca de 125 mL/min, resultado do balanço entre a pressão hidrostática capilar, que favorece a filtração, e as pressões oncótica e da cápsula de Bowman, que se opõem.';
-  assert.deepEqual(issues(audit(Q({ answer: teachingAnswer, explanation: undefined })), 0), []);
+  for (const explanation of [null, undefined, '', '   ', ' \t ']) {
+    for (const answer of ['125 mL/min', teachingAnswer]) {
+      const found = audit(Q({ answer, explanation })).findings.filter((x) => x.scope === 'question:0' && x.issue === 'EXPLANATION_MISSING');
+      assert.equal(found.length, 1, `explanation=${JSON.stringify(explanation)} answerWords=${answer.split(' ').length}`);
+      assert.equal(found[0].severity, 'MEDIUM');
+      assert.match(found[0].repair, /explica/i);
+    }
+  }
+  assert.ok(!issues(audit(Q()), 0).includes('EXPLANATION_MISSING'), 'a question with a Por quê is not flagged');
+  // each question is judged on its own: only the one without the explanation is flagged
+  const r = audit(Q(), Q({ explanation: null }), Q());
+  assert.deepEqual([0, 1, 2].map((i) => issues(r, i).includes('EXPLANATION_MISSING')), [false, true, false]);
+  // a bare answer keeps its own HIGH finding too: the two say different things (nothing to learn from / no Por quê)
+  assert.ok(issues(audit(Q({ answer: '125', explanation: null })), 0).includes('QUESTION_ANSWER_TOO_THIN'));
 });
 
 test('an answer given away in the question or in the hint is HIGH; a partial cue is fine', () => {

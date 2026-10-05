@@ -208,8 +208,11 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
     if (answerWords + explanationWords < 4) {
       add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, 'A resposta não traz explicação suficiente para o aluno entender por quê.',
         'Dê a resposta e explique em 1–3 frases por que ela está certa, com base na página citada.');
-    } else if (explanationWords === 0 && answerWords < 8) {
-      add('QUESTION_NO_EXPLANATION', 'MEDIUM', q.answer, 'Resposta curta e sem explicação: o feedback só mostra o gabarito.',
+    }
+    // 1b) F-15: the "Por quê" belongs to EVERY question, whatever the length of its answer (a long answer is not an explanation).
+    // Shown in the review as a finding; it never blocks acceptance.
+    if (explanationWords === 0) {
+      add('EXPLANATION_MISSING', 'MEDIUM', q.answer, 'Esta questão não tem o "Por quê": o feedback só mostra o gabarito.',
         'Acrescente a explicação (por que está certo) usando apenas o que a página citada diz.');
     }
 
