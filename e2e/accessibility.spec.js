@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
 
@@ -141,6 +142,49 @@ for (const { theme, width, height } of CASES) {
         for (const line of summarize(result.violations.filter((v) => !blocking.includes(v)))) console.log(`A11Y-NONBLOCKING [${theme} ${width}px ${screen.name}] ${line}`);
       }
     }
+    expect(found, found.join('\n')).toEqual([]);
+  });
+}
+
+// T-F4-05 (F-35): the lesson EDITOR was outside this audit (it only exists after a draft is generated). Every tab, the summary in
+// reading mode and the accept preview are audited too, with the question list stacked (375 px) and side by side (1280 px).
+const EDITOR_CASES = [
+  { theme: 'paper', width: 1280, height: 800 },
+  { theme: 'night', width: 1280, height: 800 },
+  { theme: 'contrast', width: 1280, height: 800 },
+  { theme: 'paper', width: 375, height: 812 },
+];
+for (const { theme, width, height } of EDITOR_CASES) {
+  test(`axe: the lesson editor has no critical/serious violation on any tab, theme ${theme} at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript((id) => { try { localStorage.setItem('smartlearn:theme', id); } catch { /* ignore */ } }, theme);
+    await signIn(page);
+    await page.locator('[data-screen="materials"]:visible').first().click();
+    await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+    await page.setInputFiles('#sources-file-input', { name: 'editor.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos']) });
+    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+    const editor = page.locator('.lesson-editor');
+    await expect(editor).toBeVisible({ timeout: 10000 });
+    const found = [];
+    const audit = async (where) => {
+      const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+      for (const line of summarize(result.violations.filter((v) => ['critical', 'serious'].includes(v.impact) && !ACCEPTED[v.id]))) found.push(`[${where}] ${line}`);
+    };
+    await audit('Resumo');
+    await editor.locator('[data-action="toggle-summary-read"]').click();
+    await audit('Resumo (lendo como aula)');
+    await editor.getByRole('tab', { name: /Questões/ }).click();
+    await editor.locator('.lesson-qitem').nth(1).click();
+    await audit('Questões');
+    await editor.getByRole('tab', { name: /Fonte/ }).click();
+    await audit('Fonte');
+    await editor.getByRole('tab', { name: /Revisão/ }).click();
+    await audit('Revisão');
+    await editor.locator('.source-draft-subject-input').fill('Fisiologia');
+    await editor.locator('[data-action="preview-accept"]').click();
+    await expect(editor.locator('.lesson-accept-preview')).toBeVisible({ timeout: 8000 });
+    await audit('Pré-visualização do aceite');
     expect(found, found.join('\n')).toEqual([]);
   });
 }

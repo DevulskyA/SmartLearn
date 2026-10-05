@@ -79,6 +79,7 @@ const notStudyNote = (kind) => `${KIND_LABELS[kind] ?? "Não é conteúdo de est
 
 // ---- views -------------------------------------------------------------------------------------------------------------
 async function showBrowse() {
+  const leftProposalId = activeEditor?.getDraft().proposalId;
   activeEditor?.destroy();
   activeEditor = null;
   editorView?.replaceChildren();
@@ -86,7 +87,10 @@ async function showBrowse() {
   if (sourcesCard) sourcesCard.hidden = false;
   // The list must tell the truth about what exists now (a draft was just created or an accept happened).
   await refreshProposals();
-  sourcesChooseFileButton?.focus({ preventScroll: false });
+  // Focus goes back to the unit the student just left (its draft is listed in "Rascunhos em andamento" or in the index), not to a far-away button.
+  const visible = (el) => Boolean(el) && el.getClientRects().length > 0;
+  const back = [draftsList?.querySelector(`[data-proposal-id="${leftProposalId}"] [data-action]`), sourcesProposalsList?.querySelector(`[data-proposal-id="${leftProposalId}"] [data-action="open-draft"]`)].find(visible);
+  (back ?? sourcesChooseFileButton)?.focus({ preventScroll: false });
 }
 
 async function openEditor(draft, title) {

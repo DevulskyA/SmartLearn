@@ -151,6 +151,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   qList.setAttribute("aria-label", "Questões da aula");
   const qEditor = document.createElement("div");
   qEditor.className = "lesson-qeditor";
+  // The form and the findings are redrawn on every save; the message between them is NOT: a live region that is replaced together with
+  // its text is not announced, so this one node lives for as long as the editor does and only its text changes.
+  const qForm = document.createElement("div");
+  const qMessage = statusMessage();
+  const qFindings = document.createElement("div");
+  qEditor.append(qForm, qMessage, qFindings);
+  let qMessageFor = null; // the question the message is about: another question never shows it
   qLayout.append(qList, qEditor);
   questionsPanel.append(qLayout);
 
@@ -171,6 +178,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const subjectSelect = document.createElement("select");
   subjectSelect.id = `${uid}-subject`;
   subjectSelect.className = "source-draft-subject-select";
+  // The editor is not in the document yet when the custom select is mounted, so it cannot find its <label for>: name it directly.
+  subjectSelect.setAttribute("aria-label", "Disciplina");
   const newOption = document.createElement("option");
   newOption.value = "";
   newOption.textContent = "Criar nova disciplina";
@@ -266,6 +275,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       b.dataset.qid = q.id;
       b.dataset.state = state.key;
       if (q.id === selectedId) b.setAttribute("aria-current", "true");
+      // One clean name instead of the symbol + word + count read one by one: "Questão 3, sinalizada, 2 pontos". The visible label stays inside it.
+      b.setAttribute("aria-label", [`Questão ${index + 1}`, state.label.toLowerCase(), state.count > 0 ? `${state.count} ${state.count === 1 ? "ponto" : "pontos"}` : null, questionBuffers.has(q.id) ? "não salva" : null].filter(Boolean).join(", "));
       b.append(createTextElement("span", "lesson-qitem-name", `Questão ${index + 1}`), document.createTextNode(" "));
       const chip = createTextElement("span", "lesson-qchip", "");
       chip.append(createTextElement("span", "lesson-qchip-symbol", state.symbol), document.createTextNode(" "), createTextElement("span", "lesson-qchip-word", state.label));
@@ -278,10 +289,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function renderQuestionEditor() {
-    qEditor.replaceChildren();
+    qForm.replaceChildren();
+    qFindings.replaceChildren();
     const q = questionById(selectedId);
+    if (q?.id !== qMessageFor) { setMessage(qMessage, ""); qMessageFor = q?.id ?? null; }
     if (!q) {
-      qEditor.append(createTextElement("p", "lesson-hint", "Esta aula não tem mais questões."));
+      qForm.append(createTextElement("p", "lesson-hint", "Esta aula não tem mais questões."));
       return;
     }
     const buffer = questionBuffers.get(q.id) ?? {};
@@ -300,7 +313,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
     const titleRow = document.createElement("div");
     titleRow.className = "lesson-qtitle";
-    titleRow.append(createTextElement("h3", "lesson-qheading", `Questão ${index + 1}`));
+    const qHeading = createTextElement("h3", "lesson-qheading", `Questão ${index + 1}`);
+    qHeading.tabIndex = -1; // where the focus lands when the button that was pressed has nothing left to do (saved, accepted, deleted)
+    titleRow.append(qHeading);
     if (q.questionType && QUESTION_TYPE_LABELS[q.questionType]) {
       titleRow.append(document.createTextNode(" "), createTextElement("span", "study-now-chip lesson-qtype", QUESTION_TYPE_LABELS[q.questionType]));
     }
@@ -343,13 +358,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const del = button("text-button lesson-danger", "Excluir questão", "delete-question");
     const dirtyEl = createTextElement("span", "lesson-dirty", questionBuffers.has(q.id) ? "Alterações não salvas" : "");
     actions.append(save, acceptQ, rejectQ, del, document.createTextNode(" "), dirtyEl);
-    const message = statusMessage();
-    message.id = `${idBase}-message`;
+    const message = qMessage;
 
     const findings = findingsOfQuestion(q.id);
     const findingsBlock = renderFindingList(findings, "Pontos para verificar nesta questão");
 
-    const run = async (fn, okText) => {
+    // `pressed` is the data-action of the button the student used. While the request runs the buttons are disabled (the focus leaves them),
+    // so afterwards the focus is put back: on the same button when it still has something to do, otherwise on the question itself.
+    const run = async (fn, okText, pressed, { toQuestion = false } = {}) => {
       for (const b of actions.querySelectorAll("button")) b.disabled = true;
       setMessage(message, "Salvando…");
       const result = await fn();
@@ -358,12 +374,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         for (const b of actions.querySelectorAll("button")) b.disabled = false;
         acceptQ.disabled = q.status === "ACCEPTED";
         save.disabled = !questionBuffers.has(q.id);
+        actions.querySelector(`[data-action="${pressed}"]:not(:disabled)`)?.focus({ preventScroll: true });
         return;
       }
       questionBuffers.delete(q.id);
       applyDraft(result.draft, { keepSelection: result.keepId ?? q.id });
-      const live = qEditor.querySelector(".lesson-message");
-      if (live) setMessage(live, okText);
+      qMessageFor = selectedId; // a message about the question that stays (or the next one after a delete) is shown, not cleared
+      setMessage(qMessage, okText);
+      const same = toQuestion ? null : qForm.querySelector(`[data-action="${pressed}"]:not(:disabled)`);
+      (same ?? qForm.querySelector(".lesson-qheading"))?.focus({ preventScroll: true });
     };
     const editedFields = () => ({
       question: inputs.question.value.trim(),
@@ -371,16 +390,17 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       explanation: inputs.explanation.value.trim() || null,
       hint: inputs.hint.value.trim() || null,
     });
-    save.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), expectedVersion: q.version }), "Questão salva."));
-    acceptQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: "ACCEPTED", expectedVersion: q.version }), "Questão aceita."));
-    rejectQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: q.status === "REJECTED" ? "PROPOSED" : "REJECTED", expectedVersion: q.version }), q.status === "REJECTED" ? "Questão restaurada." : "Questão rejeitada: não vira exercício."));
+    save.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), expectedVersion: q.version }), "Questão salva.", "save-question"));
+    acceptQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: "ACCEPTED", expectedVersion: q.version }), "Questão aceita.", "accept-question"));
+    rejectQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: q.status === "REJECTED" ? "PROPOSED" : "REJECTED", expectedVersion: q.version }), q.status === "REJECTED" ? "Questão restaurada." : "Questão rejeitada: não vira exercício.", "toggle-reject-question"));
     del.addEventListener("click", () => {
       if (!window.confirm(`Excluir a questão ${index + 1} de vez? As outras questões e o resumo não mudam.`)) return;
       const next = draft.questions[index + 1]?.id ?? draft.questions[index - 1]?.id ?? null;
-      run(async () => ({ ...(await deps.deleteQuestion(draft.id, q.id)), keepId: next }), "Questão excluída.");
+      run(async () => ({ ...(await deps.deleteQuestion(draft.id, q.id)), keepId: next }), "Questão excluída.", "delete-question", { toQuestion: true });
     });
 
-    qEditor.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions, message, findingsBlock);
+    qForm.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions);
+    qFindings.append(findingsBlock);
   }
 
   function renderFindingList(findings, heading) {
@@ -614,11 +634,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (!result.ok) {
       setMessage(summaryMessage, result.message || "Não foi possível salvar o resumo.", true);
       summarySave.disabled = false;
+      summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
       return;
     }
     summaryBuffer = null;
     applyDraft(result.draft);
     setMessage(summaryMessage, "Resumo salvo. As questões não foram alteradas.");
+    // "Salvar resumo" is disabled now (nothing left to save): the focus goes back to the text the student was working on
+    (summaryField.wrap.hidden ? summaryToggle : summaryField.input).focus({ preventScroll: true });
   });
 
   back.addEventListener("click", () => {
