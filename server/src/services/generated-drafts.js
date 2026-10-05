@@ -364,7 +364,7 @@ export async function createDraft(db, userId, proposalId, {
   // distinguishable in stored/historical drafts, not silently conflated.
   // '5' (REALMODEL-1 quality closure): explanations must add a cause, hints must not leak the answer or its value, named
   // conditions must survive, whole-sentence copying is discouraged.
-  promptVersion = '5',
+  promptVersion = '6',
   apiKey = null,
   model = null,
   consentGranted = false,

@@ -351,7 +351,7 @@ test('pipeline: SOURCE -> CODEX -> schema validation -> audit -> DRAFT, labelled
     assert.equal(draft.provider, 'CODEX');
     assert.equal(draft.live, true);
     assert.equal(draft.modelVersion, 'codex:default', 'the model does not get to name itself');
-    assert.equal(draft.promptVersion, '5');
+    assert.equal(draft.promptVersion, '6'); // T-F10-02b: the prompt text changed, so the default version moved 5 -> 6
     assert.equal(draft.audit.modelAudit, 'OK');
     assert.ok(draft.audit.auditedBy.includes('MODEL'));
     assert.equal(draft.audit.repaired, false);
@@ -471,4 +471,10 @@ test('resolveCodexInvocation: .js runs under node; an npm .cmd shim resolves to 
     assert.deepEqual(resolveCodexInvocation('codex', { platform: 'win32', env }), { file: join(shimDir, 'codex.exe'), prefix: [] });
     assert.deepEqual(resolveCodexInvocation('codex', { platform: 'win32', env: { PATH: join(root, 'nothing') } }), { file: 'codex', prefix: [] });
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// T-F10-02b: the model's structured answer declares the language it wrote in (checked by language-contract.js).
+test('the Codex draft schema requires the declared `language`', () => {
+  assert.ok(DRAFT_JSON_SCHEMA.properties.language, 'language is declared');
+  assert.ok(DRAFT_JSON_SCHEMA.required.includes('language'), 'and required (strict structured output lists every property)');
 });

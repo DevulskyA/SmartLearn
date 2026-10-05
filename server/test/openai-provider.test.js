@@ -133,3 +133,14 @@ test('end to end: createDraft with provider OPENAI stores an OPENAI draft, calls
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM generated_drafts WHERE user_id = ?').get(userId).n, 1, 'the refused call stored nothing and produced no substitute content');
   } finally { db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+// T-F10-02b: the student's generationLocale reaches the prompt the model actually receives (no real call: recording fetch).
+test('the generation locale is part of the prompt sent to the model; without one there is no language directive', async () => {
+  const sentPrompt = (call) => JSON.stringify(call.body);
+  const withLocale = recordingFetch();
+  await generateDraft({ segments: SEGMENTS, promptVersion: '6', generationLocale: 'en' }, { apiKey: 'k', model: 'gpt-5.6-luna', fetchImpl: withLocale.fetchImpl });
+  assert.match(sentPrompt(withLocale.calls[0]), /OUTPUT LANGUAGE: write the summary and every question, answer, explanation and hint in English/);
+  const without = recordingFetch();
+  await generateDraft({ segments: SEGMENTS, promptVersion: '6' }, { apiKey: 'k', model: 'gpt-5.6-luna', fetchImpl: without.fetchImpl });
+  assert.doesNotMatch(sentPrompt(without.calls[0]), /OUTPUT LANGUAGE/);
+});

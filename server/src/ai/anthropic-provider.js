@@ -89,8 +89,8 @@ async function callModel(prompt, { apiKey, model, apiUrl = null, timeoutMs = 30_
  * @returns {Promise<object>} the provider's RAW parsed JSON — NOT yet
  *   validated (see draft-schema.js, applied identically to every provider).
  */
-export function generateDraft({ segments, promptVersion }, options = {}) {
-  return callModel(buildDraftPrompt(segments, promptVersion), options);
+export function generateDraft({ segments, promptVersion, generationLocale }, options = {}) {
+  return callModel(buildDraftPrompt(segments, promptVersion, { generationLocale }), options);
 }
 
 /**

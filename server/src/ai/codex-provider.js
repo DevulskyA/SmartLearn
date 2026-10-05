@@ -75,8 +75,9 @@ export const DRAFT_JSON_SCHEMA = Object.freeze({
     },
     modelVersion: { type: 'string' },
     promptVersion: { type: 'string' },
+    language: { type: 'string' },
   },
-  required: ['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion'],
+  required: ['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion', 'language'],
   additionalProperties: false,
 });
 
@@ -316,8 +317,8 @@ export async function callCodex(prompt, schema, kind, options = {}, { signal = n
 const versionOf = (options) => `codex:${options.model || 'default'}`;
 
 /** @returns {Promise<object>} the RAW parsed JSON, validated afterwards by draft-schema.js like every provider. */
-export async function generateDraft({ segments, promptVersion, signal, onProcess, onActivity }, options = {}) {
-  const raw = await callCodex(buildDraftPrompt(segments, promptVersion), DRAFT_JSON_SCHEMA, 'generate', options, { signal, onProcess, onActivity });
+export async function generateDraft({ segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options = {}) {
+  const raw = await callCodex(buildDraftPrompt(segments, promptVersion, { generationLocale }), DRAFT_JSON_SCHEMA, 'generate', options, { signal, onProcess, onActivity });
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw, modelVersion: versionOf(options), promptVersion } : raw;
 }
 
