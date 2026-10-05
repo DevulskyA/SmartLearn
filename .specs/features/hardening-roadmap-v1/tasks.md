@@ -228,7 +228,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 - Gate: `accept-draft.test.js`, `draft-acceptance.spec.js`.
 
 ### T-F2-06 — Política de volume de questões (aplicação) · M
-- Status: `[H]` · Requisitos: R-05 (AC-05.4) · Dependências: HG-01
+- Status: `[✓]` 2026-10-05 · BASE_SHA `783abcd` · IMPLEMENTATION_SHA `1f1a686` (achado LOW QUESTION_VOLUME_OUT_OF_RANGE proporcional ao tamanho da fonte; HG-01 resolvido pelo padrão recomendado, reversível) · Requisitos: R-05 (AC-05.4) · Dependências: nenhuma
 - Fazer (após decisão): validação determinística no esquema do rascunho (`questions.length` dentro do intervalo derivado do tamanho da unidade) que marca `QUESTION_VOLUME_OUT_OF_RANGE` como achado; sem alterar o prompt. Excesso é sinalizado, não cortado silenciosamente.
 - RED: unidade pequena com 35 questões gera o achado; unidade grande não.
 - Gate: `draft-quality-hardening.test.js` ampliado; sem Codex.
