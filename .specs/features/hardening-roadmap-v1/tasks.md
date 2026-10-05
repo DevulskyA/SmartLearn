@@ -496,7 +496,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está estudando, uma unidade por vez, dentro de limites de consumo que o servidor garante; conteúdo pedagógico no idioma escolhido pelo aluno, sem perder a fonte original. Entra ANTES de estabilizar F3 (jobs). Zero chamada real a modelo em qualquer teste (INV-09); provedor simulado/espiões.
 
 ### T-F10-01 — Preferências de idioma: `uiLocale` e `generationLocale` independentes · M
-- Status: `[ ]` · Requisitos: R-13 (AC-13.1, 13.2, 13.6) · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `860ff60` · IMPLEMENTATION_SHA `29e050c` (evidência em `validation.md`) · Requisitos: R-13 (AC-13.1, 13.2, 13.6) · Dependências: nenhuma
 - Superfície: migração aditiva em `user_settings` (colunas `ui_locale`, `generation_locale`, ambas `NULL` = ainda não inicializadas; backup `pre-migrate` conforme T-F1-02), `shared/locales.js` (lista extensível BCP 47: `pt-BR`, `es`, `en`), `server/src/services/settings.js`, `server/src/routes/settings.js`.
 - Fazer: ler devolve `uiLocale`/`generationLocale` efetivos SEM gravar (GET nunca escreve); `ensureGenerationLocale(db, userId, hint)` inicializa UMA vez a partir de `hint` (`uiLocale` suportado ou locale do sistema; senão `pt-BR`) e daí em diante ignora `hint`; alteração só por ação explícita (`PATCH` de cada campo separado); locale não suportado → `VALIDATION_FAILED`.
 - Proof targets (RED): trocar `uiLocale` não altera `generationLocale`; o segundo `ensure` com outro `hint` não muda nada; ler não grava; locale desconhecido é recusado; dado histórico (usuário sem linha) continua válido. Sensor sobrevive à mutação "gravar `generationLocale` junto com `uiLocale`".
