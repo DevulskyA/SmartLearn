@@ -403,21 +403,22 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 
 
 ### T-F4-08 — Agenda offline do Companion: próximas revisões (somente leitura) · S
-- Status: `[>]` 2026-10-05 · Requisitos: ARCH-01 (Companion Web/PWA menor e somente leitura), V1-12/AC-24 (cache offline), INV offline somente leitura · Dependências: nenhuma (T39/T40/T41 já entregues; ver "Reconciliação ARCH-01" em `validation.md`)
+- Status: `[✓]` 2026-10-05 · BASE_SHA `ca40966` · IMPLEMENTATION_SHA `cb60640` · Requisitos: ARCH-01 (Companion Web/PWA menor e somente leitura), V1-12/AC-24 (cache offline), INV offline somente leitura · Dependências: nenhuma (T39/T40/T41 já entregues; ver "Reconciliação ARCH-01" em `validation.md`)
 - Origem: o snapshot offline (`/v1/agenda-snapshot`, `src/offline-store.js`) já guarda TODAS as `review_tasks` pendentes com `dueDate`, unidade, disciplina e `syncedAt`, mas `renderOfflineToday` (`src/app.js`) só mostra atrasadas e de hoje; com apenas revisões futuras a tela cai no estado "tudo em dia" e o aluno não vê o que vem a seguir.
 - Outcome: no modo offline, Hoje mostra, além de atrasadas e de hoje, as PRÓXIMAS revisões do snapshot (data, aula, disciplina), em ordem de data e limitadas, com a data da última sincronização já exibida no aviso; tudo somente leitura.
 - Fora de escopo (explícito): escrever, responder questão, registrar evidência ou concluir revisão offline; outbox, CRDT, resolução de conflito, sincronização bidirecional, banco Android, `pending_writes`, domínio duplicado. Não resolve COMO o Companion recebe o read-model do Desktop local-first (lacuna arquitetural registrada, não implementada aqui).
 - Fazer: derivar `upcoming = items com dueDate > hoje` do snapshot já carregado, agrupar por data (ordem crescente) e exibir até N itens com contagem do restante; texto próprio quando nada vence hoje mas há próximas; linhas sem ação.
 - Subtarefas:
-  - [>] RED (e2e em `offline.spec.js`): snapshot com itens em +1, +3 e +9 dias; offline, Hoje lista "Próximas" ordenadas por data com aula e disciplina
-  - [ ] RED: sem itens futuros o bloco não aparece; atrasadas e hoje seguem iguais
-  - [ ] RED: com apenas itens futuros a tela NÃO diz "tudo em dia" sem mostrar as próximas
-  - [ ] Renderizar o bloco somente leitura a partir do snapshot (agrupado por data, limitado, com o restante contado)
-  - [ ] Regressão: `offline-writes.spec.js` e `mobile-nav.spec.js` verdes; axe na Hoje offline com próximas
-  - [ ] Mutante (filtro descarta os itens futuros) deixa um teste vermelho; restaurar
-  - [ ] Evidência em `validation.md`; e2e completo uma vez no fim (≤ 480 s, 0 falhas)
+  - [x] RED (e2e em `offline.spec.js`): snapshot com itens em +1, +3 e +9 dias; offline, Hoje lista "Próximas" ordenadas por data com aula e disciplina
+  - [x] RED: sem itens futuros o bloco não aparece; atrasadas e hoje seguem iguais
+  - [x] RED: com apenas itens futuros a tela NÃO diz "tudo em dia" sem mostrar as próximas
+  - [x] Renderizar o bloco somente leitura a partir do snapshot (agrupado por data, limitado, com o restante contado)
+  - [x] Regressão: `offline-writes.spec.js` e `mobile-nav.spec.js` verdes; axe na Hoje offline com próximas
+  - [x] Mutante (filtro descarta os itens futuros) deixa um teste vermelho; restaurar
+  - [x] Evidência em `validation.md`; e2e completo uma vez no fim (≤ 480 s, 0 falhas)
 - Gate: `e2e/offline.spec.js`, `e2e/offline-writes.spec.js`, `e2e/mobile-nav.spec.js` + novos casos; axe; unidade e servidor verdes.
-- Próximo passo: ler `renderOfflineToday` em `src/app.js` (~l.1017) e o caso do snapshot em `e2e/offline.spec.js`; escrever o primeiro RED.
+- Próximo passo: nenhum; tarefa fechada (evidência em `validation.md`; e2e completo 232/0/2 mas 552-559 s > 480 s, ver risco registrado).
+- Comando: `node scripts/e2e.mjs e2e/offline.spec.js`
 ### Checkpoint F4
 - Humano executa o roteiro (T-F4-01) com a build do checkpoint; achados P0/P1 corrigidos ou aceitos explicitamente.
 - Gate completo + axe + e2e responsivo. `VISUAL_VALIDATION` registrado com autoria (humano) e data.
