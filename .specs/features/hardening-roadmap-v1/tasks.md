@@ -336,34 +336,43 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Gate: `lesson-view-model.test.js` ampliado + e2e.
 
 ### T-F4-03 — Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S
-- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `342c91b` · IMPLEMENTATION_SHA `66905ad` (bloco "Rascunhos em andamento" antes da busca; "Título salvo" em `role=status` junto do campo, foco mantido; 2 casos e2e novos + axe, 2 mutações vermelhas) · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
 - Superfície: `index.html` (ordem dos blocos de `#sources-proposals-panel`), `src/materials-ui.js` (handler de "Salvar título"), estilos.
 - Fazer: mover o bloco para antes da busca quando existir; "Salvar título" mostra "Título salvo" em região `role=status` e mantém foco.
 - Subtarefas:
-  - [>] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
-  - [ ] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no campo
-  - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
-  - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
-  - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
+  - [x] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
+  - [x] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no controle acionado
+  - [x] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
+  - [x] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
+  - [x] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
 - Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso.
-- Próximo passo: o bloco `#sources-drafts` está DEPOIS da busca (`#sources-topic-form`) em `index.html` (~linhas 667-680); o bloco "Rascunhos em andamento" agora também lista gerações em andamento/falhas (T-F3-04, `renderDraftsInProgress` em `src/materials-ui.js`), então o caso e2e pode reaproveitar o stub lento de `e2e/generation-jobs.spec.js` ou um rascunho já existente (`lesson-editor.spec.js:324`). Escrever o RED em `e2e/source-proposals.spec.js` (ordem do DOM com/sem rascunhos) e o de "Título salvo" (`role=status`, foco no campo) antes de tocar em `index.html`. Hoje a confirmação de salvar usa `#sources-message` (`setSourcesMessage("Título atualizado.")`); F-33 pede a região `role=status` mantendo o foco no campo (a subtarefa pede que o foco permaneça no campo; hoje o código devolve o foco ao botão "Salvar título": provar qual elemento deve manter o foco antes de mudar).
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F4-04.
 - Comando: `npm run test:e2e -- e2e/source-proposals.spec.js e2e/materials-a11y.spec.js`
 
 ### T-F4-04 — Editor da aula em telas estreitas · M
-- Status: `[ ]` · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
+- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
 - Fazer: abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"; sem rolagem horizontal; alvos de toque ≥ 44 px.
 - RED: e2e em 360×800 e 768×1024 verificando ausência de overflow horizontal e operabilidade completa.
 - Subtarefas:
-  - [ ] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
+  - [>] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
   - [ ] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
   - [ ] Alvos de toque ≥ 44 px no editor
   - [ ] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
 - Gate: novo `lesson-editor-responsive.spec.js`; `stats-responsive-regression.spec.js` verde.
+- Próximo passo: caracterizar o layout atual do editor (`.lesson-editor` em `src/materials-ui.js`/`src/styles.css`) em 360×800 e 768×1024: overflow horizontal, alvos de toque, navegação lista/editor; escrever o RED em `e2e/lesson-editor-responsive.spec.js` antes de tocar no CSS.
+- Comando: `npm run test:e2e -- e2e/lesson-editor-responsive.spec.js e2e/stats-responsive-regression.spec.js`
 
 ### T-F4-05 — Acessibilidade do editor (teclado, foco, anúncios) · M
 - Status: `[ ]` · Requisitos: R-06 (AC-06.2), F-35 · Dependências: T-F4-04
 - Fazer: padrão de abas com setas/Home/End, foco restaurado após salvar/rejeitar/voltar, mensagens de salvar em `aria-live`, nomes acessíveis nos itens ("Questão 3, sinalizada, 2 pontos"); axe nas telas do editor (hoje fora do alcance do axe).
 - RED: teste de teclado puro percorre as quatro abas e uma questão; axe sem violações serious/critical.
+- Subtarefas:
+  - [ ] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
+  - [ ] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
+  - [ ] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
+  - [ ] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/materials-ui.js`)
+  - [ ] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
+  - [ ] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
 - Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde.
 
 ### T-F4-06 — Regenerar UMA questão (contrato) · L (dividir)

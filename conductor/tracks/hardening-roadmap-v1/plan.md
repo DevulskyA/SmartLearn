@@ -12,34 +12,35 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F4-03 (S5a) · PRÓXIMA: T-F4-04 · TAREFAS: 41/70 · SUBTAREFAS DA ATIVA: T-F4-03 0/5 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F4-04 (S5a) · PRÓXIMA: T-F4-05 · TAREFAS: 42/70 · SUBTAREFAS DA ATIVA: T-F4-04 0/4 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F4-03 · Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S5a · subtarefas 0/5
-  Objetivo: Mover o bloco para antes da busca quando existir; "Salvar título" mostra "Título salvo" em região role=status e mantém foco
-  Próximo passo: O bloco #sources-drafts está DEPOIS da busca em index.html
-  Gate: Source-proposals.spec.js, materials-a11y.spec.js + novo caso
-  - [>] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda  ← EM EXECUÇÃO
-  - [ ] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no campo
-  - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
-  - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
-  - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
-
-## PRÓXIMO
-
-### T-F4-04 — READY — Editor da aula em telas estreitas
-  Por quê: S5a · sem dependência pendente
-  Subtarefas 0/4:
-  - [ ] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
+- T-F4-04 · Editor da aula em telas estreitas · S5a · subtarefas 0/4
+  Objetivo: Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"; sem rolagem horizontal; alvos de toque ≥ 44 px
+  Próximo passo: Caracterizar o layout atual do editor em 360×800 e 768×1024
+  Gate: Novo lesson-editor-responsive.spec.js; stats-responsive-regression.spec.js verde
+  - [>] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo  ← EM EXECUÇÃO
   - [ ] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
   - [ ] Alvos de toque ≥ 44 px no editor
   - [ ] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
 
+## PRÓXIMO
+
+### T-F4-05 — READY — Acessibilidade do editor (teclado, foco, anúncios)
+  Por quê: S5a · sem dependência pendente · depois de T-F4-04
+  Subtarefas 0/6:
+  - [ ] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
+  - [ ] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
+  - [ ] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
+  - [ ] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/materials-ui.js`)
+  - [ ] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
+  - [ ] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
+
 ### T-F4-07 — READY — Cópia de estados e i18n (T46/T47) com guarda de acentuação
-  Por quê: S5a · sem dependência pendente · passa à frente de T-F4-05 (aguardam T-F4-04)
+  Por quê: S5a · sem dependência pendente
   Subtarefas 0/4:
   - [ ] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
   - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
@@ -110,10 +111,10 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F3-04** — UI de geração: fase real, sair e voltar
 - [x] **T-F3-05** — Explicação obrigatória por validação
 
-### [>] S5a · UI local da aula — tarefas 0/4
+### [>] S5a · UI local da aula — tarefas 1/4
 
-- [>] **T-F4-03** — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
-- [ ] **T-F4-04** — Editor da aula em telas estreitas
+- [x] **T-F4-03** — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
+- [>] **T-F4-04** — Editor da aula em telas estreitas
 - [ ] **T-F4-05** — Acessibilidade do editor (teclado, foco, anúncios)
 - [ ] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
 
