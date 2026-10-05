@@ -489,3 +489,75 @@ test/persistence-adapter-contract.test.js (47 tests). No production code changed
 ### Gate S5a — e2e COMPLETO (2026-10-05)
 - `npm run test:e2e` @`bef888b` (inclui as 4 tarefas), 2 workers: **227 passed / 0 failed / 2 skipped, 7 min 28 s (447,9 s) ≤ 480 s**. Rodada única, sem repetição necessária; nenhum outro agente alterou a worktree durante ela.
 - Decisões de UX a CONFIRMAR (resumo): foco permanece no botão "Salvar título" (T-F4-03); "Voltar à lista" = lista de questões (T-F4-04); foco após salvar questão vai ao título da questão (T-F4-05).
+
+### T-F1-09 — Fumaça nativa Windows de IMPORT-1 e VERDICT-1: PASS (2026-10-05)
+- BASE_SHA `4b466d8` · IMPLEMENTATION_SHA `f102561` (só o harness `scripts/desktop-smoke-import-verdict.mjs`; nenhum código de produto mudou)
+- Runtime: o `smartlearn.exe` de debug existente era ANTERIOR a T-F1-08 (sem `SMARTLEARN_WINDOW_TITLE`); por isso `npm run build` + `npm run package:standalone` (DEV) e `cargo build` em `src-tauri` (41,7 s) refizeram build e exe no HEAD. O exe serve a UI do backend local empacotado (`dist-runtime`, loopback, porta dinâmica): NÃO precisa do Vite nem de `tauri dev`.
+- Automação: CDP no WebView2 (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<livre>`, perfil WebView2 em diretório temporário) + Playwright `connectOverCDP`; viável, sem computer-use. Dados 100% isolados em diretório temporário (`SMARTLEARN_DB_PATH`/`SOURCES_DIR`); o harness recusa o caminho do datastore humano; nenhum provedor de IA configurado.
+- Observado no Desktop real (título nativo via `MainWindowTitle` do processo): `SmartLearn DEV - v0.1.0 - 4b466d8` (= HEAD; `isLocalAuthority=true`).
+- IMPORT-1: conta A (sintética: 2 disciplinas, 2 aulas, 4 evidências) → `GET /v1/export` (exportVersion 1) → conta B vazia, entrada pelo formulário real → Configurações > restaurar: pré-visualização (Disciplinas 2, Aulas 2, Revisões 32, Evidências 4, demais 0; aviso "Materiais não são restaurados: PDFs…"), a prévia NÃO gravou nada (0 disciplinas), confirmação; resultado "Restauração concluída — Disciplinas: 2, Aulas: 2, Revisões: 32, … Evidências de aprendizagem: 4"; exportação da conta B = 2/2/4, igual ao backup.
+- VERDICT-1: Estatísticas da conta restaurada (área grande estável 70%→70% com 200 questões; área pequena 80%→40% com 20 questões; limiar 25%): título "Seu desempenho está estável."; detalhe "Disciplinas: 1 piorando (20 questões) · 1 estável (200 questões)."; atenção "“Aula pequena” (Piora Pequena) está piorando, de 80% para 40%." — ponderado por volume, a área pequena não vira o veredito mas é nomeada.
+- Execução: `node scripts/desktop-smoke-import-verdict.mjs` → 9/9 verificações mecânicas `true`, exit 0 (1ª execução). Observação mecânica; nenhum julgamento perceptivo (aparência da janela continua com o humano, T-F4-01).
+- Banco DEV humano `C:\Users\Ariel\SmartLearn-DevData` (nunca aberto; só `Get-FileHash` dos três arquivos), antes = depois: `.db` `FC55488E…B508`, `-shm` `30C09D0F…00FE`, `-wal` `B3CCF6BE…B9CE` (IGUAIS). Processos: nenhum `smartlearn.exe`/`node.exe` restante; diretório temporário removido.
+- Limite: Windows nativo PROVADO para IMPORT-1/VERDICT-1; WEB já tinha e2e (`e2e/restore-backup.spec.js`, `e2e/study-verdict.spec.js`); ANDROID continua fora (PASS em uma plataforma não prova outra).
+
+### T-F9-02 — Evidência-ou-zero por fase e critério; validador de estado: PASS (2026-10-05)
+- BASE_SHA `f102561` · IMPLEMENTATION_SHA `c2fe7c2` (nenhum código de produto: só a extensão mínima de `scripts/context-check.mjs`/`context-core.mjs`/`tasklist.mjs` e 4 testes, ver "Sem tarefa executável" abaixo)
+- Fonte: derivada dos campos `Requisitos` de `tasks.md` e das seções `### T-…` acima; nada foi promovido sem seção. `PASS` = a seção da tarefa prova o critério; `PARTIAL` = parte provada (a lacuna está dita); `NOT_PROVEN` = sem tarefa `[✓]` que o prove (a tarefa dona está `[H]`/`[ ]`). O checkpoint formal de nenhuma fase foi fechado (todas têm `[H]`/`[ ]` abertas): estas linhas valem só para o que já está `[✓]`.
+
+| Fase | Critério | Tarefa(s) → evidência | Estado |
+|---|---|---|---|
+| F0 | AC-08.1 (ignore de artefatos regeneráveis; worktrees limpas) | T-F0-04 → seção T-F0-04; limpeza das worktrees = T-F0-05 `[H]` (HG-05) | PARTIAL |
+| F0 | AC-08.2 (STATE/tracks/matriz reconciliados) | T-F0-02, T-F0-03, T-F6-07 → suas seções; `DEBT.md`/`LESSONS.md`: sem tarefa que os reconcilie | PARTIAL |
+| F1 | AC-01.1 escritor único | T-F1-01 → seção T-F1-01 | PASS |
+| F1 | AC-01.2, AC-01.3 snapshot diário e pré-migração | T-F1-02 → seção T-F1-02 | PASS |
+| F1 | AC-01.4 restore drill | T-F1-03 → seção T-F1-03 | PASS |
+| F1 | AC-02.1, AC-02.2 processos e launcher | T-F1-04 → seção T-F1-04 | PASS |
+| F1 | R-02 build por conteúdo; R-01/INV-08 purga de sessões; F-08 título/diagnóstico | T-F1-07, T-F1-06, T-F1-08 → suas seções | PASS |
+| F1 | Plataforma Windows nativa: IMPORT-1, VERDICT-1 | T-F1-09 → seção T-F1-09 (CDP no WebView2 real, banco isolado) | PASS |
+| F1 | R-01 política dos bancos legados (T-F1-05) | `[H]` HG-03 | NOT_PROVEN |
+| F2 | AC-03.1 identidade por id | T-F2-01, T-F2-02 → suas seções | PASS |
+| F2 | AC-03.2 proveniência | T-F2-04 → seção T-F2-04 | PASS |
+| F2 | AC-03.3 auditoria versionada | T-F2-03 `[H]` | NOT_PROVEN |
+| F2 | AC-03.4 pré-visualização do aceite | T-F2-05 → seção T-F2-05 | PASS |
+| F3 | AC-04.1 job com fase/atividade | T-F3-01, T-F3-02 → suas seções | PASS |
+| F3 | AC-04.2 sinal de vida / parada | T-F3-03 → seção T-F3-03 | PASS |
+| F3 | AC-04.3 sair e voltar | T-F3-04 → seção T-F3-04 | PASS |
+| F3 | AC-04.4 cancelamento sem órfão | T-F3-02 → seção T-F3-02 | PASS |
+| F3 | F-15 explicação obrigatória | T-F3-05 → seção T-F3-05 | PASS |
+| F4 | AC-06.2 editor 360–1440 px e teclado | T-F4-04, T-F4-05 → suas seções; fala real de leitor de tela NOT_PROVEN (dito em T-F4-05) | PASS (DOM/ARIA/axe) |
+| F4 | AC-06.3 confirmação de salvar | T-F4-03 → seção T-F4-03 | PASS |
+| F4 | F-36 cópia/i18n e guarda de acentuação | T-F4-07 → seção T-F4-07 | PASS |
+| F4 | AC-06.1 validação visual humana; AC-06.4 hierarquia da Revisão | T-F4-01 `[H]`; T-F4-02 `[ ]` (depende de T-F2-03) | NOT_PROVEN |
+| F5 | R-05 fidelidade de escopo na extração (D1) | T-F5-08 → seção T-F5-08 | PASS |
+| F5 | AC-05.1, 05.2, 05.3 | T-F5-01..05 `[H]`/`[ ]` | NOT_PROVEN |
+| F5/F2 | AC-05.4 política de volume de questões | T-F2-06 `[H]` (HG-01) | NOT_PROVEN |
+| F6 | AC-07.1 suíte "materiais" | T-F6-01 → seção T-F6-01 | PASS |
+| F6 | AC-02.3 portas dinâmicas | T-F6-02 → seção T-F6-02 | PASS |
+| F6 | AC-07.2 e2e particionado no tempo-alvo | T-F6-03, T-F6-09 → suas seções; causa do run 2 sem prova (T-F6-08, NOT_PROVEN por registro) | PASS |
+| F6 | AC-07.3 discriminação repetível | T-F6-04 → seção T-F6-04 | PASS |
+| F6 | AC-07.4 lint sem avisos | T-F6-05 → seção T-F6-05 | PASS |
+| F6 | Contrato de persistência (DEBT-006 parte 1) | T-F6-06a, T-F6-06b → suas seções; aposentadoria do legado = T-F6-06c `[H]` | PASS (parte 1) |
+| F8 | AC-09.1, AC-09.2 artefato empacotado | T-F8-01 → seção T-F8-01 | PASS |
+| F8 | AC-09.3 upload adversarial | T-F8-02 → seção T-F8-02 | PASS |
+| F8 | Segredos e consentimento de IA; auditoria de dependências | T-F8-03 → seção T-F8-03 (PASS); T-F8-05 → seção T-F8-05 (npm PASS, cargo audit NOT_PROVEN) | PASS / PARTIAL |
+| F8 | AC-09.4 caminho único de abertura | T-F8-04 `[H]` | NOT_PROVEN |
+| F10 | AC-12.1, AC-12.2 | T-F10-03, T-F10-05 → suas seções | PASS |
+| F10 | AC-12.3 prefetch subordinado | T-F10-03 → seção T-F10-03 (política/janela: HG-12 pendente) | PARTIAL |
+| F10 | AC-12.4, 12.5, 12.6 créditos | T-F10-04a, T-F10-04b → suas seções (VALORES: HG-11 pendente) | PASS (estrutura) |
+| F10 | AC-13.1, 13.2 | T-F10-01, T-F10-02a → suas seções | PASS |
+| F10 | AC-13.4, 13.5 | T-F10-02a → seção T-F10-02a | PASS |
+| F10 | AC-13.3 diretiva no prompt | T-F10-02b `[H]` (HG-13) | NOT_PROVEN |
+| F10 | AC-13.6 UI idioma da interface × conteúdo | T-F10-01 só a preferência; UI = T-F10-06 `[ ]` | PARTIAL |
+| F7 | AC-11.1, 11.2, 11.3 | T-F7-01..03 `[H]` | NOT_PROVEN |
+| F9 | AC-10.1 plano de integração | T-F9-01 `[H]` (HG-05) | NOT_PROVEN |
+| F9 | AC-10.2 evidência por fase + validador | esta seção | PASS |
+
+- Nenhum critério está `PASS` sem seção: conferido contra `context:check` ("done but validation.md has no section" é falha) e a coluna de evidência cita só seções existentes.
+- `validate_state.py` (skill `tlc-spec-driven-strict`; Python 3.14.7 funciona nesta máquina): executado sobre este arquivo → `FAIL: missing Verdict: PASS|FAIL|NOT_PROVEN`. NÃO APLICÁVEL por desenho: ele valida UM relatório com `Verdict:` único e falha em qualquer `NOT_PROVEN` no texto; `validation.md` é um livro-razão de tarefas com `NOT_PROVEN` legítimos (HG abertos). Verificação equivalente (determinística, nesta máquina): `npm run context:check`, `node scripts/plan-sync.mjs --check` e a matriz de cobertura — resultados em "Sem tarefa executável" abaixo.
+
+### Sem tarefa executável (2026-10-05, após T-F1-09 e T-F9-02): PASS
+- Estado: `ACTIVE_TASK=NONE` · `SAFE_WORK_REMAINING=NO`. Nenhuma tarefa `[ ]` é executável: as 3 pendentes dependem de decisão humana (T-F4-02 → T-F2-03/HG-02; T-F5-05 → T-F5-03; T-F10-06 → HG-13); as 18 `[H]` são decisões humanas. Restantes não executáveis: bloqueadas T-F10-06, T-F4-02, T-F5-04, T-F5-05, T-F5-06; humanas T-F2-03, T-F2-06, T-F10-02b, T-F6-06c, T-F8-04, T-F0-05, T-F1-05, T-F4-01, T-F4-06, T-F5-01, T-F5-02, T-F5-03, T-F5-07, T-F7-01, T-F7-02, T-F7-03, T-F9-01, T-F9-03.
+- Ferramenta: `scripts/context-check.mjs` exigia exatamente uma `[>]` (e uma fase/linha ativa no plano) mesmo sem trabalho seguro; estendido (IMPLEMENTATION_SHA `c2fe7c2`, 4 testes novos em `test/context-check.test.js` e `test/tasklist.test.js`): sem `[>]` é válido só quando nenhuma tarefa é executável (`safeWorkRemaining` em `scripts/context-core.mjs`), o plano ocioso (`Status: IDLE`) não pode ter linha ativa, e com trabalho executável sobrando a ausência de `[>]` continua sendo falha (teste existente "no active task" preservado). `npm run context:check` imprime `ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO`; o cockpit (`context:resume`) imprime `SAFE_WORK_REMAINING=NO`.
+- Defeito achado no gate raiz e corrigido (IMPLEMENTATION_SHA `44a93a8`): `test/text-integrity.test.js` ("sem mojibake") ficou VERMELHO assim que `scripts/text-integrity.mjs` e o próprio teste entraram no Git (T-F4-07 declarou 620/620 enquanto os dois ainda eram não rastreados, logo fora do `git ls-files` que a guarda varre); os dois arquivos continham os literais corrompidos que a guarda procura. Trocados por escapes `\u`; mutação não necessária (a própria guarda é o sensor).
+- Gate @`44a93a8` + docs: raiz `npm test` 624/624; `npm run lint` 0 avisos; `node scripts/plan-sync.mjs --check` PASS; `npm run context:check` PASS (idle). Servidor e e2e não reexecutados (nenhum código de produto mudou nesta sprint; o último e2e completo é o da S5a, 227/0/2 em `bef888b`).

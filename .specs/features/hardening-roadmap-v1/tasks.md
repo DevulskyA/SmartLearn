@@ -166,18 +166,18 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: teste Rust do título; teste de frontend do conteúdo copiado; verificação via CDP do título real.
 
 ### T-F1-09 — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0) · M
-- Status: `[>]` 2026-10-05 · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
+- Status: `[✓]` 2026-10-05 · BASE_SHA `4b466d8` · IMPLEMENTATION_SHA `f102561` (harness CDP `scripts/desktop-smoke-import-verdict.mjs`; 9/9 verificações no Desktop real; banco DEV humano com hash igual; evidência em `validation.md`) · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
 - Outcome: no Desktop Windows real, restaurar um backup lógico em conta vazia (IMPORT-1) e ver o veredito de Estatísticas ponderado por volume (VERDICT-1) funcionam; observação mecânica (CDP/computer-use quando o runtime permite), SEM julgamento perceptivo.
 - Regra de dados: SOMENTE sobre CÓPIA isolada do banco/dados (nunca o banco DEV humano `C:\Users\Ariel\SmartLearn-DevData`); o backup restaurado é de fixture/cópia.
 - Subtarefas:
-  - [>] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
-  - [ ] Verificar se o runtime nativo Windows pode ser automatizado (CDP no WebView2 / computer-use); se não, registrar `BLOCKED_TECHNICAL` com o tentado
-  - [ ] IMPORT-1: restaurar o backup lógico em conta vazia no Desktop real e observar o resultado (contagens), com HEAD/build do título
-  - [ ] VERDICT-1: abrir Estatísticas na conta restaurada e observar o veredito ponderado por volume (limiar 25%)
-  - [ ] Gate: observação em `validation.md` com HEAD/build; hash do banco DEV humano igual antes e depois
+  - [x] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
+  - [x] Verificar se o runtime nativo Windows pode ser automatizado (CDP no WebView2 / computer-use); se não, registrar `BLOCKED_TECHNICAL` com o tentado
+  - [x] IMPORT-1: restaurar o backup lógico em conta vazia no Desktop real e observar o resultado (contagens), com HEAD/build do título
+  - [x] VERDICT-1: abrir Estatísticas na conta restaurada e observar o veredito ponderado por volume (limiar 25%)
+  - [x] Gate: observação em `validation.md` com HEAD/build; hash do banco DEV humano igual antes e depois
 - Gate: observação registrada em `validation.md` com HEAD/build exibidos no título; se o runtime não permitir a automação, registrar `BLOCKED_TECHNICAL` com o que foi tentado (não vira gate humano por reflexo).
-- Próximo passo: preparar a CÓPIA isolada (hash do banco DEV humano antes; nunca abri-lo) e verificar se o Desktop Windows real é automatizável (CDP no WebView2 / computer-use); sem automação possível, registrar `BLOCKED_TECHNICAL` com o tentado.
-- Comando: `npm run context:resume`
+- Próximo passo: nenhum; tarefa fechada.
+- Comando: `node scripts/desktop-smoke-import-verdict.mjs`
 
 ### Checkpoint F1
 - Prova composta: abrir Desktop → segundo escritor recusado → fechar forçado → nenhum órfão → reabrir → snapshot do dia existe → restore drill passa → sessões purgadas sem tocar ativas.
@@ -398,7 +398,7 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
   - [x] Padronizar mensagens de vazio/erro/carregando
   - [x] Gate: teste de guarda + `npm test`; evidência e fechar
 - Gate: teste de guarda + `npm test`.
-- Próximo passo: nenhum; tarefa fechada. Próxima: T-F1-09.
+- Próximo passo: nenhum; tarefa fechada.
 - Comando: `node --test test/text-integrity.test.js`
 
 ### Checkpoint F4
@@ -684,13 +684,15 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 - Saída: proposta de série de PRs (um por fase), com descrição e evidência por PR. Nada é enviado.
 
 ### T-F9-02 — `validation.md` por fase e validador de estado · S
-- Status: `[ ]` · Requisitos: R-10 (AC-10.2) · Dependências: ao menos uma tarefa `[✓]` na fase que a seção de `validation.md` descreve (executa-se por fase, não no fim)
+- Status: `[✓]` 2026-10-05 · BASE_SHA `f102561` · IMPLEMENTATION_SHA `c2fe7c2` (tabela evidência-ou-zero por fase em `validation.md`; `context-check` aceita programa ocioso: ACTIVE_TASK=NONE + SAFE_WORK_REMAINING=NO; evidência em `validation.md`) · Requisitos: R-10 (AC-10.2) · Dependências: ao menos uma tarefa `[✓]` na fase que a seção de `validation.md` descreve (executa-se por fase, não no fim)
 - Fazer: `validation.md` com evidência-ou-zero por critério; rodar `scripts/validate_state.py` da skill quando aplicável.
 - Subtarefas:
-  - [ ] Para cada fase com checkpoint fechado, listar por critério AC-xx a evidência (seção, SHA, teste) ou a lacuna explícita em `validation.md`
-  - [ ] Rodar `validate_state.py` da skill `tlc-spec-driven-strict` quando aplicável e registrar o resultado (ou "não aplicável" com o motivo)
-  - [ ] Gate: nenhum critério fechado sem evidência; `npm run context:check` PASS
+  - [x] Para cada fase com checkpoint fechado, listar por critério AC-xx a evidência (seção, SHA, teste) ou a lacuna explícita em `validation.md`
+  - [x] Rodar `validate_state.py` da skill `tlc-spec-driven-strict` quando aplicável e registrar o resultado (ou "não aplicável" com o motivo)
+  - [x] Gate: nenhum critério fechado sem evidência; `npm run context:check` PASS
 - Gate: `validation.md` com uma seção por fase fechada e evidência-ou-zero por critério; `context:check` PASS.
+- Próximo passo: nenhum; tarefa fechada.
+- Comando: `npm run context:check`
 
 ### T-F9-03 — Entrega (push/merge/deploy) · —
 - Status: `[H]` · HG-10
@@ -753,4 +755,4 @@ Uma fase só fecha com: todas as tarefas `[✓]` com `IMPLEMENTATION_SHA`; gate 
 - OPEN-05 · consumo de crédito sempre `ESTIMATED` (nenhum provedor reporta custo) · depende de HG-11
 - OPEN-06 · prévia do aceite (T-F2-05) sem avaliação humana e sem axe do painel aberto · UAT em T-F4-01 · evidência: `validation.md` "T-F2-05"
 - OPEN-07 · fonte Costanzo já gravada no banco DEV NÃO foi reextraída após T-F5-08 (ordem antiga de colunas) · decisão separada com backup (INV-06/07) · evidência: `validation.md` "T-F5-08"
-- OPEN-08 · `T-F1-05` (HG-03) e provas manuais do Desktop do checkpoint F1 · S8/T-F1-09
+- OPEN-08 · `T-F1-05` (HG-03) e provas manuais do Desktop do checkpoint F1 (a fumaça mecânica IMPORT-1/VERDICT-1 já está PROVADA em T-F1-09) · UAT humano em T-F4-01
