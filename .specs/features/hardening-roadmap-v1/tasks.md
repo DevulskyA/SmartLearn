@@ -169,6 +169,12 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Status: `[ ]` · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
 - Outcome: no Desktop Windows real, restaurar um backup lógico em conta vazia (IMPORT-1) e ver o veredito de Estatísticas ponderado por volume (VERDICT-1) funcionam; observação mecânica (CDP/computer-use quando o runtime permite), SEM julgamento perceptivo.
 - Regra de dados: SOMENTE sobre CÓPIA isolada do banco/dados (nunca o banco DEV humano `C:\Users\Ariel\SmartLearn-DevData`); o backup restaurado é de fixture/cópia.
+- Subtarefas:
+  - [ ] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
+  - [ ] Verificar se o runtime nativo Windows pode ser automatizado (CDP no WebView2 / computer-use); se não, registrar `BLOCKED_TECHNICAL` com o tentado
+  - [ ] IMPORT-1: restaurar o backup lógico em conta vazia no Desktop real e observar o resultado (contagens), com HEAD/build do título
+  - [ ] VERDICT-1: abrir Estatísticas na conta restaurada e observar o veredito ponderado por volume (limiar 25%)
+  - [ ] Gate: observação em `validation.md` com HEAD/build; hash do banco DEV humano igual antes e depois
 - Gate: observação registrada em `validation.md` com HEAD/build exibidos no título; se o runtime não permitir a automação, registrar `BLOCKED_TECHNICAL` com o que foi tentado (não vira gate humano por reflexo).
 
 ### Checkpoint F1
@@ -350,30 +356,32 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Comando: `npm run test:e2e -- e2e/source-proposals.spec.js e2e/materials-a11y.spec.js`
 
 ### T-F4-04 — Editor da aula em telas estreitas · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `769f852` · IMPLEMENTATION_SHA `33ba1ad` (editor sem overflow em 360×800 e 768×1024, disclosures de 44 px, "Voltar à lista de questões" quando a lista empilha; 6 casos e2e, 4 mutações vermelhas) · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
 - Fazer: abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"; sem rolagem horizontal; alvos de toque ≥ 44 px.
 - RED: e2e em 360×800 e 768×1024 verificando ausência de overflow horizontal e operabilidade completa.
 - Subtarefas:
-  - [>] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
-  - [ ] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
-  - [ ] Alvos de toque ≥ 44 px no editor
-  - [ ] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
+  - [x] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
+  - [x] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
+  - [x] Alvos de toque ≥ 44 px no editor
+  - [x] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
 - Gate: novo `lesson-editor-responsive.spec.js`; `stats-responsive-regression.spec.js` verde.
-- Próximo passo: caracterizar o layout atual do editor (`.lesson-editor` em `src/materials-ui.js`/`src/styles.css`) em 360×800 e 768×1024: overflow horizontal, alvos de toque, navegação lista/editor; escrever o RED em `e2e/lesson-editor-responsive.spec.js` antes de tocar no CSS.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F4-05.
 - Comando: `npm run test:e2e -- e2e/lesson-editor-responsive.spec.js e2e/stats-responsive-regression.spec.js`
 
 ### T-F4-05 — Acessibilidade do editor (teclado, foco, anúncios) · M
-- Status: `[ ]` · Requisitos: R-06 (AC-06.2), F-35 · Dependências: T-F4-04
+- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.2), F-35 · Dependências: T-F4-04
 - Fazer: padrão de abas com setas/Home/End, foco restaurado após salvar/rejeitar/voltar, mensagens de salvar em `aria-live`, nomes acessíveis nos itens ("Questão 3, sinalizada, 2 pontos"); axe nas telas do editor (hoje fora do alcance do axe).
 - RED: teste de teclado puro percorre as quatro abas e uma questão; axe sem violações serious/critical.
 - Subtarefas:
-  - [ ] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
+  - [>] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
   - [ ] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
   - [ ] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
   - [ ] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/materials-ui.js`)
   - [ ] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
   - [ ] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
 - Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde.
+- Próximo passo: o editor (`src/lesson-editor-ui.js`) JÁ tem abas com setas/Home/End e `tabindex` móvel (provar com o RED, não reescrever); a lacuna provável é o foco: `run()`/`applyDraft` redesenham o editor de questão e destroem o botão acionado. Escrever os RED em `e2e/lesson-editor.spec.js` ou num `e2e/lesson-editor-a11y.spec.js` novo (teclado puro, foco após salvar/rejeitar/voltar, nome acessível dos itens) e ampliar `e2e/accessibility.spec.js` com o editor.
+- Comando: `npm run test:e2e -- e2e/accessibility.spec.js e2e/keyboard-study-materials.spec.js e2e/lesson-editor.spec.js`
 
 ### T-F4-06 — Regenerar UMA questão (contrato) · L (dividir)
 - Status: `[H]` · Requisitos: F-17 · Dependências: HG-06 (resultado do Prompt Lab) e F5
@@ -674,6 +682,11 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 ### T-F9-02 — `validation.md` por fase e validador de estado · S
 - Status: `[ ]` · Requisitos: R-10 (AC-10.2) · Dependências: ao menos uma tarefa `[✓]` na fase que a seção de `validation.md` descreve (executa-se por fase, não no fim)
 - Fazer: `validation.md` com evidência-ou-zero por critério; rodar `scripts/validate_state.py` da skill quando aplicável.
+- Subtarefas:
+  - [ ] Para cada fase com checkpoint fechado, listar por critério AC-xx a evidência (seção, SHA, teste) ou a lacuna explícita em `validation.md`
+  - [ ] Rodar `validate_state.py` da skill `tlc-spec-driven-strict` quando aplicável e registrar o resultado (ou "não aplicável" com o motivo)
+  - [ ] Gate: nenhum critério fechado sem evidência; `npm run context:check` PASS
+- Gate: `validation.md` com uma seção por fase fechada e evidência-ou-zero por critério; `context:check` PASS.
 
 ### T-F9-03 — Entrega (push/merge/deploy) · —
 - Status: `[H]` · HG-10
