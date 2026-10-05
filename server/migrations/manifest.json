@@ -153,5 +153,10 @@
     "version": 31,
     "name": "language-preferences",
     "checksum": "64e4fd8f2c153b3028bfa4b8a3a2397b27f9c69caaaba467b36ef02b25ab572d"
+  },
+  {
+    "version": 32,
+    "name": "generation-budget",
+    "checksum": "12f46eb18b5b222b9b41d33491f67f2361a2875fcba53de36fb214e6fe80a679"
   }
 ]

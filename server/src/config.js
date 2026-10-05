@@ -1,3 +1,8 @@
+const positiveNumberOrNull = (value) => {
+  const n = Number(value);
+  return value !== undefined && value !== '' && Number.isFinite(n) && n > 0 ? n : null;
+};
+
 export const config = {
   host: process.env.HOST ?? '127.0.0.1',
   port: Number(process.env.PORT ?? 3000),
@@ -55,6 +60,13 @@ export const config = {
   aiApiUrl: process.env.SMARTLEARN_AI_API_URL || null,
   aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
   aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
+  // Generation credit limits, in estimated model tokens (services/generation-budget.js). NOT decided yet (HG-11): unset = no
+  // limit on that dimension. A value that is not a positive number is treated as unset, never as zero.
+  generationLimits: {
+    maxPerJob: positiveNumberOrNull(process.env.SMARTLEARN_GEN_MAX_PER_JOB),
+    weekly: positiveNumberOrNull(process.env.SMARTLEARN_GEN_WEEKLY_LIMIT),
+    monthly: positiveNumberOrNull(process.env.SMARTLEARN_GEN_MONTHLY_LIMIT),
+  },
   // CODEX provider (SMARTLEARN_AI_PROVIDER=CODEX): runs the operator's already-logged-in Codex CLI (ChatGPT account).
   // No API key and no USD budget cap apply; explicit consent (SMARTLEARN_AI_CONSENT=true) still does.
   codexCommand: process.env.SMARTLEARN_CODEX_COMMAND || 'codex',
