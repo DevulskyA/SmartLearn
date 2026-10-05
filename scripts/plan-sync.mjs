@@ -15,7 +15,14 @@ export const BEGIN = '<!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-
 export const END = '<!-- PLAN:END -->';
 const REGION = /<!-- PLAN:BEGIN[^\n]*-->[\s\S]*?<!-- PLAN:END -->/;
 
-const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+/** Cuts at a word boundary (never mid-word, no ellipsis), after the first clause marker when there is one. */
+export function cut(text, n) {
+  let t = String(text).trim();
+  const clause = /[?:]|\s—\s|\.\s/.exec(t);
+  if (clause && clause.index >= 12) t = t.slice(0, clause.index);
+  if (t.length > n) { t = t.slice(0, n + 1); t = t.slice(0, Math.max(t.lastIndexOf(' '), 1)); }
+  return t.replace(/[\s,;:.(—-]+$/, '');
+}
 
 /** [{id, title, ids}] from the sprint table of PROGRAM.md, in file order; ids = the "Tarefas" column (ranges expanded). */
 export function programSprints(programText) {
@@ -41,13 +48,17 @@ export function orderProblems({ tasksText, programText = '' }) {
   return problems;
 }
 
-/** The panel state of a phase, derived (never hand-set): one active task -> '>', all done -> '✓', nothing runnable -> '!', else ' '. */
-function phaseState(blocks, byId) {
+/**
+ * The panel marker of a phase, derived (never hand-set), and NEVER [✓] while anything is still pending:
+ *   '>' holds the active task · '✓' everything done · 'H' only human gates remain · '!' nothing runnable · ' ' pending and runnable.
+ */
+export function phaseState(blocks, byId) {
   const real = blocks.filter((b) => b.status !== '=');
   if (real.some((b) => b.status === '>')) return '>';
-  const pending = real.filter((b) => b.status === ' ' || b.status === '!');
-  if (pending.length === 0) return real.some((b) => b.status === '✓') ? '✓' : '!';
-  const runnable = pending.some((b) => b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '='));
+  const remaining = real.filter((b) => b.status !== '✓');
+  if (remaining.length === 0) return '✓';
+  if (remaining.every((b) => b.status === 'H')) return 'H';
+  const runnable = remaining.some((b) => b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '='));
   return runnable ? ' ' : '!';
 }
 
@@ -56,17 +67,26 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   const blocks = taskBlocks(tasksText).filter((b) => b.id);
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const spec = norm(specText);
-  const gateName = (hg) => (new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').trim().replace(/\s*\(.*$/, '');
+  const gateName = (hg) => cut((new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').replace(/\s*\(.*$/, ''), 56);
   const gatesOf = (b) => [...new Set(b.statusLine.match(/HG-\d+/g) ?? [])];
   const active = blocks.find((b) => b.status === '>') ?? null;
   const order = programOrder(programText);
   const eligible = (b) => b !== active && b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '=');
   const next = order.map((id) => byId.get(id)).filter(Boolean).find(eligible) ?? blocks.find(eligible) ?? null;
-  const title = (b) => clip(b.heading.replace(/\s*·\s*[—-]?\s*$/, ''), 90);
-  const line = (b, tag = '') => `- [${b.status === '✓' ? 'x' : ' '}] **${b.id}** — ${title(b)}${tag}`;
+  const title = (b) => cut(b.heading.replace(/\s*·\s*[—-]?\s*$/, ''), 80);
+  const MARK = { '✓': 'x', '>': '>', ' ': ' ', '!': '!', H: 'H', '=': '=' };
+  // what a not-yet-done task waits for: its HG ids (as written in tasks.md) and any dependency that is a gate or blocked
+  const waits = (b) => [...new Set([...gatesOf(b), ...b.deps.filter((d) => ['H', '!'].includes(byId.get(d)?.status))])];
+  const chain = (b) => b.deps.filter((d) => byId.get(d)?.status !== '✓' && byId.get(d)?.status !== '=').slice(0, 3);
+  const row = (b, indent = '') => {
+    const w = b.status === ' ' || b.status === '!' ? waits(b) : b.status === 'H' ? gatesOf(b) : [];
+    const note = b.status === '=' ? ' — dividida em subtarefas' : w.length ? ` — ${b.status === 'H' ? '' : 'aguarda '}${w.join(', ')}` : '';
+    return `${indent}- [${MARK[b.status]}] **${b.id}** — ${title(b)}${note}`;
+  };
+  const pointer = (b, why = '') => `- ${b.id} · ${title(b)}${why ? ` · ${why}` : ''}`;
 
-  // PHASES = the sprints of PROGRAM.md in their canonical order (S0, S1, S2, S2G-a, ...); tasks keep the order PROGRAM.md gives.
-  // Tasks no sprint lists: finished ones form the "BASE" group (delivered before the sprint plan), the rest "SEM-SPRINT".
+  // PHASES = the sprints of PROGRAM.md in their canonical order; tasks keep the order PROGRAM.md gives.
+  // Tasks no sprint lists: finished ones form "BASE" (delivered before the sprint plan), the rest "SEM-SPRINT".
   const sprints = programSprints(programText);
   const rank = new Map();
   order.forEach((id, n) => rank.set(id, n));
@@ -74,17 +94,17 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   const placed = new Set();
   const groups = [];
   const childOf = (b) => blocks.find((p) => p.status === '=' && b.id !== p.id && b.id.startsWith(p.id) && /^[a-z]$/.test(b.id.slice(p.id.length))) ?? null;
-  const addGroup = (id, title, ids) => {
+  const addGroup = (id, gtitle, ids) => {
     const members = [];
     for (const tid of ids) {
       const b = byId.get(tid);
       if (!b || placed.has(tid)) continue;
       placed.add(tid);
       const parent = childOf(b);
-      if (parent && !placed.has(parent.id)) { members.push(parent); placed.add(parent.id); } // a split parent appears once, in the group of its first child
+      if (parent && !placed.has(parent.id)) { members.push(parent); placed.add(parent.id); } // a split parent appears once, before its first child
       members.push(b);
     }
-    if (members.length) groups.push({ id, title, members });
+    if (members.length) groups.push({ id, title: gtitle, members });
   };
   for (const sp of sprints) addGroup(sp.id, sp.title, sp.ids.filter((tid) => byId.has(tid)));
   const rest = blocks.filter((b) => !placed.has(b.id) && b.status !== '=');
@@ -98,39 +118,37 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   const blocked = blocks.filter((b) => b.status === '!'
     || (b.status === ' ' && b.deps.some((d) => byId.get(d)?.status === 'H' || byId.get(d)?.status === '!'))).sort(byRank);
   const humans = blocks.filter((b) => b.status === 'H').sort(byRank);
+  const real = blocks.filter((b) => b.status !== '=');
+  const done = real.filter((b) => b.status === '✓').length;
 
   const out = [BEGIN, ''];
   out.push(`ATIVA AGORA: ${active ? `${active.id} (${activeGroup})` : 'nenhuma'}`
-    + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'}`
+    + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · PROGRESSO: ${done}/${real.length}`
     + ` · BLOQUEADAS: ${blocked.length} · HUMAN GATE: ${humans.length}`, '');
+  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] human gate · [=] dividida. Fase: [✓] concluída · [>] contém a ativa · [H] só human gate restante · [!] nada executável · [ ] pendente. Os blocos abaixo de EM EXECUÇÃO a BLOQUEADO e HUMAN GATE são só ponteiros; a linha completa de cada tarefa existe uma única vez, em FASES.', '');
   out.push('## EM EXECUÇÃO', '');
-  out.push(active ? `- [ ] **${active.id}** — ${title(active)}  ← ÚNICA ATIVA` : '- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)', '');
+  out.push(active ? pointer(active) : '- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)', '');
   out.push('## PRÓXIMA', '');
-  out.push(next ? line(next) : '- (nenhuma elegível pela ordem de PROGRAM.md)', '');
+  out.push(next ? pointer(next) : '- (nenhuma elegível pela ordem de PROGRAM.md)', '');
   out.push('## BLOQUEADO', '');
   if (blocked.length === 0) out.push('- (nada bloqueado)');
-  for (const b of blocked) {
-    const why = b.status === '!' ? 'marcada bloqueada' : `aguarda ${b.deps.filter((d) => ['H', '!'].includes(byId.get(d)?.status)).join(', ')}`;
-    out.push(`- [ ] **${b.id}** — ${title(b)} — ${why}`);
-  }
-  out.push('', '## HUMAN GATE', '');
-  if (humans.length === 0) out.push('- (nenhum)');
-  for (const b of humans) {
-    const gates = gatesOf(b).map((g) => `${g} ${clip(gateName(g), 60)}`.trim()).join('; ');
-    out.push(`- [ ] **${b.id}** — ${title(b)}${gates ? ` — ${gates}` : ''}`);
-  }
+  for (const b of blocked) out.push(pointer(b, b.status === '!' ? 'marcada bloqueada' : `aguarda ${b.deps.filter((d) => ['H', '!'].includes(byId.get(d)?.status)).join(', ')}`));
   out.push('', '## FASES', '');
   for (const g of groups) {
     const parents = new Set(g.members.filter((b) => b.status === '=').map((b) => b.id));
     out.push(`### [${phaseState(g.members, byId)}] ${g.id} · ${g.title}`, '');
-    for (const b of g.members) {
-      const nested = childOf(b) && parents.has(childOf(b).id);
-      const tag = b.status === '>' ? '  ← EM EXECUÇÃO' : b.status === 'H' ? '  — HUMAN GATE' : b.status === '!' ? '  — BLOQUEADA' : b.status === '=' ? '  — DIVIDIDA em subtarefas' : '';
-      out.push(`${nested ? '  ' : ''}${line(b, tag)}`);
-    }
+    for (const b of g.members) out.push(row(b, childOf(b) && parents.has(childOf(b).id) ? '  ' : ''));
     out.push('');
   }
-  out.push(END);
+  out.push('## HUMAN GATE', '');
+  if (humans.length === 0) out.push('- (nenhum)');
+  for (const b of humans) {
+    const ids = gatesOf(b);
+    const gates = ids.length > 1 ? [ids.join(' + ')] : ids.map((g) => `${g} ${gateName(g)}`.trim()); // several gates: ids only, names live in spec.md
+    const why = gates.length ? gates.join('; ') : chain(b).length ? `aguarda ${chain(b).join(', ')}` : 'decisão humana';
+    out.push(pointer(b, why));
+  }
+  out.push('', END);
   return out.join('\n');
 }
 

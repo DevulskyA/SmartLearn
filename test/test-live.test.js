@@ -75,7 +75,9 @@ test('effective state: RUNNING only while the runner pid is alive; a dead runner
 test('the section shows tested vs current head, counts, exit code, pid and log path; escapes text', () => {
   const html = renderTestsSection([{ ...base, cmd: 'node --test <x>', log: 'C:/l.log', lastTest: 'a & b', startedAt: base.updatedAt, durationMs: 61000 }], { currentHead: 'bbbbbbb2', alive: dead });
   assert.match(html, /TESTES AO VIVO/);
-  assert.match(html, /STALE/);
+  assert.match(html, /DESATUALIZADO/);
+  assert.doesNotMatch(html, /STALE/);
+  assert.match(html, /<details class="tl-box"><summary><strong>TESTES AO VIVO:<\/strong> [^<]*DESATUALIZADO/);
   assert.match(html, /HEAD testado aaaaaaa ≠ atual bbbbbbb/);
   assert.match(html, /3\/3 feitos/);
   assert.match(html, /exit 0/);

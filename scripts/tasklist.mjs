@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SYMBOL = { '✓': '✓', '>': '>', ' ': ' ', '!': '!', '-': '-' };
+const SYMBOL = { '✓': '✓', '>': '>', ' ': ' ', '!': '!', '-': '-', H: 'H' };
 export const LABEL = { '✓': 'concluída', '>': 'ativa', ' ': 'pendente', '!': 'bloqueada', '-': 'adiada' };
 
 // Structured fields a task may carry (one per line, `KEY: text`, continuation lines append to the last key).
@@ -50,7 +50,7 @@ export function parsePlan(markdown) {
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
     // generated plan (scripts/plan-sync.mjs): one panel item per PHASE heading "### [state] HR-n · title"
-    const ph = lines[i].match(/^### \[(✓|>| |!)\] (\S+) · (.+)$/);
+    const ph = lines[i].match(/^### \[(✓|>| |!|H)\] (\S+) · (.+)$/);
     if (ph) { tasks.push({ state: ph[1], id: ph[2], title: ph[3].trim(), detail: '', fields: {}, free: '', owner: null }); continue; }
     const m = lines[i].match(/^- \[(✓|>| |!|-)\] \*\*([A-Z]+(?:-\d+)?)\s+(.+?)\*\*\s*(?:—\s*(.*))?$/);
     if (!m) {
@@ -64,38 +64,47 @@ export function parsePlan(markdown) {
     const { fields, free } = parseFields(detail);
     tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim(), fields, free: free.join(' ').trim(), owner: fields.OWNER ?? null });
   }
-  // generated plan: the "EM EXECUÇÃO" row names the active TASK; the panel shows it as the goal of the active phase
-  const running = text.match(/^- \[ \] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+?)\s+← ÚNICA ATIVA$/m);
+  // generated plan: the single [>] task row names the active TASK; the panel shows it as the goal of the active phase
+  const running = text.match(/^\s*- \[>\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/m);
   const activePhase = tasks.find((t) => t.state === '>');
   if (running && activePhase) activePhase.fields = { ...activePhase.fields, SPRINT_GOAL: `${running[1]} — ${running[2]}` };
   return { title, status, tasks, skipped, view: parsePlanView(text) };
 }
 
 /**
- * The full human view of a GENERATED plan (scripts/plan-sync.mjs): the top sections (EM EXECUÇÃO, PRÓXIMA, BLOQUEADO, HUMAN GATE) and
- * PHASE -> TASK -> SUBTASK rows with their checkboxes. Returns null for a legacy plan without the generated region.
+ * The full human view of a GENERATED plan (scripts/plan-sync.mjs). FASES holds every task row exactly once (PHASE -> TASK -> SUBTASK,
+ * each with its mark); EM EXECUÇÃO / PRÓXIMA / BLOQUEADO / HUMAN GATE hold only compact pointers. Returns null for a legacy plan.
  */
 export function parsePlanView(markdown) {
   const text = markdown.replace(/\r\n/g, '\n');
   if (!/<!-- PLAN:BEGIN/.test(text)) return null;
-  const view = { sections: [], phases: [] };
+  const view = {
+    title: (text.match(/^# TRACK:\s*(.+)$/m) ?? [])[1]?.trim() ?? '',
+    marco: (text.match(/^MARCO ATUAL:\s*(.+)$/m) ?? [])[1]?.trim() ?? '',
+    summary: (text.match(/^ATIVA AGORA:.*$/m) ?? [])[0] ?? '',
+    sections: [], phases: [],
+  };
   let cur = null;
-  const ACTIVE = /\s*←\s*(?:EM EXECUÇÃO|ÚNICA ATIVA)\s*$/;
+  let afterPhases = false;
   for (const line of text.split('\n')) {
     const sec = line.match(/^## (.+)$/);
     if (sec) {
       const name = sec[1].trim();
-      cur = name === 'FASES' ? { kind: 'fases' } : { kind: 'section', name, rows: [] };
-      if (cur.kind === 'section') view.sections.push(cur);
+      if (name === 'FASES') { cur = { kind: 'fases' }; afterPhases = true; continue; }
+      cur = { kind: 'section', name, pointers: [], afterPhases };
+      view.sections.push(cur);
       continue;
     }
-    const ph = line.match(/^### \[(✓|>| |!)\] (\S+) · (.+)$/);
+    const ph = line.match(/^### \[(✓|>| |!|H)\] (\S+) · (.+)$/);
     if (ph) { cur = { kind: 'phase', state: ph[1], id: ph[2], title: ph[3].trim(), rows: [] }; view.phases.push(cur); continue; }
-    const row = line.match(/^(\s*)- \[(x| )\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/);
-    if (row && cur && cur.rows) {
-      cur.rows.push({ sub: row[1].length > 0, checked: row[2] === 'x', id: row[3], text: row[4].replace(ACTIVE, '').trim(), active: ACTIVE.test(row[4]) });
-    }
+    const row = line.match(/^(\s*)- \[(x|>|!|H|=| )\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/);
+    if (row && cur?.kind === 'phase') { cur.rows.push({ sub: row[1].length > 0, mark: row[2], id: row[3], text: row[4].trim() }); continue; }
+    const ptr = line.match(/^- (T-[A-Z0-9]+-\d+[a-z]?) · (.+)$/);
+    if (ptr && cur?.kind === 'section') cur.pointers.push({ id: ptr[1], text: ptr[2].trim() });
   }
+  const all = view.phases.flatMap((p) => p.rows).filter((r) => r.mark !== '=');
+  view.progress = { done: all.filter((r) => r.mark === 'x').length, total: all.length };
+  view.rowCount = view.phases.reduce((n, p) => n + p.rows.length, 0);
   return view;
 }
 
@@ -130,17 +139,20 @@ export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt
  * Details stay in plan.md. `nowGoal` is the one-line goal of the active task; `extraLines` are plain lines
  * (e.g. the other agent's one-line state).
  */
-/** Simple nested checklist of the generated plan: sections first, then every phase with its tasks and subtasks. */
+/** Simple nested checklist of the generated plan: compact pointers, then every phase with its tasks and subtasks, then the gate list. */
 export function viewHtml(view) {
-  // the running task is the ONE active item ([>], bold) in the top section; inside its phase it is only marked, so the panel has exactly one [>]
-  const row = (r, inPhase = false) => `<li class="t${r.sub ? ' sub' : ''}${r.active && !inPhase ? ' now' : ''}"><span class="m">[${r.active && !inPhase ? '>' : r.checked ? 'x' : ' '}]</span> ${esc(r.id)} — ${esc(r.text)}${r.active && inPhase ? ' <span class="muted">← em execução</span>' : ''}</li>`;
-  const sections = view.sections.map((sec) => `<h2>${esc(sec.name)} (${sec.rows.length})</h2><ul>${sec.rows.map(row).join('') || '<li class="t muted">—</li>'}</ul>`).join('');
-  const phases = view.phases.map((ph) => `<h3>[${ph.state}] ${esc(ph.id)} — ${esc(ph.title)}</h3><ul>${ph.rows.map((r) => row(r, true)).join('')}</ul>`).join('');
-  return `${sections}<h2>FASES</h2>${phases}`;
+  const row = (r) => `<li class="t${r.sub ? ' sub' : ''}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.id)} — ${esc(r.text)}</span></li>`;
+  const ptr = (p) => `<li class="t p"><span class="m">·</span><span class="x">${esc(p.id)} — ${esc(p.text)}</span></li>`;
+  const section = (sec) => `<h2>${esc(sec.name)} (${sec.pointers.length})</h2><ul>${sec.pointers.map(ptr).join('') || '<li class="t muted"><span class="m"></span><span class="x">—</span></li>'}</ul>`;
+  const phases = view.phases.map((ph) => `<h3>[${ph.state}] ${esc(ph.id)} — ${esc(ph.title)}</h3><ul>${ph.rows.map(row).join('')}</ul>`).join('');
+  const { done, total } = view.progress;
+  return `<p class="hdr"><strong>TRACK:</strong> ${esc(view.title)}<br><strong>MARCO ATUAL:</strong> ${esc(view.marco || '—')} · <strong>PROGRESSO:</strong> ${done}/${total} tarefas</p>
+<p class="muted legend">Tarefa: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] human gate · [=] dividida — Fase: [✓] concluída · [>] contém a ativa · [H] só human gate restante · [!] nada executável</p>
+${view.sections.filter((s) => !s.afterPhases).map(section).join('')}<h2>FASES</h2>${phases}${view.sections.filter((s) => s.afterPhases).map(section).join('')}`;
 }
 
 export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', tasks, extraLines = [], keepDone = 6, testsHtml = '', view = null }) {
-  const mark = (t) => (t.state === '-' ? '!' : t.state === '✓' ? '✓' : t.state === '>' ? '>' : t.state === '!' ? '!' : ' ');
+  const mark = (t) => (t.state === '-' ? '!' : t.state === '✓' ? '✓' : t.state === '>' ? '>' : t.state === '!' ? '!' : t.state === 'H' ? 'H' : ' ');
   const line = (t) => `<li class="t${mark(t) === '>' ? ' now' : ''}"><span class="m">[${mark(t)}]</span> ${esc(t.id)} — ${esc(t.title)}</li>`;
   const done = tasks.filter((t) => t.state === '✓');
   const shownDone = done.slice(-keepDone);
@@ -159,8 +171,8 @@ export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', 
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace}
 main{max-width:52rem;margin:0 auto;padding:1.25rem 1rem 2rem}
 h1{font-size:1rem;margin:0 0 1rem;letter-spacing:.02em}
-ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0}.m{display:inline-block;width:2.2rem}
-.now{font-weight:700;color:var(--now)}h2{font-size:.95rem;margin:1.1rem 0 .2rem}h3{font-size:.9rem;margin:.9rem 0 .1rem}.sub{padding-left:2.2rem}.muted{color:var(--muted)}
+ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0;display:flex;gap:.4rem}.m{flex:none;width:2.2rem;white-space:pre}.x{flex:1;min-width:0;overflow-wrap:anywhere}.hdr{margin:0 0 .5rem}.legend{font-size:.8rem;line-height:1.5;margin:0 0 .5rem}
+.now{font-weight:700;color:var(--now)}h2{font-size:.95rem;margin:1.1rem 0 .2rem}h3{font-size:.9rem;margin:.9rem 0 .1rem}.sub{margin-left:2.6rem}details.tl-box{margin-top:1rem;font-size:.85rem}details.tl-box summary{cursor:pointer}.muted{color:var(--muted)}
 .goal{margin-top:1.25rem}.goal p{margin:.25rem 0 0}
 .tl{margin:.5rem 0;font-size:.85rem;line-height:1.5}.tl .st{font-weight:700}.tl.pass .st{color:#1f8a4c}.tl.fail .st,.tl.aborted .st{color:#c0392b}.tl.stale .st{color:#b7791f}.tl.running .st{color:var(--now)}
 </style></head><body><main>

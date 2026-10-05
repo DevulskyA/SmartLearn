@@ -136,6 +136,8 @@ export function fmtDuration(ms) {
   return s >= 60 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s` : `${s}s`;
 }
 
+const STATE_LABEL = { STALE: 'DESATUALIZADO' };
+const stateLabel = (st) => STATE_LABEL[st] ?? st;
 const short = (h) => (h ? h.slice(0, 7) : '?');
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR') : '—');
 
@@ -144,20 +146,23 @@ export function renderTestsSection(artifacts, { currentHead, alive, now, docsOnl
   if (!artifacts.length) {
     return '<div class="goal"><strong>TESTES AO VIVO:</strong><p class="muted">nenhuma execução registrada (rode: node scripts/test-live.mjs unit|server|e2e)</p></div>';
   }
+  const summaries = [];
   const rows = artifacts.map((a) => {
     const eff = effectiveState(a, { currentHead, alive, now, docsOnlySince });
     const c = a.counts ?? emptyCounts();
     const total = c.total ?? '?';
     const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (atual ${short(currentHead)}, só docs depois)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ atual ${short(currentHead)}`;
     const running = eff.state === 'RUNNING';
+    summaries.push(`${a.suite} ${stateLabel(eff.state)} ${c.done}/${c.total ?? '?'}`);
     const dur = running ? fmtDuration(Date.now() - Date.parse(a.startedAt)) : fmtDuration(a.durationMs ?? Date.parse(a.updatedAt) - Date.parse(a.startedAt));
     return `<div class="tl ${esc(eff.state.toLowerCase())}"${running ? ` data-hb="${esc(a.updatedAt)}"` : ''}>
-<div><span class="st">${esc(eff.state)}</span> <strong>${esc(a.suite)}</strong> · ${c.done}/${total} feitos · ${c.passed} ok · ${c.failed} falhas · ${c.skipped} pulados · ${esc(dur)}</div>
+<div><span class="st">${esc(stateLabel(eff.state))}</span> <strong>${esc(a.suite)}</strong> · ${c.done}/${total} feitos · ${c.passed} ok · ${c.failed} falhas · ${c.skipped} pulados · ${esc(dur)}</div>
 <div class="muted">${esc(head)}${eff.note ? ` · ${esc(eff.note)}` : ''} · exit ${a.exitCode ?? '—'} · pid ${a.runnerPid ?? '—'} ${running ? '(vivo)' : '(fim)'} · atualizado ${esc(clock(a.updatedAt))}</div>
 <div class="muted">${a.lastTest ? `último: ${esc(String(a.lastTest).slice(0, 110))} · ` : ''}cmd: ${esc(a.cmd)} · log: ${esc(a.log ?? '—')}</div>
 </div>`;
   });
-  return `<div class="goal"><strong>TESTES AO VIVO:</strong>${rows.join('')}</div>`;
+  // ONE line by default; paths, commands and counts per suite are inside the <details>
+  return `<details class="tl-box"><summary><strong>TESTES AO VIVO:</strong> ${esc(summaries.join(' · '))}</summary>${rows.join('')}</details>`;
 }
 
 export const HEARTBEAT_SCRIPT = `<script>document.querySelectorAll('[data-hb]').forEach(function(e){var a=Date.now()-Date.parse(e.dataset.hb);if(a>${HEARTBEAT_STALE_MS}){e.querySelector('.st').textContent='SEM SINAL (possível ABORTED)';e.classList.add('aborted')}})</script>`;

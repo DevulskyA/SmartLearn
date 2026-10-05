@@ -112,6 +112,10 @@ export function checkContext(io) {
   if (plan) {
     const actives = plan.match(/^### \[>\]/gm) ?? [];
     if (actives.length !== 1) fail(`conductor plan must have exactly ONE active phase ([>]), found ${actives.length}`);
+    const activeRows = plan.match(/^\s*- \[>\] \*\*T-/gm) ?? [];
+    if (activeRows.length !== 1) fail(`conductor plan must have exactly ONE active task row ([>]), found ${activeRows.length}`);
+    const taskIds = [...plan.matchAll(/^\s*- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
+    if (new Set(taskIds).size !== taskIds.length) fail('conductor plan lists a task more than once (FASES must hold each task exactly once)');
     const line = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
     if (active && !line.includes(active.id)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
     // the plan is the executable VIEW of tasks.md: its generated region must be exactly what tasks.md implies (npm run plan:sync)

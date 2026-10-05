@@ -72,7 +72,7 @@ export function activeTrackBlock(plan, { planPath, branch = '', head = '', date 
   const list = (label, arr) => (arr.length ? ` · ${label}: ${arr.join(', ')}` : '');
   const done = ids('✓');
   const line = `**\`${planPath}\`** — ${plan.title} · Status: ${plan.status}`
-    + list('ATIVA (GUI)', ids('>')) + list('próximas', ids(' ')) + list('adiadas', ids('-')) + list('bloqueadas', ids('!'))
+    + list('ATIVA (GUI)', ids('>')) + list('próximas', ids(' ')) + list('só human gate', ids('H')) + list('adiadas', ids('-')) + list('bloqueadas', ids('!'))
     + ` · concluídas (${done.length}): ${done.join(', ') || '—'}`
     + (branch ? ` · branch \`${branch}\`` : '') + (head ? `@${head}` : '') + (date ? ` · sincronizado ${date}` : '');
   return `<!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->\n${line}\n<!-- ACTIVE-TRACK:END -->`;
