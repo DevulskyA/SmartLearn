@@ -338,14 +338,10 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Gate: arquivo do roteiro revisado; resultado registrado.
 
 ### T-F4-02 — Hierarquia da Revisão e ruído de achados · M
-- Status: `[>]` · BASE_SHA `eded9ef` · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03 (`[✓]`)
-- Subtarefas:
-  - [>] Ordenar achados/itens por severidade, contagem por tipo no topo, BAIXA recolhida, teto de itens na primeira tela; e2e com fixture de 67 achados + `lesson-view-model.test.js`
+- Status: `[ ]` · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03 (`[✓]`)
 - Fazer: ordenar por severidade, colapsar BAIXA, mostrar contagem por tipo no topo, "Sinalizada" só para severidade ≥ MÉDIA; texto explica o que olhar.
 - RED (e2e com fixture de 67 achados): primeiros itens são os mais severos; a tela inicial não excede N linhas visíveis sem rolagem.
 - Gate: `lesson-view-model.test.js` ampliado + e2e.
-- Próximo passo: ainda NÃO iniciada (escopo do lote limitado a T-F2-03 por decisão do usuário; não bloqueia uso real). Retomar só se pedido; a Revisão já exclui BAIXA de "Sinalizada".
-- Comando: `npx playwright test e2e/lesson-editor.spec.js`
 
 ### T-F4-03 — Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `342c91b` · IMPLEMENTATION_SHA `66905ad` (bloco "Rascunhos em andamento" antes da busca; "Título salvo" em `role=status` junto do campo, foco mantido; 2 casos e2e novos + axe, 2 mutações vermelhas) · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
