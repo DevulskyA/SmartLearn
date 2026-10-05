@@ -13,7 +13,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 25/70 · SUBTAREFAS: 14/14 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 25/70 · SUBTAREFAS: 16/24 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
 
 VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a); HEAD atual ≠ HEAD testado
 
@@ -21,9 +21,19 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## AGORA — TAREFA ATIVA
 
-- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 0/0
+- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 2/10
   Resultado: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
   Próximo passo: DECISÃO de como atingir ≤ 8 min
+  - [x] Medir o baseline (534 s, 205 passed, 2 workers)
+  - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
+  - [>] Perfilar o caminho crítico (decompor os 5 maiores consumidores em tempo evitável)
+  - [ ] Eliminar desperdício sem perder cobertura nem asserções
+  - [ ] Full run de confirmação ≤ 460 s (2 workers, 0 falhas)
+  - [ ] Gate #1 ≤ 480 s
+  - [ ] Gate #2 ≤ 480 s
+  - [ ] Gate #3 ≤ 480 s
+  - [ ] Registrar a evidência em `validation.md`
+  - [ ] Fechar T-F6-03
 
 ## PRÓXIMO
 
@@ -86,7 +96,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F2-05** — Pré-visualização do aceite
 
-### [>] S3 · Verdade do runner — tarefas 1/3 · subtarefas 14/14
+### [>] S3 · Verdade do runner — tarefas 1/3 · subtarefas 16/24
 
 - [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo — subtarefas 14/14
   - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
@@ -105,7 +115,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
   - [x] Analisar a taxa de falha por workers (1 × 2)
   - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
   - [x] Decidir o fechamento ou a próxima ação (fechada sem correção; reabrir só se o sintoma reaparecer com trace)
-- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo
+- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo — subtarefas 2/10
 - [ ] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
 ### [ ] S4 · Jobs observáveis — tarefas 0/5

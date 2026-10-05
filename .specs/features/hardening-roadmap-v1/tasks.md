@@ -400,6 +400,17 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Comando: `npm run test:e2e` (suíte completa, 2 workers, cronometrar; 3 execuções consecutivas só depois da partição).
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
+- Subtarefas:
+  - [x] Medir o baseline (534 s, 205 passed, 2 workers)
+  - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
+  - [>] Perfilar o caminho crítico (decompor os 5 maiores consumidores em tempo evitável)
+  - [ ] Eliminar desperdício sem perder cobertura nem asserções
+  - [ ] Full run de confirmação ≤ 460 s (2 workers, 0 falhas)
+  - [ ] Gate #1 ≤ 480 s
+  - [ ] Gate #2 ≤ 480 s
+  - [ ] Gate #3 ≤ 480 s
+  - [ ] Registrar a evidência em `validation.md`
+  - [ ] Fechar T-F6-03
 - Medição 2026-10-04 @`3608048` em `validation.md` (gate NÃO atingido; a causa da falha do run 2 e a do `0xC0000142` NÃO estão provadas — ver T-F6-08).
 
 ### T-F6-08 — Causa da falha funcional do run 2 do e2e completo · M
