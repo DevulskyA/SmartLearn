@@ -8,6 +8,7 @@ function handleError(err, reply) {
       NOT_FOUND: 404,
       INPUT_TOO_LARGE: 413, NO_USABLE_TEXT: 409,
       INVALID_DRAFT: 502,
+      LANGUAGE_MISMATCH: 502,
       MISSING_CREDENTIALS: 409,
       TIMEOUT: 504,
       PROVIDER_ERROR: 502,
@@ -47,6 +48,8 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     try {
       const draft = await drafts.createDraft(db, request.actor.userId, id, {
         regenerate: request.body?.regenerate === true,
+        // Deliberately NO locale hint from the browser: the first generation initializes generationLocale from the interface
+        // the student is actually using (pt-BR today), never from an Accept-Language header that may disagree with it.
         // undefined -> createDraft's own default (the CURRENT prompt version), so a stored draft is labelled with the prompt that really produced it
         promptVersion: request.body?.promptVersion,
         apiUrl: config.aiApiUrl,

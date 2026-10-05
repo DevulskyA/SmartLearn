@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { generateDraft as fakeGenerateDraft, FAKE_PROVIDER_NAME } from '../ai/fake-provider.js';
+import { detectSourceLanguage, checkDraftLanguage, LanguageMismatch } from '../ai/language-contract.js';
+import { ensureGenerationLocale } from './settings.js';
 import {
   generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
   ANTHROPIC_PROVIDER_NAME, ProviderRequestError,
@@ -56,7 +58,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
   // (AI_SILENT_FALLBACK=FORBIDDEN). Without credentials/consent/budget it is an explicit error.
   if (declared) {
     const name = String(declared).toUpperCase();
-    if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
+    if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
     // CODEX authenticates through the operator's own Codex CLI login, not an API key, and has no per-request price to
     // cap — so the key/model/budget gate does not apply. Explicit consent still does, and a Codex that is missing or not
     // logged in is an explicit error raised by the provider itself (never fake/other-provider content).
@@ -87,7 +89,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
 
   // Nothing declared (legacy behaviour): the configured real adapter when fully configured, otherwise the fake.
   if (liveAvailable) return anthropic();
-  return { name: FAKE_PROVIDER_NAME, live: false, generate: fakeGenerateDraft };
+  return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
 }
 function withTimeout(promise, timeoutMs, onTimeoutCode) {
   let timer;
@@ -245,6 +247,9 @@ export function normalizeContent(content, generatedByDefault = null) {
   });
   return {
     ...content,
+    sourceLanguage: content.sourceLanguage ?? null,
+    generationLocale: content.generationLocale ?? null,
+    languageCheck: content.languageCheck ?? null,
     summaryOrigin: content.summaryOrigin === 'HUMAN_EDITED' ? 'HUMAN_EDITED' : 'GENERATED',
     summaryEditedAt: content.summaryEditedAt ?? null,
     summaryVersion: Number.isInteger(content.summaryVersion) ? content.summaryVersion : 1,
@@ -369,6 +374,8 @@ export async function createDraft(db, userId, proposalId, {
   // Test/ops seam: an already-built provider ({name, live, generate, audit?, repair?}) used instead of selectProvider, so a
   // spy can prove how many calls would have reached a model.
   providerImpl = null,
+  // System/Accept-Language hint, used ONLY to initialize the student's generationLocale the first time (never afterwards).
+  localeHint = null,
   // Generation is JIT and reuses what is valid: a repeat request returns the existing draft/lesson with NO provider call.
   // Making a new one is an explicit act.
   regenerate = false,
@@ -384,13 +391,18 @@ export async function createDraft(db, userId, proposalId, {
   const inputDigest = segmentsDigest(found.segments);
   const inputGeneration = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
 
+  // The three languages: the source's (detected here), the student's persisted content language (never inferred from the
+  // source or the interface) and, for the model, what to write in. A first generation initializes the preference once.
+  const sourceLanguage = detectSourceLanguage(found.segments);
+  const generationLocale = ensureGenerationLocale(db, userId, localeHint);
+
   const provider = providerImpl ?? selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
   // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
   const deadlineMs = provider.timeoutMs ?? timeoutMs;
 
   let raw;
   try {
-    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion }), deadlineMs, 'TIMEOUT');
+    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion, sourceLanguage, generationLocale }), deadlineMs, 'TIMEOUT');
   } catch (err) {
     if (err instanceof DraftError) throw err;
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
@@ -405,8 +417,24 @@ export async function createDraft(db, userId, proposalId, {
     throw err;
   }
 
+  // Wrong language = contract failure: refused BEFORE spending an audit on it, and nothing is stored.
+  // The built-in deterministic test double only slices the source text: it cannot write in another language, so the contract
+  // is recorded as NOT_APPLICABLE for it (never for a real provider or an injected one).
+  const languageCheckOf = (draft) => {
+    if (provider.languageContract === 'NOT_APPLICABLE') return { status: 'NOT_APPLICABLE', detected: null, declared: null };
+    try {
+      return checkDraftLanguage(draft, generationLocale, raw.language);
+    } catch (err) {
+      if (err instanceof LanguageMismatch) throw new DraftError('LANGUAGE_MISMATCH', err.message);
+      throw err;
+    }
+  };
+  languageCheckOf(validated);
+
   const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs: deadlineMs });
   validated = audited.draft;
+  // A repair may have rewritten text: the final content is what must be in the target language.
+  const languageCheck = languageCheckOf(validated);
 
   const nowIso = now().toISOString();
   const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };
@@ -416,6 +444,9 @@ export async function createDraft(db, userId, proposalId, {
     questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
     quarantinedCount: validated.quarantinedCount,
     audit: audited.audit,
+    sourceLanguage,
+    generationLocale,
+    languageCheck: languageCheck.status,
     sourceScope: {
       documentId: found.proposal.source_id,
       documentName: db.prepare('SELECT original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.original_name ?? null,

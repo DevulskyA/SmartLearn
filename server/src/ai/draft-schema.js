@@ -22,7 +22,9 @@ export const MAX_SUMMARY_LENGTH = 12_000;
 const MAX_QUESTIONS = 50;
 const MAX_QUESTION_LENGTH = 1000;
 const MAX_ANSWER_LENGTH = 2000;
-const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion']);
+// `language` is optional: the language the provider says it wrote in. It is NOT part of the validated draft; the language
+// contract (language-contract.js) reads it from the raw answer and compares it with the student's generationLocale.
+const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion', 'language']);
 const MAX_EXPLANATION_LENGTH = 2000;
 const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'explanation', 'questionType', 'hint', 'sourceSpans']);
 
