@@ -7,6 +7,7 @@ import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-
 import { generateInitialTasks, getNextReview, getReviewStatusLabel } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
 import { weakPracticeReason } from "./priorities-text.js";
+import { groupUpcomingReviews } from "./upcoming-reviews.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
@@ -82,7 +83,8 @@ const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOC
 
 // PV1-01: Materiais (the PDF -> proposal -> draft -> accept pipeline,
 // relocated from Configurações to its own primary screen) is exclusive to
-// LOCAL_DESKTOP_AUTHORITY — Companion (not implemented yet) stays a
+// LOCAL_DESKTOP_AUTHORITY — the Companion (a Web/PWA foundation already
+// exists: shell cache + offline agenda snapshot) stays a
 // read-only surface, and REMOTE_AUTHORITY-without-local-authority keeps
 // the existing server endpoints reachable (nothing removed server-side)
 // but never surfaces this as a product screen. This flag is stable for
@@ -196,6 +198,7 @@ const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
 const weakBlock = document.querySelector("#block-weak");
+const upcomingBlock = document.querySelector("#block-upcoming");
 const weakList = document.querySelector("#weak-list");
 const weakCount = document.querySelector("#weak-count");
 const reviewDashboard = document.querySelector("#review-dashboard");
@@ -1014,6 +1017,35 @@ function updateReviewBlockResult(section) {
 // offers the action at all rather than offering one that would silently
 // fail). Only overdue/today buckets are shown: T39's snapshot excludes
 // already-completed tasks, so "done today" has no offline equivalent.
+// T-F4-08 adds the read-only "Próximas revisões" block (dueDate > today).
+function renderOfflineUpcoming(upcoming, nothingDueToday) {
+  const groupsHost = upcomingBlock.querySelector("#upcoming-groups");
+  const note = upcomingBlock.querySelector("#upcoming-note");
+  const more = upcomingBlock.querySelector("#upcoming-more");
+  groupsHost.replaceChildren();
+  upcomingBlock.hidden = upcoming.total === 0;
+  upcomingBlock.querySelector("#upcoming-count").textContent = String(upcoming.total);
+  note.hidden = !nothingDueToday;
+  more.hidden = upcoming.remaining === 0;
+  more.textContent = `e mais ${upcoming.remaining} ${upcoming.remaining === 1 ? "revisão" : "revisões"} nos dias seguintes.`;
+  for (const group of upcoming.groups) {
+    const day = document.createElement("div");
+    day.className = "upcoming-day";
+    const heading = document.createElement("h3");
+    heading.textContent = formatDate(group.date, { weekday: "long", day: "2-digit", month: "long", year: undefined });
+    const list = document.createElement("ul");
+    for (const item of group.items) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+    day.append(heading, list);
+    groupsHost.append(day);
+  }
+}
+
 async function renderOfflineToday(accountId) {
   const snapshot = await OfflineStore.loadSnapshot(accountId);
   const today = getLocalDateValue();
@@ -1055,12 +1087,16 @@ async function renderOfflineToday(accountId) {
   weakRenderSeq += 1; // also cancels an online render still in flight
   if (weakBlock) weakBlock.hidden = true;
   todayEmptyState.hidden = true;
-  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0);
+  const upcoming = groupUpcomingReviews(snapshot?.items, today);
+  renderOfflineUpcoming(upcoming, overdue.length === 0 && dueToday.length === 0);
+  // "Tudo em dia" only when nothing is due AND nothing is coming up: with future items the upcoming list is the content.
+  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0 && upcoming.total === 0);
   todayTomorrow.hidden = true;
   if (todayLoadSummary) {
     const parts = [];
     if (overdue.length > 0) parts.push(`${overdue.length} vencida${overdue.length !== 1 ? "s" : ""}`);
     if (dueToday.length > 0) parts.push(`${dueToday.length} hoje`);
+    if (upcoming.total > 0) parts.push(`${upcoming.total} ${upcoming.total === 1 ? "próxima" : "próximas"}`);
     todayLoadSummary.hidden = parts.length === 0;
     todayLoadSummary.textContent = parts.join(" · ");
   }
@@ -1153,6 +1189,7 @@ export async function renderToday() {
     throw error;
   }
   if (existingOfflineBanner) existingOfflineBanner.hidden = true;
+  if (upcomingBlock) upcomingBlock.hidden = true; // offline-only block: online Hoje has its own "Amanhã" line
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {

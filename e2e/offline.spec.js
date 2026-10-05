@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -278,5 +279,121 @@ test('a second account never sees the first account\'s agenda after switching, e
   await expect(page.locator('body')).not.toContainText('Conteudo Exclusivo Offline A');
   await expect(page.locator('[data-review-list="overdue"] .review-row')).toHaveCount(0);
 
+  await page.context().setOffline(false);
+});
+
+// T-F4-08: offline Hoje also lists the snapshot's UPCOMING reviews (dueDate > today), read-only. The snapshot is seeded straight
+// into the real IndexedDB store (same shape syncSnapshot writes) so the dates are exact; the offline reopen is genuine.
+function localDate(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function openOfflineTodayWithSnapshotItems(page, label, items) {
+  await enableRemoteMode(page);
+  await registerAndLogin(page, uniqueEmail(label), 'a genuinely long test password 1');
+  await waitForServiceWorkerActive(page);
+  const syncResponse = waitForSnapshotSync(page);
+  await page.reload();
+  await syncResponse;
+  await page.evaluate(async (seed) => {
+    const { loadSnapshot } = await import('/src/offline-store.js');
+    const { getCurrentUser } = await import('/src/auth-ui.js');
+    const snapshot = await loadSnapshot(getCurrentUser().id);
+    snapshot.items = seed;
+    await new Promise((resolve, reject) => {
+      const open = indexedDB.open('smartlearn-offline', 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('agenda-snapshots', 'readwrite');
+        tx.objectStore('agenda-snapshots').put(snapshot);
+        tx.oncomplete = () => { open.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }, items);
+  await page.context().setOffline(true);
+  await page.reload();
+  await expect(page.locator('.app-header .brand')).toBeVisible({ timeout: 5000 });
+  await page.locator('[data-screen="today"]').click();
+  await expect(page.locator('#offline-banner')).toBeVisible({ timeout: 5000 });
+}
+
+const snapItem = (id, offset, unitTitle, subjectName) => ({ reviewTaskId: id, dueDate: localDate(offset), unitTitle, subjectName });
+
+test('offline Hoje lists upcoming reviews by date with aula and disciplina, beside overdue and today, read-only', async ({ page }) => {
+  await openOfflineTodayWithSnapshotItems(page, 'upc', [
+    snapItem(9, 9, 'Aula D9', 'Disc Nove'),
+    snapItem(1, -2, 'Aula Atrasada', 'Disc Velha'),
+    snapItem(3, 3, 'Aula C3', 'Disc Tres'),
+    snapItem(2, 0, 'Aula Hoje', 'Disc Hoje'),
+    snapItem(4, 1, 'Aula B1', 'Disc Um'),
+    snapItem(5, 3, 'Aula C3b', 'Disc Tres'),
+  ]);
+  await expect(page.locator('#offline-banner')).toContainText(/última sincronização/i);
+  await expect(page.locator('[data-review-list="overdue"] .review-row')).toHaveText(['Aula Atrasada — Disc Velha']);
+  await expect(page.locator('[data-review-list="today"] .review-row')).toHaveText(['Aula Hoje — Disc Hoje']);
+
+  const block = page.locator('#block-upcoming');
+  await expect(block).toBeVisible();
+  await expect(block.getByRole('heading', { name: 'Próximas revisões', level: 2 })).toBeVisible();
+  await expect(block.locator('li')).toHaveText(['Aula B1 — Disc Um', 'Aula C3 — Disc Tres', 'Aula C3b — Disc Tres', 'Aula D9 — Disc Nove']);
+  await expect(block.locator('h3')).toHaveCount(3);
+  await expect(block.locator('ul')).toHaveCount(3);
+  await expect(page.locator('#today-load-summary')).toContainText('4 próximas');
+  await expect(page.locator('#today-success-state')).toBeHidden();
+  await expect(block.getByText('Nada vence hoje')).toBeHidden();
+  // read-only: no control that could write anything
+  await expect(block.locator('button, a, input, select, textarea, [role="button"]')).toHaveCount(0);
+  await expect(page.locator('#review-dashboard button')).toHaveCount(0);
+  await page.context().setOffline(false);
+});
+
+test('offline Hoje shows no upcoming block when the snapshot has no future review', async ({ page }) => {
+  await openOfflineTodayWithSnapshotItems(page, 'noupc', [
+    snapItem(1, -1, 'Aula Atrasada', 'Disc Velha'),
+    snapItem(2, 0, 'Aula Hoje', 'Disc Hoje'),
+  ]);
+  await expect(page.locator('[data-review-list="overdue"] .review-row')).toHaveCount(1);
+  await expect(page.locator('[data-review-list="today"] .review-row')).toHaveCount(1);
+  await expect(page.locator('#block-upcoming')).toBeHidden();
+  await expect(page.locator('#today-load-summary')).not.toContainText('próxima');
+  await page.context().setOffline(false);
+});
+
+test('offline Hoje with only future reviews does not say "tudo em dia" without listing them', async ({ page }) => {
+  await openOfflineTodayWithSnapshotItems(page, 'onlyfuture', [snapItem(1, 2, 'Aula Futura', 'Disc Futura')]);
+  await expect(page.locator('#today-success-state')).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Tudo em dia!' })).toHaveCount(0); // role queries skip hidden elements
+  const block = page.locator('#block-upcoming');
+  await expect(block).toBeVisible();
+  await expect(block).toContainText('Nada vence hoje.');
+  await expect(block.locator('li')).toHaveText(['Aula Futura — Disc Futura']);
+  await page.context().setOffline(false);
+});
+
+test('offline Hoje caps the upcoming list at 20 rows and counts the rest', async ({ page }) => {
+  const many = Array.from({ length: 25 }, (_, i) => snapItem(i + 1, i + 1, `Aula ${String(i + 1).padStart(2, '0')}`, 'Disc'));
+  await openOfflineTodayWithSnapshotItems(page, 'cap', many.reverse());
+  const block = page.locator('#block-upcoming');
+  await expect(block.locator('li')).toHaveCount(20);
+  await expect(block.locator('li').first()).toContainText('Aula 01');
+  await expect(block.locator('li').last()).toContainText('Aula 20');
+  await expect(block).toContainText('e mais 5');
+  await page.context().setOffline(false);
+});
+
+test('axe: offline Hoje with upcoming reviews has no critical/serious violation at 375px', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await openOfflineTodayWithSnapshotItems(page, 'axe', [
+    snapItem(1, 1, 'Aula B1', 'Disc Um'),
+    snapItem(2, 4, 'Aula E4', 'Disc Quatro'),
+  ]);
+  await expect(page.locator('#block-upcoming')).toBeVisible();
+  const scrollsHorizontally = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(scrollsHorizontally).toBe(false);
+  const result = await new AxeBuilder({ page }).include('#screen-today').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(result.violations.filter((v) => ['critical', 'serious'].includes(v.impact)).map((v) => v.id)).toEqual([]);
   await page.context().setOffline(false);
 });

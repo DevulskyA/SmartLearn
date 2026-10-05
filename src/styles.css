@@ -450,6 +450,27 @@ h1 {
   color: var(--color-muted);
 }
 
+/* T-F4-08: offline "Próximas revisões" (read-only): one semantic list per date, rows reuse the review card look */
+.upcoming-day + .upcoming-day {
+  margin-top: 1rem;
+}
+
+.upcoming-day h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  text-transform: capitalize;
+}
+
+.upcoming-day ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .weak-practice-row {
   display: flex;
   flex-wrap: wrap;
