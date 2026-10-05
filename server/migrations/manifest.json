@@ -148,5 +148,10 @@
     "version": 30,
     "name": "proposal-scope",
     "checksum": "219eebb536056b09409cf3c9c3cffa3f01f5012fa9a6b8e0a3ef6e4b324e9bde"
+  },
+  {
+    "version": 31,
+    "name": "language-preferences",
+    "checksum": "64e4fd8f2c153b3028bfa4b8a3a2397b27f9c69caaaba467b36ef02b25ab572d"
   }
 ]
