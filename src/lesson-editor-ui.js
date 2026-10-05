@@ -289,6 +289,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const index = draft.questions.indexOf(q);
     const idBase = `${uid}-q-${q.id}`;
 
+    // Only shown when the list is stacked above the editor (narrow windows, see styles.css): it takes the student back to the list
+    // at the question they were editing, instead of scrolling up through the whole editor.
+    const toList = button("text-button lesson-qback", "Voltar à lista de questões", "back-to-question-list");
+    toList.addEventListener("click", () => {
+      const item = qList.querySelector(`[data-qid="${CSS.escape(q.id)}"]`);
+      item?.scrollIntoView({ block: "nearest" });
+      item?.focus();
+    });
+
     const titleRow = document.createElement("div");
     titleRow.className = "lesson-qtitle";
     titleRow.append(createTextElement("h3", "lesson-qheading", `Questão ${index + 1}`));
@@ -371,7 +380,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       run(async () => ({ ...(await deps.deleteQuestion(draft.id, q.id)), keepId: next }), "Questão excluída.");
     });
 
-    qEditor.append(titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions, message, findingsBlock);
+    qEditor.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions, message, findingsBlock);
   }
 
   function renderFindingList(findings, heading) {

@@ -4529,8 +4529,27 @@ h1 {
   container-type: inline-size;
 }
 
+/* Disclosures inside the editor (source pages, review items) are touch targets too. */
+.lesson-editor summary {
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  padding-block: 0.7rem;
+  cursor: pointer;
+}
+
+/* "Voltar à lista de questões" only makes sense when the list is stacked above the question (the two queries below). */
+.lesson-qback {
+  display: none;
+  margin-top: 0;
+}
+
 /* The Desktop window is often ~800 px wide and the sidebar takes a third of it: judge the room the editor really has. */
 @container (max-width: 640px) {
+  .lesson-qback {
+    display: inline-flex;
+    align-items: center;
+  }
+
   .lesson-questions {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4545,6 +4564,11 @@ h1 {
 }
 
 @media (max-width: 720px) {
+  .lesson-qback {
+    display: inline-flex;
+    align-items: center;
+  }
+
   .lesson-questions {
     grid-template-columns: minmax(0, 1fr);
   }
