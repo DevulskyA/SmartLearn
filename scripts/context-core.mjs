@@ -95,6 +95,7 @@ const HUMAN_TEXT = /decisão humana|decisão de produto|humano avalia|avaliaçã
  * Effective class of every task, derived from tasks.md alone (never stored):
  *   '✓' done · '>' active · '=' split parent · ' ' pending and runnable
  *   'D' human decision (shown [H])  · 'B' blocked by dependency (shown [!]; proceeds by itself when the dependency closes)
+ *   'P' deferred by priority (status line says ADIADA): pending, visible in the roadmap, never offered as next nor counted as safe work
  */
 export function classifyTasks(blocks) {
   const byId = new Map(blocks.map((b) => [b.id, b]));
@@ -106,7 +107,8 @@ export function classifyTasks(blocks) {
       const own = /HG-\d+/.test(b.statusLine);
       eff.set(b.id, own || !b.deps.some(open) || HUMAN_TEXT.test(`${b.heading}\n${b.body}`) ? 'D' : 'B');
     } else if (b.status === '!') eff.set(b.id, 'B');
-    else eff.set(b.id, b.hgDeps?.length ? 'B' : ' ');
+    // an explicit ADIADA (deferred by priority, e.g. USE-FIRST) in the status line keeps a runnable task out of 'safe work remaining'
+    else eff.set(b.id, /ADIADA/.test(b.statusLine) ? 'P' : b.hgDeps?.length ? 'B' : ' ');
   }
   // a pending task whose open dependency is itself a decision or blocked cannot run: blocked by dependency (to a fixpoint)
   for (let changed = true; changed;) {

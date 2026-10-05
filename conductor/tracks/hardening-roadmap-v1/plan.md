@@ -12,7 +12,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: nenhuma · PRÓXIMA: T-F4-02 · TAREFAS: 51/71 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 4 · DECISÕES HUMANAS: 15
+ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 51/71 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 4 · DECISÕES HUMANAS: 15
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Roadmap progressivo: AGORA = o resultado ativo com a árvore completa; PRÓXIMO = SÓ o próximo resultado pronto (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e a próxima; o progresso global é só de tarefas.
 
@@ -22,8 +22,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## PRÓXIMO
 
-### T-F4-02 — SEM SUBTAREFAS (não pronta) — Hierarquia da Revisão e ruído de achados
-  Por quê: S5b · dependências concluídas: T-F2-03
+- (nenhuma tarefa pronta pela ordem de PROGRAM.md)
 
 ## ROADMAP
 
@@ -98,9 +97,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [!] **T-F10-06** — UI: idioma da interface × idioma do conteúdo, estado da unidade e consumo — BLOQUEADA → HG-13
 
-### [ ] S5b · Hierarquia da Revisão — tarefas 0/1
+### [!] S5b · Hierarquia da Revisão — tarefas 0/1
 
-- [ ] **T-F4-02** — Hierarquia da Revisão e ruído de achados
+- [undefined] **T-F4-02** — Hierarquia da Revisão e ruído de achados
 
 ### [✓] S6A · Confiança: discriminação e cobertura — tarefas 2/2
 

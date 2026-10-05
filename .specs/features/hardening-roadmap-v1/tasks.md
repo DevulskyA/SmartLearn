@@ -338,7 +338,7 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Gate: arquivo do roteiro revisado; resultado registrado.
 
 ### T-F4-02 — Hierarquia da Revisão e ruído de achados · M
-- Status: `[ ]` · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03 (`[✓]`)
+- Status: `[ ]` ADIADA (P2, 2026-10-05: o dogfood decide se a Revisão está barulhenta; não bloqueia o uso real) · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03 (`[✓]`)
 - Fazer: ordenar por severidade, colapsar BAIXA, mostrar contagem por tipo no topo, "Sinalizada" só para severidade ≥ MÉDIA; texto explica o que olhar.
 - RED (e2e com fixture de 67 achados): primeiros itens são os mais severos; a tela inicial não excede N linhas visíveis sem rolagem.
 - Gate: `lesson-view-model.test.js` ampliado + e2e.

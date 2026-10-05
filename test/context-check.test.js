@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { CANONICAL, checkContext, gitIo, contextReport, preservationProblems } from '../scripts/context-check.mjs';
-import { resumeCockpit, taskBlocks, programOrder, boundaryCut } from '../scripts/context-core.mjs';
+import { resumeCockpit, taskBlocks, programOrder, boundaryCut, classifyTasks, safeWorkRemaining } from '../scripts/context-core.mjs';
 import { renderPlanFile } from '../scripts/plan-sync.mjs';
 
 // PERSISTENCE GATE + COLD-START COCKPIT. After /clear a new session must find position, active task, next command and blockers
@@ -349,4 +349,13 @@ test('an idle program with a stray active row in the plan is refused', () => {
   const r = run(files);
   assert.equal(r.ok, false);
   assert.ok(r.problems.some((p) => /NO active (phase|task row)/.test(p)), JSON.stringify(r.problems));
+});
+
+// a runnable task explicitly deferred by priority (ADIADA) is visible but is neither the next task nor "safe work remaining"
+test('ADIADA keeps a pending runnable task out of safe work, so the program can be idle without starting it', () => {
+  const task = (id, statusLine) => ({ id, status: ' ', statusLine, deps: [], hgDeps: [], heading: id, body: '' });
+  assert.equal(safeWorkRemaining([task('T-X-01', '- Status: `[ ]` · Dependências: nenhuma')]), true);
+  const deferred = [task('T-X-01', '- Status: `[ ]` ADIADA (P2) · Dependências: nenhuma')];
+  assert.equal(classifyTasks(deferred).get('T-X-01'), 'P');
+  assert.equal(safeWorkRemaining(deferred), false);
 });
