@@ -12,38 +12,24 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F6-09 · TAREFAS: 25/70 · SUBTAREFAS DA ATIVA: T-F6-03 5/10 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F6-09 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 26/70 · SUBTAREFAS DA ATIVA: T-F6-09 0/6 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 5/10
-  Resultado atual: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
-  Próximo passo: Ler test-results/t-f6-03/gates-summary.txt
-  Gate: 3 execuções consecutivas sem falha; relatório de tempos
-  - [x] Medir o baseline (534 s, 205 passed, 2 workers)
-  - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
-  - [x] Perfilar o caminho crítico (achado: ~156 de 207 testes repetem um prelúdio de login pela UI de ~3,5 s: goto 0,4 + networkidle 0,9 + registrar 1,2 + entrar 1,0; ≈ 530 s de trabalho de worker)
-  - [x] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)
-  - [x] Full run de confirmação ≤ 460 s (454 s, 205 passed, 0 falhas, 2 workers)
-  - [>] Gate #1 ≤ 480 s  ← EM EXECUÇÃO
-  - [ ] Gate #2 ≤ 480 s
-  - [ ] Gate #3 ≤ 480 s
-  - [ ] Registrar a evidência em `validation.md`
-  - [ ] Fechar T-F6-03
-
-## PRÓXIMO
-
-### T-F6-09 — READY — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
-  Por quê: S3 · dependências concluídas: T-F6-02 · depois de T-F6-03
-  Subtarefas 0/6:
-  - [ ] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
+- T-F6-09 · Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S3 · subtarefas 0/6
+  Objetivo: Existe UMA autoridade de execução do e2e completo; test/test-live.test.js:99 e scripts/test-live-core.mjs expressam o contrato atual em vez de contorná-lo, e tasks.md/validation.md deixam de citar o caminho legado como vigente
+  Próximo passo: Ao começar, grep -n "SUITES" scripts/test-live-core.mjs e ler test/test-live.test.js:90-101
+  Gate: Sensor que fica vermelho quando o runner canônico é substituído por um caminho semanticamente errado; suíte raiz 479/479; e2e continua iniciável pelo caminho governado
+  - [>] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)  ← EM EXECUÇÃO
   - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
   - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
   - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
   - [ ] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
   - [ ] Evidência em `validation.md` e fechar
+
+## PRÓXIMO
 
 ### T-F3-01 — READY — Tabela e máquina de estados de jobs
   Por quê: S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
@@ -63,6 +49,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
   - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
   - [ ] Mostrado na Revisão sem bloquear o aceite
   - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
+
+### T-F4-03 — SEM SUBTAREFAS (não pronta) — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
+  Por quê: S5a · independente de S3 · sem dependência pendente
 
 ## ROADMAP
 
@@ -111,11 +100,11 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F2-05** — Pré-visualização do aceite
 
-### [>] S3 · Verdade do runner — tarefas 1/3
+### [>] S3 · Verdade do runner — tarefas 2/3
 
 - [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo
-- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo
-- [ ] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
+- [x] **T-F6-03** — Partição e tempo-alvo do e2e completo
+- [>] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
 ### [ ] S4 · Jobs observáveis — tarefas 0/5
 

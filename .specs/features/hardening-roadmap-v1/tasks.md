@@ -407,10 +407,9 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Gate: duas execuções paralelas curtas verdes; e2e completo verde.
 
 ### T-F6-03 — Partição e tempo-alvo do e2e completo · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
+- Status: `[✓]` 2026-10-05 · BASE_SHA `fe3398e` · IMPLEMENTATION_SHA `51da2d1` (prelúdio de login por HTTP + UI; gate 3 execuções 453/448/450 s, 0 falhas; evidência em `validation.md`) · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
 - Resultado: medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados (491 s × 490 s), então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers (evidência em `validation.md`, T-F6-03).
-- Próximo passo: ler `test-results/t-f6-03/gates-summary.txt` (3 execuções completas em sequência, geradas por `gates.sh`, 2 workers); com `DONE` e as três ≤ 480 s e 0 falhas, registrar em `validation.md` e fechar. (Histórico da decisão anterior:) DECISÃO de como atingir ≤ 8 min: (a) acelerar os testes mais lentos sem perder cobertura (accessibility axe 5×15 s, select-ui, stats-responsive, lesson-editor), (b) medir 3 workers com atenção ao `0xC0000142`, ou (c) redefinir a meta; depois 3 execuções consecutivas.
-- Comando: `npm run test:e2e` (suíte completa, 2 workers, cronometrar; 3 execuções consecutivas só depois da partição).
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F6-09.
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
 - Subtarefas:
@@ -419,11 +418,11 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
   - [x] Perfilar o caminho crítico (achado: ~156 de 207 testes repetem um prelúdio de login pela UI de ~3,5 s: goto 0,4 + networkidle 0,9 + registrar 1,2 + entrar 1,0; ≈ 530 s de trabalho de worker)
   - [x] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)
   - [x] Full run de confirmação ≤ 460 s (454 s, 205 passed, 0 falhas, 2 workers)
-  - [>] Gate #1 ≤ 480 s
-  - [ ] Gate #2 ≤ 480 s
-  - [ ] Gate #3 ≤ 480 s
-  - [ ] Registrar a evidência em `validation.md`
-  - [ ] Fechar T-F6-03
+  - [x] Gate #1 ≤ 480 s (453 s)
+  - [x] Gate #2 ≤ 480 s (448 s)
+  - [x] Gate #3 ≤ 480 s (450 s)
+  - [x] Registrar a evidência em `validation.md`
+  - [x] Fechar T-F6-03
 - Medição 2026-10-04 @`3608048` em `validation.md` (gate NÃO atingido; a causa da falha do run 2 e a do `0xC0000142` NÃO estão provadas — ver T-F6-08).
 
 ### T-F6-08 — Causa da falha funcional do run 2 do e2e completo · M
@@ -459,11 +458,11 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Comando: `cat test-results/t-f6-08/summary.txt` (RESULTADO FINAL: 10 rodadas, última linha `DONE`); só reexecutar `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` com HIPÓTESE NOVA (grava em `test-results/t-f6-08/`).
 
 ### T-F6-09 — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S
-- Status: `[ ]` · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03
+- Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03
 - Outcome: existe UMA autoridade de execução do e2e completo; `test/test-live.test.js:99` e `scripts/test-live-core.mjs` (`SUITES.e2e`) expressam o contrato atual (portas por execução, workers, saída própria) em vez de contorná-lo, e `tasks.md`/`validation.md` deixam de citar o caminho legado como vigente.
 - Fazer: reconstruir T-F6-02 → `package.json` (`test:e2e` = `node scripts/e2e.mjs`) → `scripts/e2e.mjs` → `scripts/test-live-core.mjs` → comportamento pretendido; decidir por esse contrato, NÃO por deixar o teste verde.
 - Subtarefas:
-  - [ ] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
+  - [>] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
   - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
   - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
   - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
