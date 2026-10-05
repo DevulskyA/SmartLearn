@@ -46,7 +46,12 @@ function clearSessionCookie(reply, isProduction) {
  * /v1 sub-context with applyDomainEnvelope already applied). `isProduction`
  * controls cookie Secure/name per design.md §3.
  */
-export function registerAuthRoutes(app, db, { isProduction = false, policy = resolveSessionPolicy({ isProduction }) } = {}) {
+export function registerAuthRoutes(app, db, {
+  isProduction = false,
+  policy = resolveSessionPolicy({ isProduction }),
+  verifyPasswordFn = verifyPassword,
+  runDecoyHashFn = runDecoyHash,
+} = {}) {
   // Scoped to this call (one per real server process in production, one
   // per test's buildApp() call in tests) rather than module-level — a
   // module singleton here would leak rate-limit state across independently
@@ -137,7 +142,7 @@ export function registerAuthRoutes(app, db, { isProduction = false, policy = res
     if (emailError || passwordError) {
       loginRateLimiter.recordFailure(ipKey);
       loginRateLimiter.recordFailure(accountKey);
-      await runDecoyHash();
+      await runDecoyHashFn();
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
@@ -148,12 +153,12 @@ export function registerAuthRoutes(app, db, { isProduction = false, policy = res
     if (!record) {
       loginRateLimiter.recordFailure(ipKey);
       loginRateLimiter.recordFailure(accountKey);
-      await runDecoyHash();
+      await runDecoyHashFn();
       reply.status(401);
       return { error: { code: 'INVALID_CREDENTIALS' } };
     }
 
-    const valid = await verifyPassword(password, {
+    const valid = await verifyPasswordFn(password, {
       hash: record.password_hash,
       salt: record.password_salt,
       params: record.password_params,
@@ -263,7 +268,7 @@ export function registerAuthRoutes(app, db, { isProduction = false, policy = res
       return { error: { code: 'UNAUTHENTICATED' } };
     }
 
-    const currentValid = await verifyPassword(currentPassword, {
+    const currentValid = await verifyPasswordFn(currentPassword, {
       hash: record.password_hash, salt: record.password_salt, params: record.password_params,
     });
     if (!currentValid) {
