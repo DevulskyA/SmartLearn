@@ -6,35 +6,22 @@
 
 ```
 Track:    hardening-roadmap-v1                 Status: ACTIVE
-MARCO ATUAL: S3 — Verdade do runner
+MARCO ATUAL: S4 — Jobs observáveis
 Iniciado: 2026-10-04
 ```
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-09 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 26/70 · SUBTAREFAS DA ATIVA: T-F6-09 0/6 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F3-01 (S4) · PRÓXIMA: T-F3-02 · TAREFAS: 27/70 · SUBTAREFAS DA ATIVA: T-F3-01 0/7 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F6-09 · Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S3 · subtarefas 0/6
-  Objetivo: Existe UMA autoridade de execução do e2e completo; test/test-live.test.js:99 e scripts/test-live-core.mjs expressam o contrato atual em vez de contorná-lo, e tasks.md/validation.md deixam de citar o caminho legado como vigente
-  Próximo passo: Ao começar, grep -n "SUITES" scripts/test-live-core.mjs e ler test/test-live.test.js:90-101
-  Gate: Sensor que fica vermelho quando o runner canônico é substituído por um caminho semanticamente errado; suíte raiz 479/479; e2e continua iniciável pelo caminho governado
-  - [>] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)  ← EM EXECUÇÃO
-  - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
-  - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
-  - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
-  - [ ] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
-  - [ ] Evidência em `validation.md` e fechar
-
-## PRÓXIMO
-
-### T-F3-01 — READY — Tabela e máquina de estados de jobs
-  Por quê: S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
-  Subtarefas 0/7:
-  - [ ] RED: transições válidas e inválidas da máquina de estados
+- T-F3-01 · Tabela e máquina de estados de jobs · S4 · subtarefas 0/7
+  Próximo passo: Ler server/migrations/manifest.json e 032-generation-budget.sql e escrever o RED da máquina de estados em server/test/generation-jobs.test.js
+  Gate: Testes de migração, unidade, e schema checksum do runner de migrações
+  - [>] RED: transições válidas e inválidas da máquina de estados  ← EM EXECUÇÃO
   - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
   - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
   - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
@@ -42,16 +29,33 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
   - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
   - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
 
+## PRÓXIMO
+
+### T-F3-02 — READY — Execução em segundo plano com limite duro e cancelamento
+  Por quê: S4 · dependências concluídas: T-F1-04 · depois de T-F3-01
+  Subtarefas 0/5:
+  - [ ] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
+  - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
+  - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
+  - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
+  - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
+
 ### T-F3-05 — READY — Explicação obrigatória por validação
-  Por quê: S4 · independente de S3 · sem dependência pendente · passa à frente de T-F3-02, T-F3-03, T-F3-04 (aguardam T-F3-01)
+  Por quê: S4 · sem dependência pendente · passa à frente de T-F3-03, T-F3-04 (aguardam T-F3-02)
   Subtarefas 0/4:
   - [ ] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
   - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
   - [ ] Mostrado na Revisão sem bloquear o aceite
   - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
 
-### T-F4-03 — SEM SUBTAREFAS (não pronta) — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
-  Por quê: S5a · independente de S3 · sem dependência pendente
+### T-F4-03 — READY — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
+  Por quê: S5a · independente de S4 · sem dependência pendente
+  Subtarefas 0/5:
+  - [ ] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
+  - [ ] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no campo
+  - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
+  - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
+  - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
 
 ## ROADMAP
 
@@ -100,15 +104,15 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F2-05** — Pré-visualização do aceite
 
-### [>] S3 · Verdade do runner — tarefas 2/3
+### [✓] S3 · Verdade do runner — tarefas 3/3
 
 - [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo
 - [x] **T-F6-03** — Partição e tempo-alvo do e2e completo
-- [>] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
+- [x] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
-### [ ] S4 · Jobs observáveis — tarefas 0/5
+### [>] S4 · Jobs observáveis — tarefas 0/5
 
-- [ ] **T-F3-01** — Tabela e máquina de estados de jobs
+- [>] **T-F3-01** — Tabela e máquina de estados de jobs
 - [ ] **T-F3-02** — Execução em segundo plano com limite duro e cancelamento
 - [ ] **T-F3-03** — Sinal de vida do provedor e política de "parada"
 - [ ] **T-F3-04** — UI de geração: fase real, sair e voltar

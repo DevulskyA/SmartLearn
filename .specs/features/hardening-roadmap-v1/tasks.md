@@ -237,14 +237,14 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa processo ou rascunho parcial para trás. Sem alterar prompt nem provedor.
 
 ### T-F3-01 — Tabela e máquina de estados de jobs · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
+- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
 - Contrato adicional (decisão 2026-10-04): o job conhece, direta ou por referência coesa, usuário, unidade/`sourceScope` aprovado, `sourceLanguage`, `generationLocale`, estimativa/reserva de consumo, estado/fase e consumo final; um job NUNCA amplia o escopo depois de criado sem nova validação de custo e autorização de domínio (INV-13).
 - Superfície: nova migração aditiva (próxima livre: `033-generation-jobs.sql`; 031 e 032 já usadas por F10), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
 - Segurança de dados: migração aditiva, backup `pre-migrate` (T-F1-02) obrigatório.
 - Subtarefas:
-  - [ ] RED: transições válidas e inválidas da máquina de estados
+  - [>] RED: transições válidas e inválidas da máquina de estados
   - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
   - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
   - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
@@ -252,11 +252,18 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
   - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
   - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
 - Gate: testes de migração (`migrations*.test.js` + novo), unidade, e `schema checksum` do runner de migrações.
+- Próximo passo: ler `server/migrations/manifest.json` e `032-generation-budget.sql` (formato aditivo + checksum) e escrever o RED da máquina de estados em `server/test/generation-jobs.test.js`.
 
 ### T-F3-02 — Execução em segundo plano com limite duro e cancelamento · M
 - Status: `[ ]` · Requisitos: R-04 (AC-04.1, AC-04.4) · Dependências: T-F3-01, T-F1-04
 - Fazer: o job roda fora do ciclo da requisição; limite duro configurável (padrão acima do atual de 20 min para evitar regressão); `POST /generation-jobs/:id/cancel` encerra a árvore de processos do provedor e marca `CANCELLED`; falha/cancelamento não deixam rascunho parcial aceitável.
 - RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho; timeout vira `FAILED(TIMEOUT)`; nenhum rascunho criado em falha.
+- Subtarefas:
+  - [ ] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
+  - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
+  - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
+  - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
+  - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
 - Gate: `ai-drafts.test.js`, `codex-provider.test.js` (inalterado), testes novos; zero chamada real.
 
 ### T-F3-03 — Sinal de vida do provedor e política de "parada" · M
@@ -310,6 +317,12 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 ### T-F4-03 — Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S
 - Status: `[ ]` · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
 - Fazer: mover o bloco para antes da busca quando existir; "Salvar título" mostra "Título salvo" em região `role=status` e mantém foco.
+- Subtarefas:
+  - [ ] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
+  - [ ] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no campo
+  - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
+  - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
+  - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
 - Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso.
 
 ### T-F4-04 — Editor da aula em telas estreitas · M
@@ -458,18 +471,18 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Comando: `cat test-results/t-f6-08/summary.txt` (RESULTADO FINAL: 10 rodadas, última linha `DONE`); só reexecutar `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` com HIPÓTESE NOVA (grava em `test-results/t-f6-08/`).
 
 ### T-F6-09 — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S
-- Status: `[>]` 2026-10-05 · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03
+- Status: `[✓]` 2026-10-05 · BASE_SHA `8385999` · IMPLEMENTATION_SHA `a967f57` (SUITES.e2e = scripts/e2e.mjs; sensor deriva o caminho de package.json; mutação vermelha; raiz 516/516) · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03
 - Outcome: existe UMA autoridade de execução do e2e completo; `test/test-live.test.js:99` e `scripts/test-live-core.mjs` (`SUITES.e2e`) expressam o contrato atual (portas por execução, workers, saída própria) em vez de contorná-lo, e `tasks.md`/`validation.md` deixam de citar o caminho legado como vigente.
 - Fazer: reconstruir T-F6-02 → `package.json` (`test:e2e` = `node scripts/e2e.mjs`) → `scripts/e2e.mjs` → `scripts/test-live-core.mjs` → comportamento pretendido; decidir por esse contrato, NÃO por deixar o teste verde.
 - Subtarefas:
-  - [>] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
-  - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
-  - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
-  - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
-  - [ ] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
-  - [ ] Evidência em `validation.md` e fechar
+  - [x] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
+  - [x] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
+  - [x] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
+  - [x] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
+  - [x] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
+  - [x] Evidência em `validation.md` e fechar
 - Gate: sensor que fica vermelho quando o runner canônico é substituído por um caminho semanticamente errado; suíte raiz 479/479; e2e continua iniciável pelo caminho governado.
-- Próximo passo: ao começar, `grep -n "SUITES" scripts/test-live-core.mjs` e ler `test/test-live.test.js:90-101`.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F3-01.
 - Comando: `node --test "test/test-live.test.js"`
 
 ### T-F6-04 — Comando de discriminação (mutação) repetível · M
