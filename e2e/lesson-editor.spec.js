@@ -359,6 +359,51 @@ test('a legacy draft (no stored scope) still names its document and pages in the
   await expect(panel).toContainText('Páginas da unidade');
 });
 
+test('T-F2-03: a draft audited by older rules says so on open (nothing written); "Reauditar" updates only the audit and reports what changed', async ({ page }) => {
+  await openLesson(page, 'regras.pdf');
+  await page.locator('[data-action="lesson-back"]').click();
+  const db = new Database(dbPath);
+  let before;
+  try {
+    for (const row of db.prepare('SELECT id, draft_json FROM generated_drafts').all()) {
+      const content = JSON.parse(row.draft_json);
+      if (content.audit) {
+        delete content.audit.rulesVersion;
+        delete content.audit.auditedAt;
+        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+      }
+      db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), row.id);
+    }
+    before = db.prepare('SELECT id, draft_json, revision FROM generated_drafts ORDER BY id DESC LIMIT 1').get();
+  } finally { db.close(); }
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="materials"]').click();
+  await page.locator('#sources-existing-list .source-existing-item', { hasText: 'regras.pdf' }).locator('[data-action="open-source"]').click();
+  await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
+  const editor = page.locator('.lesson-editor');
+  await expect(editor).toBeVisible({ timeout: 10000 });
+  await editor.getByRole('tab', { name: /Revisão/ }).click();
+  const review = editor.locator('[data-panel="review"]');
+  await expect(review).toContainText('Auditoria com regras antigas');
+  const reread = new Database(dbPath, { readonly: true });
+  try { expect(reread.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(before.id).draft_json).toBe(before.draft_json); } finally { reread.close(); }
+  await review.getByRole('button', { name: 'Reauditar' }).click();
+  await expect(review.locator('.lesson-message')).toContainText('Auditoria atualizada com as regras atuais', { timeout: 10000 });
+  await expect(review.locator('.lesson-message')).toContainText('1 ponto removido');
+  await expect(review.getByRole('button', { name: 'Reauditar' })).toHaveCount(0);
+  await expect(review.locator('.lesson-message')).toBeFocused();
+  const check = new Database(dbPath, { readonly: true });
+  try {
+    const after = check.prepare('SELECT draft_json, revision FROM generated_drafts WHERE id = ?').get(before.id);
+    const { audit: _a, ...restBefore } = JSON.parse(before.draft_json);
+    const { audit, ...restAfter } = JSON.parse(after.draft_json);
+    expect(restAfter).toEqual(restBefore);
+    expect(after.revision).toBe(before.revision);
+    expect(audit.rulesVersion).toBeTruthy();
+  } finally { check.close(); }
+});
+
 test('at a typical Desktop window width (800 px, sidebar included) the question editor stacks under the list and stays comfortable', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 650 });
   await openLesson(page, 'janela.pdf');

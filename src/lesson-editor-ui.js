@@ -165,6 +165,29 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const sourcePanel = panels.get("source");
   // ---- REVIEW panel ----------------------------------------------------------------------------------------------------
   const reviewPanel = panels.get("review");
+  // one live region for the whole life of the editor (the panel is redrawn after a re-audit; this node is re-attached, never recreated)
+  const reauditMessage = statusMessage();
+  reauditMessage.tabIndex = -1;
+  reviewPanel.addEventListener("click", async (event) => {
+    const trigger = event.target.closest?.('[data-action="reaudit"]');
+    if (!trigger || !deps.reauditDraft) return;
+    trigger.disabled = true;
+    setMessage(reauditMessage, "Reauditando…");
+    const result = await deps.reauditDraft(draft.id);
+    if (!result.ok) {
+      setMessage(reauditMessage, result.message || "Não foi possível reauditar.", true);
+      trigger.disabled = false;
+      trigger.focus({ preventScroll: true });
+      return;
+    }
+    applyDraft(result.draft, { keepSelection: selectedId });
+    const { added, removed, after } = result.reaudit;
+    const changed = added + removed;
+    setMessage(reauditMessage, changed === 0
+      ? `Auditoria atualizada com as regras atuais: nenhum ponto mudou (${after} ${after === 1 ? "ponto" : "pontos"}).`
+      : `Auditoria atualizada com as regras atuais: ${added} ${added === 1 ? "ponto novo" : "pontos novos"}, ${removed} ${removed === 1 ? "ponto removido" : "pontos removidos"}. Agora ${after} ${after === 1 ? "ponto" : "pontos"}.`);
+    reauditMessage.focus({ preventScroll: true });
+  });
 
   // ---- ACCEPT footer ---------------------------------------------------------------------------------------------------
   const footer = document.createElement("section");
@@ -465,6 +488,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     reviewPanel.replaceChildren();
     const overview = reviewOverview(draft);
     const groups = groupFindings(draft);
+    // T-F2-03: opening never recalculates; an audit written by older rules is only SAID to be old, and re-running it is an explicit action.
+    if (draft.auditStale && !accepted && deps.reauditDraft) {
+      const stale = document.createElement("div");
+      stale.className = "lesson-audit-stale";
+      stale.append(createTextElement("p", "lesson-hint", "Auditoria com regras antigas. Os pontos abaixo foram calculados antes da última atualização das regras. Reauditar confere de novo só com as regras atuais (sem usar IA) e não altera o resumo nem as questões."));
+      stale.append(button("secondary-button lesson-reaudit", "Reauditar", "reaudit"));
+      reviewPanel.append(stale);
+    }
+    reviewPanel.append(reauditMessage);
     reviewPanel.append(createTextElement("p", "lesson-hint", "A conferência automática é um filtro que mostra onde olhar. Ausência de pontos não é validação médica: confira a fonte."));
     if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", "O rascunho foi corrigido automaticamente uma vez antes de chegar aqui."));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");

@@ -101,6 +101,17 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     };
   });
 
+  // T-F2-03: explicit re-audit with the CURRENT deterministic rules (no model call). Opening a draft never does this.
+  app.post('/drafts/:id/reaudit', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return drafts.reauditDraft(db, request.actor.userId, id);
+    } catch (err) { return handleError(err, reply); }
+  });
+
   // Granular edits: each touches ONE entity of the lesson (the summary, or one question by its stable id).
   app.patch('/drafts/:id/summary', {
     schema: {

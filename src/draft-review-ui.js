@@ -42,6 +42,14 @@ export async function reviseSummary(draftId, { summary, expectedVersion }) {
   } catch (err) { return fail(err); }
 }
 
+/** Explicit re-audit with the current deterministic rules (no model call). Changes only the audit; `reaudit` says how many findings changed. */
+export async function reauditDraft(draftId) {
+  try {
+    const { draft, reaudit } = await apiRequest(`/v1/drafts/${draftId}/reaudit`, { method: 'POST', body: {} });
+    return { ok: true, draft, reaudit };
+  } catch (err) { return fail(err); }
+}
+
 /** Saves ONE question by its stable id (text, citation and/or review status); nothing else in the lesson changes. */
 export async function reviseQuestion(draftId, questionId, patch) {
   try {

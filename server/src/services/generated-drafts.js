@@ -17,7 +17,7 @@ import {
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
-import { auditDraft, AUDIT_RESULT } from '../ai/draft-audit.js';
+import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION } from '../ai/draft-audit.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -308,6 +308,8 @@ function toDraftDto(row, { db, userId } = {}) {
     acceptedAt: row.accepted_at ?? null,
     acceptedUnitId: row.accepted_unit_id ?? null,
     ...draft,
+    // T-F2-03: a COMPARISON only (opening never recalculates nor writes); an audit stored without a version is older than any version.
+    auditStale: Boolean(audit) && audit.rulesVersion !== AUDIT_RULES_VERSION,
     sourceStale: db ? isDraftStale(db, userId, row) : false,
     sourceUnit: db ? sourceUnitFor(db, userId, row.proposal_id) : null,
     pages: db ? citedPagesFor(db, userId, row, draft) : [],
@@ -502,7 +504,7 @@ export async function createDraft(db, userId, proposalId, {
     summarySourceSpans: validated.summarySourceSpans,
     questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
     quarantinedCount: validated.quarantinedCount,
-    audit: audited.audit,
+    audit: { ...audited.audit, rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
     sourceLanguage,
     generationLocale,
     languageCheck: languageCheck.status,
@@ -662,6 +664,8 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     repairRejected: false,
     addressed: [],
     editedByHuman: true,
+    rulesVersion: AUDIT_RULES_VERSION,
+    auditedAt: now().toISOString(),
   };
   const content = normalizeContent({
     ...current,
@@ -782,6 +786,39 @@ export function reorderQuestions(db, userId, draftId, order, { expectedRevision 
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,
     questions: order.map((id) => byId.get(id)), summaryVersion: current.summaryVersion,
   }, now);
+}
+
+const findingKey = (f) => `${f.issue}|${f.scope}|${f.generatedClaim ?? ''}`;
+
+/**
+ * T-F2-03: the explicit "Reauditar". Deterministic rules only (no model, no network). Writes ONLY `audit` (new findings, rulesVersion,
+ * auditedAt) in the draft JSON: summary, questions, their versions and the draft revision are untouched. Findings an earlier MODEL audit
+ * raised about this very text are kept (they are not the deterministic rules' to judge); after a human edit they were already dropped.
+ * Returns the draft and how many deterministic findings appeared/disappeared.
+ */
+export function reauditDraft(db, userId, draftId, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  const previous = current.audit ?? null;
+  const rescreen = auditDraft({ summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions }, { segments: found.segments });
+  const deterministic = withSource(rescreen.findings, 'DETERMINISTIC');
+  const keptModel = previous && !previous.editedByHuman ? (previous.findings ?? []).filter((f) => f.source === 'MODEL') : [];
+  const findings = [...deterministic, ...keptModel];
+  const before = new Map((previous?.findings ?? []).filter((f) => f.source !== 'MODEL').map((f) => [findingKey(f), f]));
+  const after = new Map(deterministic.map((f) => [findingKey(f), f]));
+  const added = [...after.keys()].filter((k) => !before.has(k)).length;
+  const removed = [...before.keys()].filter((k) => !after.has(k)).length;
+  const audit = {
+    ...(previous ?? {}),
+    result: findings.some(isBlocking) ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS,
+    findings,
+    auditedBy: previous?.auditedBy ?? ['DETERMINISTIC'],
+    rulesVersion: AUDIT_RULES_VERSION,
+    auditedAt: now().toISOString(),
+  };
+  const content = { ...JSON.parse(draftRow.draft_json), audit };
+  db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE user_id = ? AND id = ?').run(JSON.stringify(content), userId, draftId);
+  const draft = toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+  return { draft, reaudit: { added, removed, unchanged: after.size - added, before: before.size, after: after.size } };
 }
 
 export function getDraft(db, userId, draftId) {

@@ -108,6 +108,7 @@ async function openEditor(draft, title) {
       deleteQuestion: DraftReviewUI.deleteQuestion,
       acceptDraft: DraftReviewUI.acceptDraft,
       previewAcceptance: DraftReviewUI.previewAcceptance,
+      reauditDraft: DraftReviewUI.reauditDraft,
       getDraft: DraftReviewUI.getDraft,
       onBack: showBrowse,
       startStudyNow: (unit, subjectName) => deps.startStudyNow(unit, subjectName),
