@@ -1476,8 +1476,13 @@ async function loadReinforcementByUnit() {
 // Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
 let pendingPlanFocusUnitId = null;
 
+// Plano can be refreshed from several independent actions (navigation, exam finalization,
+// study completion, subject edits). Only the newest async render may publish DOM.
+let planRenderSeq = 0;
+
 export async function renderPlan() {
   if (!planList) return;
+  const renderId = ++planRenderSeq;
   const today = getLocalDateValue();
   const [learningUnits, subjects, allTasks, allEvidence, reinforcementByUnit] = await Promise.all([
     DB.learningUnits.getAll(),
@@ -1486,6 +1491,7 @@ export async function renderPlan() {
     DB.learningEvidence.getAll(),
     loadReinforcementByUnit(),
   ]);
+  if (renderId !== planRenderSeq) return;
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
   const evidenceByUnitId = new Map();
   for (const ev of allEvidence) {
@@ -1505,6 +1511,7 @@ export async function renderPlan() {
       }
     }),
   );
+  if (renderId !== planRenderSeq) return;
 
   // Populate subject dropdowns (filter + new-unit form)
   const activeSubjects = subjects.filter((s) => s.isActive);
@@ -4366,6 +4373,10 @@ export function showScreen(screenId, { focus = false } = {}) {
     renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
   }
   if (nextScreen === "plan" && databaseAvailable) {
+    // Never leave an interactive stale Plano on screen while its authoritative refresh
+    // is in flight. A fast click on an old row could otherwise expand stale closures
+    // just before the fresh render replaced that row (CI EXAM-4 regression).
+    planList?.replaceChildren();
     renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
   }
   if (nextScreen === "tracking" && databaseAvailable) {
