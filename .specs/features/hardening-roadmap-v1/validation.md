@@ -569,3 +569,14 @@ test/persistence-adapter-contract.test.js (47 tests). No production code changed
 
 ### T-F8-05 — correção de status (2026-10-05)
 - A tarefa NÃO está concluída: o Fazer cita `npm audit`/`cargo audit`; só o primeiro foi executado. O Fazer diz "conforme gates já existentes (P2-3)" e o P2-3 omitiu deliberadamente o `cargo audit`, mas isso descreve o CI, não dispensa a auditoria Rust que a tarefa pede; fechar como DONE foi um erro do registro anterior. Status corrigido para `[H]`: instalar `cargo-audit` exige download (crates.io) e consulta de rede ao advisory-db, o que depende de autorização do usuário.
+
+### T-F7-03 — Decisão sobre FSRS baseada em dados (2026-10-05): PARTIAL
+- Relatório: `.specs/features/hardening-roadmap-v1/reports/T-F7-03-fsrs-data-report.md` (PARCIAL: método, fórmulas determinísticas do agendador, plano de medição; ZERO número empírico).
+- Snapshot usado: NENHUM. `C:\Users\Ariel\SmartLearn-DevData\snapshots` tem só `2026-09-19` e `2026-10-03`, ambas cópias cruas `db+shm+wal` sem `manifest.json` (não feitas por `dev-snapshot.js`/`VACUUM INTO`, integridade não verificável por `isValidSnapshot`); a regra do pedido permitia apenas snapshot feito pelo produto, e gerar outro abriria o banco humano (proibido).
+- Banco humano: sha256 de `smartlearn-dev.db`, `-shm`, `-wal` calculado antes e depois (arquivos lidos como bytes, nunca abertos como banco): IGUAIS. Bytes inalterados (db `fc55488e...`, shm `30c09d0f...`, wal `b3ccf6be...`).
+- Tarefa NÃO concluída: permanece `[H]`; critério de fechamento = relatório com números reais.
+- DECISÃO (do usuário, não é estado de tarefa): adotar / adiar / parâmetros de FSRS. Provisório sem dados: ADIAR. Para destravar: autorizar snapshot verificado gerado pelo produto (ou abrir o app para o snapshot diário) e rodar o plano de medição.
+
+### T-F5-01 — Desenho do Prompt Lab (2026-10-05): RASCUNHOS (tarefa permanece `[H]`)
+- Rascunhos em `.specs/features/prompt-lab/`: `design-spec.md`, `rubric.md`, `dataset.md`, `budget.md`. O `spec.md` existente (harness/baseline v1, congelado) NÃO foi alterado; `design-spec.md` é o desenho de T-F5-01 (nome diferente para não sobrescrever). Nada executado; nenhuma chamada a Codex/modelo.
+- Aguardando o usuário: HG-06 (avaliador, 1 unidade/rodada, faixas de volume), HG-07 (todos os números de `budget.md` são PROPOSED), HG-08 (diretório externo e unidade(s) em `dataset.md`; sem pedir outro PDF).

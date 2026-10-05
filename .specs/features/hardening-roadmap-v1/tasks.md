@@ -412,7 +412,7 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Codex, só com HG-07 e por rodada autorizada. Resultado NÃO é conectado ao produto automaticamente.
 
 ### T-F5-01 — Desenho do Prompt Lab (spec e rubrica) · M
-- Status: `[H]` · Requisitos: R-05 (AC-05.1) · Dependências: HG-06, HG-07, HG-08
+- Status: `[H]` · rascunhos prontos em `.specs/features/prompt-lab/` aguardando aprovação de HG-06/07/08 (`design-spec.md`, `rubric.md`, `dataset.md`, `budget.md`; números PROPOSED) · Requisitos: R-05 (AC-05.1) · Dependências: HG-06, HG-07, HG-08
 - Entregáveis em `.specs/features/prompt-lab/`: `spec.md` (objetivo, escopo, fora de escopo), `rubric.md` (critérios: erro clínico crítico, fato sem suporte, qualificador perdido, explicação circular, dica que entrega resposta, cópia literal, volume, cobertura, idioma), `dataset.md` (unidades reais referenciadas por caminho externo, nunca no repositório), `budget.md` (teto de chamadas e tempo).
 - Regras: avaliação cega entre variantes; mesma unidade e mesma entrada em todas as variantes; sementes e versões registradas; saídas guardadas fora do repositório; nenhum acoplamento ao produto.
 
@@ -587,7 +587,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Fazer: primeira abertura sem dados orienta o primeiro passo (disciplina → fonte → rascunho); testes e2e com banco vazio; fixture DEV nunca semeia produção.
 
 ### T-F7-03 — Decisão sobre FSRS baseada em dados · M
-- Status: `[H]` · Requisitos: R-11 (AC-11.3), DEBT-003 · Dependências: uso real acumulado
+- Status: `[H]` · relatório PARCIAL em `reports/T-F7-03-fsrs-data-report.md` (sem snapshot feito pelo produto com manifesto: medições NÃO feitas; ver validation.md) · Requisitos: R-11 (AC-11.3), DEBT-003 · Dependências: uso real acumulado
 - Fazer: relatório (somente leitura) com carga diária projetada, taxa de atraso e acertos por intervalo a partir do banco DEV/real; recomendação "implementar / adiar / parâmetros". Sem código de algoritmo nesta tarefa.
 
 ### Checkpoint F7
