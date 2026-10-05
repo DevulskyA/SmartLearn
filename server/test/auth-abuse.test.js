@@ -8,7 +8,7 @@ import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { buildApp } from '../src/app.js';
 import { createRateLimiter } from '../src/auth/rate-limit.js';
-import { hashPassword } from '../src/auth/passwords.js';
+import { hashPassword, verifyPassword } from '../src/auth/passwords.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const TEST_ORIGIN = 'https://smartlearn.test';
@@ -114,29 +114,28 @@ test('T12: no unbounded expensive work — concurrent login storm settles withou
 
 test('SECURITY FIX (found by independent verifier): malformed email cannot bypass the rate limiter to force unbounded real/decoy scrypt work', async () => {
   const { db, cleanup } = tmpDb();
+  let decoyCalls = 0;
   try {
-    const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], trustProxy: false });
+    const app = await buildApp(db, MIGRATIONS_DIR, {
+      isProduction: false,
+      allowedOrigins: [TEST_ORIGIN],
+      trustProxy: false,
+      auth: {
+        runDecoyHashFn: async () => { decoyCalls += 1; },
+      },
+    });
     try {
-      // A malformed email (fails validateEmailShape) previously reached
-      // runDecoyHash() — a real scrypt call — BEFORE any rate-limit check.
-      // After the fix, the same malformed-email key is rate-limited exactly
-      // like a valid one: once blocked, requests must return quickly
-      // (no scrypt attempted), not just eventually 401 after paying the cost.
       const email = 'not-a-valid-email-shape';
-      const timings = [];
       for (let i = 0; i < 15; i++) {
-        const start = Date.now();
         const res = await app.inject({
           method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN },
           payload: { email, password: 'whatever' },
         });
-        timings.push(Date.now() - start);
         assert.equal(res.statusCode, 401);
       }
-      // DEFAULT_ACCOUNT_MAX_ATTEMPTS is 10 — by request 15, the account key
-      // must be blocked, meaning this request never reached runDecoyHash().
-      const lastTiming = timings[timings.length - 1];
-      assert.ok(lastTiming < 100, `expected the rate-limited (post-block) request to be fast (no scrypt), got ${lastTiming}ms`);
+      // Exactly the first 10 attempts may reach the expensive decoy path.
+      // Requests 11..15 must be rejected by the account limiter before it.
+      assert.equal(decoyCalls, 10, 'rate-limited malformed-email requests must not invoke the expensive decoy hash');
     } finally { await app.close(); }
   } finally { cleanup(); }
 });
@@ -174,8 +173,19 @@ test('SECURITY FIX: the shared scrypt queue itself has a hard size cap independe
 
 test('SECURITY FIX round 2 (found by second independent verifier): /auth/password is rate-limited per user, wrong-password floods do not reach unbounded scrypt', async () => {
   const { db, cleanup } = tmpDb();
+  let verifyCalls = 0;
   try {
-    const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], trustProxy: false });
+    const app = await buildApp(db, MIGRATIONS_DIR, {
+      isProduction: false,
+      allowedOrigins: [TEST_ORIGIN],
+      trustProxy: false,
+      auth: {
+        verifyPasswordFn: async (...args) => {
+          verifyCalls += 1;
+          return verifyPassword(...args);
+        },
+      },
+    });
     try {
       const email = 'passwordflood@example.com';
       const password = 'a genuinely long real password 1';
@@ -185,36 +195,20 @@ test('SECURITY FIX round 2 (found by second independent verifier): /auth/passwor
       const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
       const csrfToken = JSON.parse(me.body).csrfToken;
 
-      const timings = [];
+      // Ignore the one verifyPassword call required for the successful login.
+      verifyCalls = 0;
       for (let i = 0; i < 13; i++) {
-        const start = Date.now();
         const res = await app.inject({
           method: 'POST', url: '/v1/auth/password', headers: { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken },
           payload: { currentPassword: 'wrong wrong wrong wrong', newPassword: 'irrelevant long password here' },
         });
-        timings.push(Date.now() - start);
         assert.equal(res.statusCode, 401);
       }
-      // DEFAULT_PASSWORD_CHANGE_MAX_ATTEMPTS is 10, so requests 0..9 pay a
-      // real verifyPassword/scrypt cost and requests 10..12 must be blocked
-      // by the rate limiter BEFORE reaching verifyPassword — those must be
-      // dramatically cheaper than a real scrypt call.
-      //
-      // A fixed absolute millisecond ceiling here is inherently flaky on
-      // shared/loaded CI runners (scrypt itself can take anywhere from
-      // ~150ms to 700+ms depending on machine load — see the timings
-      // logged by the password-hashing tests elsewhere in this suite).
-      // Instead, compare the blocked requests against the real scrypt cost
-      // measured in THIS run, so the assertion self-calibrates to whatever
-      // machine is executing it.
-      const unblockedTimings = timings.slice(0, 10);
-      const blockedTimings = timings.slice(10);
-      const avgUnblocked = unblockedTimings.reduce((a, b) => a + b, 0) / unblockedTimings.length;
-      const maxBlocked = Math.max(...blockedTimings);
-      assert.ok(
-        maxBlocked < avgUnblocked / 2,
-        `expected rate-limited requests (no scrypt) to be well under half the real scrypt cost measured in this run — avg unblocked ${avgUnblocked}ms, slowest blocked ${maxBlocked}ms (all blocked: ${blockedTimings.join(', ')}ms)`,
-      );
+
+      // The first 10 wrong-password attempts may verify; requests 11..13
+      // must be blocked before verifyPassword. This directly proves the
+      // security property and does not depend on wall-clock timing.
+      assert.equal(verifyCalls, 10, 'rate-limited password-change requests must not invoke verifyPassword');
     } finally { await app.close(); }
   } finally { cleanup(); }
 });
