@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { CANONICAL, checkContext, gitIo } from '../scripts/context-check.mjs';
 import { resumeCockpit, taskBlocks, programOrder } from '../scripts/context-core.mjs';
+import { renderPlanRegion } from '../scripts/plan-sync.mjs';
 
 // PERSISTENCE GATE + COLD-START COCKPIT. After /clear a new session must find position, active task, next command and blockers
 // from TRACKED files only, in a few dozen lines, and the structural gate must refuse every way that memory could leak out of Git.
@@ -11,7 +12,7 @@ const FEATURE = '.specs/features/hardening-roadmap-v1';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 function fixture() {
-  return {
+  const files = {
     'CLAUDE.md': '# rules\n',
     '.specs/EXECUTION.md': '# map\nHANDOFF.md nunca é autoridade.\n1. `npm run context:resume`\n2. `.specs/ARTIFACTS.md` e `.specs/STATE.md`\n',
     '.specs/STATE.md': 'CURRENT_PHASE=S1\nACTIVE_TASK=ver context:resume\nLAST_PROVEN_MILESTONE=S0\nNEXT_MILESTONE=S2\nCRITICAL_BLOCKER=none\n',
@@ -28,9 +29,12 @@ function fixture() {
     [`${FEATURE}/spec.md`]: '### R-01 — Req\n\n| ID | Decisão |\n| HG-01 | Humano decide |\n| F-01 | achado |\n',
     [`${FEATURE}/validation.md`]: '# Validation\n\n### T-F1-01 — Foundation: PASS\n- proved\n',
     [`${FEATURE}/uat-visual.md`]: '# uat\n',
-    'conductor/tracks/hardening-roadmap-v1/plan.md': 'MARCO ATUAL: S1\nATIVA AGORA: HR-1 (T-F1-02)\n\n- [>] **HR-1 x**\n- [ ] **HR-2 y**\n',
     'conductor/tracks.md': '# tracks\n',
   };
+  // the plan is GENERATED from tasks.md (scripts/plan-sync.mjs), exactly as in the repository
+  const inputs = { tasksText: files[`${FEATURE}/tasks.md`], programText: files[`${FEATURE}/PROGRAM.md`], specText: files[`${FEATURE}/spec.md`] };
+  files['conductor/tracks/hardening-roadmap-v1/plan.md'] = `MARCO ATUAL: S1\n\n${renderPlanRegion(inputs)}\n`;
+  return files;
 }
 
 function ioOf(files, { untracked = [], ignored = [] } = {}) {
@@ -108,7 +112,10 @@ test('every way memory can leak out of Git fails the gate', () => {
   must('unknown requirement', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace('Requisitos: R-01 · Dependências: nenhuma', 'Requisitos: R-77 · Dependências: nenhuma'); }), {}, /unknown requirement R-77/);
   must('done without an implementation sha', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace('IMPLEMENTATION_SHA `bbb2222` ', ''); }), {}, /done without IMPLEMENTATION_SHA/);
   must('done without evidence', mutate((f) => { f[`${FEATURE}/validation.md`] = '# Validation\n'; }), {}, /no section "### T-F1-01"/);
-  must('plan does not name the active task', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = f['conductor/tracks/hardening-roadmap-v1/plan.md'].replace('(T-F1-02)', '(T-F9-99)'); }), {}, /does not name the active task T-F1-02/);
+  must('plan does not name the active task', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = f['conductor/tracks/hardening-roadmap-v1/plan.md'].replace('ATIVA AGORA: T-F1-02', 'ATIVA AGORA: T-F9-99'); }), {}, /does not name the active task T-F1-02/);
+  must('plan checkbox hand-edited away from tasks.md', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = f['conductor/tracks/hardening-roadmap-v1/plan.md'].replace('- [x] **T-F1-01**', '- [ ] **T-F1-01**'); }), {}, /plan diverges from tasks\.md/);
+  must('tasks.md status changed without syncing the plan', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace('### T-F1-03 — Follow-up · S\n- Status: `[ ]`', '### T-F1-03 — Follow-up · S\n- Status: `[!]`'); }), {}, /plan diverges from tasks\.md/);
+  must('plan lost its generated region', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = 'MARCO ATUAL: S1\n'; }), {}, /plan diverges from tasks\.md: plan\.md has no PLAN/);
   must('external path with no manifest entry', mutate((f) => { f[`${FEATURE}/validation.md`] += '\nUses E:/Secret/place/data.db\n'; }), {}, /external path without an ARTIFACTS\.md entry: E:\/Secret/);
   must('manifest entry missing a field', mutate((f) => { f['.specs/ARTIFACTS.md'] = f['.specs/ARTIFACTS.md'].replace('- SHA256: abc\n', ''); }), {}, /ARTIFACTS A-01: missing field SHA256/);
   must('resume map does not disown the handoff', mutate((f) => { f['.specs/EXECUTION.md'] = f['.specs/EXECUTION.md'].replace('nunca é autoridade', 'é a posição'); }), {}, /never authority/);

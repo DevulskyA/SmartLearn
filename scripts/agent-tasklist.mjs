@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
 import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs } from './test-live-core.mjs';
-import { resumeCockpit } from './context-core.mjs';
+import { resumeCockpit, FILES } from './context-core.mjs';
+import { syncPlanFile } from './plan-sync.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -114,6 +115,8 @@ function regenerate(root, coordDir) {
   const tracksMd = readFileSync(join(root, 'conductor', 'tracks.md'), 'utf8');
   const rel = (tracksMd.match(/conductor\/tracks\/([\w-]+)\/plan\.md/) ?? [])[1];
   const planPath = arg('--plan', rel ? join(root, 'conductor', 'tracks', rel, 'plan.md') : null);
+  // plan.md is the executable VIEW of tasks.md: refresh its generated region first so the panel can never show a stale plan
+  if (!arg('--plan', null) && rel === 'hardening-roadmap-v1') syncPlanFile(root);
   const plan = parsePlan(readFileSync(planPath, 'utf8'));
   if (plan.skipped.length) console.error(`[agent-tasklist] ERRO: tarefa(s) fora do padrão de id NÃO aparecem no painel: ${plan.skipped.join(', ')} (use LETRAS-NÚMERO, ex.: ACCESS-1)`);
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
@@ -162,7 +165,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes('--watch')) {
     const tracksMd = readFileSync(join(root, 'conductor', 'tracks.md'), 'utf8');
     const rel = (tracksMd.match(/conductor\/tracks\/([\w-]+)\/plan\.md/) ?? [])[1];
-    const targets = [join(root, 'conductor', 'tracks', rel ?? '', 'plan.md'), join(coordDir, 'GUI.md'), join(coordDir, 'CLI.md')].filter(existsSync);
+    const targets = [join(root, 'conductor', 'tracks', rel ?? '', 'plan.md'), join(root, FILES.tasks), join(coordDir, 'GUI.md'), join(coordDir, 'CLI.md')].filter(existsSync);
     let timer = null;
     for (const file of targets) {
       watch(file, () => {

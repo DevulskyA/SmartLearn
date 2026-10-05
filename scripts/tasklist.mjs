@@ -49,11 +49,14 @@ export function parsePlan(markdown) {
   const skipped = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
+    // generated plan (scripts/plan-sync.mjs): one panel item per PHASE heading "### [state] HR-n · title"
+    const ph = lines[i].match(/^### \[(✓|>| |!)\] (HR-\w+) · (.+)$/);
+    if (ph) { tasks.push({ state: ph[1], id: ph[2], title: ph[3].trim(), detail: '', fields: {}, free: '', owner: null }); continue; }
     const m = lines[i].match(/^- \[(✓|>| |!|-)\] \*\*([A-Z]+(?:-\d+)?)\s+(.+?)\*\*\s*(?:—\s*(.*))?$/);
     if (!m) {
       // a task-shaped line the id pattern rejected (e.g. "A11Y-1", "LARGE-PDF-1") would silently vanish from the board
       const bad = lines[i].match(/^- \[(?:✓|>| |!|-)\] \*\*(\S+)/);
-      if (bad) skipped.push(bad[1]);
+      if (bad && !/^T-/.test(bad[1])) skipped.push(bad[1]); // T-… lines are the generated plan's task rows (not panel items)
       continue;
     }
     const detail = [m[4] ?? ''];
@@ -61,6 +64,10 @@ export function parsePlan(markdown) {
     const { fields, free } = parseFields(detail);
     tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim(), fields, free: free.join(' ').trim(), owner: fields.OWNER ?? null });
   }
+  // generated plan: the "EM EXECUÇÃO" row names the active TASK; the panel shows it as the goal of the active phase
+  const running = text.match(/^- \[ \] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+?)\s+← ÚNICA ATIVA$/m);
+  const activePhase = tasks.find((t) => t.state === '>');
+  if (running && activePhase) activePhase.fields = { ...activePhase.fields, SPRINT_GOAL: `${running[1]} — ${running[2]}` };
   return { title, status, tasks, skipped };
 }
 

@@ -11,6 +11,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit } from './context-core.mjs';
+import { planDrift } from './plan-sync.mjs';
 export const CANONICAL = [
   'CLAUDE.md',
   '.specs/EXECUTION.md',
@@ -109,10 +110,15 @@ export function checkContext(io) {
     }
   }
   if (plan) {
-    const actives = plan.match(/^- \[>\]/gm) ?? [];
-    if (actives.length !== 1) fail(`conductor plan must have exactly ONE active ([>]) line, found ${actives.length}`);
+    const actives = plan.match(/^### \[>\]/gm) ?? [];
+    if (actives.length !== 1) fail(`conductor plan must have exactly ONE active phase ([>]), found ${actives.length}`);
     const line = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
     if (active && !line.includes(active.id)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
+    // the plan is the executable VIEW of tasks.md: its generated region must be exactly what tasks.md implies (npm run plan:sync)
+    if (tasks) {
+      const drift = planDrift(plan, { tasksText: tasks, programText: text[`${FEATURE}/PROGRAM.md`] ?? '', specText: spec ?? '' });
+      if (drift.drift) fail(`conductor plan diverges from tasks.md: ${drift.reason}`);
+    }
   }
 
   // ---- documents referenced by the canonical files exist and are tracked
