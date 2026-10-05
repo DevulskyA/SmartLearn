@@ -85,37 +85,16 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
-  app.patch('/drafts/:id', {
-    schema: {
-      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-      body: {
-        type: 'object',
-        properties: {
-          summary: { type: 'string' },
-          questions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['question', 'answer', 'sourceSpans'],
-              properties: {
-                question: { type: 'string' },
-                answer: { type: 'string' },
-                explanation: { type: ['string', 'null'] },
-                questionType: { type: ['string', 'null'] },
-                hint: { type: ['string', 'null'] },
-                sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
-              },
-            },
-          },
-        },
+  // T-F2-01: replacing the whole question list by position was removed — it could not tell a reorder from a
+  // replacement, so a REJECTED status could land on the wrong question. Edit one entity at a time instead.
+  app.patch('/drafts/:id', async (request, reply) => {
+    reply.status(410);
+    return {
+      error: {
+        code: 'ENDPOINT_REMOVED',
+        message: 'Esta operação foi removida. Use PATCH /drafts/:id/summary para o resumo e PATCH ou DELETE /drafts/:id/questions/:questionId para uma questão.',
       },
-    },
-  }, async (request, reply) => {
-    const id = Number(request.params.id);
-    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
-    try {
-      return { draft: drafts.reviseDraft(db, request.actor.userId, id, request.body) };
-    } catch (err) { return handleError(err, reply); }
+    };
   });
 
   // Granular edits: each touches ONE entity of the lesson (the summary, or one question by its stable id).

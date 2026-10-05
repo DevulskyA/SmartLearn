@@ -233,7 +233,7 @@ test('a human edit re-screens the new text (deterministic only) and marks the au
     const proposal = await makeProposal(db, userId, sourcesDir);
     const { fetchImpl } = scriptedFetch([good(), { result: 'PASS', findings: [] }]);
     const draft = await create(db, userId, proposal.id, fetchImpl);
-    const edited = drafts.reviseDraft(db, userId, draft.id, { summary: `${GOOD_SUMMARY} A dose usual e 300 mg por dia.` });
+    const edited = drafts.replaceDraftContent(db, userId, draft.id, { summary: `${GOOD_SUMMARY} A dose usual e 300 mg por dia.` });
     assert.equal(edited.audit.editedByHuman, true);
     assert.equal(edited.audit.result, 'REPAIR');
     assert.ok(edited.audit.findings.some((f) => f.issue === 'SUMMARY_UNSUPPORTED_VALUE'));

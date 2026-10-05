@@ -170,13 +170,14 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 Objetivo: remover as últimas ambiguidades de identidade e preparar a medição sem violar a decisão "abrir não recalcula".
 
 ### T-F2-01 — Substituir a edição posicional da lista inteira por operações por id · M
-- Status: `[ ]` · Requisitos: R-03 (AC-03.1) · Dependências: F1 fechada
+- Status: `[x]` · Requisitos: R-03 (AC-03.1) · Dependências: F1 fechada
 - Superfície: `server/src/services/generated-drafts.js` (`reviseDraft`, `mergeIdentity`), `server/src/routes/generated-drafts.js` (`PUT /drafts/:id`), `src/draft-review-ui.js` (função `reviseDraft` do cliente, hoje sem uso na UI atual), testes.
 - DECISÃO DE DESENHO (2026-10-04, verificada: nenhum cliente de produção chama `PUT /drafts/:id` — `src/draft-review-ui.js:reviseDraft` é código morto e nenhum e2e usa a rota): a rota `PUT` é REMOVIDA (responde 410 com orientação para PATCH/DELETE/POST por entidade); o service que substitui a lista inteira deixa de ter nome genérico e vira `replaceDraftContent`, só para fixtures, nunca ligado a rota (teste-guarda).
 - Pergunta do escudo: "se reordenar trocar status entre conteúdos, o que fica vermelho?" Hoje: nada. Criar sensor primeiro.
 - RED: (a) reordenar 4 questões com Q2 REJECTED preserva REJECTED na MESMA questão de conteúdo; (b) enviar ids desconhecidos é erro; (c) tamanho diferente com REJECTED continua protegido (ver teste atual); (d) o cliente legado sem ids é recusado com orientação.
 - Desenho: aceitar `questions[]` com `id` obrigatório para as existentes; novas sem `id` recebem id novo; ausentes nunca são apagadas implicitamente (apagar é `DELETE` explícito). Alternativa mais simples e preferida se nenhum cliente usa a rota: remover `PUT` e manter `PATCH`/`DELETE`/`POST` por entidade. Verificar uso real (busca de chamadas, e2e) antes de decidir.
 - Gate: `server/test/lesson-granular-edit.test.js` + novos; e2e `lesson-editor.spec.js`, `draft-acceptance.spec.js`.
+- FEITO 2026-10-04: rota passou a 410 ENDPOINT_REMOVED (na verdade era PATCH /drafts/:id, não PUT); reviseDraft→replaceDraftContent; cliente morto removido; sensor server/test/draft-whole-list-replace.test.js (RED 3/3 antes, GREEN depois). Prova: server 810/810, e2e lesson-editor+draft-acceptance 19/19. Achado fora de escopo: root test/test-live.test.js:99 espera `playwright test` mas o script é `node scripts/e2e.mjs` (herdado de T-F6-02).
 
 ### T-F2-02 — Adicionar questão e reordenar como operações próprias · M
 - Status: `[ ]` · Requisitos: R-03 · Dependências: T-F2-01
@@ -383,6 +384,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[ ]` · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
 - Gate: 3 execuções consecutivas sem falha; relatório de tempos.
+- MEDIÇÃO 2026-10-04 @3608048 (2 workers, `npm run test:e2e` x3): run1 PASS 203/0/2 em 9m27s (> meta 8 min); run2 FAIL 202/1/2 em 9m12s (`product-value.spec.js:86`, `#account-show-register` oculto mesmo após retry de 20 s); run3 INTERROMPIDA (workers com exit 3221225794 = 0xC0000142, falha de inicialização de processo, típica de pressão de recursos do Windows; máquina 16 GB, dezenas de msedge/webview2 abertos). Gate NÃO atingido. Causa não provada: falta distinguir carga do ambiente de defeito do app. Próximo: repetir com o ambiente quieto (fechar msedge/webview2 alheios) e comparar 1 vs 2 workers.
 
 ### T-F6-04 — Comando de discriminação (mutação) repetível · M
 - Status: `[ ]` · Requisitos: R-07 (AC-07.3), F-45 · Dependências: nenhuma

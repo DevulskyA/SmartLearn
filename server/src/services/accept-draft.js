@@ -54,7 +54,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   }
 
   // C3 (audit): the caller must identify EXACTLY the revision it reviewed.
-  // A concurrent edit (reviseDraft) bumps this draft's revision — if that
+  // A concurrent edit (replaceDraftContent) bumps this draft's revision — if that
   // happened between the caller's last read and this accept call, fail
   // closed rather than silently publishing whatever content now happens
   // to be in draft_json (which the caller never actually saw).

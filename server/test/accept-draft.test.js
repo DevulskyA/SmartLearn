@@ -134,7 +134,7 @@ test('C3: accepting with a stale expectedRevision after a concurrent edit is an 
 
     // Someone (or another tab) edits the draft between when this caller
     // read it and when they click accept.
-    drafts.reviseDraft(db, userId, draft.id, {
+    drafts.replaceDraftContent(db, userId, draft.id, {
       summary: 'Resumo revisado por outra sessão',
       questions: [{ question: 'Pergunta revisada?', answer: 'Resposta revisada', hint: null, sourceSpans: [{ pageIndex: 1 }] }],
     });
@@ -360,7 +360,7 @@ test('a draft whose summary cites only some pages freezes exactly those pages, n
   try {
     const userId = makeUser(db, 'summ-part@example.com');
     const { draft } = await makeDraft(db, userId, sourcesDir, ['Página um', 'Página dois', 'Página três']);
-    drafts.reviseDraft(db, userId, draft.id, {});
+    drafts.replaceDraftContent(db, userId, draft.id, {});
     const row = db.prepare('SELECT draft_json, revision FROM generated_drafts WHERE id = ?').get(draft.id);
     const content = JSON.parse(row.draft_json);
     content.summarySourceSpans = [{ pageIndex: 2 }];

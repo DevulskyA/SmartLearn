@@ -41,7 +41,7 @@ async function acceptedUnit(db, userId, sourcesDir, questions) {
   await extractSource(db, userId, source.id, { sourcesDir });
   const [proposal] = proposals.chunkSource(db, userId, source.id, { maxPagesPerChunk: 10 });
   const draft = await drafts.createDraft(db, userId, proposal.id);
-  const revised = drafts.reviseDraft(db, userId, draft.id, { questions });
+  const revised = drafts.replaceDraftContent(db, userId, draft.id, { questions });
   const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Imunologia', studyDate: '2026-01-05', expectedRevision: revised.revision });
   return exercises.list(db, userId, result.unit.id);
 }

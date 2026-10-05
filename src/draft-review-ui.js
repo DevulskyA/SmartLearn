@@ -34,16 +34,6 @@ export async function getDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
-/** Saves the reviewer's corrections (summary and/or the full question list). The server re-validates
- * them like any draft, re-runs the deterministic screen, bumps `revision` and returns the new draft —
- * so what gets accepted is exactly what the reviewer last saw. */
-export async function reviseDraft(draftId, { summary, questions }) {
-  try {
-    const { draft } = await apiRequest(`/v1/drafts/${draftId}`, { method: 'PATCH', body: { summary, questions } });
-    return { ok: true, draft };
-  } catch (err) { return fail(err); }
-}
-
 /** Saves ONLY the summary (the questions are untouched). `expectedVersion` = summaryVersion the caller read. */
 export async function reviseSummary(draftId, { summary, expectedVersion }) {
   try {

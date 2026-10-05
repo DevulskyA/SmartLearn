@@ -420,7 +420,9 @@ export async function createDraft(db, userId, proposalId, {
  * rather than silently publishing whichever version happened to land in
  * the database last.
  */
-export function reviseDraft(db, userId, draftId, { summary, questions } = {}, now = () => new Date()) {
+// T-F2-01: replaces the WHOLE question list, so it is for fixtures only and is never wired to a route
+// (guard test: draft-whole-list-replace). Product edits go through reviseSummary / reviseQuestion by id.
+export function replaceDraftContent(db, userId, draftId, { summary, questions } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
   if (draftRow.status !== 'DRAFT') {

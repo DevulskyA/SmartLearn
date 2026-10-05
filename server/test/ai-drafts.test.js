@@ -259,13 +259,13 @@ test('a user cannot create, list, or read a draft for a proposal owned by anothe
     await assert.rejects(() => drafts.createDraft(db, userB, proposal.id, {}), (err) => err.code === 'NOT_FOUND');
     assert.throws(() => drafts.listDrafts(db, userB, proposal.id), (err) => err.code === 'NOT_FOUND');
     assert.throws(() => drafts.getDraft(db, userB, draft.id), (err) => err.code === 'NOT_FOUND');
-    assert.throws(() => drafts.reviseDraft(db, userB, draft.id, { summary: 'hacked' }), (err) => err.code === 'NOT_FOUND');
+    assert.throws(() => drafts.replaceDraftContent(db, userB, draft.id, { summary: 'hacked' }), (err) => err.code === 'NOT_FOUND');
   } finally { cleanup(); }
 });
 
 // --- C3 (audit): DRAFT_PUBLICATION_BOUNDARY -- revision + edit ---------
 
-test('reviseDraft: a well-formed edit replaces the content and bumps revision; the original text is gone (this is an edit, not a version-history append — the draft is not yet history)', async () => {
+test('replaceDraftContent: a well-formed edit replaces the content and bumps revision; the original text is gone (this is an edit, not a version-history append — the draft is not yet history)', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
     const userId = makeUser(db, 'f@example.com');
@@ -273,7 +273,7 @@ test('reviseDraft: a well-formed edit replaces the content and bumps revision; t
     const draft = await drafts.createDraft(db, userId, proposal.id, {});
     assert.equal(draft.revision, 1);
 
-    const revised = drafts.reviseDraft(db, userId, draft.id, {
+    const revised = drafts.replaceDraftContent(db, userId, draft.id, {
       summary: 'Resumo corrigido manualmente',
       questions: [{ question: 'Pergunta corrigida?', answer: 'Resposta corrigida', hint: null, sourceSpans: [{ pageIndex: 1 }] }],
     });
@@ -287,7 +287,7 @@ test('reviseDraft: a well-formed edit replaces the content and bumps revision; t
   } finally { cleanup(); }
 });
 
-test('reviseDraft rejects a citation pointing outside the proposal\'s real pages — hand-editing cannot bypass draft-schema.js', async () => {
+test('replaceDraftContent rejects a citation pointing outside the proposal\'s real pages — hand-editing cannot bypass draft-schema.js', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
     const userId = makeUser(db, 'g2@example.com');
@@ -295,7 +295,7 @@ test('reviseDraft rejects a citation pointing outside the proposal\'s real pages
     const draft = await drafts.createDraft(db, userId, proposal.id, {});
 
     assert.throws(
-      () => drafts.reviseDraft(db, userId, draft.id, {
+      () => drafts.replaceDraftContent(db, userId, draft.id, {
         questions: [{ question: 'Q', answer: 'A', hint: null, sourceSpans: [{ pageIndex: 999 }] }],
       }),
       (err) => err.code === 'INVALID_DRAFT',
@@ -304,7 +304,7 @@ test('reviseDraft rejects a citation pointing outside the proposal\'s real pages
   } finally { cleanup(); }
 });
 
-test('reviseDraft refuses to edit an already-ACCEPTED draft — its content is history now', async () => {
+test('replaceDraftContent refuses to edit an already-ACCEPTED draft — its content is history now', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
     const userId = makeUser(db, 'h2@example.com');
@@ -315,7 +315,7 @@ test('reviseDraft refuses to edit an already-ACCEPTED draft — its content is h
     acceptDraft(db, userId, draft.id, { newSubjectName: 'Farmacologia', studyDate: '2026-03-01', expectedRevision: draft.revision });
 
     assert.throws(
-      () => drafts.reviseDraft(db, userId, draft.id, { summary: 'tentando editar depois de aceito' }),
+      () => drafts.replaceDraftContent(db, userId, draft.id, { summary: 'tentando editar depois de aceito' }),
       (err) => err.code === 'INVALID_STATE',
     );
   } finally { cleanup(); }

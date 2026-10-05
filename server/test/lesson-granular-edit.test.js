@@ -37,7 +37,7 @@ async function lessonWithThreeQuestions(db, sourcesDir) {
   const [proposal] = proposals.chunkSource(db, userId, source.id, { maxPagesPerChunk: 10 });
   const generated = await drafts.createDraft(db, userId, proposal.id, {});
   const spans = [{ pageIndex: 1 }];
-  const withThree = drafts.reviseDraft(db, userId, generated.id, {
+  const withThree = drafts.replaceDraftContent(db, userId, generated.id, {
     summary: 'Resumo inicial',
     questions: ['A', 'B', 'C'].map((x) => ({ question: `Pergunta ${x}?`, answer: `Resposta ${x}`, explanation: null, hint: null, sourceSpans: spans })),
   });
@@ -165,7 +165,7 @@ test('critical sequence on 4 questions, each step re-read from the database: Q3 
   try {
     const { userId, draftId } = await lessonWithThreeQuestions(db, sourcesDir);
     const spans = [{ pageIndex: 1 }];
-    const base = drafts.reviseDraft(db, userId, draftId, {
+    const base = drafts.replaceDraftContent(db, userId, draftId, {
       summary: 'Resumo inicial',
       questions: ['A', 'B', 'C', 'D'].map((x) => ({ question: `Pergunta ${x}?`, answer: `Resposta ${x}`, explanation: null, hint: null, sourceSpans: spans })),
     });
@@ -221,7 +221,7 @@ test('a whole-list revise that changes the question count never silently re-acti
     const rejected = drafts.reviseQuestion(db, userId, draftId, draft.questions[1].id, { status: 'REJECTED' });
     const spans = [{ pageIndex: 1 }];
     const twoOnly = rejected.questions.slice(0, 2).map((q) => ({ question: q.question, answer: q.answer, explanation: null, hint: null, sourceSpans: spans }));
-    assert.throws(() => drafts.reviseDraft(db, userId, draftId, { questions: twoOnly }), (e) => e.code === 'ENTITY_CONFLICT');
+    assert.throws(() => drafts.replaceDraftContent(db, userId, draftId, { questions: twoOnly }), (e) => e.code === 'ENTITY_CONFLICT');
     const after = drafts.getDraft(db, userId, draftId);
     assert.equal(after.questions[1].status, 'REJECTED');
     assert.equal(after.revision, rejected.revision);
