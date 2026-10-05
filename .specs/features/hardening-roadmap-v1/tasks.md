@@ -207,7 +207,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 - Nota: só implementar a UI de reordenar se o roteiro humano (T-F4-01) pedir; a operação de servidor protege contra o `PUT`.
 
 ### T-F2-03 — Auditoria versionada e reauditoria explícita · M
-- Status: `[H]` · Requisitos: R-03 (AC-03.3), INV-05 · Dependências: HG-02, T-F2-01
+- Status: `[✓]` 2026-10-05 · BASE_SHA `cc1d0ee` · IMPLEMENTATION_SHA `eded9ef` (HG-02 reclassificado AUTÔNOMO: botão explícito com diff, sem efeito automático, padrão do spec §8) · Requisitos: R-03 (AC-03.3), INV-05 · Dependências: T-F2-01
 - Superfície: `server/src/ai/draft-audit.js` (exportar `AUDIT_RULES_VERSION`), `generated-drafts.js` (gravar `rulesVersion`, `auditedAt` ao auditar/editar), nova rota `POST /drafts/:id/reaudit`, UI da aba Revisão.
 - Fazer: ao abrir, apenas COMPARAR `audit.rulesVersion` com a atual e devolver `auditStale: true/false` (sem recalcular, sem gravar). A UI mostra "auditoria com regras antigas" e o botão "Reauditar" executa a rota, grava com nova versão e exibe quantos achados mudaram.
 - RED: abrir rascunho com auditoria antiga NÃO altera `draft_json` nem `revision` (teste byte-a-byte); `reaudit` altera só `audit`, nunca resumo/questões; `rulesVersion` muda quando uma regra muda (teste que falha se alguém altera regra sem bumpar versão — comparar hash do conjunto de regras).
@@ -338,10 +338,14 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Gate: arquivo do roteiro revisado; resultado registrado.
 
 ### T-F4-02 — Hierarquia da Revisão e ruído de achados · M
-- Status: `[ ]` · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03
+- Status: `[>]` · BASE_SHA `eded9ef` · Requisitos: R-06 (AC-06.4), F-31 · Dependências: T-F2-03 (`[✓]`)
+- Subtarefas:
+  - [>] Ordenar achados/itens por severidade, contagem por tipo no topo, BAIXA recolhida, teto de itens na primeira tela; e2e com fixture de 67 achados + `lesson-view-model.test.js`
 - Fazer: ordenar por severidade, colapsar BAIXA, mostrar contagem por tipo no topo, "Sinalizada" só para severidade ≥ MÉDIA; texto explica o que olhar.
 - RED (e2e com fixture de 67 achados): primeiros itens são os mais severos; a tela inicial não excede N linhas visíveis sem rolagem.
 - Gate: `lesson-view-model.test.js` ampliado + e2e.
+- Próximo passo: ainda NÃO iniciada (escopo do lote limitado a T-F2-03 por decisão do usuário; não bloqueia uso real). Retomar só se pedido; a Revisão já exclui BAIXA de "Sinalizada".
+- Comando: `npx playwright test e2e/lesson-editor.spec.js`
 
 ### T-F4-03 — Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `342c91b` · IMPLEMENTATION_SHA `66905ad` (bloco "Rascunhos em andamento" antes da busca; "Título salvo" em `role=status` junto do campo, foco mantido; 2 casos e2e novos + axe, 2 mutações vermelhas) · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
