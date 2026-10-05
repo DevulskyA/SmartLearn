@@ -17,7 +17,6 @@ function validateTitleField(value) {
   const trimmed = value.normalize('NFC').trim();
   if (!trimmed) return 'Informe o conteúdo estudado.';
   if (trimmed.length > 240) return 'O conteúdo estudado excede o tamanho máximo permitido.';
-  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1F\x7F]/.test(trimmed)) return 'O conteúdo estudado contém caracteres de controle não permitidos.';
   return null;
 }

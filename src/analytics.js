@@ -12,12 +12,6 @@ function sumField(arr, field) {
   return arr.reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
 }
 
-function weightedAccuracy(evidence) {
-  const q = sumField(evidence, 'questionsCount');
-  const c = sumField(evidence, 'correctCount');
-  return q > 0 ? (c / q) * 100 : null;
-}
-
 function windowEvidence(evidence, fromDate, toDate) {
   return evidence.filter((e) => e.evidenceDate >= fromDate && e.evidenceDate <= toDate);
 }
@@ -241,7 +235,6 @@ export const Analytics = {
   // Returns performance summary per subject
   bySubject(evidence, units, subjects, today = getLocalDateValue()) {
     const unitsById = new Map(units.map((u) => [u.id, u]));
-    const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
     const evidenceBySubject = new Map();
     for (const e of evidence) {

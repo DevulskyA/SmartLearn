@@ -141,6 +141,7 @@ Legenda da coluna **Prova**: `TESTED` (teste automatizado nomeado existe) · `MU
 | Autoridade única do runner | `test/test-live.test.js`, `scripts/test-live-core.mjs` | `SUITES.e2e` aponta para o mesmo script de `package.json test:e2e` | T-F6-09 |
 | Discriminação por mutação | `scripts/mutation-check.mjs` (`npm run test:mutation`), `test/mutation-check.test.js` | 7 mutações em worktree descartável; cada uma mata ao menos 1 teste nomeado; recusa a árvore real | T-F6-04 |
 | Lacunas achadas pela mutação (fechadas) | `server/test/lesson-granular-edit.test.js` (M1b), `test/dev-sanitize.test.js` (M4a, M4b) | Eram 3 sobreviventes antes de T-F6-04: editar o texto de questão REJECTED e o `applySanitize` com plano forjado não tinham teste | T-F6-04 |
+| Lint com orçamento zero | `package.json` (`lint`), `test/lint-gate.test.js` | `npm run lint` falha com qualquer aviso novo (`--max-warnings 0`); os 23 avisos antigos foram corrigidos | T-F6-05 |
 | Portão de persistência de contexto | `scripts/context-check.mjs`, `test/context-check.test.js` | Estado canônico rastreado e coerente | contexto 2026-10-05 |
 | Inventário de testes | `scripts/check-test-inventory.mjs` | Todo arquivo de teste cai numa raiz de descoberta conhecida | existente |
 
@@ -174,7 +175,7 @@ Legenda da coluna **Prova**: `TESTED` (teste automatizado nomeado existe) · `MU
 | AC-07.1 | `e2e/support/suites.js`; contagem na tabela de sensores | TESTED |
 | AC-07.2 | `test/e2e-ports.test.js`, `test/test-live.test.js`; tempo em `validation.md` | TESTED |
 | AC-07.3 | `test/mutation-check.test.js`, `scripts/mutation-check.mjs` | TESTED (as 7 mutações do catálogo matam ao menos 1 teste cada) |
-| AC-07.4 | `npm run lint` | NOT_PROVEN (T-F6-05 ainda não fixou `--max-warnings`) |
+| AC-07.4 | `test/lint-gate.test.js`, `package.json` (`npm run lint` = `eslint . --max-warnings 0`) | TESTED (a regra cobre `*.js`; arquivos `.mjs` não entram na configuração do ESLint, lacuna registrada em T-F6-05) |
 | AC-08.1 | nenhum teste verifica o `git status` das worktrees | NOT_PROVEN (higiene das worktrees e decisão sobre `.impeccable/` não são testadas) |
 | AC-08.2 | `test/context-check.test.js`, `test/check-state-ids.test.js` | TESTED (este bloco foi reconciliado em T-F6-07; `DEBT.md` e `LESSONS.md` não) |
 | AC-09.1 | `test/package-inspection.test.js`, `test/desktop-entrypoint.test.js` | TESTED |

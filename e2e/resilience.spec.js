@@ -84,7 +84,7 @@ const currentExamId = (page) => page.evaluate(async (base) => {
 }, API_BASE);
 
 test('exam correction: a judgment that cannot be saved is refused visibly and the retry saves it once', async ({ page }) => {
-  const unit = await startExamOver(page, 'Corr rede', [1, 2]);
+  await startExamOver(page, 'Corr rede', [1, 2]);
   const items = page.locator('.exam-review-item');
   await page.route('**/v1/exams/*/items/*/judgment', (route) => route.abort());
   await items.nth(0).locator('.exam-correct-btn').click();

@@ -77,7 +77,7 @@ test('WITHOUT the flag: the session cookie is a browser-session cookie (no Max-A
 });
 
 test('WITH the flag: the cookie is persistent and the row lives ~10 years; login -> restart -> still signed in -> again', async () => {
-  const { db, path, dir, cleanup } = tmpDb();
+  const { db, path, cleanup } = tmpDb();
   try {
     let app = await buildApp(db, MIGRATIONS_DIR, { allowedOrigins: [ORIGIN], devPersistentSession: true });
     await register(app);

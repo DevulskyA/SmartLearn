@@ -4,7 +4,7 @@ import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks, getNextReview, getDaysBetween, getReviewStatusLabel } from "./scheduler.js";
+import { generateInitialTasks, getNextReview, getReviewStatusLabel } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
 import { weakPracticeReason } from "./priorities-text.js";
 import {
@@ -13,7 +13,7 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, volumeBarWidth, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
@@ -186,7 +186,6 @@ const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
 const studySummaryTextarea = document.querySelector("#study-summary");
 const studySourceTextInput = document.querySelector("#study-source-text");
-const sourceMessage = document.querySelector("#source-message");
 const studyList = document.querySelector("#study-list");
 const studiesEmpty = document.querySelector("#studies-empty");
 const studyManagerMessage = document.querySelector("#study-manager-message");
@@ -1416,8 +1415,6 @@ function getPlanPerfBadge(evidence) {
   return span;
 }
 
-let planCurrentSubjectFilter = "";
-let planCurrentStateFilter = "";
 
 // "Para reforçar": exercises still wrong at their last attempt, by unit. Only the server
 // keeps item-level attempts; without it (or if it fails) the callers just show no cue —
@@ -2496,7 +2493,6 @@ export async function renderStatsByUnit() {
   wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
   updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
 
-  const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
   unitStatsList.replaceChildren();
   if (unitDetailEmpty && unitDetailBody) {
@@ -2705,7 +2701,6 @@ function renderEvolutionSvg(evidence, units, subjects) {
   const xStep = allMonths.length > 1 ? chartW / (allMonths.length - 1) : chartW;
   for (let i = 0; i < allMonths.length; i++) {
     const x = padL + i * xStep;
-    const [year, month] = allMonths[i].split("-");
     const label = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(`${allMonths[i]}-15T12:00:00`));
     const text = document.createElementNS(ns, "text");
     text.setAttribute("x", x);
@@ -3923,10 +3918,6 @@ function resetRegisterState() {
   setStudyManagerMessage();
   studyMessage.classList.remove("is-error");
   studyMessage.textContent = "";
-}
-
-function pluralize(value, singular, plural) {
-  return value === 1 ? singular : plural;
 }
 
 async function renderStudies() {

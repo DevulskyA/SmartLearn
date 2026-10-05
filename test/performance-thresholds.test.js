@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   getState,
   PERFORMANCE_STATES,
-  THRESHOLDS,
   SUBJECT_COLORS,
   SUBJECT_COLOR_KEYS,
   DEFAULT_SUBJECT_COLOR,

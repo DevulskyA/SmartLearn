@@ -326,9 +326,7 @@ test("createWithReviews newSubjectName equivalente reutiliza subject existente",
 test("createWithReviews newSubjectName — falha de storage não cria registro parcial", async () => {
   await DB.init();
   const origSetItem = localStorage.setItem.bind(localStorage);
-  let callCount = 0;
   localStorage.setItem = (key, value) => {
-    callCount++;
     // fail on any write — simulates quota/storage error
     throw new Error("QuotaExceededError simulado");
   };

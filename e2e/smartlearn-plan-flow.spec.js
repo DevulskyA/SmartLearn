@@ -107,6 +107,7 @@ test('AC-03: single click on Salvar aula creates new subject + unit + exactly 16
 });
 
 test('AC-04: an injected save failure leaves exact pre-state (zero partial rows)', async ({ page }) => {
+  // eslint-disable-next-line no-unused-vars -- reserved for the post-failure comparison: today this test asserts nothing after the hook check (NOT_PROVEN, see TEST_COVERAGE_MATRIX AC-03/AC-04 note)
   const before = await snapshot(page);
 
   await page.locator('#plan-show-subject-form').click();

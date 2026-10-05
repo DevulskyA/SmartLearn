@@ -67,10 +67,6 @@ function mapSubject(row) {
   };
 }
 
-function mapUsageCount(row, key) {
-  return Number(row?.[key] ?? 0) || 0;
-}
-
 function mapLearningUnit(row) {
   return {
     id: row.id,
@@ -202,24 +198,6 @@ async function getNextSortOrder(tableName) {
   const query = 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM ' + tableName;
   const [{ next_order: nextOrder = 0 } = {}] = await requireDatabase().select(query);
   return nextOrder;
-}
-
-async function ensureNamedRows(tableName, names, label) {
-  const timestamp = nowIso();
-  let nextSortOrder = await getNextSortOrder(tableName);
-
-  for (const name of names) {
-    const normalized = normalizeEntityName(name, label);
-    const query = 'SELECT id FROM ' + tableName + ' WHERE name = $1 COLLATE NOCASE';
-    const [existing] = await requireDatabase().select(query, [normalized]);
-    if (existing) continue;
-
-    await requireDatabase().execute(
-      'INSERT INTO ' + tableName + ' (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
-      [normalized, timestamp, timestamp, nextSortOrder],
-    );
-    nextSortOrder += 1;
-  }
 }
 
 function migrateV1ImportData(data) {

@@ -9,7 +9,6 @@ import { runMigrations } from '../src/migrations.js';
 import * as learningUnits from '../src/services/learning-units.js';
 import { buildApp } from '../src/app.js';
 import * as reviews from '../src/services/reviews.js';
-import { IdempotencyConflictError } from '../src/services/idempotency.js';
 
 const TEST_ORIGIN = 'https://smartlearn.test';
 
@@ -48,7 +47,7 @@ test('agenda buckets: overdue, today, tomorrow, and completedToday are correctly
     const userId = makeUser(db, 'a@example.com');
     // Create a unit far enough in the past that offset-1 (the earliest
     // review) is already overdue relative to "today" in the test.
-    const pastUnit = makeUnitWithReviews(db, userId, '2020-01-01');
+    makeUnitWithReviews(db, userId, '2020-01-01');
     const result = reviews.agenda(db, userId, { date: '2026-06-15', timezoneOverride: 'UTC' });
     assert.ok(result.overdue.length > 0, 'a unit studied in 2020 must have overdue reviews by 2026');
     assert.equal(result.date, '2026-06-15');
@@ -240,7 +239,7 @@ test('T20: list() returns every owned review task regardless of due date/complet
   try {
     const userId = makeUser(db, 'k@example.com');
     const unitA = makeUnitWithReviews(db, userId, '2020-01-01');
-    const unitB = makeUnitWithReviews(db, userId, '2026-06-01');
+    makeUnitWithReviews(db, userId, '2026-06-01');
 
     const all = reviews.list(db, userId);
     assert.equal(all.length, 32, 'both units\' 16 tasks each must be present, not just what agenda() would bucket as due');
