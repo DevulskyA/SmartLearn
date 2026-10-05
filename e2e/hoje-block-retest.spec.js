@@ -71,8 +71,10 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   }
 
   await page.locator('[data-screen="today"]').click();
-  await page.locator('#today-primary-action-btn').click();
-  const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  const primaryAction = page.locator('#today-primary-action-btn');
+  await expect(primaryAction).toBeVisible({ timeout: 5000 });
+  await primaryAction.click();
+  const reviewId = await primaryAction.getAttribute('data-review-id');
   const item = (q) => page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`, { hasText: q });
   const blockResult = page.locator(`.review-row[data-review-id="${reviewId}"] .review-block-result`);
   // Retrieval first: the questions come before the Resumo Mestre in the review body.
@@ -194,8 +196,10 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
     await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
   }
   await page.locator('[data-screen="today"]').click();
-  await page.locator('#today-primary-action-btn').click();
-  const reviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
+  const primaryAction = page.locator('#today-primary-action-btn');
+  await expect(primaryAction).toBeVisible({ timeout: 5000 });
+  await primaryAction.click();
+  const reviewId = await primaryAction.getAttribute('data-review-id');
   const r1 = page.locator(`.review-row[data-review-id="${reviewId}"]`);
   const judge = async (row, q, name) => {
     const it = row.locator('.review-exercise-item', { hasText: q });
