@@ -256,44 +256,48 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 - Comando: `npm --prefix server test` (918/918 com T-F3-05); só a fiação: `node --test server/test/generation-jobs.test.js`
 
 ### T-F3-02 — Execução em segundo plano com limite duro e cancelamento · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.1, AC-04.4) · Dependências: T-F3-01, T-F1-04
+- Status: `[✓]` 2026-10-05 · BASE_SHA `daf5013` · IMPLEMENTATION_SHA `fe0937c` (executor em segundo plano, limite duro configurável 30 min, cancelamento que mata a árvore, QUEUED retomado; 15 testes, 6 mutações vermelhas; servidor 941/941) · Requisitos: R-04 (AC-04.1, AC-04.4) · Dependências: T-F3-01, T-F1-04
 - Fazer: o job roda fora do ciclo da requisição; limite duro configurável (padrão acima do atual de 20 min para evitar regressão); `POST /generation-jobs/:id/cancel` encerra a árvore de processos do provedor e marca `CANCELLED`; falha/cancelamento não deixam rascunho parcial aceitável.
 - RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho; timeout vira `FAILED(TIMEOUT)`; nenhum rascunho criado em falha.
 - Subtarefas:
-  - [>] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
-  - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
-  - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
-  - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
-  - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
+  - [x] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
+  - [x] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
+  - [x] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
+  - [x] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
+  - [x] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
 - Gate: `ai-drafts.test.js`, `codex-provider.test.js` (inalterado), testes novos; zero chamada real.
-- Próximo passo: ler `server/src/services/generated-drafts.js` (`createDraft`, `prepareGeneration`, `withTimeout`, PRE_SEND_FAILURES), `server/src/ai/codex-provider.js` (como o processo filho é criado e morto) e `server/src/services/generation-jobs.js` (T-F3-01: `transitionJob`, `assertJobScopeIntact`); escrever o RED do cancelamento com provedor FAKE controlável em `server/test/generation-job-runner.test.js`.
-- Comando: `node --test server/test/generation-job-runner.test.js` (arquivo a criar neste RED)
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F3-03 (fechada junto) e então T-F3-04.
+- Comando: `node --test server/test/generation-job-runner.test.js`
 
 ### T-F3-03 — Sinal de vida do provedor e política de "parada" · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.2) · Dependências: T-F3-02
+- Status: `[✓]` 2026-10-05 · BASE_SHA `daf5013` · IMPLEMENTATION_SHA `fe0937c` (amostrador de CPU/handles da árvore + política STALLED só-aviso; 7 testes com relógio injetado, 3 mutações vermelhas; servidor 941/941) · Requisitos: R-04 (AC-04.2) · Dependências: T-F3-02
 - Fazer: além dos eventos de `codex exec --json`, amostrar CPU/handles do processo filho; `lastActivityAt` atualiza com qualquer sinal; só marcar `STALLED` (aviso, não falha) após silêncio total generoso; o limite duro continua sendo a única condição de falha por tempo.
 - RED (provedor FAKE que fica 5 min em silêncio com CPU ativa): não vira STALLED; FAKE sem CPU e sem saída vira STALLED.
 - Subtarefas:
-  - [ ] RED (relógio injetado): provedor FAKE em silêncio por 5 min com CPU ativa NÃO vira `STALLED`
-  - [ ] RED: provedor FAKE sem CPU e sem saída vira `STALLED` (aviso, nunca falha)
-  - [ ] Amostrar CPU/handles do processo filho além dos eventos de `codex exec --json`; `lastActivityAt` atualiza com qualquer sinal
-  - [ ] `STALLED` só após silêncio total generoso; o limite duro de T-F3-02 segue a única condição de falha por tempo; sinal de vida volta o job a `CALLING_PROVIDER`
-  - [ ] Gate: testes com relógio injetado, sem Codex; evidência e fechar
+  - [x] RED (relógio injetado): provedor FAKE em silêncio por 5 min com CPU ativa NÃO vira `STALLED`
+  - [x] RED: provedor FAKE sem CPU e sem saída vira `STALLED` (aviso, nunca falha)
+  - [x] Amostrar CPU/handles do processo filho além dos eventos de `codex exec --json`; `lastActivityAt` atualiza com qualquer sinal
+  - [x] `STALLED` só após silêncio total generoso; o limite duro de T-F3-02 segue a única condição de falha por tempo; sinal de vida volta o job a `CALLING_PROVIDER`
+  - [x] Gate: testes com relógio injetado, sem Codex; evidência e fechar
 - Gate: testes com relógio injetado; sem Codex.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F3-04.
+- Comando: `node --test server/test/generation-job-liveness.test.js`
 - Observação de evidência: a premissa "raciocínio longo é silencioso" vem do probe documentado no checkpoint; reconfirmar em T-F5-02 com medição real autorizada, não suposição.
 
 ### T-F3-04 — UI de geração: fase real, sair e voltar · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.3), F-14 · Dependências: T-F3-02
+- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.3), F-14 · Dependências: T-F3-02
 - Superfície: `src/materials-ui.js`, `src/source-proposals-ui.js`, estilos.
 - Fazer: texto "pode levar alguns minutos"; fase atual e tempo; "Continuar em segundo plano" volta à lista; item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto; "Cancelar" com confirmação.
 - RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto; cancelar libera a unidade.
 - Subtarefas:
-  - [ ] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
+  - [>] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
   - [ ] RED (e2e): cancelar com confirmação libera a unidade
   - [ ] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
   - [ ] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
   - [ ] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
 - Gate: `e2e/lesson-editor.spec.js` + novo `generation-jobs.spec.js`; axe nas telas novas.
+- Próximo passo: ler `src/materials-ui.js` (~linha 119, texto "Está demorando mais que o normal... 20 minutos", que passa a ser fase real) e `src/source-proposals-ui.js`; a API pronta é `POST/GET /v1/generation-jobs`, `GET /v1/generation-jobs/:id` (campos `state`, `phase`, `startedAt`, `lastActivityAt`, `draftId`, `errorCode`; `STALLED` = aviso) e `POST /v1/generation-jobs/:id/cancel`; escrever o RED e2e (FAKE lento) em `e2e/generation-jobs.spec.js`. Não rodar o e2e completo; só a spec nova e `e2e/lesson-editor.spec.js`.
+- Comando: `node scripts/e2e.mjs` restrito à spec (ver `scripts/e2e.mjs` para o filtro)
 
 ### T-F3-05 — Explicação obrigatória por validação · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `ea8c440` · IMPLEMENTATION_SHA `9a2799f` (EXPLANATION_MISSING substitui QUESTION_NO_EXPLANATION para toda questão sem "Por quê"; 2 mutações vermelhas; servidor 918/918) · Requisitos: F-15 · Dependências: nenhuma de F3
@@ -346,6 +350,11 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Status: `[ ]` · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
 - Fazer: abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"; sem rolagem horizontal; alvos de toque ≥ 44 px.
 - RED: e2e em 360×800 e 768×1024 verificando ausência de overflow horizontal e operabilidade completa.
+- Subtarefas:
+  - [ ] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
+  - [ ] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
+  - [ ] Alvos de toque ≥ 44 px no editor
+  - [ ] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
 - Gate: novo `lesson-editor-responsive.spec.js`; `stats-responsive-regression.spec.js` verde.
 
 ### T-F4-05 — Acessibilidade do editor (teclado, foco, anúncios) · M
@@ -361,6 +370,11 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 ### T-F4-07 — Cópia de estados e i18n (T46/T47) com guarda de acentuação · M
 - Status: `[ ]` · Requisitos: F-36 · Dependências: nenhuma · Nota (2026-10-04): i18n de INTERFACE e idioma PEDAGÓGICO são problemas diferentes; `uiLocale`/`generationLocale` pertencem a R-13/F10, não a esta tarefa
 - Fazer: varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`); mensagens de vazio/erro/carregando padronizadas. Seguir a skill `codex-portuguese-i18n-repair` se aparecer corrupção.
+- Subtarefas:
+  - [ ] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
+  - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
+  - [ ] Padronizar mensagens de vazio/erro/carregando
+  - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
 - Gate: teste de guarda + `npm test`.
 
 ### Checkpoint F4

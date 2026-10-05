@@ -12,41 +12,23 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F3-02 (S4) · PRÓXIMA: T-F3-03 · TAREFAS: 29/70 · SUBTAREFAS DA ATIVA: T-F3-02 0/5 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F3-04 (S4) · PRÓXIMA: T-F4-03 · TAREFAS: 31/70 · SUBTAREFAS DA ATIVA: T-F3-04 0/5 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F3-02 · Execução em segundo plano com limite duro e cancelamento · S4 · subtarefas 0/5
-  Objetivo: O job roda fora do ciclo da requisição; limite duro configurável; POST /generation-jobs/:id/cancel encerra a árvore de processos do provedor e marca CANCELLED; falha/cancelamento não deixam rascunho parcial aceitável
-  Próximo passo: Ler server/src/services/generated-drafts.js, server/src/ai/codex-provider.js e server/src/services/generation-jobs.js
-  Gate: Ai-drafts.test.js, codex-provider.test.js, testes novos; zero chamada real
-  - [>] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho  ← EM EXECUÇÃO
-  - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
-  - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
-  - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
-  - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
-
-## PRÓXIMO
-
-### T-F3-03 — READY — Sinal de vida do provedor e política de "parada"
-  Por quê: S4 · sem dependência pendente · depois de T-F3-02
-  Subtarefas 0/5:
-  - [ ] RED (relógio injetado): provedor FAKE em silêncio por 5 min com CPU ativa NÃO vira `STALLED`
-  - [ ] RED: provedor FAKE sem CPU e sem saída vira `STALLED` (aviso, nunca falha)
-  - [ ] Amostrar CPU/handles do processo filho além dos eventos de `codex exec --json`; `lastActivityAt` atualiza com qualquer sinal
-  - [ ] `STALLED` só após silêncio total generoso; o limite duro de T-F3-02 segue a única condição de falha por tempo; sinal de vida volta o job a `CALLING_PROVIDER`
-  - [ ] Gate: testes com relógio injetado, sem Codex; evidência e fechar
-
-### T-F3-04 — READY — UI de geração: fase real, sair e voltar
-  Por quê: S4 · sem dependência pendente · depois de T-F3-02
-  Subtarefas 0/5:
-  - [ ] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
+- T-F3-04 · UI de geração: fase real, sair e voltar · S4 · subtarefas 0/5
+  Objetivo: Texto "pode levar alguns minutos"; fase atual e tempo; "Continuar em segundo plano" volta à lista; item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto; "Cancelar" com confirmação
+  Próximo passo: Ler src/materials-ui.js e src/source-proposals-ui.js
+  Gate: E2e/lesson-editor.spec.js + novo generation-jobs.spec.js; axe nas telas novas
+  - [>] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto  ← EM EXECUÇÃO
   - [ ] RED (e2e): cancelar com confirmação libera a unidade
   - [ ] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
   - [ ] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
   - [ ] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
+
+## PRÓXIMO
 
 ### T-F4-03 — READY — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
   Por quê: S5a · independente de S4 · sem dependência pendente
@@ -56,6 +38,22 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
   - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
   - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
   - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
+
+### T-F4-04 — READY — Editor da aula em telas estreitas
+  Por quê: S5a · independente de S4 · sem dependência pendente
+  Subtarefas 0/4:
+  - [ ] RED (e2e 360×800 e 768×1024): sem overflow horizontal e editor operável por completo
+  - [ ] Abaixo de 720 px, lista e editor empilham com navegação "Voltar à lista"
+  - [ ] Alvos de toque ≥ 44 px no editor
+  - [ ] Gate: `lesson-editor-responsive.spec.js` novo e `stats-responsive-regression.spec.js` verde; evidência e fechar
+
+### T-F4-07 — READY — Cópia de estados e i18n (T46/T47) com guarda de acentuação
+  Por quê: S5a · independente de S4 · sem dependência pendente · passa à frente de T-F4-05 (aguardam T-F4-04)
+  Subtarefas 0/4:
+  - [ ] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
+  - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
+  - [ ] Padronizar mensagens de vazio/erro/carregando
+  - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
 
 ## ROADMAP
 
@@ -110,12 +108,12 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F6-03** — Partição e tempo-alvo do e2e completo
 - [x] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
-### [>] S4 · Jobs observáveis — tarefas 2/5
+### [>] S4 · Jobs observáveis — tarefas 4/5
 
 - [x] **T-F3-01** — Tabela e máquina de estados de jobs
-- [>] **T-F3-02** — Execução em segundo plano com limite duro e cancelamento
-- [ ] **T-F3-03** — Sinal de vida do provedor e política de "parada"
-- [ ] **T-F3-04** — UI de geração: fase real, sair e voltar
+- [x] **T-F3-02** — Execução em segundo plano com limite duro e cancelamento
+- [x] **T-F3-03** — Sinal de vida do provedor e política de "parada"
+- [>] **T-F3-04** — UI de geração: fase real, sair e voltar
 - [x] **T-F3-05** — Explicação obrigatória por validação
 
 ### [ ] S5a · UI local da aula — tarefas 0/4
