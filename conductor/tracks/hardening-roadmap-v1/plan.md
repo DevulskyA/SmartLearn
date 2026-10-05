@@ -12,32 +12,22 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F4-05 (S5a) · PRÓXIMA: T-F4-07 · TAREFAS: 43/70 · SUBTAREFAS DA ATIVA: T-F4-05 0/6 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F4-07 (S5a) · PRÓXIMA: T-F1-09 · TAREFAS: 44/70 · SUBTAREFAS DA ATIVA: T-F4-07 0/4 · HORIZONTE PREPARADO: 2/2 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F4-05 · Acessibilidade do editor (teclado, foco, anúncios) · S5a · subtarefas 0/6
-  Objetivo: Padrão de abas com setas/Home/End, foco restaurado após salvar/rejeitar/voltar, mensagens de salvar em aria-live, nomes acessíveis nos itens; axe nas telas do editor
-  Próximo passo: O editor JÁ tem abas com setas/Home/End e tabindex móvel
-  Gate: Accessibility.spec.js ampliado, keyboard-study-materials.spec.js verde
-  - [>] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado  ← EM EXECUÇÃO
-  - [ ] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
-  - [ ] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
-  - [ ] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/materials-ui.js`)
-  - [ ] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
-  - [ ] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
-
-## PRÓXIMO
-
-### T-F4-07 — READY — Cópia de estados e i18n (T46/T47) com guarda de acentuação
-  Por quê: S5a · sem dependência pendente
-  Subtarefas 0/4:
-  - [ ] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
+- T-F4-07 · Cópia de estados e i18n (T46/T47) com guarda de acentuação · S5a · subtarefas 0/4
+  Objetivo: Varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake; mensagens de vazio/erro/carregando padronizadas
+  Próximo passo: O repositório hoje NÃO tem mojibake e src/i18n/locales/pt-BR.js cobre só a conta
+  Gate: Teste de guarda + npm test
+  - [>] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)  ← EM EXECUÇÃO
   - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
   - [ ] Padronizar mensagens de vazio/erro/carregando
   - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
+
+## PRÓXIMO
 
 ### T-F1-09 — READY — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0)
   Por quê: S8 · independente de S5a · dependências concluídas: T-F1-01, T-F1-07, T-F1-08
@@ -116,12 +106,12 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F3-04** — UI de geração: fase real, sair e voltar
 - [x] **T-F3-05** — Explicação obrigatória por validação
 
-### [>] S5a · UI local da aula — tarefas 2/4
+### [>] S5a · UI local da aula — tarefas 3/4
 
 - [x] **T-F4-03** — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
 - [x] **T-F4-04** — Editor da aula em telas estreitas
-- [>] **T-F4-05** — Acessibilidade do editor (teclado, foco, anúncios)
-- [ ] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
+- [x] **T-F4-05** — Acessibilidade do editor (teclado, foco, anúncios)
+- [>] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
 
 ### [!] S5c · UI de idioma e consumo — tarefas 0/1
 

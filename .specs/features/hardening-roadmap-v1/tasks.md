@@ -369,33 +369,35 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Comando: `npm run test:e2e -- e2e/lesson-editor-responsive.spec.js e2e/stats-responsive-regression.spec.js`
 
 ### T-F4-05 — Acessibilidade do editor (teclado, foco, anúncios) · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.2), F-35 · Dependências: T-F4-04
+- Status: `[✓]` 2026-10-05 · BASE_SHA `38bcc83` · IMPLEMENTATION_SHA `6c0806b` (região de mensagem permanente, foco restaurado após salvar/aceitar/rejeitar/excluir/voltar, nomes "Questão N, estado, pontos", seletor Disciplina nomeado, axe no editor; 6 casos e2e + 4 de axe, 7 mutações vermelhas) · Requisitos: R-06 (AC-06.2), F-35 · Dependências: T-F4-04
 - Fazer: padrão de abas com setas/Home/End, foco restaurado após salvar/rejeitar/voltar, mensagens de salvar em `aria-live`, nomes acessíveis nos itens ("Questão 3, sinalizada, 2 pontos"); axe nas telas do editor (hoje fora do alcance do axe).
 - RED: teste de teclado puro percorre as quatro abas e uma questão; axe sem violações serious/critical.
 - Subtarefas:
-  - [>] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
-  - [ ] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
-  - [ ] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
-  - [ ] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/materials-ui.js`)
-  - [ ] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
-  - [ ] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
+  - [x] RED (e2e, teclado puro): setas/Home/End percorrem as quatro abas (tabindex móvel, `aria-selected`) e uma questão é aberta e editada só com teclado
+  - [x] RED (e2e): foco restaurado após salvar questão/resumo, rejeitar/restaurar e "Voltar às unidades"; mensagens de salvar em região `aria-live`
+  - [x] RED (e2e): itens da lista de questões com nome acessível ("Questão N, sinalizada, X pontos")
+  - [x] Padrão de abas com setas/Home/End, foco restaurado e nomes acessíveis nos itens (`src/lesson-editor-ui.js`, `src/materials-ui.js`)
+  - [x] RED/GREEN: axe sem violações serious/critical nas telas do editor (`accessibility.spec.js` ampliado)
+  - [x] Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde; evidência e fechar
 - Gate: `accessibility.spec.js` ampliado, `keyboard-study-materials.spec.js` verde.
-- Próximo passo: o editor (`src/lesson-editor-ui.js`) JÁ tem abas com setas/Home/End e `tabindex` móvel (provar com o RED, não reescrever); a lacuna provável é o foco: `run()`/`applyDraft` redesenham o editor de questão e destroem o botão acionado. Escrever os RED em `e2e/lesson-editor.spec.js` ou num `e2e/lesson-editor-a11y.spec.js` novo (teclado puro, foco após salvar/rejeitar/voltar, nome acessível dos itens) e ampliar `e2e/accessibility.spec.js` com o editor.
-- Comando: `npm run test:e2e -- e2e/accessibility.spec.js e2e/keyboard-study-materials.spec.js e2e/lesson-editor.spec.js`
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F4-07 (T-F4-06 é `[H]`).
+- Comando: `npm run test:e2e -- e2e/lesson-editor-a11y.spec.js e2e/accessibility.spec.js e2e/keyboard-study-materials.spec.js`
 
 ### T-F4-06 — Regenerar UMA questão (contrato) · L (dividir)
 - Status: `[H]` · Requisitos: F-17 · Dependências: HG-06 (resultado do Prompt Lab) e F5
 - Observação: exige contrato de questão única com o modelo = mudança de prompt/provedor. NÃO executar antes do Prompt Lab aprovar (INV-09). Subtarefas futuras: (a) contrato `regenerateQuestion(question, sourceSpans)`; (b) UI com comparação lado a lado e aceite explícito; (c) proveniência `generatedBy` da nova versão.
 
 ### T-F4-07 — Cópia de estados e i18n (T46/T47) com guarda de acentuação · M
-- Status: `[ ]` · Requisitos: F-36 · Dependências: nenhuma · Nota (2026-10-04): i18n de INTERFACE e idioma PEDAGÓGICO são problemas diferentes; `uiLocale`/`generationLocale` pertencem a R-13/F10, não a esta tarefa
+- Status: `[>]` 2026-10-05 · Requisitos: F-36 · Dependências: nenhuma · Nota (2026-10-04): i18n de INTERFACE e idioma PEDAGÓGICO são problemas diferentes; `uiLocale`/`generationLocale` pertencem a R-13/F10, não a esta tarefa
 - Fazer: varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`); mensagens de vazio/erro/carregando padronizadas. Seguir a skill `codex-portuguese-i18n-repair` se aparecer corrupção.
 - Subtarefas:
-  - [ ] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
+  - [>] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
   - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
   - [ ] Padronizar mensagens de vazio/erro/carregando
   - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
 - Gate: teste de guarda + `npm test`.
+- Próximo passo: o repositório hoje NÃO tem mojibake (varredura git grep limpa fora dos documentos que o descrevem) e `src/i18n/locales/pt-BR.js` cobre só a conta (T11); o app é pt-BR literal em `src/*.js` e `index.html` (a extração total é T46/HG-13, FORA desta tarefa). Escopo: (1) inventário contado por arquivo em `validation.md`; (2) `scripts/text-integrity.mjs` (`findMojibake`, `scanFiles`) + `test/text-integrity.test.js` (casos ruins montados por escapes `Ã§`, sem literal corrompido no arquivo; varredura real dos arquivos rastreados de código e UI; sensor de que a varredura cobre `index.html` e `src/`); (3) padrão de carregando: reticências "…" (U+2026) em vez de "..." (12 ocorrências em `src/app.js`, `src/materials-ui.js`, `index.html`) com o mesmo teste de guarda. Cuidado: não regravar arquivo com PowerShell; usar Edit/Write e conferir acentos.
+- Comando: `node --test test/text-integrity.test.js`
 
 ### Checkpoint F4
 - Humano executa o roteiro (T-F4-01) com a build do checkpoint; achados P0/P1 corrigidos ou aceitos explicitamente.
