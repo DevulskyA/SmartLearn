@@ -52,6 +52,18 @@ Se este arquivo divergir do repositório, o repositório vence. Nenhum número, 
 Fora do fechamento local (gate humano ou posterior): F5 com Codex/Prompt Lab (T-F5-01..04, 05, 06, 07), VALID-8, F7 (HG-09), entrega F9 (T-F9-01/03, HG-05/10), T-F1-05 (HG-03), T-F0-05, T-F2-03/06, T-F4-01/06, T-F6-06c, T-F8-04.
 T-F5-05 depende de T-F5-03 e NÃO integra nenhuma sprint autônoma.
 
+## 2b. Marcos USE-FIRST (2026-10-05, prioridade: USO REAL CONTROLADO > fechar todo o hardening)
+Reclassificação das tarefas JÁ existentes (sem IDs novos, sem reescrever histórico; a ordem das sprints acima não muda). P0 = impede o fluxo de uso real ou ameaça dados · P1 = degrada materialmente aprendizagem/confiabilidade · P2 = necessário para uso diário prolongado · P3 = hardening, limpeza ou release que pode esperar. Só P0/P1 podem ser iniciados antes do uso real; P2/P3 aguardam.
+
+| Marco | Resultado | Tarefas |
+|---|---|---|
+| M0 USABLE_NOW | PDF → gerar aula → revisar/aceitar → estudar → responder → evidência → revisão → Hoje/Estatísticas no Desktop real, sem risco aos dados | CONCLUÍDO no que é automatizável: S1, S2G-b (escopo, reuso, créditos), S3 (runner), S4 (jobs), S5a (UI/offline), F1 (banco único, lock, snapshot, restore), T-F1-09 (Desktop real: IMPORT-1/VERDICT-1). Falta o UAT humano: **T-F4-01 (P0, só o usuário pode fazer)** |
+| M1 CONTENT_QUALITY | Conteúdo médico gerado confiável e medido | T-F5-03 VALID-4 com PDF real (P1), T-F5-01 desenho do Prompt Lab, rascunhos prontos (P1), T-F5-07 VALID-8 (P1), T-F10-02b diretiva de idioma (P1), T-F2-06 volume de questões (P1), T-F5-02 / T-F5-04 / T-F5-05 / T-F5-06 (P2), T-F4-06 regenerar uma questão (P2) |
+| M2 DAILY_USE | Uso diário prolongado confortável | T-F2-03 reauditar (P2), T-F4-02 hierarquia da Revisão (P2), T-F10-06 UI de idioma/consumo (P2), T-F7-01 recuperação de atraso (P2), T-F7-02 onboarding (P2), T-F7-03 FSRS (P3) |
+| M3 RELEASE_HARDENING | Entrega e higiene | T-F8-04 retirar o release instalado (P2), T-F8-05 cargo audit (P3), T-F0-05, T-F1-05, T-F9-01 (P3), T-F9-03 entrega (P3) |
+
+Regra: nenhuma tarefa de M1–M3 vira ativa antes do M0 ser usado de verdade; o achado do uso real decide o próximo outcome.
+
 ## 3. Gate Registry (comandos reais de `package.json`)
 
 | ID | Nível | Comando |
