@@ -53,7 +53,10 @@ function sanitizeOriginalName(name) {
   for (const ch of withoutSeparators) {
     const code = ch.codePointAt(0);
     const isAsciiControl = code < 32 || code === 127;
-    if (!isAsciiControl) printable += ch;
+    // T-F8-02: also C1 controls and invisible format characters (bidi overrides such as U+202E, zero-width marks, BOM) and
+    // line/paragraph separators: a right-to-left override makes "evil.exe" display as "evil.pdf"-looking text.
+    const isInvisible = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ch);
+    if (!isAsciiControl && !isInvisible) printable += ch;
   }
   const trimmed = printable.trim();
   const safe = trimmed.length > 0 ? trimmed : 'source.pdf';
