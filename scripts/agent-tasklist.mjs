@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
 import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs } from './test-live-core.mjs';
+import { resumeCockpit } from './context-core.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -145,6 +146,15 @@ function regenerate(root, coordDir) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  // --resume: the compact "where am I" cockpit (about 25 lines), derived from the TRACKED authorities only. It writes nothing
+  // and never needs HANDOFF.md. Read-only over tasks.md / PROGRAM.md / spec.md / the conductor plan.
+  if (process.argv.includes('--resume')) {
+    const read = (p) => (existsSync(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null);
+    let head = '(unknown)';
+    try { head = `${gitOut(root, ['rev-parse', '--short', 'HEAD']).trim()} on ${gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()}`; } catch { /* not a git checkout */ }
+    console.log(resumeCockpit(read, { head }).join('\n'));
+    process.exit(0);
+  }
   const coordDir = arg('--coord', join(homedir(), 'SmartLearn-AgentCoord'));
   regenerate(root, coordDir);
   // --watch: any change to the plan, GUI.md or CLI.md refreshes the boards within a second, so nobody has to

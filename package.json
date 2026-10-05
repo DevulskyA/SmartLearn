@@ -18,6 +18,8 @@
     "test:e2e": "node scripts/e2e.mjs",
     "lint": "eslint .",
     "test:inventory": "node scripts/check-test-inventory.mjs",
+    "context:resume": "node scripts/agent-tasklist.mjs --resume",
+    "context:check": "node scripts/context-check.mjs",
     "package:standalone": "node scripts/package-standalone.mjs",
     "prepreview": "node scripts/require-work-branch.mjs",
     "preview": "vite preview",

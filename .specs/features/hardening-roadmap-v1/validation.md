@@ -190,3 +190,47 @@ Impacto em tarefas: T-F3-01 ganhou dependências e contrato (T-F10-02a, 03, 04a)
 - Sonda (código em `probes/t-f6-08-account-register-probe.spec.js.txt`; arquivos `zz-probe-*` NÃO ficam no repositório de testes): repete o prelúdio (novo contexto, `goto('/')`, `networkidle`, clicar na conta, esperar `#account-show-register` 2 s), 2 workers em paralelo, cada um com seu backend, registrando navegações do frame principal, mensagens do Vite e tempos.
 - Resultado: (1) carga leve: 2 × 25 = 50 iterações, 0 falhas, `networkidle` em 1,3–1,6 s; (2) CPU saturada por 8 processos externos: 50 iterações, 0 falhas, `networkidle` em 1,5–2,9 s. Nenhuma navegação extra além do carregamento inicial foi distinguida; nenhuma mensagem de reload/otimização do Vite capturada.
 - Conclusão permitida: o prelúdio ISOLADO não reproduz o sintoma nem sob CPU saturada. NÃO se concluiu "ambiental", "flake de Vite" nem "defeito do produto". Hipóteses ainda abertas: (a) corrida de inicialização só em suíte longa (estado acumulado, Vite servindo muitos módulos/otimizando dependências tardiamente), (b) colisão entre workers/lanes, (c) backend do worker, (d) memória/handles (`0xC0000142` do run 3). Próximo discriminador sugerido: rodar a suíte materiais (36) 5x com `E2E_WORKERS=1` e 5x com 2, anexando trace/console de cada falha (`trace: 'retain-on-failure'` já está ligado; ler `test-results/<run>/**/trace.zip`), e comparar taxa por condição; só depois decidir correção.
+
+## F1 e F6 — evidência migrada de tasks.md (2026-10-05)
+
+Estas evidências viviam dentro da linha `Status` de `tasks.md` (que deve guardar só status, dependências e SHAs). O texto abaixo foi MOVIDO sem alteração de conteúdo; em `tasks.md` ficou o ponteiro para cada seção.
+
+### T-F1-01 — Lock de escritor único também para o Desktop: PASS (evidência movida de tasks.md)
+- BASE_SHA: `b57ebf9` · IMPLEMENTATION_SHA: `833762f`
+- backend real segura o lock via `server/src/dev-datastore.js`, chamado por `server/src/main.js` quando `SMARTLEARN_DB_PATH` é o datastore DEV; `dev-remote` só confere; criação exclusiva `wx`; RED→GREEN em `server/test/dev-lock.test.js` com 2 backends reais; prova manual no Desktop real pendente para o checkpoint F1, pois o Desktop aberto agora roda código anterior
+
+### T-F1-02 — Snapshot diário e antes de migração no caminho do Desktop: PASS (evidência movida de tasks.md)
+- BASE_SHA: `833762f` · IMPLEMENTATION_SHA: `2d356df`
+- snapshot consistente por `VACUUM INTO` — não cópia crua de db+wal+shm —, verificado por `integrity_check`/`foreign_key_check`/contagens/sha256 + manifesto; diário 1x/dia e `pre-migrate-v<N>` ANTES da migração no `server/src/main.js` (falha de backup aborta a migração, banco intacto); launcher imprime `Snapshot: <caminho>` e para se não verificar; retenção 7 dias sem nunca deixar zero snapshot válido, `pre-migrate-*` nunca podados; testes `dev-snapshot`, `dev-datastore-startup` com backend real, `desktop-entrypoint`
+
+### T-F1-03 — Ensaio de restauração (restore drill) documentado e automatizado: PASS (evidência movida de tasks.md)
+- BASE_SHA: `2d356df` · IMPLEMENTATION_SHA: `30d5c9c`
+- `server/src/dev-restore.js` + `scripts/dev-restore.mjs`; nunca escreve no datastore vivo; ensaio REAL em CÓPIA temporária de `SmartLearn-db-backupsp0-devdata-20261004-005048` (v29, 10 unidades, 160 revisões): 7/7 PASS. INCIDENTE: uma tentativa anterior abriu o backup original em somente-leitura e recriou seu `-shm` volátil; `.db` e `-wal` seguem com o hash de `SHA256.txt` — daqui em diante só em cópias
+
+### T-F1-04 — Ciclo de vida de processos: Job Object e limpeza do launcher: PASS (evidência movida de tasks.md)
+- BASE_SHA: `a6b9645` · IMPLEMENTATION_SHA: `b926b44`: `src-tauri/src/kill_on_close_job.rs` , backend colocado no job logo após o spawn; testes Rust: fechar o job mata o processo e o neto sem `kill()` ; cargo 32/32; launcher encerra e imprime só `node` cujo caminho está na própria worktree
+- código; prova manual de `Stop-Process -Force` no `smartlearn.exe` real pendente para o checkpoint F1
+- windows-sys, KILL_ON_JOB_CLOSE; falha = degradação reportada, nunca fatal
+- mutação: com `LimitFlags=0` os processos sobrevivem → testes vermelhos
+
+### T-F1-06 — Purga de sessões expiradas/revogadas: PASS (evidência movida de tasks.md)
+- BASE_SHA: `30d5c9c` · IMPLEMENTATION_SHA: `8bc8ca0`
+- `purgeStaleSessions` em `server/src/repositories/sessions.js`, chamada na subida após as migrações; remove revogadas/expiradas há > 30 dias; sessão ativa — inclusive DEV de ~10 anos — intocada; durações de produção inalteradas; `server/test/session-purge.test.js`; auth existente `session-security`/`dev-persistent-session` verdes
+
+### T-F1-07 — Critério de build por conteúdo, não por commit: PASS (evidência movida de tasks.md)
+- BASE_SHA: `8bc8ca0` · IMPLEMENTATION_SHA: `a6b9645`
+- `inputsHash` sha256 de `src/`, `shared/`, `server/src`, `server/migrations`, `index.html`, `package.json`, com CRLF→LF e sem `node_modules`; entra em `readBuildIdentity` e no `build-info.json`; o launcher decide rebuild/`distIsCurrent` e a recusa de build defasada pelo hash e imprime `Build: content <hash12> (built at commit X), opened at Y`; a identidade exibida segue verdadeira: commit = onde o conteúdo foi construído. Testes em `version-identity.test.js`; docs-only não muda o hash
+
+### T-F1-08 — Versão na barra de título e comando de diagnóstico: PASS (evidência movida de tasks.md)
+- BASE_SHA: `b926b44` · IMPLEMENTATION_SHA: `1bf0604`
+- título via `SMARTLEARN_WINDOW_TITLE` do launcher + `window_title` testado em Rust; "Copiar diagnóstico" em Configurações > Sobre com versão/canal/build/esquema/banco/contagens — só contagens, só canal DEV, nunca caminho em release; `/health/build` ganhou `content`; CORREÇÃO de consequência de T-F1-07: o aviso de divergência app×servidor passa a comparar o hash de conteúdo, senão um commit só de docs geraria alarme falso; verificação via CDP do título real pendente para o checkpoint
+
+### T-F6-01 — Definir e etiquetar a suíte "materiais": PASS (evidência movida de tasks.md)
+- BASE_SHA: `d603aba` · IMPLEMENTATION_SHA: `1328499`
+- commit único com T-F6-01 e T-F6-02
+- em vez de editar títulos, a suíte é definida POR ARQUIVO em `e2e/support/suites.js`: 9 specs, 36 testes, `npm run test:e2e:materials`; o "45/45" histórico não é reproduzível e fica formalmente substituído por 36; opt-in Codex/PDF real fora; 36/36 verdes em 1,9 min com 2 workers; registro na `TEST_COVERAGE_MATRIX.md` em T-F6-07
+
+### T-F6-02 — Portas dinâmicas e saída única por execução: PASS (evidência movida de tasks.md)
+- BASE_SHA: `d603aba` · IMPLEMENTATION_SHA: `1328499`
+- commit único com T-F6-01 e T-F6-02
+- `scripts/e2e.mjs`: porta Vite livre, bloco de portas de servidor reservado de forma atômica em `os.tmpdir()` (arquivo `wx`, dono morto é retomado), `outputDir` `test-results/<run>`; os 42 specs derivam portas/origem de `e2e/support/ports.js`; `npx playwright test` direto mantém os padrões históricos; prova: 2 execuções simultâneas do mesmo spec passaram 5/5 cada em offsets 0 e +4000; antes da reserva atômica a 2ª execução colidiu (3 falhas), registrado como RED real; `test/e2e-ports.test.js`

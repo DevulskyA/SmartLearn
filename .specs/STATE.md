@@ -1,37 +1,16 @@
-# STATE.md — SmartLearn (Memento)
+# STATE.md — fase atual (curto; um único STATE ativo)
 
-> Snapshot de continuidade. Autoridade em conflito: Git/código/dados reais > validação > decisão humana > spec > este arquivo > plano > chat.
-> Histórico integral e intocado: `.specs/archive/STATE-ate-2026-10-04.md` (cópia byte a byte do STATE de 2026-09-10..10-03; seções citadas abaixo por nome). Cockpit de retomada: `.specs/EXECUTION.md`. Posição de sessão: `.specs/HANDOFF.md` (local, ignorado pelo Git).
+Autoridades: Git/código/testes = realidade · `.specs/features/hardening-roadmap-v1/` (`PROGRAM.md` ordem, `tasks.md` tarefas/estados/SHAs, `spec.md` requisitos e portões humanos, `validation.md` evidência, `uat-visual.md`) · `conductor/tracks/hardening-roadmap-v1/plan.md` macro · `.specs/ARTIFACTS.md` externos.
+Este arquivo NÃO copia lista de tarefas nem evidência. Para a posição exata: `npm run context:resume`.
 
-**Atualizado:** 2026-10-04 · **Worktree/branch:** `C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-v1-complete` · `claude/smartlearn-v1-complete` · só local (NO_PUSH / NO_MERGE(main) / NO_DEPLOY / NO_RELEASE)
+CURRENT_PHASE=hardening-roadmap-v1 · sprint S3 (verdade do runner e2e). Fechadas: S0, S1, S2, S2G-a/b (geração segura), S2b.
+ACTIVE_TASK=resolvida por `npm run context:resume` (a tarefa `[>]` em `tasks.md`); não é repetida aqui para não envelhecer.
+LAST_PROVEN_MILESTONE=S2b / T-F2-05 (pré-visualização do aceite) e S2G (idiomas, reuso, créditos): evidência em `validation.md`; servidor 901/901, e2e materiais 38/38.
+NEXT_MILESTONE=S3 fechada: T-F6-08 (causa do sintoma `#account-show-register`) → T-F6-03 (3 e2e consecutivos, ≤ 8 min, 2 workers) → T-F6-09 (uma autoridade de runner); depois S4 (jobs, T-F3-01..05).
+CRITICAL_BLOCKER=nenhum técnico. Portões humanos abertos não bloqueiam o trabalho local: ver `spec.md` §8 (HG-01..HG-13).
+V1_STATUS=ENGINEERING_LOCAL em andamento; V1_VALIDATED exige VALID-8 (HG-06) e REALMODEL_CONTENT_QUALITY_PROVEN: definição em `spec.md` §10.
 
-## Posição
-- HEAD de código: `169ec2d`; depois só docs/Prompt Lab (`git log -1` manda). Esquema do banco v30 (migrações 001–030; próxima livre 031). Versão do app `0.1.0`.
-- Baseline de testes (T-F0-01, reproduzido por execução em 2026-10-04): ver `.specs/features/hardening-roadmap-v1/validation.md`.
-- Plano ativo: `.specs/features/hardening-roadmap-v1/{spec.md,tasks.md}` (ordem: F0, F1, F6 [T-F6-01..03], F2, F4, F3, F8, F5, F7, F9). Track macro: `conductor/tracks/v1-validation/plan.md`; painel: `node scripts/agent-tasklist.mjs`.
-- **`PROMPT_LAB=MANUAL_GATE`** (decisão humana 2026-10-04): o Prompt Lab permanece documentado como capacidade/etapa futura (harness e baseline entregues; planos e variantes H1–H5 preservados em `.specs/features/prompt-lab/`), mas NUNCA entra automaticamente na fila de execução. `READY_FOR_PROMPT_LAB=YES` significa só "pré-condições satisfeitas". Só uma instrução explícita da pessoa autoriza iniciar Prompt Lab, Codex ou qualquer geração associada. Evidência existente: VALID-4 PASS e VALID-5 PASS de fidelidade, com limites; saídas em `C:UsersArielSmartLearn-PromptLab`.
+PROIBIDO sem ordem explícita: Codex/Prompt Lab, chamada real a modelo, push, merge, deploy, release, rebase, squash, force-push; tocar o banco DEV humano (usar cópia). Ver `tasks.md` regras 8–9 e `PROGRAM.md` §1.
 
-## Decisões canônicas em vigor (não reabrir sem decisão humana)
-- **Arquitetura (ARCH-01, 2026-09-11):** Desktop local-first; backend Node local em loopback (LOCAL-01A/01B); servidor central só é autoridade no modo remoto/Companion. Seção "ARCHITECTURE SUPERSESSION" do arquivo morto.
-- **Filosofia:** SMARTLEARN_PRODUCT_FIRST_V1 (valor ao aluno acima de processo). Constituição `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` (§0.1 desempata direção); padrões `02_SMARTLEARN_QUALITY_STANDARD_V1.md` e `SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` (v2.1.0; §4.33/I11 superfícies protegidas, ADR-0001: Estatísticas protegida).
-- **IA como produto (AI_AS_PRODUCT_SPEC, 2026-09-12):** provedor/modelo/esforço/versão de prompt são variáveis de produto que o assistente nunca escolhe nem muda em silêncio; `AI_SILENT_FALLBACK=FORBIDDEN`; conteúdo curado manualmente é `CURATED_CONTENT_TEST`, nunca evidência de qualidade de IA.
-- **Provedor ativo:** CODEX (decisão humana 2026-10-03: `codex exec` com o login existente, sem API key; `SMARTLEARN_AI_PROVIDER=CODEX` + `SMARTLEARN_AI_CONSENT=true`; falha fechada, nunca FAKE). A decisão de 2026-09-12 (`AI_PROVIDER_DECISION`: OPENAI gpt-5.6-luna, esforço alto) continua implementada e selecionável, mas NÃO é o provedor ativo (EXECUTION.md ainda a cita: reconciliar em T-F0-03). Prompt do produto = versão 5; não mudar sem decisão humana.
-- **Dados:** HUMAN DEV DATA != TEST DATA; banco DEV canônico `C:\Users\Ariel\SmartLearn-DevData\smartlearn-dev.db` (fora de qualquer worktree, nunca tocado por teste); migrações só para a frente e com backup; backups (`C:\Projetos\SmartLearn-db-backups`) e fontes importadas nunca são apagados por rotina; bancos legados #1/#3/#5 preservados sem mesclar.
-- **Aula (contrato LESSON):** Resumo + Questões + Fonte + Auditoria como entidades separadas; ids de questão estáveis e nunca reutilizados; edição granular por entidade; questão rejeitada nunca vira exercício; abrir um rascunho NÃO recalcula nem grava e NÃO reaudita (decisão humana; reauditar só como ação explícita futura, HG-02).
-- **Política de modelos e autorização (decisão humana, 2026-10-04):** Sonnet 5.5 High = todo trabalho intelectual, implementação, investigação e decisão; Haiku = SOMENTE execução mecânica de testes; nenhum outro modelo executa trabalho do projeto sem instrução explícita. Nenhuma chamada ao Codex, Prompt Lab ou geração externa sem autorização explícita da pessoa; "próxima etapa possível" (p.ex. `READY_FOR_PROMPT_LAB=YES`) NÃO é etapa autorizada. As 3 gerações do baseline (`runs\baseline-v5-span-20261004-172209`, 17:22–17:45) foram lançadas pela sessão anterior e terminaram antes de qualquer ação desta; esta sessão não iniciou nenhuma chamada ao Codex.
-- **Codex:** zero chamada em testes, fixtures e validação de UI; geração real só pelo runner do Prompt Lab (`scripts/prompt-lab/run-generation.mjs`, ≤ 3 rodadas, só em cópia sob `SmartLearn-PromptLab`) ou por ação explícita do usuário.
-- **Processo:** tasklist visual é capacidade canônica (GOV-2 opção A: skill `tlc-spec-driven-strict`; `plan.md` é só o ledger macro; exatamente uma tarefa `[>]`); nada de push/merge/deploy/release sem ordem explícita por ação.
-- **DEV/Desktop:** launcher canônico `npm run dev:desktop` (fixa banco/fontes, verifica o executável); sessão DEV persistente só por `SMARTLEARN_DEV_PERSISTENT_SESSION` do launcher (recusada em produção); autenticação de produção inalterada (INV-08).
-
-## NOT_PROVEN / abertos
-`VALID_8` e `REALMODEL_CONTENT_QUALITY_PROVEN` (decisão/confirmação humana, HG-06; 1 unidade, avaliação por IA) · `VISUAL_VALIDATION` da janela nativa (aguarda humano) · suíte "materiais": o "45/45" histórico não era reproduzível e foi substituído por 36 testes definidos por arquivo (T-F6-01 `[✓]`, `npm run test:e2e:materials`) · fumaça Windows nativa de IMPORT-1/VERDICT-1 · qualidade médica semântica entre idiomas além dos sensores determinísticos · defeito D1 de extração por colunas: corrigido no código (T-F5-08 `[✓]`, 21aedd1); fontes já gravadas no banco DEV mantêm a ordem antiga até reextração (decisão separada, exige backup e reupload; INV-06/07).
-Flakes pré-existentes sob carga: `content-quality-flow.spec.js`, `hoje-block-retest.spec.js` (ver EXECUTION.md).
-
-## Decisões humanas pendentes (HUMAN_GATES; detalhe em `hardening-roadmap-v1/spec.md` §8)
-HG-01 volume de questões · HG-02 reauditar como ação explícita · HG-03 destino dos bancos legados · HG-04 retirar o release instalado de 10/09 · HG-05 estratégia de integração/destino de `content-quality` · HG-06 avaliação humana VALID-4/5/8 · HG-07 orçamento de chamadas do Codex no Prompt Lab · HG-08 política de PDFs de teste · HG-09 recuperação de atraso/onboarding · HG-10 push/merge/deploy/release.
-
-## Não rastreados (T-F0-04)
-`src-tauri/resources/`: resolvido — os 4 `.gitkeep` voltam a ser rastreados (o conteúdo gerado por `package:standalone` segue ignorado; teste `test/resources-placeholders.test.js`). `.impeccable/` (`config.json` + `hook.cache.json`, 16 KB) e `.specs/benchmarks/reasoning-effort/` (3 arquivos, 28 KB): decisão PROPOSTA, não aplicada — ignorar `hook.cache.json`, decidir se `config.json` é rastreado; rastrear `benchmarks/` como documentação do Codex se o humano confirmar a origem.
-
-## Recuperação
-`git worktree list` → entrar na worktree de `claude/smartlearn-v1-complete` → `git branch --show-current`, `git rev-parse HEAD`, `git status --short` → `.specs/EXECUTION.md` → `.specs/HANDOFF.md` (se existir; Git vence) → ledger/tarefa ativa. Nunca inspecionar/editar `main`. Sensor de preservação deste arquivo: `node scripts/check-state-ids.mjs <rev-anterior>`.
+DECISÕES E INVARIANTES HERDADOS (texto integral preservado, não duplicado): `.specs/archive/STATE-ate-2026-10-05.md` (STATE anterior), `.specs/archive/STATE-ate-2026-10-04.md` (STATE de 2.815 linhas) e `.specs/project/INVARIANTS.md`. Decisões de produto de 2026-10-04: `spec.md` R-12, R-13, INV-13/14 e §12.
+Esse STATE substitui `.specs/project/STATE.md` (arquivado em `.specs/archive/project-STATE-ate-2026-09-04.md`).
