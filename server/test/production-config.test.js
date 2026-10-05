@@ -239,3 +239,9 @@ test('capability review: the native window gets only core:default; the CSP keeps
   assert.equal(directive('style-src'), "style-src 'self' 'unsafe-inline'");
   assert.equal(directive('connect-src'), "connect-src 'self' https: http://localhost:*");
 });
+
+// T-F6-10: the cheap test-only password hashing must never be present in a production launch.
+test('SMARTLEARN_TEST_FAST_SCRYPT is refused in production, whatever else is set', () => {
+  assert.deepEqual(codes(GOOD), [], 'the good environment stays clean');
+  assert.ok(codes({ ...GOOD, SMARTLEARN_TEST_FAST_SCRYPT: '1' }).includes('TEST_FAST_SCRYPT_SET'));
+});

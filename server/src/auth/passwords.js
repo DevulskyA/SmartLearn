@@ -4,8 +4,13 @@ import { promisify } from 'node:util';
 const scryptAsync = promisify(scrypt);
 
 // design.md §3 scrypt parameters.
+// T-F6-10: the e2e runner (scripts/e2e.mjs) sets SMARTLEARN_TEST_FAST_SCRYPT=1 so ~190 browser tests do not each pay two real
+// N=131072 hashes (~2 s of a ~3.5 s sign-in). It is honored ONLY when NODE_ENV is exactly 'test' (every e2e server sets it), is refused
+// by validateProductionConfig, and verifyPassword always uses the params stored with each hash, so production hashing and any hash
+// made with the real params are untouched. Server unit tests do not set it and keep proving the real parameters.
+export const FAST_SCRYPT_FOR_TESTS = process.env.NODE_ENV === 'test' && process.env.SMARTLEARN_TEST_FAST_SCRYPT === '1';
 export const SCRYPT_PARAMS = Object.freeze({
-  N: 131072,
+  N: FAST_SCRYPT_FOR_TESTS ? 1024 : 131072,
   r: 8,
   p: 1,
   keylen: 64,

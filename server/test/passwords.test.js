@@ -82,3 +82,21 @@ test('overloaded hashing does not crash or hang — health-equivalent probe stay
   const results = await Promise.allSettled(many);
   assert.ok(results.every(r => r.status === 'fulfilled'), 'all queued hash jobs must eventually complete, not reject or hang');
 });
+
+// T-F6-10: e2e servers hash with cheap scrypt params; that switch must be honored ONLY for NODE_ENV=test with the flag, and the real
+// parameters must stay the default everywhere else (the module reads the environment at import time, so each case is a fresh process).
+test('cheap test hashing is honored only with NODE_ENV=test AND the flag; every other combination keeps the real parameters', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const nOf = (env) => {
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./src/auth/passwords.js').then((m) => console.log(m.SCRYPT_PARAMS.N))"],
+      { cwd: new URL('..', import.meta.url), env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...env }, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return Number(r.stdout.trim());
+  };
+  assert.equal(nOf({ NODE_ENV: 'test', SMARTLEARN_TEST_FAST_SCRYPT: '1' }), 1024);
+  assert.equal(nOf({ NODE_ENV: 'test' }), 131072, 'no flag, real parameters');
+  assert.equal(nOf({ NODE_ENV: 'production', SMARTLEARN_TEST_FAST_SCRYPT: '1' }), 131072, 'production ignores the flag');
+  assert.equal(nOf({ SMARTLEARN_TEST_FAST_SCRYPT: '1' }), 131072, 'no NODE_ENV, ignores the flag');
+  assert.equal(nOf({ NODE_ENV: 'development', SMARTLEARN_TEST_FAST_SCRYPT: '1' }), 131072);
+  assert.equal(SCRYPT_PARAMS.N, 131072, 'the server unit tests themselves keep proving the real parameters');
+});

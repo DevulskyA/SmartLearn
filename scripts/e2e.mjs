@@ -85,6 +85,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   env.E2E_PORT_OFFSET = String(offset);
   env.E2E_VITE_PORT = String(vitePort);
   env.E2E_RUN_ID = `${Date.now()}-${process.pid}`;
+  // T-F6-10: the spec servers (all started with NODE_ENV=test) hash passwords with cheap scrypt params; see server/src/auth/passwords.js
+  env.SMARTLEARN_TEST_FAST_SCRYPT = '1';
   console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : ''}`);
   const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test', ...args], { env, stdio: 'inherit', shell: process.platform === 'win32' });
   child.on('exit', (code) => { release(); process.exit(code ?? 1); });

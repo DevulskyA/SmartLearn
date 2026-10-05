@@ -497,7 +497,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Resultado: medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados (491 s × 490 s), então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers (evidência em `validation.md`, T-F6-03).
 - Próximo passo: nenhum; tarefa fechada. Próxima: T-F6-09.
 - Fazer: separar specs independentes em grupos (`--shard` ou projetos), mantendo a ordem onde há dependência; meta ≤ 8 min com 2 workers sem aumentar flakes (medir 3 execuções consecutivas).
-- Gate: 3 execuções consecutivas sem falha; relatório de tempos.
+- Gate: 3 execuções consecutivas sem falha; relatório de tempos. (480 s = SLO de desempenho / orçamento de feedback, reclassificado em 2026-10-05; não é requisito funcional imutável.)
 - Subtarefas:
   - [x] Medir o baseline (534 s, 205 passed, 2 workers)
   - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)

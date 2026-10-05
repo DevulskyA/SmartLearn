@@ -14,6 +14,9 @@ export function validateProductionConfig(env = process.env, { fileExists = exist
 
   if (env.NODE_ENV !== 'production') problems.push(problem('NODE_ENV_NOT_PRODUCTION', 'NODE_ENV deve ser "production" (cookies Secure/__Host-, sem atalhos de desenvolvimento).'));
 
+  // The test-only cheap password hashing (T-F6-10) must never be present in a production launch, whatever else is set.
+  if (env.SMARTLEARN_TEST_FAST_SCRYPT) problems.push(problem('TEST_FAST_SCRYPT_SET', 'SMARTLEARN_TEST_FAST_SCRYPT é só para testes e não pode existir em produção.'));
+
   // Persistent data paths: a relative default silently creates an EMPTY database per working directory.
   for (const [code, name] of [['DB_PATH', 'SMARTLEARN_DB_PATH'], ['SOURCES_DIR', 'SMARTLEARN_SOURCES_DIR']]) {
     if (!env[name]) problems.push(problem(`${code}_MISSING`, `${name} deve ser definido explicitamente.`));
