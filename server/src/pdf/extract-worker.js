@@ -12,6 +12,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { classifyExtractionError, rollUpExtractionStatus } from './classify-extraction-error.js';
 import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShiftedGlyphs, reflowLines, groupFigureLabels, linesFromItems } from './page-text.js';
+import { orderItemsByColumns } from './column-order.js';
 import { readOutline } from './outline.js';
 import { detectHeadings, keepPresentHeadings } from './headings.js';
 
@@ -45,8 +46,14 @@ async function run() {
     try {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      const text = pageTextFromItems(content.items);
-      pageLines[i - 1] = linesFromItems(content.items);
+      // Reading order of two-column pages (see column-order.js). Only for an unrotated page whose box starts at the
+      // origin, where item coordinates and page size are in the same units; any other page keeps the painted order.
+      const [x0, y0, x1, y1] = page.view;
+      const items = x0 === 0 && y0 === 0 && !(page.rotate % 360)
+        ? orderItemsByColumns(content.items, { width: x1, height: y1 })
+        : content.items;
+      const text = pageTextFromItems(items);
+      pageLines[i - 1] = linesFromItems(items);
       pages.push({ index: i, text, status: text.trim().length > 0 ? 'OK' : 'EMPTY' });
     } catch (err) {
       pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });
