@@ -12,22 +12,22 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F6-09 · TAREFAS: 25/70 · SUBTAREFAS DA ATIVA: T-F6-03 3/10 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F6-09 · TAREFAS: 25/70 · SUBTAREFAS DA ATIVA: T-F6-03 5/10 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 3/10
+- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 5/10
   Resultado atual: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
-  Próximo passo: DECISÃO de como atingir ≤ 8 min
+  Próximo passo: Ler test-results/t-f6-03/gates-summary.txt
   Gate: 3 execuções consecutivas sem falha; relatório de tempos
   - [x] Medir o baseline (534 s, 205 passed, 2 workers)
   - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
   - [x] Perfilar o caminho crítico (achado: ~156 de 207 testes repetem um prelúdio de login pela UI de ~3,5 s: goto 0,4 + networkidle 0,9 + registrar 1,2 + entrar 1,0; ≈ 530 s de trabalho de worker)
-  - [>] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)  ← EM EXECUÇÃO
-  - [ ] Full run de confirmação ≤ 460 s (2 workers, 0 falhas)
-  - [ ] Gate #1 ≤ 480 s
+  - [x] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)
+  - [x] Full run de confirmação ≤ 460 s (454 s, 205 passed, 0 falhas, 2 workers)
+  - [>] Gate #1 ≤ 480 s  ← EM EXECUÇÃO
   - [ ] Gate #2 ≤ 480 s
   - [ ] Gate #3 ≤ 480 s
   - [ ] Registrar a evidência em `validation.md`
