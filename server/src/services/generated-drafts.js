@@ -457,7 +457,9 @@ export async function createDraft(db, userId, proposalId, {
     closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
     if (err instanceof DraftError) throw err;
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
-    throw new DraftError('PROVIDER_ERROR', String(err.message || err));
+    // T-F8-03: an exception the provider adapters did not shape themselves is NOT reported verbatim -- its text can carry the
+    // request (credential, source text) and this message is returned to the client and stored on the job.
+    throw new DraftError('PROVIDER_ERROR', 'O provedor falhou de forma inesperada. Nada foi salvo.');
   }
 
   let validated;
