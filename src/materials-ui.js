@@ -695,7 +695,7 @@ sourcesFileInput?.addEventListener("change", async () => {
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
   try {
-    setSourcesMessage("Enviando PDF...");
+    setSourcesMessage("Enviando PDF…");
     const uploadResult = await SourceProposalsUI.uploadSource(file);
     if (!uploadResult.ok) {
       setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
@@ -703,7 +703,7 @@ sourcesFileInput?.addEventListener("change", async () => {
     }
     currentSourceId = uploadResult.source.id;
 
-    setSourcesMessage("Extraindo texto do PDF...");
+    setSourcesMessage("Extraindo texto do PDF…");
     const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
     if (!extractResult.ok) {
       setSourcesMessage(extractResult.message || "Não foi possível extrair o texto do PDF.", true);
@@ -714,7 +714,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       return;
     }
 
-    setSourcesMessage("Gerando trechos propostos...");
+    setSourcesMessage("Gerando trechos propostos…");
     const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
     // The same PDF sent again: its trechos (and any rascunho or accepted content on them) already exist and are never
     // replaced silently. Land on them instead of a dead-end error.

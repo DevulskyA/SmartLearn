@@ -818,7 +818,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   const summaryTextarea = document.createElement("textarea");
   summaryTextarea.rows = 6;
   summaryTextarea.value = unit?.summaryBody ?? "";
-  summaryTextarea.placeholder = "Escreva o resumo do conteúdo estudado...";
+  summaryTextarea.placeholder = "Escreva o resumo do conteúdo estudado…";
   summaryTextarea.dataset.summaryEdit = String(task.id);
   summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
 
@@ -2931,7 +2931,7 @@ migrationFileInput?.addEventListener("change", async () => {
   const [file] = migrationFileInput.files ?? [];
   if (!file) return;
   resetMigrationPanels();
-  setMigrationMessage("Lendo e validando o arquivo...");
+  setMigrationMessage("Lendo e validando o arquivo…");
   try {
     const rawSource = JSON.parse(await readFileText(file));
     const result = await MigrationUI.previewImport(rawSource);
@@ -2966,7 +2966,7 @@ migrationConfirmBtn?.addEventListener("click", async () => {
   if (!confirmed) return;
 
   migrationConfirmBtn.disabled = true;
-  setMigrationMessage("Confirmando importação...");
+  setMigrationMessage("Confirmando importação…");
   try {
     const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
     if (!result.ok) {
@@ -4142,7 +4142,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
     DB.subjects.getActive(),
     DB.subjects.getAll(),
   ]);
-  subjectSelect.replaceChildren(new Option("Selecione...", ""));
+  subjectSelect.replaceChildren(new Option("Selecione…", ""));
 
   for (const subject of activeSubjects) {
     subjectSelect.add(new Option(subject.name, String(subject.id)));
