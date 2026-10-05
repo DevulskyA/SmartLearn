@@ -632,6 +632,6 @@ Corrige a formulação anterior de T-F6-06c ("provar que o runtime Android usa R
 - Prova: 3 testes novos (prompt com/sem locale, locale chega ao corpo enviado ao modelo via fetch gravado, esquema Codex); mutante (OpenAI deixa de repassar o locale) → vermelho, restaurado. Servidor 982/982, raiz 629/629, lint limpo. Nenhuma chamada real. A prova com modelo real segue NOT_PROVEN (Prompt Lab/VALID-4, adiado).
 
 ### T-F2-06 — Política de volume de questões (2026-10-05): PASS
-- BASE_SHA  · IMPLEMENTATION_SHA . HG-01 era um padrão de produto reversível já recomendado no spec §8 (proporcional ao tamanho, com teto, fora do prompt) → aplicado sem escalar; ajustável em .
--  acrescenta  (LOW, escopo draft): máx = clamp(⌈caracteres/300⌉, 5, 40), mín = max(1, ⌊caracteres/4000⌋). É só aviso: não bloqueia o aceite, não dispara reparo com modelo e nada é cortado. Rótulo na Revisão: "Quantidade de questões fora do esperado".
+- BASE_SHA `783abcd` · IMPLEMENTATION_SHA `1f1a686`. HG-01 era um padrão de produto reversível já recomendado no spec §8 (proporcional ao tamanho, com teto, fora do prompt) → aplicado sem escalar; ajustável em `QUESTION_VOLUME_POLICY`.
+- `auditDraft` acrescenta `QUESTION_VOLUME_OUT_OF_RANGE` (LOW, escopo draft): máx = clamp(⌈caracteres/300⌉, 5, 40), mín = max(1, ⌊caracteres/4000⌋). É só aviso: não bloqueia o aceite, não dispara reparo com modelo e nada é cortado. Rótulo na Revisão: "Quantidade de questões fora do esperado".
 - Prova: 2 testes novos (unidade pequena com 35 → sinalizada, grande com 35 → não; poucas questões para fonte grande → sinalizada; proporcional e unidade minúscula com 1 → não); mutante (achado não é emitido) → 2 testes vermelhos, restaurado. Servidor 984/984, raiz 629/629, lint limpo, sem Codex.
