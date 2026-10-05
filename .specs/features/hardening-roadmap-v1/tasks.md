@@ -57,7 +57,7 @@ Ordem recomendada original (superada por `PROGRAM.md`): F0, F1, F6(T-F6-01..03),
 Objetivo: partir de um estado em que Git, documentação e árvores de trabalho dizem a mesma coisa; sem isso, medir o resto não tem valor.
 
 ### T-F0-01 — Congelar o baseline e registrar o Memento · S
-- Status: `[✓]` 2026-10-04 (baseline reproduzido por execução e registrado em `validation.md`; Memento = `.specs/STATE.md` de 36+ linhas; achado: 1 teste de isolamento vermelho desde `8fb8e9f`, corrigido em `11372c1`) · Requisitos: R-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `6aef8f3` · IMPLEMENTATION_SHA `11372c1` (baseline reproduzido por execução e registrado em `validation.md`; Memento = `.specs/STATE.md` de 36+ linhas; achado: 1 teste de isolamento vermelho desde `8fb8e9f`, corrigido em `11372c1`) · Requisitos: R-08 · Dependências: nenhuma
 - Superfície: `.specs/STATE.md` (seção Handoff), `.specs/features/hardening-roadmap-v1/validation.md` (novo, só baseline).
 - Fazer: registrar HEAD, contagens de teste, banco canônico, esquema v30, versão `0.1.0`, hashes de backup (`SmartLearn-db-backups\p0-*`), `NOT_PROVEN` vigentes.
 - Sensores: nenhum de código; verificação cruzada manual contra Git (`git rev-parse`, `git status`) e `last-launch.json`.
@@ -65,7 +65,7 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Done quando: Memento cabe em ≤ 60 linhas e um leitor novo reconstrói o estado sem o chat.
 
 ### T-F0-02 — Compactar `STATE.md` (~2,8 mil linhas) sem perder decisões canônicas · M
-- Status: `[✓]` 2026-10-04 (STATE 2815 → 36 linhas; arquivo morto `.specs/archive/STATE-ate-2026-10-04.md`, ASCII no nome, byte a byte igual ao HEAD anterior, sha256 f99b806e…; PREMISSA CORRIGIDA: não existem IDs `DEC-/AD-/INV-` no STATE, então o sensor compara TODOS os tokens `MAIÚSCULAS_COM-SEPARADOR`: `node scripts/check-state-ids.mjs <rev>` = 364 antigos, 0 ausentes em STATE+arquivo; teste `test/check-state-ids.test.js`) · Requisitos: R-08 · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `ff83d20` · IMPLEMENTATION_SHA `33d67d2` (STATE 2815 → 36 linhas; arquivo morto `.specs/archive/STATE-ate-2026-10-04.md`, ASCII no nome, byte a byte igual ao HEAD anterior, sha256 f99b806e…; PREMISSA CORRIGIDA: não existem IDs `DEC-/AD-/INV-` no STATE, então o sensor compara TODOS os tokens `MAIÚSCULAS_COM-SEPARADOR`: `node scripts/check-state-ids.mjs <rev>` = 364 antigos, 0 ausentes em STATE+arquivo; teste `test/check-state-ids.test.js`) · Requisitos: R-08 · Dependências: T-F0-01
 - Superfície: `.specs/STATE.md`; histórico antigo movido para `.specs/archive/STATE-até-2026-10-04.md` (cópia íntegra, nada apagado).
 - Fazer: manter no STATE só decisões `CANONICAL` (AD/DEC), invariantes e o handoff; o restante vira arquivo morto referenciado.
 - Sensor: script que lista IDs de decisão (`DEC-*`, `AD-*`, `INV-*`) antes/depois e falha se algum sumir.
@@ -73,13 +73,13 @@ Objetivo: partir de um estado em que Git, documentação e árvores de trabalho 
 - Risco: perda de decisão. Mitigação: arquivo morto íntegro e comparação por ID.
 
 ### T-F0-03 — Reconciliar painel mestre e planos de track · S
-- Status: `[✓]` 2026-10-04 (track `conductor/tracks/hardening-roadmap-v1/plan.md` criado e ativo; painel mestre de 07/09 marcado como histórico; `agent-tasklist.mjs` regenerou o bloco ACTIVE-TRACK e os painéis; EXECUTION.md reconciliado: provedor ativo CODEX, track ativo, VALID-4/5) · Requisitos: R-08 · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `33d67d2` · IMPLEMENTATION_SHA `b82e9c9` (track `conductor/tracks/hardening-roadmap-v1/plan.md` criado e ativo; painel mestre de 07/09 marcado como histórico; `agent-tasklist.mjs` regenerou o bloco ACTIVE-TRACK e os painéis; EXECUTION.md reconciliado: provedor ativo CODEX, track ativo, VALID-4/5) · Requisitos: R-08 · Dependências: T-F0-01
 - Superfície: `conductor/tracks.md` (bloco não gerado), `conductor/tracks/v1-validation/plan.md`, criação de `conductor/tracks/hardening-roadmap-v1/plan.md` apontando para esta pasta.
 - Fazer: marcar o painel de 07/09 como histórico apontando para o STATE; incluir VALID-4/5/8 como `NOT_PROVEN` com ponteiro para F5; gerar o bloco ACTIVE-TRACK com `node scripts/agent-tasklist.mjs`.
 - Gate: `node scripts/agent-tasklist.mjs` termina sem erro e o bloco gerado reflete o track novo.
 
 ### T-F0-04 — Regra de ignore para artefatos regeneráveis e decisão sobre não rastreados · S
-- Status: `[✓]` 2026-10-04 · BASE_SHA `7c6ee21`/`d562dc8` · Requisitos: R-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `7c6ee21`/`d562dc8` · IMPLEMENTATION_SHA `ff83d20` · Requisitos: R-08 · Dependências: nenhuma
 - CORREÇÃO DA PREMISSA (evidência): `.gitignore` já ignora o conteúdo gerado de `src-tauri/resources/*` com exceção dos `.gitkeep`, mas os 4 `.gitkeep` NÃO estavam rastreados — o commit `ae81f67` os removeu do índice por engano, o que deixava `src-tauri/resources/` como não rastreado e um checkout limpo sem os diretórios que `tauri.conf.json` exige (invariante LOCAL-01B). Correção: restaurar o rastreamento dos 4 `.gitkeep` (sem mudar `.gitignore`) + sensor `test/resources-placeholders.test.js` (RED antes: `git ls-files` vazio; GREEN depois). Decisão sobre `.impeccable/` e `.specs/benchmarks/`: proposta registrada no STATE, não aplicada.
 - Superfície: `.gitignore`, `src-tauri/.gitignore`.
 - Fazer: ignorar `src-tauri/resources/` (artefato de `package:standalone`, ~208 MB) com exceção dos `.gitkeep` já rastreados; propor, sem aplicar, destino para `.impeccable/` e `.specs/benchmarks/` (rastrear ou ignorar) — decisão registrada no STATE.
@@ -104,7 +104,7 @@ Checklist: baseline reproduzido; `git status` das três worktrees explicado; STA
 Objetivo: tornar impossível perder ou corromper o banco humano e impossível acumular processos órfãos sem ver.
 
 ### T-F1-01 — Lock de escritor único também para o Desktop · M
-- Status: `[✓]` 2026-10-04 · BASE_SHA `b57ebf9` (backend real segura o lock via `server/src/dev-datastore.js`, chamado por `server/src/main.js` quando `SMARTLEARN_DB_PATH` é o datastore DEV; `dev-remote` só confere; criação exclusiva `wx`; RED→GREEN em `server/test/dev-lock.test.js` com 2 backends reais; prova manual no Desktop real pendente para o checkpoint F1, pois o Desktop aberto agora roda código anterior) · Requisitos: R-01 (AC-01.1) · Dependências: T-F0-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `b57ebf9` · IMPLEMENTATION_SHA `833762f` (backend real segura o lock via `server/src/dev-datastore.js`, chamado por `server/src/main.js` quando `SMARTLEARN_DB_PATH` é o datastore DEV; `dev-remote` só confere; criação exclusiva `wx`; RED→GREEN em `server/test/dev-lock.test.js` com 2 backends reais; prova manual no Desktop real pendente para o checkpoint F1, pois o Desktop aberto agora roda código anterior) · Requisitos: R-01 (AC-01.1) · Dependências: T-F0-01
 - Superfície: `scripts/dev-data.mjs` (reuso de `acquireDevLock`), `scripts/launch-desktop-dev.ps1`, `server/src/main.js` (aquisição quando `SMARTLEARN_DB_PATH` aponta para o datastore DEV), testes.
 - Decisão de desenho: o backend Node (processo filho do Desktop) adquire o lock com o PID do próprio backend e a raiz da worktree; o launcher continua apenas conferindo. Assim o lock vive exatamente enquanto o escritor vive, mesmo com fechamento forçado do Rust.
 - RED: teste que sobe dois backends no mesmo banco temporário e exige recusa do segundo com mensagem contendo pid e raiz do detentor.
@@ -113,7 +113,7 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Risco: lock órfão impedindo abrir. Mitigação: verificação de vida do PID e mensagem com instrução de recuperação.
 
 ### T-F1-02 — Snapshot diário e antes de migração no caminho do Desktop · M
-- Status: `[✓]` 2026-10-04 · BASE_SHA `833762f` (snapshot consistente por `VACUUM INTO` — não cópia crua de db+wal+shm —, verificado por `integrity_check`/`foreign_key_check`/contagens/sha256 + manifesto; diário 1x/dia e `pre-migrate-v<N>` ANTES da migração no `server/src/main.js` (falha de backup aborta a migração, banco intacto); launcher imprime `Snapshot: <caminho>` e para se não verificar; retenção 7 dias sem nunca deixar zero snapshot válido, `pre-migrate-*` nunca podados; testes `dev-snapshot`, `dev-datastore-startup` com backend real, `desktop-entrypoint`) · Requisitos: R-01 (AC-01.2, AC-01.3) · Dependências: T-F1-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `833762f` · IMPLEMENTATION_SHA `2d356df` (snapshot consistente por `VACUUM INTO` — não cópia crua de db+wal+shm —, verificado por `integrity_check`/`foreign_key_check`/contagens/sha256 + manifesto; diário 1x/dia e `pre-migrate-v<N>` ANTES da migração no `server/src/main.js` (falha de backup aborta a migração, banco intacto); launcher imprime `Snapshot: <caminho>` e para se não verificar; retenção 7 dias sem nunca deixar zero snapshot válido, `pre-migrate-*` nunca podados; testes `dev-snapshot`, `dev-datastore-startup` com backend real, `desktop-entrypoint`) · Requisitos: R-01 (AC-01.2, AC-01.3) · Dependências: T-F1-01
 - Superfície: `scripts/launch-desktop-dev.ps1` (chamada), `scripts/dev-data.mjs` (`snapshotDevDbIfNeeded` já existe), CLI pequeno `scripts/dev-snapshot.mjs`, retenção.
 - Fazer: antes de abrir o app, snapshot do dia de banco+WAL+SHM em `SmartLearn-DevData\snapshots\<data>`; antes de qualquer migração pendente (comparar `max(version)` com migrações no disco), snapshot nomeado `pre-migrate-v<N>` com checksum e verificação de leitura; retenção: 7 dias + último `pre-migrate` de cada versão.
 - RED: teste com banco temporário em v29 e migrações até v30: o snapshot `pre-migrate-v29` existe, tem checksum igual e `integrity_check ok` ANTES de a migração rodar; falha de snapshot aborta a migração.
@@ -121,14 +121,14 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: testes novos + `test/dev-data.test.js`; verificação manual de que o launcher mostra `Snapshot: <caminho>`.
 
 ### T-F1-03 — Ensaio de restauração (restore drill) documentado e automatizado · M
-- Status: `[✓]` 2026-10-04 (`server/src/dev-restore.js` + `scripts/dev-restore.mjs`; nunca escreve no datastore vivo; ensaio REAL em CÓPIA temporária de `SmartLearn-db-backupsp0-devdata-20261004-005048` (v29, 10 unidades, 160 revisões): 7/7 PASS. INCIDENTE: uma tentativa anterior abriu o backup original em somente-leitura e recriou seu `-shm` volátil; `.db` e `-wal` seguem com o hash de `SHA256.txt` — daqui em diante só em cópias) · Requisitos: R-01 (AC-01.4) · Dependências: T-F1-02
+- Status: `[✓]` 2026-10-04 · BASE_SHA `2d356df` · IMPLEMENTATION_SHA `30d5c9c` (`server/src/dev-restore.js` + `scripts/dev-restore.mjs`; nunca escreve no datastore vivo; ensaio REAL em CÓPIA temporária de `SmartLearn-db-backupsp0-devdata-20261004-005048` (v29, 10 unidades, 160 revisões): 7/7 PASS. INCIDENTE: uma tentativa anterior abriu o backup original em somente-leitura e recriou seu `-shm` volátil; `.db` e `-wal` seguem com o hash de `SHA256.txt` — daqui em diante só em cópias) · Requisitos: R-01 (AC-01.4) · Dependências: T-F1-02
 - Superfície: `scripts/dev-restore.mjs` (novo, sempre para um DESTINO diferente do banco vivo), teste.
 - Fazer: restaurar um snapshot em diretório temporário, abrir com o servidor, rodar `integrity_check`, `foreign_key_check` e comparar contagens com o manifesto do snapshot.
 - Regra: o script nunca sobrescreve o banco canônico; trocar o canônico exige comando separado, confirmação e backup do atual (fora do escopo automático).
 - Gate: teste de ponta a ponta com banco sintético; ensaio real sobre `SmartLearn-db-backups\p0-devdata-*` registrado no `validation.md`.
 
 ### T-F1-04 — Ciclo de vida de processos: Job Object e limpeza do launcher · M
-- Status: `[✓]` 2026-10-04 (código; prova manual de `Stop-Process -Force` no `smartlearn.exe` real pendente para o checkpoint F1) · BASE_SHA `a6b9645`: `src-tauri/src/kill_on_close_job.rs` (windows-sys, KILL_ON_JOB_CLOSE; falha = degradação reportada, nunca fatal), backend colocado no job logo após o spawn; testes Rust: fechar o job mata o processo e o neto sem `kill()` (mutação: com `LimitFlags=0` os processos sobrevivem → testes vermelhos); cargo 32/32; launcher encerra e imprime só `node` cujo caminho está na própria worktree · Requisitos: R-02 (AC-02.1, AC-02.2) · Dependências: nenhuma (paralelizável com T-F1-01)
+- Status: `[✓]` 2026-10-04 (código; prova manual de `Stop-Process -Force` no `smartlearn.exe` real pendente para o checkpoint F1) · BASE_SHA `a6b9645` · IMPLEMENTATION_SHA `b926b44`: `src-tauri/src/kill_on_close_job.rs` (windows-sys, KILL_ON_JOB_CLOSE; falha = degradação reportada, nunca fatal), backend colocado no job logo após o spawn; testes Rust: fechar o job mata o processo e o neto sem `kill()` (mutação: com `LimitFlags=0` os processos sobrevivem → testes vermelhos); cargo 32/32; launcher encerra e imprime só `node` cujo caminho está na própria worktree · Requisitos: R-02 (AC-02.1, AC-02.2) · Dependências: nenhuma (paralelizável com T-F1-01)
 - Superfície: `src-tauri/src/lib.rs` (`LocalBackend`), `scripts/launch-desktop-dev.ps1`.
 - Fazer: associar o backend filho a um Job Object do Windows com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, de modo que morte forçada do Rust leve o `node` e seus filhos (`codex`); launcher passa a listar e encerrar apenas processos cujo caminho pertence à própria worktree (`node` de `server-runtime`, `smartlearn.exe`) e a imprimir o que encerrou.
 - RED (Rust): teste que cria o backend, mata o processo pai com `TerminateProcess` e espera a porta livre.
@@ -143,14 +143,14 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: checksums antes/depois idênticos; teste de launcher.
 
 ### T-F1-06 — Purga de sessões expiradas/revogadas · S
-- Status: `[✓]` 2026-10-04 (`purgeStaleSessions` em `server/src/repositories/sessions.js`, chamada na subida após as migrações; remove revogadas/expiradas há > 30 dias; sessão ativa — inclusive DEV de ~10 anos — intocada; durações de produção inalteradas; `server/test/session-purge.test.js`; auth existente `session-security`/`dev-persistent-session` verdes) · Requisitos: R-01/INV-08 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `30d5c9c` · IMPLEMENTATION_SHA `8bc8ca0` (`purgeStaleSessions` em `server/src/repositories/sessions.js`, chamada na subida após as migrações; remove revogadas/expiradas há > 30 dias; sessão ativa — inclusive DEV de ~10 anos — intocada; durações de produção inalteradas; `server/test/session-purge.test.js`; auth existente `session-security`/`dev-persistent-session` verdes) · Requisitos: R-01/INV-08 · Dependências: nenhuma
 - Superfície: `server/src/repositories/sessions.js`, rotina na subida do servidor, testes.
 - Fazer: remover linhas revogadas há > 30 dias e expiradas há > 30 dias; sessões ativas (inclusive as DEV de ~10 anos) nunca são tocadas; produção mantém as mesmas durações.
 - RED: sessão ativa DEV intacta; sessão expirada antiga removida; contagem antes/depois registrada.
 - Gate: `server/test/*session*`; `PRODUCTION_AUTH_UNCHANGED` revalidado (testes de auth existentes).
 
 ### T-F1-07 — Critério de build por conteúdo, não por commit · S
-- Status: `[✓]` 2026-10-04 (`inputsHash` sha256 de `src/`, `shared/`, `server/src`, `server/migrations`, `index.html`, `package.json`, com CRLF→LF e sem `node_modules`; entra em `readBuildIdentity` e no `build-info.json`; o launcher decide rebuild/`distIsCurrent` e a recusa de build defasada pelo hash e imprime `Build: content <hash12> (built at commit X), opened at Y`; a identidade exibida segue verdadeira: commit = onde o conteúdo foi construído. Testes em `version-identity.test.js`; docs-only não muda o hash) · Requisitos: R-02 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `8bc8ca0` · IMPLEMENTATION_SHA `a6b9645` (`inputsHash` sha256 de `src/`, `shared/`, `server/src`, `server/migrations`, `index.html`, `package.json`, com CRLF→LF e sem `node_modules`; entra em `readBuildIdentity` e no `build-info.json`; o launcher decide rebuild/`distIsCurrent` e a recusa de build defasada pelo hash e imprime `Build: content <hash12> (built at commit X), opened at Y`; a identidade exibida segue verdadeira: commit = onde o conteúdo foi construído. Testes em `version-identity.test.js`; docs-only não muda o hash) · Requisitos: R-02 · Dependências: nenhuma
 - Superfície: `scripts/build-identity.mjs`, `scripts/launch-desktop-dev.ps1`, `vite.config.js`.
 - Fazer: além do SHA, calcular `inputsHash` (hash de `src/`, `index.html`, `shared/`, `server/src`, `server/migrations`, `package.json`) embutido no `build-info.json`; o launcher só rebuilda se `inputsHash` mudar, mas o SHA exibido continua sendo o do HEAD em uso (commit só de documentação não rebuilda e continua identificável).
 - Cuidado: a identidade mostrada deve continuar verdadeira — documentar que "build = conteúdo X, aberto no commit Y". Não exibir um SHA que não corresponda ao conteúdo.
@@ -158,10 +158,16 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: `test/version-identity.test.js`, `test/desktop-entrypoint.test.js`.
 
 ### T-F1-08 — Versão na barra de título e comando de diagnóstico · S
-- Status: `[✓]` 2026-10-04 (título via `SMARTLEARN_WINDOW_TITLE` do launcher + `window_title` testado em Rust; "Copiar diagnóstico" em Configurações > Sobre com versão/canal/build/esquema/banco/contagens — só contagens, só canal DEV, nunca caminho em release; `/health/build` ganhou `content`; CORREÇÃO de consequência de T-F1-07: o aviso de divergência app×servidor passa a comparar o hash de conteúdo, senão um commit só de docs geraria alarme falso; verificação via CDP do título real pendente para o checkpoint) · Requisitos: R-09/F-08 · Dependências: T-F1-07
+- Status: `[✓]` 2026-10-04 · BASE_SHA `b926b44` · IMPLEMENTATION_SHA `1bf0604` (título via `SMARTLEARN_WINDOW_TITLE` do launcher + `window_title` testado em Rust; "Copiar diagnóstico" em Configurações > Sobre com versão/canal/build/esquema/banco/contagens — só contagens, só canal DEV, nunca caminho em release; `/health/build` ganhou `content`; CORREÇÃO de consequência de T-F1-07: o aviso de divergência app×servidor passa a comparar o hash de conteúdo, senão um commit só de docs geraria alarme falso; verificação via CDP do título real pendente para o checkpoint) · Requisitos: R-09/F-08 · Dependências: T-F1-07
 - Superfície: `src-tauri/src/lib.rs` (título da janela via env `SMARTLEARN_WINDOW_TITLE` definido pelo launcher), `src/build-identity-ui.js` (botão "Copiar diagnóstico").
 - Fazer: título `SmartLearn DEV · v0.1.0 · <commit>` só no DEV; "Copiar diagnóstico" copia versão, canal, build, esquema, caminho do banco e contagens (sem dados pessoais).
 - Gate: teste Rust do título; teste de frontend do conteúdo copiado; verificação via CDP do título real.
+
+### T-F1-09 — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0) · M
+- Status: `[ ]` · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
+- Outcome: no Desktop Windows real, restaurar um backup lógico em conta vazia (IMPORT-1) e ver o veredito de Estatísticas ponderado por volume (VERDICT-1) funcionam; observação mecânica (CDP/computer-use quando o runtime permite), SEM julgamento perceptivo.
+- Regra de dados: SOMENTE sobre CÓPIA isolada do banco/dados (nunca o banco DEV humano `C:\Users\Ariel\SmartLearn-DevData`); o backup restaurado é de fixture/cópia.
+- Gate: observação registrada em `validation.md` com HEAD/build exibidos no título; se o runtime não permitir a automação, registrar `BLOCKED_TECHNICAL` com o que foi tentado (não vira gate humano por reflexo).
 
 ### Checkpoint F1
 - Prova composta: abrir Desktop → segundo escritor recusado → fechar forçado → nenhum órfão → reabrir → snapshot do dia existe → restore drill passa → sessões purgadas sem tocar ativas.
@@ -374,12 +380,12 @@ Objetivo: transformar "parece bom" em medida. Única fase que pode chamar o Code
 Objetivo: suíte rápida, determinística e que de fato fica vermelha quando algo importante quebra. Pode andar em paralelo com F2–F4 (superfície: `playwright.config.js`, `scripts/`, `e2e/` metadados).
 
 ### T-F6-01 — Definir e etiquetar a suíte "materiais" · S
-- Status: `[✓]` 2026-10-04 (em vez de editar títulos, a suíte é definida POR ARQUIVO em `e2e/support/suites.js`: 9 specs, 36 testes, `npm run test:e2e:materials`; o "45/45" histórico não é reproduzível e fica formalmente substituído por 36; opt-in Codex/PDF real fora; 36/36 verdes em 1,9 min com 2 workers; registro na `TEST_COVERAGE_MATRIX.md` em T-F6-07) · Requisitos: R-07 (AC-07.1) · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `d603aba` · IMPLEMENTATION_SHA `1328499` (commit único com T-F6-01 e T-F6-02) (em vez de editar títulos, a suíte é definida POR ARQUIVO em `e2e/support/suites.js`: 9 specs, 36 testes, `npm run test:e2e:materials`; o "45/45" histórico não é reproduzível e fica formalmente substituído por 36; opt-in Codex/PDF real fora; 36/36 verdes em 1,9 min com 2 workers; registro na `TEST_COVERAGE_MATRIX.md` em T-F6-07) · Requisitos: R-07 (AC-07.1) · Dependências: nenhuma
 - Fazer: tag `@materials` nos testes de Materiais/Fonte/Rascunho/Editor (`lesson-editor`, `draft-acceptance`, `source-proposals`, `source-reupload`, `large-pdf`, `large-draft-review`, `materials-a11y`, `keyboard-study-materials`, ...); `npm run test:e2e:materials`; contagem registrada em `TEST_COVERAGE_MATRIX.md`; o "45/45" histórico passa a ser reproduzível ou formalmente substituído.
 - Gate: comando roda e a contagem coincide com a matriz; inventário de testes PASS.
 
 ### T-F6-02 — Portas dinâmicas e saída única por execução · M
-- Status: `[✓]` 2026-10-04 (`scripts/e2e.mjs`: porta Vite livre, bloco de portas de servidor reservado de forma atômica em `os.tmpdir()` (arquivo `wx`, dono morto é retomado), `outputDir` `test-results/<run>`; os 42 specs derivam portas/origem de `e2e/support/ports.js`; `npx playwright test` direto mantém os padrões históricos; prova: 2 execuções simultâneas do mesmo spec passaram 5/5 cada em offsets 0 e +4000; antes da reserva atômica a 2ª execução colidiu (3 falhas), registrado como RED real; `test/e2e-ports.test.js`) · Requisitos: R-02 (AC-02.3), F-41 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-04 · BASE_SHA `d603aba` · IMPLEMENTATION_SHA `1328499` (commit único com T-F6-01 e T-F6-02) (`scripts/e2e.mjs`: porta Vite livre, bloco de portas de servidor reservado de forma atômica em `os.tmpdir()` (arquivo `wx`, dono morto é retomado), `outputDir` `test-results/<run>`; os 42 specs derivam portas/origem de `e2e/support/ports.js`; `npx playwright test` direto mantém os padrões históricos; prova: 2 execuções simultâneas do mesmo spec passaram 5/5 cada em offsets 0 e +4000; antes da reserva atômica a 2ª execução colidiu (3 falhas), registrado como RED real; `test/e2e-ports.test.js`) · Requisitos: R-02 (AC-02.3), F-41 · Dependências: nenhuma
 - Fazer: Playwright escolhe porta livre (config com função), `outputDir` com sufixo por execução; specs que fixam portas de servidor (`139xx`) passam a alocar livre; falha limpa quando faltar porta.
 - RED: duas execuções simultâneas da mesma suíte não colidem.
 - Gate: duas execuções paralelas curtas verdes; e2e completo verde.
@@ -394,6 +400,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[ ]` · Requisitos: R-07 (AC-07.2), F-42 · Dependências: T-F6-02 (independente de T-F6-03, que depende do resultado)
 - Outcome: a causa de `product-value.spec.js:86` (`#account-show-register` oculto após o retry de 20 s) está DISCRIMINADA com evidência; correção SOMENTE se houver defeito demonstrado (produto ou teste); se for carga do ambiente, isso fica provado, não presumido. Proibido subir timeout/retry antes da causa.
 - Hipóteses concorrentes (nenhuma assumida): (a) corrida de inicialização do app: o clique em `[data-screen="account"]` chega antes de a navegação estar ligada; (b) colisão de estado/porta/lane entre workers; (c) backend do worker ainda não pronto; (d) pressão de memória/handles da máquina (compatível com o `0xC0000142` do run 3, que é fato distinto).
+- Evidência anterior (NÃO é prova desta falha): `conductor/tracks/content-quality/plan.md` (~l.724) registra falha com o MESMO sintoma (`#account-show-register` invisível por 30 s, `content-quality-flow.spec.js:143`) classificada como "sensível a carga" por reprodução sob CPU saturada (2/24 no merge e 2/24 no baseline; isolado 6/6), com a causa exata da falha original NÃO reproduzida; `EXECUTION.md` lista também `hoje-block-retest.spec.js` como flake pré-existente. Serve para ordenar as hipóteses, não para concluir a do run 2.
 - Menor discriminador: reexecutar só esse spec N vezes com 1 worker e com 2, com o ambiente descrito (processos alheios contados antes), guardando trace/console/rede da falha; comparar taxa de falha entre as condições.
 - Gate: causa registrada em `validation.md` com contagens; se defeito: RED → GREEN → mesma repetição sem falha.
 

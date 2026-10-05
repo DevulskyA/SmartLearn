@@ -24,7 +24,7 @@
 - **DEV/Desktop:** launcher canônico `npm run dev:desktop` (fixa banco/fontes, verifica o executável); sessão DEV persistente só por `SMARTLEARN_DEV_PERSISTENT_SESSION` do launcher (recusada em produção); autenticação de produção inalterada (INV-08).
 
 ## NOT_PROVEN / abertos
-`VALID_8` e `REALMODEL_CONTENT_QUALITY_PROVEN` (decisão/confirmação humana, HG-06; 1 unidade, avaliação por IA) · `VISUAL_VALIDATION` da janela nativa (aguarda humano) · suíte "materiais 45/45" sem definição reproduzível (T-F6-01) · fumaça Windows nativa de IMPORT-1/VERDICT-1 · qualidade médica semântica entre idiomas além dos sensores determinísticos · defeito D1 de extração por colunas (T-F5-08).
+`VALID_8` e `REALMODEL_CONTENT_QUALITY_PROVEN` (decisão/confirmação humana, HG-06; 1 unidade, avaliação por IA) · `VISUAL_VALIDATION` da janela nativa (aguarda humano) · suíte "materiais": o "45/45" histórico não era reproduzível e foi substituído por 36 testes definidos por arquivo (T-F6-01 `[✓]`, `npm run test:e2e:materials`) · fumaça Windows nativa de IMPORT-1/VERDICT-1 · qualidade médica semântica entre idiomas além dos sensores determinísticos · defeito D1 de extração por colunas (T-F5-08).
 Flakes pré-existentes sob carga: `content-quality-flow.spec.js`, `hoje-block-retest.spec.js` (ver EXECUTION.md).
 
 ## Decisões humanas pendentes (HUMAN_GATES; detalhe em `hardening-roadmap-v1/spec.md` §8)

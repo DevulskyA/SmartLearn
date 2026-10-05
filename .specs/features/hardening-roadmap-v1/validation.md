@@ -67,3 +67,26 @@ Comando `npm run test:e2e` (2 workers), 3 execuções consecutivas:
 
 ## Estado de VALID (fonte: `conductor/tracks/v1-validation/plan.md`; reproduzido aqui só como referência)
 VALID-4 PASS (escopo limitado, 2026-10-04) · VALID-5 PASS de fidelidade, gate parcial (2026-10-04) · VALID-8 `NOT_PROVEN` aguardando decisão humana HG-06 (`REALMODEL_CONTENT_QUALITY_PROVEN=NOT_PROVEN`).
+
+## S0 — Reconciliação do programa (2026-10-04, HEAD de partida `e4c811c`; sem gate de código executado)
+
+Fontes lidas: `conductor/tracks/{v1-validation,product-closure,content-quality}/plan.md`, `.specs/STATE.md`, `.specs/EXECUTION.md`, `e2e/*` (skips). Nenhuma suíte foi executada nesta sprint.
+
+| Item | Estado real | Evidência | Efeito no programa |
+|---|---|---|---|
+| VERDICT-1 | DONE (decisão humana 2026-10-02, opção B, limiar 25%) | `content-quality/plan.md:162`; `product-closure/plan.md:30` | Nenhuma tarefa. Resta só a fumaça nativa (ver T-F1-09) |
+| IMPORT-1 | DONE (decisão humana 2026-10-02, opção B) | `content-quality/plan.md:455` | Idem |
+| Fumaça Windows nativa de IMPORT-1/VERDICT-1 | NOT_PROVEN, sem tarefa no ledger | `STATE.md` seção NOT_PROVEN; `product-closure/plan.md:30` | **Trabalho material sem tarefa → T-F1-09** (S8; cópia isolada; mecânica) |
+| VALID-4 | PASS, escopo limitado (2026-10-04) | `v1-validation/plan.md:34` | Sem tarefa; não promove V1_VALIDATED |
+| VALID-5 | PASS de fidelidade, gate parcial (2026-10-04) | `v1-validation/plan.md:40` | Idem |
+| VALID-8 / `REALMODEL_CONTENT_QUALITY_PROVEN` | `NOT_PROVEN`, aguarda decisão humana HG-06 | `v1-validation/plan.md:50`; `STATE.md` | `BLOCKED_HUMAN`; define `V1_VALIDATED` (`spec.md` §10) |
+| `product-closure` (A11Y-1, JOURNEY-1) | DONE; track `DONE` | `product-closure/plan.md` | Evidência anterior a `169ec2d`: vale como histórico; S8 revalida só o que mudanças posteriores invalidaram |
+| REALMODEL-1, T51 (domínio/TLS/deploy), push do PR #6/merge | dependem de humano/chave/autorização | `product-closure/plan.md:30` | Fora do fechamento local (HG-07/HG-10) |
+| T46 catálogo i18n | DEFERIDA por decisão (sem efeito observável) | `product-closure/plan.md` cabeçalho | Não é trabalho aberto; T-F4-07 cobre cópia/guarda de acentuação |
+| Skips do e2e (203 + 2 skipped no baseline) | 2 opt-in por custo (`realmodel-codex`, `realpdf-canary`); `smartlearn-plan-flow.spec.js:131` é skip dinâmico registrado como `BLOCKED_EXTERNAL` (sem seam de injeção de falha de escrita sem alterar produto) | `e2e/*.spec.js` | Os 2 opt-in são MANUAL_GATE/Codex; o dinâmico é lacuna conhecida e declarada, não escondida. Nenhuma tarefa nova (mexeria em produto só para teste) |
+| Flakes pré-existentes sob carga | `content-quality-flow.spec.js`, `hoje-block-retest.spec.js` | `EXECUTION.md:14`; `content-quality/plan.md:724` | Contexto para T-F6-08; causa do run 2 de T-F6-03 segue NÃO provada |
+| Divergência `test-live` × runner e2e | OPEN | ver "Achado" acima | S3 |
+| "materiais 45/45" em `STATE.md` | Obsoleto (T-F6-01 substituiu por 36) | `tasks.md` T-F6-01 | `STATE.md` corrigido nesta sprint |
+| `IMPLEMENTATION_SHA` das tarefas `[✓]` | Faltava em 12 de 13 | `tasks.md` | Preenchidos via `git log` (pais conferem com os `BASE_SHA` já registrados); T-F6-01/02 compartilham o commit `1328499` |
+
+Resultado S0: classificação completa sem "não sei"; 1 tarefa nova (T-F1-09), justificada por trabalho material sem tarefa; nenhum requisito do `spec.md` ficou sem tarefa por esta leitura.
