@@ -22,6 +22,7 @@ import { registerAttemptRoutes } from './routes/attempts.js';
 import { registerSourceRoutes } from './routes/sources.js';
 import { registerContentProposalRoutes } from './routes/content-proposals.js';
 import { registerGeneratedDraftRoutes } from './routes/generated-drafts.js';
+import { registerGenerationJobRoutes } from './routes/generation-jobs.js';
 import { registerAgendaSnapshotRoutes } from './routes/agenda-snapshot.js';
 import { registerPriorityRoutes } from './routes/priorities.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
@@ -122,6 +123,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerSourceRoutes(v1, db, sources);
     registerContentProposalRoutes(v1, db);
     registerGeneratedDraftRoutes(v1, db, ai);
+    registerGenerationJobRoutes(v1, db, ai);
     registerAgendaSnapshotRoutes(v1, db);
     registerPriorityRoutes(v1, db);
   }, { prefix: '/v1' });

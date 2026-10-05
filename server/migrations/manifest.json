@@ -158,5 +158,10 @@
     "version": 32,
     "name": "generation-budget",
     "checksum": "12f46eb18b5b222b9b41d33491f67f2361a2875fcba53de36fb214e6fe80a679"
+  },
+  {
+    "version": 33,
+    "name": "generation-jobs",
+    "checksum": "7a4c48e5971f2181f957487bcaac26357d55a67861067e1683e1a9ebf1513528"
   }
 ]

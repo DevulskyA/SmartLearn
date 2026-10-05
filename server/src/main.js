@@ -4,6 +4,7 @@ import { runMigrations } from './migrations.js';
 import { buildApp } from './app.js';
 import { purgeStaleSessions } from './repositories/sessions.js';
 import { reconcileOrphans } from './services/generation-budget.js';
+import { recoverOrphanJobs } from './services/generation-jobs.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { acquireDevLock, devDbPaths, isDevDatastoreDb } from './dev-datastore.js';
@@ -72,6 +73,9 @@ if (purgedSessions > 0) console.log(`SmartLearn purged ${purgedSessions} stale s
 // R-12: a generation reservation left open by a crash may already have reached the model, so it is charged at its estimate (never refunded).
 const orphanReservations = reconcileOrphans(db, { maxAgeMs: 30 * 60 * 1000 });
 if (orphanReservations > 0) console.log(`SmartLearn settled ${orphanReservations} orphaned generation reservation(s) at their estimate`);
+// R-04: no provider call of a previous process survives a restart, so a job left calling the provider can never finish: it is marked failed, never left "generating" forever.
+const orphanJobs = recoverOrphanJobs(db);
+if (orphanJobs > 0) console.log(`SmartLearn recovered ${orphanJobs} orphaned generation job(s) as FAILED(SERVER_RESTARTED)`);
 const app = await buildApp(db, undefined, {
   isProduction: config.isProduction,
   allowedOrigins: config.allowedOrigins,
