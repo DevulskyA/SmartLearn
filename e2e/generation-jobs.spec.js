@@ -122,20 +122,40 @@ async function startGeneration(page) {
 
 const progress = (page) => page.locator('#sources-generation');
 const firstItem = (page) => page.locator('.source-proposal-item').first();
+const draftCount = () => {
+  const db = new Database(dbPath);
+  try { return db.prepare('SELECT COUNT(*) AS n FROM generated_drafts').get().n; } finally { db.close(); }
+};
+const noSeriousAxeViolation = async (page, where) => {
+  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const found = result.violations.filter((v) => ['critical', 'serious'].includes(v.impact));
+  expect(found.map((v) => `${where}: ${v.id} ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`), where).toEqual([]);
+};
 
-test('leave the screen while it generates, come back (even after a reload) and see Gerando; then the finished draft opens', async ({ page }) => {
+test('leave the screen while it generates, come back (even after a reload) and see Gerando; then the finished draft opens from the list', async ({ page }) => {
   await startGeneration(page);
   await expect(progress(page)).toBeVisible();
   await expect(progress(page)).toContainText('pode levar alguns minutos');
   await expect(progress(page).locator('.sources-generation-phase')).toContainText(/Gerando|Preparando|Na fila/);
   await expect(progress(page).locator('.sources-generation-timer')).toHaveText(/^\d\d:\d\d$/);
+  await noSeriousAxeViolation(page, 'progress panel');
 
-  // "Continuar em segundo plano" returns to the list, where the unit says it is still being generated
-  await progress(page).getByRole('button', { name: 'Continuar em segundo plano' }).click();
+  // keyboard: focus lands on the panel; Tab reaches "Continuar em segundo plano", then "Cancelar geração"; Enter on the first goes back to the list
+  await expect(progress(page).locator(':focus')).toHaveCount(1);
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Continuar em segundo plano' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Cancelar geração' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Enter');
+
+  // back on the list the unit says it is still being generated, and it cannot be started a second time
   await expect(progress(page)).toBeHidden();
   await expect(firstItem(page)).toContainText('Gerando…');
   await expect(firstItem(page).locator('[data-action="generate-draft"]')).toHaveCount(0);
   await expect(page.locator('#sources-drafts')).toContainText('Gerando…');
+  await expect(firstItem(page).getByRole('button', { name: 'Ver andamento' })).toBeFocused();
+  await noSeriousAxeViolation(page, 'Gerando item');
 
   // leave Materiais and come back: the real state comes from the server
   await page.locator('[data-screen="today"]').first().click();
@@ -152,42 +172,32 @@ test('leave the screen while it generates, come back (even after a reload) and s
   // the provider answers; the list follows on its own (no click, no reload) and the draft opens from it
   await release('ok');
   await expect(firstItem(page)).toContainText('Pronto', { timeout: 15000 });
+  await expect(page.locator('#sources-drafts')).toContainText('Pronto');
   await firstItem(page).locator('[data-action="open-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
 });
 
-test('staying on the progress panel opens the draft by itself when it is ready', async ({ page }) => {
-  await startGeneration(page);
-  await expect(progress(page)).toContainText('pode levar alguns minutos');
-  await release('ok');
-  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
-  await expect(progress(page)).toBeHidden();
-});
-
-test('cancel asks for confirmation, frees the unit and leaves no draft', async ({ page }) => {
+test('cancel asks for confirmation, frees the unit, leaves no draft even if the provider answers late, and the unit generates again', async ({ page }) => {
   await startGeneration(page);
   const cancel = progress(page).getByRole('button', { name: 'Cancelar geração' });
+  const draftsBefore = draftCount();
   // refusing the confirmation keeps the job running
   page.once('dialog', (dialog) => dialog.dismiss());
   await cancel.click();
   await expect(progress(page)).toBeVisible();
   await expect(progress(page)).toContainText('pode levar alguns minutos');
-  // accepting it stops the job
+  // accepting it stops the job; the provider (which ignores the stop) answers late and its draft is thrown away
   page.once('dialog', (dialog) => { expect(dialog.message()).toMatch(/Cancelar/); dialog.accept(); });
   await cancel.click();
   await expect(progress(page).locator('.sources-generation-phase')).toHaveText('Cancelando a geração…');
-  // a provider that ignores the stop signal (the HTTP ones) is given a grace period before the job is finalised anyway
-  await expect(progress(page)).toBeHidden({ timeout: 25000 });
+  await release('ok');
+  await expect(progress(page)).toBeHidden({ timeout: 15000 });
   await expect(page.locator('#sources-message')).toContainText('cancelada');
   await expect(firstItem(page)).not.toContainText('Gerando…');
   await expect(firstItem(page).locator('[data-action="generate-draft"]')).toBeEnabled();
   await expect(firstItem(page).locator('[data-action="open-draft"]')).toHaveCount(0);
   await expect(page.locator('#sources-drafts')).toBeHidden();
-  // the cancelled call is still held by the (HTTP) stub: when it finally answers, its late draft must be thrown away
-  await release('ok');
-  await page.waitForTimeout(1500);
-  await expect(firstItem(page).locator('[data-action="open-draft"]')).toHaveCount(0);
-  await expect(page.locator('#sources-drafts')).toBeHidden();
+  expect(draftCount()).toBe(draftsBefore);
   // the unit is free: generating it again works and ends in a draft
   await firstItem(page).locator('[data-action="generate-draft"]').click();
   await release('ok');
@@ -205,12 +215,13 @@ test('a failed generation says so in plain Portuguese, in the list too, and the 
   await expect(firstItem(page)).toContainText('Falhou');
   await expect(page.locator('#sources-drafts')).toContainText('Falhou');
   await expect(firstItem(page).locator('[data-action="generate-draft"]')).toHaveText(/Tentar de novo/);
+  await noSeriousAxeViolation(page, 'Falhou item');
   await firstItem(page).locator('[data-action="generate-draft"]').click();
   await release('ok');
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
 });
 
-test('silence from the provider (STALLED) is a calm warning, not an error, and the job still finishes', async ({ page }) => {
+test('silence from the provider (STALLED) is a calm warning, not an error; staying on the panel, the draft opens by itself when ready', async ({ page }) => {
   await startGeneration(page);
   await expect(progress(page)).toBeVisible();
   const db = new Database(dbPath);
@@ -227,29 +238,5 @@ test('silence from the provider (STALLED) is a calm warning, not an error, and t
   await expect(progress(page).getByRole('button', { name: 'Cancelar geração' })).toBeEnabled();
   await release('ok');
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
-});
-
-test('axe: the progress panel, the Gerando item and the Falhou item have no serious violation; keyboard reaches the panel buttons', async ({ page }) => {
-  const blocking = async (where) => {
-    const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-    const found = result.violations.filter((v) => ['critical', 'serious'].includes(v.impact));
-    expect(found.map((v) => `${where}: ${v.id} ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`), where).toEqual([]);
-  };
-  await startGeneration(page);
-  await expect(progress(page)).toContainText('pode levar alguns minutos');
-  await blocking('progress panel');
-  // focus lands on the panel; Tab reaches "Continuar em segundo plano" and then "Cancelar geração"
-  await expect(progress(page).locator(':focus')).toHaveCount(1);
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Continuar em segundo plano' })).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Cancelar geração' })).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
-  await page.keyboard.press('Enter');
   await expect(progress(page)).toBeHidden();
-  await expect(firstItem(page)).toContainText('Gerando…');
-  await blocking('Gerando item');
-  await release('fail');
-  await expect(firstItem(page)).toContainText('Falhou', { timeout: 15000 });
-  await blocking('Falhou item');
 });

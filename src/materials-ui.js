@@ -53,8 +53,10 @@ let watched = null;
 let pollTimer = null;
 let pollRunning = false;
 const POLL_WATCHING_MS = 1000; // the progress panel is open: the student is waiting for it
+const POLL_WATCHING_QUICK_MS = 400; // ...and right after it opens, a generation that ends at once is shown at once
+const POLL_QUICK_TICKS = 5;
 const POLL_BACKGROUND_MS = 3000; // only the list shows it
-const POLL_FIRST_MS = 300;
+const POLL_FIRST_MS = 250;
 // Index sections up to this size are shown open; a whole book stays collapsed behind the topic search.
 const INDEX_OPEN_UP_TO = 12;
 
@@ -162,7 +164,8 @@ async function runPoll() {
   } finally {
     pollRunning = false;
   }
-  ensurePolling(watched ? POLL_WATCHING_MS : POLL_BACKGROUND_MS);
+  if (watched) watched.polls = (watched.polls ?? 0) + 1;
+  ensurePolling(!watched ? POLL_BACKGROUND_MS : watched.polls <= POLL_QUICK_TICKS ? POLL_WATCHING_QUICK_MS : POLL_WATCHING_MS);
 }
 
 async function pollJobs() {
