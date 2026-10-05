@@ -287,7 +287,9 @@ export function contextReport(io) {
 
   const open = blocks.filter((b) => b.status !== '✓' && b.status !== '=');
   const next = model.ready[0] ?? null;
-  add('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !safeWorkRemaining(blocks, eff), next ? next.id : safeWorkRemaining(blocks, eff) ? 'no ready task' : 'none: SAFE_WORK_REMAINING=NO');
+  // a next task is only required while safe work OTHER than the active task remains (the last executable task has no successor)
+  const othersSafe = safeWorkRemaining(blocks.filter((b) => b.id !== activeBlock?.id), eff);
+  add('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !othersSafe, next ? next.id : othersSafe ? 'no ready task' : 'none: the active task is the last executable one');
   const nextBlock = next ? model.byId.get(next.id) : null;
   const nextGaps = nextBlock ? readinessGaps(nextBlock, blocks) : [];
   add('NEXT_TASK_EXECUTION_READY', !nextBlock || nextGaps.length === 0, nextBlock ? `${nextBlock.id}${nextGaps.length ? ` lacks: ${nextGaps.join(', ')}` : ' ready'}` : 'nothing to promote');

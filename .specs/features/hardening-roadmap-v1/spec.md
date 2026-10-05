@@ -290,3 +290,11 @@ DECISION=A geração recebe `generationLocale` e o conteúdo sai direto nesse id
 EVIDENCE=`spec.md` §7 ("nenhuma mudança de prompt antes do Prompt Lab aprovado"), `PROMPT_LAB=MANUAL_GATE` e a política de não mudar o prompt do produto. O prompt atual (`server/src/ai/draft-prompt.js`, promptVersion 5) não tem nenhuma diretiva de idioma de saída.
 IMPACT=Alto para a qualidade real: sem a diretiva o idioma de saída do modelo é indeterminado; com o contrato de idioma ativo, saída em idioma diferente do alvo é recusada (fail-closed), o que expõe o problema em vez de escondê-lo.
 MINIMUM_RESOLUTION=HG-13: autorizar a diretiva aditiva mínima (bloco OUTPUT LANGUAGE + campo `language` + bump de promptVersion), SEM rodar Prompt Lab/Codex. Enquanto isso o domínio, o contrato de validação, as preferências e o provedor simulado entram (T-F10-01/02a); T-F10-02b fica `[H]`. Não bloqueia.
+
+
+## 12. Mobile/Companion: arquitetura suportada e lacuna (reconciliação ARCH-01, 2026-10-05)
+- Arquitetura canônica (ARCH-01): Desktop Windows/Tauri = produto completo local-first; Companion Web/PWA = superfície menor, somente leitura. O código Tauri-SQLite é legado inativo (T-F6-06c); não é alvo mobile.
+- Já existe (ver `validation.md`, "Reconciliação ARCH-01"): fundação PWA, cache offline da agenda e escrita offline proibida. COMPANION_PRODUCT_SURFACE = PARTIAL.
+- Lacuna de produto coberta por T-F4-08: próximas revisões na agenda offline.
+- ARCHITECTURAL GAP (sem solução decidida): como o Desktop local-first publica/atualiza o read-model do aluno que o Companion lê. Fora de escopo do programa atual; só vira tarefa após decisão de arquitetura.
+- Continua fora de escopo: escrita offline, outbox, CRDT, resolução de conflitos, sincronização bidirecional, banco Android.

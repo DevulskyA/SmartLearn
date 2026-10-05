@@ -401,6 +401,23 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Próximo passo: nenhum; tarefa fechada.
 - Comando: `node --test test/text-integrity.test.js`
 
+
+### T-F4-08 — Agenda offline do Companion: próximas revisões (somente leitura) · S
+- Status: `[>]` 2026-10-05 · Requisitos: ARCH-01 (Companion Web/PWA menor e somente leitura), V1-12/AC-24 (cache offline), INV offline somente leitura · Dependências: nenhuma (T39/T40/T41 já entregues; ver "Reconciliação ARCH-01" em `validation.md`)
+- Origem: o snapshot offline (`/v1/agenda-snapshot`, `src/offline-store.js`) já guarda TODAS as `review_tasks` pendentes com `dueDate`, unidade, disciplina e `syncedAt`, mas `renderOfflineToday` (`src/app.js`) só mostra atrasadas e de hoje; com apenas revisões futuras a tela cai no estado "tudo em dia" e o aluno não vê o que vem a seguir.
+- Outcome: no modo offline, Hoje mostra, além de atrasadas e de hoje, as PRÓXIMAS revisões do snapshot (data, aula, disciplina), em ordem de data e limitadas, com a data da última sincronização já exibida no aviso; tudo somente leitura.
+- Fora de escopo (explícito): escrever, responder questão, registrar evidência ou concluir revisão offline; outbox, CRDT, resolução de conflito, sincronização bidirecional, banco Android, `pending_writes`, domínio duplicado. Não resolve COMO o Companion recebe o read-model do Desktop local-first (lacuna arquitetural registrada, não implementada aqui).
+- Fazer: derivar `upcoming = items com dueDate > hoje` do snapshot já carregado, agrupar por data (ordem crescente) e exibir até N itens com contagem do restante; texto próprio quando nada vence hoje mas há próximas; linhas sem ação.
+- Subtarefas:
+  - [>] RED (e2e em `offline.spec.js`): snapshot com itens em +1, +3 e +9 dias; offline, Hoje lista "Próximas" ordenadas por data com aula e disciplina
+  - [ ] RED: sem itens futuros o bloco não aparece; atrasadas e hoje seguem iguais
+  - [ ] RED: com apenas itens futuros a tela NÃO diz "tudo em dia" sem mostrar as próximas
+  - [ ] Renderizar o bloco somente leitura a partir do snapshot (agrupado por data, limitado, com o restante contado)
+  - [ ] Regressão: `offline-writes.spec.js` e `mobile-nav.spec.js` verdes; axe na Hoje offline com próximas
+  - [ ] Mutante (filtro descarta os itens futuros) deixa um teste vermelho; restaurar
+  - [ ] Evidência em `validation.md`; e2e completo uma vez no fim (≤ 480 s, 0 falhas)
+- Gate: `e2e/offline.spec.js`, `e2e/offline-writes.spec.js`, `e2e/mobile-nav.spec.js` + novos casos; axe; unidade e servidor verdes.
+- Próximo passo: ler `renderOfflineToday` em `src/app.js` (~l.1017) e o caso do snapshot em `e2e/offline.spec.js`; escrever o primeiro RED.
 ### Checkpoint F4
 - Humano executa o roteiro (T-F4-01) com a build do checkpoint; achados P0/P1 corrigidos ou aceitos explicitamente.
 - Gate completo + axe + e2e responsivo. `VISUAL_VALIDATION` registrado com autoria (humano) e data.
@@ -561,7 +578,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[✓]` 2026-10-05 · BASE_SHA `24631c7` · IMPLEMENTATION_SHA `1cc51b4` (47 testes de contrato contra BrowserStore e RemoteDB; 2 mutantes vermelhos; evidência em `validation.md`) · Dependências: T-F6-06a · Fazer: testes de contrato idênticos rodados contra cada adaptador VIVO (criar/ler/atualizar/apagar, ordem, ids estáveis). Gate: suíte nova verde; mutação simples (trocar a ordem num adaptador) deixa ≥ 1 teste vermelho.
 
 ### T-F6-06c — Decisão de aposentadoria do legado · S
-- Status: `[✓]` 2026-10-05 · BASE_SHA `cc92bb3` · IMPLEMENTATION_SHA nenhum (decisão técnica registrada em `validation.md`; sem remoção de código) · Dependências: T-F6-06a, T-F6-06b · Decisão de arquitetura: aposentar SÓ o ramo Tauri-SQLite (morto, provado em T-F6-06a/06b); BrowserStore permanece sob o contrato até o padrão do Web virar remoto; a remoção do código exige prova no runtime Android, que não existe aqui
+- Status: `[✓]` 2026-10-05 · BASE_SHA `cc92bb3` · IMPLEMENTATION_SHA nenhum (decisão técnica registrada em `validation.md`; sem remoção de código) · Dependências: T-F6-06a, T-F6-06b · Decisão de arquitetura: TAURI_SQLITE_ACTIVE_ADAPTER = NO, TAURI_SQLITE_STATUS = LEGACY_INACTIVE (provado em T-F6-06a/06b); BrowserStore permanece sob o contrato até o padrão do Web virar remoto; a remoção FÍSICA do código é um cleanup separado e só depois de provar que nenhuma arquitetura suportada ou futura já decidida depende dele (o mobile canônico é o Companion Web/PWA, ARCH-01, não um Tauri Android; ver "Reconciliação ARCH-01" em validation.md)
 
 ### T-F6-07 — Matriz de cobertura reconciliada · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `751ca69` · IMPLEMENTATION_SHA `8b6a887` (matriz reconciliada: 31 TESTED / 1 MUTATION-KILLED / 6 HUMAN / 12 NOT_PROVEN; evidência em `validation.md`) · Dependências: T-F6-01

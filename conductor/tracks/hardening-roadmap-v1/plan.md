@@ -5,20 +5,30 @@
 > NO_PUSH / NO_MERGE(main) / NO_DEPLOY / NO_RELEASE. Tarefa em DECISÕES HUMANAS PENDENTES depende de decisão do usuário (HG-xx em `spec.md` §8): parar e perguntar.
 
 ```
-Track:    hardening-roadmap-v1                 Status: IDLE
-MARCO ATUAL: —
+Track:    hardening-roadmap-v1                 Status: ACTIVE
+MARCO ATUAL: S5a — UI local da aula
 Iniciado: 2026-10-04
 ```
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 47/70 · SUBTAREFAS DA ATIVA: — · HORIZONTE PREPARADO: 0/0 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F4-08 (S5a) · PRÓXIMA: nenhuma elegível · TAREFAS: 47/71 · SUBTAREFAS DA ATIVA: T-F4-08 0/7 · HORIZONTE PREPARADO: 0/0 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- (nenhuma tarefa ativa: tasks.md deve marcar exatamente uma `[>]`)
+- T-F4-08 · Agenda offline do Companion: próximas revisões (somente leitura) · S5a · subtarefas 0/7
+  Objetivo: No modo offline, Hoje mostra, além de atrasadas e de hoje, as PRÓXIMAS revisões do snapshot, em ordem de data e limitadas, com a data da última sincronização já exibida no aviso; tudo somente leitura
+  Próximo passo: Ler renderOfflineToday em src/app.js e o caso do snapshot em e2e/offline.spec.js
+  Gate: E2e/offline.spec.js, e2e/offline-writes.spec.js, e2e/mobile-nav.spec.js + novos casos; axe; unidade e servidor verdes
+  - [>] RED (e2e em `offline.spec.js`): snapshot com itens em +1, +3 e +9 dias; offline, Hoje lista "Próximas" ordenadas por data com aula e disciplina  ← EM EXECUÇÃO
+  - [ ] RED: sem itens futuros o bloco não aparece; atrasadas e hoje seguem iguais
+  - [ ] RED: com apenas itens futuros a tela NÃO diz "tudo em dia" sem mostrar as próximas
+  - [ ] Renderizar o bloco somente leitura a partir do snapshot (agrupado por data, limitado, com o restante contado)
+  - [ ] Regressão: `offline-writes.spec.js` e `mobile-nav.spec.js` verdes; axe na Hoje offline com próximas
+  - [ ] Mutante (filtro descarta os itens futuros) deixa um teste vermelho; restaurar
+  - [ ] Evidência em `validation.md`; e2e completo uma vez no fim (≤ 480 s, 0 falhas)
 
 ## PRÓXIMO
 
@@ -85,12 +95,13 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F3-04** — UI de geração: fase real, sair e voltar
 - [x] **T-F3-05** — Explicação obrigatória por validação
 
-### [✓] S5a · UI local da aula — tarefas 4/4
+### [>] S5a · UI local da aula — tarefas 4/5
 
 - [x] **T-F4-03** — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
 - [x] **T-F4-04** — Editor da aula em telas estreitas
 - [x] **T-F4-05** — Acessibilidade do editor (teclado, foco, anúncios)
 - [x] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
+- [>] **T-F4-08** — Agenda offline do Companion: próximas revisões (somente leitura)
 
 ### [!] S5c · UI de idioma e consumo — tarefas 0/1
 

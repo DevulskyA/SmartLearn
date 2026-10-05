@@ -263,7 +263,12 @@ test('NAMED PROPERTIES: one mutation per property flips exactly that property to
   fails(tasks(fixture(), (t) => t.replace('  - [ ] GREEN: a coisa funciona', '  - [ ] Testar tudo')), 'ACTIVE_TASK_FULLY_DECOMPOSED');
   fails(plan(fixture(), (p) => p.replace('  ← EM EXECUÇÃO', '')), 'ACTIVE_SUBTASK_VISIBLE');
   // NEXT: nothing ready while open work remains
-  fails(tasks(fixture(), (t) => t.replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-02', '- Status: `[✓]` · Requisitos: R-01 · Dependências: T-F1-02').replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-01 (anotação', '- Status: `[✓]` · Requisitos: R-01 · Dependências: T-F1-01 (anotação')), 'NEXT_TASK_IDENTIFIED');
+  const onlyFollowUp = (t) => t.replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-01 (anotação', '- Status: `[✓]` · Requisitos: R-01 · Dependências: T-F1-01 (anotação');
+  assert.equal(get(report(tasks(fixture(), onlyFollowUp)), 'NEXT_TASK_IDENTIFIED').pass, true, 'a task that only waits for the active one is its successor, not a missing next');
+  // open safe work that can never become ready (a dependency cycle between two open tasks) is a real FAIL
+  fails(tasks(fixture(), (t) => t.replace('Dependências: T-F1-01 (anotação', 'Dependências: T-F1-03 (anotação').replace('- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-02', '- Status: `[ ]` · Requisitos: R-01 · Dependências: T-F1-04')), 'NEXT_TASK_IDENTIFIED');
+  // the active task being the LAST executable one is not a failure: nothing else is pending but human gates
+  assert.equal(get(report(tasks(fixture(), (t) => t.replace(/- Status: `\[ \]`/g, '- Status: `[✓]`'))), 'NEXT_TASK_IDENTIFIED').pass, true);
   const gate = fails(tasks(fixture(), (t) => t.replace('- Gate: follow-up test passes\n', '')), 'NEXT_TASK_EXECUTION_READY');
   assert.match(get(gate, 'NEXT_TASK_EXECUTION_READY').detail, /T-F1-03 lacks: Gate/, 'names the task and what it lacks');
   fails(tasks(fixture(), (t) => t.replace('- Subtarefas:\n  - [ ] RED: o teste independente\n', '')), 'NEAR_HORIZON_PREPARED');
