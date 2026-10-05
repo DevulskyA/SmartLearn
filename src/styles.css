@@ -4237,6 +4237,7 @@ h1 {
   background: transparent;
   border: 0;
   border-bottom: 3px solid transparent;
+  min-height: 44px;
   padding: 0.7rem 1rem;
   color: var(--color-muted);
   font: inherit;
