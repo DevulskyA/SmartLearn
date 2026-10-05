@@ -9,10 +9,10 @@ const BAD = {
   'c-cedilla + a-tilde read as Latin-1 ("ação")': `a${C}§${C}£o`,
   'e-acute read as Latin-1': `caf${C}©`,
   'E-acute read as cp1252': `${C}‰`,
-  'ordinal read as Latin-1': '1Âº',
-  'non-breaking space read as Latin-1': 'aÂ b',
-  'curly quote read as cp1252 (three characters)': 'â€œ',
-  'replacement character': 'a�b',
+  'ordinal read as Latin-1': '1\u00C2\u00BA',
+  'non-breaking space read as Latin-1': 'a\u00C2\u00A0b',
+  'curly quote read as cp1252 (three characters)': '\u00E2\u20AC\u0153',
+  'replacement character': 'a\uFFFDb',
 };
 const GOOD = [
   'Ação, órgão, é, ê, ç, ã, õ, ü, à, ô, í, ú, Á, É, Í, Ó, Ú, Â, Ê, Ô, Ç, Ã, Õ',

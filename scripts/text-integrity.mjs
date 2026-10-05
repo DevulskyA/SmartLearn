@@ -1,6 +1,6 @@
 // T-F4-07 (F-36): guards for the text the student reads. Two independent rules, both pure so a test can feed them a corrupted
 // file without ever writing one:
-//   1. MOJIBAKE: text that was UTF-8 but was read (and saved back) as Latin-1/cp1252, so "ç" became "Ã§" and an unknown character
+//   1. MOJIBAKE: text that was UTF-8 but was read (and saved back) as Latin-1/cp1252, so "c-cedilla" became two characters (A-tilde + section sign) and an unknown character
 //      became U+FFFD. Portuguese has no legitimate "Ã" or "Â" followed by a Latin-1 symbol, so the pattern has no false positives
 //      on correct pt-BR text (including "SÃO", "ÃO", "ª", "º").
 //   2. LOADING/PROGRESS copy: a message that says something is going on ends with the ellipsis character "…" (U+2026), never three
@@ -15,8 +15,8 @@ const CP1252_HIGH = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜�
 export const MOJIBAKE_PATTERNS = [
   { kind: 'A-tilde followed by a Latin-1 symbol (e.g. c-cedilla read as two characters)', re: new RegExp(`\\u00C3[\\u0080-\\u00BF${CP1252_HIGH}]`, 'u') },
   { kind: 'A-circumflex followed by a Latin-1 symbol (e.g. a non-breaking space or ordinal read as two characters)', re: /Â[ -¿]/u },
-  { kind: 'a-circumflex + euro sign (a curly quote or dash read as three characters)', re: /â€/u },
-  { kind: 'U+FFFD replacement character (a byte that was already lost)', re: /�/u },
+  { kind: 'a-circumflex + euro sign (a curly quote or dash read as three characters)', re: /\u00E2\u20AC/u },
+  { kind: 'U+FFFD replacement character (a byte that was already lost)', re: /\uFFFD/u },
 ];
 
 /** Where `text` has mojibake: [{ line, column, kind, sample }], 1-based. */
