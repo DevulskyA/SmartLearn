@@ -36,7 +36,7 @@ const SERVER_VERSION = (() => { try { return JSON.parse(readFileSync(new URL('..
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, ai = {}, devPersistentSession = false } = {}) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, ai = {}, auth = {}, devPersistentSession = false } = {}) {
   // Throws when the DEV flag is combined with production.
   const sessionPolicy = resolveSessionPolicy({ isProduction, devPersistent: devPersistentSession });
   const app = Fastify({ logger: false, trustProxy });
@@ -115,7 +115,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     // every other mutating route already requires — there is no unscoped
     // upload surface on this server.
     await v1.register(fastifyMultipart, { limits: { files: 1, fileSize: sources.maxBytes ?? config.sourceMaxBytes } });
-    registerAuthRoutes(v1, db, { isProduction, policy: sessionPolicy });
+    registerAuthRoutes(v1, db, { isProduction, policy: sessionPolicy, ...auth });
     registerSubjectRoutes(v1, db);
     registerLearningUnitRoutes(v1, db);
     registerReviewRoutes(v1, db);
