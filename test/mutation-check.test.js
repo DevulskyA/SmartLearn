@@ -35,7 +35,9 @@ test('guard: refuses the real repository, an unmarked temp dir, a marked dir wit
 
 test('runMutation and applyMutation both refuse the real tree before touching anything', () => {
   const before = readFileSync(join(REPO_ROOT, MUTATIONS[0].file), 'utf8');
-  assert.throws(() => runMutation(REPO_ROOT, MUTATIONS[0], { run: () => ({ exitCode: 0, failed: [] }) }), /refuses/);
+  let ran = 0;
+  assert.throws(() => runMutation(REPO_ROOT, MUTATIONS[0], { run: () => { ran++; return { exitCode: 0, failed: [] }; } }), /refuses/);
+  assert.equal(ran, 0, 'no test command may even start against the real tree');
   assert.throws(() => applyMutation(REPO_ROOT, MUTATIONS[0]), /refuses/);
   assert.equal(readFileSync(join(REPO_ROOT, MUTATIONS[0].file), 'utf8'), before);
 });
