@@ -96,6 +96,14 @@ export function checkContext(io) {
       for (const hg of segment('Dependências').match(/HG-\d+/g) ?? []) if (!specHG.has(hg)) fail(`${b.id}: unknown gate ${hg}`);
       for (const r of segment('Requisitos').match(/\bR-\d+/g) ?? []) if (!specR.has(r)) fail(`${b.id}: unknown requirement ${r}`);
       for (const f of segment('Requisitos').match(/\bF-\d+/g) ?? []) if (!specF.has(f)) fail(`${b.id}: unknown finding ${f}`);
+      for (const msg of b.subtaskProblems ?? []) fail(`${b.id}: ${msg}`);
+      if (b.subtasks?.length) {
+        const leaves = b.subtasks.filter((r) => r.leaf);
+        const current = leaves.filter((r) => r.mark === '>');
+        if (b.status === '✓' && leaves.some((r) => r.mark !== 'x')) fail(`${b.id}: done but a subtask is not [x]`);
+        if (b.status === '>' && current.length !== 1) fail(`${b.id}: the active task with subtasks must have exactly ONE current subtask [>], found ${current.length}`);
+        if (b.status !== '>' && current.length) fail(`${b.id}: only the active task may have a current subtask [>]`);
+      }
       if (b.status === '✓') {
         if (!/IMPLEMENTATION_SHA/.test(line)) fail(`${b.id}: done without IMPLEMENTATION_SHA`);
         if (validation && !new RegExp(`^#{2,4} ${b.id}(?![A-Za-z0-9])`, 'm').test(validation)) fail(`${b.id}: done but validation.md has no section "### ${b.id}"`);

@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
-import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs } from './test-live-core.mjs';
+import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs, headValidation } from './test-live-core.mjs';
 import { resumeCockpit, FILES } from './context-core.mjs';
 import { syncPlanFile } from './plan-sync.mjs';
 
@@ -52,11 +52,11 @@ export function cliLane(coord) {
 
 
 /** GUI plan tasks as the checklist; the CLI agent is one plain line under it. */
-export function renderAgentBoard({ gui, cli, testsHtml = '' }) {
+export function renderAgentBoard({ gui, cli, testsHtml = '', validationLine = '' }) {
   const c = cli.tasks[0];
   const cliState = c.state === '>' ? 'executando' : c.state === '-' ? 'pausado' : c.state === '!' ? 'bloqueado' : c.state === '✓' ? 'parado (fatia concluída)' : 'sem tarefa';
   const cliLine = `CLI (outro agente): ${cliState} — ${String(c.title).slice(0, 110)}`;
-  return renderChecklistHtml({ tasks: gui.tasks, view: gui.view ?? null, extraLines: [cliLine], testsHtml });
+  return renderChecklistHtml({ tasks: gui.tasks, view: gui.view ?? null, extraLines: [cliLine], testsHtml, validationLine });
 }
 
 function gitOut(cwd, args) {
@@ -98,6 +98,13 @@ export function worktreeBoards(root) {
   return worktreeDirs(root).map((wt) => join(wt, 'conductor', '.view', 'tasklist.html'));
 }
 
+/** The head-validation line for the worktree `wt`: ITS recorded results judged against ITS current head. */
+export function validationFor(wt) {
+  const head = gitOut(wt, ['rev-parse', 'HEAD']);
+  const docsOnlySince = (from, to) => onlyConductorDocs(gitOut(wt, ['diff', '--name-only', from, to]).split('\n'));
+  return headValidation(readArtifacts(artifactDir(wt)), { currentHead: head, docsOnlySince }).line;
+}
+
 /** "TESTES AO VIVO" for the worktree whose board this is: ITS artifacts judged against ITS current head. */
 function testsFor(wt) {
   const head = gitOut(wt, ['rev-parse', 'HEAD']);
@@ -130,7 +137,7 @@ function regenerate(root, coordDir) {
     : [{ out: join(coordDir, 'tasklist.html'), wt: root }, ...worktreeDirs(root).map((wt) => ({ out: join(wt, 'conductor', '.view', 'tasklist.html'), wt }))];
   for (const { out, wt } of targets) {
     mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, renderAgentBoard({ gui, cli: cliLane(cliCoord), testsHtml: testsFor(wt) }));
+    writeFileSync(out, renderAgentBoard({ gui, cli: cliLane(cliCoord), testsHtml: testsFor(wt), validationLine: validationFor(wt) }));
   }
   const out = targets.map((t) => t.out).join(' + ');
   // Conductor: keep tracks.md's ACTIVE TRACK in step with plan.md (same command, so it cannot go stale)
@@ -155,7 +162,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const read = (p) => (existsSync(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null);
     let head = '(unknown)';
     try { head = `${gitOut(root, ['rev-parse', '--short', 'HEAD']).trim()} on ${gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()}`; } catch { /* not a git checkout */ }
-    console.log(resumeCockpit(read, { head }).join('\n'));
+    console.log(resumeCockpit(read, { head, validationLine: validationFor(root) }).join('\n'));
     process.exit(0);
   }
   const coordDir = arg('--coord', join(homedir(), 'SmartLearn-AgentCoord'));

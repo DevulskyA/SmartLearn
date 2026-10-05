@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FILES, taskBlocks, programOrder, expandRanges, norm } from './context-core.mjs';
+import { FILES, taskBlocks, programOrder, expandRanges, norm, classifyTasks, progressCounts, subtaskCounts } from './context-core.mjs';
 
 export const BEGIN = '<!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->';
 export const END = '<!-- PLAN:END -->';
@@ -50,47 +50,50 @@ export function orderProblems({ tasksText, programText = '' }) {
 
 /**
  * The panel marker of a phase, derived (never hand-set), and NEVER [✓] while anything is still pending:
- *   '>' holds the active task · '✓' everything done · 'H' only human gates remain · '!' nothing runnable · ' ' pending and runnable.
+ *   '>' holds the active task · '✓' everything done · 'H' only human decisions remain · '!' nothing runnable · ' ' pending and runnable.
+ * `eff` is the class map of classifyTasks().
  */
-export function phaseState(blocks, byId) {
+export function phaseState(blocks, eff) {
   const real = blocks.filter((b) => b.status !== '=');
   if (real.some((b) => b.status === '>')) return '>';
   const remaining = real.filter((b) => b.status !== '✓');
   if (remaining.length === 0) return '✓';
-  if (remaining.every((b) => b.status === 'H')) return 'H';
-  const runnable = remaining.some((b) => b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '='));
-  return runnable ? ' ' : '!';
+  if (remaining.every((b) => eff.get(b.id) === 'D')) return 'H';
+  return remaining.some((b) => eff.get(b.id) === ' ') ? ' ' : '!';
 }
 
 /** @returns {string} the generated region, markers included. Pure: depends only on the three authority texts. */
 export function renderPlanRegion({ tasksText, programText = '', specText = '' }) {
   const blocks = taskBlocks(tasksText).filter((b) => b.id);
   const byId = new Map(blocks.map((b) => [b.id, b]));
+  const eff = classifyTasks(blocks);
   const spec = norm(specText);
   const gateName = (hg) => cut((new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').replace(/\s*\(.*$/, ''), 56);
   const gatesOf = (b) => [...new Set(b.statusLine.match(/HG-\d+/g) ?? [])];
+  const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
   const active = blocks.find((b) => b.status === '>') ?? null;
   const order = programOrder(programText);
-  const eligible = (b) => b !== active && b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '=');
-  const next = order.map((id) => byId.get(id)).filter(Boolean).find(eligible) ?? blocks.find(eligible) ?? null;
+  const eligible = (b) => b !== active && eff.get(b.id) === ' ' && b.deps.every((d) => !open(d));
+  const queue = [...order.map((id) => byId.get(id)).filter(Boolean), ...blocks].filter((b, n, all) => all.indexOf(b) === n).filter(eligible);
+  const next = queue[0] ?? null;
   const title = (b) => cut(b.heading.replace(/\s*·\s*[—-]?\s*$/, ''), 80);
-  const MARK = { '✓': 'x', '>': '>', ' ': ' ', '!': '!', H: 'H', '=': '=' };
-  // what a not-yet-done task waits for: its HG ids (as written in tasks.md) and any dependency that is a gate or blocked
-  const waits = (b) => [...new Set([...gatesOf(b), ...b.deps.filter((d) => ['H', '!'].includes(byId.get(d)?.status))])];
-  const chain = (b) => b.deps.filter((d) => byId.get(d)?.status !== '✓' && byId.get(d)?.status !== '=').slice(0, 3);
+  const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', '=': '=' };
+  const chain = (b) => b.deps.filter(open).slice(0, 3);
+  const waitsOn = (b) => [...new Set([...gatesOf(b), ...chain(b)])];
+  const sc = (b) => subtaskCounts(b.subtasks);
+  const subNote = (b) => (b.subtasks.length ? ` — subtarefas ${sc(b).done}/${sc(b).total}` : '');
   const row = (b, indent = '') => {
-    const w = b.status === ' ' || b.status === '!' ? waits(b) : b.status === 'H' ? gatesOf(b) : [];
-    const note = b.status === '=' ? ' — dividida em subtarefas' : w.length ? ` — ${b.status === 'H' ? '' : 'aguarda '}${w.join(', ')}` : '';
-    return `${indent}- [${MARK[b.status]}] **${b.id}** — ${title(b)}${note}`;
+    const cls = eff.get(b.id);
+    const w = cls === 'B' || cls === ' ' ? waitsOn(b).filter((x) => /^HG-/.test(x) || ['D', 'B'].includes(eff.get(x))) : cls === 'D' ? gatesOf(b) : [];
+    const note = b.status === '=' ? ' — dividida em subtarefas' : w.length ? ` — ${cls === 'D' ? '' : 'aguarda '}${w.join(', ')}` : '';
+    return `${indent}- [${MARK[cls]}] **${b.id}** — ${title(b)}${note}${subNote(b)}`;
   };
   const pointer = (b, why = '') => `- ${b.id} · ${title(b)}${why ? ` · ${why}` : ''}`;
+  const subLines = (b, base) => b.subtasks.map((r) => `${' '.repeat(base + r.depth * 2)}- [${r.mark}] ${r.text}`);
 
   // PHASES = the sprints of PROGRAM.md in their canonical order; tasks keep the order PROGRAM.md gives.
   // Tasks no sprint lists: finished ones form "BASE" (delivered before the sprint plan), the rest "SEM-SPRINT".
   const sprints = programSprints(programText);
-  const rank = new Map();
-  order.forEach((id, n) => rank.set(id, n));
-  blocks.forEach((b, n) => { if (!rank.has(b.id)) rank.set(b.id, 10000 + n); });
   const placed = new Set();
   const groups = [];
   const childOf = (b) => blocks.find((p) => p.status === '=' && b.id !== p.id && b.id.startsWith(p.id) && /^[a-z]$/.test(b.id.slice(p.id.length))) ?? null;
@@ -111,42 +114,52 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   addGroup('BASE', 'Entregue antes das sprints (F0/F1)', rest.filter((b) => b.status === '✓').map((b) => b.id));
   const base = groups.pop();
   if (base?.id === 'BASE') groups.unshift(base); else if (base) groups.push(base);
-  addGroup('SEM-SPRINT', 'Fora da sequência de sprints (human gate ou ainda não sequenciadas)', rest.filter((b) => b.status !== '✓').map((b) => b.id));
+  addGroup('SEM-SPRINT', 'Fora da sequência de sprints (decisões humanas ou ainda não sequenciadas)', rest.filter((b) => b.status !== '✓').map((b) => b.id));
   const activeGroup = active ? groups.find((g) => g.members.includes(active))?.id ?? '-' : null;
+  const rank = new Map();
+  groups.forEach((g) => g.members.forEach((b) => rank.set(b.id, rank.size)));
   const byRank = (a, b) => rank.get(a.id) - rank.get(b.id);
 
-  const blocked = blocks.filter((b) => b.status === '!'
-    || (b.status === ' ' && b.deps.some((d) => byId.get(d)?.status === 'H' || byId.get(d)?.status === '!'))).sort(byRank);
-  const humans = blocks.filter((b) => b.status === 'H').sort(byRank);
-  const real = blocks.filter((b) => b.status !== '=');
-  const done = real.filter((b) => b.status === '✓').length;
+  const blockedDep = blocks.filter((b) => eff.get(b.id) === 'B').sort(byRank);
+  const decisions = blocks.filter((b) => eff.get(b.id) === 'D').sort(byRank);
+  const pc = progressCounts(blocks);
 
   const out = [BEGIN, ''];
   out.push(`ATIVA AGORA: ${active ? `${active.id} (${activeGroup})` : 'nenhuma'}`
-    + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · PROGRESSO: ${done}/${real.length}`
-    + ` · BLOQUEADAS: ${blocked.length} · HUMAN GATE: ${humans.length}`, '');
-  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] human gate · [=] dividida. Fase: [✓] concluída · [>] contém a ativa · [H] só human gate restante · [!] nada executável · [ ] pendente. Os blocos abaixo de EM EXECUÇÃO a BLOQUEADO e HUMAN GATE são só ponteiros; a linha completa de cada tarefa existe uma única vez, em FASES.', '');
-  out.push('## EM EXECUÇÃO', '');
-  out.push(active ? pointer(active) : '- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)', '');
-  out.push('## PRÓXIMA', '');
-  out.push(next ? pointer(next) : '- (nenhuma elegível pela ordem de PROGRAM.md)', '');
-  out.push('## BLOQUEADO', '');
-  if (blocked.length === 0) out.push('- (nada bloqueado)');
-  for (const b of blocked) out.push(pointer(b, b.status === '!' ? 'marcada bloqueada' : `aguarda ${b.deps.filter((d) => ['H', '!'].includes(byId.get(d)?.status)).join(', ')}`));
+    + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · TAREFAS: ${pc.tasksDone}/${pc.tasksTotal} · SUBTAREFAS: ${pc.subDone}/${pc.subTotal}`
+    + ` · BLOQUEADAS POR DEPENDÊNCIA: ${pc.blockedByDep} · DECISÕES HUMANAS: ${pc.decisions}`, '');
+  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada por dependência (segue sozinha quando a dependência fechar) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
+  out.push('## AGORA — EM EXECUÇÃO', '');
+  if (active) out.push(pointer(active, `${activeGroup} · subtarefas ${sc(active).done}/${sc(active).total}`), ...subLines(active, 2));
+  else out.push('- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)');
+  out.push('', '## PRÓXIMO', '');
+  if (queue.length === 0) out.push('- (nenhuma elegível pela ordem de PROGRAM.md)');
+  for (const b of queue.slice(0, 3)) out.push(pointer(b));
+  out.push('', '## BLOQUEADAS POR DEPENDÊNCIA', '');
+  if (blockedDep.length === 0) out.push('- (nenhuma)');
+  for (const b of blockedDep) out.push(pointer(b, `aguarda ${chain(b).join(', ') || 'dependência'}`));
   out.push('', '## FASES', '');
   for (const g of groups) {
+    const real = g.members.filter((b) => b.status !== '=');
+    const td = real.filter((b) => b.status === '✓').length;
+    const subs = subtaskCounts(real.flatMap((b) => b.subtasks));
+    out.push(`### [${phaseState(g.members, eff)}] ${g.id} · ${g.title} — tarefas ${td}/${real.length}${subs.total ? ` · subtarefas ${subs.done}/${subs.total}` : ''}`, '');
     const parents = new Set(g.members.filter((b) => b.status === '=').map((b) => b.id));
-    out.push(`### [${phaseState(g.members, byId)}] ${g.id} · ${g.title}`, '');
-    for (const b of g.members) out.push(row(b, childOf(b) && parents.has(childOf(b).id) ? '  ' : ''));
+    for (const b of g.members) {
+      const indent = childOf(b) && parents.has(childOf(b).id) ? '  ' : '';
+      out.push(row(b, indent));
+      // the active task is expanded ONLY in AGORA; any other task with subtasks is expanded here
+      if (b.status !== '>' && b.subtasks.length) out.push(...subLines(b, indent.length + 2));
+    }
     out.push('');
   }
-  out.push('## HUMAN GATE', '');
-  if (humans.length === 0) out.push('- (nenhum)');
-  for (const b of humans) {
+  out.push('## DECISÕES HUMANAS', '');
+  if (decisions.length === 0) out.push('- (nenhuma)');
+  for (const b of decisions) {
     const ids = gatesOf(b);
-    const gates = ids.length > 1 ? [ids.join(' + ')] : ids.map((g) => `${g} ${gateName(g)}`.trim()); // several gates: ids only, names live in spec.md
-    const why = gates.length ? gates.join('; ') : chain(b).length ? `aguarda ${chain(b).join(', ')}` : 'decisão humana';
-    out.push(pointer(b, why));
+    const own = ids.length > 1 ? ids.join(' + ') : ids.map((g) => `${g} ${gateName(g)}`.trim())[0];
+    const after = chain(b);
+    out.push(pointer(b, own ?? `decisão humana${after.length ? ` · após ${after.join(', ')}` : ''}`));
   }
   out.push('', END);
   return out.join('\n');

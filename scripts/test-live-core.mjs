@@ -130,6 +130,20 @@ export function onlyConductorDocs(paths) {
   return list.length > 0 && list.every((f) => f.startsWith('conductor/'));
 }
 
+/**
+ * The one-line answer to "was the CURRENT head validated?". An old PASS is never PASS of this head: every recorded suite must be
+ * PASS for the current head (docs-only commits after the run keep it valid); anything else, or nothing recorded, is NOT PROVEN.
+ */
+export function headValidation(artifacts, { currentHead, alive, now, docsOnlySince } = {}) {
+  const prefix = 'VALIDAÇÃO DO HEAD ATUAL:';
+  if (!artifacts?.length) return { proven: false, line: `${prefix} ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)` };
+  const rows = artifacts.map((a) => ({ suite: a.suite, eff: effectiveState(a, { currentHead, alive, now, docsOnlySince }), tested: a.headTested }));
+  if (rows.every((r) => r.eff.state === 'PASS')) return { proven: true, line: `${prefix} ✓ PASS (${rows.map((r) => r.suite).join(', ')}) em ${(currentHead ?? '').slice(0, 7)}` };
+  const label = (st) => (st === 'STALE' ? 'DESATUALIZADO' : st);
+  const detail = rows.map((r) => `${r.suite} ${label(r.eff.state)}${r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : ''}`).join(' · ');
+  return { proven: false, line: `${prefix} ⚠ NÃO PROVADA / DESATUALIZADA — ${detail}; HEAD atual ${(currentHead ?? '?').slice(0, 7)}` };
+}
+
 export function fmtDuration(ms) {
   if (ms == null) return '—';
   const s = Math.round(ms / 1000);

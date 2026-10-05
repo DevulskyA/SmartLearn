@@ -406,10 +406,27 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Evidência anterior (NÃO é prova desta falha): `conductor/tracks/content-quality/plan.md` (~l.724) registra falha com o MESMO sintoma (`#account-show-register` invisível por 30 s, `content-quality-flow.spec.js:143`) classificada como "sensível a carga" por reprodução sob CPU saturada (2/24 no merge e 2/24 no baseline; isolado 6/6), com a causa exata da falha original NÃO reproduzida; `EXECUTION.md` lista também `hoje-block-retest.spec.js` como flake pré-existente. Serve para ordenar as hipóteses, não para concluir a do run 2.
 - Menor discriminador: reexecutar só esse spec N vezes com 1 worker e com 2, com o ambiente descrito (processos alheios contados antes), guardando trace/console/rede da falha; comparar taxa de falha entre as condições.
 - Gate: causa registrada em `validation.md` com contagens; se defeito: RED → GREEN → mesma repetição sem falha.
-- Execução: RUNNING desde 2026-10-05 ~01:54 (-03:00). Driver: `.specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` (cópia rastreada; o processo em curso rodava a cópia idêntica do scratchpad da sessão, bash PID 24652 ao gravar, filho `npm run test:e2e:materials` com `E2E_WORKERS` 1 e depois 2). Planejado: 5x `E2E_WORKERS=1` (rodadas w1-r1..r5) + 5x `E2E_WORKERS=2` (w2-r1..r5), SEQUENCIAL, 38 testes por rodada (~3,5 min com 1 worker).
+- Subtarefas:
+  - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
+    - [x] w1-r1 — PASS 38/38 (208 s)
+    - [x] w1-r2 — PASS 38/38 (207 s)
+    - [x] w1-r3 — PASS 38/38 (208 s)
+    - [x] w1-r4 — PASS 38/38 (199 s)
+    - [x] w1-r5 — FAIL 7 passaram / 8 falharam (50 s): `Target crashed`, não é o sintoma
+  - [x] Rodadas com workers=2 (5): 5 PASS
+    - [x] w2-r1 — PASS 38/38 (131 s)
+    - [x] w2-r2 — PASS 38/38 (127 s)
+    - [x] w2-r3 — PASS 38/38 (132 s)
+    - [x] w2-r4 — PASS 38/38 (126 s)
+    - [x] w2-r5 — PASS 38/38 (126 s)
+  - [x] Coletar os traces das falhas (`trace.zip` do run da w1-r5)
+  - [x] Analisar a taxa de falha por workers (1 × 2)
+  - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
+  - [>] Decidir o fechamento ou a próxima ação
+- Execução: CONCLUÍDA em 2026-10-05; o driver terminou (`DONE` em `summary.txt`) e NADA está em execução agora. Driver: `.specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` (rodou sequencialmente `npm run test:e2e:materials` com `E2E_WORKERS` 1 e depois 2). Fatos de `summary.txt`: 10 rodadas, 38 testes cada; workers=1: w1-r1..r4 PASS, w1-r5 FAIL (`Target crashed`, 7 passaram / 8 falharam em 50 s); workers=2: w2-r1..r5 PASS. Análise já registrada em `validation.md` (seção T-F6-08): sintoma `#account-show-register` 0/10, causa NOT_PROVEN, nenhuma correção feita.
 - Resultados em ARQUIVO (não só no terminal): `test-results/t-f6-08/` na worktree (gitignored, mas em disco; espelho a cada 10 s do scratchpad por `test-results/t-f6-08/mirror.sh`): `summary.txt` = uma linha por rodada (exit, segundos, processos antes, id do run, passed/failed) + linhas `FAIL` com o teste + `DONE` no fim; `<tag>.log` = log completo da rodada. Traces de falha: `test-results/<run-id>/**/trace.zip` (o id do run está na linha da rodada em `summary.txt`).
-- Andamento: `grep -c "^w[12]-r" test-results/t-f6-08/summary.txt` = rodadas concluídas (10 = terminou; `DONE` na última linha). Parciais ao gravar (2026-10-05 02:03): w1-r1 e w1-r2 PASS 38/38 (207 e 208 s), 0 falhas, 54 processos de navegador/node antes de cada rodada.
-- Próximo passo: AO RETOMAR, conferir o andamento (comando abaixo). Com `DONE`: analisar taxa de falha por workers (1 × 2), posição/ordem do teste, teste imediatamente anterior, estado de login e DOM, e os `trace.zip` das falhas; registrar contagens e causa (ou "não provada") em `validation.md`, seção T-F6-08; só então decidir correção (proibido subir timeout, retry ou sleep antes da causa). Sem `DONE` e sem driver vivo: completar SÓ as rodadas faltantes com o mesmo comando.
+- Andamento: 10/10 rodadas concluídas (`grep -c "^w[12]-r" test-results/t-f6-08/summary.txt` = 10; última linha `DONE`). Resta só a decisão de fechamento ou de próxima ação (última subtarefa).
+- Próximo passo: decidir o fechamento de T-F6-08 ou a próxima ação (subtarefa `[>]`); qualquer correção só com defeito demonstrado (proibido subir timeout, retry ou sleep antes da causa). Não reexecutar as 10 rodadas sem hipótese nova.
 - Comando: `cat test-results/t-f6-08/summary.txt` (andamento); para (re)executar: `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` (grava em `test-results/t-f6-08/`).
 
 ### T-F6-09 — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S

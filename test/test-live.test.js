@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createParser, effectiveState, renderTestsSection } from '../scripts/test-live-core.mjs';
+import { createParser, effectiveState, renderTestsSection, headValidation } from '../scripts/test-live-core.mjs';
 
 const TAP = `TAP version 13
 # Subtest: suite A
@@ -114,4 +114,26 @@ test('commits after a run that only touch conductor/ keep the result valid; any 
   assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => false }).state, 'STALE');
   assert.equal(effectiveState(art, { currentHead: 'bbbbbbb2', alive: () => false }).state, 'STALE'); // no resolver => strict
   assert.match(renderTestsSection([{ ...art, cmd: 'x', log: 'l', startedAt: art.updatedAt, durationMs: 1000 }], { currentHead: 'bbbbbbb2', alive: () => false, docsOnlySince: () => true }), /só docs depois/);
+});
+
+test('VALIDAÇÃO DO HEAD ATUAL: an old PASS never reads as PASS of the current head; nothing recorded is not proven either', () => {
+  const art = (suite, headTested, state = 'PASS') => ({ suite, headTested, state, exitCode: state === 'PASS' ? 0 : 1, updatedAt: new Date().toISOString(), counts: { done: 1, total: 1, passed: 1, failed: 0, skipped: 0 } });
+  const dead = () => false;
+  const none = headValidation([], { currentHead: 'bbbbbbb2' });
+  assert.equal(none.proven, false);
+  assert.match(none.line, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA/);
+  const old = headValidation([art('unit', 'aaaaaaa1'), art('server', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead });
+  assert.equal(old.proven, false);
+  assert.match(old.line, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/);
+  assert.match(old.line, /unit DESATUALIZADO \(testado aaaaaaa\)/);
+  assert.doesNotMatch(old.line, /✓|PASS/);
+  const same = headValidation([art('unit', 'bbbbbbb2'), art('server', 'bbbbbbb2')], { currentHead: 'bbbbbbb2', alive: dead });
+  assert.equal(same.proven, true);
+  assert.match(same.line, /^VALIDAÇÃO DO HEAD ATUAL: ✓ PASS \(unit, server\) em bbbbbbb/);
+  // one suite at an old head, or failing, spoils the whole answer
+  assert.equal(headValidation([art('unit', 'bbbbbbb2'), art('server', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
+  assert.equal(headValidation([art('unit', 'bbbbbbb2', 'FAIL')], { currentHead: 'bbbbbbb2', alive: dead }).proven, false);
+  // commits after the run that only touch conductor/ do not invalidate it; anything else does
+  assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => true }).proven, true);
+  assert.equal(headValidation([art('unit', 'aaaaaaa1')], { currentHead: 'bbbbbbb2', alive: dead, docsOnlySince: () => false }).proven, false);
 });

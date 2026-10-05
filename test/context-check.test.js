@@ -66,6 +66,10 @@ test('the cockpit answers where am I from tracked files only, in a few lines, an
   assert.match(text, /^ACTIVE_TASK=T-F1-02 — Active work$/m);
   assert.match(text, /^ACTIVE_STATUS=IN_PROGRESS$/m);
   assert.match(text, /DONE_COUNT=1 {2}OPEN_COUNT=3 {2}BLOCKED_COUNT=0 {2}HUMAN_GATE_COUNT=1/);
+  assert.match(text, /^TASKS=1\/5 {2}SUBTASKS=0\/0 /m);
+  assert.match(text, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA/m, 'default: nothing recorded means not proven');
+  const stale = resumeCockpit(ioOf(fixture()).read, { head: 'h', validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO' }).join('\n');
+  assert.match(stale, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/m);
   assert.match(text, /^CURRENT_GOAL=the thing works$/m);
   assert.match(text, /^CURRENT_PROOF_REQUIRED=test passes$/m);
   assert.match(text, /^NEXT_COMMAND=`npm test`$/m);
@@ -115,8 +119,15 @@ test('every way memory can leak out of Git fails the gate', () => {
   must('plan does not name the active task', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = f['conductor/tracks/hardening-roadmap-v1/plan.md'].replace('ATIVA AGORA: T-F1-02', 'ATIVA AGORA: T-F9-99'); }), {}, /does not name the active task T-F1-02/);
   must('plan checkbox hand-edited away from tasks.md', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = f['conductor/tracks/hardening-roadmap-v1/plan.md'].replace('- [x] **T-F1-01**', '- [ ] **T-F1-01**'); }), {}, /plan diverges from tasks\.md/);
   must('tasks.md status changed without syncing the plan', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace('### T-F1-03 — Follow-up · S\n- Status: `[ ]`', '### T-F1-03 — Follow-up · S\n- Status: `[!]`'); }), {}, /plan diverges from tasks\.md/);
-  must('plan lists a task twice (duplication)', mutate((f) => { const k = 'conductor/tracks/hardening-roadmap-v1/plan.md'; f[k] = f[k].replace('## HUMAN GATE', '- [ ] **T-F1-03** — duplicate\n\n## HUMAN GATE'); }), {}, /more than once/);
+  must('plan lists a task twice (duplication)', mutate((f) => { const k = 'conductor/tracks/hardening-roadmap-v1/plan.md'; f[k] = f[k].replace('## DECISÕES HUMANAS', '- [ ] **T-F1-03** — duplicate\n\n## DECISÕES HUMANAS'); }), {}, /more than once/);
   must('plan has a second active task row', mutate((f) => { const k = 'conductor/tracks/hardening-roadmap-v1/plan.md'; f[k] = f[k].replace('- [ ] **T-F1-03**', '- [>] **T-F1-03**'); }), {}, /exactly ONE active task row/);
+  const withSubtasks = (list, task = 'T-F1-02') => (f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace(`### ${task} — `, `### ${task} — `).replace(/(### T-F1-02 — Active work · M\n- Status:[^\n]*\n)/, `$1- Subtarefas:\n${list}\n`); const k = 'conductor/tracks/hardening-roadmap-v1/plan.md'; f[k] = 'MARCO ATUAL: S1\n'; };
+  must('active task with subtasks has no current subtask', mutate(withSubtasks('  - [x] a\n  - [ ] b')), {}, /exactly ONE current subtask/);
+  must('active task has two current subtasks', mutate(withSubtasks('  - [>] a\n  - [>] b')), {}, /exactly ONE current subtask/);
+  must('subtask group marked done with an undone child', mutate(withSubtasks('  - [x] g\n    - [x] a\n    - [>] b')), {}, /is \[x\] but a child is not done/);
+  must('subtask indentation jumps a level', mutate(withSubtasks('  - [>] a\n      - [ ] deep')), {}, /nesting jumps/);
+  must('done task with an unfinished subtask', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace(/(### T-F1-01 — Foundation · S\n- Status:[^\n]*\n)/, '$1- Subtarefas:\n  - [ ] left behind\n'); }), {}, /done but a subtask is not \[x\]/);
+  must('only the active task may have a current subtask', mutate((f) => { f[`${FEATURE}/tasks.md`] = f[`${FEATURE}/tasks.md`].replace(/(### T-F1-03 — Follow-up · S\n- Status:[^\n]*\n)/, '$1- Subtarefas:\n  - [>] a\n'); }), {}, /only the active task may have a current subtask/);
   must('plan lost its generated region', mutate((f) => { f['conductor/tracks/hardening-roadmap-v1/plan.md'] = 'MARCO ATUAL: S1\n'; }), {}, /plan diverges from tasks\.md: plan\.md has no PLAN/);
   must('external path with no manifest entry', mutate((f) => { f[`${FEATURE}/validation.md`] += '\nUses E:/Secret/place/data.db\n'; }), {}, /external path without an ARTIFACTS\.md entry: E:\/Secret/);
   must('manifest entry missing a field', mutate((f) => { f['.specs/ARTIFACTS.md'] = f['.specs/ARTIFACTS.md'].replace('- SHA256: abc\n', ''); }), {}, /ARTIFACTS A-01: missing field SHA256/);
