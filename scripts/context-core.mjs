@@ -150,14 +150,52 @@ export function blockNote(b, blocks, eff) {
   return waits.length ? `aguarda ${waits.join(', ')}` : 'marcada bloqueada';
 }
 
-/** The numbers shown everywhere (plan, panel, cockpit): tasks exclude split parents; subtasks are leaves of the checkbox lists. */
+// PROGRESSIVE ELABORATION: detail just in time, visibility all the time. Only the active task and the next ready ones carry a
+// subtask list; a task may be worked only when it is EXECUTION_READY (a "Subtarefas:" list with at least one verifiable leaf).
+const GENERIC_SUBTASKS = [
+  'trabalhar na implementação', 'trabalhar na tarefa', 'revisar código', 'revisar o código', 'testar tudo', 'testar', 'revisar', 'implementar',
+  'implementação', 'fazer a tarefa', 'fazer', 'concluir', 'terminar', 'ajustes finais', 'finalizar', 'desenvolver',
+];
+export const isGenericSubtask = (text) => GENERIC_SUBTASKS.includes(String(text).toLowerCase().replace(/[.\s]+$/g, '').replace(/\s+/g, ' ').trim());
+/** EXECUTION_READY: at least one leaf subtask. */
+export const executionReady = (b) => !!b?.subtasks?.some((r) => r.leaf);
+/** Leaf subtasks too generic to verify (small denylist). */
+export const genericSubtasks = (b) => (b?.subtasks ?? []).filter((r) => r.leaf && isGenericSubtask(r.text));
+
+/**
+ * The next tasks, in PROGRAM.md order, that the plan shows as PRÓXIMO: runnable (class ' '), not the active one, and predictable: every
+ * open dependency is the active task or an earlier task of this same list. NEXT 1 is the first; at most `limit` are returned.
+ */
+export function nextReady(blocks, programText, limit = 3) {
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const eff = classifyTasks(blocks);
+  const active = blocks.find((b) => b.status === '>') ?? null;
+  const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
+  const ordered = [...programOrder(programText ?? '').map((id) => byId.get(id)).filter(Boolean), ...blocks].filter((b, n, all) => all.indexOf(b) === n);
+  const shown = [];
+  for (const b of ordered) {
+    if (shown.length >= limit) break;
+    if (b === active || eff.get(b.id) !== ' ') continue;
+    if (b.deps.every((d) => !open(d) || d === active?.id)) shown.push(b);
+  }
+  return shown;
+}
+
+/** Tasks that lack the minimum for a deterministic state: an Outcome/Fazer and a Gate. */
+export function missingMinimum(blocks) {
+  return {
+    // 'Outcome' or an equivalent statement of what the task delivers (Objetivo, Fazer, Contrato adicional)
+    noOutcome: blocks.filter((b) => !/^- (Outcome|Objetivo|Fazer|Contrato adicional)\b/m.test(b.body)).map((b) => b.id),
+    noGate: blocks.filter((b) => !/^- Gate\b/m.test(b.body)).map((b) => b.id),
+  };
+}
+
+/** The numbers shown everywhere (plan, panel, cockpit): tasks exclude split parents. There is NO global subtask total (subtasks exist only for the active and READY tasks). */
 export function progressCounts(blocks) {
   const eff = classifyTasks(blocks);
   const real = blocks.filter((b) => b.status !== '=');
-  const sub = subtaskCounts(blocks.flatMap((b) => b.subtasks ?? []));
   return {
     tasksDone: real.filter((b) => b.status === '✓').length, tasksTotal: real.length,
-    subDone: sub.done, subTotal: sub.total,
     decisions: real.filter((b) => eff.get(b.id) === 'D').length,
     blockedByDep: real.filter((b) => eff.get(b.id) === 'B').length,
   };
@@ -211,13 +249,10 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const active = blocks.find((b) => b.status === '>') ?? null;
   const count = (s) => blocks.filter((b) => b.status === s).length;
   const pc = progressCounts(blocks);
+  const model = buildModel({ tasksText, programText: read(FILES.program) ?? '', specText: read(FILES.spec) ?? '' });
   const spec = norm(read(FILES.spec));
   const gateName = (hg) => (new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').trim().replace(/\s*\(.*$/, '');
-  const plan = norm(read(FILES.plan));
-  const order = programOrder(read(FILES.program) ?? '');
-  const eff = classifyTasks(blocks);
-  const eligible = (b) => b && b !== active && eff.get(b.id) === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '=');
-  const next3 = order.map((id) => byId.get(id)).filter(eligible).slice(0, 3);
+  const next3 = model.ready.map((r) => model.byId.get(r.id));
   const blockers = active ? active.deps.filter((d) => byId.get(d)?.status !== '✓').map((d) => `${d}[${STATE_NAME[byId.get(d)?.status] ?? 'MISSING'}]`) : [];
   const relevantGates = [...new Set([...(active?.gates ?? []), ...next3.flatMap((b) => b.gates)])];
   // the standing prohibitions are rules 8 and 9 of tasks.md "Regras de execução" (derived here, never restated by hand)
@@ -228,11 +263,13 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => r.replace(/`/g, '')).join(' | '); // whole rules: a cut prohibition is worse than a long line
   const lines = [
     `HEAD=${head}`,
-    `PHASE=${/^MARCO ATUAL:\s*(.+)$/m.exec(plan)?.[1] ?? '(none)'}`,
+    `PHASE=${model.marco}`,
     `ACTIVE_TASK=${active ? `${active.id} — ${active.heading}` : '(none: tasks.md must mark exactly one task [>])'}`,
     `ACTIVE_STATUS=${active ? STATE_NAME[active.status] : 'NONE'}`,
     `DONE_COUNT=${count('✓')}  OPEN_COUNT=${count(' ') + count('>')}  BLOCKED_COUNT=${pc.blockedByDep}  HUMAN_GATE_COUNT=${pc.decisions}`,
-    `TASKS=${pc.tasksDone}/${pc.tasksTotal}  SUBTASKS=${pc.subDone}/${pc.subTotal}  (BLOCKED_COUNT = waits for a dependency; HUMAN_GATE_COUNT = needs the user's decision)`,
+    `TASKS=${pc.tasksDone}/${pc.tasksTotal}  (BLOCKED_COUNT = waits for a dependency; HUMAN_GATE_COUNT = needs the user's decision)`,
+    `ACTIVE_SUBTASKS=${model.progress.active ? `${model.progress.active.id} ${model.progress.active.done}/${model.progress.active.total}` : '(none)'}`,
+    `NEXT_READY=${model.ready.length ? model.ready.map((r) => `${r.id} ${r.ready ? `READY ${r.counts.done}/${r.counts.total}` : 'SEM SUBTAREFAS'}`).join(' | ') : '(none)'}  HORIZONTE_PREPARADO=${model.progress.horizon.prepared}/${model.progress.horizon.total}`,
     validationLine,
     '',
     `CURRENT_GOAL=${fit(field(active, 'Outcome') ?? field(active, 'Fazer')) ?? '(none)'}`,
@@ -240,7 +277,7 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
     `NEXT_STEP=${fit(field(active, 'Próximo passo')) ?? '(none)'}`,
     `NEXT_COMMAND=${fit(field(active, 'Comando')) ?? '(none)'}`,
     '',
-    `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${b.heading})`).join(' | ') : '(none eligible)'}`,
+    `NEXT_3_TASKS=${next3.length ? next3.map((b) => `${b.id} (${b.heading})`).join(' | ') : '(none ready)'}`,
     `BLOCKERS_FOR_CURRENT=${blockers.length ? blockers.join(', ') : 'none'}`,
     `OPEN_HUMAN_GATES_RELEVANT=${relevantGates.length ? relevantGates.map((g) => `${g} ${gateName(g)}`.trim()).join(' | ') : 'none for the current and next tasks'}`,
     `PROHIBITIONS=${prohibitions || '(see tasks.md "Regras de execução" 8-9)'}`,
@@ -254,4 +291,199 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
     '(cockpit is DERIVED from tasks.md/PROGRAM.md/spec.md/plan.md and recomputed on every run; it is never authority)',
   ];
   return lines;
+}
+
+// ======================================================================================================================
+// NORMALIZED EXECUTION MODEL. ONE projection: plan.md, the HTML board and the cockpit all render THIS object, which is derived from
+// tasks.md (+ PROGRAM.md for order, spec.md for gate titles) alone. Nothing about subtasks, state, dependencies or gates lives anywhere
+// else, so deleting every generated view and regenerating restores the same plan.
+// ======================================================================================================================
+
+/** Cuts at a word boundary (never mid-word, no ellipsis), after the first clause marker when there is one. */
+export function cut(text, n) {
+  let t = String(text).trim();
+  const clause = /[?:]|\s—\s|\.\s/.exec(t);
+  if (clause && clause.index >= 12) t = t.slice(0, clause.index);
+  if (t.length > n) { t = t.slice(0, n + 1); t = t.slice(0, Math.max(t.lastIndexOf(' '), 1)); }
+  return t.replace(/[\s,;:.(—-]+$/, '');
+}
+
+/** The first COMPLETE sentence of a text (parentheticals and backticks dropped); never cut by character count. */
+export function firstSentence(text, { clauses = true } = {}) {
+  const t = String(text ?? '').replace(/`/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  const m = /^(.+?[.?!])(?:\s|$)/.exec(t);
+  let out = (m ? m[1] : t);
+  if (clauses) out = out.split(/[;:]\s/)[0];
+  out = out.trim().replace(/[.,;:]+$/, '');
+  return out;
+}
+
+/** [{id, title, ids}] from the sprint table of PROGRAM.md, in file order; ids = the "Tarefas" column (ranges expanded). */
+export function programSprints(programText) {
+  const out = [];
+  for (const line of norm(programText).split('\n')) {
+    const m = /^\| \*\*(S[\w-]+)\*\* ([^|]*)\|/.exec(line);
+    if (!m) continue;
+    const cells = line.split('|');
+    const col = expandRanges(cells[3] ?? '');
+    out.push({ id: m[1], title: m[2].trim(), ids: [...new Set(col.match(/T-[A-Z0-9]+-\d+[a-z]?/g) ?? [])] });
+  }
+  return out;
+}
+
+/** Order problems: a task that PROGRAM.md sequences before one of its own dependencies (that is also sequenced). */
+export function orderProblems({ tasksText, programText = '' }) {
+  const order = programOrder(programText);
+  const pos = new Map(order.map((id, n) => [id, n]));
+  const problems = [];
+  for (const b of taskBlocks(tasksText).filter((t) => t.id && pos.has(t.id))) {
+    for (const d of b.deps) if (pos.has(d) && pos.get(d) > pos.get(b.id)) problems.push(`PROGRAM.md sequences ${b.id} before its dependency ${d}`);
+  }
+  return problems;
+}
+
+/**
+ * The marker of a phase, derived (never hand-set), and NEVER [✓] while anything is still pending:
+ *   '>' holds the active task · '✓' everything done · 'H' only human decisions remain · '!' nothing runnable · ' ' pending and runnable.
+ */
+export function phaseState(blocks, eff) {
+  const real = blocks.filter((b) => b.status !== '=');
+  if (real.some((b) => b.status === '>')) return '>';
+  const remaining = real.filter((b) => b.status !== '✓');
+  if (remaining.length === 0) return '✓';
+  if (remaining.every((b) => eff.get(b.id) === 'D')) return 'H';
+  return remaining.some((b) => eff.get(b.id) === ' ') ? ' ' : '!';
+}
+
+/** What a task needs to be worked, as a list of missing things (empty = EXECUTION_READY): Outcome/Fazer, Gate, known deps, subtasks, no open human gate. */
+export function readinessGaps(b, blocks) {
+  const known = new Set(blocks.map((x) => x.id));
+  const eff = classifyTasks(blocks);
+  const gaps = [];
+  if (!/^- (Outcome|Objetivo|Fazer|Contrato adicional)\b/m.test(b.body)) gaps.push('Outcome/Fazer');
+  if (!/^- Gate\b/m.test(b.body)) gaps.push('Gate');
+  if (b.deps.some((d) => !known.has(d))) gaps.push('dependências conhecidas');
+  if (!executionReady(b)) gaps.push('Subtarefas (≥ 1 folha verificável)');
+  if (b.hgDeps?.length || eff.get(b.id) === 'D') gaps.push('decisão humana pendente');
+  return gaps;
+}
+
+/** @returns the normalized execution model (see the banner above). Pure: depends only on the three authority texts. */
+export function buildModel({ tasksText, programText = '', specText = '' }) {
+  const blocks = taskBlocks(tasksText).filter((b) => b.id);
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const eff = classifyTasks(blocks);
+  const spec = norm(specText);
+  const gateTitle = (hg) => firstSentence(new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '');
+  const gatesOf = (b) => [...new Set(b.statusLine.match(/HG-\d+/g) ?? [])];
+  const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
+  const active = blocks.find((b) => b.status === '>') ?? null;
+  const shown = nextReady(blocks, programText);
+  const title = (b) => b.heading.replace(/\s*·\s*[—-]?\s*$/, '').trim();
+  const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', '=': '=' };
+  const capital = (t) => (t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}` : t);
+  const sc = (b) => subtaskCounts(b.subtasks);
+  const chain = (b) => b.deps.filter(open);
+
+  // PHASES = the sprints of PROGRAM.md in their canonical order; tasks keep the order PROGRAM.md gives.
+  // Tasks no sprint lists: finished ones form "BASE" (delivered before the sprint plan), the rest "SEM-SPRINT".
+  const childOf = (b) => blocks.find((p) => p.status === '=' && b.id !== p.id && b.id.startsWith(p.id) && /^[a-z]$/.test(b.id.slice(p.id.length))) ?? null;
+  const placed = new Set();
+  const groups = [];
+  const addGroup = (id, gtitle, ids) => {
+    const members = [];
+    for (const tid of ids) {
+      const b = byId.get(tid);
+      if (!b || placed.has(tid)) continue;
+      placed.add(tid);
+      const parent = childOf(b);
+      if (parent && !placed.has(parent.id)) { members.push(parent); placed.add(parent.id); } // a split parent appears once, before its first child
+      members.push(b);
+    }
+    if (members.length) groups.push({ id, title: gtitle, members });
+  };
+  for (const sp of programSprints(programText)) addGroup(sp.id, sp.title, sp.ids.filter((tid) => byId.has(tid)));
+  const rest = blocks.filter((b) => !placed.has(b.id) && b.status !== '=');
+  addGroup('BASE', 'Entregue antes das sprints (F0/F1)', rest.filter((b) => b.status === '✓').map((b) => b.id));
+  const base = groups.pop();
+  if (base?.id === 'BASE') groups.unshift(base); else if (base) groups.push(base);
+  addGroup('SEM-SPRINT', 'Fora da sequência de sprints (decisões humanas ou ainda não sequenciadas)', rest.filter((b) => b.status !== '✓').map((b) => b.id));
+  const groupOf = (b) => groups.find((g) => g.members.includes(b));
+  const rank = new Map();
+  groups.forEach((g) => g.members.forEach((b) => rank.set(b.id, rank.size)));
+  const byRank = (a, b) => rank.get(a.id) - rank.get(b.id);
+  const activeGroup = active ? groupOf(active) : null;
+
+  // causal chain of a blocked task: T-x BLOQUEADA → dependency → ... → HG-xx (a dependency is never a human decision itself)
+  const chainText = (b) => {
+    const roots = humanRoots(b, blocks, eff);
+    if (!roots.length) return chain(b).join(', ') || 'dependência';
+    const paths = roots.map((r) => [r.via, r.task && r.task !== r.via ? r.task : null, r.hg.length ? r.hg.join('+') : null].filter(Boolean).join(' → '));
+    return [...new Set(paths)].join(' ; ');
+  };
+
+  const rowOf = (b, indent = '') => {
+    const cls = eff.get(b.id);
+    const kids = b.status === '=' ? blocks.filter((c) => childOf(c)?.id === b.id) : [];
+    const note = b.status === '=' ? ` — dividida em ${b.id}${kids.map((c) => c.id.slice(b.id.length)).join('/')} (tarefas)` : cls === 'B' ? ` — BLOQUEADA → ${chainText(b)}` : cls === 'D' && gatesOf(b).length ? ` — ${gatesOf(b).join(', ')}` : '';
+    return { id: b.id, title: title(b), mark: MARK[cls], note, indent };
+  };
+  const phases = groups.map((g) => {
+    const real = g.members.filter((b) => b.status !== '=');
+    const parents = new Set(g.members.filter((b) => b.status === '=').map((b) => b.id));
+    return {
+      id: g.id, title: g.title, state: phaseState(g.members, eff),
+      done: real.filter((b) => b.status === '✓').length, total: real.length,
+      rows: g.members.map((b) => rowOf(b, childOf(b) && parents.has(childOf(b).id) ? '  ' : '')),
+    };
+  });
+
+  const why = (b, at) => {
+    const g = groupOf(b)?.id ?? '-';
+    const closed = b.deps.filter((d) => !open(d));
+    const waiting = b.deps.filter(open);
+    const skipped = (groupOf(b)?.members ?? []).filter((m) => m !== b && m !== active && m.status !== '✓' && m.status !== '=' && rank.get(m.id) < rank.get(b.id) && !shown.slice(0, at).includes(m));
+    const parts = [g, active && g !== activeGroup?.id && !waiting.length ? `independente de ${activeGroup.id}` : '', closed.length ? `dependências concluídas: ${closed.join(', ')}` : 'sem dependência pendente', waiting.length ? `depois de ${waiting.join(', ')}` : ''];
+    if (skipped.length) parts.push(`passa à frente de ${skipped.map((m) => m.id).join(', ')} (aguardam ${[...new Set(skipped.flatMap((m) => m.deps.filter((d) => open(d) && !skipped.some((k) => k.id === d))))].join(', ') || 'dependência'})`);
+    return parts.filter(Boolean).join(' · ');
+  };
+
+  const decisionText = (b) => {
+    const ids = gatesOf(b);
+    if (ids.length) return ids.map((g) => `${g} ${gateTitle(g)}`.trim()).join('; ');
+    // what the user must decide: the human sentence of the Status line when there is one, else the task's own Outcome/Fazer, else its title
+    const human = /(?:^|[·.;]\s*)([^·.;]*(?:UAT humano|[Dd]ecisão)[^·.;]*)/.exec(b.statusLine.replace(/\([^)]*\)/g, ''))?.[1];
+    return capital(firstSentence(human ?? field(b, 'Outcome') ?? field(b, 'Fazer') ?? '') || title(b));
+  };
+
+  const activeModel = active ? (() => {
+    const estado = firstSentence(field(active, 'Estado') ?? '', { clauses: false }) || firstSentence(field(active, 'Execução') ?? '');
+    const resultado = firstSentence(field(active, 'Resultado') ?? '', { clauses: false });
+    const objetivo = resultado ? '' : firstSentence(field(active, 'Outcome') ?? field(active, 'Fazer') ?? '', { clauses: false });
+    const proximo = firstSentence(field(active, 'Próximo passo') ?? '');
+    const gate = firstSentence(field(active, 'Gate') ?? '', { clauses: false });
+    const facts = [['Estado', estado], ['Resultado atual', resultado], ['Objetivo', objetivo], ['Próximo passo', proximo], ['Gate', gate]].filter(([, t]) => t).map(([label, t]) => ({ label, text: capital(t) }));
+    return { id: active.id, title: title(active), group: activeGroup?.id ?? '-', facts, subtasks: active.subtasks, counts: sc(active) };
+  })() : null;
+
+  const ready = shown.map((b, at) => ({
+    id: b.id, title: title(b), ready: executionReady(b), label: executionReady(b) ? 'READY' : 'SEM SUBTAREFAS (não pronta)',
+    group: groupOf(b)?.id ?? '-', why: why(b, at), subtasks: b.subtasks, counts: sc(b),
+  }));
+  const blocked = blocks.filter((b) => eff.get(b.id) === 'B').sort(byRank).map((b) => ({ id: b.id, title: title(b), chain: chainText(b) }));
+  const decisions = blocks.filter((b) => eff.get(b.id) === 'D').sort(byRank).map((b) => ({ id: b.id, title: title(b), text: decisionText(b), after: chain(b) }));
+  const realBlocks = blocks.filter((b) => b.status !== '=');
+  const progress = {
+    tasksDone: realBlocks.filter((b) => b.status === '✓').length,
+    tasksTotal: realBlocks.length,
+    active: active ? { id: active.id, ...sc(active) } : null,
+    ready: ready.map((r) => ({ id: r.id, label: r.label, ...r.counts })),
+    horizon: { prepared: ready.filter((r) => r.ready).length, total: ready.length },
+  };
+  return {
+    blocks, eff, byId, active: activeModel, ready, blocked, decisions, phases, progress,
+    next: ready[0]?.id ?? null,
+    marco: activeGroup ? `${activeGroup.id} — ${activeGroup.title}` : '—',
+    status: active ? 'ACTIVE' : (realBlocks.every((b) => b.status === '✓') ? 'DONE' : 'IDLE'),
+  };
 }

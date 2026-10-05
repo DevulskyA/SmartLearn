@@ -10,8 +10,8 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit } from './context-core.mjs';
-import { planDrift } from './plan-sync.mjs';
+import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit, nextReady, executionReady, genericSubtasks, missingMinimum, buildModel, readinessGaps, classifyTasks, norm as normText } from './context-core.mjs';
+import { planDrift, renderPlanFile, readInputs } from './plan-sync.mjs';
 import { headValidationFor } from './test-live-core.mjs';
 export const CANONICAL = [
   'CLAUDE.md',
@@ -38,6 +38,7 @@ const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
 /** @param io {read(path)->string|null, tracked(path)->bool, ignored(path)->bool} */
 export function checkContext(io) {
   const problems = [];
+  const warnings = [];
   const fail = (msg) => problems.push(msg);
   const text = {};
   for (const f of CANONICAL) {
@@ -81,6 +82,7 @@ export function checkContext(io) {
 
   // ---- task queue
   let active = null;
+  const context = { minimum: { noOutcome: [], noGate: [] } };
   if (tasks) {
     const blocks = taskBlocks(tasks);
     const ids = new Set(blocks.map((b) => b.id));
@@ -115,8 +117,41 @@ export function checkContext(io) {
     else {
       active = inProgress[0];
       if (!/^- Próximo passo:/m.test(active.body)) fail(`${active.id}: active task has no "Próximo passo:" line`);
-      if (!/^- Comando:/m.test(active.body)) fail(`${active.id}: active task has no "Comando:" line`);
+      // "Comando:" is optional; "Próximo passo:" belongs to the active task only
     }
+
+    // ---- PROGRESSIVE ELABORATION: detail just in time. A task is worked only when it is EXECUTION_READY (a "Subtarefas:" list
+    // with at least one verifiable leaf); the next ready task must be ready BEFORE it is promoted; distant tasks stay one line.
+    const programText = text[`${FEATURE}/PROGRAM.md`] ?? '';
+    const ready = nextReady(blocks, programText);
+    const lacks = (b) => !executionReady(b);
+    if (active && lacks(active)) fail(`EXECUTION_READY: the active task ${active.id} has no "Subtarefas:" list with at least one verifiable leaf`);
+    if (ready[0] && lacks(ready[0])) fail(`EXECUTION_READY: ${ready[0].id} is the next ready task but has no "Subtarefas:" list; elaborate it before promoting it`);
+    if (ready[0] && !lacks(ready[0])) { const gaps = readinessGaps(ready[0], blocks); if (gaps.length) fail(`EXECUTION_READY: ${ready[0].id} is the next ready task but lacks: ${gaps.join(', ')}`); }
+    if (!active && ready[0] && lacks(ready[0])) fail(`PROMOTION: the active task was closed but the next ready task ${ready[0].id} has no "Subtarefas:"; elaborate it first`);
+    for (const b of ready.slice(1)) if (lacks(b)) warnings.push(`${b.id} is shown in PRÓXIMO without subtasks (SEM SUBTAREFAS)`);
+    const shownIds = new Set([...(active ? [active.id] : []), ...ready.map((b) => b.id)]);
+    for (const b of blocks) {
+      const generic = genericSubtasks(b);
+      if (!generic.length) continue;
+      if (shownIds.has(b.id)) fail(`${b.id}: generic subtask(s) cannot be verified: ${generic.map((r) => `"${r.text}"`).join(', ')}`);
+      else warnings.push(`${b.id}: generic subtask(s): ${generic.map((r) => `"${r.text}"`).join(', ')}`);
+    }
+    // premature elaboration is reported, never hidden: a task with subtasks that is neither active nor shown in PRÓXIMO
+    const premature = blocks.filter((b) => b.subtasks.length && b.status !== '✓' && !shownIds.has(b.id)).map((b) => b.id);
+    if (premature.length) warnings.push(`premature subtask lists (distant tasks should stay one line): ${premature.join(', ')}`);
+    // minimum for a deterministic state: Outcome/Fazer and Gate; fails only for the active and the shown (READY) tasks
+    const min = missingMinimum(blocks);
+    for (const b of blocks.filter((x) => shownIds.has(x.id))) {
+      if (min.noOutcome.includes(b.id)) fail(`${b.id}: no Outcome/Fazer line (the active and READY tasks need one)`);
+      if (min.noGate.includes(b.id)) fail(`${b.id}: no Gate line (the active and READY tasks need one)`);
+    }
+    const otherNoOutcome = min.noOutcome.filter((id) => !shownIds.has(id));
+    const otherNoGate = min.noGate.filter((id) => !shownIds.has(id));
+    if (otherNoOutcome.length || otherNoGate.length) warnings.push(`task blocks below the minimum: ${otherNoOutcome.length} without Outcome/Fazer, ${otherNoGate.length} without Gate`);
+    context.minimum = { noOutcome: otherNoOutcome, noGate: otherNoGate };
+    const previous = io.previousTasks?.() ?? null;
+    if (previous) for (const m of preservationProblems(previous, tasks)) fail(m);
   }
   if (plan) {
     const actives = plan.match(/^### \[>\]/gm) ?? [];
@@ -126,7 +161,7 @@ export function checkContext(io) {
     const taskIds = [...plan.matchAll(/^\s*- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
     if (new Set(taskIds).size !== taskIds.length) fail('conductor plan lists a task more than once (FASES must hold each task exactly once)');
     const line = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
-    if (active && !line.includes(active.id)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
+    if (active && !line.startsWith(`ATIVA AGORA: ${active.id} `)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
     // the plan is the executable VIEW of tasks.md: its generated region must be exactly what tasks.md implies (npm run plan:sync)
     if (tasks) {
       const drift = planDrift(plan, { tasksText: tasks, programText: text[`${FEATURE}/PROGRAM.md`] ?? '', specText: spec ?? '', validationLine: io.validationLine?.() });
@@ -169,7 +204,7 @@ export function checkContext(io) {
       if (!locations.some((l) => l.startsWith(p) || p.startsWith(l))) fail(`external path without an ARTIFACTS.md entry: ${m[0]} (in ${f})`);
     }
   }
-  return { ok: problems.length === 0, problems, active: active?.id ?? null };
+  return { ok: problems.length === 0, problems, warnings, minimum: context.minimum, active: active?.id ?? null };
 }
 
 /** Cold-start answers resolved ONLY from tracked canonical files. */
@@ -184,7 +219,7 @@ export function resumeSummary(io) {
   const heads = [...validation.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
   const rule = (n) => new RegExp(`^${n}\\. (.+)$`, 'm').exec(tasks)?.[1]?.split('. ')[0] ?? null;
   return {
-    CURRENT_PHASE: /^MARCO ATUAL:\s*(.+)$/m.exec(plan)?.[1] ?? null,
+    CURRENT_PHASE: buildModel({ tasksText: tasks, programText: io.read(`${FEATURE}/PROGRAM.md`) ?? '', specText: spec }).marco,
     ACTIVE_TASK: active ? `${active.id} — ${/^[^\n]*/.exec(active.body)[0].replace(/^T-[A-Z0-9]+-\d+[a-z]?\s*—\s*/, '')}` : null,
     NEXT_ACTION: field('Próximo passo'),
     OPEN_DEFECTS: [...openFindings.matchAll(/^- (OPEN-\d+)/gm)].map((m) => m[1]),
@@ -195,6 +230,103 @@ export function resumeSummary(io) {
   };
 }
 
+/** Known work never silently disappears: a done task stays done with its subtasks; a done subtask never vanishes. (Removing the not-done list of a distant task is allowed.) */
+export function preservationProblems(previousText, currentText) {
+  const now = new Map(taskBlocks(currentText).filter((b) => b.id).map((b) => [b.id, b]));
+  const out = [];
+  for (const p of taskBlocks(previousText).filter((b) => b.id)) {
+    const c = now.get(p.id);
+    if (p.status === '✓' && (!c || c.status !== '✓')) { out.push(`COMPLETED_TASKS_PRESERVED: ${p.id} was done and is now ${c ? `[${c.status}]` : 'missing'}`); continue; }
+    if (!c) { out.push(`COMPLETED_TASKS_PRESERVED: task ${p.id} disappeared`); continue; }
+    const keep = new Set(c.subtasks.map((r) => r.text));
+    for (const r of p.subtasks) {
+      if (keep.has(r.text)) continue;
+      if (p.status === '✓' || r.mark === 'x') out.push(`COMPLETED_TASKS_PRESERVED: ${p.id}: ${p.status === '✓' ? 'a subtask of a done task' : 'the done subtask'} disappeared: "${r.text.slice(0, 60)}"`);
+    }
+  }
+  return out;
+}
+
+/**
+ * The named properties of the progressive-elaboration contract, each PASS or FAIL (gating ones fail context:check; the horizon and the
+ * premature-expansion lint are reported but never block). Derived from tasks.md (+ PROGRAM/spec) and compared with plan.md.
+ */
+export function contextReport(io) {
+  const base = checkContext(io);
+  const read = io.read;
+  const inputs = { ...readInputs(read), validationLine: io.validationLine?.() };
+  const plan = normText(read(FILES.plan) ?? '');
+  const model = buildModel(inputs);
+  const blocks = model.blocks;
+  const eff = model.eff;
+  const section = (name) => new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(plan)?.[1] ?? '';
+  const results = [];
+  const add = (name, pass, detail = '', gating = true) => results.push({ name, pass: !!pass, detail, gating });
+
+  const planIds = [...plan.matchAll(/^ *- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
+  const want = blocks.map((b) => b.id);
+  const missing = want.filter((id) => planIds.filter((x) => x === id).length !== 1);
+  const extra = planIds.filter((id) => !want.includes(id));
+  add('ALL_TASKS_VISIBLE', missing.length === 0 && extra.length === 0, `${planIds.length} rows for ${want.length} tasks${missing.length ? `; missing/duplicated: ${missing.join(' ')}` : ''}${extra.length ? `; unknown: ${extra.join(' ')}` : ''}`);
+
+  const activeBlock = blocks.find((b) => b.status === '>');
+  const leaves = activeBlock?.subtasks.filter((r) => r.leaf) ?? [];
+  const current = leaves.filter((r) => r.mark === '>');
+  const gaps = activeBlock ? [...(leaves.length ? [] : ['subtasks']), ...(current.length === 1 ? [] : [`exactly one current subtask (found ${current.length})`]), ...(genericSubtasks(activeBlock).length ? ['generic subtasks'] : []), ...readinessGaps(activeBlock, blocks).filter((g) => /Outcome|Gate/.test(g))] : ['no active task'];
+  add('ACTIVE_TASK_FULLY_DECOMPOSED', gaps.length === 0, activeBlock ? `${activeBlock.id}: ${gaps.join(', ') || `${leaves.length} leaves, current subtask marked`}` : 'no active task');
+
+  const agora = section('AGORA');
+  add('ACTIVE_SUBTASK_VISIBLE', current.length === 1 && agora.includes(`- [>] ${current[0].text}  ← EM EXECUÇÃO`), current.length === 1 ? `"${current[0].text.slice(0, 50)}"` : 'no single current subtask');
+
+  const open = blocks.filter((b) => b.status !== '✓' && b.status !== '=');
+  const next = model.ready[0] ?? null;
+  add('NEXT_TASK_IDENTIFIED', next || open.length === 0, next ? next.id : 'no ready task');
+  const nextBlock = next ? model.byId.get(next.id) : null;
+  const nextGaps = nextBlock ? readinessGaps(nextBlock, blocks) : [];
+  add('NEXT_TASK_EXECUTION_READY', !nextBlock || nextGaps.length === 0, nextBlock ? `${nextBlock.id}${nextGaps.length ? ` lacks: ${nextGaps.join(', ')}` : ' ready'}` : 'nothing to promote');
+  const near = model.ready.slice(1).filter((r) => !r.ready).map((r) => r.id);
+  add('NEAR_HORIZON_PREPARED', near.length === 0, `${model.progress.horizon.prepared}/${model.progress.horizon.total} prepared${near.length ? `; without subtasks: ${near.join(' ')}` : ''}`, false);
+  const shownIds = new Set([...(activeBlock ? [activeBlock.id] : []), ...model.ready.map((r) => r.id)]);
+  const premature = open.filter((b) => b.subtasks.length && !shownIds.has(b.id)).map((b) => b.id);
+  add('DISTANT_TASKS_NOT_PREMATURELY_EXPANDED', premature.length === 0, premature.length ? `beyond NEXT 3 with subtasks: ${premature.join(' ')}` : 'distant tasks are one line', false);
+
+  const previous = io.previousTasks?.() ?? null;
+  const lost = previous ? preservationProblems(previous, read(FILES.tasks) ?? '') : [];
+  add('COMPLETED_TASKS_PRESERVED', lost.length === 0, previous ? (lost[0] ?? 'compared with the previous committed tasks.md') : 'no previous version to compare');
+
+  const subLine = /^ +- \[(?:x|>| |!)\] (?!\*\*).+$/;
+  const planSubs = (name) => section(name).split('\n').filter((l) => subLine.test(l));
+  const rendered = normText(renderPlanFile({ ...inputs, validationLine: undefined }));
+  const renderedSub = (name) => (new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(rendered)?.[1] ?? '').split('\n').filter((l) => subLine.test(l));
+  const durable = ['AGORA', 'PRÓXIMO'].every((n) => JSON.stringify(planSubs(n)) === JSON.stringify(renderedSub(n)));
+  add('SUBTASK_STATE_DURABLE', durable, durable ? 'plan subtasks == tasks.md subtasks (plan.md can be deleted and regenerated)' : 'plan.md carries subtask state that tasks.md does not imply');
+
+  const plannedDecisions = [...section('DECISÕES HUMANAS PENDENTES').matchAll(/^- (T-[A-Z0-9]+-\d+[a-z]?) ·/gm)].map((m) => m[1]);
+  const badDecisions = plannedDecisions.filter((id) => eff.get(id) !== 'D');
+  const missedDecisions = model.decisions.map((d) => d.id).filter((id) => !plannedDecisions.includes(id));
+  add('DEPENDENCY_VS_HUMAN_GATE', badDecisions.length === 0 && missedDecisions.length === 0, `${plannedDecisions.length} decisions${badDecisions.length ? `; a dependency is listed as a human decision: ${badDecisions.join(' ')}` : ''}${missedDecisions.length ? `; missing: ${missedDecisions.join(' ')}` : ''}`);
+
+  const t = /TAREFAS: (\d+)\/(\d+)/.exec(plan);
+  const phaseTotals = [...plan.matchAll(/^### \[.\] \S+ · .* — tarefas (\d+)\/(\d+)$/gm)].reduce((a, m) => [a[0] + +m[1], a[1] + +m[2]], [0, 0]);
+  const validProgress = t && +t[1] === model.progress.tasksDone && +t[2] === model.progress.tasksTotal && phaseTotals[0] === model.progress.tasksDone && phaseTotals[1] === model.progress.tasksTotal;
+  add('GLOBAL_TASK_PROGRESS_VALID', validProgress, t ? `plan ${t[1]}/${t[2]}, tasks.md ${model.progress.tasksDone}/${model.progress.tasksTotal}, phases ${phaseTotals.join('/')}` : 'plan has no TAREFAS a/b');
+
+  let cockpit = '';
+  try { cockpit = resumeCockpit(read, { head: 'check' }).join('\n'); } catch { cockpit = ''; }
+  const fake = /SUBTAREFAS: \d|SUBTASKS=\d|^### \[.\] .* subtarefas \d/m.test(plan) || /SUBTASKS=\d/.test(cockpit);
+  add('NO_FAKE_GLOBAL_SUBTASK_PROGRESS', !fake, fake ? 'a global subtask total appears in the plan or the cockpit' : 'subtask counts only for the active and READY tasks');
+
+  const drift = planDrift(read(FILES.plan) ?? '', inputs);
+  add('PLAN_SYNC', !drift.drift, drift.drift ? drift.reason : 'plan.md equals the projection of tasks.md');
+  add('CONTEXT_CHECK', base.ok, base.ok ? `active ${base.active}` : `${base.problems.length} problem(s): ${base.problems[0]}`);
+  return { results, base, ok: base.ok && results.every((r) => r.pass || !r.gating) };
+}
+
+export function printReport(report) {
+  for (const r of report.results) console.log(`${r.name}=${r.pass ? 'PASS' : 'FAIL'}${r.gating ? '' : ' (aviso)'} · ${r.detail}`);
+  return report.ok;
+}
+
 export function gitIo(root) {
   const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
   return {
@@ -203,18 +335,36 @@ export function gitIo(root) {
     tracked: (p) => git(['ls-files', '--error-unmatch', p]).status === 0,
     ignored: (p) => git(['check-ignore', '-q', p]).status === 0,
     validationLine: () => headValidationFor(root).line,
+    // the previous committed tasks.md: HEAD when the working tree differs from it, else HEAD~1 (removals of known work must be intentional)
+    previousTasks: () => {
+      const cur = existsSync(join(root, FILES.tasks)) ? readFileSync(join(root, FILES.tasks), 'utf8') : '';
+      const head = git(['show', `HEAD:${FILES.tasks}`]);
+      if (head.status !== 0) return null;
+      if (normText(head.stdout) !== normText(cur)) return head.stdout;
+      const prev = git(['show', `HEAD~1:${FILES.tasks}`]);
+      return prev.status === 0 ? prev.stdout : null;
+    },
   };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const root = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim() || process.cwd();
   const io = gitIo(root);
-  const result = checkContext(io);
+  const report = contextReport(io);
+  const result = report.base;
   if (process.argv.includes('--resume')) console.log(JSON.stringify(resumeSummary(io), null, 2));
   if (!result.ok) {
     console.error(`CONTEXT_CHECK=FAIL (${result.problems.length})`);
     for (const p of result.problems) console.error(`  - ${p}`);
-    process.exit(1);
+  } else console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
+  console.log('--- named properties (PASS/FAIL) ---');
+  const allOk = printReport(report);
+  if (result.warnings.length) {
+    console.log(`CONTEXT_WARN (${result.warnings.length}, not failures):`);
+    for (const w of result.warnings) console.log(`  - ${w}`);
+    const m = result.minimum;
+    if (m.noOutcome.length) console.log(`  · without Outcome/Fazer: ${m.noOutcome.join(' ')}`);
+    if (m.noGate.length) console.log(`  · without Gate: ${m.noGate.join(' ')}`);
   }
-  console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
+  if (!result.ok || !allOk) { if (result.ok) console.error('CONTEXT_CHECK=FAIL: a gating named property failed'); process.exit(1); }
 }

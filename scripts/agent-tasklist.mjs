@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
 import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs, headValidationFor } from './test-live-core.mjs';
-import { resumeCockpit, FILES } from './context-core.mjs';
-import { syncPlanFile } from './plan-sync.mjs';
+import { resumeCockpit, FILES, buildModel } from './context-core.mjs';
+import { syncPlanFile, readInputs } from './plan-sync.mjs';
 
 /** KEY=value / KEY: value lines; indented (or non-key) lines continue the previous key. */
 export function parseCoordFile(text) {
@@ -115,6 +115,14 @@ function arg(name, fallback) {
   return i > -1 ? process.argv[i + 1] : fallback;
 }
 
+/** The panel's phase-level task list and the Conductor ACTIVE TRACK block, taken from the model (phases = sprints of PROGRAM.md). */
+export function planFromModel(model) {
+  return {
+    title: 'SMARTLEARN — DESENVOLVIMENTO', status: model.status, skipped: [],
+    tasks: model.phases.map((p) => ({ state: p.state, id: p.id, title: p.title, detail: '', fields: p.state === '>' && model.active ? { SPRINT_GOAL: `${model.active.id} — ${model.active.title}` } : {}, free: '', owner: null })),
+  };
+}
+
 /** Regenerates every board copy + the Conductor's ACTIVE TRACK block from plan.md / GUI.md / CLI.md. */
 function regenerate(root, coordDir) {
   const tracksMd = readFileSync(join(root, 'conductor', 'tracks.md'), 'utf8');
@@ -122,11 +130,17 @@ function regenerate(root, coordDir) {
   const planPath = arg('--plan', rel ? join(root, 'conductor', 'tracks', rel, 'plan.md') : null);
   // plan.md is the executable VIEW of tasks.md: refresh its generated region first so the panel can never show a stale plan
   if (!arg('--plan', null) && rel === 'hardening-roadmap-v1') syncPlanFile(root, { validationLine: validationFor(root) });
-  const plan = parsePlan(readFileSync(planPath, 'utf8'));
+  // the hardening track is rendered from the normalized execution model (the same one plan.md and the cockpit use); other tracks keep parsing their plan.md
+  let model = null;
+  if (!arg('--plan', null) && rel === 'hardening-roadmap-v1') {
+    const readRel = (p) => (existsSync(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null);
+    model = buildModel(readInputs(readRel));
+  }
+  const plan = model ? planFromModel(model) : parsePlan(readFileSync(planPath, 'utf8'));
   if (plan.skipped.length) console.error(`[agent-tasklist] ERRO: tarefa(s) fora do padrão de id NÃO aparecem no painel: ${plan.skipped.join(', ')} (use LETRAS-NÚMERO, ex.: ACCESS-1)`);
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
   const cliCoord = existsSync(join(coordDir, 'CLI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'CLI.md'), 'utf8')) : {};
-  const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', view: plan.view, tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
+  const gui = { title: 'AGENT_GUI', branch: guiCoord.BRANCH ?? '', head: guiCoord.HEAD ?? '', updated: guiCoord.UPDATED_AT ?? '', view: model, tasks: plan.tasks.map((t) => ({ ...t, owner: t.owner ?? 'GUI' })) };
   // ONE command refreshes EVERY copy of the board the user might have open: the shared coordination copy and
   // conductor/.view/tasklist.html of every worktree of this repo (a stale copy that says "all done" while work
   // continues leaves the user lost). --out writes only that single file.

@@ -1,33 +1,31 @@
-# TRACK: HARDENING-ROADMAP-V1 — endurecimento da V1 (correções e melhorias)
+# SMARTLEARN — DESENVOLVIMENTO
 
-> VISÃO EXECUTÁVEL legível por humanos: fases, tarefas, subtarefas, caixas de seleção, tarefa atual, próxima, bloqueios e human gates. Nada além disso.
-> Tudo entre `PLAN:BEGIN` e `PLAN:END` é GERADO de `.specs/features/hardening-roadmap-v1/tasks.md` (`npm run plan:sync`; o `agent-tasklist` também sincroniza) e `npm run context:check` FALHA se divergir. Não edite essa região à mão: mude `tasks.md` e sincronize.
-> Autoridades (nada disto é copiado para cá): `PROGRAM.md` = ordem macro · `tasks.md` = ids, dependências, estado técnico · `spec.md` = requisitos/invariantes · `validation.md` = provas · `uat-visual.md` = UAT · Git/testes = realidade.
-> NO_PUSH / NO_MERGE(main) / NO_DEPLOY / NO_RELEASE. Tarefa em DECISÕES HUMANAS depende de decisão do usuário (HG-xx em `spec.md` §8): parar e perguntar. FASES = as sprints de `PROGRAM.md` (S0, S1, S2, ...) na ORDEM canônica de execução, e as tarefas seguem a ordem que o `PROGRAM.md` dá; BASE = entregue antes das sprints; SEM-SPRINT = human gate ou ainda não sequenciadas.
+> PROJEÇÃO GERADA: este arquivo é a visão executável legível de `.specs/features/hardening-roadmap-v1/tasks.md` (+ `PROGRAM.md` para a ordem, `spec.md` para os títulos dos gates). Apagar e rodar `npm run plan:sync` recria idêntico; `npm run context:check` falha se divergir. Não edite à mão: mude `tasks.md` e sincronize.
+> Autoridades (nada disto é copiado para cá): `PROGRAM.md` = ordem macro · `tasks.md` = ids, dependências, estado técnico e subtarefas · `spec.md` = requisitos/invariantes · `validation.md` = provas · `uat-visual.md` = UAT · Git/testes = realidade.
+> NO_PUSH / NO_MERGE(main) / NO_DEPLOY / NO_RELEASE. Tarefa em DECISÕES HUMANAS PENDENTES depende de decisão do usuário (HG-xx em `spec.md` §8): parar e perguntar.
 
 ```
 Track:    hardening-roadmap-v1                 Status: ACTIVE
-MARCO ATUAL: S3 — verdade do runner e2e (T-F6-08 → T-F6-03 + contrato do test-live)
+MARCO ATUAL: S3 — Verdade do runner
 Iniciado: 2026-10-04
 ```
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F3-01 · TAREFAS: 25/70 · SUBTAREFAS: 16/24 · BLOQUEADAS POR DEPENDÊNCIA: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F6-03 (S3) · PRÓXIMA: T-F6-09 · TAREFAS: 25/70 · SUBTAREFAS DA ATIVA: T-F6-03 3/10 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
-VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a); HEAD atual ≠ HEAD testado
+Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
-Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.
+## AGORA
 
-## AGORA — TAREFA ATIVA
-
-- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 2/10
-  Resultado: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
+- T-F6-03 · Partição e tempo-alvo do e2e completo · S3 · subtarefas 3/10
+  Resultado atual: Medição 2026-10-05: 205 passed em 8,9 min com 2 workers; os workers já estão equilibrados, então partição não reduz o tempo; a meta de 8 min exige cortar ≥ ~11 % do tempo de teste ou mais workers
   Próximo passo: DECISÃO de como atingir ≤ 8 min
+  Gate: 3 execuções consecutivas sem falha; relatório de tempos
   - [x] Medir o baseline (534 s, 205 passed, 2 workers)
   - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
-  - [>] Perfilar o caminho crítico (decompor os 5 maiores consumidores em tempo evitável)
-  - [ ] Eliminar desperdício sem perder cobertura nem asserções
+  - [x] Perfilar o caminho crítico (achado: ~156 de 207 testes repetem um prelúdio de login pela UI de ~3,5 s: goto 0,4 + networkidle 0,9 + registrar 1,2 + entrar 1,0; ≈ 530 s de trabalho de worker)
+  - [>] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)  ← EM EXECUÇÃO
   - [ ] Full run de confirmação ≤ 460 s (2 workers, 0 falhas)
   - [ ] Gate #1 ≤ 480 s
   - [ ] Gate #2 ≤ 480 s
@@ -37,19 +35,36 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## PRÓXIMO
 
-- T-F3-01 · Tabela e máquina de estados de jobs · S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
-- T-F3-05 · Explicação obrigatória por validação · S4 · independente de S3 · sem dependência pendente · passa à frente de T-F3-02, T-F3-03, T-F3-04 (aguardam T-F3-01)
-- T-F4-03 · Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S5a · independente de S3 · sem dependência pendente
+### T-F6-09 — READY — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
+  Por quê: S3 · dependências concluídas: T-F6-02 · depois de T-F6-03
+  Subtarefas 0/6:
+  - [ ] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
+  - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
+  - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
+  - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
+  - [ ] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
+  - [ ] Evidência em `validation.md` e fechar
 
-## BLOQUEADAS POR DEPENDÊNCIA
+### T-F3-01 — READY — Tabela e máquina de estados de jobs
+  Por quê: S4 · independente de S3 · dependências concluídas: T-F1-01, T-F1-02, T-F2-04, T-F10-02a, T-F10-03, T-F10-04a
+  Subtarefas 0/7:
+  - [ ] RED: transições válidas e inválidas da máquina de estados
+  - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
+  - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
+  - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
+  - [ ] `server/src/services/generation-jobs.js` e rotas `POST/GET /v1/generation-jobs`
+  - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
+  - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
 
-- T-F10-06 · UI: idioma da interface × idioma do conteúdo, estado da unidade e consumo · aguarda decisão humana: HG-13
-- T-F4-02 · Hierarquia da Revisão e ruído de achados · aguarda decisão humana: HG-02 (via T-F2-03)
-- T-F5-04 · VALID-5: consistência entre gerações · aguarda decisão humana: T-F5-03
-- T-F5-05 · Sensores determinísticos de qualificadores entre idiomas · aguarda decisão humana: T-F5-03
-- T-F5-06 · Execução do Prompt Lab e relatório comparativo · aguarda decisão humana: HG-06 + HG-07 + HG-08 (via T-F5-01); HG-07 (via T-F5-02); T-F5-03
+### T-F3-05 — READY — Explicação obrigatória por validação
+  Por quê: S4 · independente de S3 · sem dependência pendente · passa à frente de T-F3-02, T-F3-03, T-F3-04 (aguardam T-F3-01)
+  Subtarefas 0/4:
+  - [ ] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
+  - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
+  - [ ] Mostrado na Revisão sem bloquear o aceite
+  - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
 
-## FASES
+## ROADMAP
 
 ### [✓] BASE · Entregue antes das sprints (F0/F1) — tarefas 14/14
 
@@ -96,26 +111,10 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F2-05** — Pré-visualização do aceite
 
-### [>] S3 · Verdade do runner — tarefas 1/3 · subtarefas 16/24
+### [>] S3 · Verdade do runner — tarefas 1/3
 
-- [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo — subtarefas 14/14
-  - [x] Rodadas com workers=1 (5): 4 PASS, 1 FAIL
-    - [x] w1-r1 — PASS 38/38 (208 s)
-    - [x] w1-r2 — PASS 38/38 (207 s)
-    - [x] w1-r3 — PASS 38/38 (208 s)
-    - [x] w1-r4 — PASS 38/38 (199 s)
-    - [x] w1-r5 — FAIL 7 passaram / 8 falharam (50 s): `Target crashed`, não é o sintoma
-  - [x] Rodadas com workers=2 (5): 5 PASS
-    - [x] w2-r1 — PASS 38/38 (131 s)
-    - [x] w2-r2 — PASS 38/38 (127 s)
-    - [x] w2-r3 — PASS 38/38 (132 s)
-    - [x] w2-r4 — PASS 38/38 (126 s)
-    - [x] w2-r5 — PASS 38/38 (126 s)
-  - [x] Coletar os traces das falhas (`trace.zip` do run da w1-r5)
-  - [x] Analisar a taxa de falha por workers (1 × 2)
-  - [x] Registrar contagens e causa em `validation.md` (seção T-F6-08)
-  - [x] Decidir o fechamento ou a próxima ação (fechada sem correção; reabrir só se o sintoma reaparecer com trace)
-- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo — subtarefas 2/10
+- [x] **T-F6-08** — Causa da falha funcional do run 2 do e2e completo
+- [>] **T-F6-03** — Partição e tempo-alvo do e2e completo
 - [ ] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
 ### [ ] S4 · Jobs observáveis — tarefas 0/5
@@ -135,11 +134,11 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ### [!] S5c · UI de idioma e consumo — tarefas 0/1
 
-- [!] **T-F10-06** — UI: idioma da interface × idioma do conteúdo, estado da unidade e consumo — aguarda decisão humana: HG-13
+- [!] **T-F10-06** — UI: idioma da interface × idioma do conteúdo, estado da unidade e consumo — BLOQUEADA → HG-13
 
 ### [!] S5b · Hierarquia da Revisão — tarefas 0/1
 
-- [!] **T-F4-02** — Hierarquia da Revisão e ruído de achados — aguarda decisão humana: HG-02 (via T-F2-03)
+- [!] **T-F4-02** — Hierarquia da Revisão e ruído de achados — BLOQUEADA → T-F2-03 → HG-02
 
 ### [ ] S6A · Confiança: discriminação e cobertura — tarefas 0/2
 
@@ -182,9 +181,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [H] **T-F5-01** — Desenho do Prompt Lab (spec e rubrica) — HG-06, HG-07, HG-08
 - [H] **T-F5-02** — Medir comportamento real do provedor (sem otimizar nada) — HG-07
 - [H] **T-F5-03** — VALID-4 completo: canário com PDF real e avaliação humana
-- [!] **T-F5-04** — VALID-5: consistência entre gerações — aguarda decisão humana: T-F5-03
-- [!] **T-F5-05** — Sensores determinísticos de qualificadores entre idiomas — aguarda decisão humana: T-F5-03
-- [!] **T-F5-06** — Execução do Prompt Lab e relatório comparativo — aguarda decisão humana: HG-06 + HG-07 + HG-08 (via T-F5-01); HG-07 (via T-F5-02); T-F5-03
+- [!] **T-F5-04** — VALID-5: consistência entre gerações — BLOQUEADA → T-F5-03
+- [!] **T-F5-05** — Sensores determinísticos de qualificadores entre idiomas — BLOQUEADA → T-F5-03
+- [!] **T-F5-06** — Execução do Prompt Lab e relatório comparativo — BLOQUEADA → T-F5-01 → HG-06+HG-07+HG-08 ; T-F5-02 → HG-07 ; T-F5-03 ; T-F5-04 → T-F5-03 ; T-F5-05 → T-F5-03
 - [H] **T-F5-07** — VALID-8: decisão de validação do V1
 - [H] **T-F7-01** — Recuperação de atraso ("reagendar atrasadas") reversível — HG-09
 - [H] **T-F7-02** — Onboarding e estado vazio de produção (DEBT-007) — HG-09
@@ -192,7 +191,15 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [H] **T-F9-01** — Mapa de integração e ensaio sem publicar — HG-05
 - [H] **T-F9-03** — Entrega (push/merge/deploy) — HG-10
 
-## DECISÕES HUMANAS
+## BLOQUEADAS
+
+- T-F10-06 BLOQUEADA → HG-13
+- T-F4-02 BLOQUEADA → T-F2-03 → HG-02
+- T-F5-04 BLOQUEADA → T-F5-03
+- T-F5-05 BLOQUEADA → T-F5-03
+- T-F5-06 BLOQUEADA → T-F5-01 → HG-06+HG-07+HG-08 ; T-F5-02 → HG-07 ; T-F5-03 ; T-F5-04 → T-F5-03 ; T-F5-05 → T-F5-03
+
+## DECISÕES HUMANAS PENDENTES
 
 - T-F2-03 · Auditoria versionada e reauditoria explícita · HG-02 "Reauditar" como ação explícita é aceitável dado que abrir não recalcula?
 - T-F2-06 · Política de volume de questões (aplicação) · HG-01 Política de volume de questões
@@ -212,5 +219,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - T-F7-03 · Decisão sobre FSRS baseada em dados · Relatório com carga diária projetada, taxa de atraso e acertos por intervalo a partir do banco DEV/real
 - T-F9-01 · Mapa de integração e ensaio sem publicar · HG-05 Estratégia de integração, destino de content-quality e do merge temporário
 - T-F9-03 · Entrega (push/merge/deploy) · HG-10 Push, merge, deploy, release
+
+## VALIDAÇÃO
+
+VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 8dc5e65) · server DESATUALIZADO (testado 7d90455) · unit DESATUALIZADO (testado 3af934a); HEAD atual ≠ HEAD testado
 
 <!-- PLAN:END -->

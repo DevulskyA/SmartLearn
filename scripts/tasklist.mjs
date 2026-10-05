@@ -43,7 +43,7 @@ export function parseFields(lines) {
 
 export function parsePlan(markdown) {
   const text = markdown.replace(/\r\n/g, '\n');
-  const title = (text.match(/^# TRACK:\s*(.+)$/m) ?? [])[1]?.trim() ?? '(track sem título)';
+  const title = (text.match(/^# TRACK:\s*(.+)$/m) ?? text.match(/^# (.+)$/m) ?? [])[1]?.trim() ?? '(track sem título)';
   const status = (text.match(/Status:\s*([A-Z_]+)/) ?? [])[1] ?? 'UNKNOWN';
   const tasks = [];
   const skipped = [];
@@ -68,7 +68,7 @@ export function parsePlan(markdown) {
   const running = text.match(/^\s*- \[>\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/m);
   const activePhase = tasks.find((t) => t.state === '>');
   if (running && activePhase) activePhase.fields = { ...activePhase.fields, SPRINT_GOAL: `${running[1]} — ${running[2]}` };
-  return { title, status, tasks, skipped, view: parsePlanView(text) };
+  return { title, status, tasks, skipped };
 }
 
 /** Splits "S3 · Verdade do runner — tarefas 0/3 · subtarefas 13/14" into the title and its counts (counts are generated, never typed). */
@@ -79,71 +79,27 @@ export function splitPhaseTitle(raw) {
 }
 
 /**
- * The full human view of a GENERATED plan (scripts/plan-sync.mjs). AGORA holds the active task with its complete nested subtask tree
- * (the only place it is expanded); FASES holds every task row exactly once (PHASE -> TASK -> SUBTASKS); PRÓXIMO, BLOQUEADAS POR
- * DEPENDÊNCIA and DECISÕES HUMANAS hold compact pointers. Returns null for a legacy plan.
+ * The board of the hardening track, rendered from the SAME normalized execution model as plan.md and the cockpit (context-core buildModel):
+ * AGORA (the active task, full tree) · PRÓXIMO (READY blocks with their subtasks) · ROADMAP (one line per task, by phase) · BLOQUEADAS ·
+ * DECISÕES HUMANAS PENDENTES. No plan.md parsing here: there is one projection, not two.
  */
-export function parsePlanView(markdown) {
-  const text = markdown.replace(/\r\n/g, '\n');
-  if (!/<!-- PLAN:BEGIN/.test(text)) return null;
-  const view = {
-    title: (text.match(/^# TRACK:\s*(.+)$/m) ?? [])[1]?.trim() ?? '',
-    marco: (text.match(/^MARCO ATUAL:\s*(.+)$/m) ?? [])[1]?.trim() ?? '',
-    summary: (text.match(/^ATIVA AGORA:.*$/m) ?? [])[0] ?? '',
-    sections: [], phases: [],
-  };
-  let cur = null;
-  let afterPhases = false;
-  let lastRow = null; // the task row (or the AGORA task) the subtask lines below it belong to
-  const subRow = /^( *)- \[(x|>| |!)\] (?!\*\*)(.+)$/;
-  for (const line of text.split('\n')) {
-    const sec = line.match(/^## (.+)$/);
-    if (sec) {
-      const name = sec[1].trim();
-      lastRow = null;
-      if (name === 'FASES') { cur = { kind: 'fases' }; afterPhases = true; continue; }
-      cur = { kind: 'section', name, pointers: [], afterPhases };
-      view.sections.push(cur);
-      continue;
-    }
-    const ph = line.match(/^### \[(✓|>| |!|H)\] (\S+) · (.+)$/);
-    if (ph) { lastRow = null; cur = { kind: 'phase', state: ph[1], id: ph[2], ...splitPhaseTitle(ph[3]), rows: [] }; view.phases.push(cur); continue; }
-    const row = line.match(/^(\s*)- \[(x|>|!|H|=| )\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/);
-    if (row && cur?.kind === 'phase') { lastRow = { sub: row[1].length > 0, mark: row[2], id: row[3], text: row[4].trim(), subtasks: [] }; cur.rows.push(lastRow); continue; }
-    const ptr = line.match(/^- (T-[A-Z0-9]+-\d+[a-z]?) · (.+)$/);
-    if (ptr && cur?.kind === 'section') { lastRow = { id: ptr[1], text: ptr[2].trim(), subtasks: [] }; cur.pointers.push(lastRow); continue; }
-    const fact = line.match(/^ {2}(Estado|Resultado|Objetivo|Próximo passo): (.+)$/);
-    if (fact && lastRow) { (lastRow.facts ??= []).push({ label: fact[1], text: fact[2].trim() }); continue; }
-    const sb = line.match(subRow);
-    if (sb && lastRow) lastRow.subtasks.push({ depth: Math.max(0, Math.floor((sb[1].length - 2) / 2)), mark: sb[2], text: sb[3].trim() });
-  }
-  for (const holder of [...view.sections.flatMap((s) => s.pointers), ...view.phases.flatMap((p) => p.rows)]) {
-    holder.subtasks.forEach((r, i) => { r.leaf = !(holder.subtasks[i + 1] && holder.subtasks[i + 1].depth > r.depth); });
-  }
-  const all = view.phases.flatMap((p) => p.rows).filter((r) => r.mark !== '=');
-  const leaves = [...view.sections.flatMap((s) => s.pointers), ...view.phases.flatMap((p) => p.rows)].flatMap((h) => h.subtasks).filter((r) => r.leaf);
-  view.progress = {
-    tasksDone: all.filter((r) => r.mark === 'x').length, tasksTotal: all.length,
-    subDone: leaves.filter((r) => r.mark === 'x').length, subTotal: leaves.length,
-  };
-  view.rowCount = view.phases.reduce((n, p) => n + p.rows.length, 0);
-  return view;
-}
-
-/** Simple nested checklist of the generated plan: AGORA (full tree), pointers, every phase with its tasks, then the decisions list. */
-export function viewHtml(view, { validationLine = '' } = {}) {
-  const sub = (r) => `<li class="t s${Math.min(r.depth, 4)}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.text)}</span></li>`;
-  const row = (r) => `<li class="t${r.sub ? ' sub' : ''}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.id)} — ${esc(r.text)}</span></li>`
-    + (r.subtasks.length ? r.subtasks.map(sub).join('') : '');
+export function viewHtml(model, { title = '', marco = '', validationLine = '' } = {}) {
+  const sub = (r) => `<li class="t s${Math.min(r.depth, 4)}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.text)}${r.mark === '>' ? ' <span class="muted">← em execução</span>' : ''}</span></li>`;
+  const row = (r) => `<li class="t${r.indent ? ' sub' : ''}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.id)} — ${esc(r.title + r.note)}</span></li>`;
   const fact = (f) => `<li class="t f"><span class="m"></span><span class="x"><strong>${esc(f.label)}:</strong> ${esc(f.text)}</span></li>`;
-  const ptr = (p) => `<li class="t p"><span class="m">·</span><span class="x">${esc(p.id)} — ${esc(p.text)}</span></li>${(p.facts ?? []).map(fact).join('')}${p.subtasks.map(sub).join('')}`;
-  const section = (sec) => `<h2>${esc(sec.name)} (${sec.pointers.length})</h2><ul>${sec.pointers.map(ptr).join('') || '<li class="t muted"><span class="m"></span><span class="x">—</span></li>'}</ul>`;
-  const counts = (p) => (p.tasks ? ` · tarefas ${p.tasks.done}/${p.tasks.total}${p.subs ? ` · subtarefas ${p.subs.done}/${p.subs.total}` : ''}` : '');
-  const phases = view.phases.map((ph) => `<h3>[${ph.state}] ${esc(ph.id)} — ${esc(ph.title)}${counts(ph)}</h3><ul>${ph.rows.map(row).join('')}</ul>`).join('');
-  const g = view.progress;
-  return `<p class="hdr"><strong>TRACK:</strong> ${esc(view.title)}<br><strong>MARCO ATUAL:</strong> ${esc(view.marco || '—')}<br><strong>PROGRESSO:</strong> tarefas ${g.tasksDone}/${g.tasksTotal} · subtarefas ${g.subDone}/${g.subTotal}</p>
-${validationLine ? `<p class="hdr val">${esc(validationLine)}</p>` : ''}<p class="muted legend">Tarefa: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada por dependência · [H] decisão humana · [=] dividida — Subtarefa: [x] feita · [>] atual · [ ] pendente (itens de checklist dentro de um bloco de tarefa; filhas de tarefa dividida contam como tarefas) — Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas · [!] nada executável</p>
-${view.sections.filter((s) => !s.afterPhases).map(section).join('')}<h2>FASES</h2>${phases}${view.sections.filter((s) => s.afterPhases).map(section).join('')}`;
+  const ptr = (id, text) => `<li class="t p"><span class="m">·</span><span class="x">${esc(id)} — ${esc(text)}</span></li>`;
+  const none = '<li class="t muted"><span class="m"></span><span class="x">—</span></li>';
+  const a = model.active;
+  const agora = `<h2>AGORA</h2><ul>${a ? `${ptr(a.id, `${a.title} · ${a.group} · subtarefas ${a.counts.done}/${a.counts.total}`)}${a.facts.map(fact).join('')}${a.subtasks.map(sub).join('')}` : none}</ul>`;
+  const proximo = `<h2>PRÓXIMO (${model.ready.length})</h2>${model.ready.map((r) => `<h3>${esc(r.id)} — ${esc(r.label)}${r.ready ? ` · subtarefas ${r.counts.done}/${r.counts.total}` : ''} — ${esc(r.title)}</h3><ul>${fact({ label: 'Por quê', text: r.why })}${r.subtasks.map(sub).join('')}</ul>`).join('') || `<ul>${none}</ul>`}`;
+  const phases = model.phases.map((p) => `<h3>[${p.state}] ${esc(p.id)} — ${esc(p.title)} · tarefas ${p.done}/${p.total}</h3><ul>${p.rows.map(row).join('')}</ul>`).join('');
+  const bloqueadas = `<h2>BLOQUEADAS (${model.blocked.length})</h2><ul>${model.blocked.map((b) => ptr(b.id, `BLOQUEADA → ${b.chain}`)).join('') || none}</ul>`;
+  const decisoes = `<h2>DECISÕES HUMANAS PENDENTES (${model.decisions.length})</h2><ul>${model.decisions.map((d) => ptr(d.id, `${d.title} · ${d.text}${d.after.length ? ` (após ${d.after.join(', ')})` : ''}`)).join('') || none}</ul>`;
+  const g = model.progress;
+  const activeSub = g.active ? ` · subtarefas da ativa ${esc(g.active.id)} ${g.active.done}/${g.active.total}` : '';
+  return `<p class="hdr"><strong>TRACK:</strong> ${esc(title)}<br><strong>MARCO ATUAL:</strong> ${esc(marco || model.marco)}<br><strong>PROGRESSO:</strong> tarefas ${g.tasksDone}/${g.tasksTotal}${activeSub} · horizonte preparado ${g.horizon.prepared}/${g.horizon.total}</p>
+<p class="muted legend">Tarefa: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada · [H] decisão humana · [=] dividida (as filhas contam como tarefas) — Subtarefa (só da ativa e das READY): [x] feita · [>] atual · [ ] pendente (itens de checklist dentro de um bloco de tarefa) — Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas · [!] nada executável</p>
+${agora}${proximo}<h2>ROADMAP</h2>${phases}${bloqueadas}${decisoes}<h2>VALIDAÇÃO</h2><p class="hdr val">${esc(validationLine || '—')}</p>`;
 }
 
 export function checkInvariants({ tasks, status, skipped = [] }) {
@@ -203,7 +159,7 @@ ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0;display:flex;gap:.4rem
 .tl{margin:.5rem 0;font-size:.85rem;line-height:1.5}.tl .st{font-weight:700}.tl.pass .st{color:#1f8a4c}.tl.fail .st,.tl.aborted .st{color:#c0392b}.tl.stale .st{color:#b7791f}.tl.running .st{color:var(--now)}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
-${view ? viewHtml(view, { validationLine }) : `<ul>${older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : ''}${shownDone.map(line).join('')}${upcoming.map(line).join('')}</ul>`}
+${view ? viewHtml(view, { title, validationLine }) : `<ul>${older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : ''}${shownDone.map(line).join('')}${upcoming.map(line).join('')}</ul>`}
 ${goal ? `<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>${esc(active.id)} — ${esc(goal)}</p></div>` : '<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>nenhuma</p></div>'}
 ${extraLines.map((l) => `<p class="muted">${esc(l)}</p>`).join('')}
 ${testsHtml}

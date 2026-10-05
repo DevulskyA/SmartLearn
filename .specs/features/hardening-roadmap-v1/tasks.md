@@ -243,6 +243,14 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
 - Segurança de dados: migração aditiva, backup `pre-migrate` (T-F1-02) obrigatório.
+- Subtarefas:
+  - [ ] RED: transições válidas e inválidas da máquina de estados
+  - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
+  - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
+  - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
+  - [ ] `server/src/services/generation-jobs.js` e rotas `POST/GET /v1/generation-jobs`
+  - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
+  - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
 - Gate: testes de migração (`migrations*.test.js` + novo), unidade, e `schema checksum` do runner de migrações.
 
 ### T-F3-02 — Execução em segundo plano com limite duro e cancelamento · M
@@ -269,6 +277,11 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 - Status: `[ ]` · Requisitos: F-15 · Dependências: nenhuma de F3
 - Fazer: achado determinístico `EXPLANATION_MISSING` para toda questão sem "Por quê" (não só respostas curtas); mostrado na Revisão, não bloqueia aceite.
 - RED: questão sem explicação gera o achado; com explicação não.
+- Subtarefas:
+  - [ ] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
+  - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
+  - [ ] Mostrado na Revisão sem bloquear o aceite
+  - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
 - Gate: `draft-audit-questions.test.js`.
 
 ### Checkpoint F3
@@ -403,8 +416,8 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Subtarefas:
   - [x] Medir o baseline (534 s, 205 passed, 2 workers)
   - [x] Provar que reparticionar não resolve (workers 491 s × 490 s)
-  - [>] Perfilar o caminho crítico (decompor os 5 maiores consumidores em tempo evitável)
-  - [ ] Eliminar desperdício sem perder cobertura nem asserções
+  - [x] Perfilar o caminho crítico (achado: ~156 de 207 testes repetem um prelúdio de login pela UI de ~3,5 s: goto 0,4 + networkidle 0,9 + registrar 1,2 + entrar 1,0; ≈ 530 s de trabalho de worker)
+  - [>] Eliminar desperdício sem perder cobertura nem asserções (registro por HTTP em paralelo ao carregamento da página; login continua pela UI; formulário de registro segue coberto em auth/first-run/student-journey/product-value)
   - [ ] Full run de confirmação ≤ 460 s (2 workers, 0 falhas)
   - [ ] Gate #1 ≤ 480 s
   - [ ] Gate #2 ≤ 480 s
@@ -449,6 +462,13 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[ ]` · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03
 - Outcome: existe UMA autoridade de execução do e2e completo; `test/test-live.test.js:99` e `scripts/test-live-core.mjs` (`SUITES.e2e`) expressam o contrato atual (portas por execução, workers, saída própria) em vez de contorná-lo, e `tasks.md`/`validation.md` deixam de citar o caminho legado como vigente.
 - Fazer: reconstruir T-F6-02 → `package.json` (`test:e2e` = `node scripts/e2e.mjs`) → `scripts/e2e.mjs` → `scripts/test-live-core.mjs` → comportamento pretendido; decidir por esse contrato, NÃO por deixar o teste verde.
+- Subtarefas:
+  - [ ] Reconstruir o contrato atual (T-F6-02 → `package.json` → `scripts/e2e.mjs` → `scripts/test-live-core.mjs`)
+  - [ ] Decidir a autoridade única de execução do e2e completo (por intenção, não por teste verde)
+  - [ ] Alinhar `SUITES.e2e` e `test/test-live.test.js:99` ao contrato (portas por execução, workers, saída própria)
+  - [ ] Sensor que fica vermelho quando o runner canônico é contornado (mutação)
+  - [ ] Suíte raiz 479/479 e e2e iniciável pelo caminho governado
+  - [ ] Evidência em `validation.md` e fechar
 - Gate: sensor que fica vermelho quando o runner canônico é substituído por um caminho semanticamente errado; suíte raiz 479/479; e2e continua iniciável pelo caminho governado.
 - Próximo passo: ao começar, `grep -n "SUITES" scripts/test-live-core.mjs` e ler `test/test-live.test.js:90-101`.
 - Comando: `node --test "test/test-live.test.js"`

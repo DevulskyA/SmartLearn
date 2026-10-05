@@ -1,17 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderPlanRegion, applyRegion, planDrift, orderProblems, phaseState, cut, firstSentence, BEGIN, END } from '../scripts/plan-sync.mjs';
-import { programOrder, taskBlocks, parseSubtasks, subtaskCounts, classifyTasks, progressCounts } from '../scripts/context-core.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { renderPlanRegion, renderPlanFile, applyRegion, planDrift, syncPlanFile, orderProblems, phaseState, cut, firstSentence, BEGIN, END } from '../scripts/plan-sync.mjs';
+import { programOrder, taskBlocks, parseSubtasks, subtaskCounts, classifyTasks, progressCounts, buildModel, resumeCockpit, FILES } from '../scripts/context-core.mjs';
 import { parsePlan, checkInvariants, renderChecklistHtml } from '../scripts/tasklist.mjs';
 
-// plan.md is the human-readable executable VIEW of tasks.md: generated, never hand-kept, impossible to diverge silently.
-// Subtasks live in tasks.md; the active task is expanded ONLY in AGORA; every task row exists once (FASES); marks are distinct and
-// honest; "human decision" means the task itself needs the user, a task that only waits for another task is blocked by dependency.
+// plan.md is a PURE PROJECTION of the normalized execution model (tasks.md + PROGRAM.md + spec.md): generated, byte-identical when
+// regenerated, impossible to diverge silently. Progressive elaboration: AGORA (active, full tree) · PRÓXIMO (READY with subtasks) ·
+// ROADMAP (every task, one line) · BLOQUEADAS · DECISÕES HUMANAS PENDENTES · VALIDAÇÃO. Global progress is tasks only.
 
 const tasksText = [
   '### T-F1-01 — Foundation · S', '- Status: `[✓]` IMPLEMENTATION_SHA `abc1234` · Dependências: nenhuma', '',
   '### T-F1-02 — Active work · M', '- Status: `[>]` · Dependências: T-F1-01', '- Estado: execução concluída; nada em execução agora.', '- Resultado: causa NOT_PROVEN; nenhuma correção feita. Depois segue.', '- Subtarefas:',
-  '  - [x] Group A', '    - [x] step a1', '    - [x] step a2', '  - [>] Step B (current)', '  - [ ] Step C', '- Próximo passo: decidir o fechamento (subtarefa `[>]`); nada além disso.', '',
+  '  - [x] Group A', '    - [x] step a1', '    - [x] step a2', '  - [>] Step B (current)', '  - [ ] Step C', '- Gate: o gate da ativa passa; mais detalhes aqui.', '- Próximo passo: decidir o fechamento (subtarefa `[>]`); nada além disso.', '',
   '### T-F1-03 — Follow-up with subtasks · S', '- Status: `[ ]` · Dependências: T-F1-01', '- Subtarefas:', '  - [x] one', '  - [ ] two', '',
   '### T-F1-04 — Needs a human · S', '- Status: `[H]` · Dependências: HG-01', '',
   '### T-F1-05 — After the human · S', '- Status: `[ ]` · Dependências: T-F1-04', '',
@@ -43,28 +46,66 @@ test('subtasks: parsed from the compact checkbox list inside the task block, lea
   assert.deepEqual(parseSubtasks('- Status: x\n- Fazer: y\n'), { subtasks: [], subtaskProblems: [] });
 });
 
-test('AGORA holds the active task with its full nested tree; PRÓXIMO is next; pointers carry no task rows', () => {
+test('the file has the contract order and titles: H1, AGORA, PRÓXIMO, ROADMAP, BLOQUEADAS, DECISÕES HUMANAS PENDENTES, VALIDAÇÃO', () => {
+  const md = renderPlanFile(inputs);
+  assert.match(md, /^# SMARTLEARN — DESENVOLVIMENTO\n/);
+  const h2 = [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(h2, ['AGORA', 'PRÓXIMO', 'ROADMAP', 'BLOQUEADAS', 'DECISÕES HUMANAS PENDENTES', 'VALIDAÇÃO']);
+  assert.match(md, /^Track: .*Status: ACTIVE$/m);
+  assert.match(md, /^MARCO ATUAL: S1 — First$/m);
+});
+
+test('three densities: AGORA = active task (Estado/Resultado atual/Próximo passo/Gate + tree, current subtask marked); PRÓXIMO = READY blocks; ROADMAP = every task on one line', () => {
   const region = renderPlanRegion(inputs);
   const agora = section(region, 'AGORA');
   assert.match(agora, /^- T-F1-02 · Active work · S1 · subtarefas 2\/4$/m);
+  assert.match(agora, /^ {2}Estado: Execução concluída; nada em execução agora$/m);
+  assert.match(agora, /^ {2}Resultado atual: Causa NOT_PROVEN; nenhuma correção feita$/m);
+  assert.match(agora, /^ {2}Próximo passo: Decidir o fechamento$/m);
+  assert.match(agora, /^ {2}Gate: O gate da ativa passa; mais detalhes aqui$/m, 'one full sentence of the Gate line');
   assert.match(agora, /^ {2}- \[x\] Group A$/m);
   assert.match(agora, /^ {4}- \[x\] step a1$/m);
-  assert.match(agora, /^ {2}- \[>\] Step B \(current\)$/m);
-  assert.match(agora, /^ {2}- \[ \] Step C$/m);
-  assert.match(section(region, 'PRÓXIMO'), /^- T-F1-03 · Follow-up with subtasks · S1 · depois de T-F1-02 · dependências concluídas: T-F1-01$/m);
-  assert.match(region, /^ATIVA AGORA: T-F1-02 \(S1\) · PRÓXIMA: T-F1-03 · TAREFAS: \d+\/\d+ · SUBTAREFAS: 3\/6/m);
-  const before = region.slice(0, region.indexOf('## FASES'));
-  assert.equal(taskRows(before).length, 0, 'no checkbox task rows above FASES');
-  assert.equal(taskRows(region.slice(region.indexOf('## DECISÕES HUMANAS'))).length, 0);
-  assert.ok(region.indexOf('## AGORA') < region.indexOf('## PRÓXIMO') && region.indexOf('## PRÓXIMO') < region.indexOf('## FASES'));
+  assert.match(agora, /^ {2}- \[>\] Step B \(current\)  ← EM EXECUÇÃO$/m);
+  assert.equal((region.match(/^ +- \[.\] .*← EM EXECUÇÃO$/gm) ?? []).length, 1, 'only the current subtask line carries the marker');
+  assert.ok(agora.indexOf('Estado:') < agora.indexOf('- [x] Group A'), 'facts come before the tree');
+  const prox = section(region, 'PRÓXIMO');
+  assert.match(prox, /^### T-F1-03 — READY — Follow-up with subtasks$/m);
+  assert.match(prox, /^ {2}Subtarefas 1\/2:\n {2}- \[x\] one\n {2}- \[ \] two$/m);
+  assert.match(prox, /^### T-F6-06a — SEM SUBTAREFAS \(não pronta\) — Child A$/m, 'a shown task without subtasks is visible and labelled, never hidden');
+  const roadmap = region.slice(region.indexOf('## ROADMAP'), region.indexOf('## BLOQUEADAS'));
+  assert.equal(taskRows(roadmap).length, taskBlocks(tasksText).length, 'every task is one ROADMAP line');
+  assert.doesNotMatch(roadmap, /step a1|\[ \] two|\[x\] one/, 'ROADMAP never expands subtasks');
+  assert.equal((region.match(/step a1/g) ?? []).length, 1, 'the active tree exists once');
+  assert.equal(taskRows(region.slice(0, region.indexOf('## ROADMAP'))).length, 0, 'no full task rows before ROADMAP');
+  assert.doesNotMatch(roadmap, /subtarefas/);
 });
 
-test('the active task is a single FASES line with its subtask count (no duplicate tree); other tasks with subtasks are expanded in FASES', () => {
+test('metrics: global TAREFAS only; subtasks only for the active task and the READY ones; no global subtask total anywhere', () => {
   const region = renderPlanRegion(inputs);
-  const fases = region.slice(region.indexOf('## FASES'));
-  assert.match(fases, /^- \[>\] \*\*T-F1-02\*\* — Active work — subtarefas 2\/4$/m);
-  assert.equal((region.match(/step a1/g) ?? []).length, 1, 'the active tree exists once');
-  assert.match(fases, /^- \[ \] \*\*T-F1-03\*\* — Follow-up with subtasks — subtarefas 1\/2\n {2}- \[x\] one\n {2}- \[ \] two$/m);
+  assert.match(region, /^ATIVA AGORA: T-F1-02 \(S1\) · PRÓXIMA: T-F1-03 · TAREFAS: \d+\/\d+ · SUBTAREFAS DA ATIVA: T-F1-02 2\/4 · HORIZONTE PREPARADO: 1\/2 · /m);
+  assert.doesNotMatch(region, /SUBTAREFAS: \d/);
+  const model = buildModel(inputs);
+  assert.deepEqual(model.progress.ready.map((r) => [r.id, r.done, r.total]), [['T-F1-03', 1, 2], ['T-F6-06a', 0, 0]]);
+  assert.equal('subDone' in progressCounts(model.blocks), false);
+  const files = { [FILES.tasks]: tasksText, [FILES.program]: programText, [FILES.spec]: specText };
+  const cockpit = resumeCockpit((p) => files[p] ?? null, { head: 'h' }).join('\n');
+  assert.doesNotMatch(cockpit, /SUBTASKS=\d/);
+  assert.match(cockpit, /^ACTIVE_SUBTASKS=T-F1-02 2\/4$/m);
+  assert.match(cockpit, /^NEXT_READY=T-F1-03 READY 1\/2 \| T-F6-06a SEM SUBTAREFAS {2}HORIZONTE_PREPARADO=1\/2$/m);
+});
+
+test('ONE projection: plan.md, the HTML board and the cockpit show the same numbers because they render the same model', () => {
+  const model = buildModel(inputs);
+  const md = renderPlanFile(inputs);
+  const html = renderChecklistHtml({ tasks: [], view: model, title: 'T' });
+  const files = { [FILES.tasks]: tasksText, [FILES.program]: programText, [FILES.spec]: specText };
+  const cockpit = resumeCockpit((p) => files[p] ?? null, { head: 'h' }).join('\n');
+  const { tasksDone: d, tasksTotal: t } = model.progress;
+  assert.match(md, new RegExp(`TAREFAS: ${d}/${t} `));
+  assert.match(html, new RegExp(`tarefas ${d}/${t} · subtarefas da ativa T-F1-02 2/4`));
+  assert.match(cockpit, new RegExp(`^TASKS=${d}/${t} `, 'm'));
+  assert.match(cockpit, /^PHASE=S1 — First$/m);
+  assert.deepEqual(parsePlan(md).tasks.map((x) => x.id), model.phases.map((p) => p.id), 'the legacy phase list also comes out of the same plan');
 });
 
 test('every task appears exactly once as a full row, subtasks of a split parent nested; exactly one [>] task row', () => {
@@ -76,7 +117,7 @@ test('every task appears exactly once as a full row, subtasks of a split parent 
   assert.deepEqual(rows.filter((r) => r.mark === '>').map((r) => r.id), ['T-F1-02']);
 });
 
-test('gate classification: a human decision is a task that itself needs the user; one that only waits for a task is blocked by dependency', () => {
+test('gate classification: a human decision is a task that itself needs the user; one that only waits is BLOQUEADA with its causal chain', () => {
   const blocks = taskBlocks(tasksText);
   const eff = classifyTasks(blocks);
   assert.equal(eff.get('T-F1-04'), 'D', 'own HG id');
@@ -88,31 +129,30 @@ test('gate classification: a human decision is a task that itself needs the user
   const pc = progressCounts(blocks);
   assert.deepEqual([pc.decisions, pc.blockedByDep], [3, 3]);
   const region = renderPlanRegion(inputs);
-  const decisions = section(region, 'DECISÕES HUMANAS');
+  const decisions = section(region, 'DECISÕES HUMANAS PENDENTES');
   assert.match(decisions, /^- T-F1-04 · Needs a human · HG-01 Humano decide algo que tem uma frase bem longa para cortar numa fronteira de palavra\?$/m, 'the whole title, not cut by characters');
   assert.match(decisions, /^- T-F7-02 · Decision after the gate · Decisão humana registrada \(após T-F7-01\)$/m);
   assert.doesNotMatch(decisions, /T-F1-06/);
-  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · .* · aguarda T-F1-03$/m);
-  assert.match(region, /^BLOQUEADAS POR DEPENDÊNCIA: 3 · DECISÕES HUMANAS: 3|BLOQUEADAS POR DEPENDÊNCIA: 3 · DECISÕES HUMANAS: 3$/m);
+  const blocked = section(region, 'BLOQUEADAS');
+  assert.match(blocked, /^- T-F1-05 BLOQUEADA → T-F1-04 → HG-01$/m, 'task → decision task → gate');
+  assert.match(blocked, /^- T-F1-07 BLOQUEADA → HG-02$/m, 'own gate');
+  assert.match(blocked, /^- T-F1-06 BLOQUEADA → T-F1-03$/m, 'ordinary dependency: the chain ends at the task, never at a human decision');
+  assert.match(region, /BLOQUEADAS: 3 · DECISÕES HUMANAS: 3/);
   const rows = Object.fromEntries(taskRows(region).map((r) => [r.id, r.mark]));
   assert.deepEqual([rows['T-F1-04'], rows['T-F1-06'], rows['T-F1-05'], rows['T-F1-07']], ['H', '!', '!', '!']);
-  assert.match(region, /^- \[!\] \*\*T-F1-07\*\* — .* — aguarda decisão humana: HG-02$/m);
-  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-07 · .* · aguarda decisão humana: HG-02$/m, 'the HG dependency appears in BLOQUEADAS');
-  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-05 · .* · aguarda decisão humana: HG-01 \(via T-F1-04\)$/m, 'a task behind a pending decision is not self-starting');
-  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · .* · aguarda T-F1-03$/m, 'ordinary dependency: plain aguarda');
+  assert.match(region, /^- \[!\] \*\*T-F1-07\*\* — .* — BLOQUEADA → HG-02$/m);
   assert.doesNotMatch(region, /…/);
   assert.equal(cut('Uma frase comprida demais para caber aqui dentro, de verdade', 30), 'Uma frase comprida demais para');
 });
 
-test('phase markers and per-phase counts: never [✓] with pending work; [H] only when decisions remain; tarefas X/Y · subtarefas A/B', () => {
+test('phase markers and per-phase counts: never [✓] with pending work; [H] only when decisions remain; per phase only "tarefas X/Y"', () => {
   const region = renderPlanRegion(inputs);
   const heads = Object.fromEntries([...region.matchAll(/^### \[(.)\] (\S+) · (.*)$/gm)].map((m) => [m[2], { mark: m[1], rest: m[3] }]));
   assert.equal(heads.S8.mark, '✓');
   assert.equal(heads.S7.mark, 'H');
   assert.equal(heads.S1.mark, '>');
-  assert.match(heads.S1.rest, / — tarefas 1\/4 · subtarefas 3\/6$/, 'S1: T-F1-02, -03, 06a, 06b; the split parent is not counted');
+  assert.match(heads.S1.rest, / — tarefas 1\/4$/, 'S1: T-F1-02, -03, 06a, 06b; the split parent is not counted; no subtask total per phase');
   assert.match(heads.S7.rest, / — tarefas 0\/2$/);
-  assert.doesNotMatch(heads.S7.rest, /subtarefas/, 'no subtask total, no subtask clause');
   const blocks = taskBlocks(tasksText);
   const eff = classifyTasks(blocks);
   const byId = new Map(blocks.map((b) => [b.id, b]));
@@ -122,70 +162,93 @@ test('phase markers and per-phase counts: never [✓] with pending work; [H] onl
 });
 
 test('the panel gets exactly one active item and the one-line goal of the active TASK', () => {
-  const plan = parsePlan(`# TRACK: T\n\nStatus: ACTIVE\n\n${renderPlanRegion(inputs)}\n`);
+  const plan = parsePlan(renderPlanFile(inputs));
   assert.deepEqual(plan.tasks.map((t) => `${t.state}${t.id}`), ['✓BASE', '>S1', 'HS7', '✓S8', '!SEM-SPRINT']);
-  assert.deepEqual(plan.tasks.map((t) => t.title).filter((t) => /tarefas \d/.test(t)), [], 'counts are not part of the phase title');
   assert.deepEqual(checkInvariants(plan), []);
   assert.match(plan.tasks.find((t) => t.state === '>').fields.SPRINT_GOAL, /^T-F1-02 — Active work/);
 });
 
-test('the HTML: same ids and marks as plan.md, AGORA tree once, per-phase and global counts, validation line, legend, one [>] task row', () => {
-  const md = `# TRACK: T\n\nStatus: ACTIVE\nMARCO ATUAL: S1 — x\n\n${renderPlanRegion(inputs)}\n`;
-  const plan = parsePlan(md);
-  const html = renderChecklistHtml({ tasks: plan.tasks, view: plan.view, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO' });
+test('the HTML renders the same model in the same order: AGORA tree once, READY blocks with their own progress, ROADMAP one line per task', () => {
+  const md = renderPlanFile(inputs);
+  const model = buildModel(inputs);
+  const html = renderChecklistHtml({ tasks: [], view: model, title: 'T', validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO' });
   const rows = taskRows(md);
   const lis = [...html.matchAll(/<li class="t((?: sub)?(?: now)?)"><span class="m">\[(.)\]<\/span><span class="x">(T-[A-Z0-9]+-\d+[a-z]?) —/g)];
-  assert.deepEqual(lis.map((m) => [m[3], m[2]]), rows.map((r) => [r.id, r.mark]));
+  assert.deepEqual(lis.map((m) => [m[3], m[2]]), rows.map((r) => [r.id, r.mark]), 'ROADMAP rows = plan rows, same ids and marks');
   assert.equal(lis.filter((m) => m[2] === '>').length, 1);
-  assert.equal((html.match(/step a1/g) ?? []).length, 1, 'the active tree is rendered once');
-  assert.match(html, /<li class="t s1"><span class="m">\[x\]<\/span><span class="x">step a1/);
-  assert.match(html, /<li class="t s0 now"><span class="m">\[>\]<\/span><span class="x">Step B/);
-  assert.match(html, /PROGRESSO:<\/strong> tarefas \d+\/\d+ · subtarefas 3\/6/);
-  assert.match(html, /\[>\] S1 — First · tarefas 1\/4 · subtarefas 3\/6/);
-  assert.match(html, /VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/);
+  assert.equal((html.match(/step a1/g) ?? []).length, 1);
+  assert.match(html, /<li class="t s0 now"><span class="m">\[>\]<\/span><span class="x">Step B \(current\) <span class="muted">← em execução<\/span>/);
+  assert.match(html, /<h3>T-F1-03 — READY · subtarefas 1\/2 — Follow-up with subtasks<\/h3>/);
+  assert.match(html, /<h3>T-F6-06a — SEM SUBTAREFAS \(não pronta\) — Child A<\/h3>/);
+  assert.match(html, /PROGRESSO:<\/strong> tarefas \d+\/\d+ · subtarefas da ativa T-F1-02 2\/4 · horizonte preparado 1\/2/);
+  assert.match(html, /<h3>\[>\] S1 — First · tarefas 1\/4<\/h3>/);
+  assert.match(html, /<p class="hdr val">VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/);
   assert.match(html, /class="muted legend"/);
-  assert.equal(plan.view.progress.subDone + '/' + plan.view.progress.subTotal, '3/6');
-  assert.ok(html.indexOf('<h2>FASES') < html.indexOf('<h2>DECISÕES HUMANAS'));
-  assert.ok(html.indexOf('<h2>AGORA') < html.indexOf('<h2>PRÓXIMO') && html.indexOf('<h2>PRÓXIMO') < html.indexOf('<h2>FASES'));
+  const at = (h) => html.indexOf(h);
+  const order = ['<h2>AGORA', '<h2>PRÓXIMO', '<h2>ROADMAP', '<h2>BLOQUEADAS', '<h2>DECISÕES HUMANAS PENDENTES', '<h2>VALIDAÇÃO'].map(at);
+  assert.deepEqual(order, [...order].sort((a, b) => a - b));
+  assert.ok(order.every((n) => n > 0));
+  assert.match(html, /T-F1-05 — BLOQUEADA → T-F1-04 → HG-01/);
+  assert.match(html, /TAREFA ATIVA AGORA:/);
+  assert.doesNotMatch(html, /EXECUTANDO AGORA|subtarefas \d+\/\d+<\/h3><ul><li class="t"/);
 });
 
 test('drift is detected for any change: a task mark, a subtask mark in tasks.md, a hand edit of the tree, the gate class', () => {
-  const plan = `header\n${renderPlanRegion(inputs)}\n`;
+  const plan = renderPlanFile(inputs);
   assert.equal(planDrift(plan, inputs).drift, false);
   assert.equal(planDrift(plan.replace('- [x] **T-F1-01**', '- [ ] **T-F1-01**'), inputs).drift, true);
   assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('  - [ ] Step C', '  - [x] Step C') }).drift, true, 'subtask changed in tasks.md');
   assert.equal(planDrift(plan.replace('  - [ ] Step C', '  - [x] Step C'), inputs).drift, true, 'subtask hand-edited in plan.md');
   assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('- Fazer: medir tudo automaticamente.', '- Fazer: decisão humana.') }).drift, true, 'gate class changed');
+  assert.equal(planDrift(plan.replace('# SMARTLEARN — DESENVOLVIMENTO', '# outro título'), inputs).drift, true, 'even the header is generated and checked');
   assert.equal(planDrift('no markers', inputs).drift, true);
   assert.equal(applyRegion(plan, renderPlanRegion(inputs)), plan);
   assert.ok(plan.includes(BEGIN) && plan.includes(END));
 });
 
+test('DURABILITY: deleting plan.md and regenerating restores it byte-identical, from tasks.md + PROGRAM.md + spec.md alone', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plan-durable-'));
+  try {
+    for (const [rel, text] of [[FILES.tasks, tasksText], [FILES.program, programText], [FILES.spec, specText]]) {
+      mkdirSync(dirname(join(root, rel)), { recursive: true });
+      writeFileSync(join(root, rel), text);
+    }
+    const planPath = join(root, FILES.plan);
+    assert.equal(existsSync(planPath), false);
+    assert.equal(syncPlanFile(root), true, 'created from nothing');
+    const first = readFileSync(planPath, 'utf8');
+    rmSync(planPath);
+    assert.equal(syncPlanFile(root), true);
+    assert.equal(readFileSync(planPath, 'utf8'), first, 'byte-identical after delete + regenerate');
+    assert.equal(syncPlanFile(root), false, 'idempotent');
+    assert.equal(first, renderPlanFile(inputs));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('phases follow the sprint order of PROGRAM.md; mutation: a task sequenced before its own dependency is refused', () => {
-  const region = renderPlanRegion(inputs);
-  assert.deepEqual([...region.matchAll(/^### \[.\] (\S+)/gm)].map((m) => m[1]), ['BASE', 'S1', 'S7', 'S8', 'SEM-SPRINT']);
-  assert.equal(planDrift(`h\n${region}\n`, { ...inputs, programText: programText.replace('T-F1-02 → T-F1-03', 'T-F1-03 → T-F1-02') }).drift, true);
-  const r = planDrift(`h\n${region}\n`, { ...inputs, programText: programText.replace('T-F1-02 → T-F1-03', 'T-F1-03 → T-F1-01') });
+  const plan = renderPlanFile(inputs);
+  assert.deepEqual([...plan.matchAll(/^### \[.\] (\S+) · /gm)].map((m) => m[1]), ['BASE', 'S1', 'S7', 'S8', 'SEM-SPRINT']);
+  assert.equal(planDrift(plan, { ...inputs, programText: programText.replace('T-F1-02 → T-F1-03', 'T-F1-03 → T-F1-02') }).drift, true);
+  const r = planDrift(plan, { ...inputs, programText: programText.replace('T-F1-02 → T-F1-03', 'T-F1-03 → T-F1-01') });
   assert.equal(r.drift, true);
   assert.deepEqual(orderProblems(inputs), []);
   assert.deepEqual(programOrder('| **S4** J | o | T-F3-01..03 | P1 | T-F1-01 |\n'), ['T-F3-01', 'T-F3-02', 'T-F3-03']);
 });
 
-test('plan.md carries the validation line (derived one-liner); drift is by class: an old PASS in the plan is stale once the head is not proven', () => {
+test('plan.md carries the validation line in VALIDAÇÃO (derived one-liner); drift is by class: an old PASS in the plan is stale once the head is not proven', () => {
   const stale = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO (testado aaaaaaa)';
-  const pass = 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit, server) em bbbbbbb';
-  const region = renderPlanRegion({ ...inputs, validationLine: stale });
-  assert.match(region, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/m);
+  const pass = 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit, server) no HEAD atual';
+  const plan = renderPlanFile({ ...inputs, validationLine: stale });
+  assert.match(section(plan, 'VALIDAÇÃO'), /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/m);
   assert.match(renderPlanRegion(inputs), /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \(nenhuma validação/m, 'default: nothing recorded');
-  const plan = `h\n${region}\n`;
   assert.equal(planDrift(plan, { ...inputs, validationLine: stale }).drift, false);
   assert.equal(planDrift(plan, { ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — server DESATUALIZADO' }).drift, false, 'detail of a not-proven state may change without drift');
   assert.equal(planDrift(plan, { ...inputs, validationLine: pass }).drift, true, 'head became proven but the plan still says not proven');
-  assert.equal(planDrift(`h\n${renderPlanRegion({ ...inputs, validationLine: pass })}\n`, { ...inputs, validationLine: stale }).drift, true, 'an old PASS must not stay in the plan');
+  assert.equal(planDrift(renderPlanFile({ ...inputs, validationLine: pass }), { ...inputs, validationLine: stale }).drift, true, 'an old PASS must not stay in the plan');
   assert.equal(planDrift(plan.replace(/^VALIDAÇÃO DO HEAD ATUAL:.*$/m, ''), { ...inputs, validationLine: stale }).drift, true, 'line deleted');
 });
 
-test('a task waiting for an HG id (or chained to one) is BLOCKED with the decision named; the phase marker follows; dependency ranges are fully listed', () => {
+test('a task waiting for an HG id (or chained to one) is BLOCKED with the chain named; the phase marker follows; dependency ranges are fully listed', () => {
   const t = [
     '### T-F1-01 — Decision · S', '- Status: `[H]` · Dependências: HG-05', '',
     '### T-F1-02 — Chained · S', '- Status: `[ ]` · Dependências: T-F1-01', '',
@@ -197,20 +260,20 @@ test('a task waiting for an HG id (or chained to one) is BLOCKED with the decisi
   const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-01 → T-F1-02 → T-F1-03 |\n| **S2** Two | y | T-F1-04 → T-F1-05 → T-F1-06 |\n';
   const spec = '| HG-05 | Estratégia de integração (merge ou série de PRs). Segunda frase que não entra | F9 | x |\n| HG-13 | Autorizar a diretiva de idioma | T-F1-03 | x |\n';
   const region = renderPlanRegion({ tasksText: t, programText: prog, specText: spec });
-  const blocked = section(region, 'BLOQUEADAS POR DEPENDÊNCIA');
-  assert.match(blocked, /^- T-F1-02 · Chained · aguarda decisão humana: HG-05 \(via T-F1-01\)$/m);
-  assert.match(blocked, /^- T-F1-03 · Own HG while pending · aguarda decisão humana: HG-13$/m);
+  const blocked = section(region, 'BLOQUEADAS');
+  assert.match(blocked, /^- T-F1-02 BLOQUEADA → T-F1-01 → HG-05$/m);
+  assert.match(blocked, /^- T-F1-03 BLOQUEADA → HG-13$/m);
   assert.doesNotMatch(blocked, /T-F1-06/, 'ordinary pending tasks are not blocked');
   assert.match(region, /^### \[!\] S1 · One/m, 'nothing runnable in S1: every task is a decision or blocked');
   assert.match(region, /^### \[ \] S2 · Two/m);
-  assert.match(section(region, 'DECISÕES HUMANAS'), /^- T-F1-01 · Decision · HG-05 Estratégia de integração$/m, 'full first sentence of the spec title, parentheses dropped, no truncation');
+  assert.match(section(region, 'DECISÕES HUMANAS PENDENTES'), /^- T-F1-01 · Decision · HG-05 Estratégia de integração$/m, 'full first sentence of the spec title, parentheses dropped, no truncation');
   assert.match(region, /^- \[ \] \*\*T-F1-06\*\* — Waits for a range$/m);
   const blocks = taskBlocks(t);
   assert.deepEqual(blocks.find((b) => b.id === 'T-F1-06').deps, ['T-F1-04', 'T-F1-05'], 'T-F1-04..05 expands to every id');
   assert.deepEqual(blocks.find((b) => b.id === 'T-F1-03').hgDeps, ['HG-13']);
   assert.equal(classifyTasks(blocks).get('T-F1-06'), ' ');
   const t2 = t.replace('### T-F1-06 — Waits for a range · S\n- Status: `[ ]`', '### T-F1-06 — Waits for a range · S\n- Status: `[!]`');
-  assert.match(section(renderPlanRegion({ tasksText: t2, programText: prog, specText: spec }), 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · Waits for a range · aguarda T-F1-04, T-F1-05$/m, 'every open dependency of the range is printed');
+  assert.match(section(renderPlanRegion({ tasksText: t2, programText: prog, specText: spec }), 'BLOQUEADAS'), /^- T-F1-06 BLOQUEADA → T-F1-04, T-F1-05$/m, 'every open dependency of the range is printed');
 });
 
 test('DECISÕES HUMANAS text is a complete sentence, never character-truncated; a [H] task without an HG id states what the user decides', () => {
@@ -219,7 +282,7 @@ test('DECISÕES HUMANAS text is a complete sentence, never character-truncated; 
     '### T-F1-02 — Retirar o legado · S', '- Status: `[H]` · Dependências: nenhuma · Decisão de produto/arquitetura sobre remover o adaptador legado; sem remoção de código.', '',
     '### T-F1-03 — Avaliar · S', '- Status: `[H]` · Dependências: nenhuma', '- Outcome: o humano avalia a unidade com a rubrica fixa e registra PASS ou FAIL. Depois disso segue.', '',
   ].join('\n');
-  const decisions = section(renderPlanRegion({ tasksText: t, programText: '', specText: '' }), 'DECISÕES HUMANAS');
+  const decisions = section(renderPlanRegion({ tasksText: t, programText: '', specText: '' }), 'DECISÕES HUMANAS PENDENTES');
   assert.match(decisions, /^- T-F1-01 · Roteiro visual · A execução é UAT humano$/m);
   assert.match(decisions, /^- T-F1-02 · Retirar o legado · Decisão de produto\/arquitetura sobre remover o adaptador legado$/m);
   assert.match(decisions, /^- T-F1-03 · Avaliar · O humano avalia a unidade com a rubrica fixa e registra PASS ou FAIL$/m);
@@ -237,48 +300,26 @@ test('the tracked plan never embeds the current HEAD sha (no churn per commit); 
   assert.doesNotMatch(renderPlanRegion({ ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit) em bbbbbbb2' }), /bbbbbbb/);
 });
 
-test('AGORA — TAREFA ATIVA shows derived Estado / Resultado / Próximo passo (from the task block, drift-checked); nothing is framed as "running"', () => {
-  const region = renderPlanRegion(inputs);
-  const agora = section(region, 'AGORA');
-  assert.match(region, /^## AGORA — TAREFA ATIVA$/m);
-  assert.doesNotMatch(region, /EM EXECUÇÃO|EXECUTANDO/);
-  assert.match(agora, /^ {2}Estado: Execução concluída; nada em execução agora$/m);
-  assert.match(agora, /^ {2}Resultado: Causa NOT_PROVEN; nenhuma correção feita$/m, 'one full sentence, not cut at the clause');
-  assert.match(agora, /^ {2}Próximo passo: Decidir o fechamento$/m);
-  assert.ok(agora.indexOf('Estado:') < agora.indexOf('- [x] Group A'), 'facts come before the subtask tree');
-  const plan = `h\n${region}\n`;
-  assert.equal(planDrift(plan, inputs).drift, false);
-  assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('- Resultado: causa NOT_PROVEN', '- Resultado: causa PROVADA') }).drift, true, 'a changed Resultado is drift');
-  assert.equal(planDrift(plan, { ...inputs, tasksText: tasksText.replace('- Estado: execução concluída', '- Estado: execução em andamento') }).drift, true);
-  const md = `# TRACK: T\n\nStatus: ACTIVE\nMARCO ATUAL: S1\n\n${region}\n`;
-  const plan2 = parsePlan(md);
-  const html = renderChecklistHtml({ tasks: plan2.tasks, view: plan2.view });
-  assert.match(html, /<li class="t f"><span class="m"><\/span><span class="x"><strong>Estado:<\/strong> Execução concluída; nada em execução agora<\/span><\/li>/);
-  assert.match(html, /<strong>Próximo passo:<\/strong> Decidir o fechamento/);
-  assert.match(html, /TAREFA ATIVA AGORA:/);
-  assert.doesNotMatch(html, /EXECUTANDO AGORA|EM EXECUÇÃO/);
-  assert.equal((html.match(/Estado:/g) ?? []).length, 1, 'the facts are shown once');
-});
-
 test('a split task says what its children are; the legend says subtarefas are checklist items, children count as tarefas', () => {
   const region = renderPlanRegion(inputs);
   assert.match(region, /^- \[=\] \*\*T-F6-06\*\* — Split parent — dividida em T-F6-06a\/b \(tarefas\)$/m);
   assert.match(region, /subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas/);
-  const html = renderChecklistHtml({ tasks: [], view: parsePlan(`# TRACK: T\n\nStatus: ACTIVE\n\n${region}\n`).view });
-  assert.match(html, /itens de checklist dentro de um bloco de tarefa; filhas de tarefa dividida contam como tarefas/);
+  assert.match(renderChecklistHtml({ tasks: [], view: buildModel(inputs), title: 'T' }), /as filhas contam como tarefas/);
 });
 
-test('PRÓXIMO says why each task is ready, and explains a task that passes ahead of earlier ones of its sprint', () => {
+test('PRÓXIMO says why each task is ready (Por quê): NEXT 1 + the next dependency-ready ones, never a task behind an unfinished task; explains a task that passes ahead', () => {
   const t = [
     '### T-F1-01 — Foundation · S', '- Status: `[✓]` IMPLEMENTATION_SHA `abc1234` · Dependências: nenhuma', '',
     '### T-F1-02 — Active · S', '- Status: `[>]` · Dependências: T-F1-01', '- Subtarefas:', '  - [>] only step', '',
-    '### T-F2-01 — Jobs base · S', '- Status: `[ ]` · Dependências: T-F1-01', '',
-    '### T-F2-02 — Needs the base · S', '- Status: `[ ]` · Dependências: T-F2-01', '',
-    '### T-F2-03 — Independent explanation · S', '- Status: `[ ]` · Dependências: nenhuma', '',
+    '### T-F2-01 — Jobs base · S', '- Status: `[ ]` · Dependências: T-F1-01', '- Subtarefas:', '  - [ ] RED: a primeira transição', '',
+    '### T-F2-02 — Needs the base · S', '- Status: `[ ]` · Dependências: T-F2-01', '- Subtarefas:', '  - [ ] RED: a segunda transição', '',
+    '### T-F2-03 — Independent explanation · S', '- Status: `[ ]` · Dependências: nenhuma', '- Subtarefas:', '  - [ ] RED: a explicação obrigatória', '',
+    '### T-F1-09 — After the active one · S', '- Status: `[ ]` · Dependências: T-F1-02', '- Subtarefas:', '  - [ ] RED: depois da ativa', '',
   ].join('\n');
-  const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-02 |\n| **S4** Jobs | y | T-F2-01 → T-F2-02 → T-F2-03 |\n';
-  const next = section(renderPlanRegion({ tasksText: t, programText: prog, specText: '' }), 'PRÓXIMO');
-  assert.match(next, /^- T-F2-01 · Jobs base · S4 · independente de S1 · dependências concluídas: T-F1-01$/m);
-  assert.match(next, /^- T-F2-03 · Independent explanation · S4 · independente de S1 · sem dependência pendente · passa à frente de T-F2-02 \(aguardam T-F2-01\)$/m);
-  assert.doesNotMatch(next, /T-F2-02 ·/, 'a task behind an unfinished dependency is not offered');
+  const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-02 → T-F1-09 |\n| **S4** Jobs | y | T-F2-01 → T-F2-02 → T-F2-03 |\n';
+  const prox = section(renderPlanRegion({ tasksText: t, programText: prog, specText: '' }), 'PRÓXIMO');
+  assert.deepEqual([...prox.matchAll(/^### (T-\S+) — READY/gm)].map((m) => m[1]), ['T-F1-09', 'T-F2-01', 'T-F2-03'], 'T-F2-02 waits for an unfinished task that is not the active one: not in the window');
+  assert.match(prox, /### T-F1-09 — READY — After the active one\n {2}Por quê: S1 · dependências concluídas: ?.*depois de T-F1-02|### T-F1-09 — READY — After the active one\n {2}Por quê: S1 · sem dependência pendente · depois de T-F1-02/);
+  assert.match(prox, /### T-F2-01 — READY — Jobs base\n {2}Por quê: S4 · independente de S1 · dependências concluídas: T-F1-01$/m);
+  assert.match(prox, /### T-F2-03 — READY — Independent explanation\n {2}Por quê: S4 · independente de S1 · sem dependência pendente · passa à frente de T-F2-02 \(aguardam T-F2-01\)$/m);
 });
