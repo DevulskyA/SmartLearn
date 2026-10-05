@@ -213,7 +213,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 - Uso futuro: o Prompt Lab mede apenas questões `GENERATED`.
 
 ### T-F2-05 — Pré-visualização do aceite · S
-- Status: `[ ]` · Requisitos: R-03 (AC-03.4), F-20 · Dependências: T-F2-01
+- Status: `[✓]` 2026-10-05 · BASE_SHA `418f057` · IMPLEMENTATION_SHA `a271e01` (evidência em `validation.md`) · Requisitos: R-03 (AC-03.4), F-20 · Dependências: T-F2-01
 - Fazer: rota somente-leitura `GET /drafts/:id/accept-preview` devolvendo unidade a criar, exercícios (com ids de origem) e questões excluídas; UI mostra antes do botão final.
 - Sensor: a pré-visualização coincide com o resultado real de `acceptDraft` (teste de igualdade sobre os mesmos dados).
 - Gate: `accept-draft.test.js`, `draft-acceptance.spec.js`.
