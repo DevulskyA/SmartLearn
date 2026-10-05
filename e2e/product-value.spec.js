@@ -239,12 +239,15 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
 
   // The original attempts are untouched and every redo is its own real,
   // closed server attempt -- history is added to, never rewritten.
+  // (the last judgment's POST may still be in flight when the result text appears, so wait for the observable final state instead of reading once)
   for (const id of [firstAttemptId, secondAttemptId, retestAttempt1, retestAttempt2]) {
-    const attempt = await page.evaluate(async ({ base, id: attemptId }) => {
-      const res = await fetch(`${base}/v1/attempts/${attemptId}`, { credentials: 'include' });
-      return res.json();
-    }, { base: API_BASE, id });
-    expect(attempt.attempt.status).toBe('SUBMITTED');
+    await expect.poll(async () => {
+      const attempt = await page.evaluate(async ({ base, id: attemptId }) => {
+        const res = await fetch(`${base}/v1/attempts/${attemptId}`, { credentials: 'include' });
+        return res.json();
+      }, { base: API_BASE, id });
+      return attempt.attempt?.status;
+    }, { message: `attempt ${id} must end SUBMITTED`, timeout: 10_000 }).toBe('SUBMITTED');
   }
 
   // 14. Exactly one INITIAL_PRACTICE evidence row, correct counts -- the

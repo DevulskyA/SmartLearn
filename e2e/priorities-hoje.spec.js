@@ -142,3 +142,40 @@ test('Hoje: a unit that is already due is explained in its review and never repe
   await expect(page.locator(`.review-row[data-review-id="${reviewId}"]`)).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#block-weak')).toBeHidden();
 });
+
+// CI_STABLE: Hoje renders are async and several can overlap (login, saving a unit, the nav click). A render that STARTED earlier but
+// finishes later used to overwrite a newer one with stale data, so a due review silently disappeared from Hoje (hidden primary action).
+// Deterministic reproduction with exactly TWO renders: render A's agenda answer is fetched before the unit exists and delivered only after
+// render B has already shown the due unit. The unit is created over the API so no UI action starts a third render.
+test('Hoje: a slow, stale render never overwrites a newer one - the due review stays on screen', async ({ page }) => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let heldTaken = false;
+  await page.route(/\/v1\/agenda(\?|$)/, async (route) => {
+    if (heldTaken) return route.continue();
+    heldTaken = true;
+    const stale = await route.fetch(); // answered NOW: no unit exists yet
+    await held;
+    await route.fulfill({ response: stale });
+  });
+  // render A: its agenda answer is held (repeat the click until the request is really in flight: a click that lands before the nav is wired is lost)
+  await expect(async () => {
+    await page.locator('[data-screen="today"]').click();
+    expect(heldTaken).toBe(true);
+  }).toPass({ timeout: 10_000 });
+  const call = (path, body) => page.evaluate(async ({ base, path: p, body: b }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${p}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(b) });
+    if (!res.ok) throw new Error(`${p} -> ${res.status}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+  const { unit } = await call('/v1/learning-units', { newSubjectName: 'Stale Subject', title: 'Stale Unit', studyDate: '2020-01-01' });
+  await call(`/v1/learning-units/${unit.id}/exercises`, { question: 'Pergunta Stale?', answer: 'Resposta', explanation: 'Porque.', provenance: 'MANUAL' });
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('[data-screen="today"]').click(); // render B sees the due unit
+  await expect(page.locator('#today-primary-action-btn')).toBeVisible({ timeout: 5000 });
+  release(); // the stale answer arrives LAST
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('#today-primary-action-btn')).toBeVisible();
+  await expect(page.locator('#block-overdue')).toBeVisible();
+});

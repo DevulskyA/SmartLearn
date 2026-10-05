@@ -1143,7 +1143,11 @@ async function renderWeakPractice(today) {
   }
 }
 
+// Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
+// that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
+let todayRenderSeq = 0;
 export async function renderToday() {
+  const renderId = ++todayRenderSeq;
   const existingOfflineBanner = document.querySelector("#offline-banner");
   // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
   // nothing about a loopback backend's reachability — Desktop must not
@@ -1188,6 +1192,7 @@ export async function renderToday() {
     }
     throw error;
   }
+  if (renderId !== todayRenderSeq) return; // a newer render started: its data wins
   if (existingOfflineBanner) existingOfflineBanner.hidden = true;
   if (upcomingBlock) upcomingBlock.hidden = true; // offline-only block: online Hoje has its own "Amanhã" line
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
@@ -1215,6 +1220,7 @@ export async function renderToday() {
     }),
   );
 
+  if (renderId !== todayRenderSeq) return;
   // Judgments already given in still-open reviews live on the server (each
   // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
   // reloading never silently drops a block the student already answered.
@@ -1234,6 +1240,7 @@ export async function renderToday() {
       console.error("Falha ao restaurar julgamentos das revisões.", error);
     }
   }
+  if (renderId !== todayRenderSeq) return;
 
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
