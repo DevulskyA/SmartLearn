@@ -99,7 +99,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ### [!] S5b · Hierarquia da Revisão — tarefas 0/1
 
-- [undefined] **T-F4-02** — Hierarquia da Revisão e ruído de achados
+- [ ] **T-F4-02** — Hierarquia da Revisão e ruído de achados
 
 ### [✓] S6A · Confiança: discriminação e cobertura — tarefas 2/2
 

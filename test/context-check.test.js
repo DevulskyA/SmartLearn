@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { CANONICAL, checkContext, gitIo, contextReport, preservationProblems } from '../scripts/context-check.mjs';
-import { resumeCockpit, taskBlocks, programOrder, boundaryCut, classifyTasks, safeWorkRemaining } from '../scripts/context-core.mjs';
+import { resumeCockpit, taskBlocks, programOrder, boundaryCut, classifyTasks, safeWorkRemaining, buildModel } from '../scripts/context-core.mjs';
 import { renderPlanFile } from '../scripts/plan-sync.mjs';
 
 // PERSISTENCE GATE + COLD-START COCKPIT. After /clear a new session must find position, active task, next command and blockers
@@ -358,4 +358,11 @@ test('ADIADA keeps a pending runnable task out of safe work, so the program can 
   const deferred = [task('T-X-01', '- Status: `[ ]` ADIADA (P2) · Dependências: nenhuma')];
   assert.equal(classifyTasks(deferred).get('T-X-01'), 'P');
   assert.equal(safeWorkRemaining(deferred), false);
+});
+
+// the deferred task must stay a valid, countable row in the plan projection (a missing marker once rendered "[undefined]" and broke ALL_TASKS_VISIBLE)
+test('an ADIADA task renders as a pending row in the plan projection', () => {
+  const tasksText = '### T-X-01 — Adiada\n- Status: `[ ]` ADIADA (P2) · Dependências: nenhuma\n';
+  const rows = buildModel({ tasksText }).phases.flatMap((p) => p.rows);
+  assert.deepEqual(rows.map((r) => r.mark), [' ']);
 });

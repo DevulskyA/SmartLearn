@@ -372,7 +372,7 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
   const active = blocks.find((b) => b.status === '>') ?? null;
   const shown = nextReady(blocks, programText);
   const title = (b) => b.heading.replace(/\s*·\s*[—-]?\s*$/, '').trim();
-  const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', '=': '=' };
+  const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', P: ' ', '=': '=' };
   const capital = (t) => (t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}` : t);
   const sc = (b) => subtaskCounts(b.subtasks);
   const chain = (b) => b.deps.filter(open);
