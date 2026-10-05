@@ -561,7 +561,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Status: `[✓]` 2026-10-05 · BASE_SHA `24631c7` · IMPLEMENTATION_SHA `1cc51b4` (47 testes de contrato contra BrowserStore e RemoteDB; 2 mutantes vermelhos; evidência em `validation.md`) · Dependências: T-F6-06a · Fazer: testes de contrato idênticos rodados contra cada adaptador VIVO (criar/ler/atualizar/apagar, ordem, ids estáveis). Gate: suíte nova verde; mutação simples (trocar a ordem num adaptador) deixa ≥ 1 teste vermelho.
 
 ### T-F6-06c — Decisão de aposentadoria do legado · S
-- Status: `[H]` · Dependências: T-F6-06a, T-F6-06b · Decisão de produto/arquitetura sobre remover o adaptador legado; sem remoção de código sem ordem.
+- Status: `[✓]` 2026-10-05 · BASE_SHA `cc92bb3` · IMPLEMENTATION_SHA nenhum (decisão técnica registrada em `validation.md`; sem remoção de código) · Dependências: T-F6-06a, T-F6-06b · Decisão de arquitetura: aposentar SÓ o ramo Tauri-SQLite (morto, provado em T-F6-06a/06b); BrowserStore permanece sob o contrato até o padrão do Web virar remoto; a remoção do código exige prova no runtime Android, que não existe aqui
 
 ### T-F6-07 — Matriz de cobertura reconciliada · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `751ca69` · IMPLEMENTATION_SHA `8b6a887` (matriz reconciliada: 31 TESTED / 1 MUTATION-KILLED / 6 HUMAN / 12 NOT_PROVEN; evidência em `validation.md`) · Dependências: T-F6-01
@@ -618,7 +618,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Sensor: `desktop-entrypoint.test.js` confirma que o atalho "SmartLearn DEV" aponta para o launcher.
 
 ### T-F8-05 — Dependências e auditoria · S
-- Status: `[✓]` 2026-10-05 · BASE_SHA `e6d1ec1` · IMPLEMENTATION_SHA `24631c7` (npm audit 0 vulnerabilidades e gates travados; cargo audit NOT_PROVEN (decisão do usuário registrada); evidência em `validation.md`) · Dependências: nenhuma
+- Status: `[H]` REABERTA 2026-10-05 (fechada por engano: faltava o `cargo audit`) · parcial: `npm audit` PASS e gates travados (IMPLEMENTATION_SHA `24631c7`); falta `cargo audit` — decisão humana: autorizar o download de `cargo-audit` (crates.io) e do advisory-db RustSec (rede) e adicionar o passo ao CI (reverte a omissão do P2-3) · Dependências: nenhuma
 - Fazer: `npm audit`/`cargo audit` conforme gates já existentes (`P2-3`), registrar achados e decisões; sem atualizar versões por reflexo.
 
 ### Checkpoint F8

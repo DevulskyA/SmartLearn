@@ -105,23 +105,23 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F6-04** — Comando de discriminação (mutação) repetível
 - [x] **T-F6-07** — Matriz de cobertura reconciliada
 
-### [H] S6B · Confiança: persistência — tarefas 2/3
+### [✓] S6B · Confiança: persistência — tarefas 3/3
 
 - [=] **T-F6-06** — Contrato de persistência entre adaptadores (DEBT-006, parte 1) — dividida em T-F6-06a/b/c (tarefas)
   - [x] **T-F6-06a** — Levantamento dos adaptadores de persistência vivos
   - [x] **T-F6-06b** — Suíte de contrato executável contra os adaptadores vivos
-  - [H] **T-F6-06c** — Decisão de aposentadoria do legado
+  - [x] **T-F6-06c** — Decisão de aposentadoria do legado
 
 ### [✓] S6C · Higiene mensurada — tarefas 1/1
 
 - [x] **T-F6-05** — Avisos de lint e do Rust
 
-### [H] S7 · Segurança e empacotamento — tarefas 4/5
+### [H] S7 · Segurança e empacotamento — tarefas 3/5
 
 - [x] **T-F8-01** — Inspeção do artefato empacotado
 - [x] **T-F8-02** — Testes adversariais de upload de PDF
 - [x] **T-F8-03** — Segredos e consentimento de IA
-- [x] **T-F8-05** — Dependências e auditoria
+- [H] **T-F8-05** — Dependências e auditoria
 - [H] **T-F8-04** — Caminho único de abertura e retirada do release antigo — HG-04
 
 ### [✓] S8 · Real-use e continuidade — tarefas 1/1
@@ -164,7 +164,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - T-F2-03 · Auditoria versionada e reauditoria explícita · HG-02 "Reauditar" como ação explícita é aceitável dado que abrir não recalcula?
 - T-F2-06 · Política de volume de questões (aplicação) · HG-01 Política de volume de questões
 - T-F10-02b · Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo · HG-13 Autorizar a diretiva mínima de idioma no prompt e confirmar o alcance de uiLocale em es/en no V1
-- T-F6-06c · Decisão de aposentadoria do legado · Decisão de produto/arquitetura sobre remover o adaptador legado
+- T-F8-05 · Dependências e auditoria · Falta cargo audit — decisão humana
 - T-F8-04 · Caminho único de abertura e retirada do release antigo · HG-04 Retirar o release instalado de 10/09
 - T-F0-05 · Higiene do checkout principal e das worktrees auxiliares · HG-05 Estratégia de integração, destino de content-quality e do merge temporário
 - T-F1-05 · Política dos bancos legados e do AppData (#1, #3, #5) · HG-03 Destino do banco antigo do AppData e dos legados #3/#5
@@ -182,6 +182,6 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## VALIDAÇÃO
 
-VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (e2e, server, unit) no HEAD atual
+VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado cc92bb3) · server DESATUALIZADO (testado cc92bb3) · unit DESATUALIZADO (testado bfdf822); HEAD atual ≠ HEAD testado
 
 <!-- PLAN:END -->

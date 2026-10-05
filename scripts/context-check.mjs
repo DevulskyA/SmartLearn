@@ -240,6 +240,8 @@ export function preservationProblems(previousText, currentText) {
   const out = [];
   for (const p of taskBlocks(previousText).filter((b) => b.id)) {
     const c = now.get(p.id);
+    // an explicit, documented REOPEN (a close that was wrong) is the only way a done task stops being done; it must say so in its status line
+    if (p.status === '✓' && c && c.status !== '✓' && /\bREABERTA\b/.test(c.statusLine)) continue;
     if (p.status === '✓' && (!c || c.status !== '✓')) { out.push(`COMPLETED_TASKS_PRESERVED: ${p.id} was done and is now ${c ? `[${c.status}]` : 'missing'}`); continue; }
     if (!c) { out.push(`COMPLETED_TASKS_PRESERVED: task ${p.id} disappeared`); continue; }
     const keep = new Set(c.subtasks.map((r) => r.text));

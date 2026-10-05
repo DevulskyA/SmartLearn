@@ -273,6 +273,9 @@ test('NAMED PROPERTIES: one mutation per property flips exactly that property to
   const before = fixture()[TASKSP];
   const regressed = before.replace('- Status: `[✓]` 2026-10-04', '- Status: `[>]` 2026-10-04');
   fails(tasks(fixture(), () => regressed), 'COMPLETED_TASKS_PRESERVED', { previousTasks: () => before });
+  // an explicit, documented reopen (a wrong close) is allowed; silently un-doing a task is not
+  assert.deepEqual(preservationProblems(before, regressed.replace('- Status: `[>]` 2026-10-04', '- Status: `[>]` REABERTA 2026-10-04')), []);
+  assert.equal(preservationProblems(before, regressed).length > 0, true);
   const withDone = before.replace(/(### T-F1-04 — Independent · S\n- Status:[^\n]*\n- Subtarefas:\n)/, '$1  - [x] já feito antes\n');
   fails(tasks(fixture(), () => before), 'COMPLETED_TASKS_PRESERVED', { previousTasks: () => withDone });
   assert.deepEqual(preservationProblems(before, before), []);
