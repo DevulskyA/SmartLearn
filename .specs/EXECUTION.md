@@ -2,7 +2,7 @@
 
 > Cockpit mínimo pra sessão perdida. Histórico completo: `.specs/STATE.md`.
 
-> ATUAL (2026-10-05, HEAD b08d6bd, LOCAL ONLY, nada enviado): programa de finalização V1 por sprints. Posição e próximos passos:  (local); ordem e regras: ; estado por tarefa:  da mesma pasta; evidência: ; painel: [agent-tasklist] C:UsersArielSmartLearn-AgentCoord	asklist.html + C:ProjetosSmartLearn.claudeworktreescontent-qualityconductor.view	asklist.html + C:ProjetosSmartLearn.claudeworktreesintegrate-tmpconductor.view	asklist.html + C:ProjetosSmartLearn.claudeworktreessmartlearn-v1-completeconductor.view	asklist.html — GUI 11 tarefas (HR-2), CLI PAUSED (token budget) — stable state. T51 code slice committ (track ).
+> ATUAL (2026-10-05, HEAD f4e2cc6, LOCAL ONLY, nada enviado): programa de finalização V1 por sprints. Posição e próximos passos: `.specs/HANDOFF.md` (local); ordem e regras: `.specs/features/hardening-roadmap-v1/PROGRAM.md`; estado por tarefa: `tasks.md` da mesma pasta; evidência: `validation.md`; painel: `node scripts/agent-tasklist.mjs` (track `conductor/tracks/hardening-roadmap-v1/plan.md`).
 > Fechadas: S0, S1, S2, S2G-a/b (geração segura: R-12/R-13), S2b. Ativa: S3 (T-F6-08 -> T-F6-03 + contrato do test-live). O bloco STATE abaixo é HISTÓRICO (2026-10-01..03) e não descreve o estado atual.
 
 PROJECT=SmartLearn
