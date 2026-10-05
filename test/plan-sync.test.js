@@ -227,3 +227,12 @@ test('DECISÕES HUMANAS text is a complete sentence, never character-truncated; 
   assert.equal(firstSentence('Texto (com parênteses). Segunda frase.'), 'Texto');
   assert.equal(firstSentence('Pergunta aceitável? Resto'), 'Pergunta aceitável?');
 });
+
+test('the tracked plan never embeds the current HEAD sha (no churn per commit); recorded "testado" shas stay', () => {
+  const a = renderPlanRegion({ ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO (testado aaaaaaa); HEAD atual 1111111' });
+  const b = renderPlanRegion({ ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO (testado aaaaaaa); HEAD atual 2222222' });
+  assert.equal(a, b);
+  assert.match(a, /unit DESATUALIZADO \(testado aaaaaaa\)$/m);
+  assert.doesNotMatch(a, /HEAD atual \d/);
+  assert.doesNotMatch(renderPlanRegion({ ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit) em bbbbbbb2' }), /bbbbbbb/);
+});

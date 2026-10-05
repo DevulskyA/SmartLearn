@@ -138,7 +138,8 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '', v
   out.push(`ATIVA AGORA: ${active ? `${active.id} (${activeGroup})` : 'nenhuma'}`
     + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · TAREFAS: ${pc.tasksDone}/${pc.tasksTotal} · SUBTAREFAS: ${pc.subDone}/${pc.subTotal}`
     + ` · BLOQUEADAS POR DEPENDÊNCIA: ${pc.blockedByDep} · DECISÕES HUMANAS: ${pc.decisions}`, '');
-  out.push(validationLine, '');
+  // the current-HEAD sha is NOT written to the tracked plan (it would change on every commit); 'testado <sha>' of recorded results stays
+  out.push(validationLine.replace(/;\s*HEAD atual \S+/, '').replace(/ em [0-9a-f]{7,40}$/, ''), '');
   out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
   out.push('## AGORA — EM EXECUÇÃO', '');
   if (active) out.push(pointer(active, `${activeGroup} · subtarefas ${sc(active).done}/${sc(active).total}`), ...subLines(active, 2));
