@@ -185,7 +185,7 @@ Impacto em tarefas: T-F3-01 ganhou dependências e contrato (T-F10-02a, 03, 04a)
 
 ### Sprint S2b: DONE (2026-10-05). T-F2-05 `[✓]`.
 
-### T-F6-08 — Sonda de reprodução do sintoma `#account-show-register` (2026-10-05, EM ANDAMENTO, causa NÃO provada)
+### T-F6-08 — Sonda de reprodução do sintoma `#account-show-register` (2026-10-05, CONCLUÍDA: 10 rodadas, causa NOT_PROVEN, aguardando decisão de fechamento)
 - Fatos: o sintoma (elemento oculto após clicar em `[data-screen="account"]`, mesmo com retry) já ocorreu em: run 2 de T-F6-03 (`product-value.spec.js:86`), `keyboard-study-materials.spec.js:164` na suíte materiais (passou isolada na repetição) e, em registro antigo, `content-quality-flow.spec.js:143` (`content-quality/plan.md` ~l.724).
 - Sonda (código em `probes/t-f6-08-account-register-probe.spec.js.txt`; arquivos `zz-probe-*` NÃO ficam no repositório de testes): repete o prelúdio (novo contexto, `goto('/')`, `networkidle`, clicar na conta, esperar `#account-show-register` 2 s), 2 workers em paralelo, cada um com seu backend, registrando navegações do frame principal, mensagens do Vite e tempos.
 - Resultado: (1) carga leve: 2 × 25 = 50 iterações, 0 falhas, `networkidle` em 1,3–1,6 s; (2) CPU saturada por 8 processos externos: 50 iterações, 0 falhas, `networkidle` em 1,5–2,9 s. Nenhuma navegação extra além do carregamento inicial foi distinguida; nenhuma mensagem de reload/otimização do Vite capturada.
