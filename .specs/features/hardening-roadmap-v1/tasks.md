@@ -205,7 +205,7 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 - Cuidado: reauditar não reexecuta modelo (sem Codex); só regras determinísticas. Reauditoria por modelo é decisão separada.
 
 ### T-F2-04 — Proveniência por questão e por rascunho · M
-- Status: `[ ]` · Requisitos: R-03 (AC-03.2) · Dependências: T-F2-01
+- Status: `[✓]` 2026-10-04 · BASE_SHA `83bfe9a` · IMPLEMENTATION_SHA `f0812a1` (evidência em `validation.md`) · Requisitos: R-03 (AC-03.2) · Dependências: T-F2-01
 - Fazer: `origin`, `generatedBy` (`provider`, `modelVersion`, `promptVersion`), `editedAt`; edição humana de campo muda `origin` para `HUMAN_EDITED` sem apagar `generatedBy`; migrar rascunhos antigos por normalização na leitura (sem gravar), com `origin=GENERATED` presumido e marca `legacy`.
 - RED: round-trip; rascunho legado lido duas vezes dá a mesma proveniência; aceitar não depende de `origin`.
 - Gate: servidor + e2e; verificação no rascunho real do Costanzo (somente leitura).
