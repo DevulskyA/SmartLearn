@@ -166,16 +166,18 @@ Objetivo: tornar impossível perder ou corromper o banco humano e impossível ac
 - Gate: teste Rust do título; teste de frontend do conteúdo copiado; verificação via CDP do título real.
 
 ### T-F1-09 — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0) · M
-- Status: `[ ]` · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
+- Status: `[>]` 2026-10-05 · Origem: S0 (`validation.md`): `STATE.md` lista "fumaça Windows nativa de IMPORT-1/VERDICT-1" como NOT_PROVEN e nenhuma tarefa do ledger a cobria · Requisitos: invariante de plataformas (WEB + ANDROID + WINDOWS; PASS em uma não prova outra) · Dependências: T-F1-01, T-F1-07, T-F1-08
 - Outcome: no Desktop Windows real, restaurar um backup lógico em conta vazia (IMPORT-1) e ver o veredito de Estatísticas ponderado por volume (VERDICT-1) funcionam; observação mecânica (CDP/computer-use quando o runtime permite), SEM julgamento perceptivo.
 - Regra de dados: SOMENTE sobre CÓPIA isolada do banco/dados (nunca o banco DEV humano `C:\Users\Ariel\SmartLearn-DevData`); o backup restaurado é de fixture/cópia.
 - Subtarefas:
-  - [ ] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
+  - [>] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
   - [ ] Verificar se o runtime nativo Windows pode ser automatizado (CDP no WebView2 / computer-use); se não, registrar `BLOCKED_TECHNICAL` com o tentado
   - [ ] IMPORT-1: restaurar o backup lógico em conta vazia no Desktop real e observar o resultado (contagens), com HEAD/build do título
   - [ ] VERDICT-1: abrir Estatísticas na conta restaurada e observar o veredito ponderado por volume (limiar 25%)
   - [ ] Gate: observação em `validation.md` com HEAD/build; hash do banco DEV humano igual antes e depois
 - Gate: observação registrada em `validation.md` com HEAD/build exibidos no título; se o runtime não permitir a automação, registrar `BLOCKED_TECHNICAL` com o que foi tentado (não vira gate humano por reflexo).
+- Próximo passo: preparar a CÓPIA isolada (hash do banco DEV humano antes; nunca abri-lo) e verificar se o Desktop Windows real é automatizável (CDP no WebView2 / computer-use); sem automação possível, registrar `BLOCKED_TECHNICAL` com o tentado.
+- Comando: `npm run context:resume`
 
 ### Checkpoint F1
 - Prova composta: abrir Desktop → segundo escritor recusado → fechar forçado → nenhum órfão → reabrir → snapshot do dia existe → restore drill passa → sessões purgadas sem tocar ativas.
@@ -388,15 +390,15 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Observação: exige contrato de questão única com o modelo = mudança de prompt/provedor. NÃO executar antes do Prompt Lab aprovar (INV-09). Subtarefas futuras: (a) contrato `regenerateQuestion(question, sourceSpans)`; (b) UI com comparação lado a lado e aceite explícito; (c) proveniência `generatedBy` da nova versão.
 
 ### T-F4-07 — Cópia de estados e i18n (T46/T47) com guarda de acentuação · M
-- Status: `[>]` 2026-10-05 · Requisitos: F-36 · Dependências: nenhuma · Nota (2026-10-04): i18n de INTERFACE e idioma PEDAGÓGICO são problemas diferentes; `uiLocale`/`generationLocale` pertencem a R-13/F10, não a esta tarefa
-- Fazer: varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`); mensagens de vazio/erro/carregando padronizadas. Seguir a skill `codex-portuguese-i18n-repair` se aparecer corrupção.
+- Status: `[✓]` 2026-10-05 · BASE_SHA `84e4d83` · IMPLEMENTATION_SHA `bef888b` (guarda de mojibake e de reticências em `scripts/text-integrity.mjs` + `test/text-integrity.test.js`; carregando padronizado em "…"; 13 testes, 4 mutações vermelhas; e2e completo 227 passed / 0 failed / 448 s) · Requisitos: F-36 · Dependências: nenhuma
+- Fazer: varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake; mensagens de vazio/erro/carregando padronizadas.
 - Subtarefas:
-  - [>] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
-  - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
-  - [ ] Padronizar mensagens de vazio/erro/carregando
-  - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
+  - [x] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)
+  - [x] RED: teste de guarda que falha com padrões de mojibake em texto visível
+  - [x] Padronizar mensagens de vazio/erro/carregando
+  - [x] Gate: teste de guarda + `npm test`; evidência e fechar
 - Gate: teste de guarda + `npm test`.
-- Próximo passo: o repositório hoje NÃO tem mojibake (varredura git grep limpa fora dos documentos que o descrevem) e `src/i18n/locales/pt-BR.js` cobre só a conta (T11); o app é pt-BR literal em `src/*.js` e `index.html` (a extração total é T46/HG-13, FORA desta tarefa). Escopo: (1) inventário contado por arquivo em `validation.md`; (2) `scripts/text-integrity.mjs` (`findMojibake`, `scanFiles`) + `test/text-integrity.test.js` (casos ruins montados por escapes `Ã§`, sem literal corrompido no arquivo; varredura real dos arquivos rastreados de código e UI; sensor de que a varredura cobre `index.html` e `src/`); (3) padrão de carregando: reticências "…" (U+2026) em vez de "..." (12 ocorrências em `src/app.js`, `src/materials-ui.js`, `index.html`) com o mesmo teste de guarda. Cuidado: não regravar arquivo com PowerShell; usar Edit/Write e conferir acentos.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F1-09.
 - Comando: `node --test test/text-integrity.test.js`
 
 ### Checkpoint F4

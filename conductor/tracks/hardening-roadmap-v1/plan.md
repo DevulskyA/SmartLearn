@@ -6,40 +6,32 @@
 
 ```
 Track:    hardening-roadmap-v1                 Status: ACTIVE
-MARCO ATUAL: S5a — UI local da aula
+MARCO ATUAL: S8 — Real-use e continuidade
 Iniciado: 2026-10-04
 ```
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F4-07 (S5a) · PRÓXIMA: T-F1-09 · TAREFAS: 44/70 · SUBTAREFAS DA ATIVA: T-F4-07 0/4 · HORIZONTE PREPARADO: 2/2 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F1-09 (S8) · PRÓXIMA: T-F9-02 · TAREFAS: 45/70 · SUBTAREFAS DA ATIVA: T-F1-09 0/5 · HORIZONTE PREPARADO: 1/1 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F4-07 · Cópia de estados e i18n (T46/T47) com guarda de acentuação · S5a · subtarefas 0/4
-  Objetivo: Varredura de textos visíveis fora dos arquivos de locale; teste que falha com padrões de mojibake; mensagens de vazio/erro/carregando padronizadas
-  Próximo passo: O repositório hoje NÃO tem mojibake e src/i18n/locales/pt-BR.js cobre só a conta
-  Gate: Teste de guarda + npm test
-  - [>] Varredura de textos visíveis fora dos arquivos de locale (lista do que existe)  ← EM EXECUÇÃO
-  - [ ] RED: teste de guarda que falha com padrões de mojibake (`Ã§`, `Ã£`, `�`) em texto visível
-  - [ ] Padronizar mensagens de vazio/erro/carregando
-  - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
-
-## PRÓXIMO
-
-### T-F1-09 — READY — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0)
-  Por quê: S8 · independente de S5a · dependências concluídas: T-F1-01, T-F1-07, T-F1-08
-  Subtarefas 0/5:
-  - [ ] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)
+- T-F1-09 · Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0) · S8 · subtarefas 0/5
+  Objetivo: No Desktop Windows real, restaurar um backup lógico em conta vazia e ver o veredito de Estatísticas ponderado por volume funcionam; observação mecânica, SEM julgamento perceptivo
+  Próximo passo: Preparar a CÓPIA isolada e verificar se o Desktop Windows real é automatizável
+  Gate: Observação registrada em validation.md com HEAD/build exibidos no título; se o runtime não permitir a automação, registrar BLOCKED_TECHNICAL com o que foi tentado
+  - [>] Preparar a CÓPIA isolada (dados e backup lógico de fixture; confirmar por hash que o banco DEV humano não é aberto nem escrito)  ← EM EXECUÇÃO
   - [ ] Verificar se o runtime nativo Windows pode ser automatizado (CDP no WebView2 / computer-use); se não, registrar `BLOCKED_TECHNICAL` com o tentado
   - [ ] IMPORT-1: restaurar o backup lógico em conta vazia no Desktop real e observar o resultado (contagens), com HEAD/build do título
   - [ ] VERDICT-1: abrir Estatísticas na conta restaurada e observar o veredito ponderado por volume (limiar 25%)
   - [ ] Gate: observação em `validation.md` com HEAD/build; hash do banco DEV humano igual antes e depois
 
+## PRÓXIMO
+
 ### T-F9-02 — READY — `validation.md` por fase e validador de estado
-  Por quê: S9 · independente de S5a · sem dependência pendente
+  Por quê: S9 · independente de S8 · sem dependência pendente
   Subtarefas 0/3:
   - [ ] Para cada fase com checkpoint fechado, listar por critério AC-xx a evidência (seção, SHA, teste) ou a lacuna explícita em `validation.md`
   - [ ] Rodar `validate_state.py` da skill `tlc-spec-driven-strict` quando aplicável e registrar o resultado (ou "não aplicável" com o motivo)
@@ -106,12 +98,12 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F3-04** — UI de geração: fase real, sair e voltar
 - [x] **T-F3-05** — Explicação obrigatória por validação
 
-### [>] S5a · UI local da aula — tarefas 3/4
+### [✓] S5a · UI local da aula — tarefas 4/4
 
 - [x] **T-F4-03** — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
 - [x] **T-F4-04** — Editor da aula em telas estreitas
 - [x] **T-F4-05** — Acessibilidade do editor (teclado, foco, anúncios)
-- [>] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
+- [x] **T-F4-07** — Cópia de estados e i18n (T46/T47) com guarda de acentuação
 
 ### [!] S5c · UI de idioma e consumo — tarefas 0/1
 
@@ -145,9 +137,9 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F8-05** — Dependências e auditoria
 - [H] **T-F8-04** — Caminho único de abertura e retirada do release antigo — HG-04
 
-### [ ] S8 · Real-use e continuidade — tarefas 0/1
+### [>] S8 · Real-use e continuidade — tarefas 0/1
 
-- [ ] **T-F1-09** — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0)
+- [>] **T-F1-09** — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0)
 
 ### [ ] S9 · Fechamento — tarefas 0/1
 
