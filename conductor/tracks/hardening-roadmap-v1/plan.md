@@ -12,41 +12,41 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F3-01 (S4) · PRÓXIMA: T-F3-02 · TAREFAS: 27/70 · SUBTAREFAS DA ATIVA: T-F3-01 0/7 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F3-02 (S4) · PRÓXIMA: T-F3-03 · TAREFAS: 29/70 · SUBTAREFAS DA ATIVA: T-F3-02 0/5 · HORIZONTE PREPARADO: 3/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
 ## AGORA
 
-- T-F3-01 · Tabela e máquina de estados de jobs · S4 · subtarefas 0/7
-  Próximo passo: Ler server/migrations/manifest.json e 032-generation-budget.sql e escrever o RED da máquina de estados em server/test/generation-jobs.test.js
-  Gate: Testes de migração, unidade, e schema checksum do runner de migrações
-  - [>] RED: transições válidas e inválidas da máquina de estados  ← EM EXECUÇÃO
-  - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
-  - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
-  - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
-  - [ ] `server/src/services/generation-jobs.js` e rotas `POST/GET /v1/generation-jobs`
-  - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
-  - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
-
-## PRÓXIMO
-
-### T-F3-02 — READY — Execução em segundo plano com limite duro e cancelamento
-  Por quê: S4 · dependências concluídas: T-F1-04 · depois de T-F3-01
-  Subtarefas 0/5:
-  - [ ] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
+- T-F3-02 · Execução em segundo plano com limite duro e cancelamento · S4 · subtarefas 0/5
+  Objetivo: O job roda fora do ciclo da requisição; limite duro configurável; POST /generation-jobs/:id/cancel encerra a árvore de processos do provedor e marca CANCELLED; falha/cancelamento não deixam rascunho parcial aceitável
+  Próximo passo: Ler server/src/services/generated-drafts.js, server/src/ai/codex-provider.js e server/src/services/generation-jobs.js
+  Gate: Ai-drafts.test.js, codex-provider.test.js, testes novos; zero chamada real
+  - [>] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho  ← EM EXECUÇÃO
   - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
   - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
   - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
   - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
 
-### T-F3-05 — READY — Explicação obrigatória por validação
-  Por quê: S4 · sem dependência pendente · passa à frente de T-F3-03, T-F3-04 (aguardam T-F3-02)
-  Subtarefas 0/4:
-  - [ ] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
-  - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
-  - [ ] Mostrado na Revisão sem bloquear o aceite
-  - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
+## PRÓXIMO
+
+### T-F3-03 — READY — Sinal de vida do provedor e política de "parada"
+  Por quê: S4 · sem dependência pendente · depois de T-F3-02
+  Subtarefas 0/5:
+  - [ ] RED (relógio injetado): provedor FAKE em silêncio por 5 min com CPU ativa NÃO vira `STALLED`
+  - [ ] RED: provedor FAKE sem CPU e sem saída vira `STALLED` (aviso, nunca falha)
+  - [ ] Amostrar CPU/handles do processo filho além dos eventos de `codex exec --json`; `lastActivityAt` atualiza com qualquer sinal
+  - [ ] `STALLED` só após silêncio total generoso; o limite duro de T-F3-02 segue a única condição de falha por tempo; sinal de vida volta o job a `CALLING_PROVIDER`
+  - [ ] Gate: testes com relógio injetado, sem Codex; evidência e fechar
+
+### T-F3-04 — READY — UI de geração: fase real, sair e voltar
+  Por quê: S4 · sem dependência pendente · depois de T-F3-02
+  Subtarefas 0/5:
+  - [ ] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
+  - [ ] RED (e2e): cancelar com confirmação libera a unidade
+  - [ ] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
+  - [ ] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
+  - [ ] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
 
 ### T-F4-03 — READY — Posição de "Rascunhos em andamento" e confirmação de salvar no índice
   Por quê: S5a · independente de S4 · sem dependência pendente
@@ -110,13 +110,13 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [x] **T-F6-03** — Partição e tempo-alvo do e2e completo
 - [x] **T-F6-09** — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`)
 
-### [>] S4 · Jobs observáveis — tarefas 0/5
+### [>] S4 · Jobs observáveis — tarefas 2/5
 
-- [>] **T-F3-01** — Tabela e máquina de estados de jobs
-- [ ] **T-F3-02** — Execução em segundo plano com limite duro e cancelamento
+- [x] **T-F3-01** — Tabela e máquina de estados de jobs
+- [>] **T-F3-02** — Execução em segundo plano com limite duro e cancelamento
 - [ ] **T-F3-03** — Sinal de vida do provedor e política de "parada"
 - [ ] **T-F3-04** — UI de geração: fase real, sair e voltar
-- [ ] **T-F3-05** — Explicação obrigatória por validação
+- [x] **T-F3-05** — Explicação obrigatória por validação
 
 ### [ ] S5a · UI local da aula — tarefas 0/4
 

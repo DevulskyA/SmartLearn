@@ -237,39 +237,48 @@ Objetivo: remover as últimas ambiguidades de identidade e preparar a medição 
 Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa processo ou rascunho parcial para trás. Sem alterar prompt nem provedor.
 
 ### T-F3-01 — Tabela e máquina de estados de jobs · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
+- Status: `[✓]` 2026-10-05 · BASE_SHA `0025a8d` · IMPLEMENTATION_SHA `ea8c440` (migração 033 aditiva + gatilho de contrato imutável; serviço, rotas e recuperação de órfãos na subida; 13 testes, 6 mutações vermelhas; servidor 918/918) · Requisitos: R-04 (AC-04.1), R-12, R-13 · Dependências: T-F1-01, T-F1-02 (backup `pre-migrate` verificado), T-F2-04 (formato de proveniência que o job grava), T-F10-02a (idiomas), T-F10-03 (reuso/estado da unidade), T-F10-04a (reserva de crédito). NÃO depende de T-F2-03 nem de T-F2-06 (`[H]`)
 - Contrato adicional (decisão 2026-10-04): o job conhece, direta ou por referência coesa, usuário, unidade/`sourceScope` aprovado, `sourceLanguage`, `generationLocale`, estimativa/reserva de consumo, estado/fase e consumo final; um job NUNCA amplia o escopo depois de criado sem nova validação de custo e autorização de domínio (INV-13).
 - Superfície: nova migração aditiva (próxima livre: `033-generation-jobs.sql`; 031 e 032 já usadas por F10), `server/src/services/generation-jobs.js`, rotas `POST/GET /v1/generation-jobs`.
 - Esquema: `id, user_id, proposal_id, state, phase, provider, started_at, last_activity_at, finished_at, error_code, error_message, draft_id, cancel_requested_at`.
 - RED: transições válidas e inválidas; um job por proposta ativa (idempotência: segundo `POST` retorna o job existente); recuperação na subida do servidor marca jobs `CALLING_PROVIDER` órfãos como `FAILED(SERVER_RESTARTED)`.
 - Segurança de dados: migração aditiva, backup `pre-migrate` (T-F1-02) obrigatório.
 - Subtarefas:
-  - [>] RED: transições válidas e inválidas da máquina de estados
-  - [ ] RED: um job por proposta ativa (segundo `POST` devolve o existente)
-  - [ ] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
-  - [ ] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
-  - [ ] `server/src/services/generation-jobs.js` e rotas `POST/GET /v1/generation-jobs`
-  - [ ] Job nunca amplia o escopo depois de criado (INV-13), com teste
-  - [ ] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
+  - [x] RED: transições válidas e inválidas da máquina de estados
+  - [x] RED: um job por proposta ativa (segundo `POST` devolve o existente)
+  - [x] RED: na subida do servidor, job `CALLING_PROVIDER` órfão vira `FAILED(SERVER_RESTARTED)`
+  - [x] Migração aditiva `033-generation-jobs.sql` com backup `pre-migrate` verificado
+  - [x] `server/src/services/generation-jobs.js` e rotas `POST/GET /v1/generation-jobs`
+  - [x] Job nunca amplia o escopo depois de criado (INV-13), com teste
+  - [x] Gate: `migrations*.test.js` + novo, unidade, `schema checksum`; evidência e fechar
 - Gate: testes de migração (`migrations*.test.js` + novo), unidade, e `schema checksum` do runner de migrações.
-- Próximo passo: ler `server/migrations/manifest.json` e `032-generation-budget.sql` (formato aditivo + checksum) e escrever o RED da máquina de estados em `server/test/generation-jobs.test.js`.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F3-05, depois T-F3-02.
+- Comando: `npm --prefix server test` (918/918 com T-F3-05); só a fiação: `node --test server/test/generation-jobs.test.js`
 
 ### T-F3-02 — Execução em segundo plano com limite duro e cancelamento · M
-- Status: `[ ]` · Requisitos: R-04 (AC-04.1, AC-04.4) · Dependências: T-F3-01, T-F1-04
+- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.1, AC-04.4) · Dependências: T-F3-01, T-F1-04
 - Fazer: o job roda fora do ciclo da requisição; limite duro configurável (padrão acima do atual de 20 min para evitar regressão); `POST /generation-jobs/:id/cancel` encerra a árvore de processos do provedor e marca `CANCELLED`; falha/cancelamento não deixam rascunho parcial aceitável.
 - RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho; timeout vira `FAILED(TIMEOUT)`; nenhum rascunho criado em falha.
 - Subtarefas:
-  - [ ] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
+  - [>] RED (provedor FAKE controlável): cancelar durante a chamada termina o processo filho
   - [ ] RED: timeout vira `FAILED(TIMEOUT)` e nenhum rascunho é criado em falha
   - [ ] Job roda fora do ciclo da requisição, com limite duro configurável (padrão acima de 20 min)
   - [ ] `POST /generation-jobs/:id/cancel` encerra a árvore de processos e marca `CANCELLED`
   - [ ] Gate: `ai-drafts.test.js`, `codex-provider.test.js` inalterado, testes novos, zero chamada real; evidência e fechar
 - Gate: `ai-drafts.test.js`, `codex-provider.test.js` (inalterado), testes novos; zero chamada real.
+- Próximo passo: ler `server/src/services/generated-drafts.js` (`createDraft`, `prepareGeneration`, `withTimeout`, PRE_SEND_FAILURES), `server/src/ai/codex-provider.js` (como o processo filho é criado e morto) e `server/src/services/generation-jobs.js` (T-F3-01: `transitionJob`, `assertJobScopeIntact`); escrever o RED do cancelamento com provedor FAKE controlável em `server/test/generation-job-runner.test.js`.
+- Comando: `node --test server/test/generation-job-runner.test.js` (arquivo a criar neste RED)
 
 ### T-F3-03 — Sinal de vida do provedor e política de "parada" · M
 - Status: `[ ]` · Requisitos: R-04 (AC-04.2) · Dependências: T-F3-02
 - Fazer: além dos eventos de `codex exec --json`, amostrar CPU/handles do processo filho; `lastActivityAt` atualiza com qualquer sinal; só marcar `STALLED` (aviso, não falha) após silêncio total generoso; o limite duro continua sendo a única condição de falha por tempo.
 - RED (provedor FAKE que fica 5 min em silêncio com CPU ativa): não vira STALLED; FAKE sem CPU e sem saída vira STALLED.
+- Subtarefas:
+  - [ ] RED (relógio injetado): provedor FAKE em silêncio por 5 min com CPU ativa NÃO vira `STALLED`
+  - [ ] RED: provedor FAKE sem CPU e sem saída vira `STALLED` (aviso, nunca falha)
+  - [ ] Amostrar CPU/handles do processo filho além dos eventos de `codex exec --json`; `lastActivityAt` atualiza com qualquer sinal
+  - [ ] `STALLED` só após silêncio total generoso; o limite duro de T-F3-02 segue a única condição de falha por tempo; sinal de vida volta o job a `CALLING_PROVIDER`
+  - [ ] Gate: testes com relógio injetado, sem Codex; evidência e fechar
 - Gate: testes com relógio injetado; sem Codex.
 - Observação de evidência: a premissa "raciocínio longo é silencioso" vem do probe documentado no checkpoint; reconfirmar em T-F5-02 com medição real autorizada, não suposição.
 
@@ -278,18 +287,26 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 - Superfície: `src/materials-ui.js`, `src/source-proposals-ui.js`, estilos.
 - Fazer: texto "pode levar alguns minutos"; fase atual e tempo; "Continuar em segundo plano" volta à lista; item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto; "Cancelar" com confirmação.
 - RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto; cancelar libera a unidade.
+- Subtarefas:
+  - [ ] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
+  - [ ] RED (e2e): cancelar com confirmação libera a unidade
+  - [ ] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
+  - [ ] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
+  - [ ] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
 - Gate: `e2e/lesson-editor.spec.js` + novo `generation-jobs.spec.js`; axe nas telas novas.
 
 ### T-F3-05 — Explicação obrigatória por validação · S
-- Status: `[ ]` · Requisitos: F-15 · Dependências: nenhuma de F3
+- Status: `[✓]` 2026-10-05 · BASE_SHA `ea8c440` · IMPLEMENTATION_SHA `9a2799f` (EXPLANATION_MISSING substitui QUESTION_NO_EXPLANATION para toda questão sem "Por quê"; 2 mutações vermelhas; servidor 918/918) · Requisitos: F-15 · Dependências: nenhuma de F3
 - Fazer: achado determinístico `EXPLANATION_MISSING` para toda questão sem "Por quê" (não só respostas curtas); mostrado na Revisão, não bloqueia aceite.
 - RED: questão sem explicação gera o achado; com explicação não.
 - Subtarefas:
-  - [ ] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
-  - [ ] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
-  - [ ] Mostrado na Revisão sem bloquear o aceite
-  - [ ] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
+  - [x] RED: questão sem explicação gera `EXPLANATION_MISSING`; com explicação não gera
+  - [x] Achado determinístico para toda questão sem "Por quê" (não só respostas curtas)
+  - [x] Mostrado na Revisão sem bloquear o aceite
+  - [x] Mutação (remover a regra deve ficar vermelho); gate `draft-audit-questions.test.js`; evidência e fechar
 - Gate: `draft-audit-questions.test.js`.
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F3-02.
+- Comando: `node --test server/test/draft-audit-questions.test.js server/test/accept-draft.test.js`
 
 ### Checkpoint F3
 - Prova composta com FAKE: gerar, sair, voltar, cancelar, falhar, reiniciar o servidor no meio (job marcado `FAILED(SERVER_RESTARTED)`), sem órfãos.
