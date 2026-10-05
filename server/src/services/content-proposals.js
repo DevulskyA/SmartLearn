@@ -3,6 +3,7 @@ import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
 import { planSectionUnits, findTopicSections, textOfSpans } from './section-spans.js';
 import { classifyUnit, effectiveKind } from './unit-kind.js';
 import { segmentsForProposal, parseSpans } from './proposal-scope.js';
+import { activeJobOfProposals } from './generation-jobs.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
@@ -150,6 +151,16 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
     );
   }
 
+  // A generation job that is still active hangs on one of these proposals (a running provider, or one about to start). Cutting the
+  // source again would delete the proposal under it, so nothing changes until the student cancels or the job ends.
+  const sourceProposalIds = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?').all(userId, sourceId).map((r) => r.id);
+  if (activeJobOfProposals(db, userId, sourceProposalIds)) {
+    throw new ProposalError(
+      'GENERATION_IN_PROGRESS',
+      'Há uma geração em andamento para um trecho desta fonte. Cancele-a (ou espere terminar) antes de reprocessar os trechos. Nada foi alterado.',
+    );
+  }
+
   // Units follow the document's own structure when it has one (its outline); page count and size are only safety bounds.
   const outline = db.prepare('SELECT level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
   const bounds = { maxPages: maxPagesPerChunk, maxChars: maxCharsPerChunk, minChars: outline.some((e) => e.detected) ? minCharsPerDetectedUnit : 0 };
@@ -165,6 +176,14 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
   const now = new Date().toISOString();
   const run = db.transaction(() => {
     if (pendingDrafts > 0) {
+      // A finished job remembers its draft; the draft is about to be discarded, the job stays as history without the pointer.
+      db.prepare(`
+        UPDATE generation_jobs SET draft_id = NULL
+        WHERE user_id = ? AND draft_id IN (
+          SELECT id FROM generated_drafts
+          WHERE user_id = ? AND status <> 'ACCEPTED'
+            AND proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?))
+      `).run(userId, userId, userId, sourceId);
       db.prepare(`
         DELETE FROM generated_drafts
         WHERE user_id = ? AND status <> 'ACCEPTED'

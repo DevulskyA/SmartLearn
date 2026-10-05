@@ -385,6 +385,9 @@ export async function createDraft(db, userId, proposalId, {
   // Generation is JIT and reuses what is valid: a repeat request returns the existing draft/lesson with NO provider call.
   // Making a new one is an explicit act.
   regenerate = false,
+  // T-F3-02: set only by the background job runner. { signal, onReservation(reservation), onBudgetClosed({reservationId, state,
+  // consumedUnits}), onPhase(phase) }. An aborted signal stops the work before the provider is called and before anything is stored.
+  hooks = null,
   now = () => new Date(),
 } = {}) {
   if (!regenerate) {
@@ -415,6 +418,7 @@ export async function createDraft(db, userId, proposalId, {
   if (provider.live === true) {
     try {
       reservation = reserve(db, userId, { proposalId, estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }), limits: budgetLimits, now });
+      hooks?.onReservation?.(reservation);
     } catch (err) {
       if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', err.message);
       throw err;
@@ -427,10 +431,22 @@ export async function createDraft(db, userId, proposalId, {
   const closeBudget = ({ refund = false } = {}) => {
     if (budgetClosed) return;
     budgetClosed = true;
-    if (refund) release(db, reservation.id, { now });
-    else settle(db, reservation.id, { consumedUnits: estimateCostUnits({ payloadChars, calls: callsMade }), basis: 'ESTIMATED', now });
+    if (refund) {
+      release(db, reservation.id, { now });
+      hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'RELEASED', consumedUnits: 0 });
+    } else {
+      const consumedUnits = estimateCostUnits({ payloadChars, calls: callsMade });
+      settle(db, reservation.id, { consumedUnits, basis: 'ESTIMATED', now });
+      hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'SETTLED', consumedUnits });
+    }
   };
   try {
+
+  // Stopped before any request could leave: nothing was spent, so the held balance returns.
+  if (hooks?.signal?.aborted) {
+    closeBudget({ refund: true });
+    throw new DraftError('CANCELLED', 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.');
+  }
 
   let raw;
   try {
@@ -472,6 +488,10 @@ export async function createDraft(db, userId, proposalId, {
   // A repair may have rewritten text: the final content is what must be in the target language.
   const languageCheck = languageCheckOf(validated);
   closeBudget();
+
+  // A stopped job never leaves a draft behind, not even a complete one that finished too late (the call happened: it is charged).
+  hooks?.onPhase?.('SAVING');
+  if (hooks?.signal?.aborted) throw new DraftError('CANCELLED', 'A geração foi interrompida; nenhum rascunho foi salvo.');
 
   const nowIso = now().toISOString();
   const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };

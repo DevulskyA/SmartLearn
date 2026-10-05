@@ -137,26 +137,36 @@ export function resolveCodexInvocation(command = CODEX_DEFAULT_COMMAND, { platfo
   return { file: command, prefix: [] }; // let spawn report ENOENT -> CODEX_NOT_FOUND
 }
 
-function killTree(child, platform = process.platform) {
+/**
+ * Terminates a child AND everything it started. On Windows `taskkill /T /F` walks the tree (Codex's launcher starts a native
+ * child, so a plain kill() would leave it running). Elsewhere the child leads its own process group (see runProcess) and the
+ * whole group is killed. `spawnImpl` is injectable so a test can observe the call.
+ */
+export function killProcessTree(child, { platform = process.platform, spawnImpl = spawn } = {}) {
   try {
     if (platform === 'win32' && child.pid) {
-      // Codex's launcher starts a native child; plain kill() would leave it running.
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', shell: false, windowsHide: true });
+      spawnImpl('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', shell: false, windowsHide: true });
+    } else if (child.pid) {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
     } else {
       child.kill('SIGKILL');
     }
   } catch { /* already gone */ }
 }
+const killTree = killProcessTree;
 
 /**
  * Runs the executable, feeds `stdin`, returns {code, stdout, stderr}. shell=false, bounded output, real timeout.
- * Rejects with ProviderRequestError(CODEX_NOT_FOUND | TIMEOUT | PROVIDER_ERROR). Never echoes the prompt.
+ * Rejects with ProviderRequestError(CODEX_NOT_FOUND | TIMEOUT | CANCELLED | PROVIDER_ERROR). Never echoes the prompt.
+ * `signal` (T-F3-02): aborting it kills the whole process tree and rejects CANCELLED once the process has really exited.
+ * `onProcess(pid)` and `onActivity()` (T-F3-03) are signs of life for the job runner: the child's pid (so its CPU can be sampled)
+ * and every chunk it writes (the `codex exec` events).
  */
-function runProcess({ file, args, cwd, stdin, timeoutMs, spawnImpl = spawn, env }) {
+function runProcess({ file, args, cwd, stdin, timeoutMs, spawnImpl = spawn, env, signal = null, onProcess = null, onActivity = null }) {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawnImpl(file, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
+      child = spawnImpl(file, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true, detached: process.platform !== 'win32' });
     } catch (err) {
       reject(err?.code === 'ENOENT'
         ? new ProviderRequestError('CODEX_NOT_FOUND', 'O executável do Codex não foi encontrado. Instale o Codex CLI ou ajuste SMARTLEARN_CODEX_COMMAND.')
@@ -164,19 +174,30 @@ function runProcess({ file, args, cwd, stdin, timeoutMs, spawnImpl = spawn, env 
       return;
     }
 
+    try { if (child.pid) onProcess?.(child.pid); } catch { /* an observer never breaks the call */ }
     let stdout = '';
     let stderr = '';
     let settled = false;
     let timedOut = false;
+    let aborted = false;
     let hardTimer = null;
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       clearTimeout(hardTimer);
+      signal?.removeEventListener('abort', onAbort);
       fn(value);
     };
     const timeoutError = () => new ProviderRequestError('TIMEOUT', 'Tempo limite excedido ao executar o Codex.');
+    const abortError = () => new ProviderRequestError('CANCELLED', 'A geração foi interrompida; o processo do Codex foi encerrado.');
+    function onAbort() {
+      if (aborted || timedOut || settled) return;
+      aborted = true;
+      killTree(child);
+      // Same rule as the timeout: report only once the process has really exited, bounded by the hard timer.
+      hardTimer = setTimeout(() => finish(reject, abortError()), 5_000);
+    }
     const timer = setTimeout(() => {
       timedOut = true;
       killTree(child);
@@ -186,14 +207,23 @@ function runProcess({ file, args, cwd, stdin, timeoutMs, spawnImpl = spawn, env 
     }, timeoutMs);
 
     const capture = (current, chunk) => (current.length >= MAX_CAPTURED_BYTES ? current : (current + chunk).slice(0, MAX_CAPTURED_BYTES));
-    child.stdout?.on('data', (chunk) => { stdout = capture(stdout, String(chunk)); });
-    child.stderr?.on('data', (chunk) => { stderr = capture(stderr, String(chunk)); });
+    const alive = () => { try { onActivity?.(); } catch { /* an observer never breaks the call */ } };
+    child.stdout?.on('data', (chunk) => { alive(); stdout = capture(stdout, String(chunk)); });
+    child.stderr?.on('data', (chunk) => { alive(); stderr = capture(stderr, String(chunk)); });
     child.on('error', (err) => {
       finish(reject, err?.code === 'ENOENT'
         ? new ProviderRequestError('CODEX_NOT_FOUND', 'O executável do Codex não foi encontrado. Instale o Codex CLI ou ajuste SMARTLEARN_CODEX_COMMAND.')
         : new ProviderRequestError('PROVIDER_ERROR', 'Falha ao executar o Codex.'));
     });
-    child.on('close', (code) => (timedOut ? finish(reject, timeoutError()) : finish(resolve, { code, stdout, stderr })));
+    child.on('close', (code) => {
+      if (timedOut) finish(reject, timeoutError());
+      else if (aborted) finish(reject, abortError());
+      else finish(resolve, { code, stdout, stderr });
+    });
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
 
     // The prompt travels on stdin, so it never appears in argv (process lists) and needs no shell quoting.
     child.stdin?.on('error', () => { /* the child exited early; its exit code tells the story */ });
@@ -206,14 +236,14 @@ const NOT_AUTHENTICATED = new ProviderRequestError('CODEX_NOT_AUTHENTICATED', 'O
 const looksUnauthenticated = (stderr) => /not (logged|signed) in|log ?in required|please (log ?in|sign ?in)|unauthori[sz]ed/i.test(stderr);
 
 /** `codex login status` — a local check, no model call. Memoized per provider instance. */
-export function ensureCodexReady(options = {}) {
+export function ensureCodexReady(options = {}, { signal = null } = {}) {
   const state = options.state ?? (options.state = {});
   if (!state.ready) {
     state.ready = (async () => {
       const { file, prefix } = resolveCodexInvocation(options.command);
       const result = await runProcess({
         file, args: [...prefix, 'login', 'status'], cwd: tmpdir(), stdin: '', timeoutMs: LOGIN_CHECK_TIMEOUT_MS,
-        spawnImpl: options.spawnImpl, env: minimalEnv(options.env),
+        spawnImpl: options.spawnImpl, env: minimalEnv(options.env), signal,
       });
       if (result.code !== 0 || !/logged in/i.test(`${result.stdout}\n${result.stderr}`)) throw NOT_AUTHENTICATED;
     })();
@@ -226,7 +256,7 @@ export function ensureCodexReady(options = {}) {
  * One model call: prompt in, parsed JSON out. Shared by generation, audit and repair.
  * @param {'generate'|'audit'|'repair'} kind used only for the per-draft call limit
  */
-export async function callCodex(prompt, schema, kind, options = {}) {
+export async function callCodex(prompt, schema, kind, options = {}, { signal = null, onProcess = null, onActivity = null } = {}) {
   const state = options.state ?? (options.state = {});
   state.calls ??= { generate: 0, audit: 0, repair: 0 };
   if (state.calls[kind] >= CODEX_CALL_LIMITS[kind]) {
@@ -234,7 +264,8 @@ export async function callCodex(prompt, schema, kind, options = {}) {
   }
   state.calls[kind] += 1;
 
-  await ensureCodexReady(options);
+  await ensureCodexReady(options, { signal });
+  if (signal?.aborted) throw new ProviderRequestError('CANCELLED', 'A geração foi interrompida antes da chamada ao Codex.');
 
   const timeoutMs = options.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS;
   const dir = mkdtempSync(join(tmpdir(), 'sl-codex-'));
@@ -259,7 +290,7 @@ export async function callCodex(prompt, schema, kind, options = {}) {
 
     const result = await runProcess({
       file, args, cwd: dir, stdin: `${INFERENCE_ONLY_PREAMBLE}${prompt}`, timeoutMs,
-      spawnImpl: options.spawnImpl, env: minimalEnv(options.env),
+      spawnImpl: options.spawnImpl, env: minimalEnv(options.env), signal, onProcess, onActivity,
     });
     if (result.code !== 0) {
       if (looksUnauthenticated(result.stderr)) throw NOT_AUTHENTICATED;
@@ -285,16 +316,16 @@ export async function callCodex(prompt, schema, kind, options = {}) {
 const versionOf = (options) => `codex:${options.model || 'default'}`;
 
 /** @returns {Promise<object>} the RAW parsed JSON, validated afterwards by draft-schema.js like every provider. */
-export async function generateDraft({ segments, promptVersion }, options = {}) {
-  const raw = await callCodex(buildDraftPrompt(segments, promptVersion), DRAFT_JSON_SCHEMA, 'generate', options);
+export async function generateDraft({ segments, promptVersion, signal, onProcess, onActivity }, options = {}) {
+  const raw = await callCodex(buildDraftPrompt(segments, promptVersion), DRAFT_JSON_SCHEMA, 'generate', options, { signal, onProcess, onActivity });
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw, modelVersion: versionOf(options), promptVersion } : raw;
 }
 
-export async function auditDraftWithModel({ draft, segments }, options = {}) {
-  const raw = await callCodex(buildAuditPrompt(draft, segments), AUDIT_JSON_SCHEMA, 'audit', options);
+export async function auditDraftWithModel({ draft, segments, signal, onProcess, onActivity }, options = {}) {
+  const raw = await callCodex(buildAuditPrompt(draft, segments), AUDIT_JSON_SCHEMA, 'audit', options, { signal, onProcess, onActivity });
   return parseModelAudit(raw, { questionCount: draft.questions.length });
 }
 
-export function repairDraftWithModel({ draft, findings, segments, promptVersion }, options = {}) {
-  return callCodex(buildRepairPrompt(draft, findings, segments, promptVersion), DRAFT_JSON_SCHEMA, 'repair', options);
+export function repairDraftWithModel({ draft, findings, segments, promptVersion, signal, onProcess, onActivity }, options = {}) {
+  return callCodex(buildRepairPrompt(draft, findings, segments, promptVersion), DRAFT_JSON_SCHEMA, 'repair', options, { signal, onProcess, onActivity });
 }

@@ -88,6 +88,9 @@ const app = await buildApp(db, undefined, {
 try {
   await app.listen({ host: config.host, port: config.port });
   console.log(`SmartLearn server listening on ${config.host}:${config.port}`);
+  // R-04: a job that was only QUEUED when the previous process ended never reached a provider; resume it so it cannot block its proposal.
+  const resumedJobs = app.generationJobs.resumeQueued();
+  if (resumedJobs > 0) console.log(`SmartLearn resumed ${resumedJobs} queued generation job(s)`);
 } catch (err) {
   console.error('Server failed to start:', err);
   db.close();

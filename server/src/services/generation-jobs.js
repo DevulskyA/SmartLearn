@@ -2,7 +2,7 @@
 // proposal, and the state machine that tells the student (and the server after a restart) what that attempt is doing.
 //
 // This module only RECORDS and VALIDATES: it never calls a provider and never touches the credit ledger. Running a job (the
-// reservation, the provider call, cancelling) is T-F3-02's work and goes through `transitionJob`.
+// reservation, the provider call, cancelling) is the runner's work (generation-job-runner.js) and goes through `transitionJob`.
 //
 //   QUEUED ──> CALLING_PROVIDER ──> SUCCEEDED
 //      │            │  ▲  └──────> FAILED
@@ -167,6 +167,37 @@ export function transitionJob(db, jobId, to, { phase, errorCode, errorMessage, d
 }
 
 /**
+ * Progress of an ACTIVE job without a state change: the phase the student sees and "something happened just now". Recording the
+ * credit reservation the run took (`reservationId`) also goes through here. A job that already finished is never touched.
+ * @returns {boolean} whether an active job was updated
+ */
+export function touchJob(db, jobId, { phase, reservationId, now = () => new Date() } = {}) {
+  if (phase !== undefined && !JOB_PHASES.includes(phase)) throw new JobError('VALIDATION_FAILED', `Fase desconhecida: ${phase}.`, 'phase');
+  return db.prepare(`
+    UPDATE generation_jobs SET phase = COALESCE(?, phase), last_activity_at = ?, reservation_id = COALESCE(?, reservation_id)
+    WHERE id = ? AND state IN ('CALLING_PROVIDER', 'STALLED')
+  `).run(phase ?? null, now().toISOString(), reservationId ?? null, jobId).changes === 1;
+}
+
+/** Records that the student asked to stop an ACTIVE job (kept even if the job ends some other way first). */
+export function markCancelRequested(db, jobId, { now = () => new Date() } = {}) {
+  db.prepare(`UPDATE generation_jobs SET cancel_requested_at = COALESCE(cancel_requested_at, ?) WHERE id = ? AND state IN (${ACTIVE_SQL})`).run(now().toISOString(), jobId);
+}
+
+/** Every job still QUEUED, oldest first, across users (system-level: the runner resumes them after a restart). */
+export function listQueuedJobs(db) {
+  return db.prepare("SELECT * FROM generation_jobs WHERE state = 'QUEUED' ORDER BY id").all().map((row) => ({ ...toDto(row), userId: row.user_id }));
+}
+
+/** The user-owned job row of a proposal that is still active (QUEUED, CALLING_PROVIDER or STALLED), or null. */
+export function activeJobOfProposals(db, userId, proposalIds) {
+  if (proposalIds.length === 0) return null;
+  const marks = proposalIds.map(() => '?').join(', ');
+  const row = db.prepare(`SELECT * FROM generation_jobs WHERE user_id = ? AND proposal_id IN (${marks}) AND state IN (${ACTIVE_SQL}) LIMIT 1`).get(userId, ...proposalIds);
+  return row ? toDto(row) : null;
+}
+
+/**
  * INV-13 at run time: the job may only run on the exact text it was created on. If the proposal's text changed since (the
  * source was re-extracted differently), throws SCOPE_CHANGED and the caller must create a NEW job, validated and priced again.
  */
@@ -188,7 +219,8 @@ export function assertJobScopeIntact(db, userId, jobId) {
 /**
  * On server startup no provider call from a previous process is still running, so a job left CALLING_PROVIDER (or STALLED) is
  * an orphan: it becomes FAILED(SERVER_RESTARTED) and its proposal can be generated again. QUEUED jobs never reached a
- * provider and are left for the runner. Returns how many jobs were recovered.
+ * provider and are left for the runner (`resumeQueued`), which resumes them. Returns how many jobs were recovered.
+ * Its credit reservation, if any, stays RESERVED and is settled at its estimate by `reconcileOrphans` (never refunded: R-12).
  */
 export function recoverOrphanJobs(db, { now = () => new Date() } = {}) {
   const at = now().toISOString();

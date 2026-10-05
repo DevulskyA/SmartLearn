@@ -317,7 +317,8 @@ async function login(app, email) {
 
 test('HTTP: POST /v1/generation-jobs (auth + CSRF + validation), idempotent, GET list/detail, tenant isolated; no provider is called', async () => {
   const ctx = tmpDb();
-  const app = await buildApp(ctx.db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], sources: { sourcesDir: ctx.sourcesDir, ...UPLOAD_DEFAULTS } });
+  // autoStart:false = the runner never runs the job: this test is about the RECORD (running is in generation-job-runner.test.js)
+  const app = await buildApp(ctx.db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], sources: { sourcesDir: ctx.sourcesDir, ...UPLOAD_DEFAULTS }, ai: { jobRunnerOptions: { autoStart: false } } });
   try {
     const alice = await login(app, 'alice-jobs@example.com');
     const bob = await login(app, 'bob-jobs@example.com');

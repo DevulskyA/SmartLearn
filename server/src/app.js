@@ -23,6 +23,7 @@ import { registerSourceRoutes } from './routes/sources.js';
 import { registerContentProposalRoutes } from './routes/content-proposals.js';
 import { registerGeneratedDraftRoutes } from './routes/generated-drafts.js';
 import { registerGenerationJobRoutes } from './routes/generation-jobs.js';
+import { createJobRunner, resolveAiSettings } from './services/generation-job-runner.js';
 import { registerAgendaSnapshotRoutes } from './routes/agenda-snapshot.js';
 import { registerPriorityRoutes } from './routes/priorities.js';
 import { createSessionActorResolver } from './auth/resolve-actor.js';
@@ -39,6 +40,11 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
   // Throws when the DEV flag is combined with production.
   const sessionPolicy = resolveSessionPolicy({ isProduction, devPersistent: devPersistentSession });
   const app = Fastify({ logger: false, trustProxy });
+  // T-F3-02: generation runs outside the request. The runner is part of the app so the process entry point can resume queued jobs
+  // after a restart, and closing the app stops every provider process tree.
+  const jobRunner = ai.jobRunner ?? createJobRunner(db, { settings: () => resolveAiSettings(ai), ...(ai.jobRunnerOptions ?? {}) });
+  app.decorate('generationJobs', jobRunner);
+  app.addHook('onClose', async () => { await jobRunner.shutdown(); });
   await app.register(fastifyCookie);
   // No wildcard credentialed CORS (design.md §3): exact configured origins
   // only, credentials enabled so the session cookie round-trips, and only
@@ -123,7 +129,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerSourceRoutes(v1, db, sources);
     registerContentProposalRoutes(v1, db);
     registerGeneratedDraftRoutes(v1, db, ai);
-    registerGenerationJobRoutes(v1, db, ai);
+    registerGenerationJobRoutes(v1, db, ai, jobRunner);
     registerAgendaSnapshotRoutes(v1, db);
     registerPriorityRoutes(v1, db);
   }, { prefix: '/v1' });

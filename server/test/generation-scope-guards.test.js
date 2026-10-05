@@ -148,7 +148,7 @@ test('inventory: the ONLY code that calls a provider is the single-unit generati
   const files = sourceFilesUnder(SRC_DIR).map((f) => ({ file: f.slice(SRC_DIR.length + 1).replaceAll('\\', '/'), text: readFileSync(f, 'utf8') }));
   const callers = (re) => files.filter((f) => re.test(f.text)).map((f) => f.file).sort();
   assert.deepEqual(callers(/provider\.(generate|audit|repair)\(/), ['services/generated-drafts.js']);
-  assert.deepEqual(callers(/\bcreateDraft\(/), ['routes/generated-drafts.js', 'services/generated-drafts.js']);
+  assert.deepEqual(callers(/\bcreateDraft\(/), ['routes/generated-drafts.js', 'services/generated-drafts.js', 'services/generation-job-runner.js']); // T-F3-02: the background job runner is the second, conscious path; it still goes through createDraft (scope check + reservation)
   assert.equal(files.find((f) => f.file === 'routes/generated-drafts.js').text.match(/drafts\.createDraft\(/g).length, 1, 'exactly one route handler generates');
   assert.deepEqual(callers(/\b(generateDraft|codexGenerateDraft|anthropicGenerateDraft|openaiGenerateDraft)\(/).filter((f) => !f.startsWith('ai/')), ['services/generated-drafts.js'], 'outside ai/, only selectProvider (inside the generation service) talks to a provider adapter');
 });

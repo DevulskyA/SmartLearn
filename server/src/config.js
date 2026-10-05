@@ -73,4 +73,10 @@ export const config = {
   codexModel: process.env.SMARTLEARN_CODEX_MODEL || null,
   codexTimeoutMs: Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS ?? 240_000),
   codexReasoningEffort: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'high',
+  // R-04: the hard time limit of a whole generation job (every provider call together). Deliberately above the 20 minutes the
+  // student was told to expect, so moving generation to the background cannot make a long-but-healthy run fail sooner than before.
+  // The VALUE is configurable and still to be confirmed with real measurements (HG-11).
+  generationJobTimeoutMs: positiveNumberOrNull(process.env.SMARTLEARN_GEN_JOB_TIMEOUT_MS) ?? 30 * 60 * 1000,
+  // How many generation jobs may run at once; the rest wait QUEUED.
+  generationJobConcurrency: positiveNumberOrNull(process.env.SMARTLEARN_GEN_JOB_CONCURRENCY) ?? 2,
 };
