@@ -115,3 +115,95 @@ this matrix is FASE 2's module map, sized to fit one session without
 degrading into shallow, low-value padding. FASE 3 (domain-core depth) and
 FASE 8 (test-quality audit) are the natural next increments, targeted at
 items 1–3 above first per the risk ranking.
+
+---
+
+# Reconciliação F6 — hardening-roadmap-v1 (T-F6-07, 2026-10-05)
+
+```
+RECONCILED_AT_HEAD=751ca69 (+ working tree de outras tarefas não commitadas; contagens marcadas abaixo)
+SOURCE_OF_TRUTH=Git + testes; este bloco é MAPA, não prova: "TESTED" = existe teste nomeado que exercita o critério; não é auditoria de poder de discriminação
+SENSOR=test/coverage-matrix.test.js (todo caminho citado entre crases existe; todo AC de R-01..R-13 do spec aparece; todo NOT_PROVEN tem motivo)
+```
+
+As seções acima são o inventário histórico de 2026-09-15 (contagens como 360/360 ficaram para trás: vigentes = `npm test` e `npm --prefix server test`).
+O bloco abaixo vale para o programa `.specs/features/hardening-roadmap-v1`.
+
+Legenda da coluna **Prova**: `TESTED` (teste automatizado nomeado existe) · `MUTATION-KILLED Mx` (mutação de `scripts/mutation-check.mjs` mata ao menos um teste) · `HUMAN` (portão/validação humana, não automatizável) · `NOT_PROVEN` (sem teste que prove o critério; o motivo está na linha). Ausência de prova nunca vira PASS (INV-11).
+
+## Sensores criados ou alterados na F6
+
+| Sensor | Arquivo | O que prova | Tarefa |
+|---|---|---|---|
+| Suíte "materiais" por arquivo | `e2e/support/suites.js`, `scripts/e2e.mjs` (`npm run test:e2e:materials`) | Define a suíte por lista de specs. 36 testes em 9 specs em `1328499`; 38 nas 10 rodadas de T-F6-08; `playwright test --list` em 2026-10-05 conta 44 em 10 specs, incluindo `e2e/generation-jobs.spec.js` (6, de T-F3-04, ainda não commitado) | T-F6-01 |
+| Portas por execução e saída única | `scripts/e2e.mjs`, `e2e/support/ports.js`, `test/e2e-ports.test.js` | Reserva atômica de portas; duas execuções simultâneas não colidem | T-F6-02 |
+| Orçamento de tempo do e2e completo | medição em `validation.md` (T-F6-03), `scripts/e2e.mjs` | 3 execuções consecutivas ≤ 480 s com 2 workers (medição, não teste de CI) | T-F6-03 |
+| Autoridade única do runner | `test/test-live.test.js`, `scripts/test-live-core.mjs` | `SUITES.e2e` aponta para o mesmo script de `package.json test:e2e` | T-F6-09 |
+| Discriminação por mutação | `scripts/mutation-check.mjs` (`npm run test:mutation`), `test/mutation-check.test.js` | 7 mutações em worktree descartável; cada uma mata ao menos 1 teste nomeado; recusa a árvore real | T-F6-04 |
+| Lacunas achadas pela mutação (fechadas) | `server/test/lesson-granular-edit.test.js` (M1b), `test/dev-sanitize.test.js` (M4a, M4b) | Eram 3 sobreviventes antes de T-F6-04: editar o texto de questão REJECTED e o `applySanitize` com plano forjado não tinham teste | T-F6-04 |
+| Portão de persistência de contexto | `scripts/context-check.mjs`, `test/context-check.test.js` | Estado canônico rastreado e coerente | contexto 2026-10-05 |
+| Inventário de testes | `scripts/check-test-inventory.mjs` | Todo arquivo de teste cai numa raiz de descoberta conhecida | existente |
+
+## Mapa requisito → teste (critérios de `spec.md`)
+
+| AC | Testes / sensores | Prova |
+|---|---|---|
+| AC-01.1 | `server/test/dev-lock.test.js`, `test/dev-data.test.js` | TESTED |
+| AC-01.2 | `server/test/dev-snapshot.test.js`, `server/test/dev-datastore-startup.test.js` | TESTED |
+| AC-01.3 | `server/test/operational-backup.test.js`, `server/test/dev-datastore-startup.test.js` | TESTED |
+| AC-01.4 | `server/test/dev-restore.test.js` | TESTED (ensaio sobre o banco DEV humano não é repetido por testes: INV-06) |
+| AC-02.1 | `src-tauri/src/kill_on_close_job.rs` (testes Rust inline) | NOT_PROVEN (nenhum teste JS; `cargo test` do crate não foi reexecutado nesta reconciliação) |
+| AC-02.2 | `test/desktop-entrypoint.test.js` | TESTED |
+| AC-02.3 | `test/e2e-ports.test.js` | TESTED |
+| AC-03.1 | `server/test/lesson-granular-edit.test.js`, `server/test/lesson-add-reorder.test.js`, `server/test/draft-whole-list-replace.test.js` | MUTATION-KILLED M1a, M1b |
+| AC-03.2 | `server/test/lesson-provenance.test.js`, `server/test/ai-drafts.test.js` | TESTED |
+| AC-03.3 | nenhum: não há `rulesVersion` nem `auditedAt` no código nem em testes | NOT_PROVEN (selo "regras antigas" e "Reauditar" sem sensor) |
+| AC-03.4 | `server/test/accept-preview.test.js`, `e2e/lesson-editor.spec.js` | TESTED |
+| AC-04.1 | `server/test/generation-jobs.test.js`, `server/test/generation-job-runner.test.js` | TESTED |
+| AC-04.2 | `server/test/generation-job-liveness.test.js` | TESTED |
+| AC-04.3 | `e2e/generation-jobs.spec.js`, `test/lesson-view-model.test.js` | NOT_PROVEN (e2e de T-F3-04 ainda não commitado nem medido) |
+| AC-04.4 | `server/test/generation-job-runner.test.js` | TESTED |
+| AC-05.1 | `test/prompt-lab-metrics.test.js`, `test/prompt-lab-runner.test.js` | TESTED (a unidade real com modelo é HUMAN) |
+| AC-05.2 | nenhum automatizável: exige PDF real, modelo real e avaliação humana | HUMAN |
+| AC-05.3 | `server/test/draft-audit-cross-language.test.js` | TESTED |
+| AC-05.4 | nenhum teste localizado para o limite de volume por unidade | NOT_PROVEN (política decidida por humano pendente) |
+| AC-06.1 | roteiro humano na janela nativa | HUMAN |
+| AC-06.2 | `e2e/lesson-editor.spec.js`, `e2e/keyboard-study-materials.spec.js`, `e2e/materials-a11y.spec.js` | TESTED |
+| AC-06.3 | `e2e/lesson-editor.spec.js`, `e2e/atomic-save.spec.js` | NOT_PROVEN (não confirmado que cada ação de salvar do Materiais tem asserção de confirmação) |
+| AC-06.4 | `e2e/large-draft-review.spec.js` | TESTED |
+| AC-07.1 | `e2e/support/suites.js`; contagem na tabela de sensores | TESTED |
+| AC-07.2 | `test/e2e-ports.test.js`, `test/test-live.test.js`; tempo em `validation.md` | TESTED |
+| AC-07.3 | `test/mutation-check.test.js`, `scripts/mutation-check.mjs` | TESTED (as 7 mutações do catálogo matam ao menos 1 teste cada) |
+| AC-07.4 | `npm run lint` | NOT_PROVEN (T-F6-05 ainda não fixou `--max-warnings`) |
+| AC-08.1 | nenhum teste verifica o `git status` das worktrees | NOT_PROVEN (higiene das worktrees e decisão sobre `.impeccable/` não são testadas) |
+| AC-08.2 | `test/context-check.test.js`, `test/check-state-ids.test.js` | TESTED (este bloco foi reconciliado em T-F6-07; `DEBT.md` e `LESSONS.md` não) |
+| AC-09.1 | `test/package-inspection.test.js`, `test/desktop-entrypoint.test.js` | TESTED |
+| AC-09.2 | `test/package-inspection.test.js` | TESTED |
+| AC-09.3 | `server/test/source-adversarial.test.js`, `server/test/uploads.test.js` | TESTED |
+| AC-09.4 | decisão humana sobre a instalação antiga | HUMAN |
+| AC-10.1 | plano de integração aprovado por humano | HUMAN |
+| AC-10.2 | `test/context-check.test.js` (cada tarefa DONE tem seção em `validation.md`) | TESTED |
+| AC-11.1 | nenhum | NOT_PROVEN (F7 ainda não implementada) |
+| AC-11.2 | nenhum | NOT_PROVEN (F7 ainda não implementada) |
+| AC-11.3 | decisão com dados reais de uso | HUMAN |
+| AC-12.1 | `server/test/source-scope.test.js`, `server/test/generation-scope-guards.test.js` | TESTED |
+| AC-12.2 | `server/test/generation-reuse.test.js` | TESTED |
+| AC-12.3 | `server/test/generation-reuse.test.js` | NOT_PROVEN (prefetch depende de HG-12, sem política decidida) |
+| AC-12.4 | `server/test/generation-budget.test.js` | TESTED |
+| AC-12.5 | valores das franquias (HG-11) | HUMAN |
+| AC-12.6 | `server/test/generation-budget.test.js`, `server/test/source-scope.test.js` | TESTED |
+| AC-13.1 | `server/test/language-preferences.test.js`, `server/test/generation-language.test.js` | TESTED |
+| AC-13.2 | `server/test/language-preferences.test.js` | TESTED |
+| AC-13.3 | `server/test/generation-language.test.js` | TESTED |
+| AC-13.4 | `server/test/generation-language.test.js` | NOT_PROVEN (rastreabilidade de spans após localização sem teste dedicado) |
+| AC-13.5 | `server/test/language-preferences.test.js` | NOT_PROVEN (aulas já aceitas intactas ao mudar o idioma, sem teste dedicado) |
+| AC-13.6 | nenhum | NOT_PROVEN (rótulos separados de idioma na UI sem teste) |
+
+## Invariantes com mutação
+
+| Invariante / área | Mutação | Resultado |
+|---|---|---|
+| INV-02 e INV-03 (rejeição e identidade) | M1a, M1b, M3 | KILLED |
+| INV-08 (sessão DEV só pela flag) | M2 | KILLED |
+| INV-12 (rotinas automáticas não apagam fontes nem backups): sanitizador | M4a, M4b | KILLED |
+| Import de fonte verifica checksum | M5 | KILLED |
