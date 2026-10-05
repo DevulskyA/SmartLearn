@@ -520,12 +520,12 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Comando: `node --test "test/test-live.test.js"`
 
 ### T-F6-04 — Comando de discriminação (mutação) repetível · M
-- Status: `[ ]` · Requisitos: R-07 (AC-07.3), F-45 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `8832df7` · IMPLEMENTATION_SHA `29cab11 + 751ca69` (npm run test:mutation: 7/7 mutantes mortos em worktree descartável; evidência em `validation.md`) · Requisitos: R-07 (AC-07.3), F-45 · Dependências: nenhuma
 - Fazer: `scripts/mutation-check.mjs` que, em worktree temporária (nunca na árvore real), aplica mutações de comportamento listadas (posicional em `mergeIdentity`; ignorar `devPersistent`; remover filtro de REJECTED no aceite; permitir apagar fora da allowlist no sanitizador; não verificar checksum no import) e confirma que o conjunto relevante de testes falha.
 - Gate: cada mutação mata ≥ 1 teste; relatório gerado; script recusa rodar fora de worktree descartável.
 
 ### T-F6-05 — Avisos de lint e do Rust · S
-- Status: `[ ]` · Requisitos: R-07 (AC-07.4), F-43 · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `8b6a887` · IMPLEMENTATION_SHA `685cfee + e6d1ec1` (lint 0 avisos e falha em qualquer aviso; Rust sem avisos; evidência em `validation.md`) · Requisitos: R-07 (AC-07.4), F-43 · Dependências: nenhuma
 - Fazer: corrigir ou justificar os 23 avisos (variáveis não usadas, diretiva eslint-disable sem efeito) e o aviso de linker; `npm run lint` passa a falhar com avisos NOVOS (`--max-warnings` fixado no valor corrigido).
 - Gate: lint com limite; sem mudança de comportamento (diff revisado por tipo).
 
@@ -534,16 +534,16 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Subtarefas originais: (a) levantar adaptadores vivos hoje (servidor SQLite é a autoridade; legado local/BrowserStore); (b) suíte de contrato executável contra o que ainda for suportado; (c) decisão de aposentadoria do legado. IndexedDB e sincronização ficam fora (spec, seção 7).
 
 ### T-F6-06a — Levantamento dos adaptadores de persistência vivos · S
-- Status: `[ ]` · Dependências: nenhuma · Fazer: lista verificada por código/uso (quem chama, em que modo: Web, REMOTE_MODE, legado) em `validation.md`; sem alterar código. Gate: cada adaptador listado tem referência `arquivo:linha` de uso real e marcação VIVO/MORTO.
+- Status: `[✓]` 2026-10-05 · BASE_SHA `24631c7` · IMPLEMENTATION_SHA nenhum (só levantamento) (2 adaptadores vivos, 1 morto; evidência em `validation.md`) · Dependências: nenhuma · Fazer: lista verificada por código/uso (quem chama, em que modo: Web, REMOTE_MODE, legado) em `validation.md`; sem alterar código. Gate: cada adaptador listado tem referência `arquivo:linha` de uso real e marcação VIVO/MORTO.
 
 ### T-F6-06b — Suíte de contrato executável contra os adaptadores vivos · M
-- Status: `[ ]` · Dependências: T-F6-06a · Fazer: testes de contrato idênticos rodados contra cada adaptador VIVO (criar/ler/atualizar/apagar, ordem, ids estáveis). Gate: suíte nova verde; mutação simples (trocar a ordem num adaptador) deixa ≥ 1 teste vermelho.
+- Status: `[✓]` 2026-10-05 · BASE_SHA `24631c7` · IMPLEMENTATION_SHA `1cc51b4` (47 testes de contrato contra BrowserStore e RemoteDB; 2 mutantes vermelhos; evidência em `validation.md`) · Dependências: T-F6-06a · Fazer: testes de contrato idênticos rodados contra cada adaptador VIVO (criar/ler/atualizar/apagar, ordem, ids estáveis). Gate: suíte nova verde; mutação simples (trocar a ordem num adaptador) deixa ≥ 1 teste vermelho.
 
 ### T-F6-06c — Decisão de aposentadoria do legado · S
 - Status: `[H]` · Dependências: T-F6-06a, T-F6-06b · Decisão de produto/arquitetura sobre remover o adaptador legado; sem remoção de código sem ordem.
 
 ### T-F6-07 — Matriz de cobertura reconciliada · S
-- Status: `[ ]` · Dependências: T-F6-01
+- Status: `[✓]` 2026-10-05 · BASE_SHA `751ca69` · IMPLEMENTATION_SHA `8b6a887` (matriz reconciliada: 31 TESTED / 1 MUTATION-KILLED / 6 HUMAN / 12 NOT_PROVEN; evidência em `validation.md`) · Dependências: T-F6-01
 - Fazer: atualizar `TEST_COVERAGE_MATRIX.md` com os sensores desta fase e o mapa requisito→teste; marcar lacunas como `NOT_PROVEN`.
 
 ### Checkpoint F6
@@ -577,18 +577,18 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 ## F8 — Segurança e empacotamento (F-60..F-63)
 
 ### T-F8-01 — Inspeção do artefato empacotado · M
-- Status: `[ ]` · Requisitos: R-09 (AC-09.1, AC-09.2) · Dependências: T-F1-01 (variáveis/caminhos DEV que não podem vazar), T-F1-08 (identidade de build)
+- Status: `[✓]` 2026-10-05 · BASE_SHA `c089311` · IMPLEMENTATION_SHA `8832df7` (inspeção do pacote real com injeção RED; evidência em `validation.md`) · Requisitos: R-09 (AC-09.1, AC-09.2) · Dependências: T-F1-01 (variáveis/caminhos DEV que não podem vazar), T-F1-08 (identidade de build)
 - Fazer: `npm run package:standalone` em diretório temporário e teste que varre `server-runtime`, `dist-runtime` e configuração Tauri: nenhuma ocorrência de `SMARTLEARN_DEV_PERSISTENT_SESSION`, da senha de fixture, de caminhos `SmartLearn-DevData`; confirma `NODE_ENV` não-produção só no que já é decidido (cookie sem `Secure` em loopback — registrar como decisão existente, não alterar).
 - RED: injetar a variável num arquivo empacotado e ver o teste falhar.
 - Gate: teste novo + `desktop-entrypoint.test.js`.
 
 ### T-F8-02 — Testes adversariais de upload de PDF · M
-- Status: `[ ]` · Requisitos: R-09 (AC-09.3) · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `8b6a887` · IMPLEMENTATION_SHA `db1a59d` (21 testes adversariais de upload; bidi removido do nome; evidência em `validation.md`) · Requisitos: R-09 (AC-09.3) · Dependências: nenhuma
 - Casos: PDF truncado, cabeçalho falso com tipo correto, páginas gigantes, extração lenta (timeout), texto com instruções injetadas (tratado como inerte pelo provedor FAKE), nome de arquivo hostil, duplicata entre usuários (já coberto), cota estourada (já coberto).
 - Gate: `server/test/source-*.test.js` ampliado; nenhum caso exige Codex.
 
 ### T-F8-03 — Segredos e consentimento de IA · S
-- Status: `[ ]` · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `685cfee` · IMPLEMENTATION_SHA `af74fb5` (12 testes de segredos/consentimento; erro do provedor não vaza; evidência em `validation.md`) · Dependências: nenhuma
 - Fazer: confirmar por teste que consentimento de IA e provedor só chegam por configuração explícita; que logs não imprimem texto de fonte nem credenciais; revisar `SMARTLEARN_AI_CONSENT=true` do launcher como exclusivo do DEV.
 
 ### T-F8-04 — Caminho único de abertura e retirada do release antigo · S
@@ -597,7 +597,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Sensor: `desktop-entrypoint.test.js` confirma que o atalho "SmartLearn DEV" aponta para o launcher.
 
 ### T-F8-05 — Dependências e auditoria · S
-- Status: `[ ]` · Dependências: nenhuma
+- Status: `[✓]` 2026-10-05 · BASE_SHA `e6d1ec1` · IMPLEMENTATION_SHA `24631c7` (npm audit 0 vulnerabilidades e gates travados; cargo audit NOT_PROVEN (decisão do usuário registrada); evidência em `validation.md`) · Dependências: nenhuma
 - Fazer: `npm audit`/`cargo audit` conforme gates já existentes (`P2-3`), registrar achados e decisões; sem atualizar versões por reflexo.
 
 ### Checkpoint F8

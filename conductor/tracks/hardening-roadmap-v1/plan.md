@@ -12,7 +12,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: T-F4-03 (S5a) · PRÓXIMA: T-F4-04 · TAREFAS: 32/70 · SUBTAREFAS DA ATIVA: T-F4-03 0/5 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
+ATIVA AGORA: T-F4-03 (S5a) · PRÓXIMA: T-F4-04 · TAREFAS: 41/70 · SUBTAREFAS DA ATIVA: T-F4-03 0/5 · HORIZONTE PREPARADO: 2/3 · BLOQUEADAS: 5 · DECISÕES HUMANAS: 18
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Elaboração progressiva: AGORA = a tarefa ativa com a árvore completa; PRÓXIMO = as tarefas prontas (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e as READY; o progresso global é só de tarefas.
 
@@ -46,8 +46,8 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
   - [ ] Padronizar mensagens de vazio/erro/carregando
   - [ ] Gate: teste de guarda + `npm test`; evidência e fechar
 
-### T-F6-04 — SEM SUBTAREFAS (não pronta) — Comando de discriminação (mutação) repetível
-  Por quê: S6A · independente de S5a · sem dependência pendente
+### T-F1-09 — SEM SUBTAREFAS (não pronta) — Fumaça nativa Windows de IMPORT-1 e VERDICT-1 (criada na S0)
+  Por quê: S8 · independente de S5a · dependências concluídas: T-F1-01, T-F1-07, T-F1-08
 
 ## ROADMAP
 
@@ -125,28 +125,28 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [!] **T-F4-02** — Hierarquia da Revisão e ruído de achados — BLOQUEADA → T-F2-03 → HG-02
 
-### [ ] S6A · Confiança: discriminação e cobertura — tarefas 0/2
+### [✓] S6A · Confiança: discriminação e cobertura — tarefas 2/2
 
-- [ ] **T-F6-04** — Comando de discriminação (mutação) repetível
-- [ ] **T-F6-07** — Matriz de cobertura reconciliada
+- [x] **T-F6-04** — Comando de discriminação (mutação) repetível
+- [x] **T-F6-07** — Matriz de cobertura reconciliada
 
-### [ ] S6B · Confiança: persistência — tarefas 0/3
+### [H] S6B · Confiança: persistência — tarefas 2/3
 
 - [=] **T-F6-06** — Contrato de persistência entre adaptadores (DEBT-006, parte 1) — dividida em T-F6-06a/b/c (tarefas)
-  - [ ] **T-F6-06a** — Levantamento dos adaptadores de persistência vivos
-  - [ ] **T-F6-06b** — Suíte de contrato executável contra os adaptadores vivos
+  - [x] **T-F6-06a** — Levantamento dos adaptadores de persistência vivos
+  - [x] **T-F6-06b** — Suíte de contrato executável contra os adaptadores vivos
   - [H] **T-F6-06c** — Decisão de aposentadoria do legado
 
-### [ ] S6C · Higiene mensurada — tarefas 0/1
+### [✓] S6C · Higiene mensurada — tarefas 1/1
 
-- [ ] **T-F6-05** — Avisos de lint e do Rust
+- [x] **T-F6-05** — Avisos de lint e do Rust
 
-### [ ] S7 · Segurança e empacotamento — tarefas 0/5
+### [H] S7 · Segurança e empacotamento — tarefas 4/5
 
-- [ ] **T-F8-01** — Inspeção do artefato empacotado
-- [ ] **T-F8-02** — Testes adversariais de upload de PDF
-- [ ] **T-F8-03** — Segredos e consentimento de IA
-- [ ] **T-F8-05** — Dependências e auditoria
+- [x] **T-F8-01** — Inspeção do artefato empacotado
+- [x] **T-F8-02** — Testes adversariais de upload de PDF
+- [x] **T-F8-03** — Segredos e consentimento de IA
+- [x] **T-F8-05** — Dependências e auditoria
 - [H] **T-F8-04** — Caminho único de abertura e retirada do release antigo — HG-04
 
 ### [ ] S8 · Real-use e continuidade — tarefas 0/1
@@ -189,7 +189,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - T-F2-03 · Auditoria versionada e reauditoria explícita · HG-02 "Reauditar" como ação explícita é aceitável dado que abrir não recalcula?
 - T-F2-06 · Política de volume de questões (aplicação) · HG-01 Política de volume de questões
 - T-F10-02b · Diretiva mínima de idioma no prompt e campo `language` no contrato do modelo · HG-13 Autorizar a diretiva mínima de idioma no prompt e confirmar o alcance de uiLocale em es/en no V1
-- T-F6-06c · Decisão de aposentadoria do legado · Decisão de produto/arquitetura sobre remover o adaptador legado (após T-F6-06a, T-F6-06b)
+- T-F6-06c · Decisão de aposentadoria do legado · Decisão de produto/arquitetura sobre remover o adaptador legado
 - T-F8-04 · Caminho único de abertura e retirada do release antigo · HG-04 Retirar o release instalado de 10/09
 - T-F0-05 · Higiene do checkout principal e das worktrees auxiliares · HG-05 Estratégia de integração, destino de content-quality e do merge temporário
 - T-F1-05 · Política dos bancos legados e do AppData (#1, #3, #5) · HG-03 Destino do banco antigo do AppData e dos legados #3/#5
