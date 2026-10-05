@@ -94,3 +94,28 @@ test('the allowlist is a short explicit list under src-tauri/target, never a nam
   }
   assert.ok(!ARTIFACT_CLASSES.some((c) => /DevData|backup|sources|src(\/|$)/i.test(c.path)));
 });
+
+// T-F6-04: the apply step re-validates every item, so a forged or stale plan can never reach outside the allowlist.
+test('applySanitize refuses a forged plan item that points outside src-tauri/target (human data, source) and deletes nothing', () => {
+  const m = machine();
+  try {
+    const forged = { items: [{ class: 'forged', path: join(m.base, 'FakeHumanData'), bytes: 1, why: 'x', worktree: m.canonical }] };
+    assert.throws(() => applySanitize(forged, { roots: m.roots }), /outside|refusing/);
+    const insideWorktreeButNotTarget = { items: [{ class: 'forged', path: join(m.canonical, 'src'), bytes: 1, why: 'x', worktree: m.canonical }] };
+    assert.throws(() => applySanitize(insideWorktreeButNotTarget, { roots: m.roots }), /outside|refusing/);
+    assert.ok(existsSync(m.files.humanDb) && existsSync(m.files.sourceCode));
+  } finally { m.cleanup(); }
+});
+
+test('applySanitize refuses an item whose worktree is not in the known worktree set, even when its path is a valid target artifact', () => {
+  const m = machine();
+  try {
+    const stranger = join(m.base, 'wt-stranger');
+    mkdirSync(join(stranger, 'src-tauri', 'target', 'release'), { recursive: true });
+    const exe = join(stranger, 'src-tauri', 'target', 'release', 'smartlearn.exe');
+    writeFileSync(exe, 'x');
+    const plan = { items: [{ class: 'release-build-cache', path: join(stranger, 'src-tauri', 'target', 'release'), bytes: 1, why: 'x', worktree: stranger }] };
+    assert.throws(() => applySanitize(plan, { roots: m.roots }), /allowlisted set/);
+    assert.ok(existsSync(exe), 'nothing was deleted');
+  } finally { m.cleanup(); }
+});

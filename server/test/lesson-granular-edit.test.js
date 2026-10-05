@@ -259,3 +259,22 @@ test('the draft DTO names the document and pages of its unit, also for a legacy 
     assert.ok(typeof dto.sourceUnit.title === 'string' && dto.sourceUnit.title.length > 0);
   } finally { cleanup(); }
 });
+
+// T-F6-04 (mutation M1b): editing the TEXT of a question must not erase its review state. A rejected question that is reworded stays
+// rejected (re-approving is an explicit status change), and the identity (id) and a non-default status survive the text edit.
+test('editing the text of a REJECTED question keeps it REJECTED with the same id; only an explicit status change re-approves it', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    const target = draft.questions[1];
+    const rejected = drafts.reviseQuestion(db, userId, draftId, target.id, { status: 'REJECTED' });
+    const reworded = drafts.reviseQuestion(db, userId, draftId, target.id, { answer: 'Resposta B reescrita', expectedVersion: rejected.questions[1].version });
+    assert.equal(reworded.questions[1].id, target.id);
+    assert.equal(reworded.questions[1].status, 'REJECTED', 'a text edit must not silently turn a rejected question back into PROPOSED');
+    assert.equal(reworded.questions[1].answer, 'Resposta B reescrita');
+    const approved = drafts.reviseQuestion(db, userId, draftId, target.id, { status: 'ACCEPTED' });
+    assert.equal(approved.questions[1].status, 'ACCEPTED');
+    const reworded2 = drafts.reviseQuestion(db, userId, draftId, target.id, { answer: 'Resposta B de novo' });
+    assert.equal(reworded2.questions[1].status, 'ACCEPTED', 'a non-default status survives a text edit');
+  } finally { cleanup(); }
+});

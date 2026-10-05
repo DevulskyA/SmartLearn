@@ -18,6 +18,7 @@
     "test:e2e": "node scripts/e2e.mjs",
     "lint": "eslint .",
     "test:inventory": "node scripts/check-test-inventory.mjs",
+    "test:mutation": "node scripts/mutation-check.mjs",
     "context:resume": "node scripts/agent-tasklist.mjs --resume",
     "context:check": "node scripts/context-check.mjs",
     "plan:sync": "node scripts/plan-sync.mjs",
