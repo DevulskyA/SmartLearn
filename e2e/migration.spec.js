@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
 
 // T28: migrates a representative legacy fixture end-to-end through the
 // real UI (src/migration-ui.js) against the real T25-T27 server pipeline
@@ -55,18 +56,7 @@ async function registerAndLogin(page) {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="account"]').click();
-  await page.locator('#account-show-register').click();
-  await page.locator('#account-register-email').fill(email);
-  await page.locator('#account-register-password').fill(password);
-  await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
-  await page.locator('#account-login-email').fill(email);
-  await page.locator('#account-login-password').fill(password);
-  await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await signInRegistered(page, { email: email, password: password });
 }
 
 function fixtureBuffer() {

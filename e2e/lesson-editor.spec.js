@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
 
 // LESSON EDITOR (VALID-4 defect register): a draft is SUMMARY + QUESTIONS[] + SOURCE + REVIEW, each its own area, each saved on
 // its own, and the rest of the book is never a vertical continuation of the lesson being edited. Real server, FAKE provider:
@@ -58,18 +59,7 @@ test.beforeEach(async ({ page }) => {
   }, API_BASE);
   const email = `lesson-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = 'a genuinely long test password 1';
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="account"]').click();
-  await page.locator('#account-show-register').click();
-  await page.locator('#account-register-email').fill(email);
-  await page.locator('#account-register-password').fill(password);
-  await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
-  await page.locator('#account-login-email').fill(email);
-  await page.locator('#account-login-password').fill(password);
-  await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await signInRegistered(page, { email: email, password: password });
 });
 
 async function openLesson(page, name = 'aula.pdf') {

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
 
 // T21: proves the server-authoritative cutover with a real server, a real
 // browser, and the REMOTE_MODE flag actually flipped on (never the default
@@ -74,17 +75,7 @@ function uniqueEmail(label) {
 }
 
 async function registerAndLogin(page, email, password) {
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="account"]').click();
-  await page.locator('#account-show-register').click();
-  await page.locator('#account-register-email').fill(email);
-  await page.locator('#account-register-password').fill(password);
-  await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
-  await page.locator('#account-login-email').fill(email);
-  await page.locator('#account-login-password').fill(password);
-  await page.locator('#account-login-form button[type="submit"]').click();
+  await signInRegistered(page, { email: email, password: password });
 }
 
 async function createUnit(page, { subjectName, title, studyDate }) {

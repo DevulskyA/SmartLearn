@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
 
 // T36: proves the real inspection UI (src/source-proposals-ui.js, wired
 // into a new "Fontes" card on Configurações) drives the actual T34-T36
@@ -62,18 +63,7 @@ test.beforeEach(async ({ page }) => {
   }, API_BASE);
   const email = `proposals-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = 'a genuinely long test password 1';
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="account"]').click();
-  await page.locator('#account-show-register').click();
-  await page.locator('#account-register-email').fill(email);
-  await page.locator('#account-register-password').fill(password);
-  await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
-  await page.locator('#account-login-email').fill(email);
-  await page.locator('#account-login-password').fill(password);
-  await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await signInRegistered(page, { email: email, password: password });
 });
 
 test('uploading a real PDF through the Fontes card produces inspectable proposals attributable to exact pages, and a title can be manually corrected', async ({ page }) => {

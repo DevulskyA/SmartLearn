@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
 
 // Proves the shared select/combobox primitive (src/select-ui.js) live,
 // across representative real consumers, instead of trusting the code
@@ -362,18 +363,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
     }, API_BASE);
     const email = `select-ui-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
     const password = 'a genuinely long test password 1';
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await page.locator('[data-screen="account"]').click();
-    await page.locator('#account-show-register').click();
-    await page.locator('#account-register-email').fill(email);
-    await page.locator('#account-register-password').fill(password);
-    await page.locator('#account-register-form button[type="submit"]').click();
-    await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
-    await page.locator('#account-login-email').fill(email);
-    await page.locator('#account-login-password').fill(password);
-    await page.locator('#account-login-form button[type="submit"]').click();
-    await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+    await signInRegistered(page, { email: email, password: password });
   });
 
   test('source-draft-subject-select uses the same shared primitive correctly, live', async ({ page }) => {
