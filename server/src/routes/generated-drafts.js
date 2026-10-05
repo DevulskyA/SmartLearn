@@ -136,6 +136,46 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  app.post('/drafts/:id/questions', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        required: ['question', 'answer', 'sourceSpans'],
+        properties: {
+          question: { type: 'string' },
+          answer: { type: 'string' },
+          explanation: { type: ['string', 'null'] },
+          hint: { type: ['string', 'null'] },
+          questionType: { type: ['string', 'null'] },
+          sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const draft = drafts.addQuestion(db, request.actor.userId, id, request.body);
+      reply.status(201);
+      return { draft };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // `order` is a static segment, so it wins over `:questionId`; real question ids are always `q<n>`, never "order".
+  app.patch('/drafts/:id/questions/order', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: { type: 'object', required: ['order'], properties: { order: { type: 'array', items: { type: 'string' } }, expectedRevision: { type: 'integer' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.reorderQuestions(db, request.actor.userId, id, request.body.order, { expectedRevision: request.body.expectedRevision }) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.delete('/drafts/:id/questions/:questionId', {
     schema: { params: { type: 'object', required: ['id', 'questionId'], properties: { id: { type: 'string' }, questionId: { type: 'string' } } } },
   }, async (request, reply) => {

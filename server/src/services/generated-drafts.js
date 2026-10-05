@@ -583,6 +583,48 @@ export function deleteQuestion(db, userId, draftId, questionId, now = () => new 
   }, now);
 }
 
+/**
+ * Appends ONE question written by the reviewer. It gets a fresh id (the sequence is persisted, so an id removed earlier is
+ * never handed out again), version 1, status PROPOSED and origin HUMAN_ADDED. The text goes through the same validation as
+ * any question, citations included; every other question and the summary are untouched.
+ */
+export function addQuestion(db, userId, draftId, input = {}, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  const validated = validateOrThrow({
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: [editableQuestion(input ?? {})],
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments);
+  if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
+    throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
+  }
+  const added = { ...validated.questions[0], id: `q${current.questionSeq + 1}`, status: 'PROPOSED', version: 1, origin: 'HUMAN_ADDED' };
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans,
+    questions: [...current.questions, added], summaryVersion: current.summaryVersion,
+  }, now);
+}
+
+/**
+ * Sets the order of the questions from a list of ids. The list must be exactly the current ids, each once: a missing,
+ * repeated or unknown id is refused (nothing is deleted or invented by omission). Questions move whole, with their text,
+ * version, review status and citations, so a REJECTED status can never land on another question's content.
+ */
+export function reorderQuestions(db, userId, draftId, order, { expectedRevision } = {}, now = () => new Date()) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  if (expectedRevision !== undefined && expectedRevision !== null && expectedRevision !== draftRow.revision) {
+    throw new DraftError('REVISION_CONFLICT', 'O rascunho foi alterado desde a última leitura. Recarregue e reordene de novo.');
+  }
+  const currentIds = current.questions.map((q) => q.id);
+  const valid = Array.isArray(order) && order.length === currentIds.length && new Set(order).size === order.length
+    && order.every((id) => typeof id === 'string' && currentIds.includes(id));
+  if (!valid) throw new DraftError('VALIDATION_FAILED', 'A ordem deve listar exatamente as questões atuais, cada uma uma vez.', 'order');
+  const byId = new Map(current.questions.map((q) => [q.id, q]));
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans,
+    questions: order.map((id) => byId.get(id)), summaryVersion: current.summaryVersion,
+  }, now);
+}
+
 export function getDraft(db, userId, draftId) {
   const row = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!row) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
