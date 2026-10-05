@@ -9,7 +9,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FILES, taskBlocks, programOrder, expandRanges, norm, classifyTasks, progressCounts, subtaskCounts } from './context-core.mjs';
+import { headValidationFor } from './test-live-core.mjs';
+import { FILES, taskBlocks, taskField, programOrder, expandRanges, norm, classifyTasks, progressCounts, subtaskCounts, blockNote } from './context-core.mjs';
 
 export const BEGIN = '<!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->';
 export const END = '<!-- PLAN:END -->';
@@ -22,6 +23,15 @@ export function cut(text, n) {
   if (clause && clause.index >= 12) t = t.slice(0, clause.index);
   if (t.length > n) { t = t.slice(0, n + 1); t = t.slice(0, Math.max(t.lastIndexOf(' '), 1)); }
   return t.replace(/[\s,;:.(—-]+$/, '');
+}
+
+/** The first COMPLETE sentence of a text (parentheticals and backticks dropped); never cut by character count. */
+export function firstSentence(text) {
+  const t = String(text ?? '').replace(/`/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  const m = /^(.+?[.?!])(?:\s|$)/.exec(t);
+  let out = (m ? m[1] : t);
+  out = out.split(/[;:]\s/)[0].trim().replace(/[.,;:]+$/, '');
+  return out;
 }
 
 /** [{id, title, ids}] from the sprint table of PROGRAM.md, in file order; ids = the "Tarefas" column (ranges expanded). */
@@ -63,12 +73,14 @@ export function phaseState(blocks, eff) {
 }
 
 /** @returns {string} the generated region, markers included. Pure: depends only on the three authority texts. */
-export function renderPlanRegion({ tasksText, programText = '', specText = '' }) {
+export const NO_VALIDATION_LINE = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)';
+
+export function renderPlanRegion({ tasksText, programText = '', specText = '', validationLine = NO_VALIDATION_LINE }) {
   const blocks = taskBlocks(tasksText).filter((b) => b.id);
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const eff = classifyTasks(blocks);
   const spec = norm(specText);
-  const gateName = (hg) => cut((new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').replace(/\s*\(.*$/, ''), 56);
+  const gateTitle = (hg) => firstSentence(new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '');
   const gatesOf = (b) => [...new Set(b.statusLine.match(/HG-\d+/g) ?? [])];
   const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
   const active = blocks.find((b) => b.status === '>') ?? null;
@@ -76,16 +88,14 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   const eligible = (b) => b !== active && eff.get(b.id) === ' ' && b.deps.every((d) => !open(d));
   const queue = [...order.map((id) => byId.get(id)).filter(Boolean), ...blocks].filter((b, n, all) => all.indexOf(b) === n).filter(eligible);
   const next = queue[0] ?? null;
-  const title = (b) => cut(b.heading.replace(/\s*·\s*[—-]?\s*$/, ''), 80);
+  const title = (b) => b.heading.replace(/\s*·\s*[—-]?\s*$/, '').trim();
   const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', '=': '=' };
-  const chain = (b) => b.deps.filter(open).slice(0, 3);
-  const waitsOn = (b) => [...new Set([...gatesOf(b), ...chain(b)])];
+  const chain = (b) => b.deps.filter(open);
   const sc = (b) => subtaskCounts(b.subtasks);
   const subNote = (b) => (b.subtasks.length ? ` — subtarefas ${sc(b).done}/${sc(b).total}` : '');
   const row = (b, indent = '') => {
     const cls = eff.get(b.id);
-    const w = cls === 'B' || cls === ' ' ? waitsOn(b).filter((x) => /^HG-/.test(x) || ['D', 'B'].includes(eff.get(x))) : cls === 'D' ? gatesOf(b) : [];
-    const note = b.status === '=' ? ' — dividida em subtarefas' : w.length ? ` — ${cls === 'D' ? '' : 'aguarda '}${w.join(', ')}` : '';
+    const note = b.status === '=' ? ' — dividida em subtarefas' : cls === 'B' ? ` — ${blockNote(b, blocks, eff)}` : cls === 'D' && gatesOf(b).length ? ` — ${gatesOf(b).join(', ')}` : '';
     return `${indent}- [${MARK[cls]}] **${b.id}** — ${title(b)}${note}${subNote(b)}`;
   };
   const pointer = (b, why = '') => `- ${b.id} · ${title(b)}${why ? ` · ${why}` : ''}`;
@@ -128,7 +138,8 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   out.push(`ATIVA AGORA: ${active ? `${active.id} (${activeGroup})` : 'nenhuma'}`
     + ` · PRÓXIMA: ${next ? next.id : 'nenhuma elegível'} · TAREFAS: ${pc.tasksDone}/${pc.tasksTotal} · SUBTAREFAS: ${pc.subDone}/${pc.subTotal}`
     + ` · BLOQUEADAS POR DEPENDÊNCIA: ${pc.blockedByDep} · DECISÕES HUMANAS: ${pc.decisions}`, '');
-  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada por dependência (segue sozinha quando a dependência fechar) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
+  out.push(validationLine, '');
+  out.push('Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual · [ ] pendente. Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. AGORA é o único lugar com a árvore completa da tarefa ativa; cada linha de tarefa existe uma única vez, em FASES.', '');
   out.push('## AGORA — EM EXECUÇÃO', '');
   if (active) out.push(pointer(active, `${activeGroup} · subtarefas ${sc(active).done}/${sc(active).total}`), ...subLines(active, 2));
   else out.push('- (nenhuma tarefa em execução: tasks.md deve marcar exatamente uma `[>]`)');
@@ -137,7 +148,7 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   for (const b of queue.slice(0, 3)) out.push(pointer(b));
   out.push('', '## BLOQUEADAS POR DEPENDÊNCIA', '');
   if (blockedDep.length === 0) out.push('- (nenhuma)');
-  for (const b of blockedDep) out.push(pointer(b, `aguarda ${chain(b).join(', ') || 'dependência'}`));
+  for (const b of blockedDep) out.push(pointer(b, blockNote(b, blocks, eff)));
   out.push('', '## FASES', '');
   for (const g of groups) {
     const real = g.members.filter((b) => b.status !== '=');
@@ -155,11 +166,17 @@ export function renderPlanRegion({ tasksText, programText = '', specText = '' })
   }
   out.push('## DECISÕES HUMANAS', '');
   if (decisions.length === 0) out.push('- (nenhuma)');
-  for (const b of decisions) {
+  const decisionText = (b) => {
     const ids = gatesOf(b);
-    const own = ids.length > 1 ? ids.join(' + ') : ids.map((g) => `${g} ${gateName(g)}`.trim())[0];
+    if (ids.length) return ids.map((g) => `${g} ${gateTitle(g)}`.trim()).join('; ');
+    // what the user must decide: the human sentence of the Status line when there is one, else the task's own Outcome/Fazer, else its title
+    const human = /(?:^|[·.;]\s*)([^·.;]*(?:UAT humano|[Dd]ecisão)[^·.;]*)/.exec(b.statusLine.replace(/\([^)]*\)/g, ''))?.[1];
+    const sentence = firstSentence(human ?? taskField(b, 'Outcome') ?? taskField(b, 'Fazer') ?? '') || title(b);
+    return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}`;
+  };
+  for (const b of decisions) {
     const after = chain(b);
-    out.push(pointer(b, own ?? `decisão humana${after.length ? ` · após ${after.join(', ')}` : ''}`));
+    out.push(pointer(b, `${decisionText(b)}${after.length ? ` (após ${after.join(', ')})` : ''}`));
   }
   out.push('', END);
   return out.join('\n');
@@ -171,14 +188,24 @@ export function applyRegion(planText, region) {
   return REGION.test(lf) ? lf.replace(REGION, () => region) : null;
 }
 
-/** True when plan.md already equals what tasks.md implies. */
+const VALIDATION = /^VALIDAÇÃO DO HEAD ATUAL:.*$/m;
+const provenClass = (line) => /^VALIDAÇÃO DO HEAD ATUAL: ✓/.test(line ?? '');
+
+/**
+ * True when plan.md already equals what tasks.md implies. The validation line is derived from recorded test results, so it is compared
+ * by CLASS (proven for this head or not): an old "✓ PASS" in the plan is drift as soon as the head is no longer proven.
+ */
 export function planDrift(planText, inputs) {
   const lf = planText.replace(/\r\n/g, '\n');
   const have = REGION.exec(lf)?.[0] ?? null;
   if (have === null) return { drift: true, reason: 'plan.md has no PLAN:BEGIN/PLAN:END generated region' };
   const bad = orderProblems(inputs);
   if (bad.length) return { drift: true, reason: `execution order violates dependencies: ${bad.join('; ')}` };
-  return have === renderPlanRegion(inputs) ? { drift: false } : { drift: true, reason: 'generated region differs from tasks.md (run: npm run plan:sync)' };
+  const want = renderPlanRegion(inputs);
+  const haveLine = VALIDATION.exec(have)?.[0];
+  const wantLine = VALIDATION.exec(want)?.[0];
+  if (!haveLine || provenClass(haveLine) !== provenClass(wantLine)) return { drift: true, reason: 'plan validation line is stale: it does not match the recorded validation of the current head (run: npm run plan:sync)' };
+  return have.replace(VALIDATION, '') === want.replace(VALIDATION, '') ? { drift: false } : { drift: true, reason: 'generated region differs from tasks.md (run: npm run plan:sync)' };
 }
 
 export function readInputs(read) {
@@ -186,11 +213,11 @@ export function readInputs(read) {
 }
 
 /** Rewrites plan.md on disk when stale (keeps CRLF if the file used it). Returns true when it wrote. */
-export function syncPlanFile(root) {
+export function syncPlanFile(root, { validationLine } = {}) {
   const read = (p) => (existsSync(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null);
   const planPath = join(root, FILES.plan);
   const raw = readFileSync(planPath, 'utf8');
-  const next = applyRegion(raw, renderPlanRegion(readInputs(read)));
+  const next = applyRegion(raw, renderPlanRegion({ ...readInputs(read), ...(validationLine ? { validationLine } : {}) }));
   if (next === null) throw new Error('plan.md has no PLAN:BEGIN/PLAN:END markers');
   if (next === raw.replace(/\r\n/g, '\n')) return false;
   writeFileSync(planPath, raw.includes('\r\n') ? next.replace(/\n/g, '\r\n') : next);
@@ -201,8 +228,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   if (process.argv.includes('--check')) {
     const read = (p) => (existsSync(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null);
-    const r = planDrift(read(FILES.plan) ?? '', readInputs(read));
+    const r = planDrift(read(FILES.plan) ?? '', { ...readInputs(read), validationLine: headValidationFor(root).line });
     if (r.drift) { console.error(`PLAN_SYNC=FAIL ${r.reason}`); process.exit(1); }
     console.log('PLAN_SYNC=PASS');
-  } else console.log(syncPlanFile(root) ? 'plan.md regenerated from tasks.md' : 'plan.md already in sync');
+  } else console.log(syncPlanFile(root, { validationLine: headValidationFor(root).line }) ? 'plan.md regenerated from tasks.md' : 'plan.md already in sync');
 }

@@ -104,7 +104,11 @@ test('SUITES run the same tests as the project scripts (a narrower discovery wou
 
 test('commits after a run that only touch conductor/ keep the result valid; any code change makes it STALE', async () => {
   const { onlyConductorDocs } = await import('../scripts/test-live-core.mjs');
-  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor\\tracks\\content-quality\\plan.md']), true);
+  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor\\.view\\tasklist.html']), true);
+  // unit tests READ conductor/**/plan.md, so a plan change is a change of what was tested
+  assert.equal(onlyConductorDocs(['conductor/tracks.md', 'conductor/tracks/hardening-roadmap-v1/plan.md']), false);
+  assert.equal(onlyConductorDocs(['conductor/tracks/content-quality/plan.md']), false);
+  assert.equal(onlyConductorDocs(['conductor/tracks.md']), true);
   assert.equal(onlyConductorDocs(['conductor/tracks.md', 'src/app.js']), false);
   assert.equal(onlyConductorDocs([]), false); // nothing changed => not "docs only" (heads differ for another reason)
   const art = { suite: 'unit', state: 'PASS', headTested: 'aaaaaaa1', runnerPid: 1, exitCode: 0, updatedAt: new Date().toISOString(), counts: { total: 1, done: 1, passed: 1, failed: 0, skipped: 0 } };

@@ -427,7 +427,7 @@ Objetivo: suíte rápida, determinística e que de fato fica vermelha quando alg
 - Resultados em ARQUIVO (não só no terminal): `test-results/t-f6-08/` na worktree (gitignored, mas em disco; espelho a cada 10 s do scratchpad por `test-results/t-f6-08/mirror.sh`): `summary.txt` = uma linha por rodada (exit, segundos, processos antes, id do run, passed/failed) + linhas `FAIL` com o teste + `DONE` no fim; `<tag>.log` = log completo da rodada. Traces de falha: `test-results/<run-id>/**/trace.zip` (o id do run está na linha da rodada em `summary.txt`).
 - Andamento: 10/10 rodadas concluídas (`grep -c "^w[12]-r" test-results/t-f6-08/summary.txt` = 10; última linha `DONE`). Resta só a decisão de fechamento ou de próxima ação (última subtarefa).
 - Próximo passo: decidir o fechamento de T-F6-08 ou a próxima ação (subtarefa `[>]`); qualquer correção só com defeito demonstrado (proibido subir timeout, retry ou sleep antes da causa). Não reexecutar as 10 rodadas sem hipótese nova.
-- Comando: `cat test-results/t-f6-08/summary.txt` (andamento); para (re)executar: `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` (grava em `test-results/t-f6-08/`).
+- Comando: `cat test-results/t-f6-08/summary.txt` (RESULTADO FINAL: 10 rodadas, última linha `DONE`); só reexecutar `bash .specs/features/hardening-roadmap-v1/probes/t-f6-08-materials-runs.sh` com HIPÓTESE NOVA (grava em `test-results/t-f6-08/`).
 
 ### T-F6-09 — Contrato do runner e2e: uma única autoridade (`test-live` × `e2e.mjs`) · S
 - Status: `[ ]` · Requisitos: R-07 (AC-07.2) · Dependências: T-F6-02, T-F6-03

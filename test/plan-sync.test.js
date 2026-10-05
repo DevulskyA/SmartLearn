@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderPlanRegion, applyRegion, planDrift, orderProblems, phaseState, cut, BEGIN, END } from '../scripts/plan-sync.mjs';
+import { renderPlanRegion, applyRegion, planDrift, orderProblems, phaseState, cut, firstSentence, BEGIN, END } from '../scripts/plan-sync.mjs';
 import { programOrder, taskBlocks, parseSubtasks, subtaskCounts, classifyTasks, progressCounts } from '../scripts/context-core.mjs';
 import { parsePlan, checkInvariants, renderChecklistHtml } from '../scripts/tasklist.mjs';
 
@@ -84,19 +84,22 @@ test('gate classification: a human decision is a task that itself needs the user
   assert.equal(eff.get('T-F7-02'), 'D', 'its own text declares a human decision, even though it waits for T-F7-01');
   assert.equal(eff.get('T-F1-06'), 'B', 'marked [H] but only waits for T-F1-03: NOT a human decision');
   assert.equal(eff.get('T-F1-05'), 'B', 'pending behind a human decision');
-  assert.equal(eff.get('T-F1-07'), ' ', 'waiting for an HG id alone does not change tasks.md state');
+  assert.equal(eff.get('T-F1-07'), 'B', 'unmet HG id in Dependências: blocked until the human decision');
   const pc = progressCounts(blocks);
-  assert.deepEqual([pc.decisions, pc.blockedByDep], [3, 2]);
+  assert.deepEqual([pc.decisions, pc.blockedByDep], [3, 3]);
   const region = renderPlanRegion(inputs);
   const decisions = section(region, 'DECISÕES HUMANAS');
-  assert.match(decisions, /^- T-F1-04 · Needs a human · HG-01 Humano decide algo que tem uma frase bem longa para$/m);
-  assert.match(decisions, /^- T-F7-02 · Decision after the gate · decisão humana · após T-F7-01$/m);
+  assert.match(decisions, /^- T-F1-04 · Needs a human · HG-01 Humano decide algo que tem uma frase bem longa para cortar numa fronteira de palavra\?$/m, 'the whole title, not cut by characters');
+  assert.match(decisions, /^- T-F7-02 · Decision after the gate · Decisão humana registrada \(após T-F7-01\)$/m);
   assert.doesNotMatch(decisions, /T-F1-06/);
   assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · .* · aguarda T-F1-03$/m);
-  assert.match(region, /^BLOQUEADAS POR DEPENDÊNCIA: 2 · DECISÕES HUMANAS: 3|BLOQUEADAS POR DEPENDÊNCIA: 2 · DECISÕES HUMANAS: 3$/m);
+  assert.match(region, /^BLOQUEADAS POR DEPENDÊNCIA: 3 · DECISÕES HUMANAS: 3|BLOQUEADAS POR DEPENDÊNCIA: 3 · DECISÕES HUMANAS: 3$/m);
   const rows = Object.fromEntries(taskRows(region).map((r) => [r.id, r.mark]));
-  assert.deepEqual([rows['T-F1-04'], rows['T-F1-06'], rows['T-F1-05'], rows['T-F1-07']], ['H', '!', '!', ' ']);
-  assert.match(region, /^- \[ \] \*\*T-F1-07\*\* — .* — aguarda HG-02$/m);
+  assert.deepEqual([rows['T-F1-04'], rows['T-F1-06'], rows['T-F1-05'], rows['T-F1-07']], ['H', '!', '!', '!']);
+  assert.match(region, /^- \[!\] \*\*T-F1-07\*\* — .* — aguarda decisão humana: HG-02$/m);
+  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-07 · .* · aguarda decisão humana: HG-02$/m, 'the HG dependency appears in BLOQUEADAS');
+  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-05 · .* · aguarda decisão humana: HG-01 \(via T-F1-04\)$/m, 'a task behind a pending decision is not self-starting');
+  assert.match(section(region, 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · .* · aguarda T-F1-03$/m, 'ordinary dependency: plain aguarda');
   assert.doesNotMatch(region, /…/);
   assert.equal(cut('Uma frase comprida demais para caber aqui dentro, de verdade', 30), 'Uma frase comprida demais para');
 });
@@ -120,7 +123,7 @@ test('phase markers and per-phase counts: never [✓] with pending work; [H] onl
 
 test('the panel gets exactly one active item and the one-line goal of the active TASK', () => {
   const plan = parsePlan(`# TRACK: T\n\nStatus: ACTIVE\n\n${renderPlanRegion(inputs)}\n`);
-  assert.deepEqual(plan.tasks.map((t) => `${t.state}${t.id}`), ['✓BASE', '>S1', 'HS7', '✓S8', ' SEM-SPRINT']);
+  assert.deepEqual(plan.tasks.map((t) => `${t.state}${t.id}`), ['✓BASE', '>S1', 'HS7', '✓S8', '!SEM-SPRINT']);
   assert.deepEqual(plan.tasks.map((t) => t.title).filter((t) => /tarefas \d/.test(t)), [], 'counts are not part of the phase title');
   assert.deepEqual(checkInvariants(plan), []);
   assert.match(plan.tasks.find((t) => t.state === '>').fields.SPRINT_GOAL, /^T-F1-02 — Active work/);
@@ -166,4 +169,61 @@ test('phases follow the sprint order of PROGRAM.md; mutation: a task sequenced b
   assert.equal(r.drift, true);
   assert.deepEqual(orderProblems(inputs), []);
   assert.deepEqual(programOrder('| **S4** J | o | T-F3-01..03 | P1 | T-F1-01 |\n'), ['T-F3-01', 'T-F3-02', 'T-F3-03']);
+});
+
+test('plan.md carries the validation line (derived one-liner); drift is by class: an old PASS in the plan is stale once the head is not proven', () => {
+  const stale = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO (testado aaaaaaa)';
+  const pass = 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit, server) em bbbbbbb';
+  const region = renderPlanRegion({ ...inputs, validationLine: stale });
+  assert.match(region, /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \/ DESATUALIZADA/m);
+  assert.match(renderPlanRegion(inputs), /^VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA \(nenhuma validação/m, 'default: nothing recorded');
+  const plan = `h\n${region}\n`;
+  assert.equal(planDrift(plan, { ...inputs, validationLine: stale }).drift, false);
+  assert.equal(planDrift(plan, { ...inputs, validationLine: 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — server DESATUALIZADO' }).drift, false, 'detail of a not-proven state may change without drift');
+  assert.equal(planDrift(plan, { ...inputs, validationLine: pass }).drift, true, 'head became proven but the plan still says not proven');
+  assert.equal(planDrift(`h\n${renderPlanRegion({ ...inputs, validationLine: pass })}\n`, { ...inputs, validationLine: stale }).drift, true, 'an old PASS must not stay in the plan');
+  assert.equal(planDrift(plan.replace(/^VALIDAÇÃO DO HEAD ATUAL:.*$/m, ''), { ...inputs, validationLine: stale }).drift, true, 'line deleted');
+});
+
+test('a task waiting for an HG id (or chained to one) is BLOCKED with the decision named; the phase marker follows; dependency ranges are fully listed', () => {
+  const t = [
+    '### T-F1-01 — Decision · S', '- Status: `[H]` · Dependências: HG-05', '',
+    '### T-F1-02 — Chained · S', '- Status: `[ ]` · Dependências: T-F1-01', '',
+    '### T-F1-03 — Own HG while pending · S', '- Status: `[ ]` · Dependências: HG-13', '',
+    '### T-F1-04 — Range a · S', '- Status: `[ ]` · Dependências: nenhuma', '',
+    '### T-F1-05 — Range b · S', '- Status: `[ ]` · Dependências: nenhuma', '',
+    '### T-F1-06 — Waits for a range · S', '- Status: `[ ]` · Dependências: T-F1-04..05', '',
+  ].join('\n');
+  const prog = '| Sprint | Outcome | Tarefas |\n|---|---|---|\n| **S1** One | x | T-F1-01 → T-F1-02 → T-F1-03 |\n| **S2** Two | y | T-F1-04 → T-F1-05 → T-F1-06 |\n';
+  const spec = '| HG-05 | Estratégia de integração (merge ou série de PRs). Segunda frase que não entra | F9 | x |\n| HG-13 | Autorizar a diretiva de idioma | T-F1-03 | x |\n';
+  const region = renderPlanRegion({ tasksText: t, programText: prog, specText: spec });
+  const blocked = section(region, 'BLOQUEADAS POR DEPENDÊNCIA');
+  assert.match(blocked, /^- T-F1-02 · Chained · aguarda decisão humana: HG-05 \(via T-F1-01\)$/m);
+  assert.match(blocked, /^- T-F1-03 · Own HG while pending · aguarda decisão humana: HG-13$/m);
+  assert.doesNotMatch(blocked, /T-F1-06/, 'ordinary pending tasks are not blocked');
+  assert.match(region, /^### \[!\] S1 · One/m, 'nothing runnable in S1: every task is a decision or blocked');
+  assert.match(region, /^### \[ \] S2 · Two/m);
+  assert.match(section(region, 'DECISÕES HUMANAS'), /^- T-F1-01 · Decision · HG-05 Estratégia de integração$/m, 'full first sentence of the spec title, parentheses dropped, no truncation');
+  assert.match(region, /^- \[ \] \*\*T-F1-06\*\* — Waits for a range$/m);
+  const blocks = taskBlocks(t);
+  assert.deepEqual(blocks.find((b) => b.id === 'T-F1-06').deps, ['T-F1-04', 'T-F1-05'], 'T-F1-04..05 expands to every id');
+  assert.deepEqual(blocks.find((b) => b.id === 'T-F1-03').hgDeps, ['HG-13']);
+  assert.equal(classifyTasks(blocks).get('T-F1-06'), ' ');
+  const t2 = t.replace('### T-F1-06 — Waits for a range · S\n- Status: `[ ]`', '### T-F1-06 — Waits for a range · S\n- Status: `[!]`');
+  assert.match(section(renderPlanRegion({ tasksText: t2, programText: prog, specText: spec }), 'BLOQUEADAS POR DEPENDÊNCIA'), /^- T-F1-06 · Waits for a range · aguarda T-F1-04, T-F1-05$/m, 'every open dependency of the range is printed');
+});
+
+test('DECISÕES HUMANAS text is a complete sentence, never character-truncated; a [H] task without an HG id states what the user decides', () => {
+  const t = [
+    '### T-F1-01 — Roteiro visual · S', '- Status: `[H]` · Dependências: nenhuma · A execução é UAT humano; os passos mecânicos podem ser provados sem humano', '- Fazer: preparar roteiro.', '',
+    '### T-F1-02 — Retirar o legado · S', '- Status: `[H]` · Dependências: nenhuma · Decisão de produto/arquitetura sobre remover o adaptador legado; sem remoção de código.', '',
+    '### T-F1-03 — Avaliar · S', '- Status: `[H]` · Dependências: nenhuma', '- Outcome: o humano avalia a unidade com a rubrica fixa e registra PASS ou FAIL. Depois disso segue.', '',
+  ].join('\n');
+  const decisions = section(renderPlanRegion({ tasksText: t, programText: '', specText: '' }), 'DECISÕES HUMANAS');
+  assert.match(decisions, /^- T-F1-01 · Roteiro visual · A execução é UAT humano$/m);
+  assert.match(decisions, /^- T-F1-02 · Retirar o legado · Decisão de produto\/arquitetura sobre remover o adaptador legado$/m);
+  assert.match(decisions, /^- T-F1-03 · Avaliar · O humano avalia a unidade com a rubrica fixa e registra PASS ou FAIL$/m);
+  assert.doesNotMatch(decisions, /…/);
+  assert.equal(firstSentence('Texto (com parênteses). Segunda frase.'), 'Texto');
+  assert.equal(firstSentence('Pergunta aceitável? Resto'), 'Pergunta aceitável?');
 });

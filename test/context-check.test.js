@@ -158,3 +158,19 @@ test('THIS repository passes its own persistence gate and its cockpit names an a
   assert.match(lines.join('\n'), /^NEXT_COMMAND=\S/m);
   assert.ok(CANONICAL.includes('.specs/ARTIFACTS.md') && CANONICAL.includes('.specs/STATE.md'));
 });
+
+test('the plan validation line is part of the gate: an old PASS in plan.md fails once the head is not proven; the same not-proven state passes', () => {
+  const PLAN = 'conductor/tracks/hardening-roadmap-v1/plan.md';
+  const stale = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — unit DESATUALIZADO (testado aaaaaaa)';
+  const pass = 'VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (unit) em bbbbbbb';
+  const withLine = (line) => {
+    const files = fixture();
+    files[PLAN] = `MARCO ATUAL: S1\n\n${renderPlanRegion({ tasksText: files[`${FEATURE}/tasks.md`], programText: files[`${FEATURE}/PROGRAM.md`], specText: files[`${FEATURE}/spec.md`], validationLine: line })}\n`;
+    return files;
+  };
+  const check = (files, line) => checkContext({ ...ioOf(files), validationLine: () => line });
+  assert.deepEqual(check(withLine(stale), stale).problems, []);
+  assert.deepEqual(check(withLine(stale), 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)').problems, [], 'not proven stays not proven');
+  assert.ok(check(withLine(pass), stale).problems.some((m) => /validation line is stale/.test(m)), 'old PASS in the plan, head no longer proven');
+  assert.ok(check(withLine(stale), pass).problems.some((m) => /validation line is stale/.test(m)), 'head proven but the plan still says not proven');
+});

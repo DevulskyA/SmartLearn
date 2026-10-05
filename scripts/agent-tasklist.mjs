@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parsePlan, renderChecklistHtml } from './tasklist.mjs';
-import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs, headValidation } from './test-live-core.mjs';
+import { renderTestsSection, HEARTBEAT_SCRIPT, readArtifacts, artifactDir, onlyConductorDocs, headValidationFor } from './test-live-core.mjs';
 import { resumeCockpit, FILES } from './context-core.mjs';
 import { syncPlanFile } from './plan-sync.mjs';
 
@@ -100,9 +100,7 @@ export function worktreeBoards(root) {
 
 /** The head-validation line for the worktree `wt`: ITS recorded results judged against ITS current head. */
 export function validationFor(wt) {
-  const head = gitOut(wt, ['rev-parse', 'HEAD']);
-  const docsOnlySince = (from, to) => onlyConductorDocs(gitOut(wt, ['diff', '--name-only', from, to]).split('\n'));
-  return headValidation(readArtifacts(artifactDir(wt)), { currentHead: head, docsOnlySince }).line;
+  return headValidationFor(wt).line;
 }
 
 /** "TESTES AO VIVO" for the worktree whose board this is: ITS artifacts judged against ITS current head. */
@@ -123,7 +121,7 @@ function regenerate(root, coordDir) {
   const rel = (tracksMd.match(/conductor\/tracks\/([\w-]+)\/plan\.md/) ?? [])[1];
   const planPath = arg('--plan', rel ? join(root, 'conductor', 'tracks', rel, 'plan.md') : null);
   // plan.md is the executable VIEW of tasks.md: refresh its generated region first so the panel can never show a stale plan
-  if (!arg('--plan', null) && rel === 'hardening-roadmap-v1') syncPlanFile(root);
+  if (!arg('--plan', null) && rel === 'hardening-roadmap-v1') syncPlanFile(root, { validationLine: validationFor(root) });
   const plan = parsePlan(readFileSync(planPath, 'utf8'));
   if (plan.skipped.length) console.error(`[agent-tasklist] ERRO: tarefa(s) fora do padrão de id NÃO aparecem no painel: ${plan.skipped.join(', ')} (use LETRAS-NÚMERO, ex.: ACCESS-1)`);
   const guiCoord = existsSync(join(coordDir, 'GUI.md')) ? parseCoordFile(readFileSync(join(coordDir, 'GUI.md'), 'utf8')) : {};
@@ -146,7 +144,7 @@ function regenerate(root, coordDir) {
   const synced = syncActiveTrack(tracksLf, activeTrackBlock(plan, {
     planPath: `conductor/tracks/${rel}/plan.md`,
     branch: gitOut(root, ['branch', '--show-current']),
-    head: gitOut(root, ['rev-parse', '--short', 'HEAD']),
+    // no head here: a sha in a tracked file is stale the moment the file is committed
     date: new Date().toISOString().slice(0, 10),
   }));
   if (synced === null) console.warn('[agent-tasklist] AVISO: conductor/tracks.md sem marcadores ACTIVE-TRACK; não sincronizado.');

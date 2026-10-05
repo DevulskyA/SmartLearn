@@ -4,6 +4,7 @@
 // text an agent typed. No I/O here except the small read/write helpers at the bottom.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { esc } from './tasklist.mjs';
 
 /** Suites the wrapper knows. `args` are passed to node WITHOUT a shell (no quoting surprises on Windows). */
@@ -124,10 +125,13 @@ export function effectiveState(artifact, { currentHead, alive = pidAlive, now = 
   return { state: stored, note: docsOnly ? 'commits posteriores só mudam conductor/ (docs)' : '', headMatches, docsOnly };
 }
 
-/** True when every changed path is under conductor/ (and there is at least one) — pure, the caller supplies the list. */
+/**
+ * True when every changed path is a GENERATED view (conductor/.view/** or conductor/tracks.md) and there is at least one — pure, the
+ * caller supplies the list. Other conductor/ files (plan.md, ...) are READ by unit tests, so changing them invalidates a result.
+ */
 export function onlyConductorDocs(paths) {
   const list = (paths ?? []).map((x) => String(x).trim().replace(/\\/g, '/')).filter(Boolean);
-  return list.length > 0 && list.every((f) => f.startsWith('conductor/'));
+  return list.length > 0 && list.every((f) => f === 'conductor/tracks.md' || f.startsWith('conductor/.view/'));
 }
 
 /**
@@ -142,6 +146,13 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
   const label = (st) => (st === 'STALE' ? 'DESATUALIZADO' : st);
   const detail = rows.map((r) => `${r.suite} ${label(r.eff.state)}${r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : ''}`).join(' · ');
   return { proven: false, line: `${prefix} ⚠ NÃO PROVADA / DESATUALIZADA — ${detail}; HEAD atual ${(currentHead ?? '?').slice(0, 7)}` };
+}
+
+/** headValidation() for the worktree `wt`: ITS recorded results judged against ITS current git head (reads files and runs git). */
+export function headValidationFor(wt) {
+  const git = (args) => { try { return execFileSync('git', args, { cwd: wt, encoding: 'utf8' }).trim(); } catch { return ''; } };
+  const docsOnlySince = (from, to) => onlyConductorDocs(git(['diff', '--name-only', from, to]).split('\n'));
+  return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince });
 }
 
 export function fmtDuration(ms) {

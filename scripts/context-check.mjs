@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FEATURE, FILES, STATE_NAME, taskBlocks, taskField, resumeCockpit } from './context-core.mjs';
 import { planDrift } from './plan-sync.mjs';
+import { headValidationFor } from './test-live-core.mjs';
 export const CANONICAL = [
   'CLAUDE.md',
   '.specs/EXECUTION.md',
@@ -128,7 +129,7 @@ export function checkContext(io) {
     if (active && !line.includes(active.id)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
     // the plan is the executable VIEW of tasks.md: its generated region must be exactly what tasks.md implies (npm run plan:sync)
     if (tasks) {
-      const drift = planDrift(plan, { tasksText: tasks, programText: text[`${FEATURE}/PROGRAM.md`] ?? '', specText: spec ?? '' });
+      const drift = planDrift(plan, { tasksText: tasks, programText: text[`${FEATURE}/PROGRAM.md`] ?? '', specText: spec ?? '', validationLine: io.validationLine?.() });
       if (drift.drift) fail(`conductor plan diverges from tasks.md: ${drift.reason}`);
     }
   }
@@ -201,6 +202,7 @@ export function gitIo(root) {
     read: (p) => (existsSync(join(root, p)) && statSync(join(root, p)).isFile() ? readFileSync(join(root, p), 'utf8') : null),
     tracked: (p) => git(['ls-files', '--error-unmatch', p]).status === 0,
     ignored: (p) => git(['check-ignore', '-q', p]).status === 0,
+    validationLine: () => headValidationFor(root).line,
   };
 }
 

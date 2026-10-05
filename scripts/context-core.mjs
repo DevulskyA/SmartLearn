@@ -33,6 +33,8 @@ export function taskBlocks(tasksText) {
       // only ids OUTSIDE parentheses are dependencies; parenthesised ids are annotations
       deps: expandRanges(segment('Dependências').split(/NÃO depende|Contrato adicional/)[0].replace(/\([^)]*\)/g, '')).match(new RegExp(ID.source, 'g')) ?? [],
       gates: [...new Set(body.match(/HG-\d+/g) ?? [])],
+      // human gates the task itself waits for, as written in its Dependências (the spec §8 table has no per-gate state: all are pending)
+      hgDeps: [...new Set(segment('Dependências').split(/NÃO depende|Contrato adicional/)[0].match(/HG-\d+/g) ?? [])],
       requirements: [...new Set(segment('Requisitos').match(/\bR-\d+/g) ?? [])],
       ...parseSubtasks(body),
     };
@@ -104,7 +106,7 @@ export function classifyTasks(blocks) {
       const own = /HG-\d+/.test(b.statusLine);
       eff.set(b.id, own || !b.deps.some(open) || HUMAN_TEXT.test(`${b.heading}\n${b.body}`) ? 'D' : 'B');
     } else if (b.status === '!') eff.set(b.id, 'B');
-    else eff.set(b.id, ' ');
+    else eff.set(b.id, b.hgDeps?.length ? 'B' : ' ');
   }
   // a pending task whose open dependency is itself a decision or blocked cannot run: blocked by dependency (to a fixpoint)
   for (let changed = true; changed;) {
@@ -114,6 +116,38 @@ export function classifyTasks(blocks) {
     }
   }
   return eff;
+}
+
+/**
+ * Why a task is blocked, when the cause is a human decision: [{hg:[HG-xx], task, via}] — own HG ids in its Dependências, and the
+ * decisions its open dependencies are (or chain to). Empty when it only waits for ordinary tasks.
+ */
+export function humanRoots(b, blocks, eff, seen = new Set()) {
+  const byId = new Map(blocks.map((x) => [x.id, x]));
+  const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
+  if (seen.has(b.id)) return [];
+  seen.add(b.id);
+  const roots = [];
+  if (b.hgDeps?.length) roots.push({ hg: b.hgDeps, task: null, via: null });
+  for (const d of b.deps.filter(open)) {
+    const dep = byId.get(d);
+    if (!dep) continue;
+    if (eff.get(d) === 'D') roots.push({ hg: [...new Set(dep.statusLine.match(/HG-\d+/g) ?? [])], task: d, via: d });
+    else if (eff.get(d) === 'B') for (const r of humanRoots(dep, blocks, eff, seen)) roots.push({ ...r, via: d });
+  }
+  return roots.filter((r, i) => roots.findIndex((x) => x.hg.join() === r.hg.join() && x.task === r.task && x.via === r.via) === i);
+}
+
+/** "aguarda decisão humana: HG-02 (via T-F2-03)" / "aguarda decisão humana: T-F5-03" / "aguarda T-F6-06a, T-F6-06b" (every open dependency, ranges expanded). */
+export function blockNote(b, blocks, eff) {
+  const byId = new Map(blocks.map((x) => [x.id, x]));
+  const roots = humanRoots(b, blocks, eff);
+  if (roots.length) {
+    const parts = roots.map((r) => (r.hg.length ? `${r.hg.join(' + ')}${r.via ? ` (via ${r.via})` : ''}` : r.task));
+    return `aguarda decisão humana: ${[...new Set(parts)].join('; ')}`;
+  }
+  const waits = b.deps.filter((d) => byId.get(d)?.status !== '✓' && byId.get(d)?.status !== '=');
+  return waits.length ? `aguarda ${waits.join(', ')}` : 'marcada bloqueada';
 }
 
 /** The numbers shown everywhere (plan, panel, cockpit): tasks exclude split parents; subtasks are leaves of the checkbox lists. */
@@ -166,7 +200,8 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const gateName = (hg) => (new RegExp(`^\\| ${hg} \\| ([^|]+)`, 'm').exec(spec)?.[1] ?? '').trim().replace(/\s*\(.*$/, '');
   const plan = norm(read(FILES.plan));
   const order = programOrder(read(FILES.program) ?? '');
-  const eligible = (b) => b && b !== active && b.status === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '=');
+  const eff = classifyTasks(blocks);
+  const eligible = (b) => b && b !== active && eff.get(b.id) === ' ' && b.deps.every((d) => byId.get(d)?.status === '✓' || byId.get(d)?.status === '=');
   const next3 = order.map((id) => byId.get(id)).filter(eligible).slice(0, 3);
   const blockers = active ? active.deps.filter((d) => byId.get(d)?.status !== '✓').map((d) => `${d}[${STATE_NAME[byId.get(d)?.status] ?? 'MISSING'}]`) : [];
   const relevantGates = [...new Set([...(active?.gates ?? []), ...next3.flatMap((b) => b.gates)])];
