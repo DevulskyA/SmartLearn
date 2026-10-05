@@ -11,7 +11,9 @@ import { esc } from './tasklist.mjs';
 export const SUITES = {
   unit: { cwd: '.', args: ['--test', '--test-reporter=tap', 'test/*.test.js'], parser: 'tap' },
   server: { cwd: 'server', args: ['--test', '--test-reporter=tap'], parser: 'tap' }, // = server's `npm test` (`node --test`, default discovery — a narrower glob silently skipped one test)
-  e2e: { cwd: '.', args: ['node_modules/@playwright/test/cli.js', 'test', '--reporter=list'], parser: 'playwright' },
+  // the governed path (package.json test:e2e = node scripts/e2e.mjs): it picks this run's ports and output directory and defaults to 2 workers, so a live
+  // run cannot collide with another one. Calling the Playwright CLI directly would bypass all of that (T-F6-09).
+  e2e: { cwd: '.', args: ['scripts/e2e.mjs', '--reporter=list'], parser: 'playwright' },
 };
 
 const emptyCounts = () => ({ total: null, done: 0, passed: 0, failed: 0, skipped: 0 });

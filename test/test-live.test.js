@@ -98,8 +98,11 @@ test('SUITES run the same tests as the project scripts (a narrower discovery wou
   assert.deepEqual(SUITES.unit.args.filter((a) => !a.startsWith('--test-reporter')), ['--test', 'test/*.test.js']);
   assert.equal(server.test, 'node --test');
   assert.deepEqual(SUITES.server.args.filter((a) => !a.startsWith('--test-reporter')), ['--test']);
-  assert.equal(root['test:e2e'], 'playwright test');
-  assert.deepEqual(SUITES.e2e.args.slice(0, 2), ['node_modules/@playwright/test/cli.js', 'test']);
+  // ONE authority for the full e2e: whatever script package.json's test:e2e runs is the one the live runner runs, never the Playwright CLI directly
+  assert.equal(root['test:e2e'], 'node scripts/e2e.mjs');
+  const governed = root['test:e2e'].match(/^node (\S+)$/)?.[1];
+  assert.equal(SUITES.e2e.args[0], governed);
+  assert.ok(!SUITES.e2e.args.some((a) => /@playwright\/test\/cli\.js/.test(a)), 'the live runner must not bypass scripts/e2e.mjs');
 });
 
 test('commits after a run that only touch conductor/ keep the result valid; any code change makes it STALE', async () => {
