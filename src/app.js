@@ -4497,6 +4497,8 @@ showSubjectFormButton.addEventListener("click", () => {
   setSubjectFormVisible(newSubjectForm.hidden);
 });
 
+let pendingSubjectCreate = null;
+
 newSubjectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = newSubjectInput.value.trim();
@@ -4514,16 +4516,19 @@ newSubjectForm.addEventListener("submit", async (event) => {
   const draftSource = studySourceTextInput ? studySourceTextInput.value : "";
 
   try {
-    const subject = await DB.subjects.create(name);
-    await renderSubjects(subject.id);
+    pendingSubjectCreate = (async () => {
+      const subject = await DB.subjects.create(name);
+      await renderSubjects(subject.id);
+    })();
+    await pendingSubjectCreate;
     newSubjectForm.reset();
     setSubjectFormVisible(false);
 
-    // AC-05: restore draft values after re-render
-    studyDateInput.value = draftDate;
-    studyContentInput.value = draftContent;
-    studySummaryTextarea.value = draftSummary;
-    if (studySourceTextInput) studySourceTextInput.value = draftSource;
+    // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
+    if (!studyDateInput.value) studyDateInput.value = draftDate;
+    if (!studyContentInput.value) studyContentInput.value = draftContent;
+    if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
+    if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
     setSubjectMessage(
@@ -5396,6 +5401,9 @@ studyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   studyMessage.classList.remove("is-error");
   studyMessage.textContent = "";
+
+  // a subject being created right now is the one the user just picked: wait for it instead of reporting "no subject"
+  if (pendingSubjectCreate) await pendingSubjectCreate.catch(() => {});
 
   const subjectId = Number(subjectSelect.value);
   const sourceText = studySourceTextInput ? studySourceTextInput.value.trim() : "";

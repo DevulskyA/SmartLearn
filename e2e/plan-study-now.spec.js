@@ -90,3 +90,22 @@ test('Plano: a unit with exercises but no first practice can start "Estudar agor
   row = await openPlanRow();
   await expect(row.locator('[data-action="plan-study-now"]')).toHaveCount(0);
 });
+
+test('saving a lesson right after creating a subject waits for the subject and keeps what was typed meanwhile', async ({ page }) => {
+  // the subject request is slow on purpose: the user has already typed the lesson and saved before it answers
+  await page.route('**/v1/subjects', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Disciplina Lenta');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2026-04-02');
+  await page.locator('#study-content').fill('Aula durante a criacao');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  await expect(page.locator('#study-date')).toHaveValue(/^(2026-04-02|)$/);
+  await expect(page.locator('.study-row', { hasText: 'Aula durante a criacao' })).toBeVisible();
+});

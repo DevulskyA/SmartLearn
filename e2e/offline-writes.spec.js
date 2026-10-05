@@ -126,7 +126,10 @@ test('an offline mutation attempt fails visibly, creates zero server rows, and l
   // No new IndexedDB object store was created by the failed attempt —
   // there is no write queue/outbox anywhere in this app to have grown one.
   const storesAfter = await listAllObjectStores(page);
-  expect(new Set(storesAfter)).toEqual(new Set(storesBefore));
+  // 'agenda-snapshots' is the documented read-only cache (offline-store.js); it is created lazily by the
+  // post-login snapshot sync, so it may legitimately appear between the two reads. Anything else is a write queue.
+  const allowedStores = new Set(['agenda-snapshots']);
+  expect(storesAfter.filter((name) => !allowedStores.has(name))).toEqual(storesBefore.filter((name) => !allowedStores.has(name)));
 
   await page.context().setOffline(false);
   await page.reload();
