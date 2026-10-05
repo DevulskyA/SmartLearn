@@ -285,19 +285,19 @@ Objetivo: o aluno nunca fica sem saber o que acontece; o sistema nunca deixa pro
 - Observação de evidência: a premissa "raciocínio longo é silencioso" vem do probe documentado no checkpoint; reconfirmar em T-F5-02 com medição real autorizada, não suposição.
 
 ### T-F3-04 — UI de geração: fase real, sair e voltar · M
-- Status: `[>]` 2026-10-05 · Requisitos: R-04 (AC-04.3), F-14 · Dependências: T-F3-02
+- Status: `[✓]` 2026-10-05 · BASE_SHA `c76c13b` · IMPLEMENTATION_SHA `169acf5` (a geração da UI vira job em segundo plano: fase real, tempo, sair/voltar/recarregar, cancelar com confirmação, STALLED calmo, falha em português; 4 casos e2e + 6 unitários, 4 mutações vermelhas; e2e completo 209 passed / 0 failed / 403 s; raiz 522/522, servidor 941/941) · Requisitos: R-04 (AC-04.3), F-14 · Dependências: T-F3-02
 - Superfície: `src/materials-ui.js`, `src/source-proposals-ui.js`, estilos.
 - Fazer: texto "pode levar alguns minutos"; fase atual e tempo; "Continuar em segundo plano" volta à lista; item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto; "Cancelar" com confirmação.
 - RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto; cancelar libera a unidade.
 - Subtarefas:
-  - [>] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
-  - [ ] RED (e2e): cancelar com confirmação libera a unidade
-  - [ ] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
-  - [ ] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
-  - [ ] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
+  - [x] RED (e2e com FAKE lento): sair da tela, voltar, ver "Gerando" e depois o rascunho pronto
+  - [x] RED (e2e): cancelar com confirmação libera a unidade
+  - [x] Texto "pode levar alguns minutos", fase atual e tempo; "Continuar em segundo plano" volta à lista
+  - [x] Item da lista mostra "Gerando…/Pronto/Falhou" e abre o rascunho quando pronto (`src/materials-ui.js`, `src/source-proposals-ui.js`, estilos)
+  - [x] Gate: `e2e/lesson-editor.spec.js` + `generation-jobs.spec.js`; axe nas telas novas; evidência e fechar
 - Gate: `e2e/lesson-editor.spec.js` + novo `generation-jobs.spec.js`; axe nas telas novas.
-- Próximo passo: ler `src/materials-ui.js` (~linha 119, texto "Está demorando mais que o normal... 20 minutos", que passa a ser fase real) e `src/source-proposals-ui.js`; a API pronta é `POST/GET /v1/generation-jobs`, `GET /v1/generation-jobs/:id` (campos `state`, `phase`, `startedAt`, `lastActivityAt`, `draftId`, `errorCode`; `STALLED` = aviso) e `POST /v1/generation-jobs/:id/cancel`; escrever o RED e2e (FAKE lento) em `e2e/generation-jobs.spec.js`. Não rodar o e2e completo; só a spec nova e `e2e/lesson-editor.spec.js`.
-- Comando: `node scripts/e2e.mjs` restrito à spec (ver `scripts/e2e.mjs` para o filtro)
+- Próximo passo: nenhum; tarefa fechada. Próxima: T-F4-03.
+- Comando: `npm run test:e2e -- e2e/generation-jobs.spec.js`
 
 ### T-F3-05 — Explicação obrigatória por validação · S
 - Status: `[✓]` 2026-10-05 · BASE_SHA `ea8c440` · IMPLEMENTATION_SHA `9a2799f` (EXPLANATION_MISSING substitui QUESTION_NO_EXPLANATION para toda questão sem "Por quê"; 2 mutações vermelhas; servidor 918/918) · Requisitos: F-15 · Dependências: nenhuma de F3
@@ -336,15 +336,18 @@ Objetivo: o produto precisa ser claro e confortável para uma pessoa, não só "
 - Gate: `lesson-view-model.test.js` ampliado + e2e.
 
 ### T-F4-03 — Posição de "Rascunhos em andamento" e confirmação de salvar no índice · S
-- Status: `[ ]` · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
+- Status: `[>]` 2026-10-05 · Requisitos: R-06 (AC-06.3), F-32, F-33 · Dependências: nenhuma
+- Superfície: `index.html` (ordem dos blocos de `#sources-proposals-panel`), `src/materials-ui.js` (handler de "Salvar título"), estilos.
 - Fazer: mover o bloco para antes da busca quando existir; "Salvar título" mostra "Título salvo" em região `role=status` e mantém foco.
 - Subtarefas:
-  - [ ] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
+  - [>] RED (e2e): com rascunhos em andamento, o bloco aparece antes da busca; sem eles, a ordem não muda
   - [ ] RED (e2e + a11y): "Salvar título" mostra "Título salvo" em `role=status` e o foco permanece no campo
   - [ ] Mover o bloco "Rascunhos em andamento" para antes da busca quando existir
   - [ ] Região `role=status` com "Título salvo" ao salvar o título no índice, sem mover o foco
   - [ ] Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso; evidência e fechar
 - Gate: `source-proposals.spec.js`, `materials-a11y.spec.js` + novo caso.
+- Próximo passo: o bloco `#sources-drafts` está DEPOIS da busca (`#sources-topic-form`) em `index.html` (~linhas 667-680); o bloco "Rascunhos em andamento" agora também lista gerações em andamento/falhas (T-F3-04, `renderDraftsInProgress` em `src/materials-ui.js`), então o caso e2e pode reaproveitar o stub lento de `e2e/generation-jobs.spec.js` ou um rascunho já existente (`lesson-editor.spec.js:324`). Escrever o RED em `e2e/source-proposals.spec.js` (ordem do DOM com/sem rascunhos) e o de "Título salvo" (`role=status`, foco no campo) antes de tocar em `index.html`. Hoje a confirmação de salvar usa `#sources-message` (`setSourcesMessage("Título atualizado.")`); F-33 pede a região `role=status` mantendo o foco no campo (a subtarefa pede que o foco permaneça no campo; hoje o código devolve o foco ao botão "Salvar título": provar qual elemento deve manter o foco antes de mudar).
+- Comando: `npm run test:e2e -- e2e/source-proposals.spec.js e2e/materials-a11y.spec.js`
 
 ### T-F4-04 — Editor da aula em telas estreitas · M
 - Status: `[ ]` · Requisitos: R-06 (AC-06.2), F-34 · Dependências: nenhuma
