@@ -81,3 +81,24 @@ Leitura contra a fonte (IA assistida; a revisão humana continua pendente): H1�
 Defeito achado e corrigido (servidor, sem mexer no prompt): o `QUALIFIER_ADDED` era falso positivo: a frase do rascunho funde duas frases da fonte e o "only" está na vizinha. A comparação agora considera a frase pareada e suas vizinhas (teste novo, vermelho sem a janela). Sobre as 3 rodadas de 04/10 e o canário: 0 achados do `risk-checks`. `audit-rules-3`. Também: uma frase só fica `SOURCE_LINKED` se todo valor que ela afirma estiver nos trechos que a sustentam (`PARTLY_LINKED` caso contrário; no canário nenhuma ficou parcial).
 
 Veredito do prompt v7: **KEEP o contrato de evidência** (o modelo real cumpre o formato e as citações são reais). A qualidade do resumo continua **NOT_PROVEN** além de 1 unidade e 1 geração, e os defeitos de concisão (0,45 da fonte), estrutura (sem títulos) e volume de questões (2,47/1.000) persistem: a v7 não os trata, como desenhado.
+
+## CICLO v7 → v8 (2026-10-08; 6 chamadas reais neste ciclo; envelope do programa: 9 de 12 usadas, ~16 de 180 min)
+Hipótese única (v8): o resumo da v7 é paráfrase quase integral em prosa sem estrutura. O challenger muda SÓ as regras do resumo (mapa de estudo por conceito com título curto, cadeia causa → mecanismo → efeito, sem referir o documento, ~1/4 a 1/3 da fonte sem perder mecanismo, número, qualificador ou conceito central); fidelidade, evidência e questões idênticas (teste garante que o prompt só difere nessas linhas).
+
+| Medida (mesma unidade "Renal Blood Flow", 12.544 car., 3 chamadas cada) | v7 (baseline) | v8 (challenger) |
+|---|---|---|
+| Falhas duras H1–H8 (leitura contra a fonte, IA assistida) | 0 | 0 |
+| Cobertura (mapa de 19 conceitos) | 19/19 | 19/19 (inclui o uso clínico da dopamina, que a v7 omitiu) |
+| Resumo | 5.692 car., 9 parágrafos, 0 títulos (0,45 da fonte) | 5.315 car., 8 títulos + parágrafos (0,42) |
+| Linguagem de meta (resumo / questões) | presente / 6 de 31 | 0 / 0 de 26 |
+| Questões (por 1.000 car.) | 31 (2,47) | 26 (2,07) |
+| Frases com trecho confirmado (cabeçalhos fora da conta) | 28/34 (82%) | 21/27 (78%) + 2 parciais |
+| Tempo | 350 s | 315 s |
+
+Validação em 2ª unidade (só v8, sem baseline): "Free-Water Clearance", PDF 313–315, 7.396 car., cálculo e caso clínico: 3 chamadas, 291 s, escopo exato, pt-BR verificado, 0 falhas duras de conteúdo, títulos por conceito, 0 linguagem de meta, 16/21 frases com trecho confirmado, 21 questões. O caso do livro tem dois valores discordantes (7 e 70 mOsm/L) e o resumo os apontou.
+
+**Veredito: PROMOVER a v8 como padrão** (`promptVersion` 8; a 7 continua reproduzível). Ganho em estrutura, linguagem de meta e volume sem perda de fidelidade ou cobertura; concisão continua fraca (0,42 e 0,53 da fonte): o modelo prioriza fidelidade, e parte do texto-fonte é fórmula/figura desfigurada que não comprime. Não persegui mais o prompt por tamanho (ganho marginal, regra do programa).
+
+Achados de produto desta rodada (não são do prompt):
+- D10 (P2) segmentação: o escopo de "Free-Water Clearance" levou ~1,3 mil caracteres do início da página 315 (bullets de resumo de capítulo) porque o texto antes do primeiro título de uma página pertence à última seção anterior; o resumo ganhou um parágrafo de Na+/K+ que não é do tema (H8 de segmentação, não de escopo: o payload respeitou o escopo aprovado).
+- D11 (P2) extração: decimais de equações tipografadas saem partidos ("3 45", "6 55"); os valores corretos 3,45 e 6,55 do resumo foram marcados HIGH `SUMMARY_UNSUPPORTED_VALUE` e bloquearam o aceite até a conferência humana (o bloqueio funcionou como projetado; o falso positivo vem da extração).

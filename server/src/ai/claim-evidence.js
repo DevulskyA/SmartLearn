@@ -88,7 +88,15 @@ export function validateSummaryEvidence(raw, { summary, segments }) {
   return { kept, rejected };
 }
 
-const sentencesOf = (text) => String(text).split(/\n+|(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= MIN_SENTENCE_CHARS);
+// A heading is a short line of its own that does not end like a sentence: it names a concept, it states nothing to be backed.
+const isHeading = (line) => line.length <= 90 && !/[.!?;:)]$/.test(line);
+const sentencesOf = (text) => String(text)
+  .split(/\n+/)
+  .map((line) => line.trim())
+  .filter((line) => line.length > 0 && !isHeading(line))
+  .flatMap((line) => line.split(/(?<=[.!?])\s+/))
+  .map((s) => s.trim())
+  .filter((s) => s.length >= MIN_SENTENCE_CHARS);
 
 /**
  * The state of the summary NOW, recomputed from the stored proposals, the current summary text and the current source.

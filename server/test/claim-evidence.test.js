@@ -170,3 +170,10 @@ test('a quote that backs only part of a sentence does not make its numbers look 
   const whole = { claim: 'A taxa de filtração glomerular normal é de cerca de 125 mL/min', pageIndex: 7, quote: GOOD.quote };
   assert.equal(groundSummary(SUMMARY, [whole], SEGMENTS).sentences[0].status, 'SOURCE_LINKED');
 });
+
+test('a heading line (a concept name on its own line) is not a claim to be backed and does not count as unlinked', () => {
+  const summary = `Filtração glomerular normal\n${SUMMARY}`;
+  const g = groundSummary(summary, [GOOD], SEGMENTS);
+  assert.equal(g.total, 3, 'the three sentences, not the heading');
+  assert.equal(g.sentences[0].status, 'SOURCE_LINKED');
+});

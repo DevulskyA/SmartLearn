@@ -14,6 +14,18 @@ import { languageOf } from '../../../shared/locales.js';
 // T-F10-02b: the content language is the student's generationLocale, never the source's. Only a locale that maps to a known language adds the directive.
 const LANGUAGE_NAMES = { pt: 'Portuguese', en: 'English', es: 'Spanish' };
 
+// CHALLENGER (promptVersion >= 8, one hypothesis: the v7 summary is a near-paraphrase in unstructured prose). It changes the SUMMARY
+// only; fidelity, qualifiers, evidence and every question rule stay exactly as in v7. Promoted to the default only if it beats v7
+// on the same unit without losing fidelity or coverage.
+const STRUCTURED_SUMMARY = (promptVersion) => Number(promptVersion) >= 8;
+const STRUCTURED_SUMMARY_RULES = [
+  '- STRUCTURE: write a study map, not a paraphrase. Organise by concept, not by the order of the source. Give each concept a short heading on its own line (the concept\'s name, no numbering, no markdown symbols), followed by its paragraph. Inside a concept go from what it is, to how it works, to why it works that way, to its consequence or clinical use, whenever the source supports those steps.',
+  '- ABSTRACT: say each idea once, in your own words, as a chain cause → mechanism → effect. Do not follow the source sentence by sentence and do not copy its wording; keep the exact terms, values, units, conditions and qualifiers.',
+  '- Put a formula or definition in plain text once, where its concept is explained, and say what each symbol stands for.',
+  '- Aim for roughly a quarter to a third of the source length; a repetitive source needs less. Length is never a reason to drop a mechanism, a number, a unit, a condition, an exception, a qualifier or a concept the source treats as central.',
+  '- Never refer to the document itself ("according to the text", "the text states", "in the table", "in the figure", "in the example shown"): state the fact directly.',
+];
+
 export function buildDraftPrompt(segments, promptVersion, { generationLocale = null } = {}) {
   const languageName = generationLocale ? LANGUAGE_NAMES[languageOf(generationLocale)] : null;
   const sourceBlock = segments
@@ -34,6 +46,7 @@ export function buildDraftPrompt(segments, promptVersion, { generationLocale = n
     `- Length is proportional to the source: a dense page justifies several paragraphs, a thin one a short paragraph. Never more than ${MAX_SUMMARY_LENGTH.toLocaleString('en-US')} characters; a summary over that is rejected whole, so compress the least important material first, never the definitions, mechanisms, conditions or numbers.`,
     '- No filler, no restating the same point twice, no generic padding to reach a length.',
     '- Teach, do not just compress: organise the concepts, keep causal relations, separate structures students commonly confuse, and explain a piece of jargon the first time it appears when the source itself explains it.',
+    ...(STRUCTURED_SUMMARY(promptVersion) ? STRUCTURED_SUMMARY_RULES : []),
     '- Source is the ONLY authority. Never complete a gap with general knowledge; if the source does not say it, leave it out.',
     '- summarySourceSpans lists the real pageIndex values the summary actually draws on (never a page that is not in the source).',
     '- summaryEvidence backs the important factual sentences of the summary: one {claim, pageIndex, quote} per sentence. `claim` is words copied EXACTLY from your summary (a whole sentence or a distinctive part of it). `quote` is a passage copied EXACTLY, character for character, from ONE page of the source text above (20 to 400 characters, in the source language: never translated, never reworded). `pageIndex` is that page. The server checks every quote against the source and discards what it cannot find, so never invent or reword a quote; a sentence you cannot back with a verbatim passage gets no entry.',

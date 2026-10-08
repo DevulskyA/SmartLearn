@@ -391,10 +391,11 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
+  // '8': structured study-map summary, no references to the document (challenger of 2026-10-08, promoted after two real units; '7' stays reproducible by passing it).
   // '7': summaryEvidence (the model proposes which passage backs which sentence; the server confirms it).
   // '5' (REALMODEL-1 quality closure): explanations must add a cause, hints must not leak the answer or its value, named
   // conditions must survive, whole-sentence copying is discouraged.
-  promptVersion = '7',
+  promptVersion = '8',
   apiKey = null,
   model = null,
   consentGranted = false,

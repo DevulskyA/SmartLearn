@@ -34,3 +34,14 @@ test('without a generation locale the prompt has no language directive (backward
   assert.doesNotMatch(prompt, /OUTPUT LANGUAGE/);
   assert.doesNotMatch(prompt, /"language": string/);
 });
+
+test('the structured-summary challenger (promptVersion 8) adds summary rules only; v7 is byte-for-byte unaffected by it', () => {
+  const segments = [{ pageIndex: 1, text: 'texto de teste' }];
+  const v7 = buildDraftPrompt(segments, '7');
+  const v8 = buildDraftPrompt(segments, '8');
+  assert.ok(!v7.includes('- STRUCTURE:'));
+  assert.ok(v8.includes('- STRUCTURE:') && v8.includes('- ABSTRACT:') && v8.includes('Never refer to the document itself'));
+  // everything else (fidelity, evidence, questions) is identical: the challenger changes ONE hypothesis
+  const strip = (p) => p.split('\n').filter((line) => !/^- (STRUCTURE|ABSTRACT|Put a formula|Aim for roughly|Never refer to the document)/.test(line)).join('\n').replace(/promptVersion exactly "\d+"/, 'promptVersion exactly "N"');
+  assert.equal(strip(v8), strip(v7));
+});
