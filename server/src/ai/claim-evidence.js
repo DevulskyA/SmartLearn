@@ -10,7 +10,7 @@
 //   4. quote and claim visibly talk about the same thing (every number of the claim is in the quote; some shared medical roots).
 // Nothing here is stored as a verdict: the stored data is only what the model proposed, and the verdict is recomputed whenever the
 // draft is read, so a changed source, an edited summary or a re-extraction can never leave support that merely looks valid.
-// The result is honest about its reach: SUPPORTED means "a real passage of the approved source, related to this sentence, is
+// The result is honest about its reach: SOURCE_LINKED means "a real passage of the approved source, related to this sentence, is
 // pointed at" — whether it really entails the sentence is what the reviewer reads side by side.
 
 export const MAX_EVIDENCE_ENTRIES = 60;
@@ -92,8 +92,8 @@ const sentencesOf = (text) => String(text).split(/\n+|(?<=[.!?])\s+/).map((s) =>
 
 /**
  * The state of the summary NOW, recomputed from the stored proposals, the current summary text and the current source.
- *   SUPPORTED    a verified entry points at a real, related passage of the approved source
- *   UNSUPPORTED  nothing points anywhere (or whatever did no longer holds: the sentence or the source changed)
+ *   SOURCE_LINKED a verified entry points at a real, related passage of the approved source (existence and relation, NOT entailment)
+ *   NOT_LINKED    nothing points anywhere (or whatever did no longer holds: the sentence or the source changed)
  * `orphaned` counts stored entries that no longer hold (claim rewritten, source changed) so the screen can say so.
  */
 export function groundSummary(summary, evidence, segments) {
@@ -109,9 +109,9 @@ export function groundSummary(summary, evidence, segments) {
     const n = normalizeForMatch(text);
     const hit = live.find((e) => n.includes(normalizeForMatch(e.claim)));
     return hit
-      ? { text, status: 'SUPPORTED', pageIndex: hit.pageIndex, quote: hit.quote }
-      : { text, status: 'UNSUPPORTED', pageIndex: null, quote: null };
+      ? { text, status: 'SOURCE_LINKED', pageIndex: hit.pageIndex, quote: hit.quote }
+      : { text, status: 'NOT_LINKED', pageIndex: null, quote: null };
   });
-  const supported = sentences.filter((s) => s.status === 'SUPPORTED').length;
+  const supported = sentences.filter((s) => s.status === 'SOURCE_LINKED').length;
   return { sentences, supported, unsupported: sentences.length - supported, total: sentences.length, orphaned };
 }

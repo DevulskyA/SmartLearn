@@ -287,7 +287,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     box.className = "summary-grounding";
     box.dataset.part = "summary-grounding";
     box.append(createTextElement("p", "summary-grounding-line", `Trecho da fonte confirmado em ${g.supported} de ${g.total} frases do resumo.${g.orphaned > 0 ? ` ${g.orphaned} apontamento(s) antigo(s) deixaram de valer porque a frase ou a fonte mudou.` : ""}`));
-    const unconfirmed = g.sentences.filter((sentence) => sentence.status !== "SUPPORTED");
+    const unconfirmed = g.sentences.filter((sentence) => sentence.status !== "SOURCE_LINKED");
     if (unconfirmed.length > 0) {
       const details = document.createElement("details");
       details.className = "summary-grounding-list";

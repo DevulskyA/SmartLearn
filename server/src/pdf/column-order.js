@@ -71,5 +71,13 @@ export function orderItemsByColumns(items, page) {
   const firstLeft = body.findIndex((b) => b.column === 'L');
   const rightBlock = body.slice(0, firstLeft);
   const leftBlock = body.slice(firstLeft);
-  return [...head, ...leftBlock, ...rightBlock, ...foot].flatMap((entry) => entry.line);
+  // A block boundary is a line boundary. The line that ended the page in the stream may carry no end-of-line marker (a watermark,
+  // a last fragment); moved in front of the other column it would glue to that column's first line and a heading there
+  // ("GLOMERULAR FILTRATION") would stop being on a line of its own, so it could no longer be found as a section start.
+  const closed = (entries) => entries.map((entry, i) => {
+    if (i < entries.length - 1 || entry.line.length === 0) return entry.line;
+    const last = entry.line[entry.line.length - 1];
+    return last.hasEOL ? entry.line : [...entry.line.slice(0, -1), { ...last, hasEOL: true }];
+  });
+  return [...head.map((entry) => entry.line), ...closed(leftBlock), ...closed(rightBlock), ...foot.map((entry) => entry.line)].flat();
 }

@@ -68,7 +68,7 @@ test('a real passage that does not talk about the claim is NOT grounding (valid 
 
 test('grounding: a supported sentence is distinguishable from an unsupported one', () => {
   const g = groundSummary(SUMMARY, [GOOD], SEGMENTS);
-  assert.deepEqual(g.sentences.map((s) => s.status), ['SUPPORTED', 'UNSUPPORTED', 'UNSUPPORTED']);
+  assert.deepEqual(g.sentences.map((s) => s.status), ['SOURCE_LINKED', 'NOT_LINKED', 'NOT_LINKED']);
   assert.equal(g.sentences[0].pageIndex, 7);
   assert.equal(g.supported, 1);
   assert.equal(g.unsupported, 2);
@@ -78,14 +78,14 @@ test('grounding: a supported sentence is distinguishable from an unsupported one
 test('an edit that rewrites the sentence leaves the evidence orphaned, never looking valid', () => {
   const edited = SUMMARY.replace('125 mL/min', '120 mL/min');
   const g = groundSummary(edited, [GOOD], SEGMENTS);
-  assert.equal(g.sentences[0].status, 'UNSUPPORTED');
+  assert.equal(g.sentences[0].status, 'NOT_LINKED');
   assert.equal(g.orphaned, 1);
 });
 
 test('a changed source stops supporting: the quote is no longer in the page, so the sentence is unsupported again', () => {
   const changed = [{ pageIndex: 7, text: 'Texto novo da página sem aquele trecho.' }, SEGMENTS[1]];
   const g = groundSummary(SUMMARY, [GOOD], changed);
-  assert.equal(g.sentences[0].status, 'UNSUPPORTED');
+  assert.equal(g.sentences[0].status, 'NOT_LINKED');
   assert.equal(g.orphaned, 1);
 });
 
@@ -131,11 +131,11 @@ test('pipeline: the model proposes three entries (real, invented, out-of-scope p
     assert.equal(created.summaryEvidence.length, 1);
     assert.equal(created.summaryGrounding.supported, 1);
     assert.equal(created.summaryGrounding.unsupported, 1);
-    assert.deepEqual(created.summaryGrounding.sentences.map((s) => s.status), ['SUPPORTED', 'UNSUPPORTED']);
+    assert.deepEqual(created.summaryGrounding.sentences.map((s) => s.status), ['SOURCE_LINKED', 'NOT_LINKED']);
 
     // the reviewer rewrites the supported sentence: the stored entry no longer holds, and the draft says so
     const edited = drafts.reviseSummary(db, userId, created.id, { summary: 'A filtracao glomerular normal e de cerca de 130 mL por minuto. Esta segunda frase do resumo nao tem apoio na fonte.', expectedVersion: created.summaryVersion });
-    assert.deepEqual(edited.summaryGrounding.sentences.map((s) => s.status), ['UNSUPPORTED', 'UNSUPPORTED']);
+    assert.deepEqual(edited.summaryGrounding.sentences.map((s) => s.status), ['NOT_LINKED', 'NOT_LINKED']);
     assert.equal(edited.summaryGrounding.orphaned, 1);
 
     // restoring the sentence restores the support (nothing was lost, nothing is stored as a verdict)

@@ -100,3 +100,14 @@ test('extraction pipeline: the same two columns painted left-then-right are stor
   const text = await storedPageText([...col(60, 700, 'Left', 8), ...col(318, 700, 'Right', 8)]);
   assert.ok(text.indexOf('Left column line 8') < text.indexOf('Right column line 1'));
 });
+
+test('a column boundary is a line boundary: the left column\'s last line has no end-of-line item in the stream, and the right column must still start on its own line', () => {
+  // as in the real Costanzo page 267: the last item painted on the page (a watermark) carries no end-of-line marker
+  const left = [...column(60, 716, 'L', 6), { str: 'watermark.com', transform: [1, 0, 0, 1, 60, 560], width: 90, height: 10, hasEOL: false }];
+  const right = [...line(318, 705, 'GLOMERULAR FILTRATION', 160), ...column(318, 690, 'R', 6)];
+  const out = orderItemsByColumns([...header(), ...right, ...left], PAGE);
+  const lines = textOf(out);
+  assert.ok(lines.includes('watermark.com'), 'the left column ends on its own line');
+  assert.ok(lines.includes('GLOMERULAR FILTRATION'), 'the right column heading starts on its own line (a section heading must be locatable)');
+  assert.equal(out.length, right.length + left.length + header().length, 'no item is lost or duplicated');
+});
