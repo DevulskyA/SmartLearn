@@ -17,10 +17,10 @@ import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const UPLOAD_DEFAULTS = { maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1024 };
 
-// T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js. Changing either changes this hash; when it does, bump
+// T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js + risk-checks.js. Changing either changes this hash; when it does, bump
 // AUDIT_RULES_VERSION (draft-audit.js) and record the new pair here. A rule changed without a new version fails below.
-const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js'];
-const PINNED = { version: 'audit-rules-1', hash: '09df983d9d718418f40160dee5882464d657246d9adc7371f379f663eb6e20c8' };
+const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js', '../src/ai/risk-checks.js'];
+const PINNED = { version: 'audit-rules-2', hash: '498edc98da6d808698aa99d3e6e4d5dc7c081344a7e34a08455a9041f7cf63f5' };
 const rulesHash = () => createHash('sha256').update(RULES_FILES.map((f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')).join('\n--\n')).digest('hex');
 
 test('the audit rule set cannot change without a new AUDIT_RULES_VERSION', () => {
