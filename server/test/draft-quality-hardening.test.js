@@ -221,7 +221,7 @@ function scriptedFetch(script) {
 }
 const draftJson = (question, o = {}) => ({
   summary: SUMMARY, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }],
-  questions: [{ questionType: 'MECHANISM', ...question }], modelVersion: 'm-1', promptVersion: '6', ...o,
+  questions: [{ questionType: 'MECHANISM', ...question }], modelVersion: 'm-1', promptVersion: '7', ...o,
 });
 const PASS = { result: 'PASS', findings: [] };
 const run = async (script) => {
@@ -235,10 +235,10 @@ const run = async (script) => {
   } finally { cleanup(); }
 };
 
-test('the current prompt version is 6 (the prompt changed materially, so stored drafts stay distinguishable)', async () => {
+test('the current prompt version is 7 (the prompt changed materially, so stored drafts stay distinguishable)', async () => {
   const { calls, draft } = await run([draftJson(PRESSURE), PASS]);
-  assert.match(calls[0], /promptVersion exactly "6"/);
-  assert.equal(draft.promptVersion, '6');
+  assert.match(calls[0], /promptVersion exactly "7"/);
+  assert.equal(draft.promptVersion, '7');
 });
 
 test('A end to end: a circular explanation triggers ONE repair, the repaired explanation teaches, and nothing loops', async () => {

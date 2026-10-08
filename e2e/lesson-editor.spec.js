@@ -458,3 +458,11 @@ test('a critical finding stops the acceptance until the reviewer resolves it: qu
   await editor.locator('[data-action="accept-draft"]').click();
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
 });
+
+test('the summary says which sentences have a confirmed passage of the source, and lists the ones that do not', async ({ page }) => {
+  await openLesson(page, 'trecho.pdf');
+  const editor = page.locator('.lesson-editor');
+  const grounding = editor.locator('[data-part="summary-grounding"]');
+  await expect(grounding).toBeVisible();
+  await expect(grounding.locator('.summary-grounding-line')).toContainText(/Trecho da fonte confirmado em \d+ de \d+ frases do resumo/);
+});

@@ -7,6 +7,8 @@
 // (AC-19/AC-21: "every proposed unit is attributable to exact source
 // segments").
 
+import { validateSummaryEvidence } from './claim-evidence.js';
+
 export class DraftValidationError extends Error {
   constructor(code, message, field) {
     super(message);
@@ -24,7 +26,7 @@ const MAX_QUESTION_LENGTH = 1000;
 const MAX_ANSWER_LENGTH = 2000;
 // `language` is optional: the language the provider says it wrote in. It is NOT part of the validated draft; the language
 // contract (language-contract.js) reads it from the raw answer and compares it with the student's generationLocale.
-const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion', 'language']);
+const ALLOWED_DRAFT_KEYS = new Set(['summary', 'summarySourceSpans', 'summaryEvidence', 'questions', 'modelVersion', 'promptVersion', 'language']);
 const MAX_EXPLANATION_LENGTH = 2000;
 const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'explanation', 'questionType', 'hint', 'sourceSpans']);
 
@@ -147,9 +149,14 @@ export function validateDraft(raw, { segments }) {
     throw new DraftValidationError('INVALID_DRAFT', 'Nenhuma questão do rascunho tinha citação válida — rascunho descartado.', 'questions');
   }
 
+  // The model PROPOSES which passage backs which sentence; only what the server can confirm is kept (ai/claim-evidence.js).
+  const evidence = validateSummaryEvidence(raw.summaryEvidence, { summary: raw.summary, segments });
+
   return {
     summary: raw.summary,
     summarySourceSpans,
+    summaryEvidence: evidence.kept,
+    evidenceRejectedCount: evidence.rejected,
     questions: acceptedQuestions,
     modelVersion: raw.modelVersion,
     promptVersion: raw.promptVersion,

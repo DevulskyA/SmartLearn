@@ -278,6 +278,29 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
   }
 
+  // Which sentences of the summary point at a real passage of the approved source (confirmed by the server, recomputed on every read).
+  function renderGrounding() {
+    summaryPanel.querySelector(":scope > .summary-grounding")?.remove();
+    const g = draft.summaryGrounding;
+    if (!g || g.total === 0) return;
+    const box = document.createElement("div");
+    box.className = "summary-grounding";
+    box.dataset.part = "summary-grounding";
+    box.append(createTextElement("p", "summary-grounding-line", `Trecho da fonte confirmado em ${g.supported} de ${g.total} frases do resumo.${g.orphaned > 0 ? ` ${g.orphaned} apontamento(s) antigo(s) deixaram de valer porque a frase ou a fonte mudou.` : ""}`));
+    const unconfirmed = g.sentences.filter((sentence) => sentence.status !== "SUPPORTED");
+    if (unconfirmed.length > 0) {
+      const details = document.createElement("details");
+      details.className = "summary-grounding-list";
+      const label = document.createElement("summary");
+      label.textContent = `Frases sem trecho confirmado (${unconfirmed.length}) — confira na fonte`;
+      const list = document.createElement("ul");
+      for (const sentence of unconfirmed) list.append(createTextElement("li", "summary-grounding-item", sentence.text));
+      details.append(label, list);
+      box.append(details);
+    }
+    summaryPanel.insertBefore(box, summaryHint);
+  }
+
   function renderSummary() {
     if (document.activeElement !== summaryField.input && summaryBuffer === null) summaryField.input.value = draft.summary;
     // where the summary came from, with the page text one click away (read live from the proposal's own pages)
@@ -290,6 +313,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         spans.map((sp) => byIndex.get(sp.pageIndex) ?? { pageIndex: sp.pageIndex, text: null }),
       ), summaryHint);
     }
+    renderGrounding();
     const dirty = summaryBuffer !== null && summaryBuffer !== draft.summary;
     summarySave.disabled = !dirty;
     summaryDirty.textContent = dirty ? "Alterações não salvas" : "";

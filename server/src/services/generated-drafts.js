@@ -18,6 +18,7 @@ import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
 import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION } from '../ai/draft-audit.js';
+import { groundSummary } from '../ai/claim-evidence.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -315,6 +316,9 @@ function toDraftDto(row, { db, userId } = {}) {
     findingCount: (audit?.findings ?? []).filter((f) => f.severity !== 'LOW' && f.entityId === q.id).length,
   }));
   draft.audit = audit;
+  // Which sentence of the summary is backed by a real passage of the approved source, recomputed NOW (never a stored verdict).
+  const grounded = db ? findOwnedProposalWithSegments(db, userId, row.proposal_id) : null;
+  draft.summaryGrounding = groundSummary(draft.summary, draft.summaryEvidence, grounded?.segments ?? []);
   // what acceptance would refuse right now (without the summary acknowledgement): the screen reads it instead of re-deriving the rule
   const acceptanceBlock = acceptanceBlockers({ ...draft, audit: draft.audit }, {});
   return {
@@ -387,9 +391,10 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
+  // '7': summaryEvidence (the model proposes which passage backs which sentence; the server confirms it).
   // '5' (REALMODEL-1 quality closure): explanations must add a cause, hints must not leak the answer or its value, named
   // conditions must survive, whole-sentence copying is discouraged.
-  promptVersion = '6',
+  promptVersion = '7',
   apiKey = null,
   model = null,
   consentGranted = false,
@@ -509,8 +514,11 @@ export async function createDraft(db, userId, proposalId, {
   };
   languageCheckOf(validated);
 
+  const proposedEvidence = validated.summaryEvidence;
   const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs: deadlineMs });
   validated = audited.draft;
+  // A repair that does not return evidence keeps the entries already confirmed; any whose sentence it rewrote simply stop holding (recomputed on read).
+  if (!validated.summaryEvidence?.length) validated = { ...validated, summaryEvidence: proposedEvidence };
   callsMade = 1 + (audited.audit.modelAudit !== 'NOT_RUN' ? 1 : 0) + (audited.audit.repaired || audited.audit.repairRejected ? 1 : 0);
   // A repair may have rewritten text: the final content is what must be in the target language.
   const languageCheck = languageCheckOf(validated);
@@ -525,6 +533,7 @@ export async function createDraft(db, userId, proposalId, {
   const draftContent = normalizeContent({
     summary: validated.summary,
     summarySourceSpans: validated.summarySourceSpans,
+    summaryEvidence: validated.summaryEvidence ?? [],
     questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
     quarantinedCount: validated.quarantinedCount,
     audit: { ...audited.audit, rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },

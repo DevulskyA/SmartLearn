@@ -44,8 +44,14 @@ export async function generateDraft({ segments, promptVersion }) {
     sourceSpans: [{ pageIndex: segment.pageIndex }],
   }));
 
+  // The double's summary is a cut of the source itself, so its first sentence is a verbatim passage of the first page: real evidence.
+  const first = segments[0];
+  const firstSentence = first ? (first.text.replace(/\s+/g, ' ').trim().match(/^.{20,300}?[.!?](?=\s|$)|^.{20,300}/)?.[0] ?? '') : '';
+  const summaryEvidence = firstSentence && summary.includes(firstSentence) ? [{ claim: firstSentence, pageIndex: first.pageIndex, quote: firstSentence }] : [];
+
   return {
     summary,
+    summaryEvidence,
     questions,
     modelVersion: FAKE_MODEL_VERSION,
     promptVersion,

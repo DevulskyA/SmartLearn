@@ -57,6 +57,15 @@ export const DRAFT_JSON_SCHEMA = Object.freeze({
   properties: {
     summary: { type: 'string' },
     summarySourceSpans: { type: 'array', items: SPAN },
+    summaryEvidence: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { claim: { type: 'string' }, pageIndex: { type: 'integer' }, quote: { type: 'string' } },
+        required: ['claim', 'pageIndex', 'quote'],
+        additionalProperties: false,
+      },
+    },
     questions: {
       type: 'array',
       items: {
@@ -77,7 +86,7 @@ export const DRAFT_JSON_SCHEMA = Object.freeze({
     promptVersion: { type: 'string' },
     language: { type: 'string' },
   },
-  required: ['summary', 'summarySourceSpans', 'questions', 'modelVersion', 'promptVersion', 'language'],
+  required: ['summary', 'summarySourceSpans', 'summaryEvidence', 'questions', 'modelVersion', 'promptVersion', 'language'],
   additionalProperties: false,
 });
 

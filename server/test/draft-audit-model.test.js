@@ -55,7 +55,7 @@ const GOOD_Q = {
   hint: null,
   sourceSpans: [{ pageIndex: 1 }],
 };
-const good = (o = {}) => ({ summary: GOOD_SUMMARY, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }], questions: [GOOD_Q], modelVersion: 'm-1', promptVersion: '6', ...o });
+const good = (o = {}) => ({ summary: GOOD_SUMMARY, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }], questions: [GOOD_Q], modelVersion: 'm-1', promptVersion: '7', ...o });
 
 /** A fetch that answers the n-th call with the n-th scripted body (or throws it, if it is an Error). */
 function scriptedFetch(script) {
@@ -257,8 +257,8 @@ test('the model endpoint is operator-configurable, defaults to the real API, and
     };
     const draft = await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl, apiUrl: 'http://127.0.0.1:9/stub' });
     assert.deepEqual(urls, ['http://127.0.0.1:9/stub', 'http://127.0.0.1:9/stub']);
-    assert.match(prompts[0], /promptVersion exactly "6"/, 'no explicit promptVersion -> the current one, not a stale default');
-    assert.equal(draft.promptVersion, '6');
+    assert.match(prompts[0], /promptVersion exactly "7"/, 'no explicit promptVersion -> the current one, not a stale default');
+    assert.equal(draft.promptVersion, '7');
 
     urls.length = 0;
     await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl });

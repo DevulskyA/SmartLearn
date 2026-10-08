@@ -351,7 +351,7 @@ test('pipeline: SOURCE -> CODEX -> schema validation -> audit -> DRAFT, labelled
     assert.equal(draft.provider, 'CODEX');
     assert.equal(draft.live, true);
     assert.equal(draft.modelVersion, 'codex:default', 'the model does not get to name itself');
-    assert.equal(draft.promptVersion, '6'); // T-F10-02b: the prompt text changed, so the default version moved 5 -> 6
+    assert.equal(draft.promptVersion, '7'); // the prompt text changed (T-F10-02b 5 -> 6; summaryEvidence 6 -> 7), so the default version moved
     assert.equal(draft.audit.modelAudit, 'OK');
     assert.ok(draft.audit.auditedBy.includes('MODEL'));
     assert.equal(draft.audit.repaired, false);
