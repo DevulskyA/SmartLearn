@@ -1,6 +1,6 @@
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { resolveOrCreateSubject, describeSubject, LearningUnitError } from './learning-units.js';
-import { isDraftStale, normalizeContent } from './generated-drafts.js';
+import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
@@ -30,7 +30,7 @@ function unitDto(row) {
  * Shared by acceptDraft and previewAcceptance so the preview can never describe something acceptance would not do.
  * `requireRevision` is true for acceptance; the preview only checks a revision it was given.
  */
-function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision }) {
+function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision, acknowledgeSummaryFindings = false }) {
   // C3 (audit): the caller must identify EXACTLY the revision it reviewed.
   // A concurrent edit (replaceDraftContent) bumps this draft's revision — if that
   // happened between the caller's last read and this accept call, fail
@@ -65,6 +65,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
   }
 
   const content = normalizeContent(JSON.parse(draftRow.draft_json));
+  const blockers = acceptanceBlockers(content, { acknowledgeSummaryFindings });
   // A question the reviewer rejected never becomes an exercise; the rest of the lesson is unaffected.
   const excluded = content.questions.filter((q) => q.status === 'REJECTED');
   const draftContent = { ...content, questions: content.questions.filter((q) => q.status !== 'REJECTED') };
@@ -83,7 +84,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
   );
 
 
-  return { proposal, dueDates, draftContent, excluded, pageTextByIndex, sourceRow };
+  return { proposal, dueDates, draftContent, excluded, pageTextByIndex, sourceRow, blockers };
 }
 
 /**
@@ -104,7 +105,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
  * medically validated — it is ordinary, editable learning material like
  * any manually created exercise, just tagged with its real provenance.
  */
-export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision } = {}, now = () => new Date()) {
+export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', 'Rascunho não encontrado.');
 
@@ -115,8 +116,14 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     throw new AcceptDraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser aceito.`);
   }
 
-  const plan = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: true });
-  const { proposal, dueDates, draftContent, pageTextByIndex, sourceRow } = plan;
+  const plan = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
+  const { proposal, dueDates, draftContent, pageTextByIndex, sourceRow, blockers } = plan;
+  if (blockers.questions.length > 0 || blockers.summary > 0) {
+    const parts = [];
+    if (blockers.questions.length > 0) parts.push(`${blockers.questions.length} questão(ões) com ponto crítico ainda não aceitas ou rejeitadas por você`);
+    if (blockers.summary > 0) parts.push(`${blockers.summary} ponto(s) crítico(s) no resumo que você ainda não conferiu`);
+    throw new AcceptDraftError('FINDINGS_UNRESOLVED', `Não dá para aceitar ainda: ${parts.join('; ')}. Confira na fonte e aceite ou rejeite cada uma.`);
+  }
 
   const run = db.transaction(() => {
     let subject;
@@ -197,7 +204,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
  * acceptance (revision if given, date, source freshness, rejected questions) and the SAME subject validation, then describes
  * the result; it writes nothing. An already accepted draft returns the frozen result of its acceptance.
  */
-export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision } = {}) {
+export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', 'Rascunho não encontrado.');
   if (draftRow.status === 'ACCEPTED') {
@@ -206,7 +213,7 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
   if (draftRow.status !== 'DRAFT') {
     throw new AcceptDraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser aceito.`);
   }
-  const { proposal, dueDates, draftContent, excluded, pageTextByIndex } = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: false });
+  const { proposal, dueDates, draftContent, excluded, pageTextByIndex, blockers } = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: false, acknowledgeSummaryFindings });
   let subject;
   try {
     subject = describeSubject(db, userId, { subjectId, newSubjectName, newSubjectColor });
@@ -238,5 +245,7 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
       origin: q.origin,
     })),
     excluded: excluded.map((q) => ({ questionId: q.id, question: q.question, reason: 'REJECTED' })),
+    // what acceptance would refuse right now (the same rule acceptDraft applies): questions with a critical finding still undecided, and unacknowledged critical findings on the summary
+    blockers,
   };
 }

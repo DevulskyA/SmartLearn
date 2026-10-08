@@ -227,12 +227,20 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   previewPanel.setAttribute("aria-label", "Pré-visualização do aceite");
   previewPanel.tabIndex = -1;
   previewPanel.hidden = true;
+  // Critical findings on the SUMMARY have no per-claim state to resolve: the reviewer confirms, explicitly, that they checked them against the source.
+  const ackWrap = document.createElement("label");
+  ackWrap.className = "lesson-accept-ack";
+  ackWrap.hidden = true;
+  const ackBox = document.createElement("input");
+  ackBox.type = "checkbox";
+  ackBox.dataset.action = "ack-summary-findings";
+  ackWrap.append(ackBox, document.createTextNode(" Conferi na fonte os pontos críticos do resumo"));
   const acceptBtn = button("primary-button", "Aceitar e criar aula", "accept-draft");
   const acceptMessage = statusMessage();
   acceptMessage.classList.add("source-draft-result");
   const afterAccept = document.createElement("div");
   afterAccept.className = "lesson-actions";
-  footer.append(acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, acceptBtn, acceptMessage, afterAccept);
+  footer.append(acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     nameField.input.disabled = picked;
@@ -536,6 +544,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const kept = keptQuestionCount(draft);
     const rejected = draft.questions.length - kept;
     acceptNote.textContent = `${kept} ${kept === 1 ? "questão vira exercício" : "questões viram exercícios"}${rejected > 0 ? `; ${rejected} rejeitada${rejected === 1 ? "" : "s"} não entra${rejected === 1 ? "" : "m"}` : ""}. Revisões são agendadas ao aceitar.`;
+    const summaryBlockers = draft.acceptanceBlockers?.summary ?? 0;
+    ackWrap.hidden = accepted || summaryBlockers === 0;
+    if (ackWrap.hidden) ackBox.checked = false;
     acceptBtn.disabled = accepted || kept === 0;
     previewBtn.disabled = accepted || kept === 0 || !deps.previewAcceptance;
     previewPanel.hidden = true;
@@ -694,6 +705,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       newSubjectName: pickedSubjectId ? undefined : nameField.input.value,
       studyDate: dateField.input.value,
       expectedRevision: draft.revision,
+      acknowledgeSummaryFindings: ackBox.checked,
     });
     previewBtn.disabled = accepted;
     if (!result.ok) {
@@ -717,6 +729,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       newSubjectName: pickedSubjectId ? undefined : nameField.input.value,
       studyDate: dateField.input.value,
       expectedRevision: draft.revision,
+      acknowledgeSummaryFindings: ackBox.checked,
     });
     if (!result.ok) {
       setMessage(acceptMessage, result.message || "Não foi possível aceitar o rascunho.", true);

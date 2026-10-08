@@ -25,6 +25,7 @@ function handleError(err, reply) {
       SCOPE_VIOLATION: 409,
       NOT_GENERATABLE: 409,
       SOURCE_CHANGED: 409,
+      FINDINGS_UNRESOLVED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message } };
@@ -209,7 +210,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
         type: 'object',
         properties: {
           subjectId: { type: 'string' }, newSubjectName: { type: 'string' }, newSubjectColor: { type: 'string' },
-          studyDate: { type: 'string' }, expectedRevision: { type: 'string' },
+          studyDate: { type: 'string' }, expectedRevision: { type: 'string' }, acknowledgeSummaryFindings: { type: 'string' },
         },
       },
     },
@@ -231,6 +232,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
           newSubjectColor: q.newSubjectColor,
           studyDate: q.studyDate,
           expectedRevision: asInteger(q.expectedRevision, 'expectedRevision'),
+          acknowledgeSummaryFindings: q.acknowledgeSummaryFindings === 'true',
         }),
       };
     } catch (err) { return handleError(err, reply); }
@@ -248,6 +250,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
           newSubjectColor: { type: 'string' },
           studyDate: { type: 'string' },
           expectedRevision: { type: 'integer' },
+          acknowledgeSummaryFindings: { type: 'boolean' },
         },
       },
     },

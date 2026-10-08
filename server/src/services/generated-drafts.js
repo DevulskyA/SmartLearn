@@ -260,7 +260,7 @@ export function normalizeContent(content, generatedByDefault = null) {
 }
 
 /** Audit findings with the entity they are about (stable id), so the UI groups them per question instead of dumping them. */
-function findingsWithEntities(audit, questions) {
+export function findingsWithEntities(audit, questions) {
   if (!audit) return audit;
   return {
     ...audit,
@@ -276,6 +276,26 @@ function findingsWithEntities(audit, questions) {
       };
     }),
   };
+}
+
+/**
+ * What the human has not yet resolved: HIGH findings ("wrong or unsupported medical content"). AI output stays a draft until a
+ * person has dealt with each one, and that is enforced HERE, not only by the screen:
+ *   - a question with a HIGH finding must be explicitly ACCEPTED by the reviewer (or rejected, which keeps it out);
+ *   - HIGH findings on the summary need the reviewer's explicit acknowledgement (there is no per-claim state to resolve).
+ * MEDIUM and LOW stay advisory (their false-positive rate would otherwise build a wall of alerts), and so do the HIGH findings
+ * that are about HOW the content teaches rather than whether it is true to the source (too thin, answer or hint giving the
+ * answer away): they stay visible on the review screen but never stop the lesson.
+ */
+const PEDAGOGY_ONLY = new Set(['SUMMARY_TOO_THIN', 'QUESTION_ANSWER_TOO_THIN', 'QUESTION_ANSWER_LEAKED', 'HINT_REVEALS_ANSWER', 'HINT_REVEALS_VALUE', 'QUESTION_VOLUME_OUT_OF_RANGE']);
+
+export function acceptanceBlockers(content, { acknowledgeSummaryFindings = false } = {}) {
+  const findings = findingsWithEntities(content.audit, content.questions)?.findings ?? [];
+  const high = findings.filter((f) => f.severity === 'HIGH' && !PEDAGOGY_ONLY.has(f.issue));
+  const questionIds = new Set(high.filter((f) => f.entityType === 'QUESTION').map((f) => f.entityId));
+  const questions = content.questions.filter((q) => questionIds.has(q.id) && q.status !== 'ACCEPTED' && q.status !== 'REJECTED').map((q) => q.id);
+  const summary = acknowledgeSummaryFindings === true ? 0 : high.filter((f) => f.entityType === 'SUMMARY').length;
+  return { questions, summary };
 }
 
 /** Read-only: which document and pages the unit this draft hangs on covers (shown even for drafts generated before sourceScope existed). */
@@ -295,7 +315,10 @@ function toDraftDto(row, { db, userId } = {}) {
     findingCount: (audit?.findings ?? []).filter((f) => f.severity !== 'LOW' && f.entityId === q.id).length,
   }));
   draft.audit = audit;
+  // what acceptance would refuse right now (without the summary acknowledgement): the screen reads it instead of re-deriving the rule
+  const acceptanceBlock = acceptanceBlockers({ ...draft, audit: draft.audit }, {});
   return {
+    acceptanceBlockers: { questions: acceptanceBlock.questions, summary: acceptanceBlock.summary },
     id: row.id,
     proposalId: row.proposal_id,
     provider: row.provider,
@@ -653,13 +676,36 @@ function loadEditable(db, userId, draftId) {
 }
 
 /** Re-screens deterministically (a human edit changes the text, so earlier findings describe text that is gone), writes ONE row update and bumps the draft revision. */
+/** The fields of a question a reviewer can change the MEANING of (status, version and timestamps are not content). */
+const questionText = (q) => JSON.stringify([q.question, q.answer, q.explanation ?? null, q.hint ?? null, q.questionType ?? null]);
+
+/**
+ * A model finding is about one specific text. After an edit it stays when THAT text is untouched (accepting an unrelated question
+ * must not erase a critical point about the summary) and goes when the text it judged changed. Findings are addressed by question
+ * position, so if questions were added, removed or reordered none of them can be trusted to still point at the same question.
+ */
+function modelFindingsStillValid(previous, current, next) {
+  const kept = (previous?.findings ?? []).filter((f) => f.source === 'MODEL');
+  if (kept.length === 0) return [];
+  const sameShape = current.questions.length === next.questions.length && current.questions.every((q, i) => q.id === next.questions[i].id);
+  return kept.filter((f) => {
+    if (f.scope === 'summary') return current.summary === next.summary;
+    const m = /^question:(\d+)$/.exec(f.scope ?? '');
+    if (!m || !sameShape) return false;
+    const i = Number(m[1]);
+    return Boolean(current.questions[i]) && questionText(current.questions[i]) === questionText(next.questions[i]);
+  });
+}
+
 function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
   const rescreen = auditDraft({ summary: next.summary, summarySourceSpans: next.summarySourceSpans, questions: next.questions }, { segments: found.segments });
+  const keptModel = modelFindingsStillValid(current.audit, current, next);
+  const findings = [...withSource(rescreen.findings, 'DETERMINISTIC'), ...keptModel];
   const audit = {
-    result: rescreen.result,
-    findings: withSource(rescreen.findings, 'DETERMINISTIC'),
-    auditedBy: ['DETERMINISTIC'],
-    modelAudit: 'NOT_RUN',
+    result: findings.some(isBlocking) ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS,
+    findings,
+    auditedBy: keptModel.length > 0 ? ['DETERMINISTIC', 'MODEL'] : ['DETERMINISTIC'],
+    modelAudit: keptModel.length > 0 ? (current.audit?.modelAudit ?? 'OK') : 'NOT_RUN',
     repaired: false,
     repairRejected: false,
     addressed: [],

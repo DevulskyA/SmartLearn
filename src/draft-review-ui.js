@@ -76,11 +76,11 @@ export async function deleteQuestion(draftId, questionId) {
  * the call with `REVISION_CONFLICT` if the draft was edited since, rather
  * than silently publishing content the caller never reviewed.
  */
-export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision }) {
+export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings }) {
   try {
     const { acceptance } = await apiRequest(`/v1/drafts/${draftId}/accept`, {
       method: 'POST',
-      body: { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision },
+      body: { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings: acknowledgeSummaryFindings === true },
     });
     return { ok: true, acceptance };
   } catch (err) { return fail(err); }
@@ -90,9 +90,9 @@ export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubje
  * READ-ONLY: what accepting this draft would create (subject, unit, exercises with the question each came from, the
  * rejected questions that stay out), computed by the server with the same preparation as the acceptance. Nothing is written.
  */
-export async function previewAcceptance(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision }) {
+export async function previewAcceptance(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings }) {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries({ subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision })) {
+  for (const [key, value] of Object.entries({ subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings: acknowledgeSummaryFindings === true ? 'true' : undefined })) {
     if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
   }
   try {
