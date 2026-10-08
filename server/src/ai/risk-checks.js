@@ -185,22 +185,38 @@ function pairSentences(sourceItems, draftItems) {
   return pairs;
 }
 
-function auditPairs(pairs, sets, scopeOf) {
+// A draft sentence often folds two neighbouring source sentences into one ("... stays constant; only below 80 ..."), so a cue that
+// the OTHER side carries in the neighbouring sentence is not a change. The window is the paired sentence plus its direct neighbours.
+function windowCues(items, at, sets, own) {
+  const out = { negation: new Set(own.negation), qualifiers: new Set(own.qualifiers) };
+  for (const k of [at - 1, at + 1]) {
+    const near = items[k];
+    if (!near || near.group !== items[at].group) continue;
+    const c = cuesIn(near.text, sets);
+    c.negation.forEach((x) => out.negation.add(x));
+    c.qualifiers.forEach((x) => out.qualifiers.add(x));
+  }
+  return out;
+}
+
+function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
   const findings = [];
   for (const { draft, source } of pairs) {
     const d = cuesIn(draft.text, sets.draft);
     const s = cuesIn(source.text, sets.source);
+    const sourceWindow = windowCues(sourceItems, sourceItems.indexOf(source), sets.source, s);
+    const draftWindow = windowCues(draftItems, draftItems.indexOf(draft), sets.draft, d);
     const scope = scopeOf(draft);
     const evidence = `p. ${source.pageIndex}: ${clip(source.text)}`;
     for (const q of s.qualifiers) {
-      if (!d.qualifiers.includes(q) && !(q.startsWith('HEDGE') && d.qualifiers.some((x) => x.startsWith('HEDGE')))) {
+      if (!draftWindow.qualifiers.has(q) && !(q.startsWith('HEDGE') && [...draftWindow.qualifiers].some((x) => x.startsWith('HEDGE')))) {
         findings.push({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
           repair: 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do rascunho não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.' });
         break;
       }
     }
     for (const q of d.qualifiers) {
-      if (ABSOLUTES.has(q) && !s.qualifiers.includes(q) && !(q === 'NEVER' && s.negation.length > 0)) {
+      if (ABSOLUTES.has(q) && !sourceWindow.qualifiers.has(q) && !(q === 'NEVER' && sourceWindow.negation.size > 0)) {
         findings.push({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
           repair: 'A frase do rascunho usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.' });
         break;
@@ -229,12 +245,12 @@ export function auditRisk(draft, { segments }) {
   const draftLang = detectLanguage(draftText).language;
   if (!CUES.negation[sourceLang] || !CUES.negation[draftLang]) return findings;
 
-  const sourceItems = segments.flatMap((seg) => sentencesOf(seg.text).map((text) => ({ text, pageIndex: seg.pageIndex, anchors: anchorsOf(text) })));
+  const sourceItems = segments.flatMap((seg) => sentencesOf(seg.text).map((text) => ({ text, pageIndex: seg.pageIndex, group: seg.pageIndex, anchors: anchorsOf(text) })));
   const draftItems = [
-    ...sentencesOf(draft.summary ?? '').map((text) => ({ text, where: 'summary', anchors: anchorsOf(text) })),
-    ...(draft.questions ?? []).flatMap((q, i) => sentencesOf([q.answer, q.explanation ?? ''].join('. ')).map((text) => ({ text, where: `question:${i}`, anchors: anchorsOf(text) }))),
+    ...sentencesOf(draft.summary ?? '').map((text) => ({ text, where: 'summary', group: 'summary', anchors: anchorsOf(text) })),
+    ...(draft.questions ?? []).flatMap((q, i) => sentencesOf([q.answer, q.explanation ?? ''].join('. ')).map((text) => ({ text, where: `question:${i}`, group: `question:${i}`, anchors: anchorsOf(text) }))),
   ];
   const pairs = pairSentences(sourceItems, draftItems);
-  findings.push(...auditPairs(pairs, { source: cueSets(sourceLang), draft: cueSets(draftLang) }, (d) => d.where));
+  findings.push(...auditPairs(pairs, { source: cueSets(sourceLang), draft: cueSets(draftLang) }, (d) => d.where, { sourceItems, draftItems }));
   return findings;
 }

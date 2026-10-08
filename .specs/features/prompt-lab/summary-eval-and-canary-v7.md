@@ -62,3 +62,22 @@ RUBRIC            = rubric.md (falhas duras H1–H8, qualidade Q1–Q10); baseli
 **WHAT_IT_DOES_NOT_PROVE:** qualidade geral do Resumo Mestre (1 unidade, 1 geração: não há variabilidade); que "trecho confirmado" implica a frase; a qualidade das questões em escala; o estudo ponta a ponta com conteúdo gerado (aceite → Estudar agora com esse rascunho é outro passo); outros idiomas e fontes; benchmark humano (VALID-8).
 
 **HUMAN_REVIEW_NEEDED:** sim. Leitura do resumo contra a fonte para H1–H7 por uma pessoa (a avaliação da IA assistente é a pré-leitura, não substitui); no mínimo todas as frases sem trecho confirmado e uma amostra de 5 frases com trecho confirmado.
+
+## RESULTADO DO CANÁRIO V7 (executado em 2026-10-08, autorizado; 1 rodada, Codex, banco de laboratório `work\lab-v7.db`, saídas em `runs\v7-canary-rbf-*`)
+```
+CANARY_STATUS      = CONCLUÍDO, nenhuma condição de falha dura disparada
+CALLS              = 3 (geração + auditoria do modelo + 1 reparo) = o máximo; nenhuma geração extra
+DURATION           = 350 s (teto 45 min)
+SOURCE_SCOPE_OK    = sim: páginas 263–267, payloadChars 12.544 = sourceChars (a medição prévia deu 12.548: diferença de 4 de espaço em branco, mesmo escopo), sem o título "GLOMERULAR FILTRATION"
+LANGUAGE           = VERIFIED, pt-BR (fonte en)
+EVIDENCE           = 32 entradas confirmadas pelo servidor, 0 em quarentena; frases com trecho confirmado 28 de 34 (82%); 1 entrada órfã (a frase foi reescrita no reparo). O total proposto pelo modelo não é gravado (limite de instrumentação)
+NOT_LINKED (6)     = 1 frase que funde duas da fonte + 5 de fórmula (a extração do PDF desfigura as fórmulas, então o modelo não consegue citar literalmente); lidas contra a fonte: todas fiéis
+SUMMARY_LENGTH     = 5.692 caracteres, 9 parágrafos, 0 títulos, 0 listas; razão 0,45 da fonte (baseline 0,34–0,36)
+QUESTIONS          = 31 (2,47 por 1.000 caracteres; baseline 1,34–1,54); 6 com linguagem de meta
+GATES              = achados finais: 2 HIGH `QUESTION_ANSWER_LEAKED` (só pedagógicos, não bloqueiam; na leitura, os enunciados não entregam a resposta: sensor lexical exagerado) e 1 MEDIUM `QUALIFIER_ADDED` do sensor novo
+```
+Leitura contra a fonte (IA assistida; a revisão humana continua pendente): H1–H8 = 0 encontradas. Valores conferidos (25%, 5 L/min → 1,25 L/min → 1800 L/dia, 80–200 mm Hg, ~10%, 1 mL/min, 1 mg%, 600 mg%, Hct 0,45, 600 e 1091 mL/min); mecanismos conferidos (miogênico, feedback tubuloglomerular com mácula densa, candidatos Na+/Cl− e adenosina/ATP/tromboxano, dieta rica em proteínas, Fick, PAH, hematócrito); a frase "somente abaixo de 80 mm Hg" é fiel (a própria fonte diz "Only when…"). Cobertura 3 de 3 subseções (regulação, autorregulação, medida de RPF/RBF); omissão menor: o uso clínico da dopamina em baixa dose na hemorragia. 5 frases com trecho confirmado conferidas: o trecho existe e sustenta a frase.
+
+Defeito achado e corrigido (servidor, sem mexer no prompt): o `QUALIFIER_ADDED` era falso positivo: a frase do rascunho funde duas frases da fonte e o "only" está na vizinha. A comparação agora considera a frase pareada e suas vizinhas (teste novo, vermelho sem a janela). Sobre as 3 rodadas de 04/10 e o canário: 0 achados do `risk-checks`. `audit-rules-3`. Também: uma frase só fica `SOURCE_LINKED` se todo valor que ela afirma estiver nos trechos que a sustentam (`PARTLY_LINKED` caso contrário; no canário nenhuma ficou parcial).
+
+Veredito do prompt v7: **KEEP o contrato de evidência** (o modelo real cumpre o formato e as citações são reais). A qualidade do resumo continua **NOT_PROVEN** além de 1 unidade e 1 geração, e os defeitos de concisão (0,45 da fonte), estrutura (sem títulos) e volume de questões (2,47/1.000) persistem: a v7 não os trata, como desenhado.

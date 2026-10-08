@@ -93,6 +93,7 @@ const sentencesOf = (text) => String(text).split(/\n+|(?<=[.!?])\s+/).map((s) =>
 /**
  * The state of the summary NOW, recomputed from the stored proposals, the current summary text and the current source.
  *   SOURCE_LINKED a verified entry points at a real, related passage of the approved source (existence and relation, NOT entailment)
+ *   PARTLY_LINKED a verified entry backs the sentence, but a value the sentence states is in none of its passages
  *   NOT_LINKED    nothing points anywhere (or whatever did no longer holds: the sentence or the source changed)
  * `orphaned` counts stored entries that no longer hold (claim rewritten, source changed) so the screen can say so.
  */
@@ -105,12 +106,16 @@ export function groundSummary(summary, evidence, segments) {
     if (entryProblem(entry, { summary, segments, validPages }) === null) live.push(entry);
     else orphaned += 1;
   }
+  const numbersOf = (t) => new Set((normalizeForMatch(t).match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(',', '.')));
   const sentences = sentencesOf(summary).map((text) => {
     const n = normalizeForMatch(text);
-    const hit = live.find((e) => n.includes(normalizeForMatch(e.claim)));
-    return hit
-      ? { text, status: 'SOURCE_LINKED', pageIndex: hit.pageIndex, quote: hit.quote }
-      : { text, status: 'NOT_LINKED', pageIndex: null, quote: null };
+    const hits = live.filter((e) => n.includes(normalizeForMatch(e.claim)));
+    if (hits.length === 0) return { text, status: 'NOT_LINKED', pageIndex: null, quote: null };
+    // A sentence is linked in full only when every value it states is in a passage it points at: a quote that backs the first half of
+    // a sentence must not make its numbers look backed too.
+    const backed = new Set(hits.flatMap((e) => [...numbersOf(e.quote)]));
+    const missing = [...numbersOf(text)].filter((v) => !backed.has(v));
+    return { text, status: missing.length === 0 ? 'SOURCE_LINKED' : 'PARTLY_LINKED', pageIndex: hits[0].pageIndex, quote: hits[0].quote, ...(missing.length > 0 ? { valuesWithoutPassage: missing } : {}) };
   });
   const supported = sentences.filter((s) => s.status === 'SOURCE_LINKED').length;
   return { sentences, supported, unsupported: sentences.length - supported, total: sentences.length, orphaned };

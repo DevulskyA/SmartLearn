@@ -292,7 +292,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       const details = document.createElement("details");
       details.className = "summary-grounding-list";
       const label = document.createElement("summary");
-      label.textContent = `Frases sem trecho confirmado (${unconfirmed.length}) — confira na fonte`;
+      label.textContent = `Frases sem trecho confirmado, ou só em parte (${unconfirmed.length}) — confira na fonte`;
       const list = document.createElement("ul");
       for (const sentence of unconfirmed) list.append(createTextElement("li", "summary-grounding-item", sentence.text));
       details.append(label, list);

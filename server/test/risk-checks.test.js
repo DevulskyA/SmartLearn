@@ -92,3 +92,13 @@ test('the checks run inside auditDraft, so the reviewer, the repair step and "Re
   assert.ok(audit.findings.some((f) => f.issue === 'UNIT_MISMATCH' && f.severity === 'HIGH'));
   assert.equal(audit.result, 'REPAIR');
 });
+
+test('a qualifier that the source carries in the NEXT sentence is not "added" when the draft folds the two sentences into one', () => {
+  const source = segment([
+    'The kidneys keep the renal blood flow constant while the arterial pressure varies between eighty and two hundred, which is the autoregulation of the renal circulation in the nephron.',
+    'Only when the arterial pressure decreases below eighty does the renal blood flow also decrease, and this is the reason why the regulation of the circulation matters in the kidney.',
+    'The nephron is the functional unit of the kidney and it is the structure that is responsible for the formation of the urine in the body of the patient.',
+  ].join(' '));
+  const folded = { summary: 'Os rins mantêm constante o fluxo sanguíneo renal enquanto a pressão arterial varia entre oitenta e duzentos, e somente abaixo de oitenta o fluxo sanguíneo renal diminui, o que é a autorregulação da circulação renal no néfron. O néfron é a unidade funcional do rim e é a estrutura responsável pela formação da urina no corpo do paciente.', questions: [] };
+  assert.deepEqual(issues(auditRisk(folded, { segments: [source] })), []);
+});

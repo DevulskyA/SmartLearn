@@ -158,3 +158,15 @@ test('the built-in test double carries real evidence, so the default pipeline sh
     assert.ok(created.summaryGrounding.supported >= 1);
   } finally { cleanup(); }
 });
+
+test('a quote that backs only part of a sentence does not make its numbers look backed: PARTLY_LINKED', () => {
+  const summary = 'A taxa de filtração glomerular normal é de cerca de 125 mL/min em adultos jovens, e corresponde a 180 L por dia.';
+  const entry = { claim: 'A taxa de filtração glomerular normal é de cerca de 125 mL/min em adultos jovens', pageIndex: 7, quote: 'taxa de filtração glomerular normal é de cerca de 125 mL/min em adultos jovens' };
+  const g = groundSummary(summary, [entry], SEGMENTS);
+  assert.equal(g.sentences[0].status, 'PARTLY_LINKED');
+  assert.deepEqual(g.sentences[0].valuesWithoutPassage, ['180']);
+  assert.equal(g.supported, 0);
+  // when the quote carries every value, the sentence is linked in full
+  const whole = { claim: 'A taxa de filtração glomerular normal é de cerca de 125 mL/min', pageIndex: 7, quote: GOOD.quote };
+  assert.equal(groundSummary(SUMMARY, [whole], SEGMENTS).sentences[0].status, 'SOURCE_LINKED');
+});

@@ -18,7 +18,7 @@ export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js): draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-2';
+export const AUDIT_RULES_VERSION = 'audit-rules-3';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
