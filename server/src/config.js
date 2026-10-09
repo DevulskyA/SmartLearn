@@ -60,6 +60,8 @@ export const config = {
   aiApiUrl: process.env.SMARTLEARN_AI_API_URL || null,
   aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
   aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
+  // Question corpus (src/corpus): the folder that holds raw question files. Configuration only, never a hard-coded path; unset = CORPUS_EMPTY.
+  questionCorpusRoot: process.env.SMARTLEARN_QUESTION_CORPUS_ROOT || null,
   // Generation credit limits, in estimated model tokens (services/generation-budget.js). NOT decided yet (HG-11): unset = no
   // limit on that dimension. A value that is not a positive number is treated as unset, never as zero.
   generationLimits: {

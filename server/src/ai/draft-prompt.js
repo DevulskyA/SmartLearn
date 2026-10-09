@@ -26,6 +26,15 @@ const STRUCTURED_SUMMARY_RULES = [
   '- Never refer to the document itself ("according to the text", "the text states", "in the table", "in the figure", "in the example shown"): state the fact directly.',
 ];
 
+// CHALLENGER v9 (one hypothesis: v8 keeps the structure but still walks the whole source; the summary must be built from what is ESSENTIAL
+// and let the rest go). It replaces the v8 length bullet with a select-first procedure; every other v8 rule stays.
+const SELECT_FIRST_RULES = [
+  '- SELECT FIRST, THEN WRITE: before writing, decide silently which concepts a student must be able to rebuild this topic from (the mechanisms, the causal chains, the relations between concepts, the conditions and exceptions that change an answer, the numbers and thresholds that matter, the clinical use, the distinctions students confuse). Write only those. The summary is a memory hook and a reconstruction cue that the student rereads for months, not a shorter copy of the page.',
+  '- MUST RETAIN: every mechanism and its causal chain; every concept needed to understand another; every condition, exception and qualifier that changes the meaning; the numbers, thresholds and units that matter; clinically relevant application; important distinctions between look-alike concepts.',
+  '- LEAVE OUT: repetition and restatement; worked examples that only illustrate (keep the principle and, at most, one key figure from an example); lists of low value (give the category and the key members, not every item); the book\'s transitions, editorial remarks and cross-references; side details that add no mechanism; derivation steps whose result is already stated.',
+  '- Compression must never cost understanding: if dropping a sentence would leave a mechanism, a condition or a number the student needs unexplained, keep it. Aim for about one fifth to one quarter of the meaningful source length; say it in fewer words, not by omitting what makes the topic work.',
+];
+
 export function buildDraftPrompt(segments, promptVersion, { generationLocale = null } = {}) {
   const languageName = generationLocale ? LANGUAGE_NAMES[languageOf(generationLocale)] : null;
   const sourceBlock = segments
@@ -46,7 +55,7 @@ export function buildDraftPrompt(segments, promptVersion, { generationLocale = n
     `- Length is proportional to the source: a dense page justifies several paragraphs, a thin one a short paragraph. Never more than ${MAX_SUMMARY_LENGTH.toLocaleString('en-US')} characters; a summary over that is rejected whole, so compress the least important material first, never the definitions, mechanisms, conditions or numbers.`,
     '- No filler, no restating the same point twice, no generic padding to reach a length.',
     '- Teach, do not just compress: organise the concepts, keep causal relations, separate structures students commonly confuse, and explain a piece of jargon the first time it appears when the source itself explains it.',
-    ...(STRUCTURED_SUMMARY(promptVersion) ? STRUCTURED_SUMMARY_RULES : []),
+    ...(Number(promptVersion) >= 9 ? [...STRUCTURED_SUMMARY_RULES.filter((rule) => !rule.startsWith('- Aim for roughly')), ...SELECT_FIRST_RULES] : STRUCTURED_SUMMARY(promptVersion) ? STRUCTURED_SUMMARY_RULES : []),
     '- Source is the ONLY authority. Never complete a gap with general knowledge; if the source does not say it, leave it out.',
     '- summarySourceSpans lists the real pageIndex values the summary actually draws on (never a page that is not in the source).',
     '- summaryEvidence backs the important factual sentences of the summary: one {claim, pageIndex, quote} per sentence. `claim` is words copied EXACTLY from your summary (a whole sentence or a distinctive part of it). `quote` is a passage copied EXACTLY, character for character, from ONE page of the source text above (20 to 400 characters, in the source language: never translated, never reworded). `pageIndex` is that page. The server checks every quote against the source and discards what it cannot find, so never invent or reword a quote; a sentence you cannot back with a verbatim passage gets no entry.',

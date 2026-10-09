@@ -45,3 +45,13 @@ test('the structured-summary challenger (promptVersion 8) adds summary rules onl
   const strip = (p) => p.split('\n').filter((line) => !/^- (STRUCTURE|ABSTRACT|Put a formula|Aim for roughly|Never refer to the document)/.test(line)).join('\n').replace(/promptVersion exactly "\d+"/, 'promptVersion exactly "N"');
   assert.equal(strip(v8), strip(v7));
 });
+
+test('the select-first challenger (promptVersion 9) changes only the summary length rule; v7 and v8 are untouched by it', () => {
+  const segments = [{ pageIndex: 1, text: 'texto de teste' }];
+  const v8 = buildDraftPrompt(segments, '8');
+  const v9 = buildDraftPrompt(segments, '9');
+  assert.ok(v9.includes('SELECT FIRST, THEN WRITE') && v9.includes('MUST RETAIN') && v9.includes('LEAVE OUT'));
+  assert.ok(!v8.includes('SELECT FIRST') && !buildDraftPrompt(segments, '7').includes('SELECT FIRST'));
+  const strip = (p) => p.split('\n').filter((line) => !/^- (SELECT FIRST|MUST RETAIN|LEAVE OUT|Compression must never|Aim for roughly)/.test(line)).join('\n').replace(/promptVersion exactly "\d+"/, 'promptVersion exactly "N"');
+  assert.equal(strip(v9), strip(v8));
+});
