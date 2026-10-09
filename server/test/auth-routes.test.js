@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { buildApp } from '../src/app.js';
+import { verifyPassword, runDecoyHash } from '../src/auth/passwords.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const VALID_PASSWORD = 'a genuinely long passphrase 99';
@@ -106,22 +107,33 @@ test('login for unknown account returns the SAME error code as wrong password (n
   } finally { await app.close(); cleanup(); }
 });
 
-test('unknown-account and wrong-password login take comparable time (both pay one real scrypt cost)', async () => {
-  const { app, cleanup } = await freshApp();
+test('unknown-account and wrong-password login each pay exactly ONE expensive hash (counted, not timed: a wall clock flakes on a loaded CI runner)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-authroutes-cost-'));
+  const db = openDb(join(dir, 'test.db'));
+  runMigrations(db, MIGRATIONS_DIR);
+  let verifyCalls = 0;
+  let decoyCalls = 0;
+  const app = await buildApp(db, MIGRATIONS_DIR, {
+    isProduction: false,
+    allowedOrigins: [TEST_ORIGIN],
+    auth: {
+      verifyPasswordFn: async (...args) => { verifyCalls += 1; return verifyPassword(...args); },
+      runDecoyHashFn: async (...args) => { decoyCalls += 1; return runDecoyHash(...args); },
+    },
+  });
   try {
     await post(app, '/v1/auth/register', { email: 'flo@example.com', password: VALID_PASSWORD });
+    verifyCalls = 0;
+    decoyCalls = 0;
 
-    const t1 = Date.now();
     await post(app, '/v1/auth/login', { email: 'flo@example.com', password: 'wrong wrong wrong wrong' });
-    const wrongPasswordMs = Date.now() - t1;
+    assert.deepEqual([verifyCalls, decoyCalls], [1, 0], 'a known account with a wrong password: one real verification, no decoy');
 
-    const t2 = Date.now();
+    verifyCalls = 0;
+    decoyCalls = 0;
     await post(app, '/v1/auth/login', { email: 'never-seen@example.com', password: VALID_PASSWORD });
-    const unknownAccountMs = Date.now() - t2;
-
-    assert.ok(wrongPasswordMs > 200, `expected a real scrypt hash (~200ms+), got ${wrongPasswordMs}ms`);
-    assert.ok(unknownAccountMs > 200, `expected the decoy hash to pay the same cost (~200ms+), got ${unknownAccountMs}ms`);
-  } finally { await app.close(); cleanup(); }
+    assert.deepEqual([verifyCalls, decoyCalls], [0, 1], 'an unknown account: one decoy hash, no verification (so the two cost the same)');
+  } finally { await app.close(); db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 
 test('registration response never returns password hash or salt at any nesting level', async () => {
