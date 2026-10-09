@@ -102,3 +102,21 @@ Validação em 2ª unidade (só v8, sem baseline): "Free-Water Clearance", PDF 3
 Achados de produto desta rodada (não são do prompt):
 - D10 (P2) segmentação: o escopo de "Free-Water Clearance" levou ~1,3 mil caracteres do início da página 315 (bullets de resumo de capítulo) porque o texto antes do primeiro título de uma página pertence à última seção anterior; o resumo ganhou um parágrafo de Na+/K+ que não é do tema (H8 de segmentação, não de escopo: o payload respeitou o escopo aprovado).
 - D11 (P2) extração: decimais de equações tipografadas saem partidos ("3 45", "6 55"); os valores corretos 3,45 e 6,55 do resumo foram marcados HIGH `SUMMARY_UNSUPPORTED_VALUE` e bloquearam o aceite até a conferência humana (o bloqueio funcionou como projetado; o falso positivo vem da extração).
+
+## EXPERIMENTO DE COMPRESSÃO v9 (2026-10-09; últimas 3 chamadas do envelope: 12 de 12 usadas, ~20 de 180 min)
+Hipótese única (v9): v8 estrutura mas ainda percorre a fonte inteira; escolher primeiro o essencial (reter mecanismos, causalidade, condições, números que importam; deixar de fora repetição, exemplos só ilustrativos, listas de baixo valor, transições do livro). Mesma unidade e MESMO texto-fonte da v8 (hash da extração idêntico após D10/D11).
+
+Métrica corrigida (`scripts/prompt-lab/coverage.mjs`): fonte bruta 12.307 car., fonte significativa 10.897 (sem marca d'água e resíduo de equação/figura).
+
+| | v7 | v8 | v9 |
+|---|---|---|---|
+| Resumo (car.) | 5.692 | 5.315 | 4.854 |
+| razão bruta / SIGNIFICATIVA | 0,46 / 0,52 | 0,43 / 0,49 | 0,39 / **0,45** |
+| Cobertura (19 conceitos) | 19 | 19 | **17** (perdeu a lista de vasoconstritores/vasodilatadores e o exemplo numérico 600/1091) |
+| Falhas duras (leitura contra a fonte) | 0 | 0 | 0 |
+| Títulos / linguagem de meta | 0 / sim | 8 / 0 | 8 / 0 |
+| Questões | 31 | 26 | 23 |
+| Frases com trecho confirmado | 82% | 78% | 74% |
+| Tempo | 350 s | 315 s | 258 s |
+
+**Veredito: COMPRESSION_NOT_SOLVED; KEEP_V8.** A v9 só baixou a razão significativa de 0,49 para 0,45 (alvo do experimento: 0,25; "claramente melhor": ~0,30) e ainda perdeu 2 conceitos: mesmo trade-off ruim da regra do envelope, então REJEITADA como padrão (continua selecionável com `promptVersion` 9). Instruções de seleção não fazem o modelo abstrair mais: ele troca omissão por frases mais densas. Hipótese para o próximo envelope (não executada): resumo em DUAS CAMADAS, um núcleo de 1 a 2 linhas por conceito (gancho de memória, meta ≤ 0,2) e o detalhe causal por baixo, em vez de pedir um texto único mais curto. Padrão v8 permanece o melhor atual.
