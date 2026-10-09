@@ -31,4 +31,8 @@ The following DEC-NNN entries in `.specs/project/STATE.md` qualify for future AD
 | DEC-011 | db.js SQL authority contract | Cross-feature; affects every module touching data |
 | DEC-016 | vNext scheduler boundary + FSRS deferral | Cross-feature; affects scheduling, UI, analytics |
 
-No ADRs needed today. Create the first ADR when one of the above is revisited or a new cross-feature architectural decision arises.
+## Active ADRs
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-0001](ADR-0001-protected-surfaces-design-non-regression.md) | Protected surfaces / design non-regression | accepted |

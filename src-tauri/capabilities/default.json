@@ -1,23 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "T42: the server-backed application window gets only baseline window/event capability. SQL, dialog, filesystem, shell, and custom-command access are deliberately absent, so loaded remote content cannot obtain a generic native bridge.",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default",
-    "sql:default",
-    "sql:allow-execute",
-    "dialog:default",
-    "dialog:allow-save",
-    "dialog:allow-open",
-    "fs:default",
-    "fs:allow-write-text-file",
-    "fs:allow-read-text-file",
-    {
-      "identifier": "fs:scope",
-      "allow": [{ "path": "**" }]
-    }
+    "core:default"
   ]
 }

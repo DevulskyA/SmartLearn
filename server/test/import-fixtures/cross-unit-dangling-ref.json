@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 3,
+  "subjects": [
+    { "id": 1, "name": "Farmacologia", "createdAt": "2026-02-01T00:00:00.000Z", "updatedAt": "2026-02-01T00:00:00.000Z", "isActive": true, "sortOrder": 0 }
+  ],
+  "learningUnits": [
+    { "id": 1, "subjectId": 999, "sourceText": "", "studyDate": "2026-02-05", "title": "Referencia orfa", "summaryBody": null, "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-05T00:00:00.000Z" }
+  ],
+  "reviewTasks": [],
+  "exercises": [],
+  "learningEvidence": []
+}

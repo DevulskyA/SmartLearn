@@ -1,5 +1,84 @@
+const positiveNumberOrNull = (value) => {
+  const n = Number(value);
+  return value !== undefined && value !== '' && Number.isFinite(n) && n > 0 ? n : null;
+};
+
 export const config = {
   host: process.env.HOST ?? '127.0.0.1',
   port: Number(process.env.PORT ?? 3000),
   dbPath: process.env.SMARTLEARN_DB_PATH ?? './data/smartlearn.db',
+  // T10: whether this server is being served over HTTPS in production.
+  // Controls Secure cookie flag and the __Host- prefix — must reflect the
+  // actual serving scheme, not just NODE_ENV, if a deployment ever serves
+  // production over plain HTTP behind a trusted proxy that terminates TLS
+  // (in which case set this explicitly rather than relying on NODE_ENV).
+  isProduction: process.env.NODE_ENV === 'production',
+  // Exact configured origin(s) allowed for CSRF-protected mutations.
+  // Comma-separated; dev default matches the Vite dev server origin.
+  allowedOrigins: (process.env.SMARTLEARN_ALLOWED_ORIGINS ?? 'http://localhost:5173')
+    .split(',').map(s => s.trim()).filter(Boolean),
+  // T12: trust X-Forwarded-For only when explicitly enabled for a known
+  // reverse-proxy topology. Disabled by default — Fastify then uses the
+  // real TCP peer address for request.ip, so a spoofed X-Forwarded-For from
+  // a direct client cannot evade IP-based rate limiting. Only enable this
+  // (and only with a correctly configured hop count / proxy IP list) once
+  // this server is actually deployed behind a specific trusted proxy.
+  trustProxy: process.env.SMARTLEARN_TRUST_PROXY === 'true',
+  // T21: "one origin" production remote mode — when set, this server also
+  // serves the built SPA (npm run build's dist/) so the browser's own
+  // origin IS the API origin (no CORS needed for that deployment shape).
+  // Unset by default: dev keeps using the Vite dev server + proxy/CORS.
+  staticDir: process.env.SMARTLEARN_STATIC_DIR || null,
+  // T27: capacity preflight for a legacy-import commit — reject an
+  // oversized batch before any write, not partway through it.
+  importMaxRows: Number(process.env.SMARTLEARN_IMPORT_MAX_ROWS ?? 5000),
+  importMaxBytes: Number(process.env.SMARTLEARN_IMPORT_MAX_BYTES ?? 5_000_000),
+  // T34: private uploaded sources (PDFs) live outside the static root, in
+  // their own directory (never served by @fastify/static). design.md §8:
+  // "cap initially at 25 MiB" per file; per-account quota is a separate,
+  // explicitly configured operational limit, not a pedagogical rule.
+  sourcesDir: process.env.SMARTLEARN_SOURCES_DIR ?? './data/sources',
+  sourceMaxBytes: Number(process.env.SMARTLEARN_SOURCE_MAX_BYTES ?? 25 * 1024 * 1024),
+  sourceQuotaBytes: Number(process.env.SMARTLEARN_SOURCE_QUOTA_BYTES ?? 200 * 1024 * 1024),
+  // T37: the real-provider AI draft path is unavailable unless ALL THREE
+  // are explicitly configured — an operator's deliberate choice, never a
+  // default. No hardcoded model name/version: this is a business decision
+  // for whoever deploys this server, not something to guess here. Missing
+  // any one of these means the fake provider runs instead; it never
+  // becomes a fabricated "live" pass (design.md/T37).
+  aiApiKey: process.env.SMARTLEARN_AI_API_KEY || null,
+  aiModel: process.env.SMARTLEARN_AI_MODEL || null,
+  // OPENAI (canonical: gpt-5.6-luna, reasoning effort high) | ANTHROPIC | CODEX | FAKE. Declared = honoured exactly, never silently replaced.
+  // Build identity, set by the Desktop DEV launcher (scripts/launch-desktop-dev.ps1) so a human can tell WHICH build is in front of them.
+  buildHead: process.env.SMARTLEARN_BUILD_HEAD || null,
+  buildContent: process.env.SMARTLEARN_BUILD_CONTENT || null,
+  buildMode: process.env.SMARTLEARN_BUILD_MODE || null,
+  aiProvider: process.env.SMARTLEARN_AI_PROVIDER ? process.env.SMARTLEARN_AI_PROVIDER.trim().toUpperCase() : null,
+  aiConsentGranted: process.env.SMARTLEARN_AI_CONSENT === 'true',
+  aiBudgetCapUsd: process.env.SMARTLEARN_AI_BUDGET_CAP_USD ? Number(process.env.SMARTLEARN_AI_BUDGET_CAP_USD) : null,
+  // Operator-controlled endpoint override (e.g. a local stub in tests); the default is the real API.
+  aiApiUrl: process.env.SMARTLEARN_AI_API_URL || null,
+  aiRequestTimeoutMs: Number(process.env.SMARTLEARN_AI_TIMEOUT_MS ?? 30_000),
+  aiMaxInputChars: Number(process.env.SMARTLEARN_AI_MAX_INPUT_CHARS ?? 50_000),
+  // Question corpus (src/corpus): the folder that holds raw question files. Configuration only, never a hard-coded path; unset = CORPUS_EMPTY.
+  questionCorpusRoot: process.env.SMARTLEARN_QUESTION_CORPUS_ROOT || null,
+  // Generation credit limits, in estimated model tokens (services/generation-budget.js). NOT decided yet (HG-11): unset = no
+  // limit on that dimension. A value that is not a positive number is treated as unset, never as zero.
+  generationLimits: {
+    maxPerJob: positiveNumberOrNull(process.env.SMARTLEARN_GEN_MAX_PER_JOB),
+    weekly: positiveNumberOrNull(process.env.SMARTLEARN_GEN_WEEKLY_LIMIT),
+    monthly: positiveNumberOrNull(process.env.SMARTLEARN_GEN_MONTHLY_LIMIT),
+  },
+  // CODEX provider (SMARTLEARN_AI_PROVIDER=CODEX): runs the operator's already-logged-in Codex CLI (ChatGPT account).
+  // No API key and no USD budget cap apply; explicit consent (SMARTLEARN_AI_CONSENT=true) still does.
+  codexCommand: process.env.SMARTLEARN_CODEX_COMMAND || 'codex',
+  codexModel: process.env.SMARTLEARN_CODEX_MODEL || null,
+  codexTimeoutMs: Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS ?? 240_000),
+  codexReasoningEffort: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'high',
+  // R-04: the hard time limit of a whole generation job (every provider call together). Deliberately above the 20 minutes the
+  // student was told to expect, so moving generation to the background cannot make a long-but-healthy run fail sooner than before.
+  // The VALUE is configurable and still to be confirmed with real measurements (HG-11).
+  generationJobTimeoutMs: positiveNumberOrNull(process.env.SMARTLEARN_GEN_JOB_TIMEOUT_MS) ?? 30 * 60 * 1000,
+  // How many generation jobs may run at once; the rest wait QUEUED.
+  generationJobConcurrency: positiveNumberOrNull(process.env.SMARTLEARN_GEN_JOB_CONCURRENCY) ?? 2,
 };

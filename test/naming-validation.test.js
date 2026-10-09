@@ -16,6 +16,11 @@ describe("validateNamingField — valid inputs", () => {
     ["Aula 1 - Introdução", "conteúdo"],
     ["Capítulo 2.3 Bioquímica", "conteúdo"],
     ["[Revisão] Fisio+Bioquím", "conteúdo"],
+    // AC-05 / T04: medical/scientific typography now accepted in discipline names too
+    ["Farmacologia — β-bloqueadores", "disciplina"],
+    ["Na⁺/K⁺-ATPase", "disciplina"],
+    ["Bioquímica — O₂ e µg", "disciplina"],
+    ["Fisiologia — Revisão", "disciplina"],
   ];
   for (const [value, label] of valid) {
     it(`accepts "${value}"`, () => {
@@ -44,8 +49,6 @@ describe("validateNamingField — empty or short", () => {
 // Contract C: typographic / sentence chars rejected
 describe("validateNamingField — rejected chars (pasted sentences)", () => {
   const invalid = [
-    // em dash
-    ["Fisiologia — Revisão", "disciplina"],
     // curly quotes
     ["\"Bioquímica\"", "disciplina"],
     // at sign
@@ -105,11 +108,23 @@ describe("NAMING_PATTERN — discrimination (mutation kills)", () => {
   it("accepts degree symbol", () => {
     assert.ok(NAMING_PATTERN.test("90°"));
   });
-  it("rejects en dash U+2013", () => {
-    assert.ok(!NAMING_PATTERN.test("A–B"));
+  it("accepts en dash U+2013 (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("A–B"));
   });
-  it("rejects em dash U+2014", () => {
-    assert.ok(!NAMING_PATTERN.test("A—B"));
+  it("accepts em dash U+2014 (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("A—B"));
+  });
+  it("accepts Greek letters (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("β-bloqueador"));
+  });
+  it("accepts superscript plus U+207A (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("Na⁺"));
+  });
+  it("accepts subscript 2 U+2082 (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("O₂"));
+  });
+  it("accepts micro sign U+00B5 (AC-05)", () => {
+    assert.ok(NAMING_PATTERN.test("µg"));
   });
   it("rejects left double quote U+201C", () => {
     assert.ok(!NAMING_PATTERN.test("“teste”"));
@@ -174,16 +189,23 @@ describe("validateTitleField — control chars and empty rejected", () => {
   });
 });
 
-// Contract H: validateTitleField discrimination — em dash valid in title, invalid for discipline
-describe("validateTitleField vs validateNamingField — field-specific policy", () => {
+// Contract H: T04 unification — medical typography accepted by both validators.
+// validateNamingField still differs from validateTitleField on sentence-signal
+// ASCII symbols (@ # $ % etc, still rejected for discipline names only) and on
+// minimum length (2 chars), but no longer on em dash/Greek/superscripts.
+describe("validateTitleField vs validateNamingField — unified medical typography, distinct sentence-guard", () => {
   it("em dash accepted by title validator", () => {
     assert.strictEqual(validateTitleField("Ausculta Cardíaca — Bulhas e Sopros", "título"), null);
   });
-  it("em dash rejected by discipline name validator", () => {
-    assert.ok(validateNamingField("Fisiologia — Revisão", "disciplina") !== null);
+  it("em dash also accepted by discipline name validator (T04)", () => {
+    assert.strictEqual(validateNamingField("Fisiologia — Revisão", "disciplina"), null);
   });
   it("plain discipline name accepted by both", () => {
     assert.strictEqual(validateNamingField("Semiologia Médica", "disciplina"), null);
     assert.strictEqual(validateTitleField("Semiologia Médica", "título"), null);
+  });
+  it("sentence-signal symbol still rejected by discipline name validator only", () => {
+    assert.ok(validateNamingField("Medicina@Interna", "disciplina") !== null);
+    assert.strictEqual(validateTitleField("Medicina@Interna", "título"), null);
   });
 });

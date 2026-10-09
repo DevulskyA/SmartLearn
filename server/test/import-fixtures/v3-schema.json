@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 3,
+  "subjects": [
+    { "id": 1, "name": "Farmacologia", "createdAt": "2026-02-01T00:00:00.000Z", "updatedAt": "2026-02-01T00:00:00.000Z", "isActive": true, "sortOrder": 0, "color": "DISC-GREEN" }
+  ],
+  "learningUnits": [
+    { "id": 1, "subjectId": 1, "sourceText": "Goodman & Gilman cap. 3", "studyDate": "2026-02-05", "title": "Farmacocinetica", "summaryBody": "Absorcao, distribuicao, metabolismo, excrecao.", "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-05T00:00:00.000Z" }
+  ],
+  "reviewTasks": [
+    { "id": 1, "unitId": 1, "reviewNumber": 1, "dueDate": "2026-02-06", "completedAt": "2026-02-06T09:00:00.000Z", "reviewDone": true, "questionsDone": true, "questionsCount": 10, "correctCount": 9, "scorePercent": 90, "comment": null, "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-06T09:00:00.000Z" },
+    { "id": 2, "unitId": 1, "reviewNumber": 2, "dueDate": "2026-02-12", "completedAt": null, "reviewDone": false, "questionsDone": false, "questionsCount": null, "correctCount": null, "scorePercent": null, "comment": null, "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-05T00:00:00.000Z" }
+  ],
+  "exercises": [
+    { "id": 1, "unitId": 1, "questionText": "O que e biodisponibilidade?", "answerText": "Fracao da dose que atinge a circulacao sistemica inalterada.", "hintText": "Pense em via de administracao.", "position": 0, "provenance": "SOURCE", "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-05T00:00:00.000Z" }
+  ],
+  "learningEvidence": [
+    { "unitId": 1, "reviewTaskId": 1, "context": "REVIEW", "questionsCount": 10, "correctCount": 9, "evidenceDate": "2026-02-06" }
+  ],
+  "settings": { "appVersion": "3.0.0", "reviewSchedule": [], "lastBackupAt": null }
+}

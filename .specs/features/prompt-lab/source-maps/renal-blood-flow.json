@@ -1,0 +1,25 @@
+{
+  "unit": "Renal Blood Flow (Costanzo, Physiology, PDF 263-267)",
+  "note": "Mapa local da unidade: conceitos que a seção ensina e palavras que um resumo fiel precisa conter. Só palavras-chave (sem texto do livro). Cobertura = conceitos com algum grupo anyOf inteiramente presente no resumo, após normalização (caixa, acentos).",
+  "concepts": [
+    { "id": "C01", "label": "Fluxo renal = cerca de 25% do débito cardíaco", "anyOf": [["25%", "debito cardiaco"]] },
+    { "id": "C02", "label": "Q = ΔP/R: a resistência varia para manter o fluxo", "anyOf": [["p/r"], ["resistencia", "proporcional"]] },
+    { "id": "C03", "label": "Vasoconstritores e vasodilatadores renais", "anyOf": [["endotelina", "bradicinina"]] },
+    { "id": "C04", "label": "Hemorragia: sistema renina-angiotensina e simpático reduzem RBF e GFR", "anyOf": [["hemorragia", "angiotensina"]] },
+    { "id": "C05", "label": "ANP dilata a aferente e contrai a eferente", "anyOf": [["natriuretico", "aferente", "eferente"]] },
+    { "id": "C06", "label": "Prostaglandinas protegem o RBF; AINEs interferem", "anyOf": [["prostaglandina", "nsaid"], ["prostaglandina", "anti-inflamatorio"]] },
+    { "id": "C07", "label": "Dopamina em baixa dose", "anyOf": [["dopamina"]] },
+    { "id": "C08", "label": "Autorregulação entre 80 e 200 mm Hg", "anyOf": [["80", "200"]] },
+    { "id": "C09", "label": "Resistência controlada sobretudo na arteríola aferente", "anyOf": [["principalmente", "aferente"], ["sobretudo", "aferente"]] },
+    { "id": "C10", "label": "O sistema nervoso autônomo não participa (rim desnervado autorregula)", "anyOf": [["desnervad"], ["transplant"]] },
+    { "id": "C11", "label": "Hipótese miogênica (estiramento, canais de Ca2+)", "anyOf": [["miogenic", "estiramento"]] },
+    { "id": "C12", "label": "Feedback tubuloglomerular (mácula densa contrai a aferente)", "anyOf": [["macula densa", "aferent"]] },
+    { "id": "C13", "label": "Incógnitas do feedback: Na+/Cl− sentido; adenosina, ATP, tromboxano", "anyOf": [["adenosina", "tromboxano"]] },
+    { "id": "C14", "label": "Dieta rica em proteínas aumenta a GFR", "anyOf": [["proteina", "dieta"]] },
+    { "id": "C15", "label": "Princípio de Fick", "anyOf": [["fick"]] },
+    { "id": "C16", "label": "PAH: propriedades que o tornam ideal", "anyOf": [["pah", "metaboliz"]] },
+    { "id": "C17", "label": "RPF efetivo = depuração de PAH; subestima o verdadeiro em ~10%", "anyOf": [["10%", "efetivo"]] },
+    { "id": "C18", "label": "RBF = RPF/(1 − Hct)", "anyOf": [["hematocrito", "rpf"], ["hct", "rpf"]] },
+    { "id": "C19", "label": "Exemplo numérico (600 e 1091 mL/min)", "anyOf": [["1091"]] }
+  ]
+}
