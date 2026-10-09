@@ -99,3 +99,13 @@ test('an exponent is one number however it is written: 10¹¹ in the source supp
   assert.equal(flagged('The marrow produces between 10¹¹ and 10¹² neutrophils per day (more during infection).'), false);
   assert.equal(flagged('The marrow produces up to 10^13 neutrophils per day during infection.'), true);
 });
+
+test('a decimal whose point was detached by the typeset equation in the PDF is still a value the source states (3.45, 6.55), but only on text that shows detached points', () => {
+  const garbled = { pageIndex: 1, text: 'SOLUTION. The free-water clearance is calculated as follows:\n10 100 10\n290\n10 3 45\n6 55\n.\n.\nCH2O is a positive value, which means that free water is being excreted.' };
+  const draft = { summary: 'Com fluxo urinário de 10 mL/min, o Cosm é 3,45 mL/min e o CH2O é +6,55 mL/min, o que indica excreção de água livre.', summarySourceSpans: [{ pageIndex: 1 }], questions: [] };
+  const unsupported = (segments) => auditDraft(draft, { segments }).findings.filter((f) => f.issue === 'SUMMARY_UNSUPPORTED_VALUE');
+  assert.equal(unsupported([garbled]).length, 0);
+  // the same digits with no detached decimal point anywhere: an invented 3.45 is still caught
+  const plain = { pageIndex: 1, text: 'SOLUTION. The free-water clearance is calculated as follows:\n10 100 10\n290\n10 3 45\n6 55\nCH2O is a positive value, which means that free water is being excreted.' };
+  assert.equal(unsupported([plain]).length >= 1, true);
+});

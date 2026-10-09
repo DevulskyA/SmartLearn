@@ -39,9 +39,23 @@ test('a line that spans the gutter (full-width title or caption) means the layou
   assert.equal(orderItemsByColumns(items, PAGE), items);
 });
 
-test('interleaved columns (more than one switch) are untouched', () => {
-  const items = [...column(318, 705, 'R', 7), ...column(60, 716, 'L', 7), ...column(318, 300, 'S', 7)];
+test('a right column painted in two pieces around the whole left column (real Costanzo pages 263, 314, 315) is read left column first, then the right column in order', () => {
+  const items = [...column(318, 705, 'R', 7), ...column(60, 716, 'L', 12), ...column(318, 300, 'S', 7)];
+  const out = orderItemsByColumns(items, PAGE);
+  assert.deepEqual(textOf(out), [...Array.from({ length: 12 }, (_, i) => `L${i + 1}`), ...Array.from({ length: 7 }, (_, i) => `R${i + 1}`), ...Array.from({ length: 7 }, (_, i) => `S${i + 1}`)]);
+  assert.equal(out.length, items.length, 'no item is lost or duplicated');
+});
+
+test('a column that goes back UP the page is some other layout (figures, floating boxes): untouched', () => {
+  const items = [...column(318, 400, 'R', 7), ...column(60, 716, 'L', 7), ...column(318, 700, 'S', 7)];
   assert.equal(orderItemsByColumns(items, PAGE), items);
+});
+
+test('the same page text after the generalization: a short trailing left piece painted last is placed with its column', () => {
+  const items = [...column(318, 705, 'R', 7), ...column(60, 716, 'L', 12), ...column(60, 560, 'T', 6)];
+  const out = textOf(orderItemsByColumns(items, PAGE));
+  assert.deepEqual(out.slice(0, 18).map((l) => l[0]), ['L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'T', 'T', 'T', 'T', 'T', 'T']);
+  assert.equal(out[18], 'R1');
 });
 
 test('blocks shorter than six lines are untouched (a marginal note is not a column)', () => {
@@ -110,4 +124,13 @@ test('a column boundary is a line boundary: the left column\'s last line has no 
   assert.ok(lines.includes('watermark.com'), 'the left column ends on its own line');
   assert.ok(lines.includes('GLOMERULAR FILTRATION'), 'the right column heading starts on its own line (a section heading must be locatable)');
   assert.equal(out.length, right.length + left.length + header().length, 'no item is lost or duplicated');
+});
+
+test('a wide footnote line just above the footer does not stop a right-then-left page from being reordered', () => {
+  const footnote = line(60, 62, 'a footnote that runs across both columns of the page', 480);
+  const items = [...header(), ...column(318, 705, 'R', 7), ...column(60, 716, 'L', 7), ...footnote, ...footer()];
+  const lines = textOf(orderItemsByColumns(items, PAGE));
+  assert.equal(lines[1], 'L1');
+  assert.equal(lines[8], 'R1');
+  assert.deepEqual(lines.slice(-2), ['a footnote that runs across both columns of the page', 'footer 261']);
 });

@@ -18,7 +18,7 @@ export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js): draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-3';
+export const AUDIT_RULES_VERSION = 'audit-rules-4';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -56,6 +56,18 @@ function numbersIn(text) {
 }
 
 const sentencesOf = (text) => String(text).split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+
+// A typeset equation can come out of the PDF with its decimal points detached ("10 3 45 / 6 55 / . / .": the values 3.45 and 6.55).
+// On text that shows such detached points (a line holding nothing but ".") two digit groups written next to each other are ALSO read
+// as a decimal number, so a value the source really states is not reported as invented. Elsewhere nothing changes.
+export function sourceNumberKeys(text) {
+  const keys = new Set(numbersIn(text).map((n) => n.key));
+  if (/(^|\n)[ \t]*\.[ \t]*(\n|$)/.test(String(text))) {
+    // every neighbouring pair (lookahead, so "10 3 45" gives 10.3 and 3.45)
+    for (const m of String(text).matchAll(/(?<![\d.,])(\d{1,3})(?=[ \t\n]+(\d{1,3})(?![\d.,]))/g)) keys.add(`${m[1]}.${m[2]}`);
+  }
+  return keys;
+}
 
 function sourceStemSet(segments) {
   const set = new Set();
@@ -98,7 +110,7 @@ function sentenceContaining(text, index) {
 function auditSummary(summary, segments, { lexical = true } = {}) {
   const findings = [];
   const sourceText = segments.map((s) => s.text).join(' ');
-  const sourceNumbers = new Set(numbersIn(sourceText).map((n) => n.key));
+  const sourceNumbers = sourceNumberKeys(segments.map((seg) => seg.text).join('\n'));
 
   // 1) Values (doses, pressures, rates...) that the source never states are the classic invented fact.
   const badNumbers = numbersIn(summary).filter((n) => !sourceNumbers.has(n.key) && (n.key.includes('.') || n.key.length >= 2));
@@ -261,7 +273,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
     }
 
     // 3) Facts the cited page does not hold — values first (the classic invented fact), then terms.
-    const citedNumbers = new Set(numbersIn(citedText).map((n) => n.key));
+    const citedNumbers = sourceNumberKeys(citedText);
     for (const n of numbersIn(teaching)) {
       if (citedNumbers.has(n.key) || !(n.key.includes('.') || n.key.length >= 2)) continue;
       const claim = sentenceContaining(teaching, n.index);
