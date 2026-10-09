@@ -160,6 +160,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 2');
   await page.locator('#study-now-reveal-btn').click();
   await expect(page.locator('#study-now-answer-text')).toBeVisible();
+  await expect(page.locator('#study-now-question-area')).toHaveAttribute('data-attempt-id', /.+/); // the id is set after an async attempt POST: wait, never read it once
   const secondAttemptId = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
   expect(secondAttemptId).toBeTruthy();
   expect(secondAttemptId).not.toBe(firstAttemptId);
@@ -212,6 +213,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await expect(page.locator('#study-now-summary-card')).toBeHidden();
   await page.locator('#study-now-reveal-btn').click();
   await expect(page.locator('#study-now-correct-btn')).toBeFocused();
+  await expect(page.locator('#study-now-question-area')).toHaveAttribute('data-attempt-id', /.+/); // the id is set after an async attempt POST: wait, never read it once
   const retestAttempt1 = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
   expect(retestAttempt1).toBeTruthy();
   expect([firstAttemptId, secondAttemptId]).not.toContain(retestAttempt1);
@@ -227,6 +229,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await retestBtn.click();
   await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
   await page.locator('#study-now-reveal-btn').click();
+  await expect(page.locator('#study-now-question-area')).toHaveAttribute('data-attempt-id', /.+/); // the id is set after an async attempt POST: wait, never read it once
   const retestAttempt2 = await page.locator('#study-now-question-area').getAttribute('data-attempt-id');
   expect([firstAttemptId, secondAttemptId, retestAttempt1]).not.toContain(retestAttempt2);
   await page.locator('#study-now-correct-btn').click();
