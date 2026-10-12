@@ -341,6 +341,10 @@ let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
+const generationLanguageCard = document.querySelector("#generation-language-card");
+const generationLanguageSelect = document.querySelector("#generation-language-select");
+const generationLanguageSave = document.querySelector("#generation-language-save");
+const generationLanguageMessage = document.querySelector("#generation-language-message");
 const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
 function getLocalDateValue(date = new Date()) {
@@ -2814,6 +2818,12 @@ function renderEvolutionSvg(evidence, units, subjects) {
 
 export async function renderSettings() {
   const settings = await DB.settings.get();
+  // Language preference has real server authority only. Never present an inert selector in legacy local mode.
+  if (generationLanguageCard) generationLanguageCard.hidden = !REMOTE_MODE;
+  if (REMOTE_MODE && generationLanguageSelect) {
+    generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? 'pt-BR';
+    syncSelect(generationLanguageSelect);
+  }
   lastBackupLabel.textContent = settings?.lastBackupAt
     ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
     : "Nenhum backup exportado.";
@@ -5213,6 +5223,30 @@ reviewDashboard.addEventListener("change", async (event) => {
     input.focus({ preventScroll: true });
     setReviewMessage("Não foi possível salvar a revisão.", true);
     console.error("Falha ao atualizar a revisão.", error);
+  }
+});
+
+generationLanguageSave?.addEventListener('click', async () => {
+  if (!REMOTE_MODE || !generationLanguageSelect) return;
+  generationLanguageSave.disabled = true;
+  if (generationLanguageMessage) {
+    generationLanguageMessage.classList.remove('is-error');
+    generationLanguageMessage.textContent = '';
+  }
+  try {
+    const chosen = generationLanguageSelect.value;
+    const updated = await DB.settings.update({ generationLocale: chosen });
+    generationLanguageSelect.value = updated.generationLocale ?? chosen;
+    syncSelect(generationLanguageSelect);
+    if (generationLanguageMessage) generationLanguageMessage.textContent = 'Idioma salvo. Novos resumos e questões usarão essa escolha; materiais anteriores não foram alterados.';
+  } catch (error) {
+    if (generationLanguageMessage) {
+      generationLanguageMessage.classList.add('is-error');
+      generationLanguageMessage.textContent = 'Não foi possível salvar o idioma. Verifique a conexão e tente novamente.';
+    }
+    console.error('Falha ao atualizar o idioma de geração.', error);
+  } finally {
+    generationLanguageSave.disabled = false;
   }
 });
 

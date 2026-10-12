@@ -377,17 +377,29 @@ const learningEvidence = {
 // multi-user accounts and had no concept of timezone. Fields the server
 // doesn't track are passed through as null rather than invented.
 
+// The server already owns and validates R-13 language preferences.
+// They are separate from the document language and from the UI language.
+const mapServerSettings = (row) => ({
+  key: 'main', appVersion: null, reviewSchedule: row.reviewSchedule,
+  lastBackupAt: null, timezone: row.timezone,
+  uiLocale: row.uiLocale ?? null,
+  generationLocale: row.generationLocale ?? null,
+  effectiveUiLocale: row.effectiveUiLocale ?? 'pt-BR',
+  effectiveGenerationLocale: row.effectiveGenerationLocale ?? 'pt-BR',
+});
 const settings = {
   async get() {
     const { settings: row } = await apiRequest('/v1/settings');
-    return { key: 'main', appVersion: null, reviewSchedule: row.reviewSchedule, lastBackupAt: null, timezone: row.timezone };
+    return mapServerSettings(row);
   },
   async update(fields) {
-    if (!('timezone' in fields)) {
-      throw new RemoteStoreError('UNSUPPORTED_FIELD', 'Apenas o fuso horário pode ser alterado no modo servidor — o cronograma de revisão é fixo.');
+    const allowed = ['timezone', 'uiLocale', 'generationLocale'];
+    const body = Object.fromEntries(allowed.filter((key) => Object.hasOwn(fields, key)).map((key) => [key, fields[key]]));
+    if (Object.keys(body).length === 0) {
+      throw new RemoteStoreError('UNSUPPORTED_FIELD', 'Informe um campo reconhecido: timezone, uiLocale ou generationLocale.');
     }
-    const { settings: row } = await apiRequest('/v1/settings', { method: 'PATCH', body: { timezone: fields.timezone } });
-    return { key: 'main', appVersion: null, reviewSchedule: row.reviewSchedule, lastBackupAt: null, timezone: row.timezone };
+    const { settings: row } = await apiRequest('/v1/settings', { method: 'PATCH', body });
+    return mapServerSettings(row);
   },
 };
 

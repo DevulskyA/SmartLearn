@@ -55,7 +55,7 @@ const GOOD_Q = {
   hint: null,
   sourceSpans: [{ pageIndex: 1 }],
 };
-const good = (o = {}) => ({ summary: GOOD_SUMMARY, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }], questions: [GOOD_Q], modelVersion: 'm-1', promptVersion: '8', ...o });
+const good = (o = {}) => ({ summary: GOOD_SUMMARY, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }], questions: [GOOD_Q], modelVersion: 'm-1', promptVersion: '10', ...o });
 
 /** A fetch that answers the n-th call with the n-th scripted body (or throws it, if it is an Error). */
 function scriptedFetch(script) {
@@ -117,7 +117,7 @@ test('the auditor receives the source pages and the draft, and treats both as un
     assert.match(genPrompt, /ONE defensible answer/);
     assert.match(genPrompt, /REVALIDA/);
     assert.match(genPrompt, /never invent official exam weights/);
-    assert.match(genPrompt, /Source is the ONLY authority/);
+    assert.match(genPrompt, /Source is the ONLY authority|Use the supplied source alone\. Never invent/, 'the source-only rule survives in v10 (MED-SUM SEMANTIC FIDELITY wording)');
     assert.match(auditPrompt, /DISTRACTOR_QUALITY does not apply/);
     assert.match(auditPrompt, /"explanation":null|"explanation":"/, 'the explanation is part of what the auditor sees');
   } finally { cleanup(); }
@@ -257,8 +257,8 @@ test('the model endpoint is operator-configurable, defaults to the real API, and
     };
     const draft = await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl, apiUrl: 'http://127.0.0.1:9/stub' });
     assert.deepEqual(urls, ['http://127.0.0.1:9/stub', 'http://127.0.0.1:9/stub']);
-    assert.match(prompts[0], /promptVersion exactly "8"/, 'no explicit promptVersion -> the current one, not a stale default');
-    assert.equal(draft.promptVersion, '8');
+    assert.match(prompts[0], /promptVersion exactly "10"/, 'no explicit promptVersion -> the current one, not a stale default');
+    assert.equal(draft.promptVersion, '10');
 
     urls.length = 0;
     await drafts.createDraft(db, userId, proposal.id, { ...LIVE, fetchImpl });

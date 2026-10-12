@@ -391,11 +391,13 @@ export async function createDraft(db, userId, proposalId, {
   // question types, teaching answers, genuine hints), and promptVersion
   // is stored per draft precisely so a version change like this is
   // distinguishable in stored/historical drafts, not silently conflated.
-  // '8': structured study-map summary, no references to the document (challenger of 2026-10-08, promoted after two real units; '7' stays reproducible by passing it).
+  // '10': selected MED-SUM v2.7.5 principles adapted for the app summary JSON, provenance, and UI.
+  // '9': historical selection-first experiment, not promoted.
+  // '8': prior study-map summary; remains reproducible by passing promptVersion '8'.
   // '7': summaryEvidence (the model proposes which passage backs which sentence; the server confirms it).
   // '5' (REALMODEL-1 quality closure): explanations must add a cause, hints must not leak the answer or its value, named
   // conditions must survive, whole-sentence copying is discouraged.
-  promptVersion = '8',
+  promptVersion = '10',
   apiKey = null,
   model = null,
   consentGranted = false,

@@ -583,6 +583,24 @@
             <div class="theme-picker" id="theme-picker" role="radiogroup" aria-labelledby="appearance-title">
             </div>
           </section>
+          <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
+            <div class="section-heading">
+              <p class="eyebrow">Preferências de estudo</p>
+              <h2 id="generation-language-title">Idioma do conteúdo</h2>
+              <p>Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.</p>
+            </div>
+            <label for="generation-language-select">Idioma de geração</label>
+            <select id="generation-language-select" name="generationLocale" aria-describedby="generation-language-hint">
+              <option value="pt-BR">Português (Brasil)</option>
+              <option value="es">Español</option>
+              <option value="en">English</option>
+            </select>
+            <p id="generation-language-hint">O idioma selecionado será utilizado nas próximas gerações de conteúdo médico.</p>
+            <div class="settings-actions">
+              <button class="primary-button" id="generation-language-save" type="button">Salvar idioma</button>
+            </div>
+            <p class="form-message" id="generation-language-message" role="status" aria-live="polite"></p>
+          </section>
           <section class="settings-card" aria-labelledby="about-title">
             <div class="section-heading">
               <p class="eyebrow">Sobre</p>
