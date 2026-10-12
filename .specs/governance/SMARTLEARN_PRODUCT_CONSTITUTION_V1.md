@@ -180,6 +180,24 @@ Se implementação e esta intenção divergirem: (1) não esconda o conflito; (2
 
 Não reescreva módulos estáveis apenas para obter pureza conceitual. A intenção canônica controla DIREÇÃO. A evidência controla ESTADO.
 
+### I.18 Adendo humano de 2026-10-12: o ciclo pedagógico e o Mapa de Conhecimento e Lacunas
+
+```
+ADDED=2026-10-12 (human decision: "se não está desse jeito, está errado")
+RECONCILED_WITH=I.4, I.6, I.7, I.12 (sem conflito; esta seção acrescenta, não substitui)
+DETAIL=.specs/features/learning-loop-v2/review.md
+```
+
+O SmartLearn não começa no resumo: começa no conhecimento que o aluno já estudou na fonte. O Resumo Mestre reativa a memória com pistas para reconstruir o essencial; não substitui a fonte e não precisa conter tudo o que as questões podem exigir. Os exercícios fortalecem a aprendizagem (prática de recuperação), verificam o que o aluno recupera e revelam o que precisa ser reestudado.
+
+Ciclo: estudo inicial → registro (disciplina, tema, subtema, material) → Resumo Mestre → exercícios → demonstrou? SIM: registrar e seguir as revisões; NÃO: investigar a dificuldade → VOLTAR AO MATERIAL ORIGINAL → corrigir a compreensão (e revisar o resumo se preciso) → tentar de novo. O retorno à fonte é o elemento decisivo.
+
+Resposta errada é SINAL, não diagnóstico. Causas possíveis: esquecimento; compreensão insuficiente; resumo incompleto; conceito equivocado; falha de pré-requisito. O sistema acumula evidência, de preferência em perguntas diferentes sobre o mesmo conhecimento, e trata a causa como hipótese.
+
+Diferencial: o Mapa de Conhecimento e Lacunas de Aprendizagem (disciplina → tema → subtema, com quantidade, tipo e histórico das questões), separando desempenho OBSERVADO de domínio INFERIDO (I.12). A IA ajuda no conteúdo; a gestão do estudo organiza a continuidade; os exercícios produzem evidência; as estatísticas dizem onde investir o próximo minuto.
+
+Distinção de estado: registro de questões, agenda e estatísticas básicas existem; diagnóstico fino por subtema, retorno estruturado à fonte e priorização adaptativa ainda precisam de desenvolvimento e validação.
+
 ## 1. Instrução de persistência
 
 Esta especificação NÃO deve permanecer apenas no chat.
