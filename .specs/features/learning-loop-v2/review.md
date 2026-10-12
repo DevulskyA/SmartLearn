@@ -88,3 +88,33 @@ Ordem e dependências: F0 → F1 (independentes de código) → F2 (base de F3�
 ## 7. Estado de prova desta revisão
 
 DECLARADO/LIDO: Constituição §I.1–I.17 (sem conflito), schema (`009`, `016`, `004`), serviços de tentativa/evidência/prioridades, UI de citação (`src/app.js:3400`), rubrica e canário. NÃO executado: nenhum teste novo, nenhuma mudança de código, nenhuma chamada a modelo. Risco principal: construir F2–F5 sobre uma noção de "conhecimento" mal escolhida; mitigação: decisão 1 antes de F2 e migração aditiva.
+
+## 8. Adendo 2 (2026-10-12): camadas visual e mnemônica, validação do resumo do aluno
+
+Definição acrescentada pelo usuário: o SmartLearn é um sistema de estudo assistido e gestão da aprendizagem com conteúdo multimodal, recuperação ativa, telemetria educacional e apoio à memorização. NÚCLEO: registro do estudo, revisão espaçada/agenda, resumo, questões, estatísticas por tema/subtema. ENRIQUECIMENTO: infográficos, mnemônicos (prontos ou gerados pela skill MN1), validação do resumo do aluno por IA e checagem de omissões e erros. Mapa funcional: fonte/aula/resumo do aluno → organização por tema → geração ou validação do resumo → infográficos → mnemônicos (busca, senão MN1) → questões → diagnóstico de lacuna → retorno ao material → registro por tema/subtema → estatísticas → próximas revisões.
+
+```
+R9   Infográfico = artefato de aprendizagem (reduz carga cognitiva; processo, mecanismo, cascata, fluxo diagnóstico, tratamento, comparação, decisão clínica), não decoração
+R10  Mnemônico: (1) buscar os existentes, (2) filtrar (clareza, relação real com o conteúdo, facilidade de lembrar, sem confundir, utilidade para prova/prática), (3) gerar com a MN1 só se nada presta, (4) incorporar no resumo, no infográfico e, possivelmente, em cartões/revisões/explicações
+R11  O mnemônico nunca deforma o conteúdo; o valor está em encaixá-lo no fluxo, não em existir
+R12  O aluno pode trazer o PRÓPRIO resumo/aula: o sistema valida, aponta omissões e erros (hoje a entrada principal é a fonte → Resumo Mestre gerado)
+R13  Enriquecimento nunca antecede o núcleo (I.2, I.11): mede-se antes de sofisticar
+R14  Texto institucional do produto (HTML/README) reescrito DEPOIS e fiel ao que existe (distinção implementado × planejado)
+```
+
+Reconciliação: a Constituição já prevê mnemônicos "quando realmente úteis" (§I.3) e o histórico de spec marcou "resgate com mnemônicos" como D9 LATER; o usuário agora os põe como camada de enriquecimento: sem conflito, mas sob §I.10/I.11/I.13/I.14 (nada vira feature obrigatória sem problema observável, evidência de melhora e custo proporcional).
+
+Estado por evidência (grep em código, migrações, UI, specs): NADA existe para infográfico (nenhuma ocorrência fora de um STATE antigo), nada para mnemônico (só texto de spec), nenhum caminho de entrada para "resumo do aluno" (a entrada é fonte → rascunho gerado). A skill MN1 NÃO foi encontrada: não está no repositório, nas skills instaladas (`~/.claude/skills`, incluindo `synced`) nem em Downloads/Documents por nome. Sem a definição ou o caminho dela, a etapa "gerar com MN1" não pode ser projetada nem testada.
+
+Engenharia proposta (menor mudança causal; tudo é RASCUNHO até aceite humano, como o resto):
+- Todo artefato de enriquecimento é ligado à entidade de conhecimento (F2) e à fonte; sem F2 não há onde pendurá-lo. Por isso F7–F10 vêm depois de F2.
+- INFOGRÁFICO (F7): gerar uma ESTRUTURA validável (nós, setas, rótulos, cada nó/seta com a frase-fonte e a página, no mesmo molde de `summaryEvidence`) e renderizá-la de forma determinística (SVG). Razão: imagem raster gerada por modelo erra texto, direção de seta e anatomia sem que o servidor consiga auditar; estrutura se audita (setas invertidas, etapa faltante, rótulo sem apoio) com sensores no estilo `risk-checks.js`. Imagem de modelo só seria considerada depois, com prova de fidelidade e custo (I.13).
+- MNEMÔNICO (F8): repositório de candidatos com `origem`, `direitos` (a mesma política OFFICIAL_PUBLIC/LICENSED reutilizável × REFERENCE_ONLY/UNKNOWN nunca copiada já usada no corpus de questões), `conceito` ligado, e os 5 filtros do usuário como rubrica; geração por MN1 apenas se o filtro não aprovar nada; um mnemônico não pode introduzir fato novo (auditoria: cada elemento se mapeia a um item da fonte); aparece no resumo/infográfico/explicação como campo ligado, não texto solto.
+- RESUMO DO ALUNO (F9): novo ponto de entrada "trazer o meu resumo": comparação com a fonte aprovada, lista de omissões de conceitos ESSENCIAIS e de afirmações contraditórias; nunca sobrescreve o texto do aluno.
+- TEXTO DO PRODUTO (F10): reescrever o texto do HTML/README com a definição de §1 + §8, separando "o que o sistema é", "como funciona", "por que é diferente", "dores que elimina", "módulos", e marcando o que ainda é planejado (honestidade de estado, §1.9).
+
+Metodologia (acréscimos às §4): rubrica de infográfico com FALHAS DURAS (seta/ordem causal invertida, etapa essencial ausente, rótulo sem apoio na fonte, valor/unidade errado) e qualidade (carga cognitiva, ordem de leitura, legibilidade); rubrica de mnemônico com os 5 filtros e uma falha dura (deforma ou acrescenta fato); evidência de utilidade só pelo desempenho OBSERVADO (conceitos com e sem mnemônico/infográfico) e sempre como hipótese, nunca como "domínio" (I.12).
+
+Plano atualizado: F0 (feito) → F1 → F2 → F3 → F4 → F5 → F6 como na §5; F7 infográfico, F8 mnemônico, F9 resumo do aluno e F10 texto do produto só depois de F2 (F10 pode correr antes, só texto, se for fiel ao estado real).
+
+Decisões humanas novas (agrupadas): (a) onde está e o que faz a skill MN1 (caminho, texto, entradas/saídas); (b) tecnologia do infográfico: estrutura + SVG determinístico (recomendado) ou imagem por modelo, com a verba que isso exige (HG-11); (c) origem dos mnemônicos "existentes": biblioteca própria/licenciada curada (recomendado) ou busca na web em tempo de geração (envia dados para fora, direitos incertos); livros comerciais de mnemônicos que o usuário possui entram como REFERENCE_ONLY, não como conteúdo copiável; (d) autorizar F10 (reescrever o texto do HTML) já, fiel ao estado real.

@@ -196,7 +196,9 @@ Resposta errada é SINAL, não diagnóstico. Causas possíveis: esquecimento; co
 
 Diferencial: o Mapa de Conhecimento e Lacunas de Aprendizagem (disciplina → tema → subtema, com quantidade, tipo e histórico das questões), separando desempenho OBSERVADO de domínio INFERIDO (I.12). A IA ajuda no conteúdo; a gestão do estudo organiza a continuidade; os exercícios produzem evidência; as estatísticas dizem onde investir o próximo minuto.
 
-Distinção de estado: registro de questões, agenda e estatísticas básicas existem; diagnóstico fino por subtema, retorno estruturado à fonte e priorização adaptativa ainda precisam de desenvolvimento e validação.
+Camadas de enriquecimento (adendo 2026-10-12, mesma decisão humana): o SmartLearn também é gerador de material multimodal. NÚCLEO: registro do estudo, revisão espaçada, resumo, questões, estatísticas por tema/subtema. ENRIQUECIMENTO, sempre depois de medir o núcleo (I.2, I.11): (a) infográficos como artefato de aprendizagem (processo, mecanismo, cascata, fluxo diagnóstico, tratamento, comparação, decisão clínica), nunca decoração; (b) mnemônicos: buscar os existentes, filtrar (clareza, relação real com o conteúdo, facilidade de lembrar, sem confundir, utilidade para prova/prática), gerar com a skill MN1 só se nada prestar, e incorporá-los ao resumo, ao infográfico e a outros artefatos, sem deformar o conteúdo; (c) validação do resumo do aluno por IA e checagem de omissões e erros. Todo artefato de IA continua RASCUNHO até aceite humano. Detalhe, estado e plano: `.specs/features/learning-loop-v2/review.md` §8.
+
+Distinção de estado: registro de questões, agenda e estatísticas básicas existem; diagnóstico fino por subtema, retorno estruturado à fonte, priorização adaptativa, infográficos, mnemônicos e a validação do resumo do aluno ainda não existem e precisam de desenvolvimento e validação.
 
 ## 1. Instrução de persistência
 
