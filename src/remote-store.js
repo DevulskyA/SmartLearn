@@ -179,7 +179,10 @@ const reviewTasks = {
 };
 
 async function agenda(dateStr) {
-  const query = dateStr ? `?date=${encodeURIComponent(dateStr)}` : '';
+  // The date is the browser's "today"; the browser's timezone goes with it so the server buckets "completed today" in the same day.
+  let browserTimezone = null;
+  try { browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { /* the server falls back to the saved timezone */ }
+  const query = dateStr ? `?date=${encodeURIComponent(dateStr)}${browserTimezone ? `&timezone=${encodeURIComponent(browserTimezone)}` : ''}` : '';
   const result = await apiRequest(`/v1/agenda${query}`);
   return {
     date: result.date,

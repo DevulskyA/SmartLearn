@@ -26,10 +26,21 @@ export function registerReviewRoutes(app, db) {
     return { reviewTasks: reviews.list(db, request.actor.userId, { unitId }) };
   });
 
+  // `date` is the day the CLIENT calls "today", in the CLIENT's own timezone. For "completed today" to agree with that day the server must
+  // read the completion instants in the same timezone, so the client sends it too (CI #48: a browser in UTC at 01:30 UTC saw 2026-10-09 while
+  // the saved timezone, America/Sao_Paulo, still said 2026-10-08, and a review completed a moment ago never appeared under "feitas hoje").
+  // Without `timezone` the student's saved timezone applies, as before. Any runtime-recognised zone is accepted (UTC, nested names).
   app.get('/agenda', {
-    schema: { querystring: { type: 'object', properties: { date: { type: 'string' } } } },
-  }, async (request) => {
-    return reviews.agenda(db, request.actor.userId, { date: request.query.date });
+    schema: { querystring: { type: 'object', properties: { date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 } } } },
+  }, async (request, reply) => {
+    const { date, timezone } = request.query;
+    if (timezone !== undefined) {
+      try { new Intl.DateTimeFormat('en-CA', { timeZone: timezone }); } catch {
+        reply.status(400);
+        return { error: { code: 'VALIDATION_FAILED', field: 'timezone', message: 'timezone não é reconhecido pelo runtime.' } };
+      }
+    }
+    return reviews.agenda(db, request.actor.userId, { date, timezoneOverride: timezone });
   });
 
   app.post('/review-tasks/:id/complete', {

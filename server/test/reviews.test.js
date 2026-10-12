@@ -271,3 +271,42 @@ test('T20: a user cannot list another user\'s review tasks via a foreign unitId'
     assert.deepEqual(result, []);
   } finally { cleanup(); }
 });
+
+// CI #48 (2026-10-09T01:3x UTC): the browser (UTC) called the day 2026-10-09; the saved timezone (America/Sao_Paulo) was still on 2026-10-08.
+test('completedToday follows the timezone of the client that names "today": a review finished at 01:30 UTC appears for a UTC client even though Sao Paulo is still on the previous day', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'tz@example.com');
+    const unit = makeUnitWithReviews(db, userId, '2026-10-08');
+    const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY offset_days LIMIT 1').get(userId, unit.unit.id);
+    reviews.complete(db, userId, task.id, {}, () => new Date('2026-10-09T01:30:00.000Z'));
+
+    // the client's own frame (UTC says 10-09): it is there
+    assert.ok(reviews.agenda(db, userId, { date: '2026-10-09', timezoneOverride: 'UTC' }).completedToday.some((t) => t.id === task.id));
+    // the saved timezone alone (Sao Paulo, 10-08) does not put it on 10-09: that mismatch is what the client now removes by sending its zone
+    assert.equal(reviews.agenda(db, userId, { date: '2026-10-09' }).completedToday.some((t) => t.id === task.id), false);
+    assert.ok(reviews.agenda(db, userId, { date: '2026-10-08' }).completedToday.some((t) => t.id === task.id), 'and with no override the saved timezone behaves exactly as before');
+  } finally { cleanup(); }
+});
+
+test('HTTP: GET /v1/agenda accepts the client timezone (UTC and nested names), and refuses an unknown one with 400', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-reviews-tz-'));
+  const db = openDb(join(dir, 'test.db'));
+  runMigrations(db, MIGRATIONS_DIR);
+  const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN] });
+  try {
+    const email = 'tzhttp@example.com';
+    const password = 'a genuinely long test password 1';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+    const cookie = login.headers['set-cookie'].split(';')[0];
+    for (const zone of ['UTC', 'America/Argentina/Buenos_Aires', 'Pacific/Auckland']) {
+      const res = await app.inject({ method: 'GET', url: `/v1/agenda?date=2026-10-09&timezone=${encodeURIComponent(zone)}`, headers: { cookie } });
+      assert.equal(res.statusCode, 200, zone);
+      assert.equal(JSON.parse(res.body).timezone, zone);
+    }
+    const bad = await app.inject({ method: 'GET', url: '/v1/agenda?date=2026-10-09&timezone=Not%2FAZone', headers: { cookie } });
+    assert.equal(bad.statusCode, 400);
+    assert.equal(JSON.parse(bad.body).error.field, 'timezone');
+  } finally { await app.close(); db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+});
