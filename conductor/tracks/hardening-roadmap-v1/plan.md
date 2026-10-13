@@ -12,7 +12,7 @@ Iniciado: 2026-10-04
 
 <!-- PLAN:BEGIN (gerado de tasks.md por node scripts/plan-sync.mjs; não edite à mão) -->
 
-ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 51/71 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 4 · DECISÕES HUMANAS: 15
+ATIVA AGORA: nenhuma · PRÓXIMA: nenhuma elegível · TAREFAS: 51/72 · SUBTAREFAS DA ATIVA: — · BLOQUEADAS: 4 · DECISÕES HUMANAS: 16
 
 Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (aguarda dependência ou decisão humana, dita na linha; só segue sozinha se a causa for tarefa comum) · [H] decisão humana · [=] dividida. Subtarefas: [x] feita · [>] atual (← EM EXECUÇÃO) · [ ] pendente (subtarefas = itens de checklist dentro de um bloco de tarefa; as filhas de uma tarefa dividida contam como tarefas). Fase: [✓] concluída · [>] contém a ativa · [H] só decisões humanas restantes · [!] nada executável. Roadmap progressivo: AGORA = o resultado ativo com a árvore completa; PRÓXIMO = SÓ o próximo resultado pronto (READY) com suas subtarefas; ROADMAP = todas as tarefas, uma linha cada (nenhuma some, as distantes não são expandidas); a linha completa de cada tarefa existe uma única vez, em ROADMAP. Subtarefas só existem para a ativa e a próxima; o progresso global é só de tarefas.
 
@@ -133,7 +133,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 - [x] **T-F9-02** — `validation.md` por fase e validador de estado
 
-### [!] SEM-SPRINT · Fora da sequência de sprints (decisões humanas ou ainda não sequenciadas) — tarefas 0/16
+### [!] SEM-SPRINT · Fora da sequência de sprints (decisões humanas ou ainda não sequenciadas) — tarefas 0/17
 
 - [H] **T-F0-05** — Higiene do checkout principal e das worktrees auxiliares — HG-05
 - [H] **T-F1-05** — Política dos bancos legados e do AppData (#1, #3, #5) — HG-03
@@ -149,6 +149,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - [H] **T-F7-01** — Recuperação de atraso ("reagendar atrasadas") reversível — HG-09
 - [H] **T-F7-02** — Onboarding e estado vazio de produção (DEBT-007) — HG-09
 - [H] **T-F7-03** — Decisão sobre FSRS baseada em dados
+- [H] **T-F11-01** — Camada mnemônica: skill MN1 (localizar, definir, integrar)
 - [H] **T-F9-01** — Mapa de integração e ensaio sem publicar — HG-05
 - [H] **T-F9-03** — Entrega (push/merge/deploy) — HG-10
 
@@ -174,6 +175,7 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 - T-F7-01 · Recuperação de atraso ("reagendar atrasadas") reversível · HG-09 Decisão de produto sobre recuperação de atraso e onboarding
 - T-F7-02 · Onboarding e estado vazio de produção (DEBT-007) · HG-09 Decisão de produto sobre recuperação de atraso e onboarding
 - T-F7-03 · Decisão sobre FSRS baseada em dados · Relatório com carga diária projetada, taxa de atraso e acertos por intervalo a partir do banco DEV/real
+- T-F11-01 · Camada mnemônica: skill MN1 (localizar, definir, integrar) · Dependências
 - T-F9-01 · Mapa de integração e ensaio sem publicar · HG-05 Estratégia de integração, destino de content-quality e do merge temporário
 - T-F9-03 · Entrega (push/merge/deploy) · HG-10 Push, merge, deploy, release
 

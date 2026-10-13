@@ -694,6 +694,17 @@ Objetivo: importar um livro nunca gera um livro; gerar só o que o aluno está e
 - Fazer: em Configurações, dois controles separados e rotulados ("Idioma da interface", "Idioma do conteúdo gerado") e texto que explica a diferença; catálogos es/en para as chaves existentes com fallback pt-BR; no fluxo de gerar: mostrar idioma alvo, estado da unidade (`NOT_GENERATED`/`DRAFT`/`ACCEPTED`) e recusa clara com orientação quando o limite impede; "Gerar de novo" passa `regenerate` e mostra o custo; nenhuma ação em massa.
 - Gate: e2e responsivo + axe; mudar `uiLocale` muda a interface e mantém o idioma do conteúdo (cenário 5).
 
+## F11 — Camada de enriquecimento: mnemônicos e infográficos (decisão de produto 2026-10-12; `learning-loop-v2/review.md` §8)
+
+Objetivo: infográficos e mnemônicos como artefatos de aprendizagem ligados ao conhecimento e à fonte, sempre DEPOIS de medir o núcleo (Constituição I.2, I.11, I.18). Zero chamada real a modelo sem ordem explícita.
+
+### T-F11-01 — Camada mnemônica: skill MN1 (localizar, definir, integrar) · M
+- Status: `[H]` · Requisitos: Constituição §I.18 (camadas de enriquecimento), `review.md` R10, R11 · Dependências: decisão humana "onde está e o que faz a MN1" (caminho/texto, entradas e saídas); entidade de conhecimento da `learning-loop-v2` (F2) para ligar o artefato
+- Contexto: a MN1 NÃO foi encontrada no repositório, nas skills instaladas (`~/.claude/skills`, `synced`) nem em Downloads/Documents por nome (2026-10-12). Tarefa deixada pelo usuário ("MN1 deixa como tarefa"): não projetar nem testar a geração sem a definição.
+- Fazer (após a definição): (1) registrar a MN1 como especificação versionada (entradas, saídas, limites); (2) repositório de candidatos com `origem`, `direitos` (política OFFICIAL_PUBLIC/LICENSED reutilizável × REFERENCE_ONLY/UNKNOWN nunca copiada, a mesma do corpus de questões) e `conceito` ligado; (3) os 5 filtros do usuário (clareza, relação real com o conteúdo, facilidade de lembrar, sem confundir, utilidade para prova/prática) como rubrica; buscar o existente primeiro, gerar com a MN1 só se nada passar; (4) auditoria: o mnemônico não acrescenta nem deforma fato (cada elemento mapeia a um item da fonte); (5) incorporar ao resumo e a outros artefatos como campo ligado, não texto solto. Tudo RASCUNHO até aceite humano.
+- Proof targets (RED): mnemônico com elemento sem item da fonte → recusado; candidato REFERENCE_ONLY nunca copiado; nenhum mnemônico aceito sem aceite humano; geração só quando a busca não aprova nada (espião de provedor: zero chamadas se há candidato aprovado).
+- Gate: testes do repositório de candidatos e da auditoria + E2E de aceite; nenhuma chamada real sem ordem.
+
 ## F9 — Integração e entrega (F-50) — por último, sempre com decisão humana
 
 ### T-F9-01 — Mapa de integração e ensaio sem publicar · M
