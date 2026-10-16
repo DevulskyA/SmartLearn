@@ -90,6 +90,14 @@ test('revealing an answer and judging it in the real review UI creates a server-
   const exItem = page.locator('.review-exercise-item', { hasText: 'Qual a capital da Farmacologia?' }).first();
   await expect(exItem).toBeVisible({ timeout: 5000 });
 
+  // Every write to the attempt ledger answers late, so the order "answer visible -> id -> reveal recorded -> submit recorded"
+  // is forced here instead of depending on how fast the CI machine is (the three waits below are what keep this test honest).
+  let delayedWrites = 0;
+  await page.route(/\/v1\/(attempts\/|exercises\/\d+\/attempts)/, async (route) => {
+    if (route.request().method() !== 'GET') { delayedWrites += 1; await new Promise((resolve) => setTimeout(resolve, 700)); }
+    await route.continue();
+  });
+
   await exItem.getByRole('button', { name: 'Ver resposta' }).click();
   await expect(exItem.getByText('Resposta correta')).toBeVisible({ timeout: 5000 });
 
@@ -101,19 +109,20 @@ test('revealing an answer and judging it in the real review UI creates a server-
 
   // Revealing the answer must have already been recorded server-side as
   // SOLUTION-level assistance BEFORE any judgment is made.
-  const afterReveal = await page.evaluate(async ({ base, id }) => {
+  // revealSolution is a SECOND request, sent after the id exists, so the server state is polled (same assertion, explicit wait).
+  const readAttempt = () => page.evaluate(async ({ base, id }) => {
     const res = await fetch(`${base}/v1/attempts/${id}`, { credentials: 'include' });
     return res.json();
   }, { base: API_BASE, id: attemptId });
-  expect(afterReveal.attempt.maxAssistance).toBe('SOLUTION');
-  expect(afterReveal.attempt.status).toBe('STARTED');
+  await expect.poll(async () => (await readAttempt()).attempt.maxAssistance, { timeout: 5000 }).toBe('SOLUTION');
+  expect((await readAttempt()).attempt.status).toBe('STARTED');
 
   await exItem.getByRole('button', { name: 'Acertei' }).click();
   await expect(exItem).toHaveClass(/is-correct/, { timeout: 5000 });
 
-  const afterSubmit = await page.evaluate(async ({ base, id }) => {
-    const res = await fetch(`${base}/v1/attempts/${id}`, { credentials: 'include' });
-    return res.json();
-  }, { base: API_BASE, id: attemptId });
-  expect(afterSubmit.attempt.status).toBe('SUBMITTED');
+  // is-correct is set locally at once; the submit to the server follows, so wait for the server to hold it.
+  await expect.poll(async () => (await readAttempt()).attempt.status, { timeout: 5000 }).toBe('SUBMITTED');
+
+  // start + reveal + submit all went through the delay: without this, the forced ordering above would be only an assumption.
+  expect(delayedWrites).toBeGreaterThanOrEqual(3);
 });
