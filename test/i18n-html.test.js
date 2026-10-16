@@ -7,7 +7,7 @@ import ptBR from '../src/i18n/locales/pt-BR.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'index.html'), 'utf8').replace(/^﻿/, '');
-const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+const decode = (s) => s.replace(/&times;/g, '×').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const ATTRIBUTES = ['title', 'aria-label', 'placeholder', 'alt'];
 
 test('every data-i18n text in index.html has a catalog key, and the HTML fallback is exactly the pt-BR catalog text', () => {

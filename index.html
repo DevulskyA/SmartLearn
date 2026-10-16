@@ -104,17 +104,17 @@
         <section class="screen" id="screen-today" data-screen-panel="today" aria-labelledby="title-today">
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Seu plano</p>
-              <h1 id="title-today">Hoje</h1>
+              <p class="eyebrow" data-i18n="screens.today.eyebrow">Seu plano</p>
+              <h1 id="title-today" data-i18n="screens.today.title">Hoje</h1>
             </div>
             <p id="today-date-label"></p>
-            <button class="text-button" id="daily-summary-btn" type="button" hidden>Resumo do Dia</button>
+            <button class="text-button" id="daily-summary-btn" type="button" hidden data-i18n="screens.today.dailySummary.open">Resumo do Dia</button>
           </div>
 
           <div class="daily-summary-panel" id="daily-summary-panel" hidden aria-labelledby="daily-summary-heading" role="region">
             <div class="daily-summary-header">
-              <h2 id="daily-summary-heading">Resumos de hoje</h2>
-              <button class="text-button" id="daily-summary-close" type="button" aria-label="Fechar painel de resumos">&times; Fechar</button>
+              <h2 id="daily-summary-heading" data-i18n="screens.today.dailySummary.heading">Resumos de hoje</h2>
+              <button class="text-button" id="daily-summary-close" type="button" aria-label="Fechar painel de resumos" data-i18n-aria-label="screens.today.dailySummary.closeLabel" data-i18n="screens.today.dailySummary.close">&times; Fechar</button>
             </div>
             <div id="daily-summary-list" class="daily-summary-list"></div>
           </div>
@@ -123,46 +123,46 @@
 
           <div class="primary-action-banner" id="today-primary-action" role="region" aria-labelledby="today-primary-action-text" hidden>
             <p id="today-primary-action-text"></p>
-            <button class="primary-button" id="today-primary-action-btn" type="button">Começar agora</button>
+            <button class="primary-button" id="today-primary-action-btn" type="button" data-i18n="screens.today.primaryAction">Começar agora</button>
           </div>
 
           <div class="review-dashboard" id="review-dashboard">
             <section class="review-block review-block-overdue" id="block-overdue" aria-labelledby="title-overdue" hidden>
               <div class="block-heading">
-                <h2 id="title-overdue">Vencidas</h2>
+                <h2 id="title-overdue" data-i18n="screens.today.block.overdue">Vencidas</h2>
                 <span class="block-count is-overdue" data-count-for="overdue"></span>
               </div>
               <div class="review-list" data-review-list="overdue"></div>
             </section>
             <section class="review-block review-block-today" id="block-today" aria-labelledby="title-today-reviews" hidden>
               <div class="block-heading">
-                <h2 id="title-today-reviews">Para hoje</h2>
+                <h2 id="title-today-reviews" data-i18n="screens.today.block.today">Para hoje</h2>
                 <span class="block-count is-today" data-count-for="today"></span>
               </div>
               <div class="review-list" data-review-list="today"></div>
             </section>
             <section class="review-block review-block-done" id="block-done-today" aria-labelledby="title-done-today" hidden>
               <div class="block-heading">
-                <h2 id="title-done-today">Feitas hoje</h2>
+                <h2 id="title-done-today" data-i18n="screens.today.block.done">Feitas hoje</h2>
                 <span class="block-count is-done" data-count-for="doneToday"></span>
               </div>
               <div class="review-list" data-review-list="doneToday"></div>
             </section>
             <section class="review-block review-block-upcoming" id="block-upcoming" aria-labelledby="title-upcoming" hidden>
               <div class="block-heading">
-                <h2 id="title-upcoming">Próximas revisões</h2>
+                <h2 id="title-upcoming" data-i18n="screens.today.block.upcoming">Próximas revisões</h2>
                 <span class="block-count" id="upcoming-count"></span>
               </div>
-              <p class="weak-practice-note" id="upcoming-note" hidden>Nada vence hoje.</p>
+              <p class="weak-practice-note" id="upcoming-note" hidden data-i18n="screens.today.upcomingNote">Nada vence hoje.</p>
               <div id="upcoming-groups"></div>
               <p class="weak-practice-note" id="upcoming-more" hidden></p>
             </section>
             <section class="review-block review-block-weak" id="block-weak" aria-labelledby="title-weak" hidden>
               <div class="block-heading">
-                <h2 id="title-weak">Vale reforçar</h2>
+                <h2 id="title-weak" data-i18n="screens.today.block.weak">Vale reforçar</h2>
                 <span class="block-count" id="weak-count"></span>
               </div>
-              <p class="weak-practice-note">Sugestões a partir do que você registrou. Não mudam suas revisões.</p>
+              <p class="weak-practice-note" data-i18n="screens.today.weakNote">Sugestões a partir do que você registrou. Não mudam suas revisões.</p>
               <div class="review-list" id="weak-list"></div>
             </section>
           </div>
@@ -173,19 +173,19 @@
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M20 6 9 17l-5-5" />
             </svg>
-            <h2>Tudo em dia!</h2>
-            <p>Nenhuma revisão pendente para hoje. Bom descanso ou adiante os estudos.</p>
+            <h2 data-i18n="screens.today.success.title">Tudo em dia!</h2>
+            <p data-i18n="screens.today.success.body">Nenhuma revisão pendente para hoje. Bom descanso ou adiante os estudos.</p>
           </div>
 
           <div class="empty-state" id="today-empty-state">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M6 3v3M18 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 12h2M14 12h2M8 16h2M14 16h2" />
             </svg>
-            <h2>Nenhuma revisão cadastrada.</h2>
-            <p>Comece pelo material de uma aula: envie o PDF e o SmartLearn propõe um resumo e questões para você revisar antes de estudar.</p>
+            <h2 data-i18n="screens.today.empty.title">Nenhuma revisão cadastrada.</h2>
+            <p data-i18n="screens.today.empty.body">Comece pelo material de uma aula: envie o PDF e o SmartLearn propõe um resumo e questões para você revisar antes de estudar.</p>
             <div class="empty-state-actions">
-              <button class="primary-button" type="button" data-action="first-upload">Enviar um PDF de aula</button>
-              <button class="secondary-button" type="button" data-action="first-create">Criar uma aula</button>
+              <button class="primary-button" type="button" data-action="first-upload" data-i18n="screens.today.empty.upload">Enviar um PDF de aula</button>
+              <button class="secondary-button" type="button" data-action="first-create" data-i18n="screens.today.empty.create">Criar uma aula</button>
             </div>
           </div>
         </section>

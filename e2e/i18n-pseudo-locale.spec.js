@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 4, plan: 9, stats: 32, tracking: 8, subjects: 0, settings: 47, account: 7 };
+const BASELINE = { today: 0, plan: 9, stats: 32, tracking: 8, subjects: 0, settings: 47, account: 7 };
 
 let serverProcess;
 let dbDir;
@@ -107,6 +107,7 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
     await page.waitForTimeout(400);
     report[screen] = await page.evaluate(untranslatedOf, [`#screen-${screen}`, STUDENT_TEXT]);
   }
+  console.log('PSEUDO_COUNTS ' + JSON.stringify(Object.fromEntries(Object.entries(report).map(([screen, { found }]) => [screen, found.length]))));
   // The ratchet: a screen may show fewer texts outside the catalog than this, never more. Lower a number when a slice of
   // index.html / app.js moves its texts to the catalog; the failure message lists what is still in the code.
   for (const [screen, { found }] of Object.entries(report)) {
