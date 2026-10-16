@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 function normalizeCount(rawValue) {
   if (rawValue === "" || rawValue == null) return null;
   return Math.max(0, Number.parseInt(rawValue, 10) || 0);
@@ -20,5 +22,5 @@ export function getReviewScoreValues(questionsRaw, correctRaw) {
 }
 
 export function getReviewScoreValidationMessage(values) {
-  return values.isOverflow ? "Acertos não pode ser maior que Questões." : "";
+  return values.isOverflow ? t('validation.review.overflow') : "";
 }

@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 // NAMING_PATTERN: discipline/subject names only. Accepts letters (accented), numbers, spaces,
 // hyphens, slashes, parentheses, basic punctuation, and valid medical/scientific typography
 // (Greek letters, superscripts/subscripts, en/em dash, common math symbols — AC-05). Still
@@ -10,9 +12,9 @@ export const NAMING_PATTERN = /^[a-zA-ZÀ-ÖØ-öø-ÿ0-9 \-\/\(\)\.\,\:\;\'\°\
 const TITLE_CONTROL_RE = /[\x00-\x1F\x7F\u0080-\u009F\u2028\u2029]/;
 
 export function validateNamingField(value, label) {
-  if (!value) return `Informe ${label}.`;
-  if (value.length < 2) return `${label} deve ter ao menos 2 caracteres.`;
-  if (!NAMING_PATTERN.test(value)) return `${label} contém caracteres não permitidos. Use letras, números, espaços e pontuação básica ( - / . , : ).`;
+  if (!value) return t('validation.name.empty', { label });
+  if (value.length < 2) return t('validation.name.tooShort', { label });
+  if (!NAMING_PATTERN.test(value)) return t('validation.name.invalidChars', { label });
   return null;
 }
 
@@ -20,9 +22,9 @@ export function validateNamingField(value, label) {
 // validateNamingField. Allows em dash (\u2014), medical symbols (Na+, B, O2, ug, etc.)
 // and broad Unicode. Rejects only empty/invisible content and control characters.
 export function validateTitleField(value, label) {
-  if (typeof value !== 'string' || !value) return `Informe ${label}.`;
+  if (typeof value !== 'string' || !value) return t('validation.title.empty', { label });
   const trimmed = value.normalize('NFC').trim();
-  if (!trimmed) return `Informe ${label}.`;
-  if (TITLE_CONTROL_RE.test(trimmed)) return `${label} contém caracteres de controle não permitidos.`;
+  if (!trimmed) return t('validation.title.empty', { label });
+  if (TITLE_CONTROL_RE.test(trimmed)) return t('validation.title.controlChars', { label });
   return null;
 }
