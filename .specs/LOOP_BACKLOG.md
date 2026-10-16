@@ -20,6 +20,7 @@ SWEEP_EMPTY_STREAK=0
 - Auto-fix do PR #6 (`set_monitor`): só com pedido do usuário.
 
 ## FEITO
+- [S1] `npm run test:mutation` (worktree descartável, 2026-10-16): 7/7 mutações mortas (M1a, M1b, M2, M3, M5, M4a, M4b). Relatório: `test-results/mutation-report.json` (não versionado).
 - [S2] Varredura de exports sem uso (2026-10-16): 55 exports de `src/`, `server/src/`, `shared/` sem referência em OUTRO arquivo (constantes e helpers só internos, inofensivos) e 69 usados só por testes. Código morto confirmado: nenhum. Uma 1ª checagem de "morto" saiu falsa (escape do shell quebrou a contagem; `computeDataRevision`, `greedyChunks` etc. são usados no próprio arquivo) e foi descartada; não apagar nada com base nela. Armadilha repetida: heredoc/`node -e` mutilam barras invertidas; script temporário vai pela ferramenta Write.
 - [S2] `.specs/STATE.md` defasado (NEXT_MILESTONE ainda pedia o canário já executado): atualizado; `SESSION_MEMENTO.md` de 2026-06-27 (raiz, enganoso para agentes) arquivado em `.specs/archive/`. Prova: `context:check` PASS, `test/codemap.test.js` 3/3.
 - [UI] Gráfico de evolução na interface real (dev-uat, navegador embutido, 2026-10-16): renderiza (7 linhas, 1 ponto, meses jul–out, legenda por disciplina); filtro Fisiologia → 1 linha; período "Tudo" → 11 meses; console sem erro de aplicação (só 502 de `/health/build`, esperado sem backend no modo local). Servidor de desenvolvimento encerrado.
