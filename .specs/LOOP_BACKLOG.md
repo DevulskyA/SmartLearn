@@ -4,7 +4,7 @@ Regras do ciclo: executar o PRIMEIRO item DESBLOQUEADO de PENDENTE; provar; comm
 Push: cada push cancela a rodada de CI em andamento (≈17 min); ENQUANTO o CI roda, commitar local e só empurrar quando a rodada terminar ou quando houver algo que o CI precise validar. Commit só de documentação não precisa de push imediato.
 Proibido no loop: chamada real a modelo, merge, deploy, release, force-push, banco DEV humano. Subagente que só roda teste usa model haiku.
 
-SWEEP_EMPTY_STREAK=0
+SWEEP_EMPTY_STREAK=1
 
 ## PENDENTE
 4. [Endurecer] Se `e2e/offline.spec.js:365` falhar de novo no CI: repetir o clique em "Conta" até `#account-login-form` aparecer (`e2e/support/session.js`).
@@ -20,6 +20,7 @@ SWEEP_EMPTY_STREAK=0
 - Auto-fix do PR #6 (`set_monitor`): só com pedido do usuário.
 
 ## FEITO
+- [Varredura 2026-10-16 18:10, VAZIA → streak 1] S1: lint e `context:check` PASS (nenhum código novo desde os testes completos). S2: commits novos só de documentação. S3: fumaça em 375 px nas 8 telas (today, materials, plan, stats, tracking, subjects, settings, account): sem rolagem horizontal, sem erro de JavaScript; as caixas "Revisão feita" têm 18×18 px mas o rótulo clicável mede 110×44 (cumpre alvo mínimo). Observação sem ação: em modo local o botão `materials` volta para `#today` (tela só existe com servidor). Servidor de desenvolvimento e aba encerrados.
 - [S1] `npm run test:mutation` (worktree descartável, 2026-10-16): 7/7 mutações mortas (M1a, M1b, M2, M3, M5, M4a, M4b). Relatório: `test-results/mutation-report.json` (não versionado).
 - [S2] Varredura de exports sem uso (2026-10-16): 55 exports de `src/`, `server/src/`, `shared/` sem referência em OUTRO arquivo (constantes e helpers só internos, inofensivos) e 69 usados só por testes. Código morto confirmado: nenhum. Uma 1ª checagem de "morto" saiu falsa (escape do shell quebrou a contagem; `computeDataRevision`, `greedyChunks` etc. são usados no próprio arquivo) e foi descartada; não apagar nada com base nela. Armadilha repetida: heredoc/`node -e` mutilam barras invertidas; script temporário vai pela ferramenta Write.
 - [S2] `.specs/STATE.md` defasado (NEXT_MILESTONE ainda pedia o canário já executado): atualizado; `SESSION_MEMENTO.md` de 2026-06-27 (raiz, enganoso para agentes) arquivado em `.specs/archive/`. Prova: `context:check` PASS, `test/codemap.test.js` 3/3.
