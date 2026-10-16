@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 9, stats: 32, tracking: 8, subjects: 0, settings: 47, account: 7 };
+const BASELINE = { today: 0, plan: 0, stats: 32, tracking: 0, subjects: 0, settings: 47, account: 7 };
 
 let serverProcess;
 let dbDir;
@@ -98,6 +98,9 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
     i18n.registerCatalog('en', Object.fromEntries(Object.entries(ptBR).map(([k, v]) => [k, `\u27E6${v}\u27E7`])));
     i18n.setLocale('en');
     (await import('/src/i18n/dom.js')).applyStaticTexts(document);
+    // the custom select widgets copied their labels when they were built: ask them to read the new ones
+    const { syncSelect } = await import('/src/select-ui.js');
+    for (const select of document.querySelectorAll('select')) syncSelect(select);
   });
 
   const report = {};
@@ -108,6 +111,7 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
     report[screen] = await page.evaluate(untranslatedOf, [`#screen-${screen}`, STUDENT_TEXT]);
   }
   console.log('PSEUDO_COUNTS ' + JSON.stringify(Object.fromEntries(Object.entries(report).map(([screen, { found }]) => [screen, found.length]))));
+  if (process.env.PSEUDO_VERBOSE) for (const [screen, { found }] of Object.entries(report)) console.log(`PSEUDO_FOUND ${screen}\n  ${found.join('\n  ')}`);
   // The ratchet: a screen may show fewer texts outside the catalog than this, never more. Lower a number when a slice of
   // index.html / app.js moves its texts to the catalog; the failure message lists what is still in the code.
   for (const [screen, { found }] of Object.entries(report)) {

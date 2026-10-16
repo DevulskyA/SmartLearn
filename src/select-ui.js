@@ -523,6 +523,12 @@ function mount(select) {
 
   const api = {
     sync() {
+      // the accessible name is read again too, so a locale change that rewrote the <select>'s label reaches the widget
+      const accessibleLabel = labelFor(select);
+      if (accessibleLabel) {
+        trigger.setAttribute("aria-label", accessibleLabel);
+        menu.setAttribute("aria-label", accessibleLabel);
+      }
       buildItems();
       syncTrigger();
       if (isOpen()) positionMenu();

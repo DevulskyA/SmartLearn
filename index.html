@@ -193,22 +193,22 @@
         <section class="screen" id="screen-plan" data-screen-panel="plan" aria-labelledby="title-plan" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Conteúdo</p>
-              <h1 id="title-plan">Plano</h1>
+              <p class="eyebrow" data-i18n="screens.plan.eyebrow">Conteúdo</p>
+              <h1 id="title-plan" data-i18n="screens.plan.title">Plano</h1>
             </div>
-            <button class="primary-button" id="plan-new-unit-btn" type="button">+ Nova aula</button>
+            <button class="primary-button" id="plan-new-unit-btn" type="button" data-i18n="screens.plan.new">+ Nova aula</button>
           </div>
           <div class="plan-new-unit-form form-card" id="plan-new-unit-form" hidden>
             <div class="section-heading compact-heading">
-              <p class="eyebrow">Plano</p>
-              <h2>Nova aula</h2>
+              <p class="eyebrow" data-i18n="screens.plan.form.eyebrow">Plano</p>
+              <h2 data-i18n="screens.plan.form.title">Nova aula</h2>
             </div>
             <div class="form-grid">
               <div class="field-group form-grid-wide">
-                <label for="plan-subject-select">Disciplina</label>
+                <label for="plan-subject-select" data-i18n="screens.form.subject">Disciplina</label>
                 <div class="inline-form-row inline-select-row">
                   <select id="plan-subject-select" name="planSubject">
-                    <option value="">Selecione…</option>
+                    <option value="" data-i18n="screens.form.select">Selecione…</option>
                   </select>
                   <button class="text-button" id="plan-show-subject-form" type="button" aria-expanded="false" aria-controls="plan-new-subject-form">
                     <span aria-hidden="true">+</span> Nova disciplina
@@ -216,88 +216,88 @@
                 </div>
                 <form class="inline-form" id="plan-new-subject-form" hidden novalidate>
                   <div class="field-group inline-form-field">
-                    <label for="plan-new-subject-input">Nome da nova disciplina</label>
+                    <label for="plan-new-subject-input" data-i18n="screens.form.newSubjectName">Nome da nova disciplina</label>
                     <div class="inline-form-row">
                       <input id="plan-new-subject-input" name="planSubjectName" type="text" maxlength="100" autocomplete="off" />
-                      <button class="primary-button" type="submit">Adicionar</button>
+                      <button class="primary-button" type="submit" data-i18n="screens.form.add">Adicionar</button>
                     </div>
                   </div>
                 </form>
               </div>
               <div class="field-group form-grid-wide">
-                <label for="plan-study-source">Fonte</label>
-                <input id="plan-study-source" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" />
+                <label for="plan-study-source" data-i18n="screens.form.source">Fonte</label>
+                <input id="plan-study-source" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" data-i18n-placeholder="screens.form.sourcePlaceholder" />
               </div>
               <div class="field-group">
-                <label for="plan-study-date">Data da aula</label>
+                <label for="plan-study-date" data-i18n="screens.form.lessonDate">Data da aula</label>
                 <input id="plan-study-date" type="date" required />
               </div>
               <div class="field-group form-grid-wide">
-                <label for="plan-study-title">Conteúdo estudado</label>
-                <input id="plan-study-title" type="text" maxlength="240" placeholder="Ex.: Lei de Frank-Starling" required />
+                <label for="plan-study-title" data-i18n="screens.form.content">Conteúdo estudado</label>
+                <input id="plan-study-title" type="text" maxlength="240" placeholder="Ex.: Lei de Frank-Starling" data-i18n-placeholder="screens.plan.form.contentPlaceholder" required />
               </div>
               <div class="field-group form-grid-wide">
                 <label for="plan-study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
-                <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado…"></textarea>
+                <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
               </div>
             </div>
             <div class="form-actions">
-              <button class="primary-button" id="plan-unit-save-btn" type="button">Salvar aula</button>
-              <button class="small-button" id="plan-unit-cancel-btn" type="button">Cancelar</button>
+              <button class="primary-button" id="plan-unit-save-btn" type="button" data-i18n="screens.plan.form.save">Salvar aula</button>
+              <button class="small-button" id="plan-unit-cancel-btn" type="button" data-i18n="screens.form.cancel">Cancelar</button>
               <p class="form-message" id="plan-unit-form-message" role="status" aria-live="polite"></p>
             </div>
           </div>
 
           <div class="plan-filters" id="plan-filters">
-            <select id="plan-filter-subject" aria-label="Filtrar por disciplina">
-              <option value="">Todas as disciplinas</option>
+            <select id="plan-filter-subject" aria-label="Filtrar por disciplina" data-i18n-aria-label="screens.filter.subjectLabel">
+              <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
             </select>
-            <select id="plan-filter-state" aria-label="Filtrar por estado">
-              <option value="">Todos os estados</option>
-              <option value="ATRASADO">Atrasada</option>
-              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
-              <option value="EM_REVISAO">Revisar hoje</option>
-              <option value="EM_ESTUDO">Em estudo</option>
-              <option value="EM_DIA">Em dia</option>
+            <select id="plan-filter-state" aria-label="Filtrar por estado" data-i18n-aria-label="screens.filter.stateLabel">
+              <option value="" data-i18n="screens.filter.allStates">Todos os estados</option>
+              <option value="ATRASADO" data-i18n="screens.state.overdue">Atrasada</option>
+              <option value="SEM_EVIDENCIA" data-i18n="screens.state.noEvidence">Sem prática registrada</option>
+              <option value="EM_REVISAO" data-i18n="screens.state.reviewToday">Revisar hoje</option>
+              <option value="EM_ESTUDO" data-i18n="screens.state.studying">Em estudo</option>
+              <option value="EM_DIA" data-i18n="screens.state.onTrack">Em dia</option>
             </select>
-            <select id="plan-sort" aria-label="Ordenar por">
-              <option value="study-date-desc">Data (mais recente)</option>
-              <option value="subject">Disciplina</option>
-              <option value="next-review">Próxima revisão</option>
+            <select id="plan-sort" aria-label="Ordenar por" data-i18n-aria-label="screens.plan.sortLabel">
+              <option value="study-date-desc" data-i18n="screens.plan.sort.date">Data (mais recente)</option>
+              <option value="subject" data-i18n="screens.form.subject">Disciplina</option>
+              <option value="next-review" data-i18n="screens.plan.sort.nextReview">Próxima revisão</option>
             </select>
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
-          <p class="panel-empty" id="plan-empty" hidden>Nenhuma aula cadastrada.</p>
+          <p class="panel-empty" id="plan-empty" hidden data-i18n="screens.plan.empty">Nenhuma aula cadastrada.</p>
         </section>
 
         <section class="screen" id="screen-tracking" data-screen-panel="tracking" aria-labelledby="title-tracking" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Processo</p>
-              <h1 id="title-tracking">Acompanhamento</h1>
+              <p class="eyebrow" data-i18n="screens.tracking.eyebrow">Processo</p>
+              <h1 id="title-tracking" data-i18n="screens.tracking.title">Acompanhamento</h1>
             </div>
           </div>
           <div class="tracking-filters" id="tracking-filters">
-            <select id="tracking-filter-subject" aria-label="Filtrar por disciplina">
-              <option value="">Todas as disciplinas</option>
+            <select id="tracking-filter-subject" aria-label="Filtrar por disciplina" data-i18n-aria-label="screens.filter.subjectLabel">
+              <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
             </select>
-            <select id="tracking-filter-state" aria-label="Filtrar por estado">
-              <option value="">Todos os estados</option>
-              <option value="ATRASADO">Atrasada</option>
-              <option value="SEM_EVIDENCIA">Sem prática registrada</option>
-              <option value="EM_REVISAO">Revisar hoje</option>
-              <option value="EM_ESTUDO">Em estudo</option>
-              <option value="EM_DIA">Em dia</option>
+            <select id="tracking-filter-state" aria-label="Filtrar por estado" data-i18n-aria-label="screens.filter.stateLabel">
+              <option value="" data-i18n="screens.filter.allStates">Todos os estados</option>
+              <option value="ATRASADO" data-i18n="screens.state.overdue">Atrasada</option>
+              <option value="SEM_EVIDENCIA" data-i18n="screens.state.noEvidence">Sem prática registrada</option>
+              <option value="EM_REVISAO" data-i18n="screens.state.reviewToday">Revisar hoje</option>
+              <option value="EM_ESTUDO" data-i18n="screens.state.studying">Em estudo</option>
+              <option value="EM_DIA" data-i18n="screens.state.onTrack">Em dia</option>
             </select>
-            <select id="tracking-filter-period" aria-label="Filtrar por período">
-              <option value="">Qualquer período</option>
-              <option value="last-30">Últimos 30 dias</option>
-              <option value="last-90">Últimos 90 dias</option>
-              <option value="last-365">Último ano</option>
+            <select id="tracking-filter-period" aria-label="Filtrar por período" data-i18n-aria-label="screens.filter.periodLabel">
+              <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
+              <option value="last-30" data-i18n="screens.filter.last30">Últimos 30 dias</option>
+              <option value="last-90" data-i18n="screens.filter.last90">Últimos 90 dias</option>
+              <option value="last-365" data-i18n="screens.filter.lastYear">Último ano</option>
             </select>
           </div>
           <div class="tracking-list" id="tracking-list" aria-live="polite"></div>
-          <p class="panel-empty" id="tracking-empty" hidden>Nenhuma aula encontrada.</p>
+          <p class="panel-empty" id="tracking-empty" hidden data-i18n="screens.tracking.empty">Nenhuma aula encontrada.</p>
         </section>
 
         <section class="screen" id="screen-subjects" data-screen-panel="subjects" aria-labelledby="title-subjects" hidden>
@@ -311,22 +311,22 @@
           <div class="subjects-create-form form-card" id="subjects-create-form" hidden>
             <div class="form-grid">
               <div class="field-group form-grid-wide">
-                <label for="subjects-new-name">Nome da disciplina</label>
+                <label for="subjects-new-name" data-i18n="screens.subjects.form.name">Nome da disciplina</label>
                 <input id="subjects-new-name" type="text" maxlength="100" autocomplete="off" />
               </div>
               <div class="field-group form-grid-wide">
-                <span class="field-label">Cor</span>
-                <div class="color-picker" id="subjects-new-color-picker" role="radiogroup" aria-label="Cor da disciplina"></div>
+                <span class="field-label" data-i18n="screens.subjects.form.color">Cor</span>
+                <div class="color-picker" id="subjects-new-color-picker" role="radiogroup" aria-label="Cor da disciplina" data-i18n-aria-label="screens.subjects.form.colorLabel"></div>
               </div>
             </div>
             <div class="form-actions">
-              <button class="primary-button" id="subjects-create-save-btn" type="button">Salvar</button>
-              <button class="small-button" id="subjects-create-cancel-btn" type="button">Cancelar</button>
+              <button class="primary-button" id="subjects-create-save-btn" type="button" data-i18n="screens.form.save">Salvar</button>
+              <button class="small-button" id="subjects-create-cancel-btn" type="button" data-i18n="screens.form.cancel">Cancelar</button>
               <p class="form-message" id="subjects-create-message" role="status" aria-live="polite"></p>
             </div>
           </div>
           <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
-          <p class="panel-empty" id="subjects-catalog-empty" hidden>Nenhuma disciplina cadastrada.</p>
+          <p class="panel-empty" id="subjects-catalog-empty" hidden data-i18n="screens.subjects.empty">Nenhuma disciplina cadastrada.</p>
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
