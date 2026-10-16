@@ -23,7 +23,8 @@ import appAccount from './pt-BR/appAccount.js';
 import screens from './pt-BR/screens.js';
 import appBackup from './pt-BR/appBackup.js';
 import appStudyNow from './pt-BR/appStudyNow.js';
+import appExam from './pt-BR/appExam.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup, appStudyNow };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup, appStudyNow, appExam };
 
 export default Object.assign({}, ...Object.values(AREAS));

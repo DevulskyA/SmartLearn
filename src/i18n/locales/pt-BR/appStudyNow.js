@@ -31,4 +31,7 @@ export default {
   'appStudyNow.error.correctAnswer': 'Resposta correta',
   'appStudyNow.hint': 'Dica: {text}',
   'appStudyNow.citation': 'Trecho do material · {source}, página {page}',
+  'appStudyNow.judgeFailed': 'Não foi possível registrar sua resposta. Verifique a conexão e toque de novo no mesmo botão.',
+  'appStudyNow.adopted.correct': 'Sua resposta anterior já estava registrada como acerto e foi mantida.',
+  'appStudyNow.adopted.incorrect': 'Sua resposta anterior já estava registrada como erro e foi mantida.',
 };

@@ -3442,8 +3442,8 @@ async function openExam(begin, { subjectName, fallbackTitle }) {
     const title = exam.title ?? fallbackTitle ?? "";
     examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
     restoreExamPending(examState);
-    examEls.unit.textContent = exam.scope === "SUBJECT" ? "Prova da disciplina" : (subjectName ?? "");
-    examEls.title.textContent = `Prova — ${title}`;
+    examEls.unit.textContent = exam.scope === "SUBJECT" ? t("appExam.scope.subject") : (subjectName ?? "");
+    examEls.title.textContent = t("appExam.title", { title });
     examEls.message.textContent = "";
     showScreen("exam", { focus: true });
     if (exam.status === "IN_PROGRESS") {
@@ -3456,7 +3456,7 @@ async function openExam(begin, { subjectName, fallbackTitle }) {
     }
   } catch (error) {
     console.error("Falha ao iniciar a prova.", error);
-    setPlanFormMessage?.("Não foi possível iniciar a prova. " + (error?.message ?? ""), true);
+    setPlanFormMessage?.(t("appExam.startFailed") + " " + (error?.message ?? ""), true);
   }
 }
 
@@ -3468,7 +3468,7 @@ function renderExamQuestion() {
   if (!examState) return;
   const { exam, index } = examState;
   const item = exam.items[index];
-  examEls.progress.textContent = `Questão ${index + 1} de ${exam.items.length}`;
+  examEls.progress.textContent = t("appExam.progress", { current: index + 1, total: exam.items.length });
   examEls.question.textContent = item.question;
   examEls.answer.value = item.studentAnswer ?? "";
   examEls.prev.disabled = index === 0;
@@ -3480,7 +3480,7 @@ function renderExamQuestion() {
     b.type = "button";
     b.textContent = String(i + 1);
     b.dataset.index = String(i);
-    b.setAttribute("aria-label", `Ir para a questão ${i + 1}${it.studentAnswer ? " (respondida)" : ""}`);
+    b.setAttribute("aria-label", t(it.studentAnswer ? "appExam.goTo.answered" : "appExam.goTo", { n: i + 1 }));
     if (it.studentAnswer && it.studentAnswer.trim()) b.classList.add("is-answered");
     if (i === index) b.setAttribute("aria-current", "true");
     li.append(b);
@@ -3515,7 +3515,7 @@ function restoreExamPending(state) {
     state.unsaved.set(item.id, text);
   }
   if (state.unsaved.size > 0) {
-    examEls.message.textContent = "Recuperei respostas que não tinham sido enviadas; vou enviá-las agora.";
+    examEls.message.textContent = t("appExam.recovered");
     flushExamAnswers().then((ok) => { if (ok && examState === state) examEls.message.textContent = ""; });
   }
 }
@@ -3532,7 +3532,7 @@ async function pushExamAnswer(itemId, text) {
     console.error("Falha ao guardar a resposta.", error);
     examState.unsaved.set(itemId, text);
     persistExamPending();
-    examEls.message.textContent = "Não foi possível guardar a resposta. Ela fica neste aparelho e será enviada de novo; verifique a conexão.";
+    examEls.message.textContent = t("appExam.saveFailed");
     return false;
   }
 }
@@ -3592,14 +3592,14 @@ examEls.submit?.addEventListener("click", async () => {
   if (!(await flushExamAnswers())) {
     const n = examState.unsaved.size;
     examEls.warning.hidden = false;
-    examEls.warning.textContent = `${n} ${n === 1 ? "resposta ainda não foi guardada" : "respostas ainda não foram guardadas"}: sem conexão com o servidor. Elas continuam neste aparelho; tente de novo quando a conexão voltar. Nada foi submetido.`;
+    examEls.warning.textContent = t(n === 1 ? "appExam.unsaved.one" : "appExam.unsaved.other", { count: n });
     return;
   }
   const unanswered = examState.exam.items.filter((it) => !it.studentAnswer || !it.studentAnswer.trim()).length;
   examEls.warning.hidden = false;
   examEls.warning.textContent = unanswered > 0
-    ? `${unanswered} ${unanswered === 1 ? "questão sem resposta" : "questões sem resposta"}. Depois de submeter, as respostas não podem mais ser alteradas.`
-    : "Depois de submeter, as respostas não podem mais ser alteradas.";
+    ? t(unanswered === 1 ? "appExam.unanswered.one" : "appExam.unanswered.other", { count: unanswered })
+    : t("appExam.submitWarning");
   examEls.submit.hidden = true;
   examEls.confirm.hidden = false;
   examEls.cancel.hidden = false;
@@ -3610,7 +3610,7 @@ examEls.confirm?.addEventListener("click", async () => {
   examEls.confirm.disabled = true;
   try {
     if (!(await flushExamAnswers())) {
-      examEls.message.textContent = "Ainda há respostas não guardadas; a prova não foi submetida. Verifique a conexão e tente de novo.";
+      examEls.message.textContent = t("appExam.stillUnsaved");
       return;
     }
     const submitted = await DB.exams.submit(examState.exam.id);
@@ -3618,7 +3618,7 @@ examEls.confirm?.addEventListener("click", async () => {
     renderExamSubmitted();
   } catch (error) {
     console.error("Falha ao submeter a prova.", error);
-    examEls.message.textContent = "Não foi possível submeter a prova. Suas respostas continuam guardadas; tente de novo.";
+    examEls.message.textContent = t("appExam.submitFailed");
   } finally {
     examEls.confirm.disabled = false;
   }
@@ -3634,15 +3634,13 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   examEls.submitted.hidden = false;
   const answered = exam.items.filter((it) => it.studentAnswer && it.studentAnswer.trim()).length;
   const judged = exam.items.filter((it) => it.outcome).length;
-  examEls.submittedText.textContent = judged < exam.items.length
-    ? `${answered} de ${exam.items.length} questões respondidas. Compare com o gabarito e marque Acertei ou Errei em cada questão (${judged} de ${exam.items.length} corrigidas).`
-    : `${answered} de ${exam.items.length} questões respondidas. Correção completa.`;
+  examEls.submittedText.textContent = t(judged < exam.items.length ? "appExam.submitted.pending" : "appExam.submitted.complete", { answered, total: exam.items.length, judged });
 
   if (exam.score) {
     const pct = exam.score.percent.toFixed(1).replace(".", ",");
-    examEls.resultScore.textContent = `${exam.score.correct}/${exam.score.total} corretas — ${pct}%`;
+    examEls.resultScore.textContent = t("appExam.score", { correct: exam.score.correct, total: exam.score.total, percent: pct });
     examEls.resultScore.hidden = false;
-    examEls.counts.textContent = `Acertos: ${exam.score.correct} · Erros: ${exam.score.total - exam.score.correct}`;
+    examEls.counts.textContent = t("appExam.counts", { correct: exam.score.correct, wrong: exam.score.total - exam.score.correct });
     examEls.counts.hidden = false;
   } else {
     examEls.resultScore.hidden = true;
@@ -3650,31 +3648,31 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   }
 
   examEls.reviewList.replaceChildren();
-  const OUTCOME_LABEL = { CORRECT: "Acerto", INCORRECT: "Erro" };
+  const OUTCOME_LABEL = { CORRECT: t("appExam.outcome.correct"), INCORRECT: t("appExam.outcome.incorrect") };
   for (const it of exam.items) {
     const li = document.createElement("li");
     li.className = "exam-review-item";
     li.dataset.itemId = String(it.id);
     li.dataset.outcome = it.outcome ?? "";
     li.append(createTextElement("p", "exam-review-q", `${it.position + 1}. ${it.question}`));
-    if (exam.scope === "SUBJECT" && it.unitTitle) li.append(createTextElement("p", "exam-review-unit", `Aula: ${it.unitTitle}`));
-    li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : "A julgar"));
-    li.append(createTextElement("p", "exam-review-label", "Sua resposta"));
-    const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : "Sem resposta");
+    if (exam.scope === "SUBJECT" && it.unitTitle) li.append(createTextElement("p", "exam-review-unit", t("appExam.unit", { title: it.unitTitle })));
+    li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : t("appExam.outcome.pending")));
+    li.append(createTextElement("p", "exam-review-label", t("appExam.yourAnswer")));
+    const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : t("appExam.noAnswer"));
     if (!it.studentAnswer || !it.studentAnswer.trim()) mine.classList.add("is-empty");
     li.append(mine);
-    li.append(createTextElement("p", "exam-review-label", "Resposta correta"), createTextElement("p", "exam-review-text exam-review-correct", it.answer ?? ""));
-    if (it.explanation) li.append(createTextElement("p", "exam-review-label", "Por quê"), createTextElement("p", "exam-review-text exam-review-why", it.explanation));
+    li.append(createTextElement("p", "exam-review-label", t("appExam.correctAnswer")), createTextElement("p", "exam-review-text exam-review-correct", it.answer ?? ""));
+    if (it.explanation) li.append(createTextElement("p", "exam-review-label", t("appExam.why")), createTextElement("p", "exam-review-text exam-review-why", it.explanation));
     const sources = (it.citations ?? []).filter((c) => c.pageText);
     if (sources.length > 0) {
       li.append(createSourceDetails(
-        `Trecho do material · ${sources[0].sourceName}, ${sources.length > 1 ? "páginas" : "página"} ${formatPageList(sources.map((c) => c.pageIndex))}`,
+        t(sources.length > 1 ? "appExam.citation.other" : "appExam.citation.one", { source: sources[0].sourceName, pages: formatPageList(sources.map((c) => c.pageIndex)) }),
         sources.map((c) => ({ pageIndex: c.pageIndex, text: c.pageText })),
       ));
     }
     const judge = document.createElement("div");
     judge.className = "exam-judge";
-    for (const [outcome, label, cls] of [["CORRECT", "Acertei", "exam-correct-btn"], ["INCORRECT", "Errei", "exam-wrong-btn"]]) {
+    for (const [outcome, label, cls] of [["CORRECT", t("appExam.judge.correct"), "exam-correct-btn"], ["INCORRECT", t("appExam.judge.incorrect"), "exam-wrong-btn"]]) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `secondary-button ${cls}`;
@@ -3683,7 +3681,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
       b.dataset.outcome = outcome;
       b.setAttribute("aria-pressed", String(it.outcome === outcome));
       // "Acertei" x N tells a screen reader nothing: name the question each button refers to
-      b.setAttribute("aria-label", `${label} — questão ${it.position + 1}`);
+      b.setAttribute("aria-label", t("appExam.judge.aria", { label, n: it.position + 1 }));
       b.textContent = label;
       judge.append(b);
     }
@@ -3699,10 +3697,15 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   for (const j of examEls.reviewList.querySelectorAll(".exam-judge")) j.hidden = corrected;
   const wrong = exam.items.filter((it) => it.outcome === "INCORRECT");
   examEls.retest.hidden = !corrected || wrong.length === 0;
-  examEls.retest.textContent = `Refazer erros (${wrong.length})`;
+  examEls.retest.textContent = t("appExam.redo", { count: wrong.length });
   examEls.finalNote.hidden = !corrected;
   examEls.finalNote.textContent = corrected
-    ? `Resultado registrado no seu histórico (${exam.score.correct}/${exam.score.total})${exam.scope === "SUBJECT" ? `, por aula (${(exam.evidenceIds ?? []).length})` : ""}.${wrong.length > 0 ? " Os erros passam a aparecer como “para reforçar” no Plano." : ""}`
+    ? [
+      exam.scope === "SUBJECT"
+        ? t("appExam.final.byUnit", { correct: exam.score.correct, total: exam.score.total, units: (exam.evidenceIds ?? []).length })
+        : t("appExam.final", { correct: exam.score.correct, total: exam.score.total }),
+      wrong.length > 0 ? t("appExam.final.reinforce") : "",
+    ].filter(Boolean).join(" ")
     : "";
   if (focusHeading) examEls.submittedTitle.focus();
 }
@@ -3719,7 +3722,7 @@ examEls.finalize?.addEventListener("click", async () => {
     renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
   } catch (error) {
     console.error("Falha ao concluir a correção.", error);
-    examEls.message.textContent = "Não foi possível registrar o resultado. Suas correções continuam guardadas; tente de novo.";
+    examEls.message.textContent = t("appExam.finalizeFailed");
   } finally {
     examEls.finalize.disabled = false;
   }
@@ -3743,7 +3746,7 @@ examEls.retest?.addEventListener("click", async () => {
     });
   } catch (error) {
     console.error("Falha ao abrir o reteste dos erros da prova.", error);
-    examEls.message.textContent = "Não foi possível abrir o reteste agora. Tente de novo.";
+    examEls.message.textContent = t("appExam.retestFailed");
   }
 });
 
@@ -3761,7 +3764,7 @@ examEls.reviewList?.addEventListener("click", async (event) => {
     examEls.reviewList.querySelector(`[data-action="exam-judge"][data-item-id="${itemId}"][data-outcome="${outcome}"]`)?.focus();
   } catch (error) {
     console.error("Falha ao registrar a correção.", error);
-    examEls.message.textContent = "Não foi possível registrar essa correção. Tente de novo.";
+    examEls.message.textContent = t("appExam.judgeFailed");
     b.disabled = false;
   }
 });
@@ -3855,7 +3858,7 @@ async function judgeStudyNow(isCorrect) {
       state.attemptIds.push(Number(state.attemptId));
     } catch (error) {
       console.error("Falha ao registrar resultado (prática inicial).", error);
-      studyNowMessage.textContent = "Não foi possível registrar sua resposta. Verifique a conexão e toque de novo no mesmo botão.";
+      studyNowMessage.textContent = t("appStudyNow.judgeFailed");
       return;
     } finally {
       state.judging = false;
@@ -3880,7 +3883,7 @@ async function judgeStudyNow(isCorrect) {
   renderStudyNowQuestion();
   if (state.index < state.exercises.length) studyNowRevealBtn.focus();
   if (adoptedOutcome && adoptedOutcome !== tapped) {
-    studyNowMessage.textContent = `Sua resposta anterior já estava registrada como ${adoptedOutcome === "CORRECT" ? "acerto" : "erro"} e foi mantida.`;
+    studyNowMessage.textContent = t(adoptedOutcome === "CORRECT" ? "appStudyNow.adopted.correct" : "appStudyNow.adopted.incorrect");
   }
 }
 
