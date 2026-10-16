@@ -1,0 +1,23 @@
+{
+  "src/analytics.js": 13,
+  "src/api-client.js": 1,
+  "src/app.js": 314,
+  "src/build-identity-ui.js": 9,
+  "src/db.js": 18,
+  "src/draft-review-ui.js": 1,
+  "src/generation-jobs-ui.js": 1,
+  "src/lesson-editor-ui.js": 95,
+  "src/lesson-view-model.js": 33,
+  "src/materials-ui.js": 69,
+  "src/migration-ui.js": 6,
+  "src/naming-validation.js": 3,
+  "src/offline-ui.js": 2,
+  "src/priorities-text.js": 2,
+  "src/remote-store.js": 6,
+  "src/review-score.js": 1,
+  "src/scheduler.js": 3,
+  "src/source-details-ui.js": 2,
+  "src/source-proposals-ui.js": 15,
+  "src/stats.js": 2,
+  "src/theme.js": 6
+}
