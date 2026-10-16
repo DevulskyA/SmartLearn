@@ -5,6 +5,7 @@
 // configureMaterialsUI.
 import * as SourceProposalsUI from "./source-proposals-ui.js";
 import { formatNumber } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
@@ -70,13 +71,14 @@ function setSourcesMessage(message = "", isError = false) {
 }
 
 const nf = { format: (value) => formatNumber(value) }; // resolved per call so the active locale applies
-const rangeLabel = (a, b) => (a === b ? `PDF página ${a}` : `PDF páginas ${a}–${b}`);
-const KIND_LABELS = {
-  FRONT_MATTER: "Página de abertura", COPYRIGHT: "Direitos autorais", DEDICATION: "Dedicatória", PREFACE: "Prefácio",
-  ACKNOWLEDGMENTS: "Agradecimentos", SUMMARY: "Resumo do próprio livro", EXERCISE: "Exercícios do próprio livro",
-  ANSWER_KEY: "Gabarito do próprio livro", REFERENCE: "Referências", APPENDIX: "Apêndice", OTHER: "Outro",
+const rangeLabel = (a, b) => (a === b ? t("materials.range.pdfPage", { page: a }) : t("materials.range.pdfPages", { start: a, end: b }));
+const KIND_LABEL_KEYS = {
+  FRONT_MATTER: "materials.kind.frontMatter", COPYRIGHT: "materials.kind.copyright", DEDICATION: "materials.kind.dedication",
+  PREFACE: "materials.kind.preface", ACKNOWLEDGMENTS: "materials.kind.acknowledgments", SUMMARY: "materials.kind.summary",
+  EXERCISE: "materials.kind.exercise", ANSWER_KEY: "materials.kind.answerKey", REFERENCE: "materials.kind.reference",
+  APPENDIX: "materials.kind.appendix", OTHER: "materials.kind.other",
 };
-const notStudyNote = (kind) => `${KIND_LABELS[kind] ?? "Não é conteúdo de estudo"} — não gera rascunho.`;
+const notStudyNote = (kind) => t("materials.kind.noDraft", { label: t(KIND_LABEL_KEYS[kind] ?? "materials.kind.notStudy") });
 
 // ---- views -------------------------------------------------------------------------------------------------------------
 async function showBrowse() {
@@ -125,7 +127,7 @@ async function openEditor(draft, title) {
 }
 
 // ---- generation (a job on the server: the student can leave and come back; every state shown is read from the server) ---------
-const progressTitle = (title) => `Gerando rascunho com IA — ${title}`;
+const progressTitle = (title) => t("materials.progress.title", { title });
 
 /** The trechos with their newest generation job as `latestJob`. A job list that cannot be read leaves them without one (never invents one). */
 async function withJobs(proposals) {
@@ -191,7 +193,7 @@ async function pollJobs() {
   }
   applyProposals(proposals);
   for (const { proposal, job } of finished) {
-    if (job?.state === "SUCCEEDED") setSourcesMessage(`Rascunho pronto: ${proposal.title}. Abra-o na lista para revisar antes de aceitar.`);
+    if (job?.state === "SUCCEEDED") setSourcesMessage(t("materials.generation.finished", { title: proposal.title }));
     else if (job?.state === "FAILED") setSourcesMessage(jobFailureMessage(job), true);
   }
   if (watched) {
@@ -217,13 +219,13 @@ function openProgressPanel(job, proposalId, title) {
   phase.setAttribute("role", "status"); // announced when the REAL phase changes, not every second
   const stalled = createTextElement("p", "lesson-hint sources-generation-stalled", "");
   stalled.setAttribute("role", "status");
-  const note = createTextElement("p", "lesson-hint", "A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o rascunho aparece na lista quando ficar pronto.");
+  const note = createTextElement("p", "lesson-hint", t("materials.progress.note"));
   const actions = document.createElement("div");
   actions.className = "sources-generation-actions";
-  const background = createTextElement("button", "small-button", "Continuar em segundo plano");
+  const background = createTextElement("button", "small-button", t("materials.progress.background"));
   background.type = "button";
   background.dataset.action = "generation-background";
-  const cancel = createTextElement("button", "small-button is-danger", "Cancelar geração");
+  const cancel = createTextElement("button", "small-button is-danger", t("materials.progress.cancel"));
   cancel.type = "button";
   cancel.dataset.action = "generation-cancel";
   actions.append(background, cancel);
@@ -240,10 +242,10 @@ function openProgressPanel(job, proposalId, title) {
 function renderProgress() {
   if (!watched) return;
   const { job, elements } = watched;
-  const phaseText = watched.cancelling ? "Cancelando a geração…" : jobPhaseLabel(job);
+  const phaseText = watched.cancelling ? t("materials.progress.cancelling") : jobPhaseLabel(job);
   if (elements.phase.textContent !== phaseText) elements.phase.textContent = phaseText;
   const stalledText = job.state === "STALLED"
-    ? "O serviço de IA está em silêncio há algum tempo. Isso nem sempre é problema: o modelo pode estar pensando. A geração continua; você pode esperar ou cancelar."
+    ? t("materials.progress.stalled")
     : "";
   if (elements.stalled.textContent !== stalledText) elements.stalled.textContent = stalledText;
 }
@@ -264,14 +266,14 @@ async function concludeWatched(job) {
     const draft = await DraftReviewUI.getDraft(job.draftId);
     if (draft.ok) {
       await openEditor(draft.draft, title);
-      setSourcesMessage("Rascunho gerado. Revise antes de aceitar.");
+      setSourcesMessage(t("materials.generation.draftReady"));
       return;
     }
-    setSourcesMessage(draft.message || "Não foi possível abrir o rascunho.", true);
+    setSourcesMessage(draft.message || t("materials.draft.openFailed"), true);
   } else if (job.state === "FAILED") {
     setSourcesMessage(jobFailureMessage(job), true);
   } else {
-    setSourcesMessage("A geração foi cancelada. O trecho está livre para gerar de novo.");
+    setSourcesMessage(t("materials.generation.cancelled"));
   }
   await refreshProposals();
   focusProposalAction(proposalId);
@@ -287,7 +289,7 @@ async function continueInBackground() {
   const { proposalId } = watched;
   closeProgressPanel();
   await refreshProposals();
-  setSourcesMessage("A geração continua em segundo plano. Quando ficar pronta, o trecho mostra Pronto na lista.");
+  setSourcesMessage(t("materials.generation.inBackground"));
   const item = sourcesProposalsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
   (item?.querySelector('[data-action="show-generation"]') ?? sourcesChooseFileButton)?.focus({ preventScroll: true });
 }
@@ -295,7 +297,7 @@ async function continueInBackground() {
 async function cancelWatched() {
   if (!watched) return;
   const { cancel } = watched.elements;
-  if (!window.confirm("Cancelar esta geração? Nada será salvo e o trecho fica livre para gerar de novo.")) {
+  if (!window.confirm(t("materials.progress.cancelConfirm"))) {
     cancel.focus({ preventScroll: true });
     return;
   }
@@ -309,7 +311,7 @@ async function cancelWatched() {
     watched.cancelling = false;
     renderProgress();
     cancel.disabled = false;
-    setSourcesMessage(result.message || "Não foi possível cancelar a geração.", true);
+    setSourcesMessage(result.message || t("materials.progress.cancelFailed"), true);
     return;
   }
   await concludeWatched(result.job);
@@ -336,7 +338,7 @@ async function generateFor(proposal) {
   }
   if (!created.ok) {
     setBusy(false);
-    setSourcesMessage(created.message || "Não foi possível gerar o rascunho.", true);
+    setSourcesMessage(created.message || t("materials.generation.startFailed"), true);
     focusProposalAction(proposal.id);
     return;
   }
@@ -364,7 +366,7 @@ function createSourceProposalItem(proposal) {
   li.className = "source-proposal-item";
   li.dataset.proposalId = String(proposal.id);
 
-  const rangeText = proposal.pageStart === proposal.pageEnd ? `Página ${proposal.pageStart}` : `Páginas ${proposal.pageStart}–${proposal.pageEnd}`;
+  const rangeText = proposal.pageStart === proposal.pageEnd ? t("materials.range.page", { page: proposal.pageStart }) : t("materials.range.pages", { start: proposal.pageStart, end: proposal.pageEnd });
   const range = createTextElement("p", "source-proposal-range", rangeText);
   range.id = `source-proposal-range-${proposal.id}`;
 
@@ -373,20 +375,20 @@ function createSourceProposalItem(proposal) {
   titleInput.className = "source-proposal-title-input";
   titleInput.value = proposal.title;
   // The field has no visible label: its accessible name says what it edits, and which trecho (the list repeats it).
-  titleInput.setAttribute("aria-label", `Título do trecho, ${rangeText.toLowerCase()}`);
+  titleInput.setAttribute("aria-label", t("materials.proposal.titleLabel", { range: rangeText.toLowerCase() }));
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "small-button";
   saveBtn.dataset.action = "save-proposal-title";
-  saveBtn.textContent = "Salvar título";
+  saveBtn.textContent = t("materials.proposal.saveTitle");
 
   const toggleBtn = document.createElement("button");
   toggleBtn.type = "button";
   toggleBtn.className = "text-button";
   toggleBtn.dataset.action = "toggle-proposal-excerpt";
   toggleBtn.setAttribute("aria-expanded", "false"); // a disclosure: expose whether the excerpt is open
-  toggleBtn.textContent = "Ver trecho da fonte";
+  toggleBtn.textContent = t("materials.proposal.showExcerpt");
 
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
   excerpt.hidden = true;
@@ -436,23 +438,23 @@ function renderActionSlot(li, proposal) {
   if (!proposal.generatable) {
     parts.push(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
   } else if (proposal.latestDraft?.status === "ACCEPTED") {
-    parts.push(createTextElement("p", "lesson-hint", "Aula já criada a partir deste trecho."));
+    parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.lessonCreated")));
   } else if (status?.kind === "generating") {
     parts.push(statusLine(status));
-    if (status.stalled) parts.push(createTextElement("p", "lesson-hint", "Sem sinal do serviço de IA há algum tempo. Isso nem sempre é problema; a geração continua."));
-    const show = actionButton("Ver andamento", "show-generation", rangeId);
+    if (status.stalled) parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
+    const show = actionButton(t("materials.action.showProgress"), "show-generation", rangeId);
     show.dataset.jobId = String(job.id);
     parts.push(show);
   } else if (proposal.latestDraft) {
     if (status?.kind === "ready" && job.draftId === proposal.latestDraft.id) parts.push(statusLine(status));
-    const open = actionButton("Abrir rascunho", "open-draft", rangeId);
+    const open = actionButton(t("materials.action.openDraft"), "open-draft", rangeId);
     open.dataset.draftId = String(proposal.latestDraft.id);
     parts.push(open);
   } else {
     if (status?.kind === "failed") {
       parts.push(statusLine(status), createTextElement("p", "lesson-hint", jobFailureMessage(job)));
     }
-    parts.push(actionButton(status?.kind === "failed" ? "Tentar de novo" : "Gerar rascunho com IA", "generate-draft", rangeId));
+    parts.push(actionButton(status?.kind === "failed" ? t("materials.action.retry") : t("materials.action.generate"), "generate-draft", rangeId));
   }
   slot.replaceChildren(...parts);
   li.dataset.signature = proposalSignature(proposal);
@@ -487,8 +489,8 @@ function renderDraftsInProgress(proposals) {
     const li = document.createElement("li");
     li.className = "source-draft-item";
     li.dataset.proposalId = String(proposal.id);
-    const rangeText = proposal.pageStart === proposal.pageEnd ? `página ${proposal.pageStart}` : `páginas ${proposal.pageStart}–${proposal.pageEnd}`;
-    const title = createTextElement("span", "source-draft-item-title", proposal.title);
+    const rangeText = proposal.pageStart === proposal.pageEnd ? t("materials.range.pageLower", { page: proposal.pageStart }) : t("materials.range.pagesLower", { start: proposal.pageStart, end: proposal.pageEnd });
+    const title =createTextElement("span", "source-draft-item-title", proposal.title);
     const range = createTextElement("span", "lesson-hint", rangeText);
     const status = jobListStatus(proposal.latestJob);
     const generating = status?.kind === "generating";
@@ -500,17 +502,17 @@ function renderDraftsInProgress(proposals) {
     button.dataset.title = proposal.title;
     if (generating) {
       button.dataset.action = "show-generation";
-      button.textContent = "Ver andamento";
-      button.setAttribute("aria-label", `Ver andamento da geração: ${proposal.title}, ${rangeText}`);
+      button.textContent = t("materials.action.showProgress");
+      button.setAttribute("aria-label", t("materials.draft.showProgressLabel", { title: proposal.title, range: rangeText }));
     } else if (failed) {
       button.dataset.action = "retry-generation";
-      button.textContent = "Tentar de novo";
-      button.setAttribute("aria-label", `Tentar gerar de novo: ${proposal.title}, ${rangeText}`);
+      button.textContent = t("materials.action.retry");
+      button.setAttribute("aria-label", t("materials.draft.retryLabel", { title: proposal.title, range: rangeText }));
     } else {
       button.dataset.action = "open-draft-in-progress";
       button.dataset.draftId = String(proposal.latestDraft.id);
-      button.textContent = "Abrir rascunho";
-      button.setAttribute("aria-label", `Abrir rascunho: ${proposal.title}, ${rangeText}`);
+      button.textContent = t("materials.action.openDraft");
+      button.setAttribute("aria-label", t("materials.draft.openLabel", { title: proposal.title, range: rangeText }));
     }
     li.append(title, range);
     if (generating || failed || ready) li.append(statusLine(status));
@@ -539,10 +541,10 @@ draftsList?.addEventListener("click", async (event) => {
   const result = await DraftReviewUI.getDraft(button.dataset.draftId);
   button.disabled = false;
   if (!result.ok) {
-    setSourcesMessage(result.message || "Não foi possível abrir o rascunho.", true);
+    setSourcesMessage(result.message || t("materials.draft.openFailed"), true);
     return;
   }
-  await openEditor(result.draft, button.dataset.title ?? "Rascunho");
+  await openEditor(result.draft, button.dataset.title ?? t("materials.draft.fallbackTitle"));
 });
 
 function renderSourceProposals(proposals) {
@@ -554,12 +556,13 @@ function renderSourceProposals(proposals) {
   const editorial = proposals.filter((p) => !p.generatable);
   for (const proposal of content) sourcesProposalsList.append(createSourceProposalItem(proposal));
   for (const proposal of editorial) editorialList?.append(createSourceProposalItem(proposal));
-  if (indexSummary) indexSummary.textContent = `Índice do documento (${content.length} ${content.length === 1 ? "unidade" : "unidades"})`;
+  // content.length can be 0: the singular is chosen explicitly (tn would treat 0 as singular in pt-BR)
+  if (indexSummary) indexSummary.textContent = content.length === 1 ? t("materials.index.summary.one", { count: content.length }) : t("materials.index.summary.other", { count: content.length });
   if (indexDetails) indexDetails.open = content.length <= INDEX_OPEN_UP_TO;
   if (editorialDetails) {
     editorialDetails.hidden = editorial.length === 0;
     editorialDetails.open = false;
-    if (editorialSummary) editorialSummary.textContent = `Páginas editoriais (${editorial.length}) — não geram conteúdo`;
+    if (editorialSummary) editorialSummary.textContent = t("materials.editorial.summary", { count: editorial.length });
   }
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
   renderDraftsInProgress(proposals);
@@ -573,7 +576,7 @@ function createTopicItem(candidate, query) {
   li.className = "source-topic-item";
   li.dataset.ordinal = String(candidate.ordinal);
   li.append(createTextElement("p", "source-topic-title", candidate.title));
-  li.append(createTextElement("p", "source-proposal-range", `${rangeLabel(candidate.pageStart, candidate.pageEnd)} · ${nf.format(candidate.chars)} caracteres`));
+  li.append(createTextElement("p", "source-proposal-range", t("materials.topic.rangeChars", { range: rangeLabel(candidate.pageStart, candidate.pageEnd), chars: nf.format(candidate.chars) })));
   if (candidate.excerpt) li.append(createTextElement("p", "source-topic-excerpt", candidate.excerpt));
   if (candidate.generatable) {
     const generate = document.createElement("button");
@@ -581,7 +584,7 @@ function createTopicItem(candidate, query) {
     generate.className = "small-button";
     generate.dataset.action = "generate-topic";
     generate.dataset.query = query;
-    generate.textContent = "Gerar rascunho com IA";
+    generate.textContent = t("materials.action.generate");
     li.append(generate);
   } else {
     li.append(createTextElement("p", "lesson-hint", notStudyNote(candidate.kind)));
@@ -594,22 +597,23 @@ topicForm?.addEventListener("submit", async (event) => {
   if (!currentSourceId) return;
   const query = topicInput.value.trim();
   if (query.length < 2) {
-    setSourcesMessage("Digite ao menos duas letras do assunto.", true);
+    setSourcesMessage(t("materials.topic.tooShort"), true);
     return;
   }
-  setSourcesMessage("Procurando no documento…");
+  setSourcesMessage(t("materials.topic.searching"));
   const result = await SourceProposalsUI.searchTopics(currentSourceId, query);
   if (!result.ok) {
-    setSourcesMessage(result.message || "Não foi possível buscar o assunto.", true);
+    setSourcesMessage(result.message || t("materials.topic.searchFailed"), true);
     return;
   }
   topicResults.replaceChildren();
   if (result.candidates.length === 0) {
-    setSourcesMessage("Nenhuma seção com esse assunto no índice do PDF. Tente outras palavras do título, ou use o índice do documento.", true);
+    setSourcesMessage(t("materials.topic.none"), true);
     return;
   }
   for (const candidate of result.candidates) topicResults.append(createTopicItem(candidate, query));
-  setSourcesMessage(`${result.candidates.length} ${result.candidates.length === 1 ? "seção encontrada" : "seções encontradas"}. Confira as páginas antes de gerar.`);
+  const found = result.candidates.length; // >= 1 here, the plural form is still chosen explicitly to mirror the old ternary
+  setSourcesMessage(found === 1 ? t("materials.topic.found.one", { count: found }) : t("materials.topic.found.other", { count: found }));
 });
 
 topicResults?.addEventListener("click", async (event) => {
@@ -621,7 +625,7 @@ topicResults?.addEventListener("click", async (event) => {
   const approved = await SourceProposalsUI.approveScope(currentSourceId, { ordinal, topic: button.dataset.query });
   button.disabled = false;
   if (!approved.ok) {
-    setSourcesMessage(approved.message || "Não foi possível aprovar este trecho.", true);
+    setSourcesMessage(approved.message || t("materials.topic.approveFailed"), true);
     button.focus({ preventScroll: true });
     return;
   }
@@ -639,14 +643,14 @@ async function loadExistingSources() {
     const li = document.createElement("li");
     li.className = "source-existing-item";
     li.append(createTextElement("span", "source-existing-name", source.originalName));
-    if (source.pageCount) li.append(document.createTextNode(" "), createTextElement("span", "source-existing-pages", `${nf.format(source.pageCount)} páginas`));
+    if (source.pageCount) li.append(document.createTextNode(" "), createTextElement("span", "source-existing-pages", t("materials.existing.pages", { count: nf.format(source.pageCount) })));
     const open = document.createElement("button");
     open.type = "button";
     open.className = "small-button";
     open.dataset.action = "open-source";
     open.dataset.sourceId = String(source.id);
-    open.textContent = "Abrir";
-    open.setAttribute("aria-label", `Abrir ${source.originalName}`);
+    open.textContent = t("materials.existing.open");
+    open.setAttribute("aria-label", t("materials.existing.openLabel", { name: source.originalName }));
     li.append(document.createTextNode(" "), open);
     existingList.append(li);
   }
@@ -658,16 +662,16 @@ existingList?.addEventListener("click", async (event) => {
   if (!button) return;
   button.disabled = true;
   currentSourceId = Number(button.dataset.sourceId);
-  setSourcesMessage("Abrindo o documento…");
+  setSourcesMessage(t("materials.existing.opening"));
   const listed = await SourceProposalsUI.listProposals(currentSourceId);
   button.disabled = false;
   if (!listed.ok) {
-    setSourcesMessage(listed.message || "Não foi possível abrir o documento.", true);
+    setSourcesMessage(listed.message || t("materials.existing.openFailed"), true);
     return;
   }
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; }
   await showProposals(listed.proposals);
-  setSourcesMessage(`${listed.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.`);
+  setSourcesMessage(t("materials.upload.proposed", { count: listed.proposals.length }));
   topicInput?.focus({ preventScroll: true });
 });
 
@@ -697,18 +701,18 @@ sourcesFileInput?.addEventListener("change", async () => {
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
   try {
-    setSourcesMessage("Enviando PDF…");
+    setSourcesMessage(t("materials.upload.sending"));
     const uploadResult = await SourceProposalsUI.uploadSource(file);
     if (!uploadResult.ok) {
-      setSourcesMessage(uploadResult.message || "Não foi possível enviar o arquivo.", true);
+      setSourcesMessage(uploadResult.message || t("materials.upload.sendFailed"), true);
       return;
     }
     currentSourceId = uploadResult.source.id;
 
-    setSourcesMessage("Extraindo texto do PDF…");
+    setSourcesMessage(t("materials.upload.extracting"));
     const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
     if (!extractResult.ok) {
-      setSourcesMessage(extractResult.message || "Não foi possível extrair o texto do PDF.", true);
+      setSourcesMessage(extractResult.message || t("materials.upload.extractFailed"), true);
       return;
     }
     if (extractResult.extraction.status !== "EXTRACTED") {
@@ -716,7 +720,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       return;
     }
 
-    setSourcesMessage("Gerando trechos propostos…");
+    setSourcesMessage(t("materials.upload.chunking"));
     const chunkResult = await SourceProposalsUI.chunkSource(uploadResult.source.id);
     // The same PDF sent again: its trechos (and any rascunho or accepted content on them) already exist and are never
     // replaced silently. Land on them instead of a dead-end error.
@@ -724,7 +728,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       if (await showExistingProposals(uploadResult.source.id, extractResult.extraction)) return;
     }
     if (!chunkResult.ok) {
-      setSourcesMessage(chunkResult.message || "Não foi possível gerar propostas para este PDF.", true);
+      setSourcesMessage(chunkResult.message || t("materials.upload.chunkFailed"), true);
       return;
     }
 
@@ -733,11 +737,13 @@ sourcesFileInput?.addEventListener("change", async () => {
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
     // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
     if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
-    setSourcesMessage(`${chunkResult.proposals.length} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.${skippedNote ? ` ${skippedNote}` : ""}`);
+    setSourcesMessage(skippedNote
+      ? t("materials.upload.proposedWithNote", { count: chunkResult.proposals.length, note: skippedNote })
+      : t("materials.upload.proposed", { count: chunkResult.proposals.length }));
     topicInput?.focus({ preventScroll: true });
     loadExistingSources();
   } catch (error) {
-    setSourcesMessage("Não foi possível processar o arquivo selecionado.", true);
+    setSourcesMessage(t("materials.upload.processFailed"), true);
     console.error("Falha ao processar fonte enviada.", error);
   } finally {
     sourcesFileInput.value = "";
@@ -759,11 +765,11 @@ async function onIndexClick(event) {
       if (result.ok) excerptEl.textContent = result.proposal.excerpt;
       excerptEl.hidden = false;
       toggleBtn.setAttribute("aria-expanded", "true");
-      toggleBtn.textContent = "Ocultar trecho da fonte";
+      toggleBtn.textContent = t("materials.proposal.hideExcerpt");
     } else {
       excerptEl.hidden = true;
       toggleBtn.setAttribute("aria-expanded", "false");
-      toggleBtn.textContent = "Ver trecho da fonte";
+      toggleBtn.textContent = t("materials.proposal.showExcerpt");
     }
     return;
   }
@@ -778,9 +784,9 @@ async function onIndexClick(event) {
     try {
       const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
       if (result.ok) {
-        if (saved) saved.textContent = "Título salvo";
+        if (saved) saved.textContent = t("materials.proposal.titleSaved");
       } else {
-        setSourcesMessage(result.message || "Não foi possível salvar o título.", true);
+        setSourcesMessage(result.message || t("materials.proposal.saveFailed"), true);
       }
     } finally {
       saveBtn.disabled = false;
@@ -795,10 +801,10 @@ async function onIndexClick(event) {
     const result = await DraftReviewUI.getDraft(openBtn.dataset.draftId);
     openBtn.disabled = false;
     if (!result.ok) {
-      setSourcesMessage(result.message || "Não foi possível abrir o rascunho.", true);
+      setSourcesMessage(result.message || t("materials.draft.openFailed"), true);
       return;
     }
-    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? "Rascunho");
+    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
     return;
   }
 
@@ -812,7 +818,7 @@ async function onIndexClick(event) {
   if (generateBtn) {
     const proposal = {
       id: Number(proposalId),
-      title: item.querySelector(".source-proposal-title-input")?.value ?? "Trecho",
+      title: item.querySelector(".source-proposal-title-input")?.value ?? t("materials.proposal.fallbackTitle"),
       pageStart: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.[0]),
       pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
     };
