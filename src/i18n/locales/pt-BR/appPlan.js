@@ -1,6 +1,12 @@
 // Plano screen: lesson (unit) list, details, summary editor and new lesson form (src/app.js)
 export default {
   // Tracking state badges
+  'plan.subject.createFailed': 'Não foi possível criar a disciplina.',
+  'plan.unit.dateRequired': 'Informe a data da aula.',
+  'plan.unit.subjectRequired': 'Selecione uma disciplina.',
+  'plan.unit.saved': 'Aula salva. 16 revisões criadas.',
+  'plan.unit.savedReload': 'Aula salva. Recarregue para ver o resultado.',
+  'plan.unit.saveFailed': 'Não foi possível salvar a aula. Tente novamente.',
   'plan.state.overdue': 'Atrasada',
   'plan.state.noEvidence': 'Sem prática registrada',
   'plan.state.reviewToday': 'Revisar hoje',

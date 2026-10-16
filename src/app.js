@@ -4986,7 +4986,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   if (!answerEl) return;
   const wasHidden = answerEl.hidden;
   answerEl.hidden = !answerEl.hidden;
-  button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
+  button.textContent = t(answerEl.hidden ? "shell.action.viewAnswer" : "shell.action.hideAnswer");
   if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
     const judgment = exItem.querySelector(".exercise-judgment");
     if (judgment) judgment.hidden = false;
@@ -5070,7 +5070,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     unitTitle: row.querySelector(".review-content")?.textContent ?? "",
     exercises: wrong,
   });
-  if (unsent > 0) studyNowMessage.textContent = `Não consegui marcar ${unsent} ${unsent === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor); o reteste segue normalmente.`;
+  if (unsent > 0) studyNowMessage.textContent = t(unsent === 1 ? "appReview.unsentRetest.one" : "appReview.unsentRetest.other", { count: unsent });
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -5113,7 +5113,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
       messageEl.classList.remove("is-error");
-      messageEl.textContent = "Resumo salvo.";
+      messageEl.textContent = t("appReview.summary.saved");
       setTimeout(() => { messageEl.textContent = ""; }, 2000);
     }
     row.querySelector(".review-summary-edit").hidden = true;
@@ -5124,7 +5124,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   } catch (error) {
     if (messageEl) {
       messageEl.classList.add("is-error");
-      messageEl.textContent = "Não foi possível salvar o resumo.";
+      messageEl.textContent = t("appReview.summary.saveFailed");
     }
     console.error("Falha ao salvar resumo.", error);
     button.disabled = false;
@@ -5159,7 +5159,7 @@ reviewDashboard.addEventListener("change", async (event) => {
     let unsentItems = 0;
     if (input.checked && exercisesSection && REMOTE_MODE && DB.attempts) unsentItems = await flushPendingAttempts(exercisesSection);
     const unsentNote = () => (unsentItems > 0
-      ? `Revisão registrada, mas não consegui marcar ${unsentItems} ${unsentItems === 1 ? "item" : "itens"} como “para reforçar” (sem conexão com o servidor).`
+      ? t(unsentItems === 1 ? "appReview.unsentReview.one" : "appReview.unsentReview.other", { count: unsentItems })
       : "");
 
     if (input.checked && exercisesSection) {
@@ -5187,7 +5187,7 @@ reviewDashboard.addEventListener("change", async (event) => {
     input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
     input.focus({ preventScroll: true });
-    setReviewMessage("Não foi possível salvar a revisão.", true);
+    setReviewMessage(t("appReview.saveFailed"), true);
     console.error("Falha ao atualizar a revisão.", error);
   }
 });
@@ -5204,11 +5204,11 @@ generationLanguageSave?.addEventListener('click', async () => {
     const updated = await DB.settings.update({ generationLocale: chosen });
     generationLanguageSelect.value = updated.generationLocale ?? chosen;
     syncSelect(generationLanguageSelect);
-    if (generationLanguageMessage) generationLanguageMessage.textContent = 'Idioma salvo. Novos resumos e questões usarão essa escolha; materiais anteriores não foram alterados.';
+    if (generationLanguageMessage) generationLanguageMessage.textContent = t("appBackup.language.saved");
   } catch (error) {
     if (generationLanguageMessage) {
       generationLanguageMessage.classList.add('is-error');
-      generationLanguageMessage.textContent = 'Não foi possível salvar o idioma. Verifique a conexão e tente novamente.';
+      generationLanguageMessage.textContent = t("appBackup.language.saveFailed");
     }
     console.error('Falha ao atualizar o idioma de geração.', error);
   } finally {
@@ -5219,9 +5219,7 @@ generationLanguageSave?.addEventListener('click', async () => {
 exportBackupButton.addEventListener("click", exportBackup);
 
 resetDatabaseButton.addEventListener("click", async () => {
-  const confirmed = await showConfirm(
-    "Apagar toda a base local? Exporte um backup antes se quiser guardar os dados atuais.",
-  );
+  const confirmed = await showConfirm(t("appBackup.reset.confirm"));
   if (!confirmed) return;
 
   resetDatabaseButton.disabled = true;
@@ -5236,9 +5234,9 @@ resetDatabaseButton.addEventListener("click", async () => {
       renderStats(),
       renderSettings(),
     ]);
-    setResetMessage("Base local apagada.");
+    setResetMessage(t("appBackup.reset.done"));
   } catch (error) {
-    setResetMessage("Não foi possível apagar a base local.", true);
+    setResetMessage(t("appBackup.reset.failed"), true);
     console.error("Falha ao apagar a base local.", error);
   } finally {
     resetDatabaseButton.disabled = false;
@@ -5252,7 +5250,7 @@ chooseBackupFileButton.addEventListener("click", () => {
 importBackupInput.addEventListener("change", async () => {
   const [file] = importBackupInput.files;
   if (!file) return;
-  const confirmed = await showConfirm("Isso substituirá todos os dados atuais. Continuar?");
+  const confirmed = await showConfirm(t("appBackup.import.confirmReplace"));
   if (confirmed) await importBackup(file);
   importBackupInput.value = "";
 });
@@ -5298,7 +5296,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
     setReviewMessage();
   } catch (error) {
     input.value = previousValue;
-    setReviewMessage("Não foi possível salvar o comentário.", true);
+    setReviewMessage(t("appReview.comment.saveFailed"), true);
     console.error("Falha ao salvar comentário.", error);
   }
 });
@@ -5356,7 +5354,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
   updateScoreDisplay(row);
 
   if (values.isOverflow) {
-    setReviewMessage("Acertos não pode ser maior que Questões.", true);
+    setReviewMessage(t("validation.review.overflow"), true);
     correctInput.reportValidity();
     setTimeout(() => correctInput.focus(), 0);
     return;
@@ -5368,7 +5366,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
     setReviewMessage();
   } catch (error) {
     restoreCommittedScoreInputs(row);
-    setReviewMessage("Não foi possível salvar questões e acertos.", true);
+    setReviewMessage(t("appReview.score.saveFailed"), true);
     console.error("Falha ao salvar questões e acertos.", error);
   }
 });
@@ -5392,7 +5390,7 @@ reviewDashboard.addEventListener("change", async (event) => {
     setReviewMessage();
   } catch (error) {
     input.checked = previousChecked;
-    setReviewMessage("Não foi possível salvar o status das questões.", true);
+    setReviewMessage(t("appReview.questionsStatus.saveFailed"), true);
     console.error("Falha ao salvar status das questões.", error);
   }
 });
@@ -5414,18 +5412,18 @@ studyForm.addEventListener("submit", async (event) => {
   if (!subjectId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
     if (!subjectId) {
-      studyMessage.textContent = "Selecione uma disciplina.";
+      studyMessage.textContent = t("appRegister.form.subjectRequired");
       subjectSelect.focus();
     } else if (!studyDate) {
-      studyMessage.textContent = "Informe a data da aula.";
+      studyMessage.textContent = t("appRegister.form.dateRequired");
       studyDateInput.focus();
     } else {
-      studyMessage.textContent = "Informe o conteúdo estudado.";
+      studyMessage.textContent = t("appRegister.form.contentRequired");
       studyContentInput.focus();
     }
     return;
   }
-  const studyTitleError = validateTitleField(content, "o conteúdo estudado");
+  const studyTitleError = validateTitleField(content, t("shell.field.studyContent"));
   if (studyTitleError) {
     studyMessage.classList.add("is-error");
     studyMessage.textContent = studyTitleError;
@@ -5448,12 +5446,12 @@ studyForm.addEventListener("submit", async (event) => {
     studyContentInput.value = "";
     studySummaryTextarea.value = "";
     if (studySourceTextInput) studySourceTextInput.value = "";
-    studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
+    studyMessage.textContent = t("appRegister.form.studySaved");
     studyContentInput.focus();
   } catch (error) {
     if (!(error instanceof NetworkError)) studySaveOperation.renew();
     studyMessage.classList.add("is-error");
-    studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
+    studyMessage.textContent = t("appRegister.form.studySaveFailed");
   }
 });
 
@@ -5600,7 +5598,7 @@ subjectsCreateCancelBtn?.addEventListener("click", () => {
 });
 subjectsCreateSaveBtn?.addEventListener("click", async () => {
   const name = subjectsNewName?.value.trim() ?? "";
-  const nameErr = validateNamingField(name, "o nome da disciplina");
+  const nameErr = validateNamingField(name, t("shell.field.subjectName"));
   if (nameErr) { subjectsCreateMessage.textContent = nameErr; subjectsNewName?.focus(); return; }
   try {
     await DB.subjects.create(name, newSubjectColor);
@@ -5608,9 +5606,7 @@ subjectsCreateSaveBtn?.addEventListener("click", async () => {
     subjectsCreateMessage.textContent = "";
     await renderDisciplinas();
   } catch (error) {
-    subjectsCreateMessage.textContent = String(error?.message ?? '').toLowerCase().includes('unique')
-      ? "Já existe uma disciplina com esse nome."
-      : "Erro ao criar disciplina.";
+    subjectsCreateMessage.textContent = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "appRegister.subject.createFailed");
   }
 });
 function setPlanFormVisible(visible) {
@@ -5682,7 +5678,7 @@ planShowSubjectForm?.addEventListener("click", () => {
 planNewSubjectForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = planNewSubjectInput.value.trim();
-  const nameError = validateNamingField(name, "o nome da disciplina");
+  const nameError = validateNamingField(name, t("shell.field.subjectName"));
   if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput.focus(); return; }
   try {
     const newSubject = await DB.subjects.create(name, "DISC-BLUE");
@@ -5692,9 +5688,7 @@ planNewSubjectForm?.addEventListener("submit", async (event) => {
     planNewSubjectInput.value = "";
     planStudyTitle.focus();
   } catch (error) {
-    const msg = String(error?.message ?? '').toLowerCase().includes('unique')
-      ? "Já existe uma disciplina com esse nome."
-      : "Não foi possível criar a disciplina.";
+    const msg = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "plan.subject.createFailed");
     setPlanFormMessage(msg, true);
     console.error("Falha ao criar disciplina no plano.", error);
   }
@@ -5707,8 +5701,8 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   const studyDate = planStudyDate?.value ?? "";
 
   // Validate unit fields first — before creating any discipline
-  if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
-  const titleError = validateTitleField(title, "o conteúdo estudado");
+  if (!studyDate) { setPlanFormMessage(t("plan.unit.dateRequired"), true); planStudyDate?.focus(); return; }
+  const titleError = validateTitleField(title, t("shell.field.studyContent"));
   if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
 
   // Resolve discipline: capture new name to include in atomic save, or use selected existing ID
@@ -5716,7 +5710,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   if (planNewSubjectForm && !planNewSubjectForm.hidden) {
     const pendingName = planNewSubjectInput?.value.trim();
     if (pendingName) {
-      const nameError = validateNamingField(pendingName, "o nome da disciplina");
+      const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
       if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
       newSubjectName = pendingName;
     }
@@ -5728,7 +5722,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   let subjectId;
   if (!newSubjectName) {
     subjectId = Number(planSubjectSelect?.value);
-    if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
+    if (!subjectId) { setPlanFormMessage(t("plan.unit.subjectRequired"), true); planSubjectSelect?.focus(); return; }
   }
 
   planUnitSaveBtn.disabled = true;
@@ -5746,7 +5740,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     planStudySummary.value = "";
     if (planNewSubjectInput) planNewSubjectInput.value = "";
     setPlanSubjectSubformVisible(false);
-    setPlanFormMessage("Aula salva. 16 revisões criadas.");
+    setPlanFormMessage(t("plan.unit.saved"));
     try {
       await renderPlan();
       if (planSubjectSelect) { planSubjectSelect.value = String(saved.subjectId); syncSelect(planSubjectSelect); }
@@ -5759,7 +5753,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
       setPlanFormMessage();
       await renderToday();
     } catch {
-      setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
+      setPlanFormMessage(t("plan.unit.savedReload"));
     }
   } catch (error) {
     // Only a NetworkError (we genuinely don't know whether the server
@@ -5770,7 +5764,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     // reusing the key there would misreport an edited resubmission as an
     // idempotency conflict instead of validating it fresh.
     if (!(error instanceof NetworkError)) planSaveOperation.renew();
-    setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
+    setPlanFormMessage(t("plan.unit.saveFailed"), true);
   } finally {
     planUnitSaveBtn.disabled = false;
   }
@@ -5812,7 +5806,7 @@ async function renderAccount() {
   if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
   if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
   if (loggedIn && accountLoggedInAs) {
-    accountLoggedInAs.textContent = `Conectado como ${user.emailDisplay}`;
+    accountLoggedInAs.textContent = t("account.connectedAs", { email: user.emailDisplay });
   }
 }
 
@@ -5857,7 +5851,7 @@ accountRegisterForm?.addEventListener("submit", async (event) => {
     setAccountMessage("account-register", result.message, true);
     return;
   }
-  setAccountMessage("account-register", "Conta criada com sucesso. Entre com suas credenciais.");
+  setAccountMessage("account-register", t("account.registered"));
   accountRegisterForm.reset();
   accountRegisterForm.hidden = true;
   accountLoginForm.hidden = false;
@@ -5873,7 +5867,7 @@ accountPasswordForm?.addEventListener("submit", async (event) => {
     setAccountMessage("account-password", result.message, true);
     return;
   }
-  setAccountMessage("account-password", "Senha alterada com sucesso.");
+  setAccountMessage("account-password", t("auth.success.passwordChanged"));
   accountPasswordForm.reset();
 });
 
