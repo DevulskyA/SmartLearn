@@ -2,7 +2,7 @@
 
 Mapa de NAVEGAÇÃO, não de estado. Estado e tarefas: `.specs/STATE.md` e `npm run context:resume`. Regras de trabalho: `CLAUDE.md`.
 Todo caminho citado aqui é verificado por `test/codemap.test.js`: se renomear ou apagar um arquivo, o teste diz qual linha do mapa atualizar.
-Cada módulo abre com um comentário de cabeçalho dizendo o que é e o que NÃO faz; leia as 3 primeiras linhas antes de editar.
+Muitos módulos abrem com um comentário de cabeçalho dizendo o que são e o que NÃO fazem (`server/src/ai/`, `server/src/domain/`, `src/api-client.js`), mas não todos (`src/app.js`, `src/analytics.js` e vários serviços não têm). Leia o topo antes de editar e não conte com ele.
 
 ## Camadas
 
@@ -12,7 +12,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
          └── shared/  (funções puras usadas pelos dois lados)
 ```
 
-- **Autoridade dos dados:** o servidor. O cliente escolhe entre o armazenamento local antigo (`src/db.js`) e o servidor (`src/remote-store.js`) por configuração explícita, nunca por fallback automático (cabeçalho de `src/app.js`).
+- **Autoridade dos dados:** o servidor. O cliente escolhe entre o armazenamento local antigo (`src/db.js`) e o servidor (`src/remote-store.js`) por configuração explícita, nunca por fallback automático (comentário "T21" no meio de `src/app.js`, perto da linha 62).
 - **Dados humanos:** nunca abrir `C:/Users/Ariel/SmartLearn-DevData`; testes usam bancos descartáveis (`server/src/db-safety.js` recusa o resto).
 
 ## Cliente (`src/`)
@@ -20,7 +20,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
 | Arquivo | Papel |
 |---|---|
 | `src/app.js` | Ponto de entrada da interface (arquivo grande: use busca por função, não leitura inteira) |
-| `src/api-client.js` | Cliente HTTP fino do `/v1`; só `remote-store.js` o usa |
+| `src/api-client.js` | Cliente HTTP fino do `/v1`; usado por `remote-store.js`, `offline-store.js`, `app.js` e as telas `*-ui.js` |
 | `src/remote-store.js` | Mesmo formato `DB` de `src/db.js`, mas contra o servidor |
 | `src/db.js` | Armazenamento local legado (DDL canônico compartilhado com o Rust) |
 | `src/offline-store.js` | Cache offline versionado da agenda |
@@ -38,7 +38,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
 | Área | Onde | Regra de ouro |
 |---|---|---|
 | Entrada e contrato HTTP | `main.js`, `app.js`, `http-contract.js` | todo `/v1` exige ator de sessão real (deny por padrão) |
-| Rotas | `routes/*.js` | tradução HTTP e validação de entrada; regra de negócio e SQL ficam em `services/` |
+| Rotas | `routes/*.js` | tradução HTTP e validação de entrada; regra de negócio e SQL ficam em `services/`, com exceção de 2 `UPDATE` direto em `routes/auth.js` |
 | Serviços | `services/*.js` | regras de negócio e SQL; `generated-drafts.js` e `accept-draft.js` são o coração do aceite |
 | Domínio puro | `domain/learning-event.js`, `evidence-profile.js`, `priorities.js` | sem banco, sem relógio (a data entra por parâmetro), sem veredito de domínio |
 | IA | `ai/` | `draft-prompt.js` (prompt), `*-provider.js` (transporte; mesmo contrato), `draft-schema.js` (validação), `draft-audit.js` e `risk-checks.js` (sensores determinísticos), `claim-evidence.js` (frase → trecho) |

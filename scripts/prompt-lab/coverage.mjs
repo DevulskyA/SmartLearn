@@ -5,14 +5,27 @@ import { normalizeForMatch } from '../../server/src/ai/claim-evidence.js';
 
 export const TIERS = ['ESSENTIAL', 'RELEVANT', 'PERIPHERAL'];
 
-const hasGroup = (text, groups) => groups.some((group) => group.every((word) => text.includes(normalizeForMatch(word))));
+// Matching is on normalized text (case, accents, spaces) with two extra rules, both found by audit:
+//   - "45 %" / "GFR / RPF" must equal "45%" / "GFR/RPF" (space around % and / is typography, not meaning);
+//   - a bare number must not sit inside a longer one ("80" is not in "180"), and a short word (<= 4 letters) must start a word
+//     ("aine" matches "AINEs" but not "Elaine" or "painel"). Longer words stay substring matches so inflections still match.
+const squeeze = (s) => normalizeForMatch(s).replace(/\s*%/g, '%').replace(/\s*\/\s*/g, '/');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function wordInText(text, word) {
+  const w = squeeze(word);
+  if (w === '') return false;
+  const body = escapeRe(w);
+  const pattern = /^\d/.test(w) ? `(?<!\\d[.,]?)${body}(?![.,]?\\d)` : w.replace(/[^a-z0-9]/g, '').length <= 4 ? `(?<![a-z0-9])${body}` : body;
+  return new RegExp(pattern).test(text);
+}
+const hasGroup = (text, groups) => groups.some((group) => group.length > 0 && group.every((word) => wordInText(text, word)));
 const mentions = (text, concept) => hasGroup(text, concept.anyOf);
 // A question names a concept with ONE distinctive term, while a summary must hold several; so questions match on the optional
 // `questionAnyOf` (falling back to `anyOf`). Reusing the summary groups made C06 look unasked when "AINEs" replaced "NSAID" (measured).
 const asked = (text, concept) => hasGroup(text, concept.questionAnyOf ?? concept.anyOf);
 
 export function coverageOf(summary, map) {
-  const text = normalizeForMatch(summary);
+  const text = squeeze(summary);
   const rows = map.concepts.map((c) => ({ id: c.id, label: c.label, tier: c.tier ?? null, covered: mentions(text, c) }));
   return { covered: rows.filter((r) => r.covered).length, total: rows.length, missing: rows.filter((r) => !r.covered), rows, ...essentialsOf(rows) };
 }
@@ -39,19 +52,28 @@ export function validateTiers(map) {
     if (ids.has(c.id)) problems.push(`${c.id}: duplicated id`);
     ids.add(c.id);
     if (!TIERS.includes(c.tier)) problems.push(`${c.id}: tier must be one of ${TIERS.join('|')} (got ${JSON.stringify(c.tier)})`);
+    for (const field of ['anyOf', 'questionAnyOf']) {
+      const groups = c[field];
+      if (groups === undefined && field === 'questionAnyOf') continue;
+      if (!Array.isArray(groups) || groups.length === 0 || groups.some((g) => !Array.isArray(g) || g.length === 0 || g.some((w) => typeof w !== 'string' || w.trim() === ''))) {
+        problems.push(`${c.id}: ${field} must be a non-empty list of non-empty keyword groups (an empty group would always count as covered)`);
+      }
+    }
   }
   if (!map.concepts.some((c) => c.tier === 'ESSENTIAL')) problems.push('no ESSENTIAL concept: the reactivation criterion would be vacuous');
   return problems;
 }
 
 /**
- * Formulations per concept: how many DISTINCT question types touch the concept (question + answer text; the explanation is ignored on
- * purpose, it names neighbouring ideas). A repeated type is a rephrasing, not a new formulation; this is a proxy for "different
- * ways to retrieve the same knowledge", and it cannot tell two semantically identical questions of different types apart.
+ * Formulations per concept: how many DISTINCT question types NAME the concept in the QUESTION text. Answers and explanations are ignored
+ * on purpose: an answer routinely mentions neighbouring concepts (an audit found "aferente" in 6 questions of which 1 tested it), so
+ * counting them inflates the figure. Still a proxy: a question that names a concept may not test it, the type label is model-assigned
+ * and unstable between runs, a repeated type is a rephrasing, and two semantically identical questions of different types both count.
+ * Read it as "is there at least a candidate", never as proof of ≥ 2 genuine formulations; one generation per version cannot show variance.
  * ESSENTIAL concepts owe at least `minFormulations` (default 2) so that forgetting can be separated from poor understanding.
  */
 export function formulationsOf(questions, map, minFormulations = 2) {
-  const texts = (questions ?? []).map((q) => ({ text: normalizeForMatch(`${q.question ?? ''} ${q.answer ?? ''}`), type: q.questionType ?? 'UNKNOWN' }));
+  const texts = (questions ?? []).map((q) => ({ text: squeeze(q.question ?? ''), type: q.questionType ?? 'UNKNOWN' }));
   const rows = map.concepts.map((c) => {
     const touching = texts.filter((t) => asked(t.text, c));
     return { id: c.id, label: c.label, tier: c.tier ?? null, questions: touching.length, types: [...new Set(touching.map((t) => t.type))].sort() };

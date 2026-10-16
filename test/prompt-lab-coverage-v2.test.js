@@ -44,7 +44,7 @@ test('matching ignores case and accents, as before (backward compatible for maps
 
 test('formulations: distinct question types count, a repeated type is a rephrasing and does not', () => {
   const qs = [
-    { question: 'O que é alfa?', answer: 'Beta explica.', questionType: 'RECALL' },
+    { question: 'O que é alfa com beta?', answer: 'Explica.', questionType: 'RECALL' },
     { question: 'Por que alfa e beta?', answer: 'Porque sim.', questionType: 'RECALL' }, // same type: not a new formulation
     { question: 'Gama no caso clínico?', answer: 'x', questionType: 'CLINICAL_REASONING' },
     { question: 'Delta no mecanismo?', answer: 'x', questionType: 'MECHANISM' },
@@ -59,17 +59,43 @@ test('formulations: distinct question types count, a repeated type is a rephrasi
   assert.deepEqual(f.essentialShort.map((s) => s.id), ['A']);
 });
 
-test('formulations read question+answer only; the explanation naming a concept does not count as a question about it', () => {
-  const qs = [{ question: 'Qual a pressão?', answer: '45', explanation: 'Alfa e beta explicam.', questionType: 'RECALL' }];
+test('formulations read the QUESTION only: an answer or explanation naming a concept is not a question about it (audit: 6 hits, 1 real)', () => {
+  const qs = [{ question: 'Qual a pressão?', answer: 'Alfa e beta.', explanation: 'Alfa e beta explicam.', questionType: 'RECALL' }];
   const f = formulationsOf(qs, MAP);
   assert.equal(f.rows.find((r) => r.id === 'A').questions, 0);
+});
+
+test('matching: a bare number is not found inside a longer one, and a short word must start a word', () => {
+  const nums = { concepts: [{ id: 'N', tier: 'ESSENTIAL', label: 'n', anyOf: [['80']] }] };
+  assert.equal(coverageOf('Pressao de 180 mmHg.', nums).covered, 0);
+  assert.equal(coverageOf('Pressao de 80 mmHg.', nums).covered, 1);
+  assert.equal(coverageOf('Valores de 1,80 e 2800.', nums).covered, 0);
+  const aine = { concepts: [{ id: 'P', tier: 'ESSENTIAL', label: 'p', anyOf: [['aine']], questionAnyOf: [['aine']] }] };
+  const q = (question) => [{ question, answer: '', questionType: 'RECALL' }];
+  assert.equal(formulationsOf(q('Quem e a Elaine?'), aine).rows[0].questions, 0);
+  assert.equal(formulationsOf(q('Mostre o painel.'), aine).rows[0].questions, 0);
+  assert.equal(formulationsOf(q('Por que os AINEs pioram?'), aine).rows[0].questions, 1);
+});
+
+test('matching: spaces around % and / are typography ("45 %" = "45%", "GFR / RPF" = "gfr/rpf")', () => {
+  const map = { concepts: [{ id: 'U', tier: 'ESSENTIAL', label: 'u', anyOf: [['45%'], ['gfr/rpf']] }] };
+  assert.equal(coverageOf('Cerca de 45 % do total.', map).covered, 1);
+  assert.equal(coverageOf('A razao GFR / RPF.', map).covered, 1);
+  assert.equal(coverageOf('Nada disso.', map).covered, 0);
+});
+
+test('an empty keyword group never counts as covered, and validateTiers rejects it', () => {
+  const map = { concepts: [{ id: 'E', tier: 'ESSENTIAL', label: 'e', anyOf: [[]] }] };
+  assert.equal(coverageOf('qualquer coisa', map).covered, 0);
+  assert.ok(validateTiers(map).some((p) => p.includes('E: anyOf must be a non-empty list')));
+  assert.ok(validateTiers({ concepts: [{ id: 'F', tier: 'ESSENTIAL', label: 'f', anyOf: [['x']], questionAnyOf: [['']] }] }).some((p) => p.includes('F: questionAnyOf')));
 });
 
 test('questions match on questionAnyOf (one distinctive term) while the summary keeps the stricter anyOf', () => {
   const map = { concepts: [{ id: 'P', tier: 'ESSENTIAL', label: 'p', anyOf: [['prostaglandina', 'nsaid']], questionAnyOf: [['prostaglandina'], ['aine']] }] };
   const qs = [
     { question: 'Por que os AINEs pioram o fluxo renal?', answer: 'Inibem a síntese.', questionType: 'MECHANISM' },
-    { question: 'Qual o papel da prostaglandina?', answer: 'Dilata a aferente.', questionType: 'RECALL' },
+    { question: 'Qual o papel da prostaglandina?', answer: 'Dilata.', questionType: 'RECALL' },
   ];
   assert.deepEqual(formulationsOf(qs, map).rows[0].types, ['MECHANISM', 'RECALL']);
   assert.equal(coverageOf('Prostaglandina protege o fluxo.', map).covered, 0, 'the summary still needs both words');

@@ -57,6 +57,8 @@ Mapa v2 (`renal-blood-flow.json`): 11 ESSENTIAL, 7 RELEVANT, 1 PERIPHERAL, níve
 |---|---|---|
 | Cobertura total | 19/19 | 19/19 |
 | R-A: essenciais no resumo | 11/11 | 11/11 |
-| R-B: essenciais com ≥ 2 tipos de questão | 8/11 (curtos: C01, C02, C09) | 10/11 (curto: C01) |
+| R-B: essenciais com ≥ 2 tipos de questão que NOMEIAM o conceito na pergunta | 7/11 (curtos: C01, C02, C08, C09) | 8/11 (curtos: C01, C02, C09) |
 
-Leitura: sob R-A não há diferença; sob R-B a v10 formula mais variado os essenciais. R-C (suficiência da pista) NÃO foi medida: exige juiz humano ou IA assistida. Primeira versão da medida R-B reusou os grupos de palavras do resumo e acusou 2/11 e 3/11: era artefato (a questão dizia "AINEs", o grupo pedia "NSAID"); corrigido com `questionAnyOf` e coberto por teste. O parecer NOT_PROVEN não muda: nenhuma medida nova toca ligação à fonte (60% × 78%) nem tamanho (+6%).
+Leitura: sob R-A não há diferença (presença de palavras-chave, não prova de que a pista basta). Sob R-B NÃO há diferença demonstrada: 7/11 contra 8/11 é um conceito (C08) em uma única geração por versão, com rótulo de tipo atribuído pelo modelo e instável (a mesma pergunta é APPLICATION na v8 e RECALL na v10). R-B é um indício de candidata a segunda formulação, não prova de duas formulações genuínas. R-C (suficiência da pista) NÃO foi medida: exige juiz humano ou IA assistida.
+
+Histórico da medida R-B, para não repetir o erro: (1) usar os grupos de palavras do resumo acusou 2/11 e 3/11, artefato ("AINEs" no lugar de "NSAID"); (2) `questionAnyOf` sobre pergunta + resposta deu 8/11 e 10/11, inflado, porque a resposta cita conceitos vizinhos (auditoria independente: "aferente" em 6 perguntas, 1 testava de fato); (3) pergunta apenas, com borda de palavra para números e palavras curtas ("80" não casa "180"; "aine" não casa "Elaine"), deu 7/11 e 8/11. Os `questionAnyOf` foram ajustados depois de ver estas duas execuções, então a medida não é independente delas. O parecer NOT_PROVEN não muda: nenhuma medida nova toca ligação à fonte (60% × 78%) nem tamanho (+6%).
