@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 2, account: 1 };
+const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 2, account: 1, navigation: 0, register: 6 };
 
 let serverProcess;
 let dbDir;
@@ -58,7 +58,7 @@ function untranslatedOf([screenId, studentText]) {
     const s = n.nodeValue.replace(/\s+/g, ' ').trim();
     // Not catalog text, on purpose: a date formatted by the active locale, the commit hash and channel of the build, and the
     // name of each language written in that language (autonyms never change with the interface language).
-    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^(Português \(Brasil\)|Español|English)$/.test(s);
+    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$|^(Português \(Brasil\)|Español|English)$/.test(s);
     if (prose(s) && !s.includes('\u27E6') && !isStudent(s) && !isDate) found.add(`text: ${s}`);
   }
   for (const el of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) {
@@ -119,7 +119,14 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
     await expect(pseudo.locator(`#screen-${screen}`)).toBeVisible();
     await pseudo.waitForTimeout(400);
     report[screen] = await pseudo.evaluate(untranslatedOf, [`#screen-${screen}`, STUDENT_TEXT]);
+    // the navigation is on every screen: measured once, here, while its items are all drawn
+    if (screen === 'today') report.navigation = await pseudo.evaluate(untranslatedOf, ['.app-nav', STUDENT_TEXT]);
   }
+  // Cadastro has no navigation item: it opens by its address
+  await pseudo.evaluate(() => { window.location.hash = '#register'; });
+  await expect(pseudo.locator('#screen-register')).toBeVisible();
+  await pseudo.waitForTimeout(400);
+  report.register = await pseudo.evaluate(untranslatedOf, ['#screen-register', STUDENT_TEXT]);
   console.log('PSEUDO_COUNTS ' + JSON.stringify(Object.fromEntries(Object.entries(report).map(([screen, { found }]) => [screen, found.length]))));
   if (process.env.PSEUDO_VERBOSE) for (const [screen, { found }] of Object.entries(report)) console.log(`PSEUDO_FOUND ${screen}\n  ${found.join('\n  ')}`);
   // The ratchet: a screen may show fewer texts outside the catalog than this, never more. Lower a number when a slice of

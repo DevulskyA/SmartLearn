@@ -1,6 +1,8 @@
 // Static texts of index.html, one group per screen. The HTML keeps the same Portuguese as a first-paint fallback;
 // test/i18n-html.test.js keeps the two identical.
 export default {
+  'screens.form.summary': 'Resumo Mestre',
+  'screens.form.optional': '(opcional)',
   'screens.subjects.eyebrow': 'Organização',
   'screens.subjects.title': 'Disciplinas',
   'screens.subjects.new': '+ Nova disciplina',
@@ -183,4 +185,24 @@ export default {
   'screens.studyNow.done': 'Voltar para Hoje',
   'screens.dialog.confirm': 'Confirmar',
   'screens.dialog.close': 'Fechar',
+  'screens.nav.brandLabel': 'SmartLearn - ir para Hoje',
+  'screens.nav.label': 'Navegação principal',
+  'screens.nav.statsShort': 'Estat.',
+  'screens.nav.tracking': 'Acompanhar',
+  'screens.nav.trackingShort': 'Acomp.',
+  'screens.nav.subjectsShort': 'Discipl.',
+  'screens.nav.settingsShort': 'Config.',
+  'screens.register.title': 'Cadastro',
+  'screens.register.eyebrow': 'Novo estudo',
+  'screens.register.quick': 'Cadastro rápido',
+  'screens.register.body': 'Escolha a disciplina, informe a fonte e o conteúdo do estudo.',
+  'screens.register.contentPlaceholder': 'Ex.: Funções quadráticas',
+  'screens.register.save': 'Salvar estudo',
+  'screens.register.studies.eyebrow': 'Estudos salvos',
+  'screens.register.studies.title': 'Gerenciar estudos',
+  'screens.register.studies.body': 'Fonte, data e conteúdo ficam juntos porque não existe estudo sem fonte.',
+  'screens.register.studies.empty': 'Nenhum estudo salvo.',
+  'screens.register.subjects.eyebrow': 'Disciplinas cadastradas',
+  'screens.register.subjects.title': 'Gerenciar disciplinas',
+  'screens.register.subjects.body': 'Edite ou desative disciplinas. Disciplinas com estudos não podem ser excluídas.',
 };

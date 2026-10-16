@@ -35,7 +35,7 @@
   <body>
     <div class="app-shell">
       <header class="app-header">
-        <a class="brand" href="#today" aria-label="SmartLearn - ir para Hoje">SmartLearn</a>
+        <a class="brand" href="#today" aria-label="SmartLearn - ir para Hoje" data-i18n-aria-label="screens.nav.brandLabel">SmartLearn</a>
         <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Alternar tema rápido" title="Alternar tema rápido">
           <svg class="theme-icon-moon" aria-hidden="true" viewBox="0 0 24 24">
             <path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" />
@@ -47,55 +47,55 @@
         </button>
       </header>
 
-      <nav class="app-nav" aria-label="Navegação principal">
+      <nav class="app-nav" aria-label="Navegação principal" data-i18n-aria-label="screens.nav.label">
         <button class="nav-item" type="button" data-screen="today" aria-controls="screen-today">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5H15v-7H9v7H3.5a.5.5 0 0 1-.5-.5Z" />
           </svg>
-          <span>Hoje</span>
+          <span data-i18n="screens.today.title">Hoje</span>
         </button>
         <button class="nav-item" type="button" data-screen="materials" aria-controls="screen-materials" hidden>
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M15 3v4h4M9 13h6M9 17h6" stroke-linecap="round" />
           </svg>
-          <span>Materiais</span>
+          <span data-i18n="screens.materials.title">Materiais</span>
         </button>
         <button class="nav-item" type="button" data-screen="plan" aria-controls="screen-plan">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
           </svg>
-          <span>Plano</span>
+          <span data-i18n="screens.plan.title">Plano</span>
         </button>
         <button class="nav-item" type="button" data-screen="stats" aria-controls="screen-stats">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 20v-7h4v7M10 20V8h4v12M15 20V4h4v16M3 20.5h18" />
           </svg>
-          <span><span class="nav-long">Estatísticas</span><span class="nav-short" aria-hidden="true">Estat.</span></span>
+          <span><span class="nav-long" data-i18n="screens.stats.title">Estatísticas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.statsShort">Estat.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span><span class="nav-long">Acompanhar</span><span class="nav-short" aria-hidden="true">Acomp.</span></span>
+          <span><span class="nav-long" data-i18n="screens.nav.tracking">Acompanhar</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.trackingShort">Acomp.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
-          <span><span class="nav-long">Disciplinas</span><span class="nav-short" aria-hidden="true">Discipl.</span></span>
+          <span><span class="nav-long" data-i18n="screens.subjects.title">Disciplinas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.subjectsShort">Discipl.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <span><span class="nav-long">Configurações</span><span class="nav-short" aria-hidden="true">Config.</span></span>
+          <span><span class="nav-long" data-i18n="screens.settings.title">Configurações</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.settingsShort">Config.</span></span>
         </button>
         <button class="nav-item" type="button" data-screen="account" aria-controls="screen-account">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>
           </svg>
-          <span>Conta</span>
+          <span data-i18n="screens.account.title">Conta</span>
         </button>
         <p class="build-identity" id="build-identity" hidden></p>
       </nav>
@@ -237,7 +237,7 @@
                 <input id="plan-study-title" type="text" maxlength="240" placeholder="Ex.: Lei de Frank-Starling" data-i18n-placeholder="screens.plan.form.contentPlaceholder" required />
               </div>
               <div class="field-group form-grid-wide">
-                <label for="plan-study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
+                <label for="plan-study-summary"><span data-i18n="screens.form.summary">Resumo Mestre</span> <span class="optional-label" data-i18n="screens.form.optional">(opcional)</span></label>
                 <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
               </div>
             </div>
@@ -330,21 +330,21 @@
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
-          <h1 id="title-register">Cadastro</h1>
+          <h1 id="title-register" data-i18n="screens.register.title">Cadastro</h1>
           <div class="form-card">
             <form class="study-form" id="study-form" novalidate>
               <div class="section-heading">
-                <p class="eyebrow">Novo estudo</p>
-                <h2>Cadastro rápido</h2>
-                <p>Escolha a disciplina, informe a fonte e o conteúdo do estudo.</p>
+                <p class="eyebrow" data-i18n="screens.register.eyebrow">Novo estudo</p>
+                <h2 data-i18n="screens.register.quick">Cadastro rápido</h2>
+                <p data-i18n="screens.register.body">Escolha a disciplina, informe a fonte e o conteúdo do estudo.</p>
               </div>
 
               <div class="form-grid">
                 <div class="field-group form-grid-wide">
-                  <label for="subject-select">Disciplina</label>
+                  <label for="subject-select" data-i18n="screens.form.subject">Disciplina</label>
                   <div class="inline-form-row inline-select-row">
                     <select id="subject-select" name="subject">
-                      <option value="">Selecione…</option>
+                      <option value="" data-i18n="screens.form.select">Selecione…</option>
                     </select>
                     <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
                       <span aria-hidden="true">+</span> Nova disciplina
@@ -354,62 +354,62 @@
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-source-text">Fonte</label>
-                  <input id="study-source-text" name="studySourceText" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" />
+                  <label for="study-source-text" data-i18n="screens.form.source">Fonte</label>
+                  <input id="study-source-text" name="studySourceText" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" data-i18n-placeholder="screens.form.sourcePlaceholder" />
                   <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
                 </div>
 
                 <div class="field-group">
-                  <label for="study-date">Data da aula</label>
+                  <label for="study-date" data-i18n="screens.form.lessonDate">Data da aula</label>
                   <input id="study-date" name="studyDate" type="date" required />
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-content">Conteúdo estudado</label>
-                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" required />
+                  <label for="study-content" data-i18n="screens.form.content">Conteúdo estudado</label>
+                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" data-i18n-placeholder="screens.register.contentPlaceholder" required />
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-summary">Resumo Mestre <span class="optional-label">(opcional)</span></label>
-                  <textarea id="study-summary" name="studySummary" rows="5" placeholder="Escreva aqui o resumo do conteúdo estudado…"></textarea>
+                  <label for="study-summary"><span data-i18n="screens.form.summary">Resumo Mestre</span> <span class="optional-label" data-i18n="screens.form.optional">(opcional)</span></label>
+                  <textarea id="study-summary" name="studySummary" rows="5" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
                 </div>
               </div>
 
               <div class="form-actions">
-                <button class="primary-button" type="submit">Salvar estudo</button>
+                <button class="primary-button" type="submit" data-i18n="screens.register.save">Salvar estudo</button>
                 <p class="form-message" id="study-message" role="status" aria-live="polite"></p>
               </div>
             </form>
 
             <form class="inline-form" id="new-subject-form" hidden novalidate>
               <div class="field-group inline-form-field">
-                <label for="new-subject-input">Nome da nova disciplina</label>
+                <label for="new-subject-input" data-i18n="screens.form.newSubjectName">Nome da nova disciplina</label>
                 <div class="inline-form-row">
                   <input id="new-subject-input" name="subjectName" type="text" maxlength="100" autocomplete="off" />
-                  <button class="primary-button" type="submit">Adicionar</button>
+                  <button class="primary-button" type="submit" data-i18n="screens.form.add">Adicionar</button>
                 </div>
               </div>
             </form>
 
             <section class="study-manager" aria-labelledby="study-manager-title">
               <div class="section-heading compact-heading">
-                <p class="eyebrow">Estudos salvos</p>
-                <h2 id="study-manager-title">Gerenciar estudos</h2>
-                <p>Fonte, data e conteúdo ficam juntos porque não existe estudo sem fonte.</p>
+                <p class="eyebrow" data-i18n="screens.register.studies.eyebrow">Estudos salvos</p>
+                <h2 id="study-manager-title" data-i18n="screens.register.studies.title">Gerenciar estudos</h2>
+                <p data-i18n="screens.register.studies.body">Fonte, data e conteúdo ficam juntos porque não existe estudo sem fonte.</p>
               </div>
               <div class="study-list" id="study-list" aria-live="polite"></div>
-              <p class="panel-empty" id="studies-empty">Nenhum estudo salvo.</p>
+              <p class="panel-empty" id="studies-empty" data-i18n="screens.register.studies.empty">Nenhum estudo salvo.</p>
               <p class="field-message" id="study-manager-message" role="alert" aria-live="polite"></p>
             </section>
 
             <section class="subject-manager" aria-labelledby="subject-manager-title">
               <div class="section-heading compact-heading">
-                <p class="eyebrow">Disciplinas cadastradas</p>
-                <h2 id="subject-manager-title">Gerenciar disciplinas</h2>
-                <p>Edite ou desative disciplinas. Disciplinas com estudos não podem ser excluídas.</p>
+                <p class="eyebrow" data-i18n="screens.register.subjects.eyebrow">Disciplinas cadastradas</p>
+                <h2 id="subject-manager-title" data-i18n="screens.register.subjects.title">Gerenciar disciplinas</h2>
+                <p data-i18n="screens.register.subjects.body">Edite ou desative disciplinas. Disciplinas com estudos não podem ser excluídas.</p>
               </div>
               <div class="subject-list" id="subject-list" aria-live="polite"></div>
-              <p class="panel-empty" id="subjects-empty">Nenhuma disciplina cadastrada.</p>
+              <p class="panel-empty" id="subjects-empty" data-i18n="screens.subjects.empty">Nenhuma disciplina cadastrada.</p>
               <p class="field-message" id="subject-manager-message" role="alert" aria-live="polite"></p>
             </section>
 
