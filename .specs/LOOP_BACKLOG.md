@@ -4,7 +4,7 @@ Regras do ciclo: executar o PRIMEIRO item DESBLOQUEADO de PENDENTE; provar; comm
 Push: cada push cancela a rodada de CI em andamento (≈17 min); ENQUANTO o CI roda, commitar local e só empurrar quando a rodada terminar ou quando houver algo que o CI precise validar. Commit só de documentação não precisa de push imediato.
 Proibido no loop: chamada real a modelo, merge, deploy, release, force-push, banco DEV humano. Subagente que só roda teste usa model haiku.
 
-SWEEP_EMPTY_STREAK=1
+SWEEP_EMPTY_STREAK=2
 
 ## PENDENTE
 4. [Endurecer] Se `e2e/offline.spec.js:365` falhar de novo no CI: repetir o clique em "Conta" até `#account-login-form` aparecer (`e2e/support/session.js`).
@@ -20,6 +20,7 @@ SWEEP_EMPTY_STREAK=1
 - Auto-fix do PR #6 (`set_monitor`): só com pedido do usuário.
 
 ## FEITO
+- [Varredura 2026-10-16 ~18:25, VAZIA → streak 2, loop encerrado] HEAD `ed15172`: unitários 652/652, servidor 1051/1051, lint, `test:inventory`, `context:check` PASS; Rust: `cargo test` 33/33 e `cargo clippy --all-targets -D warnings` limpo (rodado por subagente Haiku, regra do usuário); sem commit de código desde a varredura anterior; interface sem alteração desde a verificação das 8 telas. CI verde em `be57cc8` (mesmo código); CI de `ed15172` (só documentação) conferido antes de encerrar.
 - [Higiene] Varredura de segredos e arquivos sensíveis nos arquivos versionados (2026-10-16): nenhuma chave (sk-, AKIA, ghp_, xox, chave privada), nenhum `.env`, `.pem`, `.key`, `.db` ou `.sqlite` rastreado, nenhum arquivo versionado > 2 MB. Não conta como a 2ª varredura completa (o streak segue 1).
 - [Varredura 2026-10-16 18:10, VAZIA → streak 1] S1: lint e `context:check` PASS (nenhum código novo desde os testes completos). S2: commits novos só de documentação. S3: fumaça em 375 px nas 8 telas (today, materials, plan, stats, tracking, subjects, settings, account): sem rolagem horizontal, sem erro de JavaScript; as caixas "Revisão feita" têm 18×18 px mas o rótulo clicável mede 110×44 (cumpre alvo mínimo). Observação sem ação: em modo local o botão `materials` volta para `#today` (tela só existe com servidor). Servidor de desenvolvimento e aba encerrados.
 - [S1] `npm run test:mutation` (worktree descartável, 2026-10-16): 7/7 mutações mortas (M1a, M1b, M2, M3, M5, M4a, M4b). Relatório: `test-results/mutation-report.json` (não versionado).
