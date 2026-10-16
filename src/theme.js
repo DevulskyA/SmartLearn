@@ -53,7 +53,7 @@ const THEME_VARIABLES = {
       "--color-surface": "oklch(0.998 0.003 262)",
       "--color-surface-sunken": "oklch(0.955 0.01 262)",
       "--color-text": "oklch(0.29 0.035 264)",
-      "--color-muted": "oklch(0.55 0.025 260)",
+      "--color-muted": "oklch(0.52 0.025 260)",
       "--color-border": "oklch(0.905 0.013 260)",
       "--color-primary": "oklch(0.52 0.155 264)",
       "--color-primary-strong": "oklch(0.46 0.16 264)",

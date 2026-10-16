@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "subjects": [
+    { "id": 1, "name": "Fisiologia", "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z", "isActive": true, "sortOrder": 0 }
+  ],
+  "learningUnits": [
+    { "id": 1, "subjectId": 1, "sourceText": "Guyton", "studyDate": "2026-01-10", "title": "Homeostase", "summaryBody": null, "createdAt": "2026-01-10T00:00:00.000Z", "updatedAt": "2026-01-10T00:00:00.000Z" }
+  ],
+  "reviewTasks": [
+    {
+      "id": 1,
+      "unitId": 1,
+      "reviewNumber": 1,
+      "dueDate": "2026-01-11",
+      "completedAt": "2026-01-11T10:00:00.000Z",
+      "reviewDone": true,
+      "questionsDone": true,
+      "questionsCount": 20,
+      "correctCount": 16,
+      "scorePercent": 80,
+      "comment": null,
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-01-11T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "unitId": 1,
+      "reviewNumber": 2,
+      "dueDate": "2026-01-17",
+      "completedAt": null,
+      "reviewDone": false,
+      "questionsDone": false,
+      "questionsCount": null,
+      "correctCount": null,
+      "scorePercent": null,
+      "comment": null,
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-01-10T00:00:00.000Z"
+    }
+  ],
+  "exercises": [
+    { "id": 1, "unitId": 1, "questionText": "O que é homeostase?", "answerText": "Equilíbrio dinâmico interno.", "hintText": null, "position": 0, "provenance": "MANUAL", "createdAt": "2026-01-10T00:00:00.000Z", "updatedAt": "2026-01-10T00:00:00.000Z" }
+  ],
+  "settings": { "appVersion": "2.0.0", "reviewSchedule": [], "lastBackupAt": null }
+}

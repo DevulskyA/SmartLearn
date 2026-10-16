@@ -1,0 +1,310 @@
+# STATE.md — SmartLearn
+
+Memória persistente do projeto. Atualizar a cada sessão significativa.
+
+---
+
+## Status atual
+
+- **Fase:** Pre-PR Hardening — closure técnica em andamento; UAT Tauri pendente execução humana.
+- **Data:** 2026-09-05
+- **Próxima ação:** Executar UAT-1..UAT-6 no Tauri Desktop real (ver `.specs/features/smartlearn-pre-pr-closure-hardening/validation.md`). Após UAT Tauri PASS: gate Web + gate Android per INV-26 (ou SPEC_DEVIATION explícito). Depois: DRAFT PR → auditoria adversarial → merge.
+- **Testes:** 97 node:test PASS, 8 cargo test PASS (2026-09-04, branch `claude/fix-complete-review-sqlite-593426`)
+- **Branch de trabalho:** `claude/fix-complete-review-sqlite-593426` (worktree isolado)
+- **Commits do hardening:** `d68589f` (T1), `82caf1f` (T2+T3), `5c542df` (T4), `c78cf86` (T5), `55286ad` (gov), `af000b2` (mutantes+AC-TRACK-01), `9e412b6` (UAT dataset), `70f07f0` (seeder hook), `35b2328` (fresh verifier), `7256ca3` (DEC-013-V2) — aplicados sobre `bbe3eea` (analytics-vnext HEAD)
+- **DEC-013-V2:** ACCEPTED (2026-09-05) — `source_text` canônico, `sources` removido, INV-05B SUPERSEDED, DEBT-004 RESOLVED.
+- **INV-26:** Novo invariante global de compatibilidade multiplataforma (Web/Tauri/Android). Todo gate de closure futuro deve incluir gate por plataforma ou SPEC_DEVIATION aprovado.
+- **TLC_INSTALLATION_MISMATCH = TRUE**: `validate_spec.py`, `validate_tasks.py`, `validate_completion.py` ausentes do runtime atual. STRUCTURAL_VALIDATION = UNVERIFIED para todas as features. Não bloqueia UAT nem PR — bloqueia apenas certificação TLC formal. Ver DEBT-009.
+
+### Multiplatform closure policy (INV-26)
+
+Vigora a partir de 2026-09-05. Features futuras: gates Web + Tauri + Android obrigatórios ou SPEC_DEVIATION explícito.
+
+**Análise de impacto — feature atual (`smartlearn-pre-pr-closure-hardening`):**
+
+| Aspecto | Resultado |
+|---------|-----------|
+| Dispatch pattern | COMPLIANT — `hasTauriRuntime()` em db.js; BrowserStore = Web; SQLite = Tauri+Android |
+| APIs Tauri em caminho compartilhado | NONE — `invoke()` confinado a db.js e saveBackupFile (guarda correta) |
+| BrowserStore (Web) coberto | PASS — 97/97 node:test |
+| SQLite/Tauri coberto | PASS — 8/8 cargo test + UAT pendente |
+| Android gate | **MISSING** — não há gate Android para esta feature. Android usa o mesmo adapter SQLite do Tauri desktop (mesmo código db.js), mas não há build/install/flow evidence para esta feature. |
+| Web browser funcional | **MISSING** — node:test cobre BrowserStore mas não renderização real em navegador. |
+
+**Decisão requerida antes do merge:** SPEC_DEVIATION (aceitar risco Android+Web-browser sem gate) ou adicionar gates. A auditoria externa decidirá.
+
+---
+
+## Decisões registradas
+
+### DEC-001 — Stack puro sem framework
+- **Data:** 2026-06-22
+- **Decisão:** HTML, CSS e JavaScript puro. Sem React, Vue, Next.js ou TypeScript.
+  Vite é apenas o empacotador mínimo e Tauri 2 é a camada multiplataforma.
+- **Motivo:** MVP deve ser simples, sem dependências pesadas, sem tooling complexo para manter.
+- **Irreversível no MVP:** Sim.
+
+### DEC-002 — ~~IndexedDB como banco local~~ SUBSTITUÍDA por DEC-008
+
+Decisão original (2026-06-22) foi usar IndexedDB. Substituída pela DEC-008 em 2026-06-22.
+Ver DEC-008 para a decisão atual sobre o banco de dados.
+
+### DEC-003 — 16 revisões por estudo cadastrado
+- **Data:** 2026-06-22
+- **Decisão:** Gerar 16 revisões fixas por estudo. R1=D+1, R2=D+7, R3=D+15, R4=D+30, R5+=a cada 30 dias.
+- **Motivo:** Quantidade fixa simplifica a implementação. Suficiente para cobrir ciclos longos.
+- **Revisável:** Sim, em versão futura se houver feedback.
+
+### DEC-004 — Gráfico via Canvas nativo
+- **Data:** 2026-06-22
+- **Decisão:** Usar `<canvas>` nativo para o gráfico de evolução. Sem Chart.js ou bibliotecas externas.
+- **Motivo:** Zero dependências. Gráfico simples de linha não justifica biblioteca no MVP.
+- **Revisável:** Sim, se a implementação nativa for muito custosa.
+
+### DEC-005 — Sem login no MVP
+- **Data:** 2026-06-22
+- **Decisão:** Sem autenticação, sem conta, sem perfil de usuário no MVP local.
+- **Motivo:** Dados são locais. Login adicionaria complexidade sem benefício no MVP.
+- **Irreversível no MVP:** Sim.
+
+### DEC-006 — Backup obrigatório via JSON
+- **Data:** 2026-06-22
+- **Decisão:** Exportar e importar todos os dados como arquivo JSON é parte do MVP, não extra.
+- **Motivo:** Substitui sincronização em nuvem para migração entre dispositivos no MVP.
+- **Irreversível no MVP:** Sim.
+
+### DEC-008 — ~~Substituição do IndexedDB por SQLite nativo via Capacitor~~ SUBSTITUÍDA por DEC-009
+- **Data:** 2026-06-22
+- **Decisão histórica:** Abandonar IndexedDB como banco principal e usar SQLite nativo.
+  A escolha de Capacitor e `@capacitor-community/sqlite` foi substituída pela DEC-009.
+- **Motivo:** IndexedDB é controlado pelo navegador e pode ser apagado pelo sistema operacional.
+  SQLite nativo é mais previsível e não depende das políticas de storage do browser.
+- **Consequências:**
+  - O princípio de SQLite nativo foi preservado.
+  - Driver, empacotador e estrutura foram redefinidos pela DEC-009.
+- **Status:** Substituída.
+
+### DEC-009 — Tauri 2 como alvo único para desktop, iOS e Android
+- **Data:** 2026-06-22
+- **Decisão:** Capacitor foi substituído porque o produto não é apenas Android/iOS. O alvo correto
+  é desktop + iOS + Android com uma única base. Tauri 2 permite empacotar uma interface web para
+  desktop e mobile, preservando HTML/CSS/JS e permitindo SQLite local nativo via plugin SQL.
+- **Consequências:**
+  - Desktop é o primeiro alvo de execução local.
+  - Android é alvo móvel posterior.
+  - iOS permanece preparado na mesma base; o build real exige ambiente Apple/Mac.
+  - Vite é apenas o empacotador mínimo.
+  - `src/db.js` usa `@tauri-apps/plugin-sql` e é o único ponto autorizado a executar SQL.
+  - Não usar IndexedDB nem localStorage como banco principal.
+- **Irreversível no MVP:** Sim.
+
+### DEC-010 — Git obrigatório desde o início
+- **Data:** 2026-06-22
+- **Decisão:** O projeto deve nascer versionado em Git. Cada task deve gerar mudanças pequenas,
+  revisáveis e com commit próprio. Codex cuidará da integração com GitHub, mas o repositório local
+  deve existir antes da implementação.
+- **Consequências:**
+  - TASK-000 inicializa o Git e cria a base do projeto antes do código funcional.
+  - O primeiro commit contém apenas specs aprovadas e estrutura inicial.
+  - Tasks diferentes não podem ser misturadas no mesmo commit.
+  - Claude não cria repositório GitHub nem faz push remoto sem instrução explícita.
+- **Irreversível no MVP:** Sim.
+
+### DEC-011 — Contrato da camada SQLite
+- **Data:** 2026-06-23
+- **Decisão:** `src/db.js` é o único arquivo autorizado a executar SQL da aplicação. As colunas
+  permanecem em snake_case no SQLite e todos os objetos públicos `DB.*` usam camelCase.
+  O schema é inicializado de forma idempotente por `DB.init()` antes da renderização da interface.
+- **Consequências:**
+  - UI, estatísticas e demais módulos não importam o driver SQL diretamente.
+  - O plugin oficial `tauri-plugin-sql` 2.4.0 usa a feature SQLite e permissões mínimas de
+    leitura/fechamento e execução.
+  - Um comando Rust genérico, sem SQL de domínio, executa lotes enviados por `src/db.js` na mesma
+    transação SQLite quando uma regra exige atomicidade.
+  - Exportação e importação usam o mesmo contrato camelCase da API pública.
+- **Irreversível no MVP:** Sim.
+
+### DEC-012 — Disciplina como entidade própria e reutilizável
+- **Data:** 2026-06-23
+- **Decisão:** Disciplina é entidade própria em `subjects`, cadastrada uma vez e reutilizada por
+  `study_records.subject_id`. O fluxo normal de RP/Cadastro seleciona disciplina ativa em lista;
+  não digita nome livremente a cada estudo.
+- **Campos obrigatórios em `subjects`:** `id`, `name`, `created_at`, `updated_at`, `is_active`,
+  `sort_order`.
+- **Consequências:**
+  - Deve existir área própria para listar, criar, editar e desativar disciplinas.
+  - Deve existir exclusão destrutiva de disciplina, apagando todos os dados relacionados no banco.
+  - RP/Cadastro deve oferecer quick add `+ Nova disciplina`, sem sair do fluxo, selecionando a
+    disciplina recém-criada.
+  - Desativação usa `is_active = 0` e preserva histórico, revisões, estatísticas e backups.
+  - Exclusão remove `review_tasks` relacionadas, `study_records` da disciplina e a própria linha em
+    `subjects`, em transação e após confirmação explícita.
+  - Salvar estudo sem `subject_id` válido é proibido.
+  - O sistema deve reduzir digitação repetitiva e esforço cognitivo.
+- **Status:** Implementada na TASK-017.
+- **Irreversível no MVP:** Sim.
+
+### DEC-013 — Disciplinas e fontes como entidades reutilizáveis com seed inicial
+- **Data:** 2026-06-23
+- **Status:** ⚠️ SUPERSEDED_FOR_VNEXT — ver DEC-013-V2
+- **Decisão original (histórica):** Disciplina e fonte são entidades próprias (`subjects`, `sources`). Seed inicial com disciplinas de concurso + fonte `Grancursos`.
+- **Por que superseded:** Teste real com fluxo Fisiologia/Guyton revelou que fonte é texto livre (varia por capítulo/apostila); entidade `sources` cria fricção sem benefício. Usuário é estudante de Medicina, não de concurso.
+
+### DEC-013-V2 — Fonte como texto livre, estado inicial VAZIO
+- **Data:** 2026-09-03
+- **Aprovada:** 2026-09-05 — HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL executado.
+- **Status:** ✅ ACCEPTED
+- **Decisão:** Fonte é campo texto livre em `learning_units.source_text`. Tabela `sources` não existe e não deve ser recriada.
+  Estado inicial do banco é VAZIO — sem seeds de disciplinas, fontes ou conteúdo acadêmico.
+  DEV fixtures permanecem estritamente DEV-only via `import.meta.env?.DEV` + `fixtures/dev-dataset.js`.
+- **Invariante substituída:** INV-05B → SUPERSEDED. Nova regra canônica: "Fonte é texto livre descritivo do conteúdo estudado; pertence à unidade de aprendizagem (`source_text`)."
+- **DEC-015 reinterpretado:** Reset via Configurações retorna banco a estado VAZIO — seeds padrão NÃO são reaplicados.
+- **Referência de implementação:** commits `09ea0d8` (hipótese inicial), domain-redesign WP-DRD-01..08.
+- **DEBT-004:** RESOLVED.
+
+### DEC-014 — Tela Hoje linear com ReviewRow e cadastro minimalista
+- **Data:** 2026-06-23
+- **Decisão:** A Tela Hoje deve ser apresentada como uma linha operacional ReviewRow, com os blocos em ordem Atrasadas, Hoje, Amanhã e Feitas hoje. O cadastro deve priorizar Novo estudo, manter disciplina, fonte e data após salvar e tratar o gerenciamento de disciplinas e fontes como ação secundária.
+- **Consequências:**
+  - As ações diárias ficam sempre visíveis, sem modal, accordion ou card solto como affordance principal.
+  - Desktop usa leitura quase tabular; mobile preserva a mesma ordem visual em linha empilhada.
+  - Cor por disciplina continua proibida; cores ficam reservadas para status, ação, alerta, erro e sucesso.
+- **Status:** Implementada na TASK-019.
+- **Irreversível no MVP:** Sim.
+
+
+### DEC-016 — Arquitetura vNext: Resumo Mestre + Exercícios + Scheduler Boundary
+- **Data:** 2026-09-02 (v2 — corrigido após deep planning audit)
+- **Decisão:** SmartLearn evolui para suportar o ciclo longitudinal completo:
+  Material → Resumo Mestre → Exercícios → Revisões → Evidência → Relearning.
+  DEC-003 (16 revisões fixas) é SUPERSEDED_FOR_VNEXT: scheduler encapsulado em `scheduler.js`.
+  Algoritmo 'legacy' preserva comportamento atual como DEFAULT.
+  study_records ganha `summary_body TEXT NULL` (additive via ensureColumns).
+  Nova tabela `exercises` (ON DELETE CASCADE para study_records).
+  Backup JSON inclui exercises na versão 2.0.0.
+- **Ordem de WPs (v2):** WP-01 Tests → WP-02 Scheduler → WP-03 Resumo Mestre → WP-04 Resumo Diário → WP-05 Exercícios → WP-06 Ciclo integrado
+- **Nota crítica sobre FSRS:** `scheduler.js` encapsula legacy mas NÃO é interface FSRS.
+  FSRS requer `repeat(card_state, rating, now) → next_due` — interface completamente diferente.
+  Cold-start aceitável na migração (mesmo comportamento do Anki). FSRS = WP-07, LATER.
+- **Risco de escala:** Schedule fixo gera ~1.190 revisões/dia no ano 3 de Medicina.
+  FSRS é necessário, não opcional, para uso longitudinal. Revisar prioridade após WP-06.
+- **BUG-005:** JÁ CORRIGIDO no código atual. WP-01 é somente testes, sem implementação de fix.
+- **Pré-condições:** HUMAN_GATE: VNEXT_PLAN_APPROVAL antes de qualquer implementação.
+- **Irreversível no MVP:** Não — cada WP é independente e revertível.
+- **Referência:** `.specs/features/smartlearn-learning-vnext/` (spec.md v2, design.md v2, tasks.md v2)
+
+### DEC-015 — Limpeza total da base local via Configurações
+- **Data:** 2026-06-23
+- **Status:** REINTERPRETAÇÃO PROPOSTA — aguarda HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL
+- **Decisão original:** Após limpeza, seeds padrão são reaplicados na próxima inicialização.
+- **Reinterpretação proposta (2026-09-03):** Seeds NÃO são reaplicados. Estado após reset é VAZIO. O aluno cadastra suas próprias disciplinas. Nenhum conteúdo acadêmico pré-injetado (nem medicina, nem concurso).
+- **Tornar definitivo:** apenas após HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL.
+
+---
+
+### DEC-007 — Correções de consistência das specs antes da implementação
+- **Data:** 2026-06-22
+- **Decisão:** Aplicadas 9 correções nas specs antes de iniciar qualquer implementação.
+- **Motivo:** Revisão humana identificou problemas que causariam bugs na implementação:
+  1. Store `settings` agora usa keyPath `"key"` com valor singleton `"main"`.
+  2. `Stats.calculate` recebe `(reviewTasks, studyRecords, subjects)` — necessário para join de disciplina.
+  3. Bloco "Amanhã" filtra `reviewDone = false` — evita duplicação com "Feitas hoje".
+  4. TASK-016 depende de TASK-014 e TASK-015 — polimento só após todas as features.
+  5. TASK-009 separa `input` (atualiza display) de `blur/Enter` (salva no banco de dados).
+  6. Métodos de query do DB recebem data como parâmetro (`getForToday(today)`, etc.).
+  7. Comparação de `completedAt` com hoje usa `slice(0,10)` — não compara ISO string direta.
+  8. Inputs de questões visíveis mesmo com `questionsDone = false`; só excluídos das stats.
+  9. `dataPoints` do gráfico filtram `questionsDone=true AND scorePercent!=null AND completedAt!=null`.
+- **Irreversível:** Sim (são correções de consistência, não mudanças de escopo).
+
+---
+
+## HUMAN_GATES ativos
+
+| Gate | Bloqueio | Referência |
+|------|---------|-----------|
+| UI_ANALYTICS_DESIGN_APPROVAL | NÃO implementar código; NÃO push/PR/merge | `.specs/features/smartlearn-ui-analytics-vnext/` |
+| SCHEMA_MIGRATION_APPROVAL | Antes de migration destrutiva se banco real tem dados do usuário | `.specs/features/smartlearn-domain-redesign/design.md §8` |
+
+**Resolvido:** DOMAIN_REDESIGN_APPROVAL — implementado (WP-DRD-01..08, commits 5a43fd4..77911b3).
+**Superseded:** PUSH_AND_PR_APPROVAL — aguarda UI_ANALYTICS_DESIGN_APPROVAL + implementação completa + Tauri/SQLite real + UATs.
+
+## TLC_INSTALLATION_MISMATCH
+
+- **Registrado em:** 2026-09-03
+- **Descrição:** Incompatibilidade potencial entre `@tauri-apps/plugin-sql` versão instalada e a feature SQLite nas permissões Tauri 2. Observado durante planejamento de UAT em ambiente Tauri real.
+- **Impacto:** Migrations SQL (`ensureColumns`) e `ON DELETE CASCADE` não foram validados em SQLite nativo nesta sessão — apenas BrowserStore.
+- **Ação requerida:** Executar `npm run tauri dev` em ambiente desktop, verificar migrations em banco legado com dados reais, confirmar `PRAGMA foreign_keys = ON` ativo.
+- **Prioridade:** Alta — bloqueia validação completa antes do merge.
+
+---
+
+## Bloqueadores ativos
+
+Nenhum técnico. HUMAN_GATE: DOMAIN_REDESIGN_APPROVAL bloqueia implementação (não é bloqueador técnico — é gate de aprovação intencional).
+
+---
+
+## Pendências
+- [x] Quick fix executado: criação da tabela review_tasks no schema e reparo de textos UTF-8.
+- [ ] Auditoria de bugs executada; pendências registradas em .specs/quick/bug-audit-smartlearn/SUMMARY.md.
+
+- [x] Revisão humana de todas as specs (concluída em 2026-06-22, 9 correções aplicadas).
+- [x] Revisão humana da correção arquitetural Tauri 2 + Git.
+- [x] TASK-000 executada em 2026-06-22: Git, Vite, Tauri 2, Rust/MSVC e scaffold desktop.
+- [x] TASK-001 executada em 2026-06-23: shell visual, navegação e responsividade desktop/mobile.
+- [x] TASK-002 executada em 2026-06-23: plugin SQL, schema, API `DB.*`, persistência e backup lógico.
+- [x] TASK-003 executada em 2026-06-23: criação, validação e seleção persistente de disciplinas.
+- [x] TASK-004 executada em 2026-06-23: formulário validado e persistência de sessões de estudo.
+- [x] TASK-005 executada em 2026-06-23: 16 revisões geradas com datas fixas e gravação atômica.
+- [x] TASK-006 executada em 2026-06-23: cards e quatro grupos dinâmicos da Tela Hoje.
+- [x] TASK-007 executada em 2026-06-23: layout tabular responsivo da Tela Hoje no desktop.
+- [x] TASK-008 executada em 2026-06-23: conclusão reversível de revisões com atualização da tela.
+- [x] TASK-009 executada em 2026-06-23: questões, acertos e percentual com autosave controlado.
+- [x] TASK-010 executada em 2026-06-23: comentário opcional persistido por revisão.
+- [x] TASK-011 executada em 2026-06-23: métricas gerais e médias por disciplina.
+- [x] TASK-012 executada em 2026-06-23: gráfico Canvas nativo com notas em ordem cronológica.
+- [x] TASK-013 executada em 2026-06-23: exportação JSON e registro do último backup.
+- [x] TASK-014 executada em 2026-06-23: importação JSON validada e transacional.
+- [x] TASK-015 executada em 2026-06-23: Android SDK/NDK preparado, APK debug gerado e app aberto no emulador.
+- [x] TASK-016 executada em 2026-06-23: polimento de acessibilidade, responsividade 320px e safe-area mobile.
+- [x] TASK-017 executada em 2026-06-23: disciplinas com CRUD, desativação, exclusão destrutiva em cascata e quick add.
+- [x] TASK-018 executada em 2026-06-23: fontes como entidade reutilizável, seed inicial e contrato `source_id`.
+- [x] TASK-019 executada em 2026-06-23: Tela Hoje linear com ReviewRow e cadastro minimalista.
+- [ ] Executar build real iOS somente em ambiente Apple/Mac.
+- [ ] Decidir paleta de cores final (pode ocorrer durante implementação do M1).
+- [ ] Decidir ícone do app (pode ocorrer durante implementação do M7 — mobile Tauri 2).
+
+---
+
+## Ideias deferidas (não-MVP)
+
+| Ideia | Motivo do adiamento |
+|-------|---------------------|
+| Notificações push | Requer service worker mais complexo + permissão do usuário |
+| Redistribuição inteligente de revisões atrasadas | Complexidade de UX não justificada no MVP |
+| IA para sugerir conteúdo | Fora do escopo do MVP local |
+| Modo turbo (apenas revisões críticas) | Decisão de produto a validar com usuários reais |
+| Compartilhamento de plano de estudos | Requer backend |
+| Banco de questões integrado | Feature independente, não relacionada ao MVP |
+| Código de interface específico em Swift/Kotlin | Fora do MVP; uma base Tauri 2 é obrigatória |
+| Sincronização em nuvem | Fase 2 |
+
+---
+
+## Lições aprendidas
+
+- O repositório remoto já possuía histórico antes da TASK-000; ele foi preservado sem force-push.
+- O bundle identifier não deve terminar em `.app`, pois conflita com bundles macOS.
+- O Vite deve ignorar `src-tauri/target/**` para não observar executáveis Rust bloqueados no Windows.
+- O README publicado no pacote npm do plugin SQL estava desatualizado sobre iOS; o repositório
+  oficial atual classifica SQLite como suporte completo em desktop, Android e iOS.
+
+---
+
+## Preferências do projeto
+
+- Idioma do código: inglês (nomes de variáveis, funções, stores).
+- Idioma da interface: português brasileiro.
+- Idioma das specs: português brasileiro.
+- Comentários no código: apenas quando o "porquê" não é óbvio.

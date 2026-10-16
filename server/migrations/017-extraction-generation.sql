@@ -1,0 +1,13 @@
+-- C4 (audit): source-extraction.js's extractSource() spans a real async
+-- worker call (T35) -- unlike every other write in this codebase, two
+-- concurrent calls for the SAME source can genuinely interleave (a
+-- double-click, a client retry while the first request is still
+-- in-flight). Without a guard, whichever call happens to FINISH last
+-- wins, regardless of which one STARTED last -- a slow, since-superseded
+-- attempt could silently overwrite a newer attempt's already-correct
+-- result (design.md's OPERATION-vs-ATTEMPT distinction: a stale attempt
+-- must never outrank the current one). `extraction_generation` is bumped
+-- synchronously the instant an attempt STARTS; only the attempt that
+-- still holds the current generation when its worker finishes is allowed
+-- to write its result.
+ALTER TABLE sources ADD COLUMN extraction_generation INTEGER NOT NULL DEFAULT 0;

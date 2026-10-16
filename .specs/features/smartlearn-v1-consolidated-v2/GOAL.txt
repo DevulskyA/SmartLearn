@@ -1,0 +1,28 @@
+/goal Use TLC Strict + ECC Engineering.
+MASTER_ID=SMARTLEARN_V1_CONSOLIDATED_V2
+
+Execute the complete plan already authored by ChatGPT in:
+.specs/features/smartlearn-v1-consolidated-v2/
+Read spec.md + design.md + tasks.md + acceptance.md; update validation.md and compact STATE. Tasks T01-T54 define the complete scope. Do not delegate architecture, invent phases, or stop at a phase boundary.
+
+START
+Reconcile the real local branch/worktree and existing work. Intended continuation: claude/smartlearn-v1-complete. Inspected main=f645a0730f6e37560de813b1610f359a57419f27; continuation=18e903b2f297a251764b8e37a567a0fef1634664. Preserve later valid descendants and dirty work. PR #3 and PR #5 foundation are integrated; do not rebuild them. Normal local integration of reviewed main ancestry is allowed; no rebase/reset/wholesale historical merge.
+
+FIXED CONTRACT
+One medical-learning Web/PWA; central independent Node24/Fastify5/better-sqlite3/SQLite-WAL server; shared Windows/Android wrappers. User-owned typed API, secure sessions, idempotent transactions, exact historical data, safe migration tooling, real source/PDF provenance and accepted AI drafts. Offline is last-known agenda READ ONLY. Fixed 16-review schedule. Preserve review-only completion without invented scores. Unknown assistance stays UNKNOWN; duplicate events never become extra learning. Experimental mastery remains disabled until explicit evidence-backed promotion. House and advanced scheduling stay outside this V1.
+
+EXECUTION
+Follow T01-T54 dependencies. T01-T06 recover reliable authority and tests; then identity, domain API, Web, migration, reconstructed evidence, PDF/AI, offline/wrappers, UX and final closure. The plan specifies files, contracts, difficulty, risks, tests and recovery. Implement the smallest equivalent change; reuse proven current behavior. Never correct a reported bug before discriminating application failure from wrong target/test.
+
+One controller writes this worktree. Use narrow tests during each task, meaningful local commits, exact-source evidence and independent review at specified high-risk closures. Run material mutations in disposable copies. No weakened assertions, hidden skipped tests or mock substituted for required runtime evidence. Missing tools/credentials/platforms remain explicitly unverified; continue independent safe work. At most three failed correction cycles on the same cause before recording a reproducer and moving to independent work.
+
+SAFETY
+No remote push/PR/merge/Ready/deploy, main protection changes, real-data import/reset/delete, credential mutation or paid provider use without fresh explicit permission. Test in temporary data/accounts; never assume a worktree isolates AppData. Preserve old branches and unrelated sessions.
+
+DONE
+All required task/acceptance gates pass and independent final verifier confirms them. Report IMPLEMENTATION_COMPLETE, V1_VALIDATED and PRODUCTION_RELEASED separately. Local implementation or fake-provider success does not establish complete live integration. If all remaining tasks require unavailable external action, persist a precise BLOCKED_EXTERNAL report, not a false COMPLETE.
+
+At true terminal completion/block only: persist handoff/evidence and permitted commits, cancel this mission's recurring job, stop owned temporary processes, output final status, then attempt shutdown.exe /h as the last power action under the standing user authorization. No hooks, no forced shutdown, no hibernation at intermediate checkpoints. A denied command is not success.
+
+ARCH-01 ADDENDUM (2026-09-11, canonical, externally decided — see .specs/STATE.md "ARCHITECTURE SUPERSESSION — ARCH-01" for the full decision text)
+This FIXED CONTRACT's "central independent ... server" as the universal authority for "shared Windows/Android wrappers" is SUPERSEDED for Desktop: Windows/Tauri becomes the complete local-first product, with material staying on the user's machine and no requirement to upload full PDFs to the cloud. A deliberately smaller, read-only Web/PWA Companion is added. Cloud stops being a PDF/book repository. This does not redefine T01-T54's other fixed contract terms (16-review schedule, review-only completion, unknown-assistance handling, experimental-mastery gating, House exclusion all remain unchanged). NEXT_TASK per .specs/STATE.md is now LOCAL-01, not T43 — do not resume T43/T44 in their original server-central-authority form without a fresh explicit decision superseding this one.

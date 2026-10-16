@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readdirSync, copyFileSync, unlinkSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { openDb } from '../src/db.js';
-import { runMigrations, validateMigrations } from '../src/migrations.js';
+import { runMigrations, validateMigrations, canonicalChecksum, normalizeLineEndings } from '../src/migrations.js';
 
 const REAL_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -32,12 +33,12 @@ test('001-bootstrap creates server_meta', () => {
   }
 });
 
-test('001-bootstrap records one row in schema_migrations', () => {
+test('001-bootstrap records exactly one row for version 1 in schema_migrations', () => {
   const { path, cleanup } = tmpDb();
   try {
     const db = openDb(path);
     runMigrations(db, REAL_MIGRATIONS_DIR);
-    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations WHERE version = 1').get();
     assert.equal(n, 1);
     db.close();
   } finally {
@@ -45,14 +46,15 @@ test('001-bootstrap records one row in schema_migrations', () => {
   }
 });
 
-test('idempotent — second run does not duplicate rows', () => {
+test('idempotent — second run does not duplicate any migration row', () => {
   const { path, cleanup } = tmpDb();
   try {
     const db = openDb(path);
     runMigrations(db, REAL_MIGRATIONS_DIR);
+    const { n: firstRunCount } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
     runMigrations(db, REAL_MIGRATIONS_DIR);
-    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
-    assert.equal(n, 1);
+    const { n: secondRunCount } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    assert.equal(secondRunCount, firstRunCount, 'rerunning migrations must not add or duplicate rows');
     db.close();
   } finally {
     cleanup();
@@ -131,6 +133,66 @@ test('broken migration is fully atomic — no partial table created', () => {
   }
 });
 
+test('canonical checksum is line-ending independent: same SQL content hashes the same whether the file is LF or CRLF', () => {
+  const lfContent = 'CREATE TABLE IF NOT EXISTS eol_probe (\n  id INTEGER PRIMARY KEY\n);\n';
+  const crlfContent = lfContent.replace(/\n/g, '\r\n');
+  const crContent = lfContent.replace(/\n/g, '\r');
+  assert.notEqual(lfContent, crlfContent, 'sanity: fixtures actually differ byte-for-byte');
+  assert.equal(canonicalChecksum(lfContent), canonicalChecksum(crlfContent));
+  assert.equal(canonicalChecksum(lfContent), canonicalChecksum(crContent));
+  assert.equal(normalizeLineEndings(crlfContent), lfContent);
+});
+
+test('a real change to SQL content still changes the canonical checksum, regardless of line ending', () => {
+  const original = 'CREATE TABLE IF NOT EXISTS eol_probe (id INTEGER PRIMARY KEY);\r\n';
+  const changed = 'CREATE TABLE IF NOT EXISTS eol_probe (id INTEGER PRIMARY KEY, extra TEXT);\r\n';
+  assert.notEqual(canonicalChecksum(original), canonicalChecksum(changed));
+});
+
+test('a database that recorded the historical CRLF checksum for a migration stays valid after switching to canonical (LF) checksums', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = tmpMigDir();
+  try {
+    const lfContent = 'CREATE TABLE IF NOT EXISTS legacy_crlf_probe (id INTEGER PRIMARY KEY);\n';
+    const crlfContent = lfContent.replace(/\n/g, '\r\n');
+    writeFileSync(join(mDir, '001-legacy.sql'), lfContent);
+    writeFileSync(
+      join(mDir, 'manifest.json'),
+      JSON.stringify([{ version: 1, name: 'legacy', checksum: canonicalChecksum(lfContent) }])
+    );
+
+    const historicalCrlfChecksum = createHash('sha256').update(crlfContent).digest('hex');
+    assert.notEqual(
+      historicalCrlfChecksum,
+      canonicalChecksum(lfContent),
+      'sanity: the historical CRLF checksum must actually differ from the canonical one'
+    );
+
+    const db = openDb(path);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version    INTEGER NOT NULL PRIMARY KEY,
+        name       TEXT    NOT NULL,
+        checksum   TEXT    NOT NULL,
+        applied_at TEXT    NOT NULL
+      )
+    `);
+    db.prepare(
+      'INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)'
+    ).run(1, 'legacy', historicalCrlfChecksum, new Date().toISOString());
+
+    assert.doesNotThrow(() => runMigrations(db, mDir));
+    assert.doesNotThrow(() => validateMigrations(db, mDir));
+
+    const { n } = db.prepare('SELECT COUNT(*) as n FROM schema_migrations').get();
+    assert.equal(n, 1, 'the historical row must not be duplicated by re-running migrations');
+    db.close();
+  } finally {
+    cleanupDb();
+    cleanupM();
+  }
+});
+
 test('validateMigrations passes after correct apply', () => {
   const { path, cleanup } = tmpDb();
   try {
@@ -140,5 +202,110 @@ test('validateMigrations passes after correct apply', () => {
     db.close();
   } finally {
     cleanup();
+  }
+});
+
+// A5 (audit): a real deployment could be missing a migration file the
+// manifest says should exist, or have applied every file on disk while
+// silently never running one that was never committed. Prove the
+// readiness gate (validateMigrations, called by /health/ready) actually
+// fails closed in each of those cases, using a real copy of the true
+// migrations directory -- not a synthetic one -- so this exercises the
+// exact manifest.json shipped with the product.
+function copyRealMigrationsDir() {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-migs-real-copy-'));
+  for (const f of readdirSync(REAL_MIGRATIONS_DIR)) {
+    copyFileSync(join(REAL_MIGRATIONS_DIR, f), join(dir, f));
+  }
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('A5: readiness fails when a migration the manifest expects is missing from disk (never deployed)', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = copyRealMigrationsDir();
+  try {
+    const db = openDb(path);
+    runMigrations(db, mDir);
+    assert.doesNotThrow(() => validateMigrations(db, mDir), 'sanity: an untouched real copy must validate cleanly first');
+
+    // Simulate "the last migration file was never deployed": delete the
+    // .sql file but leave the manifest (and the applied schema_migrations
+    // row, since it already ran above) exactly as they were.
+    const files = readdirSync(mDir).filter((f) => f.endsWith('.sql'));
+    const highestVersionFile = files.sort().at(-1);
+    unlinkSync(join(mDir, highestVersionFile));
+
+    assert.throws(
+      () => validateMigrations(db, mDir),
+      /is missing from the migrations directory/,
+      'a manifest-expected migration missing from disk must fail readiness, not pass it',
+    );
+    db.close();
+  } finally { cleanupDb(); cleanupM(); }
+});
+
+test('A5: readiness fails when a manifest-expected migration exists on disk but was never applied to this database', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = copyRealMigrationsDir();
+  try {
+    const db = openDb(path);
+    // Deliberately do NOT run migrations at all: schema_migrations has zero
+    // rows, but the directory + manifest both list every real migration.
+    db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)');
+
+    assert.throws(
+      () => validateMigrations(db, mDir),
+      /has not been applied to this database/,
+      'a real, on-disk, manifest-listed migration that never actually ran must fail readiness',
+    );
+    db.close();
+  } finally { cleanupDb(); cleanupM(); }
+});
+
+test('A5: readiness fails closed when manifest.json itself is missing', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = copyRealMigrationsDir();
+  try {
+    const db = openDb(path);
+    runMigrations(db, mDir);
+    unlinkSync(join(mDir, 'manifest.json'));
+
+    assert.throws(() => validateMigrations(db, mDir), /manifest\.json is missing/);
+    db.close();
+  } finally { cleanupDb(); cleanupM(); }
+});
+
+test('A5: readiness fails when an on-disk migration is not accounted for in the manifest', () => {
+  const { path, cleanup: cleanupDb } = tmpDb();
+  const { dir: mDir, cleanup: cleanupM } = copyRealMigrationsDir();
+  try {
+    const db = openDb(path);
+    runMigrations(db, mDir);
+    writeFileSync(join(mDir, '999-unlisted.sql'), 'CREATE TABLE IF NOT EXISTS unlisted_probe (id INTEGER PRIMARY KEY);\n');
+    runMigrations(db, mDir); // applies the new file so the "not applied" check doesn't mask this one
+
+    assert.throws(
+      () => validateMigrations(db, mDir),
+      /is not listed in manifest\.json/,
+      'a rogue migration file the manifest never accounted for must fail readiness',
+    );
+    db.close();
+  } finally { cleanupDb(); cleanupM(); }
+});
+
+test('the real, committed manifest.json exactly matches the canonical checksum of every real migration file on disk', () => {
+  const manifest = JSON.parse(readFileSync(join(REAL_MIGRATIONS_DIR, 'manifest.json'), 'utf8'));
+  const onDiskFiles = readdirSync(REAL_MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'));
+  assert.equal(manifest.length, onDiskFiles.length, 'manifest.json must list exactly the migrations that exist on disk');
+
+  for (const entry of manifest) {
+    const file = onDiskFiles.find((f) => parseInt(f.match(/^(\d+)-/)[1], 10) === entry.version);
+    assert.ok(file, `manifest lists version ${entry.version} but no matching file exists on disk`);
+    const content = readFileSync(join(REAL_MIGRATIONS_DIR, file), 'utf8');
+    assert.equal(
+      entry.checksum,
+      canonicalChecksum(content),
+      `manifest checksum for ${file} must equal the canonical (line-ending independent) checksum of its real content`
+    );
   }
 });

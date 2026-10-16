@@ -5,11 +5,28 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/require-work-branch.mjs",
     "dev": "vite",
+    "dev:remote": "node scripts/dev-remote.mjs",
+    "dev:uat": "node scripts/dev-uat.mjs",
+    "seed:dev": "node scripts/seed-dev.mjs",
+    "dev:sanitize": "node scripts/dev-sanitize.mjs",
+    "dev:desktop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launch-desktop-dev.ps1",
+    "prebuild": "node scripts/require-work-branch.mjs",
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "node scripts/e2e.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test:inventory": "node scripts/check-test-inventory.mjs",
+    "test:mutation": "node scripts/mutation-check.mjs",
+    "context:resume": "node scripts/agent-tasklist.mjs --resume",
+    "context:check": "node scripts/context-check.mjs",
+    "plan:sync": "node scripts/plan-sync.mjs",
+    "package:standalone": "node scripts/package-standalone.mjs",
+    "prepreview": "node scripts/require-work-branch.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e:materials": "node scripts/e2e.mjs --suite materials"
   },
   "repository": {
     "type": "git",
@@ -32,7 +49,12 @@
     "@tauri-apps/plugin-sql": "^2.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@tauri-apps/cli": "^2.11.3",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
     "vite": "^8.0.16"
   }
 }

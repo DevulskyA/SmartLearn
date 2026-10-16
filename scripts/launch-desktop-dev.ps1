@@ -1,0 +1,134 @@
+# SmartLearn Desktop DEV - the ONE human entry point.
+#
+# Why this exists: a desktop shortcut once opened an old release .exe (07/09) and a whole validation round was lost on a build
+# that was not the one under test. This launcher always resolves the worktree it lives in, refuses to run from any other
+# branch, rebuilds the frontend/backend resources when they are older than the sources, stamps the build identity
+# (commit, mode, provider) so the app can show it, and opens the Tauri DEV window for THIS worktree - never a release.
+#
+# ASCII only on purpose: Windows PowerShell 5.1 reads BOM-less files as ANSI.
+param(
+  [string]$Provider = $(if ($env:SMARTLEARN_AI_PROVIDER) { $env:SMARTLEARN_AI_PROVIDER } else { 'CODEX' }),
+  [switch]$NoBuild
+)
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+Set-Location $root
+
+function Fail($message) {
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.MessageBox]::Show($message, 'SmartLearn DEV', 'OK', 'Error') | Out-Null
+  exit 1
+}
+
+$expectedBranch = 'claude/smartlearn-v1-complete'
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($branch -ne $expectedBranch) { Fail "Esta pasta esta na branch '$branch', nao em '$expectedBranch'. Nada foi aberto." }
+$head = (git rev-parse --short HEAD).Trim()
+$dirty = if ((git status --porcelain --untracked-files=no | Out-String).Trim()) { '+local' } else { '' }
+
+# The build identity (version from the root package.json, commit from git) is computed ONCE by scripts/build-identity.mjs, the same
+# code Vite uses to embed it in the app. The channel must be set BEFORE any build so the bundle says DEV.
+$env:SMARTLEARN_BUILD_MODE = 'DEV'
+$identity = (node scripts/build-identity.mjs | Out-String) | ConvertFrom-Json
+function BuildSha($id) { if ($id) { ([string]$id).Split('+')[0] } else { '' } }
+
+# Only this worktree's own DEV processes are replaced; nothing else is touched.
+Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force
+# T-F1-04: leftovers of THIS worktree only (the bundled backend node-runtime), reported by name; nothing outside the worktree is touched.
+Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Write-Host "Encerrado (backend orfao desta worktree): pid $($_.Id) $($_.Path)"; Stop-Process -Id $_.Id -Force }
+Start-Sleep -Milliseconds 500
+
+function Newest($paths) {
+  $items = foreach ($p in $paths) { Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue }
+  ($items | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+}
+
+if (-not $NoBuild) {
+  $dist = Join-Path $root 'dist\index.html'
+  $srcNewest = Newest @("$root\src", "$root\index.html", "$root\shared")
+  $distInfoPath = Join-Path $root 'dist\build-info.json'
+  $distInfo = if (Test-Path $distInfoPath) { try { Get-Content $distInfoPath -Raw | ConvertFrom-Json } catch { $null } } else { $null }
+  # Current = same CONTENT (inputsHash of src/, shared/, server/, index.html, package.json), not the same commit: a docs-only commit does not rebuild.
+  $distIsCurrent = $distInfo -and ($distInfo.inputsHash -eq $identity.inputsHash) -and ($distInfo.channel -eq 'DEV')
+  if (-not (Test-Path $dist) -or (Get-Item $dist).LastWriteTime -lt $srcNewest -or -not $distIsCurrent) {
+    Write-Host 'Compilando o frontend...'
+    npm run build | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail 'O build do frontend falhou. Veja o console.' }
+  }
+  $staged = Join-Path $root 'src-tauri\resources\server-runtime\src\main.js'
+  $needStage = -not (Test-Path $staged) -or (Get-Item $staged).LastWriteTime -lt (Newest @("$root\server\src", "$root\server\migrations")) -or (Get-Item $staged).LastWriteTime -lt (Get-Item $dist).LastWriteTime
+  if ($needStage) {
+    Write-Host 'Empacotando backend e frontend para o Desktop...'
+    npm run package:standalone | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail 'O empacotamento do backend falhou. Veja o console.' }
+  }
+}
+
+# The build the Desktop will serve must be the one for THIS commit: never open a stale identity by mistake.
+$stagedInfoPath = Join-Path $root 'src-tauri\resources\dist-runtime\build-info.json'
+$stagedInfo = if (Test-Path $stagedInfoPath) { try { Get-Content $stagedInfoPath -Raw | ConvertFrom-Json } catch { $null } } else { $null }
+if (-not $stagedInfo -or $stagedInfo.inputsHash -ne $identity.inputsHash) {
+  Fail "A build empacotada (conteudo $($stagedInfo.inputsHash), commit $($stagedInfo.id)) nao tem o conteudo atual ($($identity.inputsHash)). Rode o launcher sem -NoBuild. Nada foi aberto."
+}
+# Honest identity: the app shows the commit its content was BUILT at; the launcher says which content is open and at which commit it was opened.
+Write-Host "Build: content $($identity.inputsHash.Substring(0, 12)) (built at commit $($stagedInfo.id)), opened at $head$dirty"
+
+# HUMAN DEV DATA != TEST DATA. The human Desktop DEV always opens ONE persistent datastore under the user profile, independent of
+# branch/worktree, never created empty by accident and never reset. Automated tests use their own throwaway databases.
+$devData = if ($env:SMARTLEARN_DEV_DATA_DIR) { $env:SMARTLEARN_DEV_DATA_DIR } else { Join-Path $env:USERPROFILE 'SmartLearn-DevData' }
+$devDb = Join-Path $devData 'smartlearn-dev.db'
+$devSources = Join-Path $devData 'sources'
+if (-not (Test-Path $devDb)) { Fail "O datastore DEV persistente nao existe: $devDb. Nada foi aberto (o Desktop nao cria um banco vazio no lugar dele)." }
+$lockPath = Join-Path $devData 'dev.lock'
+if (Test-Path $lockPath) {
+  try { $holder = Get-Content $lockPath -Raw | ConvertFrom-Json } catch { $holder = $null }
+  if ($holder -and $holder.pid -and (Get-Process -Id $holder.pid -ErrorAction SilentlyContinue)) {
+    Fail "O datastore DEV esta em uso pelo processo $($holder.pid) ($($holder.root)). Feche-o antes de abrir o Desktop."
+  }
+}
+$env:SMARTLEARN_DB_PATH = $devDb
+$env:SMARTLEARN_SOURCES_DIR = $devSources
+
+# A verified snapshot of the human's data (once per day) exists BEFORE the app can touch it; a snapshot that cannot be verified stops the launch.
+$snapshotOutput = (node scripts/dev-snapshot.mjs 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "O snapshot verificado do datastore DEV falhou: $snapshotOutput. Nada foi aberto." }
+Write-Host $snapshotOutput
+
+# The Desktop starts its own local backend (loopback, dynamic port) and inherits these.
+$env:SMARTLEARN_LOCAL_AUTHORITY = 'true'
+$env:SMARTLEARN_AI_PROVIDER = $Provider
+$env:SMARTLEARN_AI_CONSENT = 'true'
+$env:SMARTLEARN_CODEX_TIMEOUT_MS = '1200000'
+$env:SMARTLEARN_BUILD_HEAD = "$head$dirty"
+$env:SMARTLEARN_BUILD_CONTENT = $identity.inputsHash
+# DEV only: the title bar names the build (ASCII only in this file).
+$env:SMARTLEARN_WINDOW_TITLE = "SmartLearn DEV - v$($identity.version) - $head$dirty"
+# DEV only: the signed-in session survives closing the app until "Sair". The server refuses this flag in production.
+$env:SMARTLEARN_DEV_PERSISTENT_SESSION = 'true'
+
+$devExe = Join-Path $root 'src-tauri\target\debug\smartlearn.exe'
+Write-Host "SMARTLEARN DEV"
+Write-Host "Executable: $devExe"
+Write-Host "Database: $devDb"
+Write-Host "Sources: $devSources"
+Write-Host "App version: $($identity.version)"
+Write-Host "Git HEAD: $head$dirty"
+Write-Host "Branch: $branch"
+Write-Host "Provedor de IA: $Provider"
+Write-Host "Raiz: $root"
+# Once the window exists, record the executable that is REALLY running (path, pid) next to the identity it was launched with.
+$launchInfo = Join-Path $devData 'last-launch.json'
+$watcher = @"
+`$deadline = (Get-Date).AddMinutes(10)
+while ((Get-Date) -lt `$deadline) {
+  `$p = Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { `$_.Path -and `$_.Path.StartsWith('$root', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+  if (`$p) {
+    @{ executable = `$p.Path; expectedExecutable = '$devExe'; pathVerified = (`$p.Path -ieq '$devExe'); pid = `$p.Id; database = '$devDb'; sources = '$devSources'; appVersion = '$($identity.version)'; head = '$head$dirty'; branch = '$branch'; startedAt = (Get-Date).ToString('o') } | ConvertTo-Json | Set-Content -Path '$launchInfo' -Encoding ASCII
+    break
+  }
+  Start-Sleep -Seconds 2
+}
+"@
+Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @('-NoProfile', '-Command', $watcher) | Out-Null
+$host.UI.RawUI.WindowTitle = "SmartLearn DEV $head - feche esta janela para encerrar"
+npm run tauri dev

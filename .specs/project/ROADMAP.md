@@ -1,3 +1,5 @@
+> HISTORICAL (anterior ao programa hardening-roadmap-v1): não é autoridade de estado nem de ordem. Posição atual: `npm run context:resume`; ordem: `.specs/features/hardening-roadmap-v1/PROGRAM.md`.
+
 # ROADMAP.md — SmartLearn
 
 ## Fase 1 — MVP Local (atual)

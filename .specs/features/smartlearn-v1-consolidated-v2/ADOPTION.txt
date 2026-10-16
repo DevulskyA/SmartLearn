@@ -1,0 +1,15 @@
+SMARTLEARN - ACTIVATE CONSOLIDATED V2 EXECUTION PLAN
+Use TLC Strict + ECC Engineering.
+
+The attached execution pack was researched and specified by ChatGPT from the current repository, both pedagogical branches and the earlier server experiment. Use it as the execution contract when I activate the accompanying goal. Your responsibility is implementation and proof; do not redesign the product or re-extract the old branches.
+
+1. Finish the current safe checkpoint; identify and suspend only overlapping writers/old recurring goals for this same mission. Preserve other sessions, files and data. Do not force-close applications or kill unrelated processes.
+2. Reconcile Git/worktrees/dirty files. Intended continuation is claude/smartlearn-v1-complete, inspected at 18e903b2f297a251764b8e37a567a0fef1634664; main inspected at f645a0730f6e37560de813b1610f359a57419f27. Keep newer valid descendants. Merge only reviewed main ancestry locally when safe; never reset to these historical SHAs.
+3. Copy the pack to .specs/features/smartlearn-v1-consolidated-v2/. Preserve its text, requirement IDs, task order and acceptance meaning. Existing different content must be compared/preserved, not overwritten. The evidence/ folder is historical audit input, excluded from production and normal test discovery. If I supplied the combined Markdown, split by its explicit FILE markers without semantic rewriting.
+4. Read README, spec, design and the task overview. Load only the active phase afterward. This plan incorporates the useful intent from historical branches; do not merge/cherry-pick their old implementations or governances. Main already contains PR #3 and PR #5: do not rebuild their foundations.
+5. Correct discovery/documentation according to T01-T02. Product facts come from the current code and source evidence; product intentions come from this approved plan. The existing one-save handler must be tested before any alleged fix. Unknown help, duplicates and aggregates must never fabricate independent learning evidence.
+6. Persist the plan and compact active handoff with named-file local commits. Record the exact original current state. Do not push, merge remotely, deploy, use paid provider credentials or migrate real data without new explicit authorization.
+
+After activation, execute T01-T54 in order with the dependency rules. Phase completion advances automatically. Only a material unresolved decision, unavailable mandatory integration or safety blocker may suspend dependent work; independent safe tasks continue. Do not ask me to repeat project history already in the pack.
+
+This supersedes conflicting old continuation prompts for this mission, not unrelated projects. The historical Evidence Architecture file remains supporting research. Terminal hibernation remains restricted to true completion or exhaustion of all safe executable work, after saving evidence and cancelling this mission's loop.

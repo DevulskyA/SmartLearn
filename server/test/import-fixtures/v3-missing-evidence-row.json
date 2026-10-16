@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "subjects": [
+    { "id": 1, "name": "Farmacologia", "createdAt": "2026-02-01T00:00:00.000Z", "updatedAt": "2026-02-01T00:00:00.000Z", "isActive": true, "sortOrder": 0 }
+  ],
+  "learningUnits": [
+    { "id": 1, "subjectId": 1, "sourceText": "", "studyDate": "2026-02-05", "title": "Farmacocinetica", "summaryBody": null, "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-05T00:00:00.000Z" }
+  ],
+  "reviewTasks": [
+    { "id": 1, "unitId": 1, "reviewNumber": 1, "dueDate": "2026-02-06", "completedAt": "2026-02-06T09:00:00.000Z", "reviewDone": true, "questionsDone": true, "questionsCount": 10, "correctCount": 9, "scorePercent": 90, "comment": null, "createdAt": "2026-02-05T00:00:00.000Z", "updatedAt": "2026-02-06T09:00:00.000Z" }
+  ],
+  "exercises": [],
+  "learningEvidence": []
+}

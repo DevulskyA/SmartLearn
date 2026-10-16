@@ -1,0 +1,28 @@
+{
+  "track_id": "smartlearn-v1",
+  "feature_ref": ".specs/features/smartlearn-v1-consolidated-v2/",
+  "branch": "claude/smartlearn-v1-complete",
+  "worktree": "C:/Projetos/SmartLearn/.claude/worktrees/smartlearn-v1-complete",
+  "task_count": 54,
+  "task_id_pattern": "T01-T54",
+  "created": "2026-09-06",
+  "cockpit_created": "2026-09-07",
+  "last_proven": "T22",
+  "in_progress": "T23",
+  "head_at_cockpit_creation": "a51725f",
+  "status": "IN_PROGRESS",
+  "current_sprint": "S03",
+  "sprints": [
+    { "id": "S00", "range": "T01-T06", "status": "PROVEN" },
+    { "id": "S01", "range": "T07-T12", "status": "PROVEN" },
+    { "id": "S02", "range": "T13-T19", "status": "PROVEN" },
+    { "id": "S03", "range": "T20-T24", "status": "IN_PROGRESS" },
+    { "id": "GATE_P1", "range": "n/a", "status": "TODO", "note": "priority audit DOC-01..72 vs T25-T54, deferred by user" },
+    { "id": "S04", "range": "T25-T28", "status": "TODO" },
+    { "id": "S05", "range": "T29-T33", "status": "TODO" },
+    { "id": "S06", "range": "T34-T38", "status": "TODO", "note": "Document Learning Core — highest product-value sprint" },
+    { "id": "S07", "range": "T39-T44", "status": "TODO" },
+    { "id": "S08", "range": "T45-T49", "status": "TODO" },
+    { "id": "S09", "range": "T50-T54", "status": "TODO" }
+  ]
+}

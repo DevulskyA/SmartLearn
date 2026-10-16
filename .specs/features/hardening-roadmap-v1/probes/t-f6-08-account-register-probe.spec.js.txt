@@ -1,0 +1,54 @@
+import { test } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+
+// DIAGNOSTIC PROBE (T-F6-08), NOT part of the suite: repeats the registration prelude and records, per iteration, whether
+// #account-show-register became visible, whether the main frame navigated/reloaded after load, Vite console messages and
+// the time it took. Deleted after the measurement.
+const SERVER_PORT = serverPort(Number(process.env.PROBE_PORT || 13985));
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+const ITERATIONS = Number(process.env.PROBE_N || 30);
+
+let serverProcess; let dataDir;
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-probe-'));
+  serverProcess = spawn(process.execPath, [MAIN_JS], { env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'p.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN }, stdio: 'ignore' });
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) { try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* */ } await new Promise((r) => setTimeout(r, 150)); }
+  throw new Error('probe server not ready');
+});
+test.afterAll(async () => { serverProcess?.kill(); await new Promise((r) => setTimeout(r, 300)); rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
+
+test('probe: account screen reachable after load', async ({ browser }) => {
+  test.setTimeout(10 * 60 * 1000);
+  const results = [];
+  for (let i = 0; i < ITERATIONS; i += 1) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const events = [];
+    const t0 = Date.now();
+    page.on('framenavigated', (f) => { if (f === page.mainFrame()) events.push({ t: Date.now() - t0, nav: f.url().replace(/^https?:\/\/[^/]+/, '') }); });
+    page.on('console', (m) => { const x = m.text(); if (/vite|optimi|reload/i.test(x)) events.push({ t: Date.now() - t0, console: x.slice(0, 120) }); });
+    await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; }, API_BASE);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const tIdle = Date.now() - t0;
+    await page.locator('[data-screen="account"]').click();
+    let visible = false; let waited = 0;
+    try { await page.locator('#account-show-register').waitFor({ state: 'visible', timeout: 2000 }); visible = true; waited = Date.now() - t0 - tIdle; } catch { visible = false; }
+    // after the failed 2 s, does one more click make it appear? (a lost click vs a slow render)
+    let afterRetry = null;
+    if (!visible) { await page.locator('[data-screen="account"]').click(); try { await page.locator('#account-show-register').waitFor({ state: 'visible', timeout: 3000 }); afterRetry = true; } catch { afterRetry = false; } }
+    results.push({ i, visible, tIdle, waited, afterRetry, navs: events.filter((e) => e.nav !== undefined).length, events: events.slice(0, 6) });
+    await context.close();
+  }
+  const failed = results.filter((r) => !r.visible);
+  console.log(`PROBE ${process.env.PROBE_TAG || ''} port ${SERVER_PORT}: ${results.length} runs, ${failed.length} not visible within 2s; navs>1 in ${results.filter((r) => r.navs > 1).length}; idle ms min/max ${Math.min(...results.map((r) => r.tIdle))}/${Math.max(...results.map((r) => r.tIdle))}`);
+  for (const f of failed) console.log('PROBE_FAIL ' + JSON.stringify(f));
+  console.log('PROBE_SLOW ' + JSON.stringify(results.filter((r) => r.visible && r.waited > 800).map((r) => ({ i: r.i, waited: r.waited, navs: r.navs }))));
+});
