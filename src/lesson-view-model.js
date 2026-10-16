@@ -1,6 +1,8 @@
 // LESSON EDITOR — pure view-model (no DOM, no network). A lesson is SUMMARY + QUESTIONS[] + SOURCE + REVIEW, and the editor
 // shows each as its own area. This module only decides WHAT is shown (labels, grouping, counts); lesson-editor-ui.js draws it.
 
+import { formatNumber } from "./i18n/format.js";
+
 export const QUESTION_TYPE_LABELS = {
   RECALL: "Recordação",
   CONCEPT: "Conceito",
@@ -71,7 +73,7 @@ export function reviewOverview(draft) {
 /** Questions that will become exercises when the lesson is accepted. */
 export const keptQuestionCount = (draft) => (draft?.questions ?? []).filter((q) => q.status !== "REJECTED").length;
 
-const nf = new Intl.NumberFormat("pt-BR");
+const nf = { format: (value) => formatNumber(value) }; // resolved per call so the active locale applies
 
 /** "Costanzo Physiology.pdf · fonte aprovada: PDF 267–273 · 23.317 caracteres" — read from what was really sent, not from the title. */
 export function sourceLine(draft) {

@@ -12,6 +12,7 @@
 // and the server derives user_id itself.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
 import { REVIEW_DAY_OFFSETS } from '../shared/review-schedule.js';
+import { DEFAULT_LOCALE } from '../shared/locales.js';
 
 export class RemoteStoreError extends Error {
   constructor(code, message) {
@@ -384,8 +385,8 @@ const mapServerSettings = (row) => ({
   lastBackupAt: null, timezone: row.timezone,
   uiLocale: row.uiLocale ?? null,
   generationLocale: row.generationLocale ?? null,
-  effectiveUiLocale: row.effectiveUiLocale ?? 'pt-BR',
-  effectiveGenerationLocale: row.effectiveGenerationLocale ?? 'pt-BR',
+  effectiveUiLocale: row.effectiveUiLocale ?? DEFAULT_LOCALE,
+  effectiveGenerationLocale: row.effectiveGenerationLocale ?? DEFAULT_LOCALE,
 });
 const settings = {
   async get() {

@@ -1,4 +1,5 @@
 import { getReviewScoreValues } from "./review-score.js";
+import { compareText } from "./i18n/format.js";
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -61,9 +62,9 @@ export const Stats = {
       })
       .filter((ev) => !ev.isOverflow)
       .sort((a, b) => {
-        const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
+        const subjectComparison = compareText(a.subjectName, b.subjectName);
         if (subjectComparison !== 0) return subjectComparison;
-        const titleComparison = a.title.localeCompare(b.title, "pt-BR");
+        const titleComparison = compareText(a.title, b.title);
         if (titleComparison !== 0) return titleComparison;
         return b.completedAt.localeCompare(a.completedAt);
       });
@@ -96,7 +97,7 @@ export const Stats = {
         totalQuestions: item.totalQuestions,
         avgScore: item.totalQuestions > 0 ? (item.totalCorrect / item.totalQuestions) * 100 : 0,
       }))
-      .sort((a, b) => a.avgScore - b.avgScore || a.subjectName.localeCompare(b.subjectName, "pt-BR"));
+      .sort((a, b) => a.avgScore - b.avgScore || compareText(a.subjectName, b.subjectName));
 
     return {
       totalQuestions,

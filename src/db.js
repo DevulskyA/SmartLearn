@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
+import { compareText, sameName } from "./i18n/format.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
 import schemaDdl from "./schema-statements.json" with { type: "json" };
 // Canonical migration plan — shared with Rust integration test; neither may duplicate these SQL strings.
@@ -542,13 +543,13 @@ function createBrowserStore() {
   }
 
   function sortByOrderAndName(a, b) {
-    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "pt-BR");
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || compareText(a.name, b.name);
   }
 
   function normalizeUniqueName(items, name, label, currentId = null) {
     const value = normalizeEntityName(name, label);
     const duplicate = items.some(
-      (item) => item.id !== currentId && item.name.localeCompare(value, "pt-BR", { sensitivity: "accent" }) === 0,
+      (item) => item.id !== currentId && sameName(item.name, value),
     );
     if (duplicate) throw new Error("unique constraint");
     return value;
@@ -717,13 +718,13 @@ function createBrowserStore() {
         if (data.newSubjectName) {
           const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
           const existing = state.subjects.find(
-            s => s.isActive && s.name.localeCompare(name, 'pt-BR', { sensitivity: 'accent' }) === 0,
+            s => s.isActive && sameName(s.name, name),
           );
           if (existing) {
             subjectId = existing.id;
           } else {
             const archived = state.subjects.find(
-              s => !s.isActive && s.name.localeCompare(name, 'pt-BR', { sensitivity: 'accent' }) === 0,
+              s => !s.isActive && sameName(s.name, name),
             );
             if (archived) {
               throw new Error('Disciplina "' + archived.name + '" está arquivada. Ative-a antes de criar uma aula.');

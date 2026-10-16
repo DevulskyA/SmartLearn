@@ -16,6 +16,8 @@ import {
 } from "./theme.js";
 import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
+import { formatDate as formatIntlDate } from "./i18n/format.js";
+import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
@@ -357,12 +359,12 @@ function getLocalDateValue(date = new Date()) {
 function formatDate(dateValue, options = {}) {
   if (!dateValue) return "—";
   const date = new Date(`${dateValue.slice(0, 10)}T12:00:00`);
-  return new Intl.DateTimeFormat("pt-BR", {
+  return formatIntlDate(date, {
     day: "2-digit",
     month: "short",
     year: "numeric",
     ...options,
-  }).format(date);
+  });
 }
 
 function getTomorrowValue(today) {
@@ -1064,7 +1066,7 @@ async function renderOfflineToday(accountId) {
   }
   banner.hidden = false;
   banner.textContent = snapshot
-    ? `Modo offline — última sincronização: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(snapshot.syncedAt))}.`
+    ? `Modo offline — última sincronização: ${formatIntlDate(snapshot.syncedAt, { dateStyle: "short", timeStyle: "short" })}.`
     : "Modo offline — nenhuma agenda sincronizada anteriormente.";
 
   const overdue = (snapshot?.items ?? []).filter((i) => i.dueDate < today);
@@ -1104,7 +1106,7 @@ async function renderOfflineToday(accountId) {
     todayLoadSummary.hidden = parts.length === 0;
     todayLoadSummary.textContent = parts.join(" · ");
   }
-  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+  todayDateLabel.textContent = formatIntlDate(new Date(), { weekday: "long", day: "2-digit", month: "long" });
 }
 
 // "Vale reforçar": optional suggestions from the server's explainable priorities
@@ -1319,11 +1321,11 @@ export async function renderToday() {
     todayTomorrow.hidden = true;
   }
 
-  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", {
+  todayDateLabel.textContent = formatIntlDate(new Date(), {
     weekday: "long",
     day: "2-digit",
     month: "long",
-  }).format(new Date());
+  });
 
   // Show/hide daily summary button based on studies with study_date === today
   const todayStudies = learningUnits.filter((u) => u.studyDate === today);
@@ -2716,7 +2718,7 @@ function renderEvolutionSvg(evidence, units, subjects) {
   const xStep = allMonths.length > 1 ? chartW / (allMonths.length - 1) : chartW;
   for (let i = 0; i < allMonths.length; i++) {
     const x = padL + i * xStep;
-    const label = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(`${allMonths[i]}-15T12:00:00`));
+    const label = formatIntlDate(`${allMonths[i]}-15T12:00:00`, { month: "short" });
     const text = document.createElementNS(ns, "text");
     text.setAttribute("x", x);
     text.setAttribute("y", H - padB + 14);
@@ -2781,11 +2783,11 @@ export async function renderSettings() {
   // Language preference has real server authority only. Never present an inert selector in legacy local mode.
   if (generationLanguageCard) generationLanguageCard.hidden = !REMOTE_MODE;
   if (REMOTE_MODE && generationLanguageSelect) {
-    generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? 'pt-BR';
+    generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? DEFAULT_LOCALE;
     syncSelect(generationLanguageSelect);
   }
   lastBackupLabel.textContent = settings?.lastBackupAt
-    ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
+    ? `Último backup: ${formatIntlDate(settings.lastBackupAt, { dateStyle: "medium", timeStyle: "short" })}`
     : "Nenhum backup exportado.";
 
   // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote

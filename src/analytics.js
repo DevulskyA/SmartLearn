@@ -1,4 +1,5 @@
 import { getState, TREND_DELTA_MIN, VERDICT_MIXED_VOLUME_SHARE_MIN } from './performance-thresholds.js';
+import { compareText } from './i18n/format.js';
 
 function getLocalDateValue() {
   const d = new Date();
@@ -209,7 +210,7 @@ export function sortMatrixRows(results, { key, dir }) {
     if (av == null && bv == null) return 0;
     if (av == null) return 1;
     if (bv == null) return -1;
-    const result = av.localeCompare(bv, 'pt-BR', { sensitivity: 'base' });
+    const result = compareText(av, bv, { sensitivity: 'base' });
     return dir === 'asc' ? result : -result;
   };
   if (key === 'practice') return [...results].sort(cmp((r) => r.totalQuestions));

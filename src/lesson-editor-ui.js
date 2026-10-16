@@ -5,6 +5,7 @@
 // DOM semantics matter here because people copy text out of this screen: content lives only in <textarea>s and content <p>s;
 // state words, counts, buttons and findings are separate elements, always separated by real text, never glued to the content.
 import { createTextElement } from "./dom-utils.js";
+import { formatNumber } from "./i18n/format.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import {
@@ -490,7 +491,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       if (text === null || text === undefined || text === "") return;
       dl.append(createTextElement("dt", "lesson-fact-label", label), createTextElement("dd", "lesson-fact-value", text));
     };
-    const nf = new Intl.NumberFormat("pt-BR");
+    const nf = { format: (value) => formatNumber(value) };
     if (scope) {
       fact("Documento", scope.documentName);
       fact("Tema", scope.topic);

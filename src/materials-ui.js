@@ -4,6 +4,7 @@
 // book is never a vertical continuation of the lesson being edited. What belongs to other screens is passed in once through
 // configureMaterialsUI.
 import * as SourceProposalsUI from "./source-proposals-ui.js";
+import { formatNumber } from "./i18n/format.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
@@ -68,7 +69,7 @@ function setSourcesMessage(message = "", isError = false) {
   if (isError && message) sourcesMessage.scrollIntoView({ block: "nearest" });
 }
 
-const nf = new Intl.NumberFormat("pt-BR");
+const nf = { format: (value) => formatNumber(value) }; // resolved per call so the active locale applies
 const rangeLabel = (a, b) => (a === b ? `PDF página ${a}` : `PDF páginas ${a}–${b}`);
 const KIND_LABELS = {
   FRONT_MATTER: "Página de abertura", COPYRIGHT: "Direitos autorais", DEDICATION: "Dedicatória", PREFACE: "Prefácio",

@@ -7,6 +7,7 @@
 // onUnauthenticated below).
 import * as OfflineStore from './offline-store.js';
 import * as AuthUI from './auth-ui.js';
+import { formatDate } from './i18n/format.js';
 
 let indicatorEl = null;
 
@@ -48,7 +49,7 @@ export async function refreshIndicator() {
   const snapshot = accountId ? await OfflineStore.loadSnapshot(accountId) : null;
   el.hidden = false;
   el.textContent = snapshot
-    ? `Você está offline — somente leitura. Última sincronização: ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(snapshot.syncedAt))}.`
+    ? `Você está offline — somente leitura. Última sincronização: ${formatDate(snapshot.syncedAt, { dateStyle: 'short', timeStyle: 'short' })}.`
     : 'Você está offline — nenhuma agenda sincronizada neste dispositivo ainda; ações não estão disponíveis.';
 }
 
