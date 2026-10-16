@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 2, account: 1, navigation: 0, register: 6 };
+const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 0, account: 1, navigation: 0, register: 6 };
 
 let serverProcess;
 let dbDir;

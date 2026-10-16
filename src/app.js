@@ -2810,8 +2810,8 @@ export async function renderSettings() {
     syncSelect(generationLanguageSelect);
   }
   lastBackupLabel.textContent = settings?.lastBackupAt
-    ? `Último backup: ${formatIntlDate(settings.lastBackupAt, { dateStyle: "medium", timeStyle: "short" })}`
-    : "Nenhum backup exportado.";
+    ? t("appBackup.last", { date: formatIntlDate(settings.lastBackupAt, { dateStyle: "medium", timeStyle: "short" }) })
+    : t("appBackup.none");
 
   // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
   // mode (T20) — restoring a snapshot into the server, and a full-account
@@ -2824,7 +2824,7 @@ export async function renderSettings() {
   if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
   if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
   if (REMOTE_MODE) {
-    setResetMessage("Apagar todos os dados ainda não é uma operação suportada no modo servidor.");
+    setResetMessage(t("appBackup.resetUnsupported"));
   }
   // T28: legacy-import migration only exists against the real server
   // (T25-T27) — no local-only equivalent, so it's REMOTE_MODE-only,
@@ -2890,10 +2890,10 @@ export async function exportBackup() {
       console.warn("Não foi possível registrar a data do último backup.", metaError);
     }
     await renderSettings();
-    backupMessage.textContent = "Backup exportado com sucesso.";
+    backupMessage.textContent = t("appBackup.exported");
   } catch (error) {
     backupMessage.classList.add("is-error");
-    backupMessage.textContent = "Não foi possível exportar o backup.";
+    backupMessage.textContent = t("appBackup.exportFailed");
     console.error("Falha ao exportar backup.", error);
   } finally {
     exportBackupButton.disabled = false;
@@ -2955,18 +2955,14 @@ function renderMigrationPreview(preview) {
     migrationConflicts.replaceChildren();
     for (const conflict of preview.conflicts ?? []) {
       const li = document.createElement("li");
-      li.textContent = conflict.reason === 'ARCHIVED_HOMONYM'
-        ? `"${conflict.name}" já existe nesta conta como disciplina arquivada — reative-a nas Disciplinas ou renomeie a de origem e envie o arquivo novamente.`
-        : `"${conflict.name}" já existe nesta conta — renomeie a disciplina de origem e envie o arquivo novamente para importar este item.`;
+      li.textContent = t(conflict.reason === 'ARCHIVED_HOMONYM' ? "appBackup.conflict.archived" : "appBackup.conflict.exists", { name: conflict.name });
       migrationConflicts.append(li);
     }
   }
   if (migrationConfirmBtn) migrationConfirmBtn.disabled = hasConflicts;
   if (migrationPreviewPanel) migrationPreviewPanel.hidden = false;
   if (migrationResultPanel) migrationResultPanel.hidden = true;
-  setMigrationMessage(hasConflicts
-    ? "Há conflitos de nome — resolva-os antes de confirmar (veja a lista abaixo)."
-    : "Revise os itens acima. Confirmar grava esses dados nesta conta.");
+  setMigrationMessage(t(hasConflicts ? "appBackup.preview.hasConflicts" : "appBackup.preview.review"));
 }
 
 migrationChooseFileButton?.addEventListener("click", () => {
@@ -2977,20 +2973,18 @@ migrationFileInput?.addEventListener("change", async () => {
   const [file] = migrationFileInput.files ?? [];
   if (!file) return;
   resetMigrationPanels();
-  setMigrationMessage("Lendo e validando o arquivo…");
+  setMigrationMessage(t("appBackup.reading"));
   try {
     const rawSource = JSON.parse(await readFileText(file));
     const result = await MigrationUI.previewImport(rawSource);
     if (!result.ok) {
-      setMigrationMessage(result.message || "Não foi possível gerar a prévia desta importação.", true);
+      setMigrationMessage(result.message || t("appBackup.previewFailed"), true);
       return;
     }
     renderMigrationPreview(result.preview);
   } catch (error) {
     setMigrationMessage(
-      error instanceof SyntaxError
-        ? "O arquivo selecionado não contém JSON válido."
-        : "Não foi possível ler o arquivo selecionado.",
+      t(error instanceof SyntaxError ? "appBackup.invalidJson" : "appBackup.unreadable"),
       true,
     );
     console.error("Falha ao gerar prévia de migração.", error);
@@ -3001,22 +2995,20 @@ migrationFileInput?.addEventListener("change", async () => {
 
 migrationCancelBtn?.addEventListener("click", () => {
   resetMigrationPanels();
-  setMigrationMessage("Importação cancelada. Nenhum dado foi alterado.");
+  setMigrationMessage(t("appBackup.cancelled"));
 });
 
 migrationConfirmBtn?.addEventListener("click", async () => {
   if (!migrationActivePreview) return;
-  const confirmed = await showConfirm(
-    "Confirmar grava estes dados de forma real e definitiva nesta conta. Continuar?",
-  );
+  const confirmed = await showConfirm(t("appBackup.confirmPrompt"));
   if (!confirmed) return;
 
   migrationConfirmBtn.disabled = true;
-  setMigrationMessage("Confirmando importação…");
+  setMigrationMessage(t("appBackup.committing"));
   try {
     const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
     if (!result.ok) {
-      setMigrationMessage(result.message || "Não foi possível confirmar a importação.", true);
+      setMigrationMessage(result.message || t("appBackup.commitFailed"), true);
       migrationConfirmBtn.disabled = false; // still on the preview panel — must stay clickable to retry
       return;
     }
@@ -3026,8 +3018,7 @@ migrationConfirmBtn?.addEventListener("click", async () => {
     if (migrationResultSummary) {
       const parts = Object.entries(result.commit.counts ?? {})
         .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
-      const verb = result.commit.kind === "LOGICAL_RESTORE" ? "Restauração concluída" : "Importação concluída";
-      migrationResultSummary.textContent = `${verb} — ${parts.join(", ")}.`;
+      migrationResultSummary.textContent = t(result.commit.kind === "LOGICAL_RESTORE" ? "appBackup.done.restore" : "appBackup.done.import", { parts: parts.join(", ") });
     }
     setMigrationMessage("");
     // Deliberately NOT re-enabling migrationConfirmBtn here: the preview
@@ -3038,7 +3029,7 @@ migrationConfirmBtn?.addEventListener("click", async () => {
     // conflict-blocked confirm underneath them.
     await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
   } catch (error) {
-    setMigrationMessage("Não foi possível confirmar a importação.", true);
+    setMigrationMessage(t("appBackup.commitFailed"), true);
     migrationConfirmBtn.disabled = false;
     console.error("Falha ao confirmar migração.", error);
   }
@@ -3906,13 +3897,11 @@ export async function importBackup(file) {
     await DB.importAll(data);
     await renderSubjects();
     await Promise.all([renderToday(), renderStats(), renderSettings()]);
-    backupMessage.textContent = "Backup importado com sucesso.";
+    backupMessage.textContent = t("appBackup.imported");
     showScreen("today", { focus: true });
   } catch (error) {
     backupMessage.classList.add("is-error");
-    backupMessage.textContent = error instanceof SyntaxError
-      ? "O arquivo selecionado não contém JSON válido."
-      : "O backup é inválido ou não pôde ser importado.";
+    backupMessage.textContent = t(error instanceof SyntaxError ? "appBackup.invalidJson" : "appBackup.invalidBackup");
     console.error("Falha ao importar backup.", error);
   }
 }
