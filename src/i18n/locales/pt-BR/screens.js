@@ -3,6 +3,7 @@
 export default {
   'screens.form.summary': 'Resumo Mestre',
   'screens.form.optional': '(opcional)',
+  'screens.form.newSubject': 'Nova disciplina',
   'screens.subjects.eyebrow': 'Organização',
   'screens.subjects.title': 'Disciplinas',
   'screens.subjects.new': '+ Nova disciplina',

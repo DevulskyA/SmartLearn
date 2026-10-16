@@ -3986,7 +3986,7 @@ async function renderStudies() {
       form.className = "study-edit-grid";
 
       const sourceLabel = document.createElement("label");
-      sourceLabel.textContent = "Fonte";
+      sourceLabel.textContent = t("appRegister.field.source");
       const sourceInput = document.createElement("input");
       sourceInput.type = "text";
       sourceInput.className = "study-edit-source";
@@ -3996,7 +3996,7 @@ async function renderStudies() {
       sourceLabel.append(sourceInput);
 
       const dateLabel = document.createElement("label");
-      dateLabel.textContent = "Data";
+      dateLabel.textContent = t("appRegister.field.date");
       const dateInput = document.createElement("input");
       dateInput.type = "date";
       dateInput.className = "study-edit-date";
@@ -4005,7 +4005,7 @@ async function renderStudies() {
       dateLabel.append(dateInput);
 
       const contentLabel = document.createElement("label");
-      contentLabel.textContent = "Conteúdo";
+      contentLabel.textContent = t("appRegister.field.content");
       const contentInput = document.createElement("textarea");
       contentInput.className = "study-edit-content";
       contentInput.rows = 3;
@@ -4025,17 +4025,17 @@ async function renderStudies() {
       saveButton.className = "small-button is-primary";
       saveButton.type = "button";
       saveButton.dataset.action = "save-study";
-      saveButton.textContent = "Salvar";
+      saveButton.textContent = t("appRegister.save");
 
       const cancelButton = document.createElement("button");
       cancelButton.className = "small-button";
       cancelButton.type = "button";
       cancelButton.dataset.action = "cancel-study";
-      cancelButton.textContent = "Cancelar";
+      cancelButton.textContent = t("appRegister.cancel");
 
       actions.append(saveButton, cancelButton);
     } else {
-      info.append(createTextElement("p", "study-title", subject?.name ?? "Sem disciplina"));
+      info.append(createTextElement("p", "study-title", subject?.name ?? t("appRegister.noSubject")));
 
       const meta = document.createElement("div");
       meta.className = "study-meta";
@@ -4044,13 +4044,13 @@ async function renderStudies() {
         createTextElement("span", "study-date-tag", formatDate(record.studyDate)),
       );
       info.append(meta);
-      info.append(createTextElement("p", "study-content", record.title || "Conteúdo indisponível"));
+      info.append(createTextElement("p", "study-content", record.title || t("appRegister.contentUnavailable")));
 
       const editButton = document.createElement("button");
       editButton.className = "small-button";
       editButton.type = "button";
       editButton.dataset.action = "edit-study";
-      editButton.textContent = "Editar";
+      editButton.textContent = t("appRegister.edit");
       actions.append(editButton);
     }
 
@@ -4068,38 +4068,38 @@ async function renderStudies() {
     exerciseAddForm.className = "exercise-add-form";
 
     const qLabel = document.createElement("label");
-    qLabel.textContent = "Enunciado";
+    qLabel.textContent = t("appRegister.exercise.question");
     const qInput = document.createElement("textarea");
     qInput.rows = 2;
     qInput.className = "exercise-question-input";
-    qInput.placeholder = "Enunciado da questão (obrigatório)";
+    qInput.placeholder = t("appRegister.exercise.questionPlaceholder");
     qLabel.append(qInput);
 
     const aLabel = document.createElement("label");
-    aLabel.textContent = "Resposta";
+    aLabel.textContent = t("appRegister.exercise.answer");
     const aInput = document.createElement("textarea");
     aInput.rows = 2;
     aInput.className = "exercise-answer-input";
-    aInput.placeholder = "Resposta esperada";
+    aInput.placeholder = t("appRegister.exercise.answerPlaceholder");
     aLabel.append(aInput);
 
     const hLabel = document.createElement("label");
-    hLabel.textContent = "Dica (opcional)";
+    hLabel.textContent = t("appRegister.exercise.hint");
     const hInput = document.createElement("input");
     hInput.type = "text";
     hInput.className = "exercise-hint-input";
-    hInput.placeholder = "Dica (opcional)";
+    hInput.placeholder = t("appRegister.exercise.hint");
     hLabel.append(hInput);
 
     // "Por quê" only where the store can keep it (the server); the local store has no such column.
     let wLabel = null;
     if (REMOTE_MODE) {
       wLabel = document.createElement("label");
-      wLabel.textContent = "Por quê (opcional)";
+      wLabel.textContent = t("appRegister.exercise.why");
       const wInput = document.createElement("textarea");
       wInput.rows = 2;
       wInput.className = "exercise-why-input";
-      wInput.placeholder = "Por que essa é a resposta? Aparece depois de revelar e ao errar.";
+      wInput.placeholder = t("appRegister.exercise.whyPlaceholder");
       wLabel.append(wInput);
     }
 
@@ -4108,7 +4108,7 @@ async function renderStudies() {
     addBtn.className = "small-button is-primary";
     addBtn.dataset.action = "add-exercise";
     addBtn.dataset.studyId = String(record.id);
-    addBtn.textContent = "Adicionar exercício";
+    addBtn.textContent = t("appRegister.exercise.add");
 
     const exerciseFormMsg = createTextElement("p", "field-message exercise-form-message", "");
     exerciseFormMsg.setAttribute("role", "status");
@@ -4121,7 +4121,7 @@ async function renderStudies() {
     toggleExercisesBtn.className = "small-button";
     toggleExercisesBtn.dataset.action = "toggle-exercises";
     toggleExercisesBtn.dataset.studyId = String(record.id);
-    toggleExercisesBtn.textContent = "Exercícios";
+    toggleExercisesBtn.textContent = t("appRegister.exercise.toggle");
 
     actions.append(toggleExercisesBtn);
 
@@ -4145,8 +4145,8 @@ async function renderExerciseList(unitId) {
 
     const qEl = createTextElement("p", "exercise-question", exercise.questionText);
     const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
-    const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", `Dica: ${exercise.hintText}`) : null;
-    const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", `Por quê: ${exercise.explanationText}`) : null;
+    const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", t("appStudyNow.hint", { text: exercise.hintText })) : null;
+    const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", t("appStudyNow.why", { text: exercise.explanationText })) : null;
 
     const itemActions = document.createElement("div");
     itemActions.className = "exercise-item-actions";
@@ -4157,7 +4157,7 @@ async function renderExerciseList(unitId) {
     editExBtn.dataset.action = "edit-exercise";
     editExBtn.dataset.exerciseId = String(exercise.id);
     editExBtn.dataset.studyId = String(unitId);
-    editExBtn.textContent = "Editar";
+    editExBtn.textContent = t("appRegister.edit");
 
     const delExBtn = document.createElement("button");
     delExBtn.type = "button";
@@ -4165,7 +4165,7 @@ async function renderExerciseList(unitId) {
     delExBtn.dataset.action = "delete-exercise";
     delExBtn.dataset.exerciseId = String(exercise.id);
     delExBtn.dataset.studyId = String(unitId);
-    delExBtn.textContent = "Remover";
+    delExBtn.textContent = t("appRegister.remove");
 
     itemActions.append(editExBtn, delExBtn);
     item.append(qEl, aEl, ...[hEl, wEl].filter(Boolean), itemActions);
@@ -4178,7 +4178,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
     DB.subjects.getActive(),
     DB.subjects.getAll(),
   ]);
-  subjectSelect.replaceChildren(new Option("Selecione…", ""));
+  subjectSelect.replaceChildren(new Option(t("screens.form.select"), ""));
 
   for (const subject of activeSubjects) {
     subjectSelect.add(new Option(subject.name, String(subject.id)));
@@ -4224,7 +4224,7 @@ function renderSubjectList(subjects) {
       input.className = "inline-edit-input";
       input.value = subject.name;
       input.id = `subject-edit-input-${subject.id}`;
-      input.setAttribute("aria-label", "Novo nome da disciplina");
+      input.setAttribute("aria-label", t("appRegister.subject.newNameLabel"));
       input.setAttribute("autocomplete", "off");
 
       const error = document.createElement("span");
@@ -4237,39 +4237,39 @@ function renderSubjectList(subjects) {
       saveBtn.className = "small-button is-primary";
       saveBtn.type = "button";
       saveBtn.dataset.action = "save-subject";
-      saveBtn.textContent = "Salvar";
+      saveBtn.textContent = t("appRegister.save");
 
       const cancelBtn = document.createElement("button");
       cancelBtn.className = "small-button";
       cancelBtn.type = "button";
       cancelBtn.dataset.action = "cancel-subject";
-      cancelBtn.textContent = "Cancelar";
+      cancelBtn.textContent = t("appRegister.cancel");
 
       actions.append(saveBtn, cancelBtn);
     } else {
       // Modo visualização
       info.append(createTextElement("p", "subject-name", subject.name));
-      info.append(createTextElement("span", "subject-status", subject.isActive ? "Ativa" : "Desativada"));
+      info.append(createTextElement("span", "subject-status", t(subject.isActive ? "appRegister.subject.active" : "appRegister.subject.inactive")));
 
       const editButton = document.createElement("button");
       editButton.className = "small-button";
       editButton.type = "button";
       editButton.dataset.action = "edit-subject";
       editButton.dataset.subjectName = subject.name;
-      editButton.textContent = "Editar";
+      editButton.textContent = t("appRegister.edit");
 
       const toggleButton = document.createElement("button");
       toggleButton.className = "small-button";
       toggleButton.type = "button";
       toggleButton.dataset.action = subject.isActive ? "deactivate-subject" : "activate-subject";
-      toggleButton.textContent = subject.isActive ? "Desativar" : "Ativar";
+      toggleButton.textContent = t(subject.isActive ? "appRegister.subject.deactivate" : "appRegister.subject.activate");
 
       const deleteButton = document.createElement("button");
       deleteButton.className = "small-button is-danger";
       deleteButton.type = "button";
       deleteButton.dataset.action = "delete-subject";
       deleteButton.dataset.subjectName = subject.name;
-      deleteButton.textContent = "Excluir";
+      deleteButton.textContent = t("appRegister.subject.delete");
 
       actions.append(editButton, toggleButton, deleteButton);
     }
