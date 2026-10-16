@@ -22,7 +22,8 @@ import appSettings from './pt-BR/appSettings.js';
 import appAccount from './pt-BR/appAccount.js';
 import screens from './pt-BR/screens.js';
 import appBackup from './pt-BR/appBackup.js';
+import appStudyNow from './pt-BR/appStudyNow.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup, appStudyNow };
 
 export default Object.assign({}, ...Object.values(AREAS));

@@ -3080,7 +3080,7 @@ function newStudyNowState(mode, unitId, exercises) {
 
 function resetStudyNowResult() {
   studyNowResultCard.hidden = true;
-  studyNowResultTitle.textContent = "Resultado";
+  studyNowResultTitle.textContent = t("appStudyNow.result");
   studyNowResultText.textContent = "";
   studyNowResultNote.hidden = true;
   studyNowResultNote.textContent = "";
@@ -3093,10 +3093,10 @@ function resetStudyNowResult() {
   studyNowPracticeCard.hidden = false;
 }
 
-const STUDY_PROVENANCE_LABEL = {
-  MANUAL: "Origem: escrita por você",
-  SOURCE: "Origem: material enviado",
-  AI_GENERATED: "Origem: gerada por IA a partir do material",
+const STUDY_PROVENANCE_KEY = {
+  MANUAL: "appStudyNow.origin.manual",
+  SOURCE: "appStudyNow.origin.source",
+  AI_GENERATED: "appStudyNow.origin.ai",
 };
 
 async function startStudyNow(unit, subjectName) {
@@ -3128,7 +3128,11 @@ async function startStudyNow(unit, subjectName) {
     studyNowQuestionArea.hidden = true;
     studyNowNoExercises.hidden = true;
     studyNowProgress.textContent = "";
-    studyNowResumeText.textContent = `Você já respondeu ${snapshot.answeredCount} de ${snapshot.exerciseIds.length} nesta aula (${snapshot.correctCount} ${snapshot.correctCount === 1 ? "acerto" : "acertos"}). Quer continuar de onde parou?`;
+    studyNowResumeText.textContent = t(snapshot.correctCount === 1 ? "appStudyNow.resume.one" : "appStudyNow.resume.other", {
+      answered: snapshot.answeredCount,
+      total: snapshot.exerciseIds.length,
+      correct: snapshot.correctCount,
+    });
     studyNowResume.hidden = false;
     studyNowResumeSnapshot = snapshot;
     studyNowResume.querySelector("#study-now-resume-continue").focus();
@@ -3233,7 +3237,7 @@ function renderStudyNowQuestion() {
   studyNowQuestionText.textContent = exercise.questionText;
   studyNowAnswerText.textContent = exercise.answerText;
   studyNowAnswerText.hidden = true;
-  studyNowExplanationText.textContent = exercise.explanationText ? `Por quê: ${exercise.explanationText}` : "";
+  studyNowExplanationText.textContent = exercise.explanationText ? t("appStudyNow.why", { text: exercise.explanationText }) : "";
   studyNowExplanationText.hidden = true;
   if (exercise.hintText) {
     // Honest reuse, not invention: shown unconditionally exactly like the
@@ -3247,9 +3251,9 @@ function renderStudyNowQuestion() {
   }
   studyNowJudgment.hidden = true;
   studyNowRevealBtn.hidden = false;
-  studyNowRevealBtn.textContent = "Ver resposta";
-  studyNowProgress.textContent = `${state.mode === "retest" ? "Erro" : "Questão"} ${state.index + 1} de ${state.exercises.length}`;
-  studyNowPracticeTitle.textContent = state.mode === "retest" ? "Refazendo seus erros" : "Praticar";
+  studyNowRevealBtn.textContent = t("appStudyNow.reveal");
+  studyNowProgress.textContent = t(state.mode === "retest" ? "appStudyNow.progress.retest" : "appStudyNow.progress.question", { current: state.index + 1, total: state.exercises.length });
+  studyNowPracticeTitle.textContent = t(state.mode === "retest" ? "appStudyNow.practiceTitle.retest" : "appStudyNow.practiceTitle");
   // The Resumo Mestre contains the very answers being retrieved: showing it
   // above a redo question would turn retrieval practice into reading.
   if (state.mode === "retest") studyNowSummaryCard.hidden = true;
@@ -3281,22 +3285,20 @@ async function finishStudyNowSession() {
   }
 
   if (isRetest) {
-    studyNowResultTitle.textContent = "Resultado do reteste";
-    studyNowResultText.textContent = `${correctCount}/${answeredCount} erros corrigidos`;
+    studyNowResultTitle.textContent = t("appStudyNow.result.retest");
+    studyNowResultText.textContent = t("appStudyNow.score.retest", { correct: correctCount, answered: answeredCount });
     studyNowResultNote.hidden = false;
-    studyNowResultNote.textContent = state.wrongExercises.length === 0
-      ? "Você corrigiu todos os erros deste bloco. Acertar logo depois de ver a resposta mostra que você recuperou o conteúdo; a próxima revisão confirma se ficou."
-      : "Acertar logo depois de ver a resposta mostra recuperação, não domínio. O que ainda errou fica abaixo para você fixar.";
+    studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
   } else {
     const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
-    studyNowResultTitle.textContent = "Resultado";
-    studyNowResultText.textContent = `${correctCount}/${answeredCount} corretas — ${pct}%`;
+    studyNowResultTitle.textContent = t("appStudyNow.result");
+    studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
   }
 
   try {
     const tasks = await DB.reviewTasks.getByUnit(unitId);
     const next = getNextReview(unitId, tasks);
-    studyNowNextReviewText.textContent = next ? `Próxima revisão: ${formatDate(next)}` : "Nenhuma revisão pendente.";
+    studyNowNextReviewText.textContent = next ? t("appStudyNow.nextReview", { date: formatDate(next) }) : t("appStudyNow.nextReview.none");
   } catch (error) {
     console.error("Falha ao buscar próxima revisão.", error);
     studyNowNextReviewText.textContent = "";
@@ -3309,15 +3311,11 @@ async function finishStudyNowSession() {
   // "you marked wrong" + the correct answer -- never an invented reason.
   studyNowErrorsList.replaceChildren();
   if (state.wrongExercises.length > 0) {
-    studyNowErrorsTitle.textContent = isRetest
-      ? `Ainda para fixar (${state.wrongExercises.length})`
-      : `Questões para revisar (${state.wrongExercises.length})`;
+    studyNowErrorsTitle.textContent = t(isRetest ? "appStudyNow.errors.retest" : "appStudyNow.errors.initial", { count: state.wrongExercises.length });
     for (const wrong of state.wrongExercises) studyNowErrorsList.append(createStudyErrorItem(wrong));
     studyNowErrorsSection.hidden = false;
     studyNowRetestBtn.hidden = false;
-    studyNowRetestBtn.textContent = isRetest
-      ? `Refazer os que ainda errei (${state.wrongExercises.length})`
-      : `Refazer erros (${state.wrongExercises.length})`;
+    studyNowRetestBtn.textContent = t(isRetest ? "appStudyNow.redo.retest" : "appStudyNow.redo.initial", { count: state.wrongExercises.length });
   } else {
     studyNowErrorsSection.hidden = true;
     studyNowRetestBtn.hidden = true;
@@ -3325,12 +3323,12 @@ async function finishStudyNowSession() {
 
   studyNowCorrectedList.replaceChildren();
   if (isRetest && state.correctedExercises.length > 0) {
-    studyNowCorrectedTitle.textContent = `Corrigidos (${state.correctedExercises.length})`;
+    studyNowCorrectedTitle.textContent = t("appStudyNow.corrected.title", { count: state.correctedExercises.length });
     for (const fixed of state.correctedExercises) {
       const li = document.createElement("li");
       li.className = "study-now-corrected-item";
       li.append(
-        createTextElement("span", "study-now-chip is-corrected", "Corrigido"),
+        createTextElement("span", "study-now-chip is-corrected", t("appStudyNow.corrected.chip")),
         createTextElement("span", "study-now-corrected-question", fixed.questionText),
       );
       studyNowCorrectedList.append(li);
@@ -3355,21 +3353,21 @@ function createStudyErrorItem(exercise) {
   li.className = "study-now-error-item";
   li.append(
     createTextElement("p", "study-now-error-question", exercise.questionText),
-    createTextElement("span", "study-now-chip", "Você marcou: errei"),
+    createTextElement("span", "study-now-chip", t("appStudyNow.error.markedWrong")),
   );
   const answer = document.createElement("div");
   answer.className = "study-now-error-answer-block";
   answer.append(
-    createTextElement("p", "study-now-error-label", "Resposta correta"),
+    createTextElement("p", "study-now-error-label", t("appStudyNow.error.correctAnswer")),
     createTextElement("p", "study-now-error-answer", exercise.answerText),
   );
   li.append(answer);
   if (exercise.explanationText) {
-    li.append(createTextElement("p", "study-now-error-label", "Por quê"), createTextElement("p", "study-now-error-why", exercise.explanationText));
+    li.append(createTextElement("p", "study-now-error-label", t("appStudyNow.whyLabel")), createTextElement("p", "study-now-error-why", exercise.explanationText));
   }
-  if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", `Dica: ${exercise.hintText}`));
-  const origin = STUDY_PROVENANCE_LABEL[exercise.provenance];
-  if (origin) li.append(createTextElement("p", "study-now-error-meta", origin));
+  if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", t("appStudyNow.hint", { text: exercise.hintText })));
+  const originKey = STUDY_PROVENANCE_KEY[exercise.provenance];
+  if (originKey) li.append(createTextElement("p", "study-now-error-meta", t(originKey)));
   // The only explanation the product really holds: the exact source page the
   // question was drafted from (frozen at acceptance). Shown as evidence, not
   // paraphrased -- and absent (nothing invented) for manual exercises.
@@ -3378,7 +3376,7 @@ function createStudyErrorItem(exercise) {
     const details = document.createElement("details");
     details.className = "study-now-source";
     const summary = document.createElement("summary");
-    summary.textContent = `Trecho do material · ${citation.sourceName}, página ${citation.pageIndex}`;
+    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
     details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
     li.append(details);
   }
