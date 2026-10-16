@@ -5,6 +5,7 @@
 // Moved out of src/app.js unchanged in behaviour. It owns no state and reads no globals: the only thing it
 // needs from the outside (the remote learning-units API) is passed in by the caller.
 import { createTextElement } from "./dom-utils.js";
+import { t, tn } from "./i18n/index.js";
 
 // "3", "1–3", "1, 3–4": a compact page list for provenance labels.
 export function formatPageList(pageIndexes) {
@@ -30,7 +31,7 @@ export function createSourceDetails(label, pages) {
   for (const page of pages) {
     if (!page.text) continue;
     details.append(
-      createTextElement("p", "study-now-error-label", `Página ${page.pageIndex}`),
+      createTextElement("p", "study-now-error-label", t("sourceDetails.pageLabel", { pageIndex: page.pageIndex })),
       createTextElement("p", "study-now-source-text", page.text),
     );
   }
@@ -54,7 +55,7 @@ export async function appendSummarySources(container, unitId, learningUnits) {
   const name = sources[0].sourceName;
   const pages = sources.map((s) => s.pageIndex);
   container.append(createSourceDetails(
-    `Origem do resumo · ${name}, ${pages.length > 1 ? "páginas" : "página"} ${formatPageList(pages)}`,
+    tn("sourceDetails.summaryOrigin", pages.length, { name, pages: formatPageList(pages) }),
     sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
   ));
 }

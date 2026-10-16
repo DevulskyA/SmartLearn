@@ -6,13 +6,14 @@
 // (creates a real unit/exercises/reviews), and it is idempotent — calling
 // it again for an already-accepted draft returns the original result.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
+import { t } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
     return { ok: false, code: err.code, message: err.message, field: err.field };
   }
   if (err instanceof NetworkError) {
-    return { ok: false, code: 'NETWORK_ERROR', message: 'Não foi possível contatar o servidor. Verifique sua conexão e tente novamente.' };
+    return { ok: false, code: 'NETWORK_ERROR', message: t('draftReview.networkError') };
   }
   throw err;
 }

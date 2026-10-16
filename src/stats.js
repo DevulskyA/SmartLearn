@@ -1,5 +1,6 @@
 import { getReviewScoreValues } from "./review-score.js";
 import { compareText } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -55,8 +56,8 @@ export const Stats = {
         return {
           ...ev,
           ...values,
-          subjectName: subject?.name ?? "Sem disciplina",
-          title: unit?.title ?? "Conteúdo indisponível",
+          subjectName: subject?.name ?? t("stats.noSubject"),
+          title: unit?.title ?? t("stats.unavailableContent"),
           completedAt: ev.completedAt ?? "",
         };
       })

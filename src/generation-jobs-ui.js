@@ -2,10 +2,11 @@
 // talks to the server. A job is generated outside the request that created it, so the student can leave and come back; the state
 // shown always comes from here, never from a timer that started in the browser.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
+import { t } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) return { ok: false, code: err.code, message: err.message, field: err.field };
-  if (err instanceof NetworkError) return { ok: false, code: 'NETWORK_ERROR', message: 'Não foi possível contatar o servidor. Verifique sua conexão e tente novamente.' };
+  if (err instanceof NetworkError) return { ok: false, code: 'NETWORK_ERROR', message: t('generationJobs.networkError') };
   throw err;
 }
 
