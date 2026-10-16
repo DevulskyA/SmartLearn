@@ -18,6 +18,7 @@ import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
 import { formatDate as formatIntlDate } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
+import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
@@ -30,6 +31,9 @@ import { createTextElement } from "./dom-utils.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
+
+// index.html carries the pt-BR text only as first-paint fallback; every [data-i18n*] element is filled from the catalog.
+applyStaticTexts(document);
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;

@@ -20,7 +20,8 @@ import appStudies from './pt-BR/appStudies.js';
 import appStats from './pt-BR/appStats.js';
 import appSettings from './pt-BR/appSettings.js';
 import appAccount from './pt-BR/appAccount.js';
+import screens from './pt-BR/screens.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens };
 
 export default Object.assign({}, ...Object.values(AREAS));
