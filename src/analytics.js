@@ -231,6 +231,44 @@ export function sortMatrixRows(results, { key, dir }) {
   return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
 }
 
+// Evolution chart data (Estatísticas): per subject, accuracy in percent for each calendar month ("YYYY-MM") that has evidence,
+// null where a subject has none. `periodMonths` > 0 keeps the last N months counted from `today` (UTC month arithmetic);
+// 0 keeps everything. `subjectFilter` is a subject id as a string, "" for all. Pure: the chart drawing stays in app.js.
+export function monthlyAccuracySeries(evidence, units, subjects, { subjectFilter = '', periodMonths = 6, today } = {}) {
+  const cutoff = periodMonths > 0
+    ? (() => { const d = new Date(`${today}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - periodMonths); return d.toISOString().slice(0, 7); })()
+    : '0000-01';
+  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
+
+  const dataBySubject = new Map();
+  for (const ev of evidence) {
+    const month = ev.evidenceDate.slice(0, 7);
+    if (month < cutoff) continue;
+    const subjectId = unitToSubject.get(ev.unitId);
+    if (!subjectId) continue;
+    if (subjectFilter && String(subjectId) !== subjectFilter) continue;
+    if (!dataBySubject.has(subjectId)) dataBySubject.set(subjectId, new Map());
+    const monthMap = dataBySubject.get(subjectId);
+    if (!monthMap.has(month)) monthMap.set(month, { q: 0, c: 0 });
+    const m = monthMap.get(month);
+    m.q += ev.questionsCount;
+    m.c += ev.correctCount;
+  }
+  if (dataBySubject.size === 0) return { months: [], series: [] };
+
+  const months = [...new Set([...dataBySubject.values()].flatMap((mm) => [...mm.keys()]))].sort();
+  const series = [];
+  for (const [subjectId, monthMap] of dataBySubject) {
+    const points = months.map((m) => {
+      const d = monthMap.get(m);
+      return d && d.q > 0 ? (d.c / d.q) * 100 : null;
+    });
+    series.push({ subject: subjectsById.get(subjectId), points, subjectId });
+  }
+  return { months, series };
+}
+
 export const Analytics = {
   // Returns performance summary per subject
   bySubject(evidence, units, subjects, today = getLocalDateValue()) {

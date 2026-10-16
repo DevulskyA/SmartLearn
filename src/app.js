@@ -15,7 +15,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
-import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText } from "./analytics.js";
+import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
@@ -2670,52 +2670,12 @@ function showUnitDetail(r) {
 
 function renderEvolutionSvg(evidence, units, subjects) {
   if (!evolutionSvg) return false;
-  const subjectFilter = evolutionFilterSubject?.value ?? "";
-  const periodMonths = Number(evolutionFilterPeriod?.value ?? "6");
-  const today = getLocalDateValue();
-  const cutoff = periodMonths > 0
-    ? (() => { const d = new Date(`${today}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - periodMonths); return d.toISOString().slice(0, 7); })()
-    : "0000-01";
-
-  // Map unitId → subjectId
-  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-
-  // Group evidence by month + subject, compute weighted_accuracy per month per subject
-  const dataBySubject = new Map();
-  for (const ev of evidence) {
-    const month = ev.evidenceDate.slice(0, 7);
-    if (month < cutoff) continue;
-    const subjectId = unitToSubject.get(ev.unitId);
-    if (!subjectId) continue;
-    if (subjectFilter && String(subjectId) !== subjectFilter) continue;
-    if (!dataBySubject.has(subjectId)) dataBySubject.set(subjectId, new Map());
-    const monthMap = dataBySubject.get(subjectId);
-    if (!monthMap.has(month)) monthMap.set(month, { q: 0, c: 0 });
-    const m = monthMap.get(month);
-    m.q += ev.questionsCount;
-    m.c += ev.correctCount;
-  }
-
-  if (dataBySubject.size === 0) { evolutionSvg.hidden = true; return false; }
-
-  // Collect all months and sort
-  const allMonths = [...new Set(
-    [...dataBySubject.values()].flatMap((mm) => [...mm.keys()])
-  )].sort();
-
+  const { months: allMonths, series } = monthlyAccuracySeries(evidence, units, subjects, {
+    subjectFilter: evolutionFilterSubject?.value ?? "",
+    periodMonths: Number(evolutionFilterPeriod?.value ?? "6"),
+    today: getLocalDateValue(),
+  });
   if (allMonths.length < 1) { evolutionSvg.hidden = true; return false; }
-
-  // Build series per subject
-  const series = [];
-  for (const [subjectId, monthMap] of dataBySubject) {
-    const subject = subjectsById.get(subjectId);
-    const points = allMonths.map((m) => {
-      const d = monthMap.get(m);
-      return d && d.q > 0 ? (d.c / d.q) * 100 : null;
-    });
-    series.push({ subject, points, subjectId });
-  }
 
   // SVG layout
   const W = 320, H = 160, padL = 36, padR = 12, padT = 10, padB = 28;
