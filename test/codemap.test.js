@@ -25,7 +25,9 @@ function citedPaths(markdown) {
 test('CODEMAP.md cites paths, and every cited path exists', () => {
   const paths = citedPaths(map);
   assert.ok(paths.length >= 30, `the map should cite its modules (found ${paths.length})`);
-  const missing = paths.filter((p) => !existsSync(join(root, p)));
+  // Paths the map names precisely because they must NOT be committed: they exist on a developer machine, never in a clean checkout (CI).
+  const NEVER_COMMITTED = new Set(['.specs/benchmarks/']);
+  const missing = paths.filter((p) => !NEVER_COMMITTED.has(p) && !existsSync(join(root, p)));
   assert.deepEqual(missing, [], `CODEMAP.md cites paths that no longer exist: ${missing.join(', ')}`);
 });
 
