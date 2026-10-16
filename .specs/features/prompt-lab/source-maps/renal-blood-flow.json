@@ -19,7 +19,7 @@
     { "id": "C15", "label": "Princípio de Fick", "anyOf": [["fick"]] },
     { "id": "C16", "label": "PAH: propriedades que o tornam ideal", "anyOf": [["pah", "metaboliz"]] },
     { "id": "C17", "label": "RPF efetivo = depuração de PAH; subestima o verdadeiro em ~10%", "anyOf": [["10%", "efetivo"]] },
-    { "id": "C18", "label": "RBF = RPF/(1 − Hct)", "anyOf": [["hematocrito", "rpf"], ["hct", "rpf"]] },
+    { "id": "C18", "label": "RBF = RPF/(1 − Hct)", "anyOf": [["hematocrito", "rpf"], ["hct", "rpf"], ["hematocrito", "fpr"], ["hct", "fpr"]] },
     { "id": "C19", "label": "Exemplo numérico (600 e 1091 mL/min)", "anyOf": [["1091"]] }
   ]
 }

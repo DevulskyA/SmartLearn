@@ -422,3 +422,44 @@ test('real API: a second account never sees the first account\'s subjects, and a
   globalThis.fetch = realFetch;
   await assert.rejects(() => DB.subjects.getAll(), (err) => err instanceof ApiError && err.status === 401);
 });
+
+// -- 4. Generation language (R-13) and the day the browser calls "today" ---------------------------------------------------
+test('settings.update sends only the recognised fields, and generationLocale round-trips through the real server', async () => {
+  await bootstrapSession('remotestore-lang@example.com');
+  try {
+    const before = await DB.settings.get();
+    assert.equal(before.generationLocale, null, 'not chosen yet');
+    assert.equal(before.effectiveGenerationLocale, 'pt-BR');
+
+    // an unrecognised field next to a recognised one is dropped, never forwarded
+    const after = await DB.settings.update({ generationLocale: 'es', appVersion: '9.9.9' });
+    assert.equal(after.generationLocale, 'es');
+    assert.equal(after.effectiveGenerationLocale, 'es');
+    assert.equal(after.timezone, before.timezone, 'choosing a language leaves the timezone alone');
+    assert.equal(after.uiLocale, before.uiLocale, 'the generation language never moves the interface language');
+
+    const reloaded = await DB.settings.get();
+    assert.equal(reloaded.generationLocale, 'es', 'the server, not the page, holds the choice');
+    await assert.rejects(() => DB.settings.update({ generationLocale: 'xx' }), (err) => err instanceof ApiError && err.status === 400, 'an unsupported language is refused, never replaced by a near one');
+    assert.equal((await DB.settings.get()).generationLocale, 'es', 'a refused value changes nothing');
+  } finally { globalThis.fetch = realFetch; setCsrfToken(null); }
+});
+
+test("the agenda request carries the browser's timezone with the day it calls today (CI #48: browser UTC vs saved America/Sao_Paulo)", async () => {
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    return new Response(JSON.stringify({ date: '2026-10-09', today: [], overdue: [], completedToday: [], tomorrow: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await DB.reviewTasks.getCompletedToday('2026-10-09');
+    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    assert.equal(urls.length, 1);
+    const query = new URL(urls[0]).searchParams;
+    assert.equal(query.get('date'), '2026-10-09');
+    assert.equal(query.get('timezone'), browserZone);
+    urls.length = 0;
+    await DB.reviewTasks.getCompletedToday();
+    assert.equal(new URL(urls[0]).searchParams.get('timezone'), null, 'without a date there is nothing to disambiguate: the saved timezone applies');
+  } finally { globalThis.fetch = realFetch; }
+});
