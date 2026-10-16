@@ -8,6 +8,8 @@ import { t, tn, has, setLocale, getLocale, registerCatalog } from '../src/i18n/i
 import ptBR from '../src/i18n/locales/pt-BR.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Built from code points on purpose: the repository's mojibake guard (scripts/text-integrity.mjs) flags the characters themselves.
+const MOJIBAKE = new RegExp([0xC3, 0xC2, 0xFFFD].map((code) => String.fromCodePoint(code)).join('|'));
 afterEach(() => { setLocale('pt-BR'); });
 
 test('a known key returns the pt-BR text; an unknown key returns the key itself (nothing is invented)', () => {
@@ -71,6 +73,7 @@ test('catalog keys follow area.what.detail and no value is empty or mojibake', (
   for (const [key, value] of Object.entries(ptBR)) {
     assert.match(key, /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_-]+)+$/, key);
     assert.ok(typeof value === 'string' && value.trim() !== '', `${key} is empty`);
-    assert.doesNotMatch(value, /Ã|Â|�/, `${key} looks like mojibake`);
+    // escapes, not the characters: the repository's mojibake guard (scripts/text-integrity.mjs) would flag the literals themselves
+    assert.doesNotMatch(value, MOJIBAKE, `${key} looks like mojibake`);
   }
 });
