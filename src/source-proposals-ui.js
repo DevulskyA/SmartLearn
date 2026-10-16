@@ -5,13 +5,14 @@
 // or any other real learning-domain row is ever created by this module —
 // that stays a separate, explicit acceptance step (T38), not built yet.
 import { apiRequest, apiUpload, ApiError, NetworkError } from './api-client.js';
+import { t, tn } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
     return { ok: false, code: err.code, message: err.message, field: err.field };
   }
   if (err instanceof NetworkError) {
-    return { ok: false, code: 'NETWORK_ERROR', message: 'Não foi possível contatar o servidor. Verifique sua conexão e tente novamente.' };
+    return { ok: false, code: 'NETWORK_ERROR', message: t('proposals.network.unreachable') };
   }
   throw err;
 }
@@ -63,9 +64,10 @@ export function isAlreadyProcessed(code) {
 
 /** The same PDF sent again lands on its existing trechos; this is what the student is told. */
 export function alreadyProcessedMessage(count, extraction) {
-  const shown = `${count} ${count === 1 ? "trecho existente" : "trechos existentes"}`;
+  // Explicit 1 check: the old rule made 0 plural, while the pt-BR plural category treats 0 as singular.
+  const shown = count === 1 ? t('proposals.existing.one', { count }) : t('proposals.existing.other', { count });
   const skipped = skippedPagesNote(extraction);
-  return `Este PDF já foi processado: ${shown}, com o que você já fez neles.${skipped ? ` ${skipped}` : ""}`;
+  return skipped ? t('proposals.processed.withSkipped', { shown, skipped }) : t('proposals.processed.message', { shown });
 }
 
 export async function listProposals(sourceId) {
@@ -116,7 +118,7 @@ const PAGES_SHOWN = 8;
 /** "p. 2, 5" — long lists are shortened, the count in front stays exact. */
 function pageList(pages) {
   const shown = pages.slice(0, PAGES_SHOWN).join(", ");
-  return pages.length > PAGES_SHOWN ? `p. ${shown} e mais ${pages.length - PAGES_SHOWN}` : `p. ${shown}`;
+  return pages.length > PAGES_SHOWN ? t('proposals.pages.listMore', { pages: shown, more: pages.length - PAGES_SHOWN }) : t('proposals.pages.list', { pages: shown });
 }
 
 /**
@@ -128,10 +130,11 @@ export function skippedPagesNote(extraction) {
   const failed = extraction?.failedPages ?? [];
   const parts = [];
   if (empty.length > 0) {
-    parts.push(`${empty.length} ${empty.length === 1 ? "página sem texto extraível" : "páginas sem texto extraível"} (${pageList(empty)}) ${empty.length === 1 ? "ficou" : "ficaram"} de fora dos trechos — provavelmente imagem ou digitalização. O resumo não cobre ${empty.length === 1 ? "essa página" : "essas páginas"}.`);
+    // Both counts are >= 1 here, so the plural category matches the old `=== 1` rule.
+    parts.push(tn('proposals.skipped.empty', empty.length, { pages: pageList(empty) }));
   }
   if (failed.length > 0) {
-    parts.push(`${failed.length} ${failed.length === 1 ? "página não pôde ser lida" : "páginas não puderam ser lidas"} (${pageList(failed)}).`);
+    parts.push(tn('proposals.skipped.failed', failed.length, { pages: pageList(failed) }));
   }
   return parts.join(" ");
 }
@@ -139,10 +142,10 @@ export function skippedPagesNote(extraction) {
 /** The message for an extraction that produced no usable text; the image-only case says what to do next. */
 export function unreadableSourceMessage(status) {
   const reasons = {
-    ENCRYPTED: "Este PDF está criptografado e não pode ser lido.",
-    TIMEOUT: "A extração excedeu o tempo limite.",
-    IMAGE_ONLY_OR_UNREADABLE: "Este PDF parece ser apenas imagem (sem texto extraível). Envie uma versão com texto selecionável (por exemplo, exportada do arquivo original) ou use Plano para criar a aula à mão.",
-    EXTRACTION_FAILED: "Não foi possível extrair o texto deste PDF.",
+    ENCRYPTED: t('proposals.unreadable.encrypted'),
+    TIMEOUT: t('proposals.unreadable.timeout'),
+    IMAGE_ONLY_OR_UNREADABLE: t('proposals.unreadable.imageOnly'),
+    EXTRACTION_FAILED: t('proposals.unreadable.failed'),
   };
-  return reasons[status] || "Não foi possível extrair o texto deste PDF.";
+  return reasons[status] || t('proposals.unreadable.failed');
 }
