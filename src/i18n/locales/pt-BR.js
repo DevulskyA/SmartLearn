@@ -13,7 +13,14 @@ import proposals from './pt-BR/proposals.js';
 import editor from './pt-BR/editor.js';
 import materials from './pt-BR/materials.js';
 import localStore from './pt-BR/localStore.js';
+import appShell from './pt-BR/appShell.js';
+import appToday from './pt-BR/appToday.js';
+import appPlan from './pt-BR/appPlan.js';
+import appStudies from './pt-BR/appStudies.js';
+import appStats from './pt-BR/appStats.js';
+import appSettings from './pt-BR/appSettings.js';
+import appAccount from './pt-BR/appAccount.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount };
 
 export default Object.assign({}, ...Object.values(AREAS));
