@@ -10,7 +10,10 @@ import status from './pt-BR/status.js';
 import store from './pt-BR/store.js';
 import lesson from './pt-BR/lesson.js';
 import proposals from './pt-BR/proposals.js';
+import editor from './pt-BR/editor.js';
+import materials from './pt-BR/materials.js';
+import localStore from './pt-BR/localStore.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore };
 
 export default Object.assign({}, ...Object.values(AREAS));
