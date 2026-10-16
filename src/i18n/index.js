@@ -17,6 +17,8 @@ let activeLocale = DEFAULT_LOCALE;
 /** The locale the interface is shown in. An unsupported tag leaves the default in place. */
 export function setLocale(tag) {
   activeLocale = resolveSupportedLocale(tag) ?? DEFAULT_LOCALE;
+  // the document says which language it is in (screen readers pick the voice from it); index.html starts as pt-BR
+  if (typeof document !== 'undefined') document.documentElement.lang = activeLocale;
   return activeLocale;
 }
 

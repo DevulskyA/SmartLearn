@@ -440,14 +440,17 @@ function createExerciseRow(exercise) {
 
   const questionsCell = document.createElement("td");
   questionsCell.dataset.cell = "q";
+  questionsCell.dataset.prefix = t("statsView.exercises.prefix.q");
   questionsCell.textContent = exercise.questionsCount == null ? "—" : String(exercise.questionsCount);
 
   const correctCell = document.createElement("td");
   correctCell.dataset.cell = "a";
+  correctCell.dataset.prefix = t("statsView.exercises.prefix.a");
   correctCell.textContent = String(exercise.correctCount);
 
   const scoreCell = document.createElement("td");
   scoreCell.dataset.cell = "score";
+  scoreCell.dataset.prefix = t("statsView.exercises.prefix.score");
   scoreCell.append(createPerformanceBadge(exercise.scorePercent));
 
   row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);

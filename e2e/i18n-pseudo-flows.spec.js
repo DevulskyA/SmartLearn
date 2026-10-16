@@ -277,6 +277,17 @@ test('pseudo-locale: the texts of the data-driven states, and where they come fr
   await measure('stats_unit', '#screen-stats', pseudo.locator('#view-stats-unit'));
   const exerciseRow = pseudo.locator('#exercise-notes-body .exercise-row').first();
   await expect(exerciseRow).toBeVisible({ timeout: 8000 });
+  // Text drawn by CSS (content: attr(data-prefix)) is not in the DOM, so the text-node measurement cannot see it: read what the
+  // browser would print before each cell, on the narrow layout where the table turns into cards.
+  await pseudo.setViewportSize({ width: 390, height: 800 });
+  const printedBefore = await pseudo.evaluate(() => ['q', 'a', 'score'].map((cell) => {
+    const el = document.querySelector(`.stats-table-exercises td[data-cell="${cell}"]`);
+    return el ? getComputedStyle(el, '::before').content : null;
+  }));
+  expect(printedBefore, 'the narrow exercise table prints its Q / A / Nota prefixes from the catalog').toEqual(['"⟦Q ⟧"', '"⟦ · A ⟧"', '"⟦ · Nota ⟧"']);
+  await pseudo.setViewportSize({ width: 1280, height: 800 });
+  // the document language follows the active locale (the pseudo locale is registered as "en")
+  await expect(pseudo.locator('html')).toHaveAttribute('lang', 'en');
   await exerciseRow.click();
   await measure('stats_exercise_detail', '#exercise-detail-dialog', pseudo.locator('#exercise-detail-dialog .exercise-attempt-item').first());
   await pseudo.locator('#exercise-detail-close').click();

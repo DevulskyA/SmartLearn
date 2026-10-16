@@ -1,5 +1,9 @@
 // Estatisticas screen: verdict, matrices, unit detail and exercise attempt dialog (src/app.js)
 export default {
+  // Exercise table, narrow layout: the CSS prints these before the cell value (content: attr(data-prefix)); the spaces are part of the text
+  'statsView.exercises.prefix.q': 'Q ',
+  'statsView.exercises.prefix.a': ' · A ',
+  'statsView.exercises.prefix.score': ' · Nota ',
   // Exercise attempt dialog
   'statsView.attempt.outcome.correct': 'Acertou',
   'statsView.attempt.outcome.incorrect': 'Errou',

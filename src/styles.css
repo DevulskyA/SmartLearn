@@ -3064,19 +3064,19 @@ h1 {
   }
 
   .stats-table-exercises td[data-cell="q"]::before {
-    content: "Q ";
+    content: attr(data-prefix);
     font-weight: 700;
     color: var(--color-muted);
   }
 
   .stats-table-exercises td[data-cell="a"]::before {
-    content: " · A ";
+    content: attr(data-prefix);
     font-weight: 700;
     color: var(--color-muted);
   }
 
   .stats-table-exercises td[data-cell="score"]::before {
-    content: " · Nota ";
+    content: attr(data-prefix);
     font-weight: 700;
     color: var(--color-muted);
   }
