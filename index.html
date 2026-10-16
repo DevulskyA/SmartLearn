@@ -671,38 +671,38 @@
         <section class="screen" id="screen-materials" data-screen-panel="materials" aria-labelledby="title-materials" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Fontes</p>
-              <h1 id="title-materials">Materiais</h1>
+              <p class="eyebrow" data-i18n="screens.materials.eyebrow">Fontes</p>
+              <h1 id="title-materials" data-i18n="screens.materials.title">Materiais</h1>
             </div>
           </div>
           <section class="settings-card" id="sources-card" aria-labelledby="sources-title">
             <div class="section-heading">
-              <p class="eyebrow">Fontes</p>
-              <h2 id="sources-title">Fontes em PDF</h2>
-              <p>Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo.</p>
+              <p class="eyebrow" data-i18n="screens.materials.eyebrow">Fontes</p>
+              <h2 id="sources-title" data-i18n="screens.materials.sources.title">Fontes em PDF</h2>
+              <p data-i18n="screens.materials.sources.body">Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo.</p>
             </div>
             <div class="settings-actions">
-              <button class="secondary-button file-button" id="sources-choose-file" type="button">Selecionar PDF</button>
+              <button class="secondary-button file-button" id="sources-choose-file" type="button" data-i18n="screens.materials.sources.choose">Selecionar PDF</button>
               <input class="visually-hidden" id="sources-file-input" type="file" accept=".pdf,application/pdf" tabindex="-1" aria-hidden="true" />
             </div>
             <div class="sources-existing" id="sources-existing" hidden>
-              <h3 class="sources-subheading" id="sources-existing-title">Documentos já enviados</h3>
+              <h3 class="sources-subheading" id="sources-existing-title" data-i18n="screens.materials.existing.title">Documentos já enviados</h3>
               <ul class="sources-existing-list" id="sources-existing-list" aria-labelledby="sources-existing-title"></ul>
             </div>
             <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
             <div id="sources-proposals-panel" hidden>
               <p id="sources-coverage-note" class="form-message" role="note" hidden></p>
               <div class="sources-drafts" id="sources-drafts" hidden>
-                <h3 class="sources-subheading" id="sources-drafts-title">Rascunhos em andamento</h3>
+                <h3 class="sources-subheading" id="sources-drafts-title" data-i18n="screens.materials.drafts.title">Rascunhos em andamento</h3>
                 <ul class="sources-drafts-list" id="sources-drafts-list" aria-labelledby="sources-drafts-title"></ul>
               </div>
               <div class="sources-topic">
-                <h3 class="sources-subheading" id="sources-topic-title">O que você quer estudar?</h3>
+                <h3 class="sources-subheading" id="sources-topic-title" data-i18n="screens.materials.topic.title">O que você quer estudar?</h3>
                 <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-topic-title">
-                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Measurement of Glomerular Filtration Rate" aria-describedby="sources-topic-hint" />
-                  <button class="primary-button" type="submit">Buscar</button>
+                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Measurement of Glomerular Filtration Rate" data-i18n-placeholder="screens.materials.topic.placeholder" aria-describedby="sources-topic-hint" />
+                  <button class="primary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
                 </form>
-                <p class="lesson-hint" id="sources-topic-hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
+                <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
                 <ul class="sources-topic-results" id="sources-topic-results"></ul>
               </div>
               <details class="sources-index" id="sources-index">
@@ -714,9 +714,9 @@
                 <ul id="sources-editorial-list" class="sources-proposals-list"></ul>
               </details>
             </div>
-            <div class="sources-generation" id="sources-generation" role="group" aria-label="Geração em andamento" hidden></div>
+            <div class="sources-generation" id="sources-generation" role="group" aria-label="Geração em andamento" data-i18n-aria-label="screens.materials.generation.label" hidden></div>
           </section>
-          <section class="settings-card lesson-view" id="sources-editor-view" aria-label="Aula em edição" hidden></section>
+          <section class="settings-card lesson-view" id="sources-editor-view" aria-label="Aula em edição" data-i18n-aria-label="screens.materials.editor.label" hidden></section>
         </section>
 
         <section class="screen" id="screen-exam" data-screen-panel="exam" aria-labelledby="title-exam" hidden>
@@ -728,36 +728,36 @@
           </div>
           <p class="form-message" id="exam-message" role="status" aria-live="polite"></p>
 
-          <section class="settings-card" id="exam-taking" aria-label="Fazendo a prova" hidden>
+          <section class="settings-card" id="exam-taking" aria-label="Fazendo a prova" data-i18n-aria-label="screens.exam.taking.label" hidden>
             <p class="study-now-progress" id="exam-progress"></p>
             <p id="exam-question-text"></p>
-            <label class="exam-answer-label" for="exam-answer-input">Sua resposta</label>
+            <label class="exam-answer-label" for="exam-answer-input" data-i18n="screens.exam.answer">Sua resposta</label>
             <textarea id="exam-answer-input" rows="5" maxlength="5000" aria-describedby="exam-progress exam-question-text"></textarea>
             <div class="settings-actions">
-              <button class="secondary-button" id="exam-prev-btn" type="button">Anterior</button>
-              <button class="secondary-button" id="exam-next-btn" type="button">Próxima</button>
+              <button class="secondary-button" id="exam-prev-btn" type="button" data-i18n="screens.exam.prev">Anterior</button>
+              <button class="secondary-button" id="exam-next-btn" type="button" data-i18n="screens.exam.next">Próxima</button>
             </div>
-            <ol class="exam-nav" id="exam-nav" aria-label="Questões da prova"></ol>
+            <ol class="exam-nav" id="exam-nav" aria-label="Questões da prova" data-i18n-aria-label="screens.exam.navLabel"></ol>
             <div class="settings-actions">
-              <button class="primary-button" id="exam-submit-btn" type="button">Submeter prova</button>
-              <button class="primary-button" id="exam-submit-confirm-btn" type="button" hidden>Confirmar submissão</button>
-              <button class="secondary-button" id="exam-submit-cancel-btn" type="button" hidden>Continuar respondendo</button>
+              <button class="primary-button" id="exam-submit-btn" type="button" data-i18n="screens.exam.submit">Submeter prova</button>
+              <button class="primary-button" id="exam-submit-confirm-btn" type="button" hidden data-i18n="screens.exam.submitConfirm">Confirmar submissão</button>
+              <button class="secondary-button" id="exam-submit-cancel-btn" type="button" hidden data-i18n="screens.exam.submitCancel">Continuar respondendo</button>
             </div>
             <p class="form-message" id="exam-submit-warning" role="status" aria-live="polite" hidden></p>
           </section>
 
-          <section class="settings-card" id="exam-submitted" aria-label="Prova submetida" hidden>
-            <h2 id="exam-submitted-title" tabindex="-1">Correção da prova</h2>
+          <section class="settings-card" id="exam-submitted" aria-label="Prova submetida" data-i18n-aria-label="screens.exam.submitted.label" hidden>
+            <h2 id="exam-submitted-title" tabindex="-1" data-i18n="screens.exam.submitted.title">Correção da prova</h2>
             <p id="exam-submitted-text"></p>
             <p class="study-result-score" id="exam-result-score" hidden></p>
             <p class="exam-counts" id="exam-counts" hidden></p>
             <ol class="exam-review-list" id="exam-review-list"></ol>
             <p class="form-message" id="exam-final-note" role="status" aria-live="polite" hidden></p>
             <div class="settings-actions">
-              <button class="primary-button" id="exam-finalize-btn" type="button" hidden>Concluir e registrar o resultado</button>
+              <button class="primary-button" id="exam-finalize-btn" type="button" hidden data-i18n="screens.exam.finalize">Concluir e registrar o resultado</button>
               <button class="primary-button" id="exam-retest-btn" type="button" hidden>Refazer erros</button>
-              <button class="secondary-button" id="exam-back-btn" type="button">Voltar para o Plano</button>
-              <button class="secondary-button" id="exam-today-btn" type="button">Ir para Hoje</button>
+              <button class="secondary-button" id="exam-back-btn" type="button" data-i18n="screens.exam.backToPlan">Voltar para o Plano</button>
+              <button class="secondary-button" id="exam-today-btn" type="button" data-i18n="screens.exam.toToday">Ir para Hoje</button>
             </div>
           </section>
         </section>
@@ -772,7 +772,7 @@
 
           <section class="settings-card" id="study-now-summary-card" aria-labelledby="study-now-summary-title" hidden>
             <div class="section-heading compact-heading">
-              <h2 id="study-now-summary-title">Resumo Mestre</h2>
+              <h2 id="study-now-summary-title" data-i18n="screens.studyNow.summary">Resumo Mestre</h2>
             </div>
             <p id="study-now-summary-body"></p>
           </section>
@@ -785,8 +785,8 @@
             <div class="study-now-resume" id="study-now-resume" role="group" aria-labelledby="study-now-resume-text" hidden>
               <p id="study-now-resume-text"></p>
               <div class="settings-actions">
-                <button class="primary-button" id="study-now-resume-continue" type="button">Continuar de onde parei</button>
-                <button class="secondary-button" id="study-now-resume-restart" type="button">Recomeçar</button>
+                <button class="primary-button" id="study-now-resume-continue" type="button" data-i18n="screens.studyNow.resumeContinue">Continuar de onde parei</button>
+                <button class="secondary-button" id="study-now-resume-restart" type="button" data-i18n="screens.studyNow.resumeRestart">Recomeçar</button>
               </div>
             </div>
             <div id="study-now-question-area">
@@ -796,12 +796,12 @@
               <p id="study-now-answer-text" hidden></p>
               <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
               <div id="study-now-judgment" class="exercise-judgment" hidden>
-                <button class="primary-button" id="study-now-correct-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Acertei</button>
-                <button class="secondary-button" id="study-now-incorrect-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text">Errei</button>
+                <button class="primary-button" id="study-now-correct-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text" data-i18n="screens.studyNow.correct">Acertei</button>
+                <button class="secondary-button" id="study-now-incorrect-btn" type="button" aria-describedby="study-now-answer-text study-now-explanation-text" data-i18n="screens.studyNow.incorrect">Errei</button>
               </div>
               <p class="form-message" id="study-now-message" role="status" aria-live="polite"></p>
             </div>
-            <p class="panel-empty" id="study-now-no-exercises" hidden>Esta aula ainda não tem exercícios.</p>
+            <p class="panel-empty" id="study-now-no-exercises" hidden data-i18n="screens.studyNow.noExercises">Esta aula ainda não tem exercícios.</p>
           </section>
 
           <section class="settings-card study-result" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
@@ -813,7 +813,7 @@
             <p id="study-now-next-review-text" class="study-result-next"></p>
             <div class="settings-actions study-result-actions">
               <button class="primary-button" id="study-now-retest-btn" type="button" hidden>Refazer erros</button>
-              <button class="secondary-button" id="study-now-done-btn" type="button">Voltar para Hoje</button>
+              <button class="secondary-button" id="study-now-done-btn" type="button" data-i18n="screens.studyNow.done">Voltar para Hoje</button>
             </div>
             <section class="study-result-section" id="study-now-errors-section" aria-labelledby="study-now-errors-title" hidden>
               <h3 id="study-now-errors-title"></h3>
@@ -899,8 +899,8 @@
     <dialog id="confirm-dialog" aria-modal="true">
       <p id="confirm-dialog-message"></p>
       <div class="confirm-dialog-actions">
-        <button id="confirm-dialog-cancel" type="button" class="secondary-button">Cancelar</button>
-        <button id="confirm-dialog-ok" type="button" class="small-button is-danger">Confirmar</button>
+        <button id="confirm-dialog-cancel" type="button" class="secondary-button" data-i18n="screens.form.cancel">Cancelar</button>
+        <button id="confirm-dialog-ok" type="button" class="small-button is-danger" data-i18n="screens.dialog.confirm">Confirmar</button>
       </div>
     </dialog>
 
@@ -910,7 +910,7 @@
           <p class="eyebrow" id="exercise-detail-eyebrow"></p>
           <h2 id="exercise-detail-title"></h2>
         </div>
-        <button type="button" id="exercise-detail-close" aria-label="Fechar">✕</button>
+        <button type="button" id="exercise-detail-close" aria-label="Fechar" data-i18n-aria-label="screens.dialog.close">✕</button>
       </div>
       <div id="exercise-detail-body"></div>
     </dialog>
