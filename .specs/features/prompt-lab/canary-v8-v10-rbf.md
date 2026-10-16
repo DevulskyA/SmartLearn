@@ -49,3 +49,14 @@ Pontos fortes da v10: estrutura causal mais clara ("Autorregulação: manter o f
 HARD gates: todos passaram (escopo exato; 3 chamadas; idioma; 0 falha dura; 0 evidência falsa aceita, 29 entradas confirmadas; 0 HIGH; títulos `## ` e JSON válidos).
 Regra de decisão registrada acima: PROMOTE_V10 exigia cobertura 19/19, ≥ 78% de frases com trecho e resumo não maior que o da v8 — a v10 NÃO cumpre as duas últimas (60%; +6%). Nenhum HARD gate falhou, portanto não é KEEP_V8.
 PARECER: **NOT_PROVEN**. A v10 não regrediu em fidelidade nem em cobertura e melhora a estrutura e o tempo, mas não melhora a compressão (0,50 contra 0,47; o alvo MED-SUM de ~10% do texto didático segue longe) e liga menos frases à fonte. Uma geração por versão não mede variabilidade. A v10 permanece o padrão de DESENVOLVIMENTO; a v8 segue reproduzível; sem promoção. Qualquer nova geração ou ajuste de prompt exige NOVA autorização.
+
+## Recomputo sob a metodologia v2 (2026-10-16; sem nova chamada ao modelo)
+Mapa v2 (`renal-blood-flow.json`): 11 ESSENTIAL, 7 RELEVANT, 1 PERIPHERAL, níveis propostos por IA e pendentes de revisão médica. Execuções `v8-challenger-rbf-20261008-193316` e `v10-challenger-rbf-20261012-224436`.
+
+| Medida (`coverage.mjs`) | v8 | v10 |
+|---|---|---|
+| Cobertura total | 19/19 | 19/19 |
+| R-A: essenciais no resumo | 11/11 | 11/11 |
+| R-B: essenciais com ≥ 2 tipos de questão | 8/11 (curtos: C01, C02, C09) | 10/11 (curto: C01) |
+
+Leitura: sob R-A não há diferença; sob R-B a v10 formula mais variado os essenciais. R-C (suficiência da pista) NÃO foi medida: exige juiz humano ou IA assistida. Primeira versão da medida R-B reusou os grupos de palavras do resumo e acusou 2/11 e 3/11: era artefato (a questão dizia "AINEs", o grupo pedia "NSAID"); corrigido com `questionAnyOf` e coberto por teste. O parecer NOT_PROVEN não muda: nenhuma medida nova toca ligação à fonte (60% × 78%) nem tamanho (+6%).

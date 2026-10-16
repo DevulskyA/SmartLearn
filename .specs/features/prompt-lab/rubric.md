@@ -28,3 +28,11 @@ Detecção: H3 e parte de H4 por `risk-checks.js`; valor sem suporte (H2) por `d
 
 **Qualidade (0 falha, 1 defeito parcial, 2 sem defeito; cada dimensão sozinha):** Q1 cobertura (conceitos da seção, contados contra os títulos e subseções da própria fonte); Q2 estrutura causal (a cadeia "porque, então" está visível); Q3 clareza; Q4 didática (organiza, separa o que se confunde, explica o jargão na primeira vez); Q5 profundidade adequada à unidade; Q6 redundância; Q7 concisão (razão resumo/fonte; paráfrase quase integral é 0); Q8 precisão e estabilidade da terminologia; Q9 explicação de mecanismos; Q10 utilidade para recuperação posterior (dá para revisar em minutos; há estrutura para localizar o ponto).
 Medidas de apoio (determinísticas, não veredito): razão resumo/fonte, parágrafos/títulos/listas, conceitos cobertos, frases com trecho da fonte confirmado (`summaryGrounding`).
+
+## Metodologia v2 — reativação (Constituição §I.18; `learning-loop-v2/review.md` §4)
+O Resumo Mestre existe para REATIVAR conhecimento já estudado, não para substituir a fonte. Por isso, além das falhas duras e da qualidade acima:
+
+- **Níveis por conceito** no mapa da unidade (`source-maps/*.json`, campo `tier`): `ESSENTIAL` (sem ele o aluno que estudou não reconstrói o mecanismo central ou erra clinicamente), `RELEVANT` (enriquece ou aplica), `PERIPHERAL` (exceção ou incógnita da fonte). Os níveis propostos por IA têm `tierStatus: PROPOSED_BY_AI_PENDING_MEDICAL_REVIEW` até revisão humana.
+- **R-A (cobertura de essenciais):** o resumo deve conter 100% dos `ESSENTIAL`. `RELEVANT` é reportado; `PERIPHERAL` nunca conta contra o resumo. Medida: `coverage.mjs` (`ESSENTIAL_COVERAGE`). Mede PRESENÇA de palavras-chave, não que a pista baste para reconstruir.
+- **R-B (formulações):** cada `ESSENTIAL` precisa de ≥ 2 questões de tipos (`questionType`) distintos. Medida: `coverage.mjs` (`ESSENTIAL_FORMULATIONS`), por `questionAnyOf` (um termo distintivo) sobre pergunta + resposta. É um proxy: não separa duas questões semanticamente iguais de tipos diferentes, e "menciona o conceito" não prova que a questão o testa.
+- **R-C (suficiência da pista), NÃO automatizável:** dado só o resumo, um aluno que já estudou responde "qual é o mecanismo/valor/condição?" de uma amostra dos essenciais. Juiz humano ou IA assistida, identificado. Sem R-C, R-A é só condição necessária.
