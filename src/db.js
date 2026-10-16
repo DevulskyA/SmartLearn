@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 import { compareText, sameName } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
 import schemaDdl from "./schema-statements.json" with { type: "json" };
 // Canonical migration plan — shared with Rust integration test; neither may duplicate these SQL strings.
@@ -528,7 +529,7 @@ function createBrowserStore() {
       refreshNextIds(state);
       return state;
     } catch {
-      throw new Error('Falha ao ler armazenamento: dados corrompidos. Nenhuma operação será realizada.');
+      throw new Error(t('localStore.state.corrupted'));
     }
   }
 
