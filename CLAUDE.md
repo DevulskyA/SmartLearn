@@ -13,6 +13,8 @@ For product-intent and prioritization doubts, use `.specs/governance/SMARTLEARN_
 It controls DIRECTION; code, tests and Git control STATE. Conductor never becomes a second Constitution.
 For everything else (active feature, current checkpoint, dependency-ready task) reconcile from Git plus `.specs/STATE.md`, not from this file.
 
+Para saber ONDE está cada coisa no código (camadas, módulos, onde testar), leia `CODEMAP.md` antes de buscar; ele é verificado por teste.
+
 ## Estado e painel
 
 - Fonte única de estado: `tasks.md` da feature ativa (+ `PROGRAM.md` ordem, `spec.md` requisitos e portões, `validation.md` evidência). `plan.md`, o bloco ACTIVE TRACK de `conductor/tracks.md`, o painel HTML e o cockpit são PROJEÇÕES geradas: nunca editar à mão. `npm run plan:sync` / `node scripts/agent-tasklist.mjs` (`--watch` em segundo plano) as regeneram; painel velho é bug.
