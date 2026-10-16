@@ -18,6 +18,5 @@
   "src/scheduler.js": 3,
   "src/source-details-ui.js": 2,
   "src/source-proposals-ui.js": 15,
-  "src/stats.js": 2,
-  "src/theme.js": 6
+  "src/stats.js": 2
 }

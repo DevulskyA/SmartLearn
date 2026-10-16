@@ -90,3 +90,35 @@ test("REGRESSION: the hardcoded night/contrast dark-theme id set in applyThemePr
 test("THEME_STORAGE_KEY is a stable, namespaced localStorage key", () => {
   assert.equal(THEME_STORAGE_KEY, "smartlearn:theme");
 });
+
+// i18n: the labels come from the catalog (src/i18n/locales/pt-BR.js). These pin the exact pt-BR texts the screen showed before the
+// move, and prove every id has both keys (a missing key would silently show "theme.x.label").
+test("THEME_OPTIONS: pt-BR texts are exactly what the interface showed before they moved to the catalog", () => {
+  assert.deepEqual(
+    THEME_OPTIONS.map(({ id, label, description }) => [id, label, description]),
+    [
+      ["auto", "Automático", "Segue o tema do sistema."],
+      ["paper", "Papel", "Claro, calmo e legível."],
+      ["sepia", "Sépia", "Mais quente para leitura longa."],
+      ["night", "Noite", "Escuro, estável e discreto."],
+      ["contrast", "Alto contraste", "Mais nítido para leitura rápida."],
+    ],
+  );
+});
+
+test("THEME_OPTIONS: every id has its label and description keys in the catalog, and the texts follow the active locale", async () => {
+  const { has, registerCatalog, setLocale } = await import("../src/i18n/index.js");
+  for (const { id } of THEME_OPTIONS) {
+    assert.ok(has(`theme.${id}.label`), `theme.${id}.label is missing from the catalog`);
+    assert.ok(has(`theme.${id}.description`), `theme.${id}.description is missing from the catalog`);
+  }
+  registerCatalog("en", { "theme.paper.label": "Paper" });
+  try {
+    setLocale("en");
+    assert.equal(getThemeOption("paper").label, "Paper");
+    assert.equal(getThemeOption("paper").description, "Claro, calmo e legível.", "no en text yet: falls back to pt-BR per key");
+  } finally {
+    setLocale("pt-BR");
+    registerCatalog("en", undefined);
+  }
+});

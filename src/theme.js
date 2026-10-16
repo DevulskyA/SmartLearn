@@ -1,36 +1,22 @@
+import { t } from "./i18n/index.js";
+
 export const THEME_STORAGE_KEY = "smartlearn:theme";
 
+// label and description are read through t() on every access, so they follow the active interface language; the texts live in
+// src/i18n/locales/pt-BR.js under theme.<id>.label / theme.<id>.description.
+const themeOption = (id, mode) => ({
+  id,
+  mode,
+  get label() { return t(`theme.${id}.label`); },
+  get description() { return t(`theme.${id}.description`); },
+});
+
 export const THEME_OPTIONS = [
-  {
-    id: "auto",
-    label: "Automático",
-    mode: "auto",
-    description: "Segue o tema do sistema.",
-  },
-  {
-    id: "paper",
-    label: "Papel",
-    mode: "light",
-    description: "Claro, calmo e legível.",
-  },
-  {
-    id: "sepia",
-    label: "Sépia",
-    mode: "light",
-    description: "Mais quente para leitura longa.",
-  },
-  {
-    id: "night",
-    label: "Noite",
-    mode: "dark",
-    description: "Escuro, estável e discreto.",
-  },
-  {
-    id: "contrast",
-    label: "Alto contraste",
-    mode: "dark",
-    description: "Mais nítido para leitura rápida.",
-  },
+  themeOption("auto", "auto"),
+  themeOption("paper", "light"),
+  themeOption("sepia", "light"),
+  themeOption("night", "dark"),
+  themeOption("contrast", "dark"),
 ];
 
 const THEME_OPTIONS_BY_ID = new Map(THEME_OPTIONS.map((option) => [option.id, option]));
