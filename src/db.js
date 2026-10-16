@@ -167,23 +167,23 @@ function normalizeEntityName(name, label) {
 
 function rejectNulBytes(value, label) {
   if (typeof value === 'string' && value.includes('\x00')) {
-    throw new Error(label + ' contém bytes nulos não permitidos.');
+    throw new Error(t('localStore.nulBytes', { label }));
   }
 }
 
 const LINE_TERMINATOR_RE = /[\u0085\u2028\u2029]/u;
 function rejectLineTerminators(value, label) {
   if (typeof value === 'string' && LINE_TERMINATOR_RE.test(value)) {
-    throw new Error(label + ' contém separadores de linha não permitidos.');
+    throw new Error(t('localStore.lineTerminators', { label }));
   }
 }
 
 function validateUnitData(data) {
-  rejectNulBytes(String(data.title ?? ''), 'O título');
-  rejectNulBytes(String(data.sourceText ?? ''), 'A fonte');
-  if (data.summaryBody != null) rejectNulBytes(data.summaryBody, 'O resumo');
-  rejectLineTerminators(String(data.title ?? ''), 'O título');
-  rejectLineTerminators(String(data.sourceText ?? ''), 'A fonte');
+  rejectNulBytes(String(data.title ?? ''), t('localStore.label.title'));
+  rejectNulBytes(String(data.sourceText ?? ''), t('localStore.label.source'));
+  if (data.summaryBody != null) rejectNulBytes(data.summaryBody, t('localStore.label.summary'));
+  rejectLineTerminators(String(data.title ?? ''), t('localStore.label.title'));
+  rejectLineTerminators(String(data.sourceText ?? ''), t('localStore.label.source'));
 }
 
 async function assertActiveSubject(subjectId) {
@@ -257,9 +257,9 @@ function validateImportContent(normalized) {
     if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
     if (!(u.title ?? u.content ?? '').trim()) throw new Error('Backup inválido: learningUnit ' + u.id + ' sem title.');
     if ((u.title ?? u.content ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos no título.');
-    rejectLineTerminators(u.title ?? u.content ?? '', 'Título da unidade ' + u.id);
+    rejectLineTerminators(u.title ?? u.content ?? '', t('localStore.label.unitTitle', { id: u.id }));
     if (String(u.sourceText ?? u.source_text ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos na fonte.');
-    rejectLineTerminators(String(u.sourceText ?? u.source_text ?? ''), 'Fonte da unidade ' + u.id);
+    rejectLineTerminators(String(u.sourceText ?? u.source_text ?? ''), t('localStore.label.unitSource', { id: u.id }));
     if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
     unitIds.add(u.id);
   }
@@ -369,7 +369,7 @@ function buildImportStatements(data) {
       query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order, color)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
       values: [
         row.id,
-        normalizeEntityName(row.name, 'o nome da disciplina'),
+        normalizeEntityName(row.name, t('shell.field.subjectName')),
         row.createdAt,
         row.updatedAt,
         (row.isActive ?? row.is_active ?? true) ? 1 : 0,
@@ -620,7 +620,7 @@ function createBrowserStore() {
         const timestamp = nowIso();
         const subject = {
           id: nextId(state, "subjects"),
-          name: normalizeUniqueName(state.subjects, name, "o nome da disciplina"),
+          name: normalizeUniqueName(state.subjects, name, t('shell.field.subjectName')),
           color: color ?? 'DISC-BLUE',
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -636,7 +636,7 @@ function createBrowserStore() {
         const subject = state.subjects.find((item) => item.id === id);
         if (!subject) return null;
         if (Object.hasOwn(fields, "name")) {
-          subject.name = normalizeUniqueName(state.subjects, fields.name, "o nome da disciplina", id);
+          subject.name = normalizeUniqueName(state.subjects, fields.name, t('shell.field.subjectName'), id);
         }
         if (Object.hasOwn(fields, "isActive")) subject.isActive = Boolean(fields.isActive);
         if (Object.hasOwn(fields, "sortOrder")) subject.sortOrder = Number(fields.sortOrder) || 0;
@@ -696,7 +696,7 @@ function createBrowserStore() {
       async create(data) {
         validateUnitData(data);
         const state = readState();
-        assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
+        assertActive(state.subjects, data.subjectId, t('localStore.subject.activeRequired'));
         const timestamp = nowIso();
         const record = {
           id: nextId(state, "learningUnits"),
@@ -717,7 +717,7 @@ function createBrowserStore() {
         let subjectId = data.subjectId;
 
         if (data.newSubjectName) {
-          const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+          const name = normalizeEntityName(data.newSubjectName, t('shell.field.subjectName'));
           const existing = state.subjects.find(
             s => s.isActive && sameName(s.name, name),
           );
@@ -743,7 +743,7 @@ function createBrowserStore() {
             subjectId = newSubject.id;
           }
         } else {
-          assertActive(state.subjects, subjectId, "Selecione uma disciplina ativa.");
+          assertActive(state.subjects, subjectId, t('localStore.subject.activeRequired'));
         }
 
         validateUnitData(data);
@@ -1082,7 +1082,7 @@ function createBrowserStore() {
       const normalized = assertImportData(data);
       const state = emptyState();
       state.subjects = normalized.subjects.map((row) => ({
-        ...mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
+        ...mapEntityForImport(row, state, "subjects", t('shell.field.subjectName')),
         color: row.color ?? 'DISC-BLUE',
       }));
       state.learningUnits = normalized.learningUnits.map((row) => ({
@@ -1303,7 +1303,7 @@ export const DB = {
     },
 
     async create(name, color = 'DISC-BLUE') {
-      const value = normalizeEntityName(name, 'o nome da disciplina');
+      const value = normalizeEntityName(name, t('shell.field.subjectName'));
       const [existing] = await requireDatabase().select(
         'SELECT id FROM subjects WHERE name = $1 COLLATE NOCASE AND is_active = 1', [value],
       );
@@ -1323,7 +1323,7 @@ export const DB = {
 
     async update(id, fields) {
       const columns = {
-        name: ['name', (value) => normalizeEntityName(value, 'o nome da disciplina')],
+        name: ['name', (value) => normalizeEntityName(value, t('shell.field.subjectName'))],
         isActive: ['is_active', (value) => (value ? 1 : 0)],
         sortOrder: ['sort_order', (value) => Number(value) || 0],
         color: ['color', (value) => String(value ?? 'DISC-BLUE')],
@@ -1470,7 +1470,7 @@ export const DB = {
       const statements = [];
 
       if (data.newSubjectName) {
-        const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+        const name = normalizeEntityName(data.newSubjectName, t('shell.field.subjectName'));
         // AC-008: reuse active equivalent subject if found (COLLATE NOCASE is SQLite built-in)
         const [activeRow] = await requireDatabase().select(
           'SELECT id FROM subjects WHERE name = $1 COLLATE NOCASE AND is_active = 1', [name],

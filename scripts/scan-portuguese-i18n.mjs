@@ -37,6 +37,7 @@ export function looksLikeProse(text, { visibleContext = false } = {}) {
   if (s.length < 2 || !/\p{L}/u.test(s)) return false;
   if (/^[.#[]/.test(s) || /^(https?:|\/|\.\/|\.\.\/|data:|--)/.test(s)) return false;
   if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|PRAGMA|WITH)\b/i.test(s)) return false;
+  if (/^(WHERE|FROM|VALUES|ORDER BY|GROUP BY|LIMIT|JOIN)\b[^.!?]*=?\s*[$?:\w]*$/.test(s)) return false; // a clause of a statement built in pieces
   if (/^[\w-]+\s*:\s*[^;]+;/.test(s)) return false; // inline CSS declarations ("position:sticky;top:0")
   if (/^[MmLlHhVvCcSsQqTtAaZz][\d\s.,-]*([MmLlHhVvCcSsQqTtAaZz][\d\s.,-]*)*$/.test(s)) return false; // SVG path data
   if (!/\s/.test(s)) {

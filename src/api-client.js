@@ -13,6 +13,7 @@
 // risks reporting local success for an uncertain remote write — that is
 // exactly what design.md/T20 forbid ("API errors never create local
 // success"). Every write path in remote-store.js must let both propagate.
+import { t } from './i18n/index.js';
 
 // Relative by default (T21 "one origin"): the Vite dev proxy and the
 // production static+API server both make '/v1/...' resolve to the right
@@ -53,7 +54,7 @@ export class NetworkError extends Error {
  * entrypoint in the app, not just the ones an audit happened to visit.
  */
 export class OfflineError extends Error {
-  constructor(message = 'Sem conexão — esta ação requer internet.') {
+  constructor(message = t('store.error.offline')) {
     super(message);
     this.name = 'OfflineError';
   }

@@ -1,5 +1,6 @@
 // Texts raised by the server-backed store (remote-store.js).
 export default {
+  'store.error.offline': 'Sem conexão — esta ação requer internet.',
   'store.error.unsupportedUnitField': 'Correção de data de estudo e troca de disciplina ainda não são suportadas no modo servidor.',
   'store.error.unsupportedPartialUpdate': 'Esta combinação de campos não tem equivalente atômico no modo servidor.',
   'store.error.unsupportedDirectReviewEvidence': 'Evidência de tipo REVIEW só pode ser criada concluindo uma revisão.',

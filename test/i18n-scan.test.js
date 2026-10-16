@@ -8,7 +8,7 @@ import { looksLikeProse, scanSource, scanAll, toMigrate, BASELINE_PATH } from '.
 
 test('prose is told apart from identifiers, selectors, URLs, SQL, CSS and SVG data', () => {
   for (const text of ['Salvar alterações', 'Não foi possível concluir a operação.', 'Você está offline', 'Sem disciplina']) assert.equal(looksLikeProse(text), true, text);
-  for (const text of ['is-highlighted', '.review-row', '#today-primary-action', 'review-exercise-item hidden', '/v1/subjects', 'https://x.test/a', 'SELECT id FROM subjects', 'position:sticky;top:0;z-index:200;', 'M6 9l6 6 6-6', 'data-review-id', 'application/json']) {
+  for (const text of ['is-highlighted', '.review-row', '#today-primary-action', 'review-exercise-item hidden', '/v1/subjects', 'https://x.test/a', 'SELECT id FROM subjects', 'WHERE id = $2','position:sticky;top:0;z-index:200;', 'M6 9l6 6 6-6', 'data-review-id', 'application/json']) {
     assert.equal(looksLikeProse(text), false, text);
   }
 });
