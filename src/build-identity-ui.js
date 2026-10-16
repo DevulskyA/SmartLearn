@@ -2,6 +2,8 @@
 // opened by mistake and invalidated a whole test round). The app carries the identity of the build it was made from (version from
 // the root package.json, commit from git, channel) embedded by Vite at build time, shows it under the navigation and in
 // Configurações > Sobre, and asks the local server which build IT is: a mismatch is shown, never hidden.
+import { t } from './i18n/index.js';
+
 const line = document.querySelector("#build-identity");
 const about = document.querySelector("#about-identity");
 const copyButton = document.querySelector("#copy-diagnostics");
@@ -39,28 +41,38 @@ export function identityMismatch(identity, server) {
 /** The text a person pastes into a bug report: build identity, schema, database file and row COUNTS (never row content). */
 export function diagnosticText(identity, server) {
   const d = server?.diagnostics;
+  const unavailable = t('build.value.unavailable');
+  const buildId = identity?.id ?? unavailable;
+  const buildText = identity?.inputsHash
+    ? t('build.value.buildContent', { build: buildId, content: identity.inputsHash.slice(0, 12) })
+    : buildId;
   const lines = [
-    `Versão: ${identity ? `SmartLearn ${identity.version}` : "indisponível"}`,
-    `Canal: ${identity?.channel ?? "indisponível"}`,
-    `Build: ${identity?.id ?? "indisponível"}${identity?.inputsHash ? ` (conteúdo ${identity.inputsHash.slice(0, 12)})` : ""}`,
+    t('build.diagnostic.version', { version: identity ? t('build.value.version', { version: identity.version }) : unavailable }),
+    t('build.diagnostic.channel', { channel: identity?.channel ?? unavailable }),
+    t('build.diagnostic.build', { build: buildText }),
   ];
-  if (server) lines.push(`Servidor local: ${[server.mode, server.head, server.provider].filter(Boolean).join(" · ") || "sem identificação"}`);
+  if (server) lines.push(t('build.diagnostic.server', { server: [server.mode, server.head, server.provider].filter(Boolean).join(" · ") || t('build.value.noIdentity') }));
   if (d) {
-    lines.push(`Esquema: ${d.schemaVersion ?? "indisponível"}`, `Banco: ${d.dbPath}`, `Contagens: ${Object.entries(d.counts ?? {}).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+    lines.push(
+      t('build.diagnostic.schema', { schema: d.schemaVersion ?? unavailable }),
+      t('build.diagnostic.database', { database: d.dbPath }),
+      t('build.diagnostic.counts', { counts: Object.entries(d.counts ?? {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
+    );
   }
   return lines.join("\n");
 }
 
 function renderAbout(identity, server) {
   if (!about) return;
+  const unavailable = t('build.value.unavailable');
   const rows = [
-    ["Versão", identity ? `SmartLearn ${identity.version}` : "indisponível"],
-    ["Canal", identity?.channel ?? "indisponível"],
-    ["Build/commit", identity?.id ?? "indisponível"],
+    [t('build.label.version'), identity ? t('build.value.version', { version: identity.version }) : unavailable],
+    [t('build.label.channel'), identity?.channel ?? unavailable],
+    [t('build.label.build'), identity?.id ?? unavailable],
   ];
   if (server) {
-    rows.push(["Servidor local", [server.mode, server.head, server.provider].filter(Boolean).join(" · ") || "sem identificação"]);
-    if (identityMismatch(identity, server)) rows.push(["Atenção", "o aplicativo e o servidor local vêm de commits diferentes: reabra pelo SmartLearn DEV."]);
+    rows.push([t('build.label.server'), [server.mode, server.head, server.provider].filter(Boolean).join(" · ") || t('build.value.noIdentity')]);
+    if (identityMismatch(identity, server)) rows.push([t('build.label.warning'), t('build.value.mismatch')]);
   }
   about.replaceChildren(...rows.flatMap(([term, value]) => {
     const dt = document.createElement("dt");
@@ -81,8 +93,8 @@ async function show() {
   if (line) {
     const text = appIdentityLine(identity);
     if (text) {
-      line.textContent = identityMismatch(identity, server) ? `${text} · servidor ${server.head}` : text;
-      line.title = "Identidade desta execução: versão, canal e commit da build. Detalhes em Configurações > Sobre.";
+      line.textContent = identityMismatch(identity, server) ? t('build.line.mismatch', { identity: text, head: server.head }) : text;
+      line.title = t('build.line.title');
       line.hidden = false;
     }
   }
@@ -91,9 +103,9 @@ async function show() {
     copyButton.onclick = async () => {
       try {
         await navigator.clipboard.writeText(diagnosticText(identity, server));
-        if (copyMessage) copyMessage.textContent = "Diagnóstico copiado.";
+        if (copyMessage) copyMessage.textContent = t('build.copy.done');
       } catch {
-        if (copyMessage) copyMessage.textContent = "Não foi possível copiar automaticamente.";
+        if (copyMessage) copyMessage.textContent = t('build.copy.failed');
       }
     };
   }

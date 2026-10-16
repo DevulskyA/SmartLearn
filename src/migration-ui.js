@@ -15,13 +15,14 @@
 // in .specs/features/smartlearn-v1-consolidated-v2/migration-runbook.md,
 // not something client code can determine from a payload's shape.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
+import { t } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
     return { ok: false, code: err.code, message: err.message, details: err.details };
   }
   if (err instanceof NetworkError) {
-    return { ok: false, code: 'NETWORK_ERROR', message: 'Não foi possível contatar o servidor. Verifique sua conexão e tente novamente.' };
+    return { ok: false, code: 'NETWORK_ERROR', message: t('migration.error.network') };
   }
   throw err;
 }
@@ -52,22 +53,23 @@ export async function commitImportPreview(id) {
   } catch (err) { return fail(err); }
 }
 
-const ENTITY_LABELS = {
-  subjects: 'Disciplinas',
-  learningUnits: 'Aulas',
-  reviewTasks: 'Revisões',
-  exercises: 'Exercícios',
-  learningEvidence: 'Evidências de aprendizagem',
-  exerciseVersions: 'Versões de exercícios',
-  exerciseAttempts: 'Tentativas',
-  learningEvents: 'Eventos de aprendizagem',
-  exams: 'Provas',
-  examItems: 'Itens de provas',
-  examEvidence: 'Evidências de provas',
+// Entity key -> catalog key of its pt-BR label. An unknown entity key is shown as it is.
+const ENTITY_LABEL_KEYS = {
+  subjects: 'migration.entity.subjects',
+  learningUnits: 'migration.entity.learningUnits',
+  reviewTasks: 'migration.entity.reviewTasks',
+  exercises: 'migration.entity.exercises',
+  learningEvidence: 'migration.entity.learningEvidence',
+  exerciseVersions: 'migration.entity.exerciseVersions',
+  exerciseAttempts: 'migration.entity.exerciseAttempts',
+  learningEvents: 'migration.entity.learningEvents',
+  exams: 'migration.entity.exams',
+  examItems: 'migration.entity.examItems',
+  examEvidence: 'migration.entity.examEvidence',
 };
 
 export function entityLabel(key) {
-  return ENTITY_LABELS[key] ?? key;
+  return Object.hasOwn(ENTITY_LABEL_KEYS, key) ? t(ENTITY_LABEL_KEYS[key]) : key;
 }
 
 /** A downloadable, self-contained record of what a commit actually did —
