@@ -332,6 +332,18 @@ test('learningEvidence.create rejects a direct REVIEW-type submission locally, b
   } finally { globalThis.fetch = realFetch; }
 });
 
+test('characterization: the user-visible RemoteStoreError messages keep their exact pt-BR text', async () => {
+  globalThis.fetch = () => { throw new Error('must not be called'); };
+  try {
+    await assert.rejects(() => DB.learningUnits.update(1, { studyDate: '2030-01-01' }), (err) => err.message === 'Correção de data de estudo e troca de disciplina ainda não são suportadas no modo servidor.');
+    await assert.rejects(() => DB.reviewTasks.update(1, { questionsDone: true }), (err) => err.message === 'Esta combinação de campos não tem equivalente atômico no modo servidor.');
+    await assert.rejects(() => DB.learningEvidence.create({ unitId: 1, context: 'REVIEW', evidenceDate: '2026-01-01' }), (err) => err.message === 'Evidência de tipo REVIEW só pode ser criada concluindo uma revisão.');
+    await assert.rejects(() => DB.settings.update({ lastBackupAt: 'x' }), (err) => err.message === 'Informe um campo reconhecido: timezone, uiLocale ou generationLocale.');
+    await assert.rejects(() => DB.importAll({}), (err) => err.message === 'Restaurar um backup ainda não é suportado no modo servidor — use a exportação legada até a migração ser concluída.');
+    await assert.rejects(() => DB.clearAll(), (err) => err.message === 'Reiniciar todos os dados ainda não é uma operação suportada no modo servidor.');
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('settings.update rejects any field other than timezone locally, before any network call', async () => {
   let called = false;
   globalThis.fetch = () => { called = true; throw new Error('must not be called'); };

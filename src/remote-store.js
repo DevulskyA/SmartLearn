@@ -13,6 +13,7 @@
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
 import { REVIEW_DAY_OFFSETS } from '../shared/review-schedule.js';
 import { DEFAULT_LOCALE } from '../shared/locales.js';
+import { t } from './i18n/index.js';
 
 export class RemoteStoreError extends Error {
   constructor(code, message) {
@@ -85,7 +86,7 @@ const learningUnits = {
   },
   async update(id, fields) {
     if ('studyDate' in fields || 'subjectId' in fields) {
-      throw new RemoteStoreError('UNSUPPORTED_FIELD', 'Correção de data de estudo e troca de disciplina ainda não são suportadas no modo servidor.');
+      throw new RemoteStoreError('UNSUPPORTED_FIELD', t('store.error.unsupportedUnitField'));
     }
     const { unit } = await apiRequest(`/v1/learning-units/${id}`, { method: 'PATCH', body: fields });
     return unit;
@@ -175,7 +176,7 @@ const reviewTasks = {
     if (fields.reviewDone === true) {
       return complete(id, {});
     }
-    throw new RemoteStoreError('UNSUPPORTED_PARTIAL_UPDATE', 'Esta combinação de campos não tem equivalente atômico no modo servidor.');
+    throw new RemoteStoreError('UNSUPPORTED_PARTIAL_UPDATE', t('store.error.unsupportedPartialUpdate'));
   },
 };
 
@@ -356,7 +357,7 @@ const learningEvidence = {
   },
   async create({ unitId, context, questionsCount, correctCount, evidenceDate, attemptIds }) {
     if (context === 'REVIEW') {
-      throw new RemoteStoreError('UNSUPPORTED_DIRECT_REVIEW_EVIDENCE', 'Evidência de tipo REVIEW só pode ser criada concluindo uma revisão.');
+      throw new RemoteStoreError('UNSUPPORTED_DIRECT_REVIEW_EVIDENCE', t('store.error.unsupportedDirectReviewEvidence'));
     }
     const body = { unitId, type: context, questionsCount, correctCount, evidenceDate };
     if (Array.isArray(attemptIds) && attemptIds.length > 0) body.attemptIds = attemptIds;
@@ -397,7 +398,7 @@ const settings = {
     const allowed = ['timezone', 'uiLocale', 'generationLocale'];
     const body = Object.fromEntries(allowed.filter((key) => Object.hasOwn(fields, key)).map((key) => [key, fields[key]]));
     if (Object.keys(body).length === 0) {
-      throw new RemoteStoreError('UNSUPPORTED_FIELD', 'Informe um campo reconhecido: timezone, uiLocale ou generationLocale.');
+      throw new RemoteStoreError('UNSUPPORTED_FIELD', t('store.error.unsupportedSettingsField'));
     }
     const { settings: row } = await apiRequest('/v1/settings', { method: 'PATCH', body });
     return mapServerSettings(row);
@@ -417,11 +418,11 @@ async function exportAll() {
 }
 
 async function importAll() {
-  throw new RemoteStoreError('NOT_YET_SUPPORTED', 'Restaurar um backup ainda não é suportado no modo servidor — use a exportação legada até a migração ser concluída.');
+  throw new RemoteStoreError('NOT_YET_SUPPORTED', t('store.error.importNotSupported'));
 }
 
 async function clearAll() {
-  throw new RemoteStoreError('NOT_YET_SUPPORTED', 'Reiniciar todos os dados ainda não é uma operação suportada no modo servidor.');
+  throw new RemoteStoreError('NOT_YET_SUPPORTED', t('store.error.resetNotSupported'));
 }
 
 // -- exams (Modo Prova) ---------------------------------------------------------
