@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 0, stats: 32, tracking: 0, subjects: 0, settings: 47, account: 7 };
+const BASELINE = { today: 0, plan: 0, stats: 32, tracking: 0, subjects: 0, settings: 31, account: 7 };
 
 let serverProcess;
 let dbDir;
@@ -70,7 +70,11 @@ function untranslatedOf([screenId, studentText]) {
   return { missing: false, found: [...found] };
 }
 
-test('pseudo-locale: every visible text of the main screens, and where it comes from', async ({ page }) => {
+// The app registers an app-shell service worker (public/service-worker.js) that would answer the module requests itself and
+// bypass the interception below; this test is about where the TEXTS come from, not about offline behavior.
+test.use({ serviceWorkers: 'block' });
+
+test('pseudo-locale: every visible text of the main screens, and where it comes from', async ({ page, context }) => {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
   await signInRegistered(page, { email: `pseudo-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
 
@@ -91,24 +95,29 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
   await row.getByRole('button', { name: 'Adicionar exercício' }).click();
   await expect(row.getByText(STUDENT_TEXT[2])).toBeVisible({ timeout: 5000 });
 
-  // switch the interface to the marked catalog, then render every screen again
-  await page.evaluate(async () => {
-    const i18n = await import('/src/i18n/index.js');
-    const ptBR = (await import('/src/i18n/locales/pt-BR.js')).default;
-    i18n.registerCatalog('en', Object.fromEntries(Object.entries(ptBR).map(([k, v]) => [k, `\u27E6${v}\u27E7`])));
-    i18n.setLocale('en');
-    (await import('/src/i18n/dom.js')).applyStaticTexts(document);
-    // the custom select widgets copied their labels when they were built: ask them to read the new ones
-    const { syncSelect } = await import('/src/select-ui.js');
-    for (const select of document.querySelectorAll('select')) syncSelect(select);
+  // Boot the app in the marked catalog: the i18n module is served with the pseudo catalog registered and selected as its last
+  // statements, so everything the app draws while starting (theme picker, build identity, selects) already uses it. There is no
+  // language switch in the interface yet; this is how the active locale is chosen for the whole page lifetime.
+  // A NEW page of the same context (same session): a reload would reuse the module already in the browser's memory cache.
+  const pseudo = await context.newPage();
+  await pseudo.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
+  let served = 0;
+  await pseudo.route(/\/src\/i18n\/index\.js/, async (route) => {
+    const response = await route.fetch();
+    const tail = `\nregisterCatalog('en', Object.fromEntries(Object.entries(ptBR).map(([key, value]) => [key, '\\u27E6' + value + '\\u27E7'])));\nsetLocale('en');\n`;
+    served += 1;
+    await route.fulfill({ response, body: (await response.text()) + tail });
   });
+  await pseudo.goto('/');
+  await pseudo.waitForLoadState('networkidle');
+  expect(served, 'the i18n module must have been served with the pseudo catalog, or this test measures nothing').toBeGreaterThan(0);
 
   const report = {};
   for (const screen of ['today', 'plan', 'stats', 'tracking', 'subjects', 'settings', 'account']) {
-    await page.locator(`[data-screen="${screen}"]`).click();
-    await expect(page.locator(`#screen-${screen}`)).toBeVisible();
-    await page.waitForTimeout(400);
-    report[screen] = await page.evaluate(untranslatedOf, [`#screen-${screen}`, STUDENT_TEXT]);
+    await pseudo.locator(`[data-screen="${screen}"]`).click();
+    await expect(pseudo.locator(`#screen-${screen}`)).toBeVisible();
+    await pseudo.waitForTimeout(400);
+    report[screen] = await pseudo.evaluate(untranslatedOf, [`#screen-${screen}`, STUDENT_TEXT]);
   }
   console.log('PSEUDO_COUNTS ' + JSON.stringify(Object.fromEntries(Object.entries(report).map(([screen, { found }]) => [screen, found.length]))));
   if (process.env.PSEUDO_VERBOSE) for (const [screen, { found }] of Object.entries(report)) console.log(`PSEUDO_FOUND ${screen}\n  ${found.join('\n  ')}`);
@@ -119,7 +128,8 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
   }
   expect(Object.keys(report).sort()).toEqual(Object.keys(BASELINE).sort());
   // the marker only exists if t() was used for a screen: a baseline of "everything outside" would pass the ratchet by itself
-  expect(await page.locator('#screen-today').innerText()).toContain(OPEN);
+  await pseudo.locator('[data-screen="today"]').click();
+  expect(await pseudo.locator('#screen-today').innerText()).toContain(OPEN);
   // dates follow the active locale, not a fixed pt-BR (I-R3): the pseudo locale is registered as "en"
-  expect(await page.locator('#screen-today').innerText()).toMatch(/October|November|December|January|February|March|April|May|June|July|August|September/);
+  expect(await pseudo.locator('#screen-today').innerText()).toMatch(/October|November|December|January|February|March|April|May|June|July|August|September/);
 });
