@@ -12,7 +12,6 @@
   "src/migration-ui.js": 6,
   "src/naming-validation.js": 3,
   "src/offline-ui.js": 2,
-  "src/priorities-text.js": 2,
   "src/remote-store.js": 6,
   "src/review-score.js": 1,
   "src/source-details-ui.js": 2,

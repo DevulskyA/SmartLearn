@@ -31,6 +31,12 @@ export default {
   'review.status.overdue.one': 'Atrasada {count} dia',
   'review.status.overdue.other': 'Atrasada {count} dias',
 
+  'priority.weak.accuracy': 'Acerto de {pct}% em {questions} nos últimos {days} dias',
+  'priority.weak.questions.one': '{count} questão',
+  'priority.weak.questions.other': '{count} questões',
+  'priority.weak.reinforce.one': '{count} exercício para reforçar',
+  'priority.weak.reinforce.other': '{count} exercícios para reforçar',
+
   'theme.auto.label': 'Automático',
   'theme.auto.description': 'Segue o tema do sistema.',
   'theme.paper.label': 'Papel',
