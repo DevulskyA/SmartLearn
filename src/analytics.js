@@ -1,5 +1,6 @@
 import { getState, TREND_DELTA_MIN, VERDICT_MIXED_VOLUME_SHARE_MIN } from './performance-thresholds.js';
 import { compareText } from './i18n/format.js';
+import { t } from './i18n/index.js';
 
 function getLocalDateValue() {
   const d = new Date();
@@ -144,39 +145,46 @@ export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
   return { state, counts, volumes, totalQuestions, attention };
 }
 
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // Fixed pt-BR thousands separator ("1.020"): independent of the runtime's ICU data.
 const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-const questions = (n) => `${thousands(n)} ${n === 1 ? 'questão' : 'questões'}`;
+// Singular only for exactly 1 (the catalog plural rule would also treat 0 as singular, so the choice is explicit here).
+const questions = (n) => (n === 1
+  ? t('analytics.verdict.questions.one', { count: thousands(n) })
+  : t('analytics.verdict.questions.other', { count: thousands(n) }));
 
 // Plain-language rendering of studyVerdict (pt-BR). Never says mastery/retention/score.
 export function verdictText(v) {
   const { counts } = v;
   if (v.state === 'NO_EVIDENCE') {
-    return { headline: 'Ainda não há evidência para dizer se seu estudo está funcionando.', detail: 'Registre questões ou faça revisões para começar a medir.' };
+    return { headline: t('analytics.verdict.none.headline'), detail: t('analytics.verdict.none.detail') };
   }
   if (v.state === 'INSUFFICIENT') {
     return {
-      headline: 'Ainda não há histórico suficiente para comparar.',
-      detail: `Há ${plural(v.totalQuestions, 'questão registrada', 'questões registradas')}, mas cada período precisa de pelo menos 10 para indicar uma tendência.`,
+      headline: t('analytics.verdict.insufficient.headline'),
+      detail: v.totalQuestions === 1
+        ? t('analytics.verdict.insufficient.detail.one', { count: v.totalQuestions })
+        : t('analytics.verdict.insufficient.detail.other', { count: v.totalQuestions }),
     };
   }
   const headline = {
-    IMPROVING: 'Seu desempenho está melhorando.',
-    DECLINING: 'Seu desempenho está piorando.',
-    STABLE: 'Seu desempenho está estável.',
-    MIXED: 'Resultado misto: melhorando em umas áreas e piorando em outras.',
-  }[v.state];
+    IMPROVING: () => t('analytics.verdict.improving.headline'),
+    DECLINING: () => t('analytics.verdict.declining.headline'),
+    STABLE: () => t('analytics.verdict.stable.headline'),
+    MIXED: () => t('analytics.verdict.mixed.headline'),
+  }[v.state]?.();
   // Each direction shows the questions it rests on (VERDICT-1), so a headline carried by a few
   // questions is visible as such.
   const { volumes } = v;
   const parts = [];
-  if (counts.improving) parts.push(`${counts.improving} melhorando (${questions(volumes.improving)})`);
-  if (counts.declining) parts.push(`${counts.declining} piorando (${questions(volumes.declining)})`);
-  if (counts.stable) parts.push(`${counts.stable} ${counts.stable === 1 ? 'estável' : 'estáveis'} (${questions(volumes.stable)})`);
-  if (counts.insufficient) parts.push(`${counts.insufficient} com evidência insuficiente`);
-  if (counts.noEvidence) parts.push(`${counts.noEvidence} sem evidência`);
-  return { headline, detail: `Disciplinas: ${parts.join(' · ')}.` };
+  if (counts.improving) parts.push(t('analytics.verdict.part.improving', { count: counts.improving, questions: questions(volumes.improving) }));
+  if (counts.declining) parts.push(t('analytics.verdict.part.declining', { count: counts.declining, questions: questions(volumes.declining) }));
+  if (counts.stable) {
+    const params = { count: counts.stable, questions: questions(volumes.stable) };
+    parts.push(counts.stable === 1 ? t('analytics.verdict.part.stable.one', params) : t('analytics.verdict.part.stable.other', params));
+  }
+  if (counts.insufficient) parts.push(t('analytics.verdict.part.insufficient', { count: counts.insufficient }));
+  if (counts.noEvidence) parts.push(t('analytics.verdict.part.noEvidence', { count: counts.noEvidence }));
+  return { headline, detail: t('analytics.verdict.detail.subjects', { parts: parts.join(' · ') }) };
 }
 
 // Rows without a lastEvidence date are excluded by a period filter (there's
@@ -354,7 +362,7 @@ export const Analytics = {
         unitId: unit.id,
         unitTitle: unit.title,
         subjectId: unit.subjectId,
-        subjectName: subject?.name ?? 'Sem disciplina',
+        subjectName: subject?.name ?? t('analytics.subject.none'),
         color: subject?.color ?? 'DISC-BLUE',
         totalQuestions: totalQ,
         weightedAccuracy: acc,

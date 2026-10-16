@@ -1,2 +1,80 @@
 // Lesson view model and trend/verdict texts (lesson-view-model.js, analytics.js).
-export default {};
+export default {
+  // Study verdict ("Meu estudo está funcionando?")
+  'analytics.verdict.none.headline': 'Ainda não há evidência para dizer se seu estudo está funcionando.',
+  'analytics.verdict.none.detail': 'Registre questões ou faça revisões para começar a medir.',
+  'analytics.verdict.insufficient.headline': 'Ainda não há histórico suficiente para comparar.',
+  'analytics.verdict.insufficient.detail.one': 'Há {count} questão registrada, mas cada período precisa de pelo menos 10 para indicar uma tendência.',
+  'analytics.verdict.insufficient.detail.other': 'Há {count} questões registradas, mas cada período precisa de pelo menos 10 para indicar uma tendência.',
+  'analytics.verdict.improving.headline': 'Seu desempenho está melhorando.',
+  'analytics.verdict.declining.headline': 'Seu desempenho está piorando.',
+  'analytics.verdict.stable.headline': 'Seu desempenho está estável.',
+  'analytics.verdict.mixed.headline': 'Resultado misto: melhorando em umas áreas e piorando em outras.',
+  'analytics.verdict.questions.one': '{count} questão',
+  'analytics.verdict.questions.other': '{count} questões',
+  'analytics.verdict.part.improving': '{count} melhorando ({questions})',
+  'analytics.verdict.part.declining': '{count} piorando ({questions})',
+  'analytics.verdict.part.stable.one': '{count} estável ({questions})',
+  'analytics.verdict.part.stable.other': '{count} estáveis ({questions})',
+  'analytics.verdict.part.insufficient': '{count} com evidência insuficiente',
+  'analytics.verdict.part.noEvidence': '{count} sem evidência',
+  'analytics.verdict.detail.subjects': 'Disciplinas: {parts}.',
+  'analytics.subject.none': 'Sem disciplina',
+
+  // Question types
+  'lesson.questionType.recall': 'Recordação',
+  'lesson.questionType.concept': 'Conceito',
+  'lesson.questionType.mechanism': 'Mecanismo',
+  'lesson.questionType.application': 'Aplicação',
+  'lesson.questionType.discrimination': 'Discriminação',
+  'lesson.questionType.clinicalReasoning': 'Raciocínio clínico',
+  'lesson.questionType.transfer': 'Transferência',
+
+  // Audit issues
+  'lesson.issue.summaryUnsupportedValue': 'Valor que a fonte não traz',
+  'lesson.issue.summaryUnsupportedTerm': 'Termo que não aparece na fonte',
+  'lesson.issue.summaryOmitsCentralConcept': 'Pode omitir um conceito central',
+  'lesson.issue.summaryTooThin': 'Resumo curto demais para a fonte',
+  'lesson.issue.questionAnswerTooThin': 'Resposta sem explicação suficiente',
+  'lesson.issue.explanationMissing': 'Falta explicar por quê',
+  'lesson.issue.questionAnswerLeaked': 'O enunciado já dá a resposta',
+  'lesson.issue.hintRevealsAnswer': 'A dica entrega a resposta',
+  'lesson.issue.questionUnsupportedValue': 'Valor que a página citada não traz',
+  'lesson.issue.questionUnsupportedTerm': 'Termo que não aparece na página citada',
+  'lesson.issue.questionLowSourceSupport': 'Pouco apoio na página citada',
+  'lesson.issue.questionDuplicate': 'Questão repetida',
+  'lesson.issue.questionVolumeOutOfRange': 'Quantidade de questões fora do esperado',
+  'lesson.issue.questionLiteralCopy': 'Resposta copiada da fonte',
+
+  // Question review state
+  'lesson.questionState.rejected': 'Rejeitada',
+  'lesson.questionState.accepted': 'Aceita',
+  'lesson.questionState.flagged': 'Sinalizada',
+  'lesson.questionState.proposed': 'Proposta',
+
+  // Source line
+  'lesson.source.page': 'PDF página {page}',
+  'lesson.source.pages': 'PDF páginas {from}–{to}',
+  'lesson.source.approved': 'fonte aprovada: {pages}',
+  'lesson.source.chars': '{count} caracteres',
+
+  // Generation jobs
+  'lesson.job.phase.queued': 'Na fila para começar',
+  'lesson.job.phase.preparing': 'Preparando o trecho aprovado',
+  'lesson.job.phase.generating': 'Gerando resumo e questões',
+  'lesson.job.phase.auditing': 'Conferindo com a fonte',
+  'lesson.job.phase.repairing': 'Corrigindo o que a conferência encontrou',
+  'lesson.job.phase.saving': 'Salvando o rascunho',
+  'lesson.job.failure.providerError': 'O serviço de IA não respondeu como esperado.',
+  'lesson.job.failure.timeout': 'A geração passou do tempo limite e foi interrompida.',
+  'lesson.job.failure.serverRestarted': 'O servidor foi reiniciado durante a geração.',
+  'lesson.job.failure.internalError': 'Houve um erro interno.',
+  'lesson.job.failure.budgetExceeded': 'O limite de uso da geração foi atingido.',
+  'lesson.job.failure.languageMismatch': 'O rascunho veio em um idioma diferente do pedido.',
+  'lesson.job.failure.scopeChanged': 'O texto do trecho mudou desde que a geração foi pedida.',
+  'lesson.job.failure.unknown': 'A geração não terminou.',
+  'lesson.job.failure.message': 'Não foi possível gerar o rascunho. {reason} Nada foi salvo; você pode tentar de novo.',
+  'lesson.job.status.generating': 'Gerando… {phase}',
+  'lesson.job.status.ready': 'Pronto',
+  'lesson.job.status.failed': 'Falhou',
+};

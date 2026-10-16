@@ -2,33 +2,41 @@
 // shows each as its own area. This module only decides WHAT is shown (labels, grouping, counts); lesson-editor-ui.js draws it.
 
 import { formatNumber } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 
-export const QUESTION_TYPE_LABELS = {
-  RECALL: "Recordação",
-  CONCEPT: "Conceito",
-  MECHANISM: "Mecanismo",
-  APPLICATION: "Aplicação",
-  DISCRIMINATION: "Discriminação",
-  CLINICAL_REASONING: "Raciocínio clínico",
-  TRANSFER: "Transferência",
-};
+// A label table whose texts are read from the catalog when a label is read (not once at import), so the active locale applies.
+function catalogLabels(makers) {
+  const labels = {};
+  for (const [code, make] of Object.entries(makers)) Object.defineProperty(labels, code, { get: make, enumerable: true });
+  return labels;
+}
 
-export const ISSUE_LABELS = {
-  SUMMARY_UNSUPPORTED_VALUE: "Valor que a fonte não traz",
-  SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
-  SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
-  SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
-  QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
-  EXPLANATION_MISSING: "Falta explicar por quê",
-  QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
-  HINT_REVEALS_ANSWER: "A dica entrega a resposta",
-  QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",
-  QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
-  QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
-  QUESTION_DUPLICATE: "Questão repetida",
-  QUESTION_VOLUME_OUT_OF_RANGE: "Quantidade de questões fora do esperado",
-  QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
-};
+export const QUESTION_TYPE_LABELS = catalogLabels({
+  RECALL: () => t("lesson.questionType.recall"),
+  CONCEPT: () => t("lesson.questionType.concept"),
+  MECHANISM: () => t("lesson.questionType.mechanism"),
+  APPLICATION: () => t("lesson.questionType.application"),
+  DISCRIMINATION: () => t("lesson.questionType.discrimination"),
+  CLINICAL_REASONING: () => t("lesson.questionType.clinicalReasoning"),
+  TRANSFER: () => t("lesson.questionType.transfer"),
+});
+
+export const ISSUE_LABELS = catalogLabels({
+  SUMMARY_UNSUPPORTED_VALUE: () => t("lesson.issue.summaryUnsupportedValue"),
+  SUMMARY_UNSUPPORTED_TERM: () => t("lesson.issue.summaryUnsupportedTerm"),
+  SUMMARY_OMITS_CENTRAL_CONCEPT: () => t("lesson.issue.summaryOmitsCentralConcept"),
+  SUMMARY_TOO_THIN: () => t("lesson.issue.summaryTooThin"),
+  QUESTION_ANSWER_TOO_THIN: () => t("lesson.issue.questionAnswerTooThin"),
+  EXPLANATION_MISSING: () => t("lesson.issue.explanationMissing"),
+  QUESTION_ANSWER_LEAKED: () => t("lesson.issue.questionAnswerLeaked"),
+  HINT_REVEALS_ANSWER: () => t("lesson.issue.hintRevealsAnswer"),
+  QUESTION_UNSUPPORTED_VALUE: () => t("lesson.issue.questionUnsupportedValue"),
+  QUESTION_UNSUPPORTED_TERM: () => t("lesson.issue.questionUnsupportedTerm"),
+  QUESTION_LOW_SOURCE_SUPPORT: () => t("lesson.issue.questionLowSourceSupport"),
+  QUESTION_DUPLICATE: () => t("lesson.issue.questionDuplicate"),
+  QUESTION_VOLUME_OUT_OF_RANGE: () => t("lesson.issue.questionVolumeOutOfRange"),
+  QUESTION_LITERAL_COPY: () => t("lesson.issue.questionLiteralCopy"),
+});
 
 export const issueLabel = (issue) => ISSUE_LABELS[issue] ?? issue;
 
@@ -52,10 +60,10 @@ export function groupFindings(draft) {
 
 /** The review state a question shows in the list: a symbol (decorative), a word (always present) and how many findings it has. */
 export function questionState(question, findingCount = 0) {
-  if (question.status === "REJECTED") return { key: "rejected", symbol: "✕", label: "Rejeitada", count: 0 };
-  if (question.status === "ACCEPTED") return { key: "accepted", symbol: "✓", label: "Aceita", count: findingCount };
-  if (findingCount > 0) return { key: "flagged", symbol: "⚠", label: "Sinalizada", count: findingCount };
-  return { key: "proposed", symbol: "•", label: "Proposta", count: 0 };
+  if (question.status === "REJECTED") return { key: "rejected", symbol: "✕", label: t("lesson.questionState.rejected"), count: 0 };
+  if (question.status === "ACCEPTED") return { key: "accepted", symbol: "✓", label: t("lesson.questionState.accepted"), count: findingCount };
+  if (findingCount > 0) return { key: "flagged", symbol: "⚠", label: t("lesson.questionState.flagged"), count: findingCount };
+  return { key: "proposed", symbol: "•", label: t("lesson.questionState.proposed"), count: 0 };
 }
 
 /** Totals for the tab labels and the review overview. */
@@ -80,8 +88,8 @@ export function sourceLine(draft) {
   const scope = draft?.sourceScope;
   if (!scope) return "";
   const [a, b] = scope.approvedPages ?? [];
-  const pages = a === undefined ? "" : a === b ? `PDF página ${a}` : `PDF páginas ${a}–${b}`;
-  const parts = [scope.documentName, pages ? `fonte aprovada: ${pages}` : null, Number.isFinite(scope.sourceChars) ? `${nf.format(scope.sourceChars)} caracteres` : null];
+  const pages = a === undefined ? "" : a === b ? t("lesson.source.page", { page: a }) : t("lesson.source.pages", { from: a, to: b });
+  const parts = [scope.documentName, pages ? t("lesson.source.approved", { pages }) : null, Number.isFinite(scope.sourceChars) ? t("lesson.source.chars", { count: nf.format(scope.sourceChars) }) : null];
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -137,18 +145,18 @@ export function latestJobsByProposal(jobs) {
   return latest;
 }
 
-const PHASE_LABELS = {
-  QUEUED: "Na fila para começar",
-  PREPARING: "Preparando o trecho aprovado",
-  GENERATING: "Gerando resumo e questões",
-  AUDITING: "Conferindo com a fonte",
-  REPAIRING: "Corrigindo o que a conferência encontrou",
-  SAVING: "Salvando o rascunho",
-};
+const PHASE_LABELS = catalogLabels({
+  QUEUED: () => t("lesson.job.phase.queued"),
+  PREPARING: () => t("lesson.job.phase.preparing"),
+  GENERATING: () => t("lesson.job.phase.generating"),
+  AUDITING: () => t("lesson.job.phase.auditing"),
+  REPAIRING: () => t("lesson.job.phase.repairing"),
+  SAVING: () => t("lesson.job.phase.saving"),
+});
 /** The real phase the server reports; one it does not know yet reads as the generic "Gerando", never as raw text. */
 export function jobPhaseLabel(job) {
   if (job?.state === "QUEUED") return PHASE_LABELS.QUEUED;
-  return PHASE_LABELS[job?.phase] ?? "Gerando resumo e questões";
+  return PHASE_LABELS[job?.phase] ?? PHASE_LABELS.GENERATING;
 }
 
 /** Milliseconds since the job started running (since it was created while it still waits in the queue); never negative. */
@@ -157,15 +165,15 @@ export function jobElapsedMs(job, nowMs) {
   return Number.isFinite(from) ? Math.max(0, nowMs - from) : 0;
 }
 
-const FAILURE_REASONS = {
-  PROVIDER_ERROR: "O serviço de IA não respondeu como esperado.",
-  TIMEOUT: "A geração passou do tempo limite e foi interrompida.",
-  SERVER_RESTARTED: "O servidor foi reiniciado durante a geração.",
-  INTERNAL_ERROR: "Houve um erro interno.",
-  BUDGET_EXCEEDED: "O limite de uso da geração foi atingido.",
-  LANGUAGE_MISMATCH: "O rascunho veio em um idioma diferente do pedido.",
-  SCOPE_CHANGED: "O texto do trecho mudou desde que a geração foi pedida.",
-};
+const FAILURE_REASONS = catalogLabels({
+  PROVIDER_ERROR: () => t("lesson.job.failure.providerError"),
+  TIMEOUT: () => t("lesson.job.failure.timeout"),
+  SERVER_RESTARTED: () => t("lesson.job.failure.serverRestarted"),
+  INTERNAL_ERROR: () => t("lesson.job.failure.internalError"),
+  BUDGET_EXCEEDED: () => t("lesson.job.failure.budgetExceeded"),
+  LANGUAGE_MISMATCH: () => t("lesson.job.failure.languageMismatch"),
+  SCOPE_CHANGED: () => t("lesson.job.failure.scopeChanged"),
+});
 // Codes whose server text is already an actionable sentence for the student (it says what to do), kept as the reason.
 const SERVER_TEXT_CODES = new Set(["BUDGET_EXCEEDED"]);
 
@@ -174,15 +182,15 @@ export function jobFailureMessage(job) {
   const server = typeof job?.errorMessage === "string" ? job.errorMessage.trim() : "";
   const reason = SERVER_TEXT_CODES.has(job?.errorCode) && /^[\p{Lu}][^\n]{8,300}[.!]$/u.test(server)
     ? server
-    : FAILURE_REASONS[job?.errorCode] ?? "A geração não terminou.";
-  return `Não foi possível gerar o rascunho. ${reason} Nada foi salvo; você pode tentar de novo.`;
+    : FAILURE_REASONS[job?.errorCode] ?? t("lesson.job.failure.unknown");
+  return t("lesson.job.failure.message", { reason });
 }
 
 /** What a trecho in the list says about its newest job; null when there is nothing to say (no job, or one the student cancelled). */
 export function jobListStatus(job) {
   if (!job) return null;
-  if (jobIsActive(job)) return { kind: "generating", label: `Gerando… ${jobPhaseLabel(job)}`, stalled: job.state === "STALLED" };
-  if (job.state === "SUCCEEDED") return { kind: "ready", label: "Pronto", stalled: false };
-  if (job.state === "FAILED") return { kind: "failed", label: "Falhou", stalled: false };
+  if (jobIsActive(job)) return { kind: "generating", label: t("lesson.job.status.generating", { phase: jobPhaseLabel(job) }), stalled: job.state === "STALLED" };
+  if (job.state === "SUCCEEDED") return { kind: "ready", label: t("lesson.job.status.ready"), stalled: false };
+  if (job.state === "FAILED") return { kind: "failed", label: t("lesson.job.status.failed"), stalled: false };
   return null;
 }
