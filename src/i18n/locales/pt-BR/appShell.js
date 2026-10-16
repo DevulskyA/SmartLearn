@@ -15,6 +15,7 @@ export default {
   'shell.action.edit': 'Editar',
   'shell.action.delete': 'Excluir',
   'shell.field.subjectName': 'o nome da disciplina',
+  'shell.field.studyContent': 'o conteúdo estudado',
   'shell.saving': 'Salvando…',
   'shell.exam.subject': 'Prova da disciplina',
   'shell.action.cancel': 'Cancelar',

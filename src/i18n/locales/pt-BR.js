@@ -25,7 +25,8 @@ import appBackup from './pt-BR/appBackup.js';
 import appStudyNow from './pt-BR/appStudyNow.js';
 import appExam from './pt-BR/appExam.js';
 import appRegister from './pt-BR/appRegister.js';
+import appReview from './pt-BR/appReview.js';
 
-export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup, appStudyNow, appExam, appRegister };
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals, editor, materials, localStore, appShell, appToday, appPlan, appStudies, appStats, appSettings, appAccount, screens, appBackup, appStudyNow, appExam, appRegister, appReview };
 
 export default Object.assign({}, ...Object.values(AREAS));

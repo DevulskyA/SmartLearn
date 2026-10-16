@@ -4147,6 +4147,9 @@ async function renderExerciseList(unitId) {
     const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
     const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", t("appStudyNow.hint", { text: exercise.hintText })) : null;
     const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", t("appStudyNow.why", { text: exercise.explanationText })) : null;
+    // the raw values travel with the elements: the inline editor must not parse them back out of the translated sentence
+    if (hEl) hEl.dataset.text = exercise.hintText;
+    if (wEl) wEl.dataset.text = exercise.explanationText;
 
     const itemActions = document.createElement("div");
     itemActions.className = "exercise-item-actions";
@@ -4487,7 +4490,7 @@ let pendingSubjectCreate = null;
 newSubjectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = newSubjectInput.value.trim();
-  const nameValidationError = validateNamingField(name, "o nome da disciplina");
+  const nameValidationError = validateNamingField(name, t("shell.field.subjectName"));
   if (nameValidationError) {
     setSubjectMessage(nameValidationError);
     newSubjectInput.focus();
@@ -4516,11 +4519,7 @@ newSubjectForm.addEventListener("submit", async (event) => {
     if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectMessage(
-      isDuplicate
-        ? "Essa disciplina já está cadastrada."
-        : "Não foi possível adicionar a disciplina. Tente novamente.",
-    );
+    setSubjectMessage(t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.addFailed"));
     newSubjectInput.focus();
   }
 });
@@ -4554,7 +4553,7 @@ subjectList.addEventListener("click", async (event) => {
     const errorEl = row.querySelector(".inline-edit-error");
     const newName = input?.value?.trim() ?? "";
     if (!newName) {
-      if (errorEl) errorEl.textContent = "Informe o nome da disciplina.";
+      if (errorEl) errorEl.textContent = t("appRegister.subject.nameRequired");
       input?.focus();
       return;
     }
@@ -4567,9 +4566,7 @@ subjectList.addEventListener("click", async (event) => {
     } catch (saveError) {
       const isDuplicate = /unique|duplicate/i.test(String(saveError));
       if (errorEl) {
-        errorEl.textContent = isDuplicate
-          ? "Essa disciplina já está cadastrada."
-          : "Não foi possível renomear a disciplina.";
+        errorEl.textContent = t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.renameFailed");
       }
       input?.focus();
     }
@@ -4586,9 +4583,7 @@ subjectList.addEventListener("click", async (event) => {
     }
 
     if (action === "delete-subject") {
-      const confirmed = await showConfirm(
-        `Confirma a exclusão de "${currentName}"? Esta ação não pode ser desfeita.`,
-      );
+      const confirmed = await showConfirm(t("appRegister.subject.deleteConfirm", { name: currentName }));
       if (!confirmed) return;
       await DB.subjects.deleteIfEmpty(subjectId);
     }
@@ -4600,11 +4595,7 @@ subjectList.addEventListener("click", async (event) => {
     );
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectManagerMessage(
-      isDuplicate
-        ? "Essa disciplina já está cadastrada."
-        : "Não foi possível alterar a disciplina.",
-    );
+    setSubjectManagerMessage(t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.changeFailed"));
     console.error("Falha ao alterar disciplina.", error);
   }
 });
@@ -4653,7 +4644,7 @@ studyList.addEventListener("click", async (event) => {
     const msgEl = section?.querySelector(".exercise-form-message");
     const questionText = qInput?.value.trim() ?? "";
     if (!questionText) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o enunciado do exercício."; }
+      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.questionRequired"); }
       qInput?.focus();
       return;
     }
@@ -4670,10 +4661,10 @@ studyList.addEventListener("click", async (event) => {
       if (aInput) aInput.value = "";
       if (hInput) hInput.value = "";
       if (wInput) wInput.value = "";
-      if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = "Exercício adicionado."; }
+      if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = t("appRegister.exercise.added"); }
       await renderExerciseList(studyId);
     } catch (error) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível salvar o exercício."; }
+      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.saveFailed"); }
       console.error("Falha ao salvar exercício.", error);
     } finally {
       button.disabled = false;
@@ -4704,9 +4695,9 @@ studyList.addEventListener("click", async (event) => {
     const currentQ = item.querySelector(".exercise-question")?.textContent ?? "";
     const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
     const hintEl = item.querySelector(".exercise-hint");
-    const currentH = hintEl ? hintEl.textContent.replace(/^Dica:\s*/, "") : "";
+    const currentH = hintEl?.dataset.text ?? "";
     const whyEl = item.querySelector(".exercise-why");
-    const currentW = whyEl ? whyEl.textContent.replace(/^Por quê:\s*/, "") : "";
+    const currentW = whyEl?.dataset.text ?? "";
 
     const editForm = document.createElement("div");
     editForm.className = "exercise-item exercise-item-edit";
@@ -4716,12 +4707,12 @@ studyList.addEventListener("click", async (event) => {
     const ea = document.createElement("textarea");
     ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
     const eh = document.createElement("input");
-    eh.type = "text"; eh.value = currentH; eh.placeholder = "Dica (opcional)"; eh.className = "exercise-hint-input";
+    eh.type = "text"; eh.value = currentH; eh.placeholder = t("appRegister.exercise.hint"); eh.className = "exercise-hint-input";
     let ew = null;
     if (REMOTE_MODE) {
       ew = document.createElement("textarea");
-      ew.rows = 2; ew.value = currentW; ew.placeholder = "Por quê (opcional)"; ew.className = "exercise-why-input";
-      ew.setAttribute("aria-label", "Por quê (opcional)");
+      ew.rows = 2; ew.value = currentW; ew.placeholder = t("appRegister.exercise.why"); ew.className = "exercise-why-input";
+      ew.setAttribute("aria-label", t("appRegister.exercise.why"));
     }
 
     const saveEx = document.createElement("button");
@@ -4729,13 +4720,13 @@ studyList.addEventListener("click", async (event) => {
     saveEx.dataset.action = "save-exercise-edit";
     saveEx.dataset.exerciseId = String(exerciseId);
     saveEx.dataset.studyId = String(studyId);
-    saveEx.textContent = "Salvar";
+    saveEx.textContent = t("appRegister.save");
 
     const cancelEx = document.createElement("button");
     cancelEx.type = "button"; cancelEx.className = "small-button";
     cancelEx.dataset.action = "cancel-exercise-edit";
     cancelEx.dataset.studyId = String(studyId);
-    cancelEx.textContent = "Cancelar";
+    cancelEx.textContent = t("appRegister.cancel");
 
     editForm.append(eq, ea, eh, ...(ew ? [ew] : []), saveEx, cancelEx);
     item.replaceWith(editForm);
@@ -4772,7 +4763,7 @@ studyList.addEventListener("click", async (event) => {
         errMsg.className = "exercise-edit-error form-error";
         item.appendChild(errMsg);
       }
-      if (errMsg) errMsg.textContent = "Erro ao salvar. Tente novamente.";
+      if (errMsg) errMsg.textContent = t("appRegister.exercise.editSaveFailed");
     }
     return;
   }
@@ -4808,7 +4799,7 @@ studyList.addEventListener("click", async (event) => {
     const content = String(contentInput?.value ?? "").trim();
 
     if (!studyDate || !content) {
-      if (errorEl) errorEl.textContent = "Data e conteúdo são obrigatórios.";
+      if (errorEl) errorEl.textContent = t("appRegister.study.required");
       if (!studyDate) dateInput?.focus();
       else contentInput?.focus();
       return;
@@ -4820,7 +4811,7 @@ studyList.addEventListener("click", async (event) => {
       setStudyManagerMessage();
       await Promise.all([renderStudies(), renderToday(), renderStats()]);
     } catch (error) {
-      if (errorEl) errorEl.textContent = "Não foi possível salvar o estudo.";
+      if (errorEl) errorEl.textContent = t("appRegister.study.saveFailed");
       console.error("Falha ao salvar estudo.", error);
     }
   }
@@ -4837,7 +4828,7 @@ todayPrimaryActionBtn?.addEventListener("click", () => {
     body.hidden = false;
     row.classList.add("is-open");
     toggle?.setAttribute("aria-expanded", "true");
-    if (toggle) toggle.textContent = "Recolher";
+    if (toggle) toggle.textContent = t("shell.action.collapse");
   }
   row.scrollIntoView({ behavior: "smooth", block: "start" });
   row.classList.add("is-highlighted");
@@ -4854,7 +4845,7 @@ reviewDashboard.addEventListener("click", (event) => {
   body.hidden = !expanded;
   row.classList.toggle("is-open", expanded);
   button.setAttribute("aria-expanded", String(expanded));
-  button.textContent = expanded ? "Recolher" : "Ver conteúdo";
+  button.textContent = t(expanded ? "shell.action.collapse" : "shell.action.viewContent");
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -4881,12 +4872,12 @@ reviewDashboard.addEventListener("click", async (event) => {
   const questionsCount = Number(qInput?.value);
   const correctCount = Number(aInput?.value ?? 0);
   if (!questionsCount || questionsCount < 1) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o número de questões (mínimo 1)."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.questionsRequired"); }
     qInput?.focus();
     return;
   }
   if (correctCount > questionsCount) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Acertos não pode ser maior que questões."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.overflow"); }
     aInput?.focus();
     return;
   }
@@ -4905,10 +4896,10 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (msgEl) {
       msgEl.classList.remove("is-error");
       const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
-      msgEl.textContent = `Registrado: ${questionsCount} questões, ${correctCount} acertos (${pct}%).`;
+      msgEl.textContent = t("appReview.external.recorded", { questions: questionsCount, correct: correctCount, percent: pct });
     }
   } catch (error) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível registrar os exercícios."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.failed"); }
     console.error("Falha ao registrar exercícios externos.", error);
   } finally {
     button.disabled = false;
