@@ -4,10 +4,19 @@ Regras do ciclo: executar o PRIMEIRO item DESBLOQUEADO de PENDENTE; provar; comm
 Push: cada push cancela a rodada de CI em andamento (≈17 min); ENQUANTO o CI roda, commitar local e só empurrar quando a rodada terminar ou quando houver algo que o CI precise validar. Commit só de documentação não precisa de push imediato.
 Proibido no loop: chamada real a modelo, merge, deploy, release, force-push, banco DEV humano. Subagente que só roda teste usa model haiku.
 
-SWEEP_EMPTY_STREAK=2
+SWEEP_EMPTY_STREAK=0 (zerado em 2026-10-16: as varreduras anteriores não cobriam qualidade de código nem i18n; nova varredura S4 abaixo)
+
+## META I18N (pedido do usuário, 2026-10-16: "código preparado para internacionalização")
+Requisitos: I-R1 todo texto visível (conteúdo, `title`, `aria-label`, `placeholder`, `alt`, status/toast/diálogo) sai do código para catálogo, com `t()`; I-R2 comportamento e textos pt-BR idênticos (e2e e unitários seguem verdes sem editar expectativas); I-R3 formatação de data, número e ordenação pelo idioma ativo, sem 'pt-BR' fixo; I-R4 pt-BR é o único catálogo traduzido e es/en caem em pt-BR (HG-13: tradução completa adiada, nada de tradução inventada); I-R5 acentos íntegros (guarda `scripts/text-integrity.mjs`); I-R6 nunca regex/`sed` em código: só âncora de AST ou Edit.
+Fora de escopo agora: mensagens em português devolvidas pela API do servidor (virar código + texto no cliente exige decisão de contrato); textos de teste, log e comentário.
+Fatias: I1 base `t()` (parâmetros, plural, idioma ativo, fallback) + testes; I2 formatadores centrais de data/número/ordenação; I3 scanner AST `scripts/scan-portuguese-i18n.mjs` + guarda de catraca (contagem por arquivo só pode cair); I4+ migrar arquivo a arquivo, do menor ao maior (`today-priority`, `theme`, `migration-ui`, `remote-store`, `source-proposals-ui`, `build-identity-ui`, `analytics`, `lesson-view-model`, `materials-ui`, `lesson-editor-ui`, `db`, `app`), cada uma com inventário revisado, chaves antes dos pontos de uso, lint, unitários e e2e; I5 `index.html` por `data-i18n`; I6 server: apenas registrar.
 
 ## PENDENTE
-4. [Endurecer] Se `e2e/offline.spec.js:365` falhar de novo no CI: repetir o clique em "Conta" até `#account-login-form` aparecer (`e2e/support/session.js`).
+1. [I1] Base do i18n em `src/i18n/index.js`: `t(chave, parâmetros)` com `{nome}`, plural por `Intl.PluralRules` (`tn`), idioma ativo (`setLocale`/`getLocale` sobre `shared/locales.js`), fallback pt-BR, chave ausente devolve a chave; assinatura antiga `t(chave, locale)` continua valendo. Teste `test/i18n.test.js` + teste estático: toda chave literal usada em `t('...')` existe no catálogo.
+2. [I2] Formatadores centrais (data, número, ordenação) pelo idioma ativo, no lugar dos 'pt-BR' fixos (≈15 pontos em `src/`), saída idêntica em pt-BR.
+3. [I3] Scanner AST de textos visíveis fora do catálogo + guarda de catraca por arquivo.
+4. [S4] Varredura de qualidade (comentários obsoletos/código comentado, funções longas como `createReviewRow` 396 linhas, `console.log`, números mágicos, duplicação); só achados, correção em fatia própria.
+5. [Endurecer] Se `e2e/offline.spec.js:365` falhar de novo no CI: repetir o clique em "Conta" até `#account-login-form` aparecer (`e2e/support/session.js`).
 
 ## AGUARDANDO (evento externo; checar a cada ciclo, não bloqueia nada)
 - [CI] Rodada do PR #6 no commit mais recente (`gh run list`); quando terminar: verde → empurrar commits locais; vermelho → caracterizar (regressão, teste stale, flake, ambiente) e corrigir.
@@ -20,7 +29,7 @@ SWEEP_EMPTY_STREAK=2
 - Auto-fix do PR #6 (`set_monitor`): só com pedido do usuário.
 
 ## FEITO
-- [Varredura 2026-10-16 ~18:25, VAZIA → streak 2, loop encerrado] HEAD `ed15172`: unitários 652/652, servidor 1051/1051, lint, `test:inventory`, `context:check` PASS; Rust: `cargo test` 33/33 e `cargo clippy --all-targets -D warnings` limpo (rodado por subagente Haiku, regra do usuário); sem commit de código desde a varredura anterior; interface sem alteração desde a verificação das 8 telas. CI verde em `be57cc8` (mesmo código); CI de `ed15172` (só documentação) conferido antes de encerrar.
+- [Varredura 2026-10-16 ~18:25, VAZIA para testes/lint/UI/Rust, MAS não cobria qualidade de código nem i18n → REABERTO, streak zerado] HEAD `ed15172`: unitários 652/652, servidor 1051/1051, lint, `test:inventory`, `context:check` PASS; Rust: `cargo test` 33/33 e `cargo clippy --all-targets -D warnings` limpo (rodado por subagente Haiku, regra do usuário); sem commit de código desde a varredura anterior; interface sem alteração desde a verificação das 8 telas. CI verde em `be57cc8` (mesmo código); CI de `ed15172` (só documentação) conferido antes de encerrar.
 - [Higiene] Varredura de segredos e arquivos sensíveis nos arquivos versionados (2026-10-16): nenhuma chave (sk-, AKIA, ghp_, xox, chave privada), nenhum `.env`, `.pem`, `.key`, `.db` ou `.sqlite` rastreado, nenhum arquivo versionado > 2 MB. Não conta como a 2ª varredura completa (o streak segue 1).
 - [Varredura 2026-10-16 18:10, VAZIA → streak 1] S1: lint e `context:check` PASS (nenhum código novo desde os testes completos). S2: commits novos só de documentação. S3: fumaça em 375 px nas 8 telas (today, materials, plan, stats, tracking, subjects, settings, account): sem rolagem horizontal, sem erro de JavaScript; as caixas "Revisão feita" têm 18×18 px mas o rótulo clicável mede 110×44 (cumpre alvo mínimo). Observação sem ação: em modo local o botão `materials` volta para `#today` (tela só existe com servidor). Servidor de desenvolvimento e aba encerrados.
 - [S1] `npm run test:mutation` (worktree descartável, 2026-10-16): 7/7 mutações mortas (M1a, M1b, M2, M3, M5, M4a, M4b). Relatório: `test-results/mutation-report.json` (não versionado).
