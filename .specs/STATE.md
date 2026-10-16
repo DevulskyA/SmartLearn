@@ -6,8 +6,8 @@ Este arquivo NÃO copia lista de tarefas nem evidência. Para a posição exata:
 EXECUTION_MODEL=OUTCOME_DRIVEN_LEAN (2026-10-05; política em `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md`, seção "Outcome-Driven Lean Execution"; o roadmap legado T-F* segue como está e é reclassificado só quando tocado).
 CURRENT_PHASE=hardening-roadmap-v1 · qualidade de geração (prompt interno 10 = MED-SUM V2.7.5, padrão de DESENVOLVIMENTO; 7/8/9 reproduzíveis) e idioma de geração. Fechadas: S0–S3, S2G, S2b, CI #48 (fuso).
 ACTIVE_TASK=resolvida por `npm run context:resume` (a tarefa `[>]` em `tasks.md`); não é repetida aqui para não envelhecer.
-LAST_PROVEN_MILESTONE=S2b / T-F2-05 (pré-visualização do aceite) e S2G (idiomas, reuso, créditos): evidência em `validation.md`; servidor 901/901, e2e materiais 38/38.
-NEXT_MILESTONE=canário v8 × v10 em "Renal Blood Flow" (exige NOVA autorização de chamadas reais; resultado KEEP_V8 / PROMOTE_V10 / NOT_PROVEN) → ligar `resolveNeed` à geração de questões. Detalhe: `validation.md` (últimas seções).
+LAST_PROVEN_MILESTONE=canário v8 × v10 "Renal Blood Flow" executado (2026-10-12, 3 chamadas autorizadas): NOT_PROVEN, v10 segue padrão de DESENVOLVIMENTO; metodologia v2 (reativação) em `scripts/prompt-lab/coverage.mjs` com testes (2026-10-16); servidor 1051/1051, unitários 652/652. Evidência: `validation.md` (últimas seções), `prompt-lab/canary-v8-v10-rbf.md`.
+NEXT_MILESTONE=depende de decisões humanas (`.specs/features/learning-loop-v2/review.md` §5 e §8): subtema, causa do erro, infográfico, mnemônicos, texto do HTML; revisão médica dos níveis do mapa e da amostra do resumo; nova autorização para um canário sob a rubrica v2. Trabalho local sem decisão: fila em `.specs/LOOP_BACKLOG.md`.
 CRITICAL_BLOCKER=nenhum técnico. Portões humanos abertos não bloqueiam o trabalho local: ver `spec.md` §8 (HG-01..HG-13).
 V1_STATUS=ENGINEERING_LOCAL em andamento; V1_VALIDATED exige VALID-8 (HG-06) e REALMODEL_CONTENT_QUALITY_PROVEN: definição em `spec.md` §10.
 
