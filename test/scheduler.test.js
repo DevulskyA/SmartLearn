@@ -95,3 +95,14 @@ test("getReviewStatusLabel: overdue group floors to 'Atrasada 1 dia' (singular) 
   // dueDate == today, mis-sorted into "overdue" by a hypothetical caller bug: still floors to 1 dia, never "0 dias".
   assert.equal(getReviewStatusLabel("overdue", task({ dueDate: "2026-01-05" }), "2026-01-05"), "Atrasada 1 dia");
 });
+
+// i18n: the status text now comes from the catalog (review.status.*), with the day count as a plural parameter. Same output as the
+// former string concatenation for every count the app can show.
+test("getReviewStatusLabel: pt-BR text is unchanged for every overdue count (singular at 1 and below, plural from 2)", () => {
+  for (let late = -3; late <= 400; late += 1) {
+    const expected = late <= 1 ? "Atrasada 1 dia" : `Atrasada ${late} dias`;
+    const dueDate = new Date(Date.UTC(2026, 0, 5) - late * 86400000).toISOString().slice(0, 10);
+    assert.equal(getReviewStatusLabel("overdue", task({ dueDate }), "2026-01-05"), expected, `${late} days late`);
+  }
+  assert.equal(getReviewStatusLabel("doneToday", task({ dueDate: "2026-01-05" }), "2026-01-05"), "Concluída");
+});

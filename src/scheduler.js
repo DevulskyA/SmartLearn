@@ -1,4 +1,5 @@
 import { REVIEW_DAY_OFFSETS, generateReviewDates } from "./review-schedule.js";
+import { t, tn } from "./i18n/index.js";
 
 // LEGACY_TEMPORARY: fixed 16-review schedule. Boundary: scheduling logic stays here.
 // A future adaptive scheduler (SM-2, FSRS) replaces this file; may require schema evolution.
@@ -50,8 +51,9 @@ export function getDaysBetween(fromDate, toDate) {
 // group by a caller bug would still read as "at least 1 day late" rather
 // than a confusing "0 dias" or negative count) — deliberate floor, not a bug.
 export function getReviewStatusLabel(groupName, task, today) {
-  if (groupName === "doneToday") return "Concluída";
-  if (groupName === "today") return "Vence hoje";
+  if (groupName === "doneToday") return t("review.status.doneToday");
+  if (groupName === "today") return t("review.status.dueToday");
   const days = getDaysBetween(task.dueDate, today);
-  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
+  // The count is a plural parameter, not text glued to a word: other languages order and inflect it differently.
+  return tn("review.status.overdue", Math.max(1, days));
 }

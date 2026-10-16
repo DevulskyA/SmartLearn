@@ -26,6 +26,11 @@ export default {
   'auth.success.passwordChanged': 'Senha alterada com sucesso.',
   'auth.success.loggedOut': 'Sessão encerrada.',
 
+  'review.status.doneToday': 'Concluída',
+  'review.status.dueToday': 'Vence hoje',
+  'review.status.overdue.one': 'Atrasada {count} dia',
+  'review.status.overdue.other': 'Atrasada {count} dias',
+
   'theme.auto.label': 'Automático',
   'theme.auto.description': 'Segue o tema do sistema.',
   'theme.paper.label': 'Papel',

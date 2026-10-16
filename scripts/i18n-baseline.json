@@ -15,7 +15,6 @@
   "src/priorities-text.js": 2,
   "src/remote-store.js": 6,
   "src/review-score.js": 1,
-  "src/scheduler.js": 3,
   "src/source-details-ui.js": 2,
   "src/source-proposals-ui.js": 15,
   "src/stats.js": 2

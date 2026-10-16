@@ -14,10 +14,8 @@ Feito (commits locais): base `t()`/`tn()` (`10fd7d5`), formatadores por idioma a
 Próximas fatias, uma por vez, menor risco primeiro: `scheduler.js` (plural "Atrasada 1 dia/dias" com `tn`), `priorities-text.js` (frases montadas por pedaços), `naming-validation.js`, `review-score.js`, `source-details-ui.js`, `stats.js`, `offline-ui.js`, `build-identity-ui.js`, `migration-ui.js`, `remote-store.js`, `analytics.js`, `lesson-view-model.js`, `source-proposals-ui.js`, `materials-ui.js`, `lesson-editor-ui.js`, `db.js`, `app.js`; depois `index.html` por `data-i18n`. Mensagens da API do servidor em português: só registrar (exige decisão de contrato).
 
 ## PENDENTE
-1. [I1] Base do i18n em `src/i18n/index.js`: `t(chave, parâmetros)` com `{nome}`, plural por `Intl.PluralRules` (`tn`), idioma ativo (`setLocale`/`getLocale` sobre `shared/locales.js`), fallback pt-BR, chave ausente devolve a chave; assinatura antiga `t(chave, locale)` continua valendo. Teste `test/i18n.test.js` + teste estático: toda chave literal usada em `t('...')` existe no catálogo.
-2. [I2] Formatadores centrais (data, número, ordenação) pelo idioma ativo, no lugar dos 'pt-BR' fixos (≈15 pontos em `src/`), saída idêntica em pt-BR.
-3. [I3] Scanner AST de textos visíveis fora do catálogo + guarda de catraca por arquivo.
-4. [S4] Varredura de qualidade (comentários obsoletos/código comentado, funções longas como `createReviewRow` 396 linhas, `console.log`, números mágicos, duplicação); só achados, correção em fatia própria.
+1. [I4] Próxima fatia de texto, uma por vez (lista em META I18N): `scheduler.js` → `priorities-text.js` → ... Cada fatia: inventário (`--list`), chaves no catálogo, troca, teste de caracterização, baixar a catraca (`--update`), lint, unitários, E2E da superfície, commit local.
+2. [S4] Varredura de qualidade (comentários obsoletos/código comentado, funções longas como `createReviewRow` 396 linhas, `console.log`, números mágicos, duplicação); só achados, correção em fatia própria.
 5. [Endurecer] Se `e2e/offline.spec.js:365` falhar de novo no CI: repetir o clique em "Conta" até `#account-login-form` aparecer (`e2e/support/session.js`).
 
 ## AGUARDANDO (evento externo; checar a cada ciclo, não bloqueia nada)
