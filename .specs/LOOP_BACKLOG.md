@@ -1,6 +1,7 @@
 # LOOP_BACKLOG — fila do /loop (derivada; o Git e os testes vencem este arquivo)
 
 Regras do ciclo: executar o PRIMEIRO item de PENDENTE; provar; commitar só arquivos explícitos; mover o item para FEITO com a prova (comando e resultado). Fila vazia: rodar as 3 varreduras (S1 testes+lint, S2 revisão dos commits novos, S3 interface), enfileirar o que acharem e atualizar `SWEEP_EMPTY_STREAK`. Parar só com `SWEEP_EMPTY_STREAK=2`.
+Push: cada push cancela a rodada de CI em andamento (≈17 min); ENQUANTO o CI roda, commitar local e só empurrar quando a rodada terminar ou quando houver algo que o CI precise validar. Commit só de documentação não precisa de push imediato.
 Proibido no loop: chamada real a modelo, merge, deploy, release, force-push, banco DEV humano. Subagente que só roda teste usa model haiku.
 
 SWEEP_EMPTY_STREAK=0
