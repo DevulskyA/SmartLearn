@@ -77,3 +77,17 @@ test('catalog keys follow area.what.detail and no value is empty or mojibake', (
     assert.doesNotMatch(value, MOJIBAKE, `${key} looks like mojibake`);
   }
 });
+
+test('the pt-BR catalog is the union of its area files, and no key is defined in two areas', async () => {
+  const { AREAS } = await import('../src/i18n/locales/pt-BR.js');
+  const seen = new Map();
+  const duplicates = [];
+  for (const [area, keys] of Object.entries(AREAS)) {
+    for (const key of Object.keys(keys)) {
+      if (seen.has(key)) duplicates.push(`${key} in ${seen.get(key)} and ${area}`);
+      seen.set(key, area);
+    }
+  }
+  assert.deepEqual(duplicates, []);
+  assert.equal(Object.keys(ptBR).length, seen.size, 'merged catalog must hold every area key');
+});

@@ -1,50 +1,16 @@
-// T11: minimal presentation catalog for the account/auth experience.
-// Domain error/reason codes (server-side) remain stable identifiers — this
-// catalog only maps them to human-readable pt-BR text for display.
-export default {
-  'auth.login.title': 'Entrar',
-  'auth.register.title': 'Criar conta',
-  'auth.email.label': 'E-mail',
-  'auth.password.label': 'Senha',
-  'auth.password.hint': 'Mínimo de 15 caracteres.',
-  'auth.newPassword.label': 'Nova senha',
-  'auth.currentPassword.label': 'Senha atual',
-  'auth.submit.login': 'Entrar',
-  'auth.submit.register': 'Criar conta',
-  'auth.submit.changePassword': 'Alterar senha',
-  'auth.submit.logout': 'Sair',
-  'auth.switchToRegister': 'Ainda não tem conta? Criar uma',
-  'auth.switchToLogin': 'Já tem conta? Entrar',
-  'auth.loggedInAs': 'Conectado como',
-  'auth.error.INVALID_CREDENTIALS': 'E-mail ou senha incorretos.',
-  'auth.error.EMAIL_CONFLICT': 'Já existe uma conta com este e-mail.',
-  'auth.error.VALIDATION_FAILED': 'Verifique os dados informados.',
-  'auth.error.INVALID_RESET_TOKEN': 'Token de redefinição inválido ou expirado.',
-  'auth.error.UNAUTHENTICATED': 'Sessão expirada. Entre novamente.',
-  'auth.error.generic': 'Não foi possível concluir a operação. Tente novamente.',
-  'auth.success.register': 'Conta criada com sucesso.',
-  'auth.success.passwordChanged': 'Senha alterada com sucesso.',
-  'auth.success.loggedOut': 'Sessão encerrada.',
+// pt-BR catalog, assembled from one file per area under ./pt-BR/. A key lives in exactly one area (test/i18n.test.js fails on a
+// duplicate), so adding text to an area never touches another one. Keys are 'area.what.detail'.
+import auth from './pt-BR/auth.js';
+import review from './pt-BR/review.js';
+import priority from './pt-BR/priority.js';
+import theme from './pt-BR/theme.js';
+import validation from './pt-BR/validation.js';
+import sharedUi from './pt-BR/sharedUi.js';
+import status from './pt-BR/status.js';
+import store from './pt-BR/store.js';
+import lesson from './pt-BR/lesson.js';
+import proposals from './pt-BR/proposals.js';
 
-  'review.status.doneToday': 'Concluída',
-  'review.status.dueToday': 'Vence hoje',
-  'review.status.overdue.one': 'Atrasada {count} dia',
-  'review.status.overdue.other': 'Atrasada {count} dias',
+export const AREAS = { auth, review, priority, theme, validation, sharedUi, status, store, lesson, proposals };
 
-  'priority.weak.accuracy': 'Acerto de {pct}% em {questions} nos últimos {days} dias',
-  'priority.weak.questions.one': '{count} questão',
-  'priority.weak.questions.other': '{count} questões',
-  'priority.weak.reinforce.one': '{count} exercício para reforçar',
-  'priority.weak.reinforce.other': '{count} exercícios para reforçar',
-
-  'theme.auto.label': 'Automático',
-  'theme.auto.description': 'Segue o tema do sistema.',
-  'theme.paper.label': 'Papel',
-  'theme.paper.description': 'Claro, calmo e legível.',
-  'theme.sepia.label': 'Sépia',
-  'theme.sepia.description': 'Mais quente para leitura longa.',
-  'theme.night.label': 'Noite',
-  'theme.night.description': 'Escuro, estável e discreto.',
-  'theme.contrast.label': 'Alto contraste',
-  'theme.contrast.description': 'Mais nítido para leitura rápida.',
-};
+export default Object.assign({}, ...Object.values(AREAS));
