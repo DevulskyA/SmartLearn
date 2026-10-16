@@ -1,7 +1,5 @@
 {
   "src/api-client.js": 1,
-  "src/app.js": 314,
-  "src/db.js": 18,
-  "src/lesson-editor-ui.js": 95,
-  "src/materials-ui.js": 69
+  "src/app.js": 181,
+  "src/db.js": 18
 }
