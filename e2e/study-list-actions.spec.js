@@ -470,14 +470,34 @@ test('save-study validation: an empty date or an empty content shows the message
   expect(await serverStudy(page, studyId)).toEqual({ title: 'Aula valida', sourceText: 'Fonte V', studyDate: '2030-03-04' });
 });
 
-test('KNOWN DEFECT (pinned so the refactor does not change it; fixing it changes this test on purpose): save-study in server mode: even a valid edit fails with the failure message, sends no request and keeps the form open (the server mode cannot change a study date)', async ({ page }) => {
-  // KNOWN PRODUCT DEFECT, not the intended behavior: the screen offers the edit, the store refuses it. See .specs/LOOP_BACKLOG.md.
-  // DIFFERENCE from the brief: remote-store.learningUnits.update throws UNSUPPORTED_FIELD whenever the fields contain studyDate, and
-  // save-study always sends studyDate, so a "successful save" does not exist against the server; the local store test below has it.
+test('save-study in server mode: editing the source and the content (date untouched) saves, and the request carries only the changed fields, never studyDate', async ({ page }) => {
+  // The server contract (server/src/services/learning-units.js updateFields) takes title/sourceText/summaryBody only; studyDate is
+  // refused on purpose, because correcting a date would have to reproject the pending reviews. So a date nobody changed must not be sent.
+  const studyId = await createStudy(page, { subject: 'Estudo salva', date: '2030-03-04', source: 'Fonte S', content: 'Aula salva' });
+  const row = rowOf(page, studyId);
+  const bodies = [];
+  page.on('request', (req) => { if (/\/v1\/learning-units\/\d+$/.test(req.url()) && req.method() === 'PATCH') bodies.push(req.postDataJSON()); });
+  await row.getByRole('button', { name: 'Editar' }).first().click();
+  await row.locator('.study-edit-source').fill('Fonte nova');
+  await row.locator('.study-edit-content').fill('Conteúdo novo');
+  await row.getByRole('button', { name: 'Salvar' }).click();
+  await expect(row).not.toHaveClass(/is-editing/);
+  await expect(row.locator('.study-content')).toHaveText('Conteúdo novo');
+  await expect(row.locator('.study-source-tag')).toHaveText('Fonte nova');
+  expect(bodies).toEqual([{ sourceText: 'Fonte nova', title: 'Conteúdo novo' }]);
+  expect(await serverStudy(page, studyId)).toEqual({ title: 'Conteúdo novo', sourceText: 'Fonte nova', studyDate: '2030-03-04' });
+  await page.reload();
+  await expect(rowOf(page, studyId).locator('.study-content')).toHaveText('Conteúdo novo');
+});
+
+test('save-study in server mode: CHANGING the date is refused by the contract: the failure message, no request, the form stays open and nothing changes', async ({ page }) => {
+  // Not a defect: the server does not correct study dates (see the test above). The message is the generic one on purpose; a
+  // dedicated message for this case is a product decision (see .specs/LOOP_BACKLOG.md).
   const studyId = await createStudy(page, { subject: 'Estudo falha', date: '2030-03-04', source: 'Fonte F', content: 'Aula falha' });
   const row = rowOf(page, studyId);
   const patches = countRequests(page, /\/v1\/learning-units\/\d+$/, 'PATCH');
   await row.getByRole('button', { name: 'Editar' }).first().click();
+  await row.locator('.study-edit-date').fill('2031-01-02');
   await row.locator('.study-edit-source').fill('Fonte nova');
   await row.locator('.study-edit-content').fill('Conteúdo novo');
   await row.getByRole('button', { name: 'Salvar' }).click();

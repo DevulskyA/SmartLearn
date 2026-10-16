@@ -4005,6 +4005,7 @@ async function renderStudies() {
       dateInput.className = "study-edit-date";
       dateInput.dataset.studyField = "studyDate";
       dateInput.value = record.studyDate;
+      dateInput.dataset.original = record.studyDate;
       dateLabel.append(dateInput);
 
       const contentLabel = document.createElement("label");
@@ -4809,7 +4810,11 @@ studyList.addEventListener("click", async (event) => {
     }
 
     try {
-      await DB.learningUnits.update(studyId, { sourceText, studyDate, title: content });
+      // The date goes along only when the student changed it: the server refuses any studyDate (correcting it would have to
+      // reproject the pending reviews), so sending an unchanged one made every edit fail in server mode.
+      const changes = { sourceText, title: content };
+      if (studyDate !== dateInput.dataset.original) changes.studyDate = studyDate;
+      await DB.learningUnits.update(studyId, changes);
       activeStudyEditId = null;
       setStudyManagerMessage();
       await Promise.all([renderStudies(), renderToday(), renderStats()]);
