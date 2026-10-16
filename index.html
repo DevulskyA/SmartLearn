@@ -419,32 +419,32 @@
         <section class="screen" id="screen-stats" data-screen-panel="stats" aria-labelledby="title-stats" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Seu desempenho</p>
-              <h1 id="title-stats">Estatísticas</h1>
+              <p class="eyebrow" data-i18n="screens.stats.eyebrow">Seu desempenho</p>
+              <h1 id="title-stats" data-i18n="screens.stats.title">Estatísticas</h1>
             </div>
             <label class="select-control sort-control">
-              <span class="visually-hidden">Período</span>
-              <select id="stats-unit-filter-period" aria-label="Período">
-                <option value="">Qualquer período</option>
-                <option value="last-30">Últimos 30 dias</option>
-                <option value="last-90">Últimos 90 dias</option>
-                <option value="last-365">Último ano</option>
+              <span class="visually-hidden" data-i18n="screens.filter.period">Período</span>
+              <select id="stats-unit-filter-period" aria-label="Período" data-i18n-aria-label="screens.filter.period">
+                <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
+                <option value="last-30" data-i18n="screens.filter.last30">Últimos 30 dias</option>
+                <option value="last-90" data-i18n="screens.filter.last90">Últimos 90 dias</option>
+                <option value="last-365" data-i18n="screens.filter.lastYear">Último ano</option>
               </select>
             </label>
           </div>
 
-          <div class="metric-grid" aria-label="Resumo de desempenho">
-            <article class="metric-card metric-card--alert"><span>Vencidas</span><strong id="metric-reviews-overdue">0</strong></article>
-            <article class="metric-card"><span>Não feitas hoje</span><strong id="metric-reviews-pending">0</strong></article>
-            <article class="metric-card"><span>Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
-            <article class="metric-card"><span>Média geral</span><strong id="metric-average">0,0%</strong></article>
-            <article class="metric-card"><span>Questões</span><strong id="metric-questions">0</strong></article>
-            <article class="metric-card"><span>Acertos</span><strong id="metric-correct">0</strong></article>
+          <div class="metric-grid" aria-label="Resumo de desempenho" data-i18n-aria-label="screens.stats.metrics.label">
+            <article class="metric-card metric-card--alert"><span data-i18n="screens.stats.metric.overdue">Vencidas</span><strong id="metric-reviews-overdue">0</strong></article>
+            <article class="metric-card"><span data-i18n="screens.stats.metric.pending">Não feitas hoje</span><strong id="metric-reviews-pending">0</strong></article>
+            <article class="metric-card"><span data-i18n="screens.stats.metric.done">Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
+            <article class="metric-card"><span data-i18n="screens.stats.metric.average">Média geral</span><strong id="metric-average">0,0%</strong></article>
+            <article class="metric-card"><span data-i18n="screens.stats.metric.questions">Questões</span><strong id="metric-questions">0</strong></article>
+            <article class="metric-card"><span data-i18n="screens.stats.metric.correct">Acertos</span><strong id="metric-correct">0</strong></article>
           </div>
 
-          <div class="view-tabs" role="tablist" aria-label="Profundidade da análise">
-            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0">Por disciplina</button>
-            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1">Por conteúdo</button>
+          <div class="view-tabs" role="tablist" aria-label="Profundidade da análise" data-i18n-aria-label="screens.stats.tabs.label">
+            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0" data-i18n="screens.stats.tabs.subject">Por disciplina</button>
+            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1" data-i18n="screens.stats.tabs.unit">Por conteúdo</button>
           </div>
 
           <div id="view-stats-subject" class="view-panel" role="tabpanel" aria-labelledby="tab-stats-subject">
@@ -452,8 +452,8 @@
               <section class="stats-panel table-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
                 <div class="stats-panel-heading wrap">
                   <div>
-                    <p class="eyebrow">Por disciplina</p>
-                    <h2 id="subject-kpi-title">Desempenho por disciplina</h2>
+                    <p class="eyebrow" data-i18n="screens.stats.tabs.subject">Por disciplina</p>
+                    <h2 id="subject-kpi-title" data-i18n="screens.stats.subject.title">Desempenho por disciplina</h2>
                   </div>
                 </div>
                 <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
@@ -461,49 +461,49 @@
                   <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
                   <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
                     <span id="stats-verdict-attention-text"></span>
-                    <button type="button" class="text-button" id="stats-verdict-attention-btn">Ver no Plano</button>
+                    <button type="button" class="text-button" id="stats-verdict-attention-btn" data-i18n="screens.stats.viewInPlan">Ver no Plano</button>
                   </p>
                 </div>
                 <div class="table-scroll">
                   <table class="stats-table matrix-table">
                     <thead>
                       <tr id="subject-kpi-head">
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity">Disciplina<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.form.subject">Disciplina</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
                     <tbody id="subject-kpi-list"></tbody>
                   </table>
                 </div>
-                <p class="panel-empty" id="subject-kpi-empty" hidden>Registre questões para ver o desempenho por disciplina.</p>
+                <p class="panel-empty" id="subject-kpi-empty" hidden data-i18n="screens.stats.subject.empty">Registre questões para ver o desempenho por disciplina.</p>
               </section>
 
               <aside class="stats-panel analysis-panel chart-panel" aria-labelledby="evolution-title">
                 <div class="stats-panel-heading">
-                  <div><p class="eyebrow">Histórico</p><h2 id="evolution-title">Evolução por disciplina</h2></div>
+                  <div><p class="eyebrow" data-i18n="screens.stats.evolution.eyebrow">Histórico</p><h2 id="evolution-title" data-i18n="screens.stats.evolution.title">Evolução por disciplina</h2></div>
                 </div>
                 <div class="panel-heading-actions analysis-filters">
                   <label class="select-control sort-control">
-                    <span class="visually-hidden">Filtrar disciplina no gráfico</span>
-                    <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico">
-                      <option value="">Todas as disciplinas</option>
+                    <span class="visually-hidden" data-i18n="screens.stats.evolution.subjectLabel">Filtrar disciplina no gráfico</span>
+                    <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico" data-i18n-aria-label="screens.stats.evolution.subjectLabel">
+                      <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
                     </select>
                   </label>
                   <label class="select-control sort-control">
-                    <span class="visually-hidden">Período do gráfico</span>
-                    <select id="evolution-filter-period" aria-label="Período do gráfico">
-                      <option value="3">3 meses</option>
-                      <option value="6">6 meses</option>
-                      <option value="12">12 meses</option>
-                      <option value="0">Tudo</option>
+                    <span class="visually-hidden" data-i18n="screens.stats.evolution.periodLabel">Período do gráfico</span>
+                    <select id="evolution-filter-period" aria-label="Período do gráfico" data-i18n-aria-label="screens.stats.evolution.periodLabel">
+                      <option value="3" data-i18n="screens.stats.evolution.months3">3 meses</option>
+                      <option value="6" data-i18n="screens.stats.evolution.months6">6 meses</option>
+                      <option value="12" data-i18n="screens.stats.evolution.months12">12 meses</option>
+                      <option value="0" data-i18n="screens.stats.evolution.all">Tudo</option>
                     </select>
                   </label>
                 </div>
-                <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" hidden></svg>
+                <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" data-i18n-aria-label="screens.stats.evolution.chartLabel" hidden></svg>
                 <canvas id="evolution-chart" hidden></canvas>
-                <p class="panel-empty" id="chart-empty">O gráfico será exibido quando houver dados suficientes.</p>
+                <p class="panel-empty" id="chart-empty" data-i18n="screens.stats.evolution.empty">O gráfico será exibido quando houver dados suficientes.</p>
               </aside>
             </div>
           </div>
@@ -512,7 +512,7 @@
             <div class="content-context" id="content-context">
               <div class="discipline-switch" id="discipline-switch">
                 <button type="button" class="subject-cell content-context-plate" id="content-context-plate" aria-haspopup="menu" aria-expanded="false" aria-controls="discipline-switch-list"></button>
-                <ul class="discipline-switch-list" id="discipline-switch-list" role="menu" aria-label="Trocar disciplina" tabindex="-1" hidden></ul>
+                <ul class="discipline-switch-list" id="discipline-switch-list" role="menu" aria-label="Trocar disciplina" data-i18n-aria-label="screens.stats.switchSubject" tabindex="-1" hidden></ul>
               </div>
               <p class="content-context-meta" id="content-context-meta"></p>
             </div>
@@ -520,28 +520,28 @@
               <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
                 <div class="stats-panel-heading wrap">
                   <div>
-                    <p class="eyebrow">Por conteúdo</p>
-                    <h2 id="unit-stats-title">Desempenho por conteúdo</h2>
+                    <p class="eyebrow" data-i18n="screens.stats.tabs.unit">Por conteúdo</p>
+                    <h2 id="unit-stats-title" data-i18n="screens.stats.unit.title">Desempenho por conteúdo</h2>
                   </div>
                 </div>
                 <div class="table-scroll">
                   <table class="stats-table matrix-table">
                     <thead>
                       <tr id="unit-stats-head">
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity">Conteúdo<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance">Desempenho<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.stats.col.content">Conteúdo</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend">Tendência<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
                     <tbody id="unit-stats-list"></tbody>
                   </table>
                 </div>
-                <p class="panel-empty" id="unit-stats-empty" hidden>Nenhum conteúdo com dados.</p>
+                <p class="panel-empty" id="unit-stats-empty" hidden data-i18n="screens.stats.unit.empty">Nenhum conteúdo com dados.</p>
               </section>
 
-              <aside class="stats-panel analysis-panel" aria-label="Detalhe do conteúdo selecionado" id="unit-detail-panel">
-                <p class="panel-empty" id="unit-detail-empty">Selecione um conteúdo na lista para ver detalhes.</p>
+              <aside class="stats-panel analysis-panel" aria-label="Detalhe do conteúdo selecionado" data-i18n-aria-label="screens.stats.unit.detailLabel" id="unit-detail-panel">
+                <p class="panel-empty" id="unit-detail-empty" data-i18n="screens.stats.unit.detailEmpty">Selecione um conteúdo na lista para ver detalhes.</p>
                 <div id="unit-detail-body" hidden></div>
               </aside>
             </div>
@@ -550,25 +550,25 @@
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
               <div>
-                <p class="eyebrow">Exercícios</p>
-                <h2 id="exercise-notes-title">Exercícios resolvidos</h2>
+                <p class="eyebrow" data-i18n="screens.stats.exercises.eyebrow">Exercícios</p>
+                <h2 id="exercise-notes-title" data-i18n="screens.stats.exercises.title">Exercícios resolvidos</h2>
               </div>
             </div>
             <div class="table-scroll">
               <table class="stats-table stats-table-exercises">
                 <thead>
                   <tr>
-                    <th scope="col">Disciplina</th>
-                    <th scope="col">Conteúdo</th>
+                    <th scope="col" data-i18n="screens.form.subject">Disciplina</th>
+                    <th scope="col" data-i18n="screens.stats.col.content">Conteúdo</th>
                     <th scope="col">Q</th>
                     <th scope="col">A</th>
-                    <th scope="col">Nota %</th>
+                    <th scope="col" data-i18n="screens.stats.exercises.score">Nota %</th>
                   </tr>
                 </thead>
                 <tbody id="exercise-notes-body"></tbody>
               </table>
             </div>
-            <p class="panel-empty" id="exercise-notes-empty">Registre exercícios concluídos para ver a lista.</p>
+            <p class="panel-empty" id="exercise-notes-empty" data-i18n="screens.stats.exercises.empty">Registre exercícios concluídos para ver a lista.</p>
           </section>
         </section>
 
