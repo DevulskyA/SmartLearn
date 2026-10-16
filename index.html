@@ -573,55 +573,55 @@
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
-          <div class="screen-heading"><div><p class="eyebrow">Dados locais</p><h1 id="title-settings">Configurações</h1></div></div>
+          <div class="screen-heading"><div><p class="eyebrow" data-i18n="screens.settings.eyebrow">Dados locais</p><h1 id="title-settings" data-i18n="screens.settings.title">Configurações</h1></div></div>
           <section class="settings-card" aria-labelledby="appearance-title">
             <div class="section-heading">
-              <p class="eyebrow">Aparência</p>
-              <h2 id="appearance-title">Tema</h2>
-              <p>Escolha uma base de leitura. O ajuste fica salvo neste dispositivo.</p>
+              <p class="eyebrow" data-i18n="screens.settings.appearance.eyebrow">Aparência</p>
+              <h2 id="appearance-title" data-i18n="screens.settings.appearance.title">Tema</h2>
+              <p data-i18n="screens.settings.appearance.body">Escolha uma base de leitura. O ajuste fica salvo neste dispositivo.</p>
             </div>
             <div class="theme-picker" id="theme-picker" role="radiogroup" aria-labelledby="appearance-title">
             </div>
           </section>
           <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
             <div class="section-heading">
-              <p class="eyebrow">Preferências de estudo</p>
-              <h2 id="generation-language-title">Idioma do conteúdo</h2>
-              <p>Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.</p>
+              <p class="eyebrow" data-i18n="screens.settings.language.eyebrow">Preferências de estudo</p>
+              <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo</h2>
+              <p data-i18n="screens.settings.language.body">Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.</p>
             </div>
-            <label for="generation-language-select">Idioma de geração</label>
+            <label for="generation-language-select" data-i18n="screens.settings.language.label">Idioma de geração</label>
             <select id="generation-language-select" name="generationLocale" aria-describedby="generation-language-hint">
               <option value="pt-BR">Português (Brasil)</option>
               <option value="es">Español</option>
               <option value="en">English</option>
             </select>
-            <p id="generation-language-hint">O idioma selecionado será utilizado nas próximas gerações de conteúdo médico.</p>
+            <p id="generation-language-hint" data-i18n="screens.settings.language.hint">O idioma selecionado será utilizado nas próximas gerações de conteúdo médico.</p>
             <div class="settings-actions">
-              <button class="primary-button" id="generation-language-save" type="button">Salvar idioma</button>
+              <button class="primary-button" id="generation-language-save" type="button" data-i18n="screens.settings.language.save">Salvar idioma</button>
             </div>
             <p class="form-message" id="generation-language-message" role="status" aria-live="polite"></p>
           </section>
           <section class="settings-card" aria-labelledby="about-title">
             <div class="section-heading">
-              <p class="eyebrow">Sobre</p>
-              <h2 id="about-title">Sobre o SmartLearn</h2>
-              <p>Qual build está aberta agora. Informe estes dados ao relatar um problema.</p>
+              <p class="eyebrow" data-i18n="screens.settings.about.eyebrow">Sobre</p>
+              <h2 id="about-title" data-i18n="screens.settings.about.title">Sobre o SmartLearn</h2>
+              <p data-i18n="screens.settings.about.body">Qual build está aberta agora. Informe estes dados ao relatar um problema.</p>
             </div>
             <dl class="about-identity" id="about-identity"></dl>
             <div class="settings-actions">
-              <button class="secondary-button" id="copy-diagnostics" type="button">Copiar diagnóstico</button>
+              <button class="secondary-button" id="copy-diagnostics" type="button" data-i18n="screens.settings.about.copy">Copiar diagnóstico</button>
             </div>
             <p class="form-message" id="copy-diagnostics-message" role="status" aria-live="polite"></p>
           </section>
           <section class="settings-card" aria-labelledby="backup-title">
             <div class="section-heading">
-              <p class="eyebrow">Segurança dos dados</p>
-              <h2 id="backup-title">Backup</h2>
-              <p>Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações. PDFs e fontes enviadas não entram no backup.</p>
+              <p class="eyebrow" data-i18n="screens.settings.backup.eyebrow">Segurança dos dados</p>
+              <h2 id="backup-title" data-i18n="screens.settings.backup.title">Backup</h2>
+              <p data-i18n="screens.settings.backup.body">Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações. PDFs e fontes enviadas não entram no backup.</p>
             </div>
             <div class="settings-actions">
-              <button class="primary-button" id="export-backup" type="button">Exportar backup</button>
-              <button class="secondary-button file-button" id="choose-backup-file" type="button">Importar backup</button>
+              <button class="primary-button" id="export-backup" type="button" data-i18n="screens.settings.backup.export">Exportar backup</button>
+              <button class="secondary-button file-button" id="choose-backup-file" type="button" data-i18n="screens.settings.backup.import">Importar backup</button>
               <input class="visually-hidden" id="import-backup" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
               <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
             </div>
@@ -630,24 +630,24 @@
 
           <section class="settings-card danger-card" aria-labelledby="reset-title">
             <div class="section-heading">
-              <p class="eyebrow">Recomeçar</p>
-              <h2 id="reset-title">Apagar base local</h2>
-              <p>Remove disciplinas, fontes, estudos, revisões e configurações deste dispositivo.</p>
+              <p class="eyebrow" data-i18n="screens.settings.reset.eyebrow">Recomeçar</p>
+              <h2 id="reset-title" data-i18n="screens.settings.reset.title">Apagar base local</h2>
+              <p data-i18n="screens.settings.reset.body">Remove disciplinas, fontes, estudos, revisões e configurações deste dispositivo.</p>
             </div>
             <div class="settings-actions">
-              <button class="secondary-button is-danger" id="reset-database" type="button">Apagar banco todo</button>
+              <button class="secondary-button is-danger" id="reset-database" type="button" data-i18n="screens.settings.reset.button">Apagar banco todo</button>
             </div>
             <p class="form-message" id="reset-message" role="status" aria-live="polite"></p>
           </section>
 
           <section class="settings-card" id="migration-card" aria-labelledby="migration-title" hidden>
             <div class="section-heading">
-              <p class="eyebrow">Migração</p>
-              <h2 id="migration-title">Restaurar ou migrar backup</h2>
-              <p>Envie um backup exportado pelo SmartLearn, ou um arquivo antigo (v1, v2 ou v3), para revisar o que será gravado antes de confirmar. Um backup do SmartLearn só pode ser restaurado em uma conta vazia e não traz PDFs nem fontes. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
+              <p class="eyebrow" data-i18n="screens.settings.migration.eyebrow">Migração</p>
+              <h2 id="migration-title" data-i18n="screens.settings.migration.title">Restaurar ou migrar backup</h2>
+              <p data-i18n="screens.settings.migration.body">Envie um backup exportado pelo SmartLearn, ou um arquivo antigo (v1, v2 ou v3), para revisar o que será gravado antes de confirmar. Um backup do SmartLearn só pode ser restaurado em uma conta vazia e não traz PDFs nem fontes. Esta ação grava dados reais e definitivos nesta conta — reveja a prévia com cuidado.</p>
             </div>
             <div class="settings-actions">
-              <button class="secondary-button file-button" id="migration-choose-file" type="button">Selecionar arquivo de backup</button>
+              <button class="secondary-button file-button" id="migration-choose-file" type="button" data-i18n="screens.settings.migration.choose">Selecionar arquivo de backup</button>
               <input class="visually-hidden" id="migration-file-input" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
             </div>
             <p class="form-message" id="migration-message" role="status" aria-live="polite"></p>
@@ -656,13 +656,13 @@
               <ul class="migration-warnings" id="migration-warnings"></ul>
               <ul class="migration-conflicts" id="migration-conflicts"></ul>
               <div class="settings-actions">
-                <button class="primary-button" id="migration-confirm-btn" type="button">Confirmar importação</button>
-                <button class="secondary-button" id="migration-cancel-btn" type="button">Cancelar</button>
+                <button class="primary-button" id="migration-confirm-btn" type="button" data-i18n="screens.settings.migration.confirm">Confirmar importação</button>
+                <button class="secondary-button" id="migration-cancel-btn" type="button" data-i18n="screens.form.cancel">Cancelar</button>
               </div>
             </div>
             <div id="migration-result-panel" hidden>
               <p id="migration-result-summary"></p>
-              <button class="secondary-button" id="migration-download-report" type="button">Baixar relatório</button>
+              <button class="secondary-button" id="migration-download-report" type="button" data-i18n="screens.settings.migration.report">Baixar relatório</button>
             </div>
           </section>
 
@@ -829,43 +829,43 @@
         <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow">Servidor central</p>
-              <h1 id="title-account">Conta</h1>
+              <p class="eyebrow" data-i18n="screens.account.eyebrow">Servidor central</p>
+              <h1 id="title-account" data-i18n="screens.account.title">Conta</h1>
             </div>
           </div>
 
           <div class="form-card" id="account-logged-out-view">
             <form class="study-form" id="account-login-form">
-              <h2 id="account-login-title">Entrar</h2>
+              <h2 id="account-login-title" data-i18n="screens.account.login">Entrar</h2>
               <div class="field-group">
-                <label for="account-login-email">E-mail</label>
+                <label for="account-login-email" data-i18n="screens.account.email">E-mail</label>
                 <input id="account-login-email" name="email" type="email" required autocomplete="email">
               </div>
               <div class="field-group">
-                <label for="account-login-password">Senha</label>
+                <label for="account-login-password" data-i18n="screens.account.password">Senha</label>
                 <input id="account-login-password" name="password" type="password" required autocomplete="current-password">
               </div>
               <div class="form-actions">
-                <button class="primary-button" type="submit">Entrar</button>
-                <button class="text-button" type="button" id="account-show-register">Ainda não tem conta? Criar uma</button>
+                <button class="primary-button" type="submit" data-i18n="screens.account.login">Entrar</button>
+                <button class="text-button" type="button" id="account-show-register" data-i18n="screens.account.toRegister">Ainda não tem conta? Criar uma</button>
               </div>
               <p class="form-message" id="account-login-message" role="status" aria-live="polite"></p>
             </form>
 
             <form class="study-form" id="account-register-form" hidden>
-              <h2 id="account-register-title">Criar conta</h2>
+              <h2 id="account-register-title" data-i18n="screens.account.register">Criar conta</h2>
               <div class="field-group">
-                <label for="account-register-email">E-mail</label>
+                <label for="account-register-email" data-i18n="screens.account.email">E-mail</label>
                 <input id="account-register-email" name="email" type="email" required autocomplete="email">
               </div>
               <div class="field-group">
-                <label for="account-register-password">Senha</label>
+                <label for="account-register-password" data-i18n="screens.account.password">Senha</label>
                 <input id="account-register-password" name="password" type="password" required autocomplete="new-password" minlength="15">
-                <p class="field-hint">Mínimo de 15 caracteres.</p>
+                <p class="field-hint" data-i18n="screens.account.passwordHint">Mínimo de 15 caracteres.</p>
               </div>
               <div class="form-actions">
-                <button class="primary-button" type="submit">Criar conta</button>
-                <button class="text-button" type="button" id="account-show-login">Já tem conta? Entrar</button>
+                <button class="primary-button" type="submit" data-i18n="screens.account.register">Criar conta</button>
+                <button class="text-button" type="button" id="account-show-login" data-i18n="screens.account.toLogin">Já tem conta? Entrar</button>
               </div>
               <p class="form-message" id="account-register-message" role="status" aria-live="polite"></p>
             </form>
@@ -874,22 +874,22 @@
           <div class="form-card" id="account-logged-in-view" hidden>
             <p id="account-logged-in-as"></p>
             <form class="study-form" id="account-password-form">
-              <h2>Alterar senha</h2>
+              <h2 data-i18n="screens.account.changePassword">Alterar senha</h2>
               <div class="field-group">
-                <label for="account-current-password">Senha atual</label>
+                <label for="account-current-password" data-i18n="screens.account.currentPassword">Senha atual</label>
                 <input id="account-current-password" name="currentPassword" type="password" required autocomplete="current-password">
               </div>
               <div class="field-group">
-                <label for="account-new-password">Nova senha</label>
+                <label for="account-new-password" data-i18n="screens.account.newPassword">Nova senha</label>
                 <input id="account-new-password" name="newPassword" type="password" required autocomplete="new-password" minlength="15">
               </div>
               <div class="form-actions">
-                <button class="primary-button" type="submit">Alterar senha</button>
+                <button class="primary-button" type="submit" data-i18n="screens.account.changePassword">Alterar senha</button>
               </div>
               <p class="form-message" id="account-password-message" role="status" aria-live="polite"></p>
             </form>
             <div class="settings-actions">
-              <button class="secondary-button" id="account-logout-btn" type="button">Sair</button>
+              <button class="secondary-button" id="account-logout-btn" type="button" data-i18n="screens.account.logout">Sair</button>
             </div>
           </div>
         </section>

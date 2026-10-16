@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 31, account: 7 };
+const BASELINE = { today: 0, plan: 0, stats: 0, tracking: 0, subjects: 0, settings: 2, account: 1 };
 
 let serverProcess;
 let dbDir;
@@ -56,8 +56,9 @@ function untranslatedOf([screenId, studentText]) {
     const el = n.parentElement;
     if (!el || ['SCRIPT', 'STYLE', 'OPTION'].includes(el.tagName) || !visible(el)) continue;
     const s = n.nodeValue.replace(/\s+/g, ' ').trim();
-    // a date formatted by the active locale, or the commit hash of the build: data, not catalog text
-    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$/.test(s);
+    // Not catalog text, on purpose: a date formatted by the active locale, the commit hash and channel of the build, and the
+    // name of each language written in that language (autonyms never change with the interface language).
+    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^(Português \(Brasil\)|Español|English)$/.test(s);
     if (prose(s) && !s.includes('\u27E6') && !isStudent(s) && !isDate) found.add(`text: ${s}`);
   }
   for (const el of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) {
