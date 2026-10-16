@@ -23,5 +23,8 @@ export default defineConfig({
     url: `http://localhost:${VITE_PORT}`,
     reuseExistingServer: false,
     timeout: 30000,
+    // Vite's own messages (server restart, dependency re-optimization, page reload) were hidden, so a one-off
+    // ERR_CONNECTION_REFUSED on the Vite port (accessibility.spec.js:158 once) could not be traced to a cause. Keep them in the log.
+    stdout: 'pipe',
   },
 });
