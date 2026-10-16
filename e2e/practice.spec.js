@@ -93,6 +93,9 @@ test('revealing an answer and judging it in the real review UI creates a server-
   await exItem.getByRole('button', { name: 'Ver resposta' }).click();
   await expect(exItem.getByText('Resposta correta')).toBeVisible({ timeout: 5000 });
 
+  // The attempt id comes back from the server (ensureAttemptStarted is async and best-effort) after the answer text is already
+  // visible, so wait for the attribute instead of reading it at once; it failed that way once in CI with the code unchanged.
+  await expect(exItem).toHaveAttribute('data-attempt-id', /.+/, { timeout: 5000 });
   const attemptId = await exItem.evaluate((el) => el.dataset.attemptId);
   expect(attemptId).toBeTruthy();
 
