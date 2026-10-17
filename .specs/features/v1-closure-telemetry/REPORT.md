@@ -93,3 +93,7 @@ Classificação: instabilidade da infraestrutura de teste (servidor de desenvolv
 ## 12. Mitigação da instabilidade do servidor de desenvolvimento (226df7f)
 
 `e2e/support/session.js`: `signInRegistered` espera a hash da URL (prova de que `src/app.js` avaliou) e recarrega uma vez se um módulo foi recusado. Prova discriminante: spec descartável que aborta a 1ª requisição de `/src/stats.js` mostrou o app sem iniciar (hash vazia) e o guard recuperando na 2ª tentativa; spec removido. E2E completo com a mudança (HEAD 226df7f): 259 passaram, 2 ignorados, 0 falhas (EXIT=0, 8,9 min). Código de produto inalterado desde 9d572d5 (jornada nativa 18/18 vale); lint e `test:inventory` limpos. Sem ocorrência aberta de engenharia.
+
+## 13. Jornada nativa no HEAD f3966f9
+
+18/18, EXIT=0, `head` gravado = f3966f9 (build do bundle de 9d572d5, aceito por conteúdo; o código de produto não mudou desde então). Com isso todas as provas de engenharia valem para o mesmo código final: jornada 18/18 (f3966f9), E2E 259/0 (226df7f, sem mudança de código depois), servidor 1066/1066, unitários 717/717, lint e guardas limpos. O app aberto do usuário segue em 5174b28 (não reiniciado por regra); ele contém as correções de telemetria.
