@@ -8,7 +8,7 @@ REGRA DO USUÁRIO (vigente, 2026-10-17)=o tempo de resposta por questão NUNCA m
 
 ## Nota sobre as fontes
 
-O texto integral de D-T1..D-T8 não existe como bloco único. `REPORT.md` §3 dá uma linha por decisão; o desenho vive em `telemetry-audit.md` (TG-01..TG-12), `comparison-plan.md` (§3 a §6, §9) e `ledger.md` (AC-M/AC-X). A pergunta completa de cada item abaixo foi reconstruída desses documentos; o que for dedução minha está marcado INFERIDO. D-T7 já foi respondida (fuso do cliente/salvo, `America/Sao_Paulo`; commit 760491c) e não aparece como pergunta.
+O texto integral de D-T1..D-T8 não existe como bloco único. `REPORT.md` §3 dá uma linha por decisão; o desenho vive em `telemetry-audit.md` (TG-01..TG-12), `comparison-plan.md` (§3 a §6, §9) e `ledger.md` (AC-M/AC-X). Como nunca houve um texto-fonte único, a pergunta COMPLETA de cada item abaixo (pergunta, consequência, alternativas, recomendação, fatos que mudam o risco) é, a partir de agora, o texto integral de referência da decisão: foi reconstruída desses documentos; o que for dedução minha está marcado INFERIDO. D-T7 já foi respondida (fuso do cliente/salvo, `America/Sao_Paulo`; commit 760491c) e não aparece como pergunta.
 
 ---
 
