@@ -557,3 +557,10 @@ test('IMPORT-1: capacity is checked at PREVIEW — the student is told before co
     assert.equal((await commitRaw(app, b, (await previewOk(app, b, exportA)).id)).statusCode, 200);
   } finally { config.importMaxRows = original; cleanup(); }
 });
+
+test('the DEFAULT capacity limits admit the logical backup of a year of intensive use (measured: 40 units, 12,240 attempts = 28,636 rows, 8.8 MB)', () => {
+  // Found by the long-use audit: with the old defaults (5,000 rows, 5 MB) a real export could no longer be restored after ~1,150 attempts,
+  // since attempts and their events count as two rows each. The limits are an operational ceiling against absurd payloads, not a product rule.
+  assert.ok(config.importMaxRows >= 28_636 * 5, `importMaxRows ${config.importMaxRows} is below five times a measured year of use`);
+  assert.ok(config.importMaxBytes >= 8_800_000 * 5, `importMaxBytes ${config.importMaxBytes} is below five times a measured year of use`);
+});

@@ -31,8 +31,8 @@ export const config = {
   staticDir: process.env.SMARTLEARN_STATIC_DIR || null,
   // T27: capacity preflight for a legacy-import commit — reject an
   // oversized batch before any write, not partway through it.
-  importMaxRows: Number(process.env.SMARTLEARN_IMPORT_MAX_ROWS ?? 5000),
-  importMaxBytes: Number(process.env.SMARTLEARN_IMPORT_MAX_BYTES ?? 5_000_000),
+  importMaxRows: Number(process.env.SMARTLEARN_IMPORT_MAX_ROWS ?? 500_000),
+  importMaxBytes: Number(process.env.SMARTLEARN_IMPORT_MAX_BYTES ?? 100_000_000),
   // T34: private uploaded sources (PDFs) live outside the static root, in
   // their own directory (never served by @fastify/static). design.md §8:
   // "cap initially at 25 MiB" per file; per-account quota is a separate,
