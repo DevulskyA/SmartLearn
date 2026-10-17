@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -118,4 +119,15 @@ test('Acompanhar > Ver no Plano: a Plano subject filter that hides the unit is r
   await expect(row).toBeVisible();
   await expect(row.locator('.plan-expand-btn')).toHaveAttribute('aria-expanded', 'true');
   await expect(row.locator('.plan-row-detail')).toBeVisible();
+});
+
+test('Disciplinas > Editar: the name field has an accessible name (axe "label")', async ({ page }) => {
+  await signIn(page);
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
+  await openScreen(page, 'subjects');
+  const card = page.locator('.subject-catalog-card', { hasText: 'Fisiologia Renal' });
+  await card.getByRole('button', { name: 'Editar' }).click();
+  await expect(card.getByRole('textbox', { name: 'Nome da disciplina' })).toBeVisible();
+  const result = await new AxeBuilder({ page }).include('#screen-subjects').withRules(['label']).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
 });

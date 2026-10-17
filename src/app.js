@@ -2443,6 +2443,7 @@ export async function renderDisciplinas() {
     nameInput.className = "subject-edit-name";
     nameInput.value = subj.name;
     nameInput.maxLength = 100;
+    nameInput.setAttribute("aria-label", t("screens.subjects.form.name"));
 
     let editColor = subj.color ?? "DISC-BLUE";
     const colorPickerEl = document.createElement("div");
