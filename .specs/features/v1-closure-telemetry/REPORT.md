@@ -35,3 +35,8 @@ D-T1 manter o banco sintético ou começar limpo · D-T2 autorizar migração 03
 ## 4. Fonte
 
 Sondagens P-1..P-5 e mutantes M-A..M-I rodaram em banco temporário e cópia descartável (scripts não versionados). Este resumo repete o relato do agente da etapa; a prova de cada item está em `ledger.md` §5 e deve ser reproduzida ao virar teste.
+
+## 5. Atualização 2026-10-17 (depois do relatório)
+
+- TG-04, TG-02, TG-09, TG-12 corrigidos (e8e46a4, f0aae39, 3742827, 9603f21). TG-01 corrigido (760491c) com D-T7 = fuso do cliente/salvo (America/Sao_Paulo), também no padrão do `exams.finalize`.
+- Regra do produto (usuário): tempo de resposta por questão NÃO mede conhecimento nem penaliza o aluno; só avaliação cronometrada de propósito pode usá-lo. TG-05b/TG-05c (`think_ms`) valem apenas como dado de tempo de estudo, nunca entram em domínio, agendamento nem veredito.
