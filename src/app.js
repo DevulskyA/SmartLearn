@@ -1306,12 +1306,24 @@ export async function renderToday() {
   }
   if (renderId !== todayRenderSeq) return;
 
+  // Overdue before today (protocol kept), but never a review with nothing to
+  // retrieve while another one has exercises / items to reinforce. Picked before
+  // the lists are built because the card that holds it must start open.
+  const contextOf = (task) => ({
+    exerciseIds: (exercisesByUnitId.get(task.unitId) ?? []).map((e) => e.id),
+    judgedIds: new Set((judgmentsByTaskId.get(task.id) ?? []).filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId)),
+    priorWrongIds: priorWrongByTaskId.get(task.id) ?? new Set(),
+  });
+  const pick = pickPrimaryReview(overdueReviews, pendingToday, contextOf);
+
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
     const count = block.querySelector(`[data-count-for="${groupName}"]`);
     // Re-renders (e.g. after "Revisão feita") must not fold a unit card the student had open.
     const openUnitIds = new Set([...list.querySelectorAll("details.overdue-unit[open]")].map((d) => d.dataset.unitId));
+    // The unit of the "Começar agora" review is where the student goes next: it never starts folded.
+    if (groupName === "overdue" && pick?.group === "overdue") openUnitIds.add(String(pick.task.unitId));
     list.replaceChildren();
     count.textContent = String(tasks.length);
     block.hidden = tasks.length === 0;
@@ -1358,14 +1370,6 @@ export async function renderToday() {
   // existing todayTomorrow/todaySuccessState elements below, which
   // already communicate those two cases adequately).
   if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
-    // Overdue before today (protocol kept), but never a review with nothing to
-    // retrieve while another one has exercises / items to reinforce.
-    const contextOf = (task) => ({
-      exerciseIds: (exercisesByUnitId.get(task.unitId) ?? []).map((e) => e.id),
-      judgedIds: new Set((judgmentsByTaskId.get(task.id) ?? []).filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId)),
-      priorWrongIds: priorWrongByTaskId.get(task.id) ?? new Set(),
-    });
-    const pick = pickPrimaryReview(overdueReviews, pendingToday, contextOf);
     const primaryTask = pick?.task ?? null;
     if (primaryTask) {
       const lead = overdueReviews.length > 0

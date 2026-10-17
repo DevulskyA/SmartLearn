@@ -87,16 +87,24 @@ test('Hoje groups overdue stages by unit, starts collapsed when long, keeps ever
   await expect(muitoAntiga.locator('summary')).toContainText('a mais antiga há 99 dias');
   await expect(list.locator('details.overdue-unit', { hasText: 'Aula Antiga' }).locator('summary')).toContainText('R1 a R4');
 
-  // 11 stages > the collapse threshold: unit cards start closed, their stage rows are not on screen.
-  await expect(list.locator('details.overdue-unit[open]')).toHaveCount(0);
-  await expect(muitoAntiga.locator('.review-row').first()).toBeHidden();
+  // 11 stages > the collapse threshold: unit cards start closed EXCEPT the one holding the "Começar agora" review,
+  // so the student lands on the next action; the other card's stage rows are not on screen.
+  const antiga = list.locator('details.overdue-unit', { hasText: 'Aula Antiga' });
+  await expect(list.locator('details.overdue-unit[open]')).toHaveCount(1);
+  await expect(muitoAntiga).toHaveJSProperty('open', true);
+  await expect(muitoAntiga.locator('.review-row')).toHaveCount(6);
+  await expect(antiga).toHaveJSProperty('open', false);
+  await expect(antiga.locator('.review-row').first()).toBeHidden();
 
-  // "Começar agora" must still reach its review: it opens the card that holds it.
+  // "Começar agora" must still reach its review when the student has folded its card: it opens the card again.
+  await muitoAntiga.locator('summary').click();
+  await expect(muitoAntiga).toHaveJSProperty('open', false);
+  await expect(muitoAntiga.locator('.review-row').first()).toBeHidden();
   await page.locator('#today-primary-action-btn').click();
   const targetId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
   const target = page.locator(`.review-row[data-review-id="${targetId}"]`);
   await expect(target).toBeVisible();
-  await expect(target.locator('xpath=ancestor::details[contains(@class,"overdue-unit")]')).toHaveJSProperty('open', true);
+  await expect(muitoAntiga).toHaveJSProperty('open', true);
 
   // Each stage keeps its own "Revisão feita"; finishing one re-renders without folding the card the student opened.
   await target.locator('[data-action="review-done"]').check();
