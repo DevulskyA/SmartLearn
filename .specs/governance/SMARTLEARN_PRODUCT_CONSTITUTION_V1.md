@@ -1,7 +1,7 @@
 # SmartLearn — Product Constitution & Canonical Functional Specification
 
 ```
-VERSION=1.1
+VERSION=1.2 (2026-10-17: adendo I.19; 1.1 = 2026-09-19)
 STATUS=CANONICAL_PRODUCT_INTENT
 SCOPE=SMARTLEARN
 AUDIENCE=ALL_DESIGN_ENGINEERING_AI_PRODUCT_AGENTS
@@ -199,6 +199,43 @@ Diferencial: o Mapa de Conhecimento e Lacunas de Aprendizagem (disciplina → te
 Camadas de enriquecimento (adendo 2026-10-12, mesma decisão humana): o SmartLearn também é gerador de material multimodal. NÚCLEO: registro do estudo, revisão espaçada, resumo, questões, estatísticas por tema/subtema. ENRIQUECIMENTO, sempre depois de medir o núcleo (I.2, I.11): (a) infográficos como artefato de aprendizagem (processo, mecanismo, cascata, fluxo diagnóstico, tratamento, comparação, decisão clínica), nunca decoração; (b) mnemônicos: buscar os existentes, filtrar (clareza, relação real com o conteúdo, facilidade de lembrar, sem confundir, utilidade para prova/prática), gerar com a skill MN1 só se nada prestar, e incorporá-los ao resumo, ao infográfico e a outros artefatos, sem deformar o conteúdo; (c) validação do resumo do aluno por IA e checagem de omissões e erros. Todo artefato de IA continua RASCUNHO até aceite humano. Detalhe, estado e plano: `.specs/features/learning-loop-v2/review.md` §8.
 
 Distinção de estado: registro de questões, agenda e estatísticas básicas existem; diagnóstico fino por subtema, retorno estruturado à fonte, priorização adaptativa, infográficos, mnemônicos e a validação do resumo do aluno ainda não existem e precisam de desenvolvimento e validação.
+
+### I.19 Adendo humano de 2026-10-17: papéis, carga acadêmica e planejamento da aprendizagem
+
+```
+ADDED=2026-10-17 (decisão humana do aluno, registrada em substância)
+CLASSIFICAÇÃO=CANÔNICO para papéis, princípios e invariantes · NENHUMA implementação é autorizada por este adendo
+RECONCILED_WITH=I.5, I.8, I.12, I.14, §19, §20, §22, §35, §39 (sem conflito) · CONFLITO registrado com §21, §23 e §91-C (abaixo)
+DETAIL=.specs/features/hardening-roadmap-v1/PROGRAM.md §2c (ordem e frentes), tasks.md (F7 e F12), hg-09-proposal.md §0 (frente B), .specs/features/daily-plan-time-budget-v1/ (frente A, PROPOSED)
+```
+
+PAPÉIS. A escola define a carga acadêmica: aulas, materiais, conteúdo e provas. O SmartLearn não controla essa entrada: não pode bloquear aulas novas, presumir que o conteúdo é pequeno nem descartar conhecimento obrigatório para caber no tempo. O aluno decide quanto tempo real tem. O SmartLearn gerencia a APRENDIZAGEM: organiza conteúdo e revisões; considera o tempo realmente disponível; prioriza com critérios que se possa justificar; entrega um plano diário executável; acompanha o cumprimento; detecta dificuldade e atraso cedo; recupera conhecimento esquecido; preserva o preparo para as provas da instituição, para exames externos de certificação (por exemplo, o Revalida) e a retenção de longo prazo.
+
+REGRA DO DÉFICIT. Quando o tempo não basta, o SmartLearn MOSTRA o déficit e suas consequências observáveis. Nunca esconde tarefas, nunca declara conhecimento dominado de forma artificial, nunca classifica conteúdo como dispensável sem critério explícito aprovado pelo aluno.
+
+DOIS PROBLEMAS DISTINTOS, nunca uma tarefa só:
+
+- A. PREVENIR SOBRECARGA (planejamento da aprendizagem): orçamento de tempo (disponibilidade diária e semanal × tempo necessário); plano do dia (sessão ordenada por prioridade, com duração estimada, tarefas executáveis em vez de fila longa); previsão de carga (efeito de aulas novas nas revisões futuras, sem controlar a entrada); priorização acadêmica (provas, bases clínicas, dificuldades, necessidade de retenção); rastreio de comportamento (tempo efetivo, sessões concluídas e abandonadas, ausências); pausas e retomadas (futuro). As seis capacidades NÃO nascem juntas: a ordem sai de dependência, custo e valor. Primeiro incremento candidato, depois de um produto utilizável: orçamento de tempo + plano do dia (spec PROPOSED em `.specs/features/daily-plan-time-budget-v1/`).
+- B. CORRIGIR A DÍVIDA ARTIFICIAL DE REVISÕES (HG-09): as 16 obrigações independentes criadas de antemão por unidade continuam vencendo mesmo quando etapas anteriores não foram feitas. DIREÇÃO ACEITA (não autorizada para implementação; nenhuma migração): evoluir para um calendário com UMA obrigação de revisão exigível por unidade, agendando a próxima a partir da revisão realmente realizada; a dívida deve representar CONHECIMENTO a recuperar, não uma coleção de datas perdidas. Fórmula do calendário, intervalos, estados, tratamento de erro e de ajuda, cobertura de conteúdo e migração dependem da decisão formal HG-09.
+
+INVARIANTES (CANÔNICO; valem para A e B):
+
+1. A revisão espaçada continua necessária.
+2. Uma retomada NÃO equivale automaticamente a várias revisões feitas.
+3. Nenhuma etapa perdida é declarada concluída de forma artificial.
+4. O histórico permanece íntegro e auditável (review_tasks ≠ learning_evidence, I-06).
+5. Reteste nunca substitui a evidência original.
+6. Um acerto isolado não prova o domínio de uma unidade extensa.
+7. Unidade sem questões adequadas não recebe crédito automático de domínio.
+8. O agendamento considera provas e necessidades reais de acompanhamento.
+
+CONFLITOS REGISTRADOS (CONFLITO; não resolvidos silenciosamente, conforme §0.1 e I.17):
+
+- C-I19-1. Direção B × §21 ("o scheduler vencedor é FIXO… não implementar na V1: scheduler adaptativo"), §91-C ("FSRS / SCHEDULER ADAPTATIVO — NÃO é V1; não reabrir sem nova evidência"), V1-09 e INV-04/INV-05 do MVP (todas as revisões geradas no cadastro). Até a decisão HG-09 e a emenda registrada, §21 continua em vigor para o CÓDIGO; a direção B governa o planejamento e a análise.
+- C-I19-2. Frente A × §23 ("não transformar em calendário carregado ou planejamento manual") e §39 (zero meta-work): a disponibilidade diária é a única entrada nova que o sistema não consegue derivar; o plano em si é derivado. Resolução proposta: aceitar essa única entrada, opcional e sem valor padrão inventado; depende de aprovação do aluno (decisão DP-D1 do spec do plano diário).
+- C-I19-3. Priorização por prova e importância × §35 ("não inventar fórmula de impacto sem contrato validado") e §92 (recomendação curricular automática não negociada): critérios explícitos e versionados, sem escore de impacto; qualquer pontuação exige decisão e validação próprias.
+
+ESTADO (§90): nada deste adendo está implementado; é FUTURO. A decisão do aluno é de DIREÇÃO, não autorização de código.
 
 ## 1. Instrução de persistência
 
@@ -596,6 +633,8 @@ Offsets atualmente canônicos: D+1, D+7, D+15, D+30, D+60, D+90, D+120, D+150, D
 Criação da unidade + 16 revisões deve respeitar atomicidade onde o contrato vigente a exigir.
 
 Não implementar na V1: FSRS; scheduler adaptativo; ML de memória; algoritmo de retenção personalizado.
+
+> CONFLITO registrado em 2026-10-17 (o texto acima NÃO foi alterado e segue em vigor para o código): a direção humana da frente B (I.19) quer evoluir para uma obrigação exigível por unidade, agendada a partir da revisão realmente feita. Isso contradiz esta seção e a §91-C. Resolução só por decisão formal HG-09 com emenda registrada; análise em `.specs/features/hardening-roadmap-v1/hg-09-proposal.md` §0.
 
 Revisão pode existir sem questões.
 
@@ -1520,7 +1559,7 @@ A. SERVER-CENTRAL COMO AUTORIDADE UNIVERSAL — SUPERSEDED para Desktop por ARCH
 
 B. 13 REVISÕES DA PLANILHA — HISTÓRICO. V1 atual = 16.
 
-C. FSRS / SCHEDULER ADAPTATIVO — NÃO é V1.
+C. FSRS / SCHEDULER ADAPTATIVO — NÃO é V1. (CONFLITO 2026-10-17: a direção B de I.19 propõe reabrir parte desta decisão; a "nova evidência" exigida acima é o uso real com dezenas de revisões vencidas e a decisão HG-09, ainda não tomada. Nada muda no código até lá.)
 
 D. CHECKBOXES MANUAIS DE ACOMPANHAMENTO — SUBSTITUÍDOS por estado derivado.
 
