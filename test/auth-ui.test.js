@@ -85,3 +85,11 @@ test('every fetch call includes credentials:"include" so the session cookie is s
   await authUi.bootstrap();
   assert.equal(calls[0].opts.credentials, 'include');
 });
+
+test('changePassword with a wrong current password says the CURRENT PASSWORD is wrong (there is no e-mail field in that form)', async () => {
+  global.fetch = mockFetch([{ status: 401, body: { error: { code: 'INVALID_CREDENTIALS' } } }]);
+  const result = await authUi.changePassword('wrong', 'a long enough password 123');
+  assert.equal(result.ok, false);
+  assert.equal(result.message, 'Senha atual incorreta.');
+  assert.doesNotMatch(result.message, /e-mail/i);
+});

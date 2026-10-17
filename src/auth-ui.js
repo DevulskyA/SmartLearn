@@ -93,7 +93,12 @@ export async function logout() {
 
 export async function changePassword(currentPassword, newPassword) {
   const res = await apiFetch('/v1/auth/password', { method: 'POST', csrf: true, body: { currentPassword, newPassword } });
-  if (!res.ok) return { ok: false, message: errorMessage(res.body?.error?.code) };
+  if (!res.ok) {
+    // The server answers a wrong current password with the generic INVALID_CREDENTIALS; this form has no e-mail
+    // field, so "e-mail ou senha incorretos" would name a field the student never typed.
+    const code = res.body?.error?.code;
+    return { ok: false, message: errorMessage(code === 'INVALID_CREDENTIALS' ? 'CURRENT_PASSWORD_INVALID' : code) };
+  }
   return { ok: true };
 }
 

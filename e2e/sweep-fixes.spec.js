@@ -149,3 +149,11 @@ test('Conta: after "Criar conta" the success text is shown where the student can
   await expect(page.locator('#account-login-message')).toHaveText('Conta criada com sucesso. Entre com suas credenciais.');
   await expect(page.locator('#account-login-message')).toBeVisible();
 });
+
+test('Conta > Alterar senha: a wrong current password says so (no e-mail/senha wording)', async ({ page }) => {
+  await signIn(page);
+  await page.locator('#account-password-form [name="currentPassword"]').fill('definitely not the current password');
+  await page.locator('#account-password-form [name="newPassword"]').fill('another genuinely long password 2');
+  await page.locator('#account-password-form button[type="submit"]').click();
+  await expect(page.locator('#account-password-message')).toHaveText('Senha atual incorreta.');
+});

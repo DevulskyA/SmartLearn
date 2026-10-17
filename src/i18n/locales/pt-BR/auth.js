@@ -16,6 +16,7 @@ export default {
   'auth.switchToLogin': 'Já tem conta? Entrar',
   'auth.loggedInAs': 'Conectado como',
   'auth.error.INVALID_CREDENTIALS': 'E-mail ou senha incorretos.',
+  'auth.error.CURRENT_PASSWORD_INVALID': 'Senha atual incorreta.',
   'auth.error.EMAIL_CONFLICT': 'Já existe uma conta com este e-mail.',
   'auth.error.VALIDATION_FAILED': 'Verifique os dados informados.',
   'auth.error.INVALID_RESET_TOKEN': 'Token de redefinição inválido ou expirado.',
