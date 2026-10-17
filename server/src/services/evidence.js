@@ -27,6 +27,13 @@ export function isAcceptableEvidenceDate(value, now = () => new Date()) {
 
 export const EVIDENCE_DATE_MESSAGE = 'evidenceDate é obrigatória e deve ser um dia real (YYYY-MM-DD), a partir de 2000-01-01 e não no futuro.';
 
+// A row is current unless a LATER row of the same user exists for the same review task (NULL never equals NULL, so
+// practice/external/exam rows are always current). Pure SQL over the existing columns: no schema change.
+const IS_CURRENT_SQL = `NOT EXISTS (
+  SELECT 1 FROM learning_evidence later
+  WHERE later.user_id = le.user_id AND later.review_task_id = le.review_task_id AND later.id > le.id
+)`;
+
 function findOwnedUnit(db, userId, unitId) {
   return db.prepare('SELECT id FROM learning_units WHERE user_id = ? AND id = ?').get(userId, unitId);
 }
@@ -44,6 +51,9 @@ function toDto(row) {
     score: row.questions_count != null ? row.correct_count / row.questions_count : null,
     evidenceDate: row.evidence_date,
     createdAt: row.created_at,
+    // Only listings know it (computed in list()). false = a LATER REVIEW row exists for the same review task
+    // (complete -> reopen -> complete): the older row is kept as history but is no longer the task's result.
+    ...(row.is_current != null ? { isCurrent: row.is_current === 1 } : {}),
     // Only listings know it (LEFT JOIN below). The TYPE stays INITIAL_PRACTICE; "origin" only says a corrected
     // exam produced the row, so the history can tell an exam from a study pass. Absent = not from an exam.
     ...(row.from_exam ? { origin: 'EXAM' } : {}),
@@ -123,18 +133,29 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
   return toDto(db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? AND id = ?').get(userId, run()));
 }
 
-/** Owned unit/date filters — unit ownership is checked when unitId is given. */
-export function list(db, userId, { unitId, dateFrom, dateTo } = {}) {
+/**
+ * Owned unit/date filters — unit ownership is checked when unitId is given.
+ *
+ * By default only CURRENT evidence is returned (TG-02): a REVIEW row is superseded when a later REVIEW row exists
+ * for the same review task (complete -> reopen -> complete), so every aggregate that sums this list (Stats,
+ * analytics, priorities) counts a re-completed review once. Nothing is updated or deleted: superseded rows stay
+ * in the ledger and come back flagged `isCurrent: false` with `includeSuperseded`. Rows without a review task
+ * (practice, external, exams) are never superseded.
+ */
+export function list(db, userId, { unitId, dateFrom, dateTo, includeSuperseded = false } = {}) {
   if (unitId !== undefined && !findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', 'Aula não encontrada.');
 
-  const clauses = ['user_id = ?'];
+  const clauses = ['le.user_id = ?'];
   const params = [userId];
-  if (unitId !== undefined) { clauses.push('unit_id = ?'); params.push(unitId); }
-  if (dateFrom) { clauses.push('evidence_date >= ?'); params.push(dateFrom); }
-  if (dateTo) { clauses.push('evidence_date <= ?'); params.push(dateTo); }
+  if (unitId !== undefined) { clauses.push('le.unit_id = ?'); params.push(unitId); }
+  if (dateFrom) { clauses.push('le.evidence_date >= ?'); params.push(dateFrom); }
+  if (dateTo) { clauses.push('le.evidence_date <= ?'); params.push(dateTo); }
+  if (!includeSuperseded) clauses.push(IS_CURRENT_SQL);
 
   return db.prepare(`
-    SELECT le.*, EXISTS(SELECT 1 FROM exam_evidence x WHERE x.user_id = le.user_id AND x.evidence_id = le.id) AS from_exam
-    FROM learning_evidence le WHERE ${clauses.map((c) => `le.${c}`).join(' AND ')} ORDER BY le.evidence_date, le.id
+    SELECT le.*,
+      EXISTS(SELECT 1 FROM exam_evidence x WHERE x.user_id = le.user_id AND x.evidence_id = le.id) AS from_exam,
+      CASE WHEN ${IS_CURRENT_SQL} THEN 1 ELSE 0 END AS is_current
+    FROM learning_evidence le WHERE ${clauses.join(' AND ')} ORDER BY le.evidence_date, le.id
   `).all(...params).map(toDto);
 }

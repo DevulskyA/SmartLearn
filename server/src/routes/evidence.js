@@ -51,18 +51,19 @@ export function registerEvidenceRoutes(app, db) {
           unitId: { type: 'string' },
           from: { type: 'string' },
           to: { type: 'string' },
+          includeSuperseded: { type: 'string', enum: ['true', 'false'] },
         },
       },
     },
   }, async (request, reply) => {
-    const { unitId, from, to } = request.query;
+    const { unitId, from, to, includeSuperseded } = request.query;
     let parsedUnitId;
     if (unitId !== undefined) {
       parsedUnitId = Number(unitId);
       if (!Number.isInteger(parsedUnitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     }
     try {
-      return { evidence: evidence.list(db, request.actor.userId, { unitId: parsedUnitId, dateFrom: from, dateTo: to }) };
+      return { evidence: evidence.list(db, request.actor.userId, { unitId: parsedUnitId, dateFrom: from, dateTo: to, includeSuperseded: includeSuperseded === 'true' }) };
     } catch (err) { return handleError(err, reply); }
   });
 }
