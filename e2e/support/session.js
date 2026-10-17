@@ -6,9 +6,22 @@
 import { expect } from '@playwright/test';
 import { VITE_ORIGIN } from './ports.js';
 
+/**
+ * src/app.js ends by calling showScreen(), which writes the screen into the URL hash, so a hash proves the module graph evaluated and
+ * the navigation handlers are bound. Under `vite dev` a single module request can be refused (lesson-editor.spec.js:207: ERR_CONNECTION_REFUSED
+ * on /src/stats.js, the whole of app.js never ran, the click on "Conta" did nothing). The dev server is test infrastructure, so reload once.
+ */
+async function ensureAppBooted(page) {
+  const booted = () => page.waitForFunction(() => window.location.hash.length > 1, undefined, { timeout: 8000 }).then(() => true, () => false);
+  if (await booted()) return;
+  await page.reload();
+  expect(await booted(), 'src/app.js did not boot after a reload (no screen in the URL hash)').toBeTruthy();
+}
+
 /** Creates `email` over HTTP while the page settles, then signs in through the real login form and waits for the logged-in view. */
 export async function signInRegistered(page, { email, password }) {
   await page.goto('/');
+  await ensureAppBooted(page);
   // the account is created on the SAME server the page was told to use (a spec may run several), exactly where the form would post
   // (read right after goto, so it can land while the dev server is still reloading the page: only a destroyed context is retried)
   let apiBase;
