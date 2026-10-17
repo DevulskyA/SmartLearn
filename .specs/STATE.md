@@ -16,3 +16,4 @@ PROIBIDO sem ordem explícita: Codex/Prompt Lab, chamada real a modelo, push, me
 
 DECISÕES E INVARIANTES HERDADOS (texto integral preservado, não duplicado): `.specs/archive/STATE-ate-2026-10-05.md` (STATE anterior), `.specs/archive/STATE-ate-2026-10-04.md` (STATE de 2.815 linhas) e `.specs/project/INVARIANTS.md`. Decisões de produto de 2026-10-04: `spec.md` R-12, R-13, INV-13/14 e §12.
 Esse STATE substitui `.specs/project/STATE.md` (arquivado em `.specs/archive/project-STATE-ate-2026-09-04.md`).
+AGENT_PRINCIPLES_PATH=.specs/governance/SMARTLEARN_AGENT_PRINCIPLES_V1.md (CANÔNICO por ordem do usuário em 2026-10-17; adendo de julgamento à Constituição do Produto, não segunda fonte de verdade; §XI = crítica PROPOSTA a ratificar). Pacote de retomada do primeiro estudo real: `.specs/features/first-real-study-v1/`.
