@@ -109,5 +109,5 @@ test('catalog drift sensor: every mutation anchor still occurs exactly once in t
   }
   // the five areas the requirement names must all be covered
   const areas = MUTATIONS.map((m) => m.area).join('|');
-  for (const needle of ['identidade', 'devPersistent', 'rejeição', 'sanitizador', 'checksum']) assert.match(areas, new RegExp(needle));
+  for (const needle of ['identidade', 'devPersistent', 'rejeição', 'sanitizador', 'checksum', 'telemetria']) assert.match(areas, new RegExp(needle));
 });

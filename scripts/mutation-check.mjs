@@ -75,6 +75,73 @@ export const MUTATIONS = [
     find: 'if (sourceChecksum(claimedRawSource) !== row.source_checksum) {', replace: 'if (false) {',
     cwd: 'server', tests: ['test/import-preview.test.js', 'test/import-commit.test.js'],
   },
+  // --- Telemetria do estudo (TG-12, v1-closure-telemetry): M-A..M-I do relatório viram M6A..M6I. Cada um quebra uma
+  // garantia sobre o que o aluno fez (assistência, conclusão da revisão, contexto da tentativa, razão do evento, razão
+  // da prova, vínculo da evidência). Os pares M6D/M6A também são guardados estaticamente por ledger-immutability.test.js.
+  {
+    id: 'M6A', area: 'telemetria (assistência nunca sobe)',
+    why: 'pedir dica ou revelar a resposta deixaria de elevar max_assistance: a tentativa assistida seria registrada como independente',
+    file: 'server/src/services/attempts.js',
+    find: 'if (assistanceRank(level) > assistanceRank(attempt.max_assistance)) {', replace: 'if (false) {',
+    cwd: 'server', tests: ['test/attempts.test.js', 'test/learning-events-schema.test.js'],
+  },
+  {
+    id: 'M6B', area: 'telemetria (assistência regride)',
+    why: 'max_assistance deixaria de ser monótono: uma dica pedida depois da revelação rebaixaria a assistência da tentativa',
+    file: 'server/src/services/attempts.js',
+    find: 'if (assistanceRank(level) > assistanceRank(attempt.max_assistance)) {', replace: 'if (assistanceRank(level) !== assistanceRank(attempt.max_assistance)) {',
+    cwd: 'server', tests: ['test/attempts.test.js'],
+  },
+  {
+    id: 'M6C', area: 'telemetria (concluir revisão duas vezes)',
+    why: 'concluir uma revisão já concluída passaria a gravar uma segunda evidência em vez de falhar com ALREADY_COMPLETED',
+    file: 'server/src/services/reviews.js',
+    find: 'if (task.completed_at) {', replace: 'if (false) {',
+    cwd: 'server', tests: ['test/reviews.test.js'],
+  },
+  {
+    id: 'M6D', area: 'telemetria (reabrir apaga evidência)',
+    why: 'reabrir uma revisão apagaria a evidência que a conclusão anterior gravou (história reescrita)',
+    file: 'server/src/services/reviews.js',
+    find: "db.prepare('UPDATE review_tasks SET completed_at = NULL WHERE user_id = ? AND id = ?').run(userId, reviewTaskId);",
+    replace: "db.prepare('UPDATE review_tasks SET completed_at = NULL WHERE user_id = ? AND id = ?').run(userId, reviewTaskId); db.prepare('DELETE FROM learning_evidence WHERE user_id = ? AND review_task_id = ?').run(userId, reviewTaskId);",
+    cwd: 'server', tests: ['test/reviews.test.js', 'test/ledger-immutability.test.js'],
+  },
+  {
+    id: 'M6E', area: 'telemetria (assistência omitida vira NONE)',
+    why: 'um evento sem assistanceUsed informada seria gravado como NONE (independente) em vez de UNKNOWN',
+    file: 'server/src/domain/learning-event.js',
+    find: "assistanceUsed = 'UNKNOWN',", replace: "assistanceUsed = 'NONE',",
+    cwd: 'server', tests: ['test/learning-events-schema.test.js', 'test/attempts.test.js'],
+  },
+  {
+    id: 'M6F', area: 'telemetria (correção não vence o evento original)',
+    why: 'a reconciliação escolheria o evento de MENOR sequência: a correção de um item perderia para a observação original',
+    file: 'server/src/services/review-results.js',
+    find: 'if (!current || row.sequence > current.sequence) latestByAttempt.set', replace: 'if (!current || row.sequence < current.sequence) latestByAttempt.set',
+    cwd: 'server', tests: ['test/result-reconciliation.test.js'],
+  },
+  {
+    id: 'M6G', area: 'telemetria (prova não idempotente)',
+    why: 'finalizar uma prova já corrigida geraria um segundo conjunto de tentativas e uma segunda evidência',
+    file: 'server/src/services/exams.js',
+    find: "if (exam.status === 'CORRECTED') return get(db, userId, examId);", replace: '',
+    cwd: 'server', tests: ['test/exams-finalize.test.js'],
+  },
+  {
+    id: 'M6H', area: 'telemetria (reteste contado como da revisão)',
+    why: 'tentativas feitas FORA da revisão (estudar agora, reteste) entrariam na lista de itens da revisão e inflariam sua contagem',
+    file: 'server/src/services/attempts.js',
+    find: "WHERE a.user_id = ? AND a.review_task_id = ? AND a.status = 'SUBMITTED'", replace: "WHERE a.user_id = ? AND (a.review_task_id = ? OR a.review_task_id IS NULL) AND a.status = 'SUBMITTED'",
+    cwd: 'server', tests: ['test/attempts.test.js'],
+  },
+  {
+    id: 'M6I', area: 'telemetria (evidência vincula tentativa de outra aula)',
+    why: 'a evidência aceitaria vincular uma tentativa de OUTRA aula, misturando o desempenho de duas aulas',
+    file: 'server/src/services/evidence.js',
+    find: 'if (attempt.unit_id !== unitId) throw', replace: 'if (false) throw',
+    cwd: 'server', tests: ['test/evidence.test.js'],
+  },
 ];
 
 const norm = (p) => resolve(p).toLowerCase();
