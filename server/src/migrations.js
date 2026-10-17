@@ -72,6 +72,16 @@ export function runMigrations(db, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   ensureSchemaTable(db);
 
   const migrations = listMigrations(migrationsDir);
+  // A database that already records a schema newer than this build knows (a backup restored from a newer build, an older
+  // checkout pointed at newer data) must never be run by this code: refuse before touching anything.
+  const newestKnown = migrations.reduce((max, m) => Math.max(max, m.version), 0);
+  const newestApplied = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v ?? 0;
+  if (newestApplied > newestKnown) {
+    throw new Error(
+      `Database schema v${newestApplied} is newer than this build (newest known migration v${newestKnown}). ` +
+      'Refusing to run an older build against newer data: use the build that wrote it, or restore an older backup.',
+    );
+  }
   const getRow = db.prepare('SELECT checksum FROM schema_migrations WHERE version = ?');
   const insertRow = db.prepare(
     'INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)'

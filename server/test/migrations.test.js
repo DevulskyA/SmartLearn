@@ -61,6 +61,26 @@ test('idempotent — second run does not duplicate any migration row', () => {
   }
 });
 
+test('a database written by a NEWER build (restored backup / older checkout) is refused loudly and left untouched', () => {
+  // Found by the backup/restore integrity proof: restoring a snapshot that records a schema version this build has never
+  // heard of used to be accepted silently and the older code then ran against a schema it does not understand.
+  const { path, cleanup } = tmpDb();
+  try {
+    const db = openDb(path);
+    runMigrations(db, REAL_MIGRATIONS_DIR);
+    const newest = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v;
+    db.prepare("INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, 'from-a-newer-build', 'x', '2030-01-01T00:00:00.000Z')").run(newest + 1);
+    const before = db.prepare('SELECT version, checksum FROM schema_migrations ORDER BY version').all();
+
+    assert.throws(
+      () => runMigrations(db, REAL_MIGRATIONS_DIR),
+      (err) => /newer/i.test(err.message) && err.message.includes(`v${newest + 1}`) && err.message.includes(`v${newest}`),
+    );
+    assert.deepEqual(db.prepare('SELECT version, checksum FROM schema_migrations ORDER BY version').all(), before, 'the refusal changes nothing');
+    db.close();
+  } finally { cleanup(); }
+});
+
 test('checksum mismatch on applied migration throws', () => {
   const { path, cleanup: cleanupDb } = tmpDb();
   const { dir: mDir, cleanup: cleanupM } = tmpMigDir();
