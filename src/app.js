@@ -4263,6 +4263,41 @@ function createExerciseEditForm({ exerciseId, studyId, question, answer, hint, w
   return { form, questionInput };
 }
 
+// Saves the exercise open in the inline editor built by createExerciseEditForm: validates the question, updates the exercise and
+// re-renders the list; on failure the editor stays open with its own error line. `button` is the editor's Save button.
+async function saveExerciseEdit(button, studyId) {
+  const exerciseId = Number(button.dataset.exerciseId);
+  if (!exerciseId) return;
+  const item = button.closest(".exercise-item-edit");
+  const eq = item?.querySelector(".exercise-question-input");
+  const ea = item?.querySelector(".exercise-answer-input");
+  const eh = item?.querySelector(".exercise-hint-input");
+  const ew = item?.querySelector(".exercise-why-input");
+  const questionText = eq?.value.trim() ?? "";
+  if (!questionText) { eq?.focus(); return; }
+  button.disabled = true;
+  try {
+    await DB.exercises.update(exerciseId, {
+      questionText,
+      answerText: ea?.value.trim() ?? "",
+      hintText: eh?.value.trim() || null,
+      ...(ew ? { explanationText: ew.value.trim() || null } : {}),
+    });
+    await renderExerciseList(studyId);
+  } catch (error) {
+    button.disabled = false;
+    console.error("Falha ao salvar exercício.", error);
+    const item = button.closest(".exercise-item-edit");
+    let errMsg = item?.querySelector(".exercise-edit-error");
+    if (!errMsg && item) {
+      errMsg = document.createElement("span");
+      errMsg.className = "exercise-edit-error form-error";
+      item.appendChild(errMsg);
+    }
+    if (errMsg) errMsg.textContent = t("appRegister.exercise.editSaveFailed");
+  }
+}
+
 async function renderSubjects(selectedId = subjectSelect.value) {
   const [activeSubjects, allSubjects] = await Promise.all([
     DB.subjects.getActive(),
@@ -4760,36 +4795,7 @@ studyList.addEventListener("click", async (event) => {
   }
 
   if (action === "save-exercise-edit") {
-    const exerciseId = Number(button.dataset.exerciseId);
-    if (!exerciseId) return;
-    const item = button.closest(".exercise-item-edit");
-    const eq = item?.querySelector(".exercise-question-input");
-    const ea = item?.querySelector(".exercise-answer-input");
-    const eh = item?.querySelector(".exercise-hint-input");
-    const ew = item?.querySelector(".exercise-why-input");
-    const questionText = eq?.value.trim() ?? "";
-    if (!questionText) { eq?.focus(); return; }
-    button.disabled = true;
-    try {
-      await DB.exercises.update(exerciseId, {
-        questionText,
-        answerText: ea?.value.trim() ?? "",
-        hintText: eh?.value.trim() || null,
-        ...(ew ? { explanationText: ew.value.trim() || null } : {}),
-      });
-      await renderExerciseList(studyId);
-    } catch (error) {
-      button.disabled = false;
-      console.error("Falha ao salvar exercício.", error);
-      const item = button.closest(".exercise-item-edit");
-      let errMsg = item?.querySelector(".exercise-edit-error");
-      if (!errMsg && item) {
-        errMsg = document.createElement("span");
-        errMsg.className = "exercise-edit-error form-error";
-        item.appendChild(errMsg);
-      }
-      if (errMsg) errMsg.textContent = t("appRegister.exercise.editSaveFailed");
-    }
+    await saveExerciseEdit(button, studyId);
     return;
   }
 
