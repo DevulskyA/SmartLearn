@@ -4180,6 +4180,41 @@ async function renderExerciseList(unitId) {
   }
 }
 
+// The inline editor that replaces an exercise row; its Save / Cancel buttons are handled by the study-list click dispatcher.
+function createExerciseEditForm({ exerciseId, studyId, question, answer, hint, why }) {
+  const form = document.createElement("div");
+  form.className = "exercise-item exercise-item-edit";
+
+  const questionInput = document.createElement("textarea");
+  questionInput.rows = 2; questionInput.value = question; questionInput.className = "exercise-question-input";
+  const answerInput = document.createElement("textarea");
+  answerInput.rows = 2; answerInput.value = answer; answerInput.className = "exercise-answer-input";
+  const hintInput = document.createElement("input");
+  hintInput.type = "text"; hintInput.value = hint; hintInput.placeholder = t("appRegister.exercise.hint"); hintInput.className = "exercise-hint-input";
+  let whyInput = null;
+  if (REMOTE_MODE) {
+    whyInput = document.createElement("textarea");
+    whyInput.rows = 2; whyInput.value = why; whyInput.placeholder = t("appRegister.exercise.why"); whyInput.className = "exercise-why-input";
+    whyInput.setAttribute("aria-label", t("appRegister.exercise.why"));
+  }
+
+  const saveButton = document.createElement("button");
+  saveButton.type = "button"; saveButton.className = "small-button is-primary";
+  saveButton.dataset.action = "save-exercise-edit";
+  saveButton.dataset.exerciseId = String(exerciseId);
+  saveButton.dataset.studyId = String(studyId);
+  saveButton.textContent = t("appRegister.save");
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button"; cancelButton.className = "small-button";
+  cancelButton.dataset.action = "cancel-exercise-edit";
+  cancelButton.dataset.studyId = String(studyId);
+  cancelButton.textContent = t("appRegister.cancel");
+
+  form.append(questionInput, answerInput, hintInput, ...(whyInput ? [whyInput] : []), saveButton, cancelButton);
+  return { form, questionInput };
+}
+
 async function renderSubjects(selectedId = subjectSelect.value) {
   const [activeSubjects, allSubjects] = await Promise.all([
     DB.subjects.getActive(),
@@ -4695,46 +4730,16 @@ studyList.addEventListener("click", async (event) => {
     if (!exerciseId) return;
     const item = button.closest(".exercise-item");
     if (!item) return;
-    // Replace item with inline edit form
-    const currentQ = item.querySelector(".exercise-question")?.textContent ?? "";
-    const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
-    const hintEl = item.querySelector(".exercise-hint");
-    const currentH = hintEl?.dataset.text ?? "";
-    const whyEl = item.querySelector(".exercise-why");
-    const currentW = whyEl?.dataset.text ?? "";
-
-    const editForm = document.createElement("div");
-    editForm.className = "exercise-item exercise-item-edit";
-
-    const eq = document.createElement("textarea");
-    eq.rows = 2; eq.value = currentQ; eq.className = "exercise-question-input";
-    const ea = document.createElement("textarea");
-    ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
-    const eh = document.createElement("input");
-    eh.type = "text"; eh.value = currentH; eh.placeholder = t("appRegister.exercise.hint"); eh.className = "exercise-hint-input";
-    let ew = null;
-    if (REMOTE_MODE) {
-      ew = document.createElement("textarea");
-      ew.rows = 2; ew.value = currentW; ew.placeholder = t("appRegister.exercise.why"); ew.className = "exercise-why-input";
-      ew.setAttribute("aria-label", t("appRegister.exercise.why"));
-    }
-
-    const saveEx = document.createElement("button");
-    saveEx.type = "button"; saveEx.className = "small-button is-primary";
-    saveEx.dataset.action = "save-exercise-edit";
-    saveEx.dataset.exerciseId = String(exerciseId);
-    saveEx.dataset.studyId = String(studyId);
-    saveEx.textContent = t("appRegister.save");
-
-    const cancelEx = document.createElement("button");
-    cancelEx.type = "button"; cancelEx.className = "small-button";
-    cancelEx.dataset.action = "cancel-exercise-edit";
-    cancelEx.dataset.studyId = String(studyId);
-    cancelEx.textContent = t("appRegister.cancel");
-
-    editForm.append(eq, ea, eh, ...(ew ? [ew] : []), saveEx, cancelEx);
-    item.replaceWith(editForm);
-    eq.focus();
+    const { form, questionInput } = createExerciseEditForm({
+      exerciseId,
+      studyId,
+      question: item.querySelector(".exercise-question")?.textContent ?? "",
+      answer: item.querySelector(".exercise-answer")?.textContent ?? "",
+      hint: item.querySelector(".exercise-hint")?.dataset.text ?? "",
+      why: item.querySelector(".exercise-why")?.dataset.text ?? "",
+    });
+    item.replaceWith(form);
+    questionInput.focus();
     return;
   }
 
