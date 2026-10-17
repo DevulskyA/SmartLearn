@@ -109,7 +109,7 @@ Para cada passo responda em uma linha: **claro? confortável? o que incomodou?**
 
 ## D. Ensaio e cobertura (por que isto não substitui você)
 
-`scripts/desktop-study-journey.mjs` repete 18 passos no Desktop real, mas com banco descartável, provedor FAKE e PDF fabricado. **Ensaio mecânico executado em 2026-10-17** em instância isolada (banco temporário, sem tocar `~/SmartLearn-DevData`, sem reiniciar o seu Desktop): 18/18 no HEAD `f3966f9` (EXIT=0), antes 18/18 duas vezes em `9d572d5`. Evidência: `v1-closure-telemetry/REPORT.md` §6 e §13. Mapa dos seus oito passos:
+`scripts/desktop-study-journey.mjs` repete 18 passos no Desktop real, mas com banco descartável, provedor FAKE e PDF fabricado. **Ensaio mecânico executado em 2026-10-17** em instância isolada (banco temporário, sem tocar `~/SmartLearn-DevData`, sem reiniciar o seu Desktop): 18/18 no HEAD `f3966f9` (EXIT=0), antes 18/18 duas vezes em `9d572d5`. Evidência: `v1-closure-telemetry/REPORT.md` §6 e §13. **Conferência mecânica do próprio roteiro (2026-10-17, leitura do código, sem executar o app):** das 117 cadeias entre aspas da seção A a C, 90 existem literalmente em `index.html`/catálogos `pt-BR`/`src/*.js`; as 27 restantes são modelos com variável (ex.: "Questão {current} de {total}" e "Erro {current} de {total}" em `appStudyNow.js:14-15`, "{count} conteúdo" em `appToday.js:52`) ou trechos de prosa, e os rótulos-base de cada modelo conferidos existem. Mapa dos seus oito passos:
 
 | Seu passo | Passos da jornada | Cobertura |
 |---|---|---|
