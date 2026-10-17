@@ -475,3 +475,24 @@ test("the agenda request carries the browser's timezone with the day it calls to
     assert.equal(new URL(urls[0]).searchParams.get('timezone'), null, 'without a date there is nothing to disambiguate: the saved timezone applies');
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('listForReviews splits a long id list into batches under the server cap (500) and merges the answers, so Hoje never loses restored judgments', async () => {
+  // Found by the long-use audit: 501+ open reviews made the server answer 400 and Hoje only logged the error.
+  const ids = Array.from({ length: 1234 }, (_, i) => i + 1);
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const requested = new URL(String(url)).searchParams.get('ids').split(',').map(Number);
+    assert.ok(requested.length <= 500, `batch of ${requested.length} ids is over the server cap`);
+    const body = { attemptsByReviewTask: {}, priorWrongByReviewTask: {} };
+    for (const id of requested) { body.attemptsByReviewTask[id] = [{ id: id * 10 }]; if (id % 2 === 0) body.priorWrongByReviewTask[id] = [id]; }
+    return { ok: true, status: 200, json: async () => body };
+  };
+  try {
+    const out = await DB.attempts.listForReviews(ids);
+    assert.ok(calls.length >= 3, `expected at least 3 batches, got ${calls.length}`);
+    assert.equal(Object.keys(out.attemptsByReviewTask).length, 1234);
+    assert.equal(Object.keys(out.priorWrongByReviewTask).length, 617);
+    assert.deepEqual(out.attemptsByReviewTask[777], [{ id: 7770 }]);
+  } finally { globalThis.fetch = realFetch; }
+});

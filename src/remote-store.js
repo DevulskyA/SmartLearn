@@ -306,8 +306,15 @@ const attempts = {
   },
   // Batch: one request for every open review Hoje is about to render.
   async listForReviews(reviewTaskIds) {
-    if (reviewTaskIds.length === 0) return { attemptsByReviewTask: {}, priorWrongByReviewTask: {} };
-    return apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.join(",")}`);
+    const merged = { attemptsByReviewTask: {}, priorWrongByReviewTask: {} };
+    // The server caps one request at 500 ids (MAX_BATCH_REVIEW_TASKS); with more open reviews than that the whole call used to fail with 400.
+    const BATCH = 400;
+    for (let start = 0; start < reviewTaskIds.length; start += BATCH) {
+      const part = await apiRequest(`/v1/review-task-attempts?ids=${reviewTaskIds.slice(start, start + BATCH).join(",")}`);
+      Object.assign(merged.attemptsByReviewTask, part.attemptsByReviewTask ?? {});
+      Object.assign(merged.priorWrongByReviewTask, part.priorWrongByReviewTask ?? {});
+    }
+    return merged;
   },
   // Exercises whose most recent submitted attempt was INCORRECT, grouped by
   // unit: { [unitId]: [exerciseId, ...] }. Read-only; a later correct answer
