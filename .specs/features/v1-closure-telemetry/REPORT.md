@@ -79,3 +79,13 @@ NEXT=aguardar decisões humanas; diagnosticar a falha só se reaparecer com trac
 ## 10. Provas no HEAD final af98c8f
 
 Jornada nativa 18/18 (título e commit gravados = af98c8f) e E2E completo 259 passaram, 2 ignorados, 0 falhas (EXIT=0, 8,8 min), ambos no HEAD final. Segunda execução limpa consecutiva do E2E completo (a anterior em 5174b28 também 259/0); a falha única de `lesson-editor.spec.js:207` não reapareceu em 3 execuções completas posteriores nem em 304 repetições sob carga. Causa continua não provada (risco residual registrado).
+
+## 11. Causa da falha única de `lesson-editor.spec.js:207` (trace, comprovada)
+
+Evidência no `trace.zip` da execução 1792259443727-26464:
+- A requisição de `/src/stats.js` (módulo importado por `src/app.js`) terminou com `net::ERR_CONNECTION_REFUSED` (status -1, mono 305731.7), enquanto as vizinhas no mesmo instante responderam 200 (`/src/upcoming-reviews.js` 305732.3, `/src/auth-ui.js` 305732.8). É a única requisição falha do trace.
+- Um `import` ES que falha derruba a avaliação do módulo inteiro: `src/app.js` nunca registrou os handlers de navegação (`app.js:4666`), então o clique em "Conta" (306419) não fez nada e a página ficou no HTML estático de "Hoje"; o formulário de login seguiu oculto até o timeout.
+- Origem: conexão recusada pontual do servidor de desenvolvimento do Vite (só existe em `vite dev` com módulos servidos um a um; o build de produção empacota os módulos, e a jornada nativa e `production-build.spec` não passam por esse caminho). Não é defeito do código de evidência nem do produto empacotado.
+- Por que não reproduz: depende de uma recusa de conexão transitória do Vite sob carga (0 recorrências em 3 E2E completos e 304 repetições).
+
+Classificação: instabilidade da infraestrutura de teste (servidor de desenvolvimento), com mecanismo provado por trace. Nenhuma alteração de produto. Melhoria opcional e não feita: `signInRegistered` poderia detectar `requestfailed` de módulo e recarregar.
