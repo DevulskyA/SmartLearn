@@ -2,9 +2,80 @@
 
 Data: 2026-10-17 · Natureza: ANÁLISE E PLANO. Nenhum código, migração ou dado foi alterado. O banco humano (`SmartLearn-DevData`) não foi aberto.
 Base lida: worktree `smartlearn-v1-complete` (HEAD `80627a4`) e worktree `smartlearn-v1-split-fatia2` (commits `7b44104`, `f55da10`).
-Requisitos relacionados: R-11 / AC-11.1, AC-11.3 · tarefas `T-F7-01`, `T-F7-03` · dívida DEBT-003.
+Requisitos relacionados: R-11 / AC-11.1, AC-11.3, AC-11.4 · tarefas `T-F7-01`, `T-F7-03`, `T-F7-04` a `T-F7-09` · dívida DEBT-003.
+Classificação: DERIVADO (análise de agente, não é decisão). Reconciliada em 2026-10-17 com a direção CANÔNICA do aluno: ver a seção 0, que prevalece sobre as seções 1 a 12 onde houver divergência.
 
 Legenda de prova: `LIDO` = confirmado lendo o código/documento; `FONTE` = confirmado em fonte primária na web nesta sessão (via WebFetch, com a ressalva da seção 9); `NÃO VERIFICADO` = dito sem prova; `ESCOLHA DE PRODUTO` = decisão do aluno, sem prova científica que a determine.
+
+---
+
+## 0. Reconciliação com a direção do aluno de 2026-10-17 (frente B) — LEIA ANTES DO RESTANTE
+
+Legenda de classificação usada neste documento: CANÔNICO = decisão humana vigente · DERIVADO = análise ou recomendação de agente, não é decisão · HISTÓRICO = informação preservada e não ativa · CONFLITO = afirmações incompatíveis, a decidir por humano.
+
+- Este documento (seções 1 a 12) é DERIVADO e foi escrito ANTES da direção abaixo. Onde divergir dela, a direção vence e a divergência está marcada como CONFLITO nesta seção.
+- A direção é CANÔNICA (Constituição I.19, commit `be69426`). Ela é de DIREÇÃO: não autoriza implementação, migração nem alteração de dados.
+
+### 0.1 Direção aceita (CANÔNICO)
+
+Evoluir para um calendário com UMA obrigação de revisão exigível por unidade, agendando a próxima a partir da revisão realmente realizada. A dívida deve representar conhecimento a recuperar, não uma coleção de datas perdidas. Invariantes: a revisão espaçada continua necessária; retomar não equivale automaticamente a várias revisões feitas; nenhuma etapa perdida é declarada concluída de forma artificial; histórico íntegro e auditável; reteste nunca substitui a evidência original; um acerto isolado não prova domínio de unidade extensa; unidade sem questões adequadas não recebe crédito automático de domínio; o agendamento considera provas e necessidades reais de acompanhamento. Fórmula, intervalos, estados, erro/ajuda, cobertura de conteúdo e migração dependem da decisão formal HG-09.
+
+### 0.2 Quanto cada opção da seção 5 cumpre da direção (DERIVADO)
+
+| Elemento da direção | Opção 0 (só agrupamento) | Opção 2 (recomendada nas seções 1 e 5: recuperação por unidade, 16 linhas mantidas) | Opção 3 (corrente preguiçosa: uma linha exigível por vez) |
+|---|---|---|---|
+| Uma obrigação exigível por unidade | Não (só visual; contadores seguem em 34 etapas em 10 unidades) | Parcial: vale como propriedade depois de uma recuperação com evidência, e só quando a etapa seguinte também venceu. Unidade em dia continua com 16 linhas independentes | Sim, estrutural |
+| Próxima revisão agendada a partir da revisão realmente feita | Não | Parcial: só no gatilho de empilhamento. Numa unidade em dia, revisar com 2 dias de atraso NÃO move as datas seguintes (âncora continua na data de estudo) | Sim, sempre |
+| Dívida = conhecimento a recuperar, não datas perdidas | Não | Parcial: etapas perdidas viram `SUPERSEDED` (não realizada) e saem do contador de atraso; o histórico fica | Sim (não existem linhas futuras para "perder") |
+| Histórico auditável, nenhuma etapa declarada concluída | Sim | Sim (`SUPERSEDED` ≠ concluída; log reversível) | Sim, com `stage_index` e `derived_from`; `reopen` precisa anular a linha derivada |
+| Conflito com Constituição §21, §91-C, V1-09 | Nenhum | CONFLITO moderado (adaptação por resultado, mas as 16 linhas ficam) | CONFLITO forte (viola também INV-04/INV-05 do MVP, "todas as revisões geradas no cadastro") |
+
+Leitura honesta: a Opção 2 cumpre a direção só para unidades JÁ empilhadas. Para unidades em dia a direção pede mais (âncora na revisão feita) do que a Opção 2 entrega. A Opção 3 cumpre a direção por inteiro e é a de maior custo, maior conflito e menor evidência (nenhum dado medido).
+
+### 0.3 CONFLITO e resoluções necessárias
+
+| # | Item | Classificação | Tratamento |
+|---|---|---|---|
+| C12 | A recomendação das seções 1 e 5 ("não implementar a corrente preguiçosa agora; Fase 5 gated por dados") foi escrita antes da direção e contradiz a parte "uma obrigação exigível por unidade, próxima a partir da revisão feita" para unidades em dia | CONFLITO entre DERIVADO e CANÔNICO | Não é decisão. A pergunta passa a ser D-12 (abaixo). A recomendação anterior fica como uma das alternativas, não como curso padrão |
+| C13 | Constituição §21 e §91-C (scheduler FIXO na V1; FSRS/adaptativo "NÃO é V1; não reabrir sem nova evidência"), V1-09, heritage H-01 × direção B | CONFLITO CANÔNICO × CANÔNICO | Registrado também na Constituição (§21, §91-C, I.19). O código segue o texto de §21 até D-1 e a emenda (T-F7-07). Não resolvido silenciosamente |
+| C14 | INV-04/INV-05 e INV-20 (MVP, `INVARIANTS.md`) × Opção 3 | CONFLITO; INV-20 pode estar obsoleto para a V1 (NÃO VERIFICADO qual vigora) | Entra na emenda de D-1; só a Opção 3 viola INV-04 de fato |
+| C15 | A direção acrescenta "provas e necessidades reais de acompanhamento" ao agendamento, mas não existe campo de data de prova (seção 2) | Dependência | O campo é decidido e implementado em T-F12-10 (compartilhado com a frente A). As tarefas HG9-E1 a HG9-E3 passam a depender dele, sem duplicar |
+
+Os conflitos C1 a C11 da seção 3 continuam válidos; C1 e C2 são o mesmo assunto de C13 e C14.
+
+### 0.4 Decisões que a direção abre (acrescentam-se a D-1..D-11 da seção 11; dono: o aluno; preparo: agente)
+
+| ID | Decisão | Depende de | Preparo (tarefa) |
+|---|---|---|---|
+| D-12 | Arquitetura-alvo: (a) só Opção 2; (b) Opção 2 como etapa 1 e Opção 3 como alvo, com o esquema da etapa 1 já prevendo `stage_index`/`derived_from`; (c) Opção 3 direto. Inclui responder se a âncora da próxima revisão passa a ser a data REAL da revisão também para unidades em dia | D-1, análise de impacto | T-F7-04, T-F7-05 |
+| D-13 | Cobertura de conteúdo: o que significa "recuperada" numa unidade extensa (mínimo de itens independentes, de conceitos distintos, ou ambos) e o que acontece com unidade sem questões adequadas (recomendação DERIVADA: nenhum crédito automático; a unidade segue como "evidência insuficiente" com ação clara para obter exercícios) | D-3, D-5; entidade de conhecimento/subtema (`learning-loop-v2`, F2) para cobertura por conceito | T-F7-06 |
+| D-14 | Âncora do próximo intervalo em unidade em dia (data real da revisão × data planejada). Mudar isso altera o calendário de TODAS as unidades, não só das atrasadas | D-12 | T-F7-04 |
+| D-15 | Destino das linhas já existentes (16 por unidade) na migração, uso dos dados de uso (hoje o banco de uso é o seed sintético), reversibilidade e paridade de plataformas | D-12, D-11 | T-F7-08 |
+| D-16 | Papel da data de prova no agendamento (teto antes da prova, ordem em Hoje) e sua relação com a frente A | T-F12-10 (D-6) | T-F12-10 |
+
+### 0.5 Mapa de IDs: esta proposta × `tasks.md` (sem duplicar)
+
+As tarefas `HG9-*` permanecem os itens de desenho deste documento; `tasks.md` carrega o estado. Equivalências: HG9-S1 = T-F7-07; HG9-S2 = parte de T-F7-01(a) e de T-F7-06; HG9-S3 = T-F7-03; HG9-C1 a C7 e C9 = T-F7-01(b) a (d), só depois de T-F7-07; HG9-C2 e HG9-C8 = T-F7-08 (migração e paridade); HG9-E1 a E3 = subsumidas por T-F12-10 (um único campo/entidade de prova para as frentes A e B); HG9-E4/E5 seguem em B; HG9-A1 a A4 = Fase 5, depois de T-F7-09. Tarefas NOVAS desta reconciliação: T-F7-04 a T-F7-09 (frente B) e a família T-F12 (frente A). Acoplamento A↔B: o plano do dia (`shared/day-plan.js`, T-F12-04) e a previsão de carga (T-F12-09) leem o predicado "etapa aberta"; quando a frente B mudar o calendário ou introduzir `SUPERSEDED`, esses módulos entram na lista de consumidores a ajustar da seção 8 (HG9-C4).
+
+### 0.6 Fundamentação científica: o que é provado, o que é inferência, o que NÃO foi verificado
+
+PROVADO (fontes lidas, nível de resumo ou código; ver a seção 4):
+- Cepeda et al., 2006 (Psychological Bulletin 132(3):354-380): o intervalo entre estudos que dá melhor retenção cresce com o intervalo de retenção desejado.
+- Cepeda et al., 2008 (Psychological Science 19(11):1095-1102): o intervalo ótimo cai de cerca de 20 a 40% de um atraso de 1 semana para cerca de 5 a 10% de um atraso de 1 ano; o desempenho sobe e depois cai com o aumento do intervalo.
+- Anki (código do agendador e FAQ): o atraso entra no cálculo do próximo intervalo de um cartão (Good e Easy o incorporam; Hard o ignora). FSRS: o atraso entra por `t` em `R(t,S)`.
+
+INFERÊNCIA (consistente com o que está acima, NÃO provada para este caso):
+- Concentrar numa sessão as repetições de várias etapas atrasadas não reproduz o benefício de distribuí-las no tempo. A frase "massa < espaçamento" como conclusão geral não foi reverificada nesta sessão; só o item acima de Cepeda foi lido.
+- Que uma sessão diagnóstica de recordação ativa por unidade seja suficiente para reagendar; que as classes `CLEAN/MIXED/FAILED/NO_EVIDENCE` e seus limiares sejam adequados; que o acerto de poucos itens autojulgados justifique avançar o intervalo.
+
+NÃO VERIFICADO (não usar como fundamento):
+- As referências do texto original da proposta de retomada adaptativa (Rawson e Dunlosky; Trumble 2024; Maye e Hurley 2026), registradas em `LOOP_BACKLOG.md` e nunca conferidas.
+- Aplicabilidade de parâmetros de Anki/FSRS a unidades com vários exercícios autojulgados; o algoritmo SM-2 original; a frase de que "20 revisões perdidas valem uma sessão" (o próprio backlog diz que não há prova).
+- Qualquer número de "tempo por questão" ou "duração ideal de sessão": nenhuma fonte foi lida; na frente A são ESCOLHAS DE PRODUTO provisórias (ver `.specs/features/daily-plan-time-budget-v1/spec.md`).
+
+### 0.7 Estado de uso real citado (INFORMADO, não medido por este documento)
+
+Dados do coordenador em 2026-10-17: o banco do aluno é o seed sintético (34 revisões vencidas em 10 unidades, sem duplicata, dados de 19/09); o agrupamento por unidade está implementado e provado só na branch `claude/smartlearn-v1-split-fatia2` (commits `7b44104`, `f55da10`; 258 E2E passaram, a única falha é a guarda de branch de `production-build.spec`, que exige a branch de trabalho), NÃO integrado; jornada nativa Windows 18/18 em `d80f46d`, repetição em `f55da10` em andamento por outro agente. Os dois commits da branch foram conferidos por `git log` nesta sessão; o restante não foi reexecutado aqui.
 
 ---
 
@@ -289,6 +360,7 @@ Caminho crítico: D-1, S1/S2, C1, C2, C3, C4, C5, C6, C9. A Fase 1 e a Fase 4 sa
 | D-9 | Após `FAILED`: aceitar horizonte menor ou acrescentar linhas | Aceitar horizonte menor na v1 |
 | D-10 | Autorizar o produto a gerar um snapshot verificado para medir (T-F7-03); eu não abro o banco humano | Sim, quando houver janela |
 | D-11 | Paridade com Android e cliente local: replicar ou declarar fora do escopo | Verificar primeiro como o Android guarda dados |
+| D-12 a D-16 | Abertas pela direção de 2026-10-17: arquitetura-alvo (Opção 2, 2 depois 3, ou 3), cobertura de conteúdo, âncora em unidade em dia, destino das linhas existentes, papel da data de prova | Ver a seção 0.4. A recomendação da coluna anterior para D-1 ("Sim para a Fase 3; não para a Fase 5") passa a ser DERIVADA e em CONFLITO com a direção para unidades em dia (C12); D-1 deve ser respondido junto com D-12 |
 
 ---
 
