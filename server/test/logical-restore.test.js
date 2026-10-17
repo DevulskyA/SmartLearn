@@ -410,6 +410,56 @@ test('IMPORT-1: an account that never touched settings restores no settings row 
   } finally { cleanup(); }
 });
 
+test('IMPORT-1: the language preferences the student chose (interface and content) survive the round trip', async () => {
+  // Found by the backup/restore integrity proof: user_settings.ui_locale / generation_locale (migration 031) were exported
+  // but never restored, so a restored account silently lost the content language the student had fixed.
+  const { app, db, cleanup } = await freshApp();
+  try {
+    const a = await registerAndAuth(app, 'a@example.com');
+    seedRichAccount(db, a.userId);
+    db.prepare('UPDATE user_settings SET ui_locale = ?, generation_locale = ? WHERE user_id = ?').run('en', 'es', a.userId);
+    const exportA = await exportOf(app, a);
+    assert.equal(exportA.settings.uiLocale, 'en');
+    assert.equal(exportA.settings.generationLocale, 'es');
+
+    const b = await registerAndAuth(app, 'b@example.com');
+    await commitRaw(app, b, (await previewOk(app, b, exportA)).id);
+    const row = db.prepare('SELECT timezone, ui_locale, generation_locale FROM user_settings WHERE user_id = ?').get(b.userId);
+    assert.deepEqual(row, { timezone: 'America/Manaus', ui_locale: 'en', generation_locale: 'es' });
+    assert.deepEqual((await exportOf(app, b)).settings, exportA.settings);
+  } finally { cleanup(); }
+});
+
+test('IMPORT-1: an export made before the language preferences existed still restores (they stay unchosen)', async () => {
+  const { app, db, cleanup } = await freshApp();
+  try {
+    const a = await registerAndAuth(app, 'a@example.com');
+    seedRichAccount(db, a.userId);
+    const exportA = await exportOf(app, a);
+    delete exportA.settings.uiLocale;
+    delete exportA.settings.generationLocale;
+    const b = await registerAndAuth(app, 'b@example.com');
+    await commitRaw(app, b, (await previewOk(app, b, exportA)).id);
+    const row = db.prepare('SELECT ui_locale, generation_locale FROM user_settings WHERE user_id = ?').get(b.userId);
+    assert.deepEqual(row, { ui_locale: null, generation_locale: null });
+  } finally { cleanup(); }
+});
+
+test('IMPORT-1: an unsupported language in the file rejects the whole file at preview', async () => {
+  const { app, db, cleanup } = await freshApp();
+  try {
+    const a = await registerAndAuth(app, 'a@example.com');
+    seedRichAccount(db, a.userId);
+    const exportA = await exportOf(app, a);
+    exportA.settings.generationLocale = 'xx-YY';
+    const b = await registerAndAuth(app, 'b@example.com');
+    const res = await previewRaw(app, b, exportA);
+    assert.equal(res.statusCode, 400);
+    assert.equal(JSON.parse(res.body).error.code, 'INVALID_SOURCE');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_units WHERE user_id = ?').get(b.userId).n, 0);
+  } finally { cleanup(); }
+});
+
 test('IMPORT-1: an export with nothing in it restores to an equally empty account', async () => {
   const { app, cleanup } = await freshApp();
   try {

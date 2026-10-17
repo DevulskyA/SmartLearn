@@ -146,9 +146,11 @@ export function restoreLogical(db, userId, normalized, now = new Date()) {
   // the new account reads the same defaults the old one did.
   if (normalized.settings.updatedAt !== null && normalized.settings.timezone !== null) {
     db.prepare(`
-      INSERT INTO user_settings (user_id, timezone, review_schedule, updated_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET timezone = excluded.timezone, updated_at = excluded.updated_at
-    `).run(userId, normalized.settings.timezone, JSON.stringify(REVIEW_DAY_OFFSETS), normalized.settings.updatedAt);
+      INSERT INTO user_settings (user_id, timezone, review_schedule, updated_at, ui_locale, generation_locale) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET timezone = excluded.timezone, updated_at = excluded.updated_at,
+        ui_locale = excluded.ui_locale, generation_locale = excluded.generation_locale
+    `).run(userId, normalized.settings.timezone, JSON.stringify(REVIEW_DAY_OFFSETS), normalized.settings.updatedAt,
+      normalized.settings.uiLocale ?? null, normalized.settings.generationLocale ?? null);
   }
 
   return inserted;

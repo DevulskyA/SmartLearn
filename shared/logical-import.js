@@ -15,6 +15,7 @@
 // pages, outline, proposals, drafts, citations) and competencies are not part
 // of the export and are not restored; the preview says so explicitly.
 import { ImportNormalizationError } from './import-normalization.js';
+import { resolveSupportedLocale } from './locales.js';
 
 export const LOGICAL_EXPORT_VERSION = 1;
 
@@ -370,7 +371,7 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
   }
 
   // ---- settings: only the timezone is user-editable; the schedule is fixed ----
-  let settings = { timezone: null, updatedAt: null };
+  let settings = { timezone: null, updatedAt: null, uiLocale: null, generationLocale: null };
   if (raw.settings !== undefined && raw.settings !== null) {
     if (typeof raw.settings !== 'object' || Array.isArray(raw.settings)) {
       issue('INVALID_SETTINGS', 'settings deve ser um objeto.');
@@ -378,7 +379,15 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
       const { timezone, updatedAt } = raw.settings;
       if (typeof timezone !== 'string' || timezone.trim() === '') issue('INVALID_SETTINGS', 'settings.timezone ausente ou inválido.');
       if (updatedAt !== null && updatedAt !== undefined && !isTimestamp(updatedAt)) issue('INVALID_SETTINGS', 'settings.updatedAt inválido.');
-      settings = { timezone: typeof timezone === 'string' ? timezone : null, updatedAt: updatedAt ?? null };
+      // The language the student CHOSE (null = not chosen yet; absent in exports older than migration 031). Never replaced by a near locale.
+      const locales = {};
+      for (const key of ['uiLocale', 'generationLocale']) {
+        const value = raw.settings[key];
+        if (value === undefined || value === null) { locales[key] = null; continue; }
+        locales[key] = resolveSupportedLocale(value);
+        if (locales[key] === null) issue('INVALID_SETTINGS', `settings.${key} não é um idioma suportado (${JSON.stringify(value)}).`);
+      }
+      settings = { timezone: typeof timezone === 'string' ? timezone : null, updatedAt: updatedAt ?? null, ...locales };
     }
   } else {
     issue('INVALID_SETTINGS', 'settings ausente.');
