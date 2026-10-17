@@ -63,3 +63,15 @@ Aberto: a falha única do E2E completo (rodar de novo e, se repetir, diagnostica
 - Entre `9d572d5` (jornada nativa 18/18 x2, servidor 1066/1066) e o HEAD só mudou este REPORT (`git diff --name-only`, nada fora de `.specs/`): as provas valem para o código final.
 - Depois da TG-01, no mesmo código: `npm test` 717/717, `context:check` PASS, `test:inventory` PASS, `codemap` 3/3, lint limpo, E2E completo 259/0.
 - Falha única `lesson-editor.spec.js:207`: o trace mostra que o clique em `[data-screen="account"]` foi executado e a tela seguiu em "Hoje" (o formulário de login ficou oculto). Reexecução: 3x o arquivo sozinho (19/19), E2E completo (259/0) e `--repeat-each=6 --workers=4` (114/114). NÃO reproduzida. Causa NÃO provada (hipótese não testada: o clique chegou antes da inicialização do app terminar de montar a tela). Sem alteração de código por falta de evidência; se reaparecer, abrir o trace e ver se a inicialização redefiniu a tela depois do clique.
+
+## 9. Portão final de completude (HEAD f8fc602 + este commit; código idêntico a 9d572d5)
+
+```
+GOAL=V1 em 3 níveis separados e comprovados
+ENGENHARIA=PASS  (E2E completo 259/0 e servidor 1066/1066 e unitários 717/717 e lint e guardas no código final; jornada nativa 18/18 x2 em 9d572d5, que contém a TG-01; entre 9d572d5 e o HEAD só mudou .specs/)
+TELEMETRIA=PASS  (TG-01/02/04/09/12 com teste vermelho→verde e mutantes; plano de comparação em comparison-plan.md)
+PENDENCIAS_HUMANAS=REGISTRADAS (D-T1..D-T6, D-T8, T-F4-01)
+QUALIDADE_MEDICA=NOT_PROVEN (não afirmada) · EFICACIA=NOT_PROVEN (não afirmada) · ANDROID=NOT_PROVEN
+RESIDUAL_RISK=1 falha E2E isolada (lesson-editor.spec.js:207) sem causa provada; 304/304 de repetição sob carga sem recorrência. Risco residual registrado, não critério falho: o critério é suíte verde no código integrado, e ela está verde.
+NEXT=aguardar decisões humanas; diagnosticar a falha só se reaparecer com trace novo
+```
