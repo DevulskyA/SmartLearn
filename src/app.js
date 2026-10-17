@@ -1654,6 +1654,25 @@ export async function renderPlan() {
     sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
   }
 
+  // A requested unit ("Ver no Plano") must be on screen: a subject/state filter left over from an
+  // earlier visit would hide its row and nothing would open, so such a filter is cleared first.
+  if (pendingPlanFocusUnitId != null) {
+    const focusUnit = learningUnits.find((unit) => unit.id === pendingPlanFocusUnitId);
+    if (focusUnit) {
+      const hiddenBySubject = Boolean(planFilterSubject?.value) && planFilterSubject.value !== String(focusUnit.subjectId);
+      const hiddenByState = Boolean(planFilterState?.value)
+        && getTrackingState(focusUnit.id, allTasks, allEvidence, today) !== planFilterState.value;
+      if (hiddenBySubject && planFilterSubject) {
+        planFilterSubject.value = "";
+        syncSelect(planFilterSubject);
+      }
+      if (hiddenByState && planFilterState) {
+        planFilterState.value = "";
+        syncSelect(planFilterState);
+      }
+    }
+  }
+
   // Apply filters
   const subjectFilter = planFilterSubject?.value ?? "";
   const stateFilter = planFilterState?.value ?? "";
@@ -2273,16 +2292,9 @@ export async function renderTracking() {
     goToPlanBtn.type = "button";
     goToPlanBtn.textContent = t("shell.action.viewInPlan");
     goToPlanBtn.addEventListener("click", () => {
+      // renderPlan consumes this once: it relaxes any Plano filter that hides the unit, then opens its row
+      pendingPlanFocusUnitId = unit.id;
       showScreen("plan");
-      // after render, expand this unit
-      renderPlan().then(() => {
-        const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-        if (row) {
-          row.scrollIntoView({ behavior: "smooth", block: "center" });
-          const expandBtn = row.querySelector(".plan-expand-btn");
-          if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
-        }
-      }).catch(console.error);
     });
 
     actions.append(goToPlanBtn);

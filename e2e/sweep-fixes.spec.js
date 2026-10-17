@@ -58,6 +58,15 @@ async function signIn(page, email = uniqueEmail()) {
   return email;
 }
 
+async function apiCall(page, path, body) {
+  return page.evaluate(async ({ base, path, body }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+}
+
 const openScreen = async (page, id) => {
   await page.locator(`.app-nav [data-screen="${id}"]:visible, [data-screen="${id}"]:visible`).first().click();
   await expect(page.locator(`#screen-${id}`)).toBeVisible();
@@ -86,4 +95,27 @@ test('Backup: after an export the screen shows the date and not the "none" text,
   await page.waitForLoadState('networkidle');
   await openScreen(page, 'settings');
   await expect(page.locator('#last-backup-label')).toContainText('Último backup:');
+});
+
+test('Acompanhar > Ver no Plano: a Plano subject filter that hides the unit is relaxed and the unit opens expanded', async ({ page }) => {
+  await signIn(page);
+  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
+  const b = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: '2026-08-02' });
+  await openScreen(page, 'plan');
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(2);
+  // filter the Plano down to the OTHER discipline (what a student does before leaving the screen)
+  await page.evaluate((subjectId) => {
+    const select = document.querySelector('#plan-filter-subject');
+    select.value = String(subjectId);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, b.unit.subjectId);
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(1);
+  await openScreen(page, 'tracking');
+  const card = page.locator('.tracking-card', { hasText: 'Filtração glomerular' });
+  await card.getByRole('button', { name: 'Ver no Plano' }).click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  const row = page.locator(`#plan-list .plan-row[data-unit-id="${a.unit.id}"]`);
+  await expect(row).toBeVisible();
+  await expect(row.locator('.plan-expand-btn')).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.locator('.plan-row-detail')).toBeVisible();
 });
