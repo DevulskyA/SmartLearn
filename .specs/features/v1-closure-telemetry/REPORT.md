@@ -89,3 +89,7 @@ Evidência no `trace.zip` da execução 1792259443727-26464:
 - Por que não reproduz: depende de uma recusa de conexão transitória do Vite sob carga (0 recorrências em 3 E2E completos e 304 repetições).
 
 Classificação: instabilidade da infraestrutura de teste (servidor de desenvolvimento), com mecanismo provado por trace. Nenhuma alteração de produto. Melhoria opcional e não feita: `signInRegistered` poderia detectar `requestfailed` de módulo e recarregar.
+
+## 12. Mitigação da instabilidade do servidor de desenvolvimento (226df7f)
+
+`e2e/support/session.js`: `signInRegistered` espera a hash da URL (prova de que `src/app.js` avaliou) e recarrega uma vez se um módulo foi recusado. Prova discriminante: spec descartável que aborta a 1ª requisição de `/src/stats.js` mostrou o app sem iniciar (hash vazia) e o guard recuperando na 2ª tentativa; spec removido. E2E completo com a mudança (HEAD 226df7f): 259 passaram, 2 ignorados, 0 falhas (EXIT=0, 8,9 min). Código de produto inalterado desde 9d572d5 (jornada nativa 18/18 vale); lint e `test:inventory` limpos. Sem ocorrência aberta de engenharia.
