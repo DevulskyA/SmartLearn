@@ -116,3 +116,59 @@ test('revealing and judging with a hint on the exercise records the hint and the
   await expect.poll(async () => (await serverAttempt(page)).status, { timeout: 5000 }).toBe('SUBMITTED');
   expect((await serverAttempt(page)).maxAssistance).toBe('SOLUTION');
 });
+
+// The Hoje review has its own copy of the same sequence (reveal -> start, hint, reveal-solution; then judge -> submit).
+async function openOverdueReview(page) {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Hoje Ordem Subject');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2020-01-01');
+  await page.locator('#study-content').fill('Hoje Ordem Unit');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+  const studyRow = page.locator('.study-row', { hasText: 'Hoje Ordem Unit' });
+  await studyRow.getByRole('button', { name: 'Exercícios' }).click();
+  await studyRow.locator('.exercise-question-input').fill('Pergunta hoje ordem?');
+  await studyRow.locator('.exercise-answer-input').fill('Resposta hoje ordem');
+  await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
+  await expect(studyRow.getByText('Pergunta hoje ordem?')).toBeVisible({ timeout: 5000 });
+  await page.locator('[data-screen="today"]').click();
+  await expect(page.locator('#today-primary-action')).toBeVisible({ timeout: 5000 });
+  await page.locator('#today-primary-action-btn').click();
+  const exItem = page.locator('.review-exercise-item', { hasText: 'Pergunta hoje ordem?' }).first();
+  await expect(exItem).toBeVisible({ timeout: 5000 });
+  return exItem;
+}
+
+for (const action of ['Acertei', 'Errei']) {
+  test(`Hoje review: judging (${action}) right after revealing starts ONE attempt and records the reveal on it before the judgment`, async ({ page }) => {
+    const exItem = await openOverdueReview(page);
+    let delayed = 0;
+    const starts = [];
+    await page.route(/\/v1\/exercises\/\d+\/attempts$|\/v1\/attempts\/\d+\/(reveal-solution|hint)/, async (route) => {
+      if (route.request().method() === 'POST') {
+        delayed += 1;
+        if (/\/exercises\/\d+\/attempts$/.test(route.request().url())) starts.push(route.request().url());
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      await route.continue();
+    });
+
+    await exItem.getByRole('button', { name: 'Ver resposta' }).click();
+    await exItem.getByRole('button', { name: action }).click();
+    await expect(exItem).toHaveClass(action === 'Acertei' ? /is-correct/ : /is-wrong/, { timeout: 5000 });
+
+    expect(delayed, 'the delay must have applied, or this test measures nothing').toBeGreaterThan(0);
+    await expect.poll(() => exItem.getAttribute('data-attempt-id'), { timeout: 8000 }).toBeTruthy();
+    const attemptId = await exItem.getAttribute('data-attempt-id');
+    const readAttempt = () => page.evaluate(async ({ base, id }) => {
+      const res = await fetch(`${base}/v1/attempts/${id}`, { credentials: 'include' });
+      return (await res.json()).attempt;
+    }, { base: API_BASE, id: attemptId });
+    await expect.poll(async () => (await readAttempt()).status, { timeout: 8000 }).toBe('SUBMITTED');
+    expect((await readAttempt()).maxAssistance).toBe('SOLUTION');
+    expect(starts, 'one question, one attempt').toHaveLength(1);
+  });
+}

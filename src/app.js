@@ -4191,6 +4191,43 @@ async function renderExerciseList(unitId) {
   }
 }
 
+// The "add exercise" form under a study: validates the question, creates the exercise, clears the form and reports the outcome
+// in the form's own message line. `section` is the study's exercises section; `button` is the form's Add button.
+async function addExerciseFromForm(section, studyId, button) {
+  const qInput = section?.querySelector(".exercise-question-input");
+  const aInput = section?.querySelector(".exercise-answer-input");
+  const hInput = section?.querySelector(".exercise-hint-input");
+  const wInput = section?.querySelector(".exercise-why-input");
+  const msgEl = section?.querySelector(".exercise-form-message");
+  const questionText = qInput?.value.trim() ?? "";
+  if (!questionText) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.questionRequired"); }
+    qInput?.focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    await DB.exercises.create(studyId, {
+      questionText,
+      answerText: aInput?.value.trim() ?? "",
+      hintText: hInput?.value.trim() || null,
+      ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
+      provenance: 'MANUAL',
+    });
+    if (qInput) qInput.value = "";
+    if (aInput) aInput.value = "";
+    if (hInput) hInput.value = "";
+    if (wInput) wInput.value = "";
+    if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = t("appRegister.exercise.added"); }
+    await renderExerciseList(studyId);
+  } catch (error) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.saveFailed"); }
+    console.error("Falha ao salvar exercício.", error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // The inline editor that replaces an exercise row; its Save / Cancel buttons are handled by the study-list click dispatcher.
 function createExerciseEditForm({ exerciseId, studyId, question, answer, hint, why }) {
   const form = document.createElement("div");
@@ -4686,39 +4723,7 @@ studyList.addEventListener("click", async (event) => {
   }
 
   if (action === "add-exercise") {
-    const section = row.querySelector(`[data-exercises-for="${studyId}"]`);
-    const qInput = section?.querySelector(".exercise-question-input");
-    const aInput = section?.querySelector(".exercise-answer-input");
-    const hInput = section?.querySelector(".exercise-hint-input");
-    const wInput = section?.querySelector(".exercise-why-input");
-    const msgEl = section?.querySelector(".exercise-form-message");
-    const questionText = qInput?.value.trim() ?? "";
-    if (!questionText) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.questionRequired"); }
-      qInput?.focus();
-      return;
-    }
-    button.disabled = true;
-    try {
-      await DB.exercises.create(studyId, {
-        questionText,
-        answerText: aInput?.value.trim() ?? "",
-        hintText: hInput?.value.trim() || null,
-        ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
-        provenance: 'MANUAL',
-      });
-      if (qInput) qInput.value = "";
-      if (aInput) aInput.value = "";
-      if (hInput) hInput.value = "";
-      if (wInput) wInput.value = "";
-      if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = t("appRegister.exercise.added"); }
-      await renderExerciseList(studyId);
-    } catch (error) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.saveFailed"); }
-      console.error("Falha ao salvar exercício.", error);
-    } finally {
-      button.disabled = false;
-    }
+    await addExerciseFromForm(row.querySelector(`[data-exercises-for="${studyId}"]`), studyId, button);
     return;
   }
 
@@ -4976,6 +4981,7 @@ async function flushPendingAttempt(exItem) {
   const outcome = exItem.dataset.pendingOutcome;
   if (!outcome) return true;
   try {
+    await pendingReviewReveals.get(exItem); // the reveal of this item may still be on its way: judge only after it
     const attemptId = exItem.dataset.attemptId || await ensureAttemptStarted(exItem);
     if (!attemptId) return false;
     await DB.attempts.submit(attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
@@ -5016,13 +5022,23 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (judgment) judgment.hidden = false;
   }
   if (wasHidden && !answerEl.hidden) {
-    const attemptId = await ensureAttemptStarted(exItem);
-    if (attemptId) {
-      try { await DB.attempts.revealSolution(attemptId); }
-      catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
-    }
+    // Kept per item so a judgment tapped right away waits for it (see flushPendingAttempt): judging first would start a second
+    // attempt for the same question, or submit this one before the reveal reaches the server, which then refuses it.
+    const reveal = recordReviewReveal(exItem);
+    pendingReviewReveals.set(exItem, reveal);
+    await reveal;
   }
 });
+
+const pendingReviewReveals = new WeakMap();
+
+/** Starts the server attempt for a review exercise (when it has none yet) and records the reveal on it. Never rejects. */
+async function recordReviewReveal(exItem) {
+  const attemptId = await ensureAttemptStarted(exItem);
+  if (!attemptId) return;
+  try { await DB.attempts.revealSolution(attemptId); }
+  catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
+}
 
 reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
