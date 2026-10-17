@@ -75,3 +75,7 @@ QUALIDADE_MEDICA=NOT_PROVEN (não afirmada) · EFICACIA=NOT_PROVEN (não afirmad
 RESIDUAL_RISK=1 falha E2E isolada (lesson-editor.spec.js:207) sem causa provada; 304/304 de repetição sob carga sem recorrência. Risco residual registrado, não critério falho: o critério é suíte verde no código integrado, e ela está verde.
 NEXT=aguardar decisões humanas; diagnosticar a falha só se reaparecer com trace novo
 ```
+
+## 10. Provas no HEAD final af98c8f
+
+Jornada nativa 18/18 (título e commit gravados = af98c8f) e E2E completo 259 passaram, 2 ignorados, 0 falhas (EXIT=0, 8,8 min), ambos no HEAD final. Segunda execução limpa consecutiva do E2E completo (a anterior em 5174b28 também 259/0); a falha única de `lesson-editor.spec.js:207` não reapareceu em 3 execuções completas posteriores nem em 304 repetições sob carga. Causa continua não provada (risco residual registrado).
