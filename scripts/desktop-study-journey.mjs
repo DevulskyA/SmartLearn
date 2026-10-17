@@ -207,7 +207,12 @@ try {
     expect(info.localAuthority, 'window is not in LOCAL_AUTHORITY');
     const staged = join(dirname(exe), 'dist-runtime', 'build-info.json');
     const stagedInfo = existsSync(staged) ? JSON.parse(readFileSync(staged, 'utf8')) : null;
-    expect(stagedInfo && stagedInfo.inputsHash === identity.inputsHash && stagedInfo.commit === head, `bundled frontend identity ${JSON.stringify(stagedInfo)}`);
+    // The build is identified by CONTENT (inputsHash), not by commit: a later commit that changes no build input (this script, docs)
+    // leaves the same content. The commit stamped in the bundle must still be HEAD or one of its ancestors.
+    const stampedIsHeadOrAncestor = Boolean(stagedInfo) && (() => {
+      try { git('merge-base', '--is-ancestor', stagedInfo.commit, 'HEAD'); return true; } catch { return false; }
+    })();
+    expect(stagedInfo && stagedInfo.inputsHash === identity.inputsHash && stampedIsHeadOrAncestor, `bundled frontend identity ${JSON.stringify(stagedInfo)}`);
     const backend = ps(`Get-CimInstance Win32_Process -Filter "ParentProcessId=${app.pid}" | ForEach-Object { $_.ExecutablePath }`).split(/\r?\n/).filter(Boolean);
     expect(backend.some((p) => p.toLowerCase().startsWith(dirname(exe).toLowerCase())), `backend child not under the binary's own resources: ${backend.join(',')}`);
     const diag = info.build.diagnostics;
