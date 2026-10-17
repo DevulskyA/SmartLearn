@@ -421,6 +421,23 @@ try {
     await page.locator('#today-primary-action-btn').click();
     const row = page.locator(`.review-row[data-review-id="${reviewId}"]`);
     await row.waitFor({ state: 'visible', timeout: 10000 });
+    // the unit has several overdue stages (16-review schedule): Hoje must show them as ONE grouped card that holds this review, open
+    const grouped = await page.evaluate((id) => {
+      const card = document.querySelector(`.review-row[data-review-id="${id}"]`)?.closest('details.overdue-unit');
+      if (!card) return null;
+      return {
+        cards: document.querySelectorAll('details.overdue-unit').length,
+        stagesAttr: Number(card.dataset.stages),
+        stageRows: card.querySelectorAll('.review-row').length,
+        open: card.open,
+        meta: card.querySelector('summary .review-meta')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+        count: document.querySelector('[data-count-for="overdue"]')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      };
+    }, reviewId);
+    expect(grouped !== null, 'Hoje: the review is not inside a grouped details.overdue-unit card');
+    expect(grouped.cards === 1 && grouped.stagesAttr > 1 && grouped.stageRows === grouped.stagesAttr, `Hoje grouped card: ${JSON.stringify(grouped)} (expected 1 card holding every overdue stage as its own row)`);
+    expect(grouped.count === `${grouped.stagesAttr} revisões · 1 conteúdo`, `Hoje overdue counter must state stages and units: ${JSON.stringify(grouped)}`);
+    expect(grouped.open === true && /revisões atrasadas · R1 a R\d+ · a mais antiga há/.test(grouped.meta), `Hoje grouped card must start open with the stage range summary: ${JSON.stringify(grouped)}`);
     // every write to the attempt ledger answers late (as on a slow connection): the judgment must not overtake the reveal
     let delayed = 0; const starts = [];
     await page.route(/\/v1\/exercises\/\d+\/attempts$|\/v1\/attempts\/\d+\/(reveal-solution|hint)/, async (route) => {
