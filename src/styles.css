@@ -2094,6 +2094,67 @@ h1 {
   border-color: color-mix(in oklch, var(--status-done-text) 14%, var(--color-border));
 }
 
+/* Vencidas: several overdue stages of one unit as a single expandable card.
+   Native <details>: keyboard, focus and screen-reader semantics come for free. */
+.overdue-unit {
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.overdue-unit-summary {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.9rem 1.2rem 0.9rem 2.6rem;
+  position: relative;
+  cursor: pointer;
+  list-style: none;
+}
+
+.overdue-unit-summary::-webkit-details-marker {
+  display: none;
+}
+
+.overdue-unit-summary::before {
+  content: "";
+  position: absolute;
+  left: 1.1rem;
+  top: 1.35rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--status-overdue-text);
+  border-bottom: 2px solid var(--status-overdue-text);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.overdue-unit[open] > .overdue-unit-summary::before {
+  transform: rotate(45deg);
+}
+
+.overdue-unit-summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 1rem;
+}
+
+.overdue-unit-summary .subject-chip {
+  justify-self: start;
+}
+
+.overdue-unit-stages {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0 0.85rem 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overdue-unit-summary::before {
+    transition: none;
+  }
+}
+
 .review-row-header {
   display: flex;
   align-items: flex-start;

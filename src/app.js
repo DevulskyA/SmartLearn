@@ -4,8 +4,9 @@ import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
 import { Stats } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks, getNextReview, getReviewStatusLabel } from "./scheduler.js";
+import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
+import { groupOverdueByUnit, stageRanges, shouldCollapseOverdue } from "./overdue-groups.js";
 import { weakPracticeReason } from "./priorities-text.js";
 import { groupUpcomingReviews } from "./upcoming-reviews.js";
 import {
@@ -594,6 +595,44 @@ function createScoreInput(task, field, label) {
 
 function formatReviewScore(value) {
   return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+}
+
+// Several overdue stages of the same unit as ONE card (native <details>, so
+// keyboard and screen readers work without extra code). The stage rows inside
+// are created by the caller, unchanged.
+function createOverdueUnitCard(group, unit, subject, today, collapsed, buildRow) {
+  const card = document.createElement("details");
+  card.className = "overdue-unit";
+  card.dataset.unitId = String(group.unitId);
+  card.dataset.stages = String(group.tasks.length);
+  card.open = !collapsed;
+
+  const summary = document.createElement("summary");
+  summary.className = "overdue-unit-summary";
+  const subjectChip = createTextElement("span", "subject-chip", subject?.name ?? t("stats.noSubject"));
+  subjectChip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
+  const ranges = stageRanges(group.tasks.map((task) => task.reviewNumber))
+    .map(([from, to]) => (from === to
+      ? t("today.overdue.unit.single", { number: from })
+      : t("today.overdue.unit.range", { from, to })))
+    .join(", ");
+  const oldestDays = Math.max(1, getDaysBetween(group.tasks[0].dueDate, today));
+  const meta = t("today.overdue.unit.meta", {
+    stages: tn("today.overdue.unit.stages", group.tasks.length),
+    ranges,
+    oldest: tn("today.overdue.unit.oldest", oldestDays),
+  });
+  summary.append(
+    subjectChip,
+    createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent")),
+    createTextElement("p", "review-meta", meta),
+  );
+
+  const stages = document.createElement("div");
+  stages.className = "overdue-unit-stages";
+  for (const task of group.tasks) stages.append(buildRow(task));
+  card.append(summary, stages);
+  return card;
 }
 
 function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set()) {
@@ -1271,15 +1310,42 @@ export async function renderToday() {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
     const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    // Re-renders (e.g. after "Revisão feita") must not fold a unit card the student had open.
+    const openUnitIds = new Set([...list.querySelectorAll("details.overdue-unit[open]")].map((d) => d.dataset.unitId));
     list.replaceChildren();
     count.textContent = String(tasks.length);
     block.hidden = tasks.length === 0;
 
-    for (const task of tasks) {
+    const buildRow = (task) => {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      list.append(createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set()));
+      return createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set());
+    };
+
+    if (groupName !== "overdue") {
+      for (const task of tasks) list.append(buildRow(task));
+      continue;
+    }
+
+    // Vencidas: one card per unit. A unit with a single overdue stage keeps
+    // its plain row; a unit with several becomes an expandable card whose
+    // stages are the very same rows (each keeps its own "Revisão feita").
+    const unitGroups = groupOverdueByUnit(tasks);
+    const collapse = shouldCollapseOverdue(tasks.length);
+    if (unitGroups.length < tasks.length) {
+      count.textContent = t("today.overdue.count", {
+        stages: tn("today.overdue.count.stages", tasks.length),
+        units: tn("today.overdue.count.units", unitGroups.length),
+      });
+    }
+    for (const group of unitGroups) {
+      if (group.tasks.length === 1) {
+        list.append(buildRow(group.tasks[0]));
+        continue;
+      }
+      const unit = unitsById.get(group.unitId);
+      list.append(createOverdueUnitCard(group, unit, subjectsById.get(unit?.subjectId), today, collapse && !openUnitIds.has(String(group.unitId)), buildRow));
     }
   }
 
@@ -4857,6 +4923,9 @@ todayPrimaryActionBtn?.addEventListener("click", () => {
   if (!reviewId) return;
   const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
   if (!row) return;
+  // The review may sit inside a collapsed per-unit card on Vencidas.
+  const unitCard = row.closest("details.overdue-unit");
+  if (unitCard) unitCard.open = true;
   const body = row.querySelector(".review-row-body");
   const toggle = row.querySelector('[data-action="toggle-row"]');
   if (body && body.hidden) {
