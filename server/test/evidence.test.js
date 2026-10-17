@@ -11,6 +11,7 @@ import * as attempts from '../src/services/attempts.js';
 import * as learningUnits from '../src/services/learning-units.js';
 import * as exercises from '../src/services/exercises.js';
 import * as reviews from '../src/services/reviews.js';
+import { buildApp } from '../src/app.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -202,4 +203,72 @@ test('reviews.complete() REVIEW evidence still gets no evidence_id link — it i
     assert.equal(attemptRow.evidence_id, null, 'REVIEW-context attempts link via review_task_id, not evidence_id');
     assert.equal(attemptRow.review_task_id, reviewTask.id);
   } finally { cleanup(); }
+});
+
+// TG-04 / probe P-5 (v1-closure-telemetry): create() used to accept 2099-01-01, 1900-01-01 and 2026-02-31
+// (V8 rolls the impossible day over, so "parseable" was the only check). The client always sends its local day,
+// so this is a contract guard against bad data in the ledger, not a UI path.
+test('create() rejects impossible, future and absurd evidence dates with VALIDATION_FAILED on evidenceDate (TG-04)', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'dates@example.com');
+    const unit = makeUnit(db, userId);
+    const bad = ['2026-02-31', '2026-13-01', '2026-00-10', '2025-02-29', '2099-01-01', '1900-01-01', '2026-1-5', '20260105', '2026-01-05T10:00:00Z', ' 2026-01-05', ''];
+    for (const evidenceDate of bad) {
+      assert.throws(
+        () => evidence.create(db, userId, { unitId: unit.id, type: 'EXTERNAL', questionsCount: 2, correctCount: 1, evidenceDate }),
+        (err) => err.code === 'VALIDATION_FAILED' && err.field === 'evidenceDate',
+        `should reject ${JSON.stringify(evidenceDate)}`,
+      );
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_evidence').get().n, 0, 'nothing written for rejected dates');
+  } finally { cleanup(); }
+});
+
+test('create() accepts today, the local day one ahead of UTC, and past dates; rejects two days ahead (TG-04)', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'dates-ok@example.com');
+    const unit = makeUnit(db, userId);
+    const clock = () => new Date('2026-10-17T02:30:00.000Z');
+    const create = (evidenceDate) => evidence.create(db, userId, { unitId: unit.id, type: 'EXTERNAL', evidenceDate }, clock);
+    assert.equal(create('2026-10-17').evidenceDate, '2026-10-17');
+    assert.equal(create('2026-10-16').evidenceDate, '2026-10-16');
+    assert.equal(create('2024-02-29').evidenceDate, '2024-02-29', 'real leap day');
+    // UTC+14 is already on the 18th while the server is still on the 17th: that is a legitimate local day.
+    assert.equal(create('2026-10-18').evidenceDate, '2026-10-18');
+    assert.throws(() => create('2026-10-19'), (err) => err.code === 'VALIDATION_FAILED' && err.field === 'evidenceDate');
+  } finally { cleanup(); }
+});
+
+test('HTTP: POST /learning-evidence answers 400 with field evidenceDate for an impossible or future date (TG-04)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-evidence-date-http-'));
+  const db = openDb(join(dir, 'test.db'));
+  runMigrations(db, MIGRATIONS_DIR);
+  const origin = 'https://smartlearn.test';
+  const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [origin] });
+  try {
+    const email = 'httpdates@example.com';
+    const password = 'a genuinely long test password 1';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin }, payload: { email, password } });
+    const loginRes = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin }, payload: { email, password } });
+    const cookie = loginRes.headers['set-cookie'].split(';')[0];
+    const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
+    const headers = { origin, cookie, 'x-csrf-token': JSON.parse(me.body).csrfToken };
+    const unitRes = await app.inject({ method: 'POST', url: '/v1/learning-units', headers, payload: { newSubjectName: 'Disciplina HTTP', title: 'Aula', studyDate: '2026-01-01' } });
+    const unitId = JSON.parse(unitRes.body).unit.id;
+    for (const evidenceDate of ['2026-02-31', '2099-01-01', '1900-01-01']) {
+      const res = await app.inject({ method: 'POST', url: '/v1/learning-evidence', headers, payload: { unitId, type: 'EXTERNAL', evidenceDate } });
+      assert.equal(res.statusCode, 400, evidenceDate);
+      const body = JSON.parse(res.body);
+      assert.equal(body.error.code, 'VALIDATION_FAILED');
+      assert.equal(body.error.field, 'evidenceDate');
+    }
+    const ok = await app.inject({ method: 'POST', url: '/v1/learning-evidence', headers, payload: { unitId, type: 'EXTERNAL', evidenceDate: '2026-01-02' } });
+    assert.equal(ok.statusCode, 201);
+  } finally {
+    await app.close();
+    db.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });

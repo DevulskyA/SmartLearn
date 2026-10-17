@@ -134,3 +134,23 @@ test('after CORRECTED the answers and judgements are final, and a new exam can b
     assert.equal(next.exam.status, 'IN_PROGRESS');
   } finally { cleanup(); }
 });
+
+// TG-04: the exam is the other write path into learning_evidence (finalize -> evidence.create). A bad date must be
+// a typed 400-class ExamError that leaves the exam untouched (no attempts, no evidence, still SUBMITTED).
+test('finalize rejects an impossible or future evidenceDate with VALIDATION_FAILED and changes nothing (TG-04)', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'dates@example.com');
+    const { exam } = judgedExam(db, userId, ['CORRECT', 'INCORRECT']);
+    for (const evidenceDate of ['2026-02-31', '2099-01-01', '1900-01-01']) {
+      assert.throws(
+        () => exams.finalize(db, userId, exam.id, { evidenceDate }),
+        (err) => err.code === 'VALIDATION_FAILED' && err.field === 'evidenceDate',
+        evidenceDate,
+      );
+    }
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM learning_evidence'), 0);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM exercise_attempts'), 0);
+    assert.equal(exams.get(db, userId, exam.id).status, 'SUBMITTED');
+  } finally { cleanup(); }
+});

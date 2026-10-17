@@ -257,6 +257,10 @@ export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => 
     byUnit.get(r.item_unit_id).push(r);
   }
   const date = evidenceDate ?? now().toISOString().slice(0, 10);
+  // Checked up front so a bad date is a typed 400 for the exam, not an evidence error thrown mid-transaction.
+  if (!evidenceService.isAcceptableEvidenceDate(date, now)) {
+    throw new ExamError('VALIDATION_FAILED', evidenceService.EVIDENCE_DATE_MESSAGE, 'evidenceDate');
+  }
   const run = db.transaction(() => {
     const evidenceIds = [];
     for (const [unitId, group] of byUnit) {
@@ -273,7 +277,7 @@ export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => 
         correctCount: group.filter((r) => r.outcome === 'CORRECT').length,
         evidenceDate: date,
         attemptIds,
-      });
+      }, now);
       evidenceIds.push(evidence.id);
     }
     const link = db.prepare('INSERT INTO exam_evidence (user_id, exam_id, evidence_id) VALUES (?, ?, ?)');

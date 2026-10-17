@@ -8,6 +8,25 @@ export class EvidenceError extends Error {
   }
 }
 
+// Earliest day the ledger accepts: anything before is a typo, not study history. The upper bound is "tomorrow"
+// in UTC, because the client sends its LOCAL day and UTC+14 is already a calendar day ahead of the server.
+export const EVIDENCE_DATE_MIN = '2000-01-01';
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * True only for a real calendar day in YYYY-MM-DD form inside [EVIDENCE_DATE_MIN, UTC tomorrow of `now`].
+ * "Parseable" is not enough: V8 rolls 2026-02-31 over to March, so the round trip must give the same string back.
+ */
+export function isAcceptableEvidenceDate(value, now = () => new Date()) {
+  if (typeof value !== 'string' || !DATE_RE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return false;
+  const tomorrow = new Date(now().getTime() + 86_400_000).toISOString().slice(0, 10);
+  return value >= EVIDENCE_DATE_MIN && value <= tomorrow;
+}
+
+export const EVIDENCE_DATE_MESSAGE = 'evidenceDate é obrigatória e deve ser um dia real (YYYY-MM-DD), a partir de 2000-01-01 e não no futuro.';
+
 function findOwnedUnit(db, userId, unitId) {
   return db.prepare('SELECT id FROM learning_units WHERE user_id = ? AND id = ?').get(userId, unitId);
 }
@@ -47,7 +66,7 @@ function toDto(row) {
  * claimed — a bad id is rejected, never silently dropped, so a caller can't
  * end up with fewer linked attempts than it thinks it asked for.
  */
-export function create(db, userId, { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds }) {
+export function create(db, userId, { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds }, now = () => new Date()) {
   if (!DIRECT_TYPES.has(type)) {
     throw new EvidenceError('VALIDATION_FAILED', 'type deve ser INITIAL_PRACTICE ou EXTERNAL. Evidência REVIEW só é criada ao concluir uma revisão.', 'type');
   }
@@ -65,8 +84,8 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
     throw new EvidenceError('VALIDATION_FAILED', 'correctCount não pode ser informado sem questionsCount.', 'correctCount');
   }
 
-  if (typeof evidenceDate !== 'string' || Number.isNaN(new Date(`${evidenceDate}T00:00:00.000Z`).getTime())) {
-    throw new EvidenceError('VALIDATION_FAILED', 'evidenceDate é obrigatória e deve ser uma data válida (YYYY-MM-DD).', 'evidenceDate');
+  if (!isAcceptableEvidenceDate(evidenceDate, now)) {
+    throw new EvidenceError('VALIDATION_FAILED', EVIDENCE_DATE_MESSAGE, 'evidenceDate');
   }
 
   const ids = Array.isArray(attemptIds) ? [...new Set(attemptIds)] : [];
@@ -87,12 +106,12 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
     }
   }
 
-  const now = new Date().toISOString();
+  const createdAt = now().toISOString();
   const run = db.transaction(() => {
     const result = db.prepare(`
       INSERT INTO learning_evidence (user_id, unit_id, review_task_id, type, questions_count, correct_count, evidence_date, created_at)
       VALUES (?, ?, NULL, ?, ?, ?, ?, ?)
-    `).run(userId, unitId, type, hasQuestions ? questionsCount : null, hasQuestions ? correctCount : null, evidenceDate, now);
+    `).run(userId, unitId, type, hasQuestions ? questionsCount : null, hasQuestions ? correctCount : null, evidenceDate, createdAt);
 
     const evidenceId = result.lastInsertRowid;
     const linkAttempt = db.prepare('UPDATE exercise_attempts SET evidence_id = ? WHERE user_id = ? AND id = ?');
