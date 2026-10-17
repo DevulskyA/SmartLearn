@@ -33,7 +33,7 @@ Tamanho: S (≤ meio dia) · M (≤ 2 dias).
 
 ## T-F12-05 — UI "Plano de hoje" em Hoje, com déficit visível · M
 - Status: `[ ]` PROPOSTA · Requisitos: R-14 (AC-14.2, AC-14.3) · Dependências: T-F12-03, T-F12-04, T-F12-01 (DP-D9: mockup aprovado)
-- Superfície: `src/app.js` (`renderToday`), `index.html`, `src/styles.css`, `src/i18n/locales/pt-BR/*.js`, `e2e/hoje-day-plan.spec.js` (novo). Não toca Estatísticas, Plano, Acompanhamento, agendador nem snapshot offline. Convive com o agrupamento por unidade (HG9-00) se integrado.
+- Superfície: `src/app.js` (`renderToday`), `index.html`, `src/styles.css`, `src/i18n/locales/pt-BR/*.js`, `e2e/hoje-day-plan.spec.js` (novo). Não toca Estatísticas, Plano, Acompanhamento, agendador nem snapshot offline. Convive com o agrupamento por unidade (HG9-00, já integrado ao branch de uso local).
 - Fazer: bloco conforme DP-R9 e DP-R6; modo local e offline sem o bloco (limitação registrada); lista "Atrasadas"/"Para hoje" e botão principal intactos.
 - Proof targets (RED): com a base sintética (34 etapas, 10 unidades) o déficit exibido bate com a soma e com a lista "Atrasadas"; sem orçamento, nenhuma frase de déficit; chaves de texto sem verbos de juízo proibidos; hash das tabelas históricas idêntico; 375 px sem rolagem horizontal; axe sem violações; scanner de i18n em 0; e2e existentes de Hoje verdes sem editar expectativas.
 - Gate: `node scripts/e2e.mjs e2e/hoje-day-plan.spec.js` + specs de Hoje existentes + `npm run lint` + `node scripts/scan-portuguese-i18n.mjs`; regressão completa só no fechamento (executada por Haiku conforme a divisão de modelos).

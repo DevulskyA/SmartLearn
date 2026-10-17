@@ -51,7 +51,7 @@ Sequência mínima que entrega valor real: 1+2 (este spec) → calibrar a estima
 | O backup operacional copia a tabela `user_settings` inteira; o export/import LÓGICO só carrega `timezone` e `updatedAt` | `server/src/backup.js:63`; `shared/logical-import.js` (~372-381); `server/src/services/logical-restore.js` (~145-151). Observação: as preferências de idioma tampouco constam do restore lógico (lido, não testado): lacuna existente, fora deste escopo |
 | `GET /v1/review-tasks` devolve TODAS as etapas, também as futuras (Plano já as usa); a agenda do servidor separa vencidas, hoje e amanhã | `server/src/services/reviews.js` (`agenda`, `list`); `src/remote-store.js` |
 | Recursos só do servidor já degradam em silêncio no modo local (`REMOTE_MODE && DB.priorities?.get`) | `src/app.js` `renderWeakPractice` |
-| Hoje, no HEAD de uso, é uma lista PLANA por etapa; o agrupamento por unidade existe só na branch `claude/smartlearn-v1-split-fatia2` (`7b44104`, `f55da10`), não integrado | `git log` da branch conferido; integração depende de HG-05/HG-10 |
+| Hoje, no HEAD de 85636c2 (base desta leitura), era uma lista PLANA por etapa. ATUALIZAÇÃO VERIFICADA no fim da sessão: o agrupamento por unidade (cartão por unidade, uma linha por etapa dentro dele, recolhido acima de 6 etapas, cartão da "Começar agora" aberto) foi integrado ao branch de uso por `d8e2443` e `6aa6198` (cópias locais dos `7b44104` e `f55da10`), com `7591c59` na jornada nativa. A base de código desta spec passa a incluir `src/overdue-groups.js`; o resto da tabela vale como lido | `git log`, `grep` em `src/app.js` (`groupOverdueByUnit`, `createOverdueUnitCard`). Sem push nem merge para `main` (HG-05/HG-10 pendentes). Testes não reexecutados aqui |
 | Estatísticas é a única superfície formalmente protegida (ADR-0001); Hoje não é, mas mudança de aparência exige aprovação do aluno | `.specs/adr/ADR-0001-protected-surfaces-design-non-regression.md` |
 
 ## 4. Requisitos (DERIVADO; cada um com critério de aceitação verificável)
@@ -122,7 +122,7 @@ Previsão de carga de N dias; efeito de aulas novas; prioridade por prova, relev
 
 - Depende de decisão: HG-14 (esta spec, DP-D1..DP-D9).
 - Depende de ordem de marcos: "produto utilizável" demonstrado (T-F4-01, primeira utilização real; PROGRAM §2c) antes de implementar.
-- Recomendado antes da UI (T-F12-05): integrar o agrupamento por unidade (HG9-00, depende de HG-05/HG-10), porque o bloco convive com a lista de Hoje. Sem integração, o plano funciona sobre a lista plana atual, com valor menor.
+- Agrupamento por unidade (HG9-00): JÁ INTEGRADO ao branch de uso local (seção 3, atualização). O bloco "Plano de hoje" convive com os cartões por unidade da lista de Hoje; o desenho do mockup (DP-D9) precisa evitar duplicar a mesma unidade em dois lugares sem relação clara entre o plano e o cartão.
 - Independente de HG-09: lê o calendário vigente. Quando a frente B introduzir `SUPERSEDED` ou mudar o calendário, `shared/day-plan.js` entra na lista de consumidores do predicado "etapa aberta" (`hg-09-proposal.md` §0.5).
 - Coordenar o número da migração com a frente B (034/035 provisórios).
 

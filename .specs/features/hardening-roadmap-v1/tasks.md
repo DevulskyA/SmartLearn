@@ -742,7 +742,7 @@ Objetivo: infográficos e mnemônicos como artefatos de aprendizagem ligados ao 
 | `playwright.config.js` | T-F6-02/03 | antes de F2 se possível, para reduzir o custo de gate |
 | `server/migrations/` | T-F3-01 (e futuras), T-F12-03, T-F12-10, HG9-C2 (034/035 provisórios) | só adição; backup pre-migrate obrigatório; numeração linear: coordenar o número livre no momento |
 | `user_settings` (`server/src/services/settings.js`, `routes/settings.js`) | T-F10-01 (feito), T-F10-06, T-F12-03 | um autor por vez; GET nunca grava; PATCH na mesma transação |
-| `src/app.js` `renderToday`, `src/today-priority.js` | T-F12-05, HG9-00, HG9-T1..T4, T-F7-01 | sequenciar: agrupamento (HG9-00) antes do bloco "Plano de hoje"; um autor por vez |
+| `src/app.js` `renderToday`, `src/today-priority.js` | T-F12-05, HG9-00, HG9-T1..T4, T-F7-01 | agrupamento (HG9-00) já está no branch de uso; o bloco "Plano de hoje" vem depois dele; um autor por vez |
 
 ## Registro de riscos (probabilidade × impacto, mitigação, sinal de alarme)
 
@@ -803,7 +803,7 @@ Classificação: a direção das duas frentes é CANÔNICA (Constituição I.19;
 | T-F7-01 | Recuperação de atraso (ledger, `[H]`): passa a REALIZAR a direção B depois da decisão; detalhe em HG9-C* | L | `[H]` (no ledger) | T-F7-07, T-F7-08 | HG-09 | histórico idêntico por hash fora das datas declaradas; desfazer testado |
 | T-F7-02 | Onboarding e estado vazio (ledger) | M | `[H]` (no ledger) | HG-09 | independente da direção B | ver o ledger |
 | T-F7-03 | Medição somente leitura em snapshot verificado (= HG9-S3) | M | `[H]` (no ledger) | D-10, uso real | HG-09 (D-10) | relatório; regra de amostra do próprio T-F7-03 |
-| HG9-00 | Agrupamento por unidade (FEITO na branch `claude/smartlearn-v1-split-fatia2`, não integrado) | S | FEITO, aguardando integração | HG-05, HG-10 | integrar é decisão humana | integração com E2E verde incluindo a guarda de branch |
+| HG9-00 | Agrupamento por unidade: FEITO e INTEGRADO ao branch de uso local por `d8e2443` e `6aa6198` (cópias de `7b44104` e `f55da10`); sem push nem merge para `main` | S | FEITO (branch de uso local); falta só HG-05/HG-10 para o resto | HG-05, HG-10 (só para publicar) | publicar é decisão humana | regressão E2E completa no HEAD final com a guarda de branch satisfeita (não reexecutada por este registro) |
 | T-F7-04 | Análise de impacto e migração do calendário "uma obrigação exigível por unidade": Opção 2, Opção 2 depois 3, Opção 3 (consumidores do predicado "etapa aberta" com arquivo e linha, DTOs, backup e restore lógico, snapshot offline, estados e transições, `reopen`, calendário das unidades em dia, migração das 16 linhas, reversão, paridade) | M | PROPOSTA, executável pelo agente (só documentação, nova seção de `hg-09-proposal.md`) | nenhuma | nenhuma (a decisão vem depois) | cada consumidor listado com comando de busca reproduzível; nenhuma afirmação sem arquivo |
 | T-F7-05 | Simulador somente leitura do calendário sobre dados sintéticos: compara fixo (hoje), Opção 2 e Opção 3 em carga por dia e dívida visível, com o caso de 34 etapas em 10 unidades e atraso de 104 dias | M | PROPOSTA, executável (script isolado, sem tocar app nem banco humano) | T-F7-04 | nenhuma | propriedades: nenhuma etapa some sem `SUPERSEDED` e histórico; contagem de unidades bate com o seed; determinístico, relógio explícito. NÃO prova retenção |
 | T-F7-06 | Contrato de cobertura de conteúdo e critério de "recuperada" para unidade extensa e para unidade sem questões adequadas | M | `[H]` PROPOSTA | T-F7-04 | D-13; entidade de conhecimento (`learning-loop-v2`, F2) para cobertura por conceito | tabela de casos (um acerto isolado, unidade extensa, sem questões) com o resultado esperado |
@@ -835,4 +835,4 @@ Classificação: a direção das duas frentes é CANÔNICA (Constituição I.19;
 - A data de prova é um só campo, de dono T-F12-10; HG9-E4/E5 da frente B dependem dele.
 - `shared/day-plan.js` entra na lista de consumidores do predicado "etapa aberta" (HG9-C4) quando B mudar o calendário.
 - Número de migração: coordenar o da disponibilidade (T-F12-03) com os provisórios 034/035 da proposta HG-09.
-- Ambas dependem de "produto utilizável" demonstrado (T-F4-01) antes de implementar, e a UI de Hoje convive com HG9-00 (integração: HG-05/HG-10).
+- Ambas dependem de "produto utilizável" demonstrado (T-F4-01) antes de implementar, e a UI de Hoje convive com HG9-00 (já integrado ao branch de uso local; publicar: HG-05/HG-10).

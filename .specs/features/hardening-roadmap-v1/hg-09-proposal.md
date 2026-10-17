@@ -75,7 +75,9 @@ NÃO VERIFICADO (não usar como fundamento):
 
 ### 0.7 Estado de uso real citado (INFORMADO, não medido por este documento)
 
-Dados do coordenador em 2026-10-17: o banco do aluno é o seed sintético (34 revisões vencidas em 10 unidades, sem duplicata, dados de 19/09); o agrupamento por unidade está implementado e provado só na branch `claude/smartlearn-v1-split-fatia2` (commits `7b44104`, `f55da10`; 258 E2E passaram, a única falha é a guarda de branch de `production-build.spec`, que exige a branch de trabalho), NÃO integrado; jornada nativa Windows 18/18 em `d80f46d`, repetição em `f55da10` em andamento por outro agente. Os dois commits da branch foram conferidos por `git log` nesta sessão; o restante não foi reexecutado aqui.
+Dados do coordenador em 2026-10-17: o banco do aluno é o seed sintético (34 revisões vencidas em 10 unidades, sem duplicata, dados de 19/09); o agrupamento por unidade foi implementado e provado na branch `claude/smartlearn-v1-split-fatia2` (commits `7b44104`, `f55da10`; 258 E2E passaram, a única falha é a guarda de branch de `production-build.spec`, que exige a branch de trabalho); jornada nativa Windows 18/18 em `d80f46d`, repetição em `f55da10` em andamento por outro agente. Os dois commits da branch foram conferidos por `git log` nesta sessão; o restante não foi reexecutado aqui.
+
+ATUALIZAÇÃO no fim da mesma sessão (VERIFICADA por `git log` e `grep`): o agrupamento passou a existir no branch de uso `claude/smartlearn-v1-complete` por dois commits locais equivalentes, `d8e2443` e `6aa6198` (`src/overdue-groups.js`, `createOverdueUnitCard` e `groupOverdueByUnit` em `src/app.js`, `e2e/hoje-overdue-groups.spec.js`, `test/overdue-groups.test.js`), mais `7591c59` (a jornada nativa passou a conferir o cartão agrupado). Portanto HG9-00 está INTEGRADO NO BRANCH DE USO LOCAL (sem push, sem merge para `main`: HG-05/HG-10 seguem pendentes para o resto). Nenhum teste foi reexecutado por este documento após a integração. Onde este documento ou o registro de tarefas disser "agrupamento não integrado", vale esta atualização.
 
 ---
 
