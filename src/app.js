@@ -3261,6 +3261,7 @@ function renderStudyNowQuestion() {
   // above a redo question would turn retrieval practice into reading.
   if (state.mode === "retest") studyNowSummaryCard.hidden = true;
   state.attemptId = null;
+  state.pendingReveal = null;
   delete studyNowQuestionArea.dataset.attemptId;
 }
 
@@ -3798,24 +3799,32 @@ studyNowRevealBtn?.addEventListener("click", async () => {
   studyNowCorrectBtn.focus();
 
   if (REMOTE_MODE && DB.attempts) {
-    try {
-      // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
-      const attempt = await DB.attempts.start(exercise.id);
-      state.attemptId = attempt.id;
-      // Real, observable signal (same idiom as ensureAttemptStarted's
-      // exItem.dataset.attemptId above) — lets tests confirm a real
-      // server-owned attempt exists without a dedicated listing endpoint.
-      studyNowQuestionArea.dataset.attemptId = String(attempt.id);
-      if (exercise.hintText) {
-        try { await DB.attempts.useHint(attempt.id); }
-        catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
-      }
-      await DB.attempts.revealSolution(attempt.id);
-    } catch (error) {
-      console.error("Falha ao iniciar tentativa (prática inicial).", error);
-    }
+    // Kept on the state so a judgment tapped right away waits for it (see judgeStudyNow): an attempt that is already SUBMITTED
+    // refuses the reveal, and the ledger would then say the solution was seen with no help.
+    state.pendingReveal = recordStudyNowReveal(state, exercise);
+    await state.pendingReveal;
   }
 });
+
+/** Starts the server attempt for this question and records the hint and the reveal on it. Never rejects: failures are logged. */
+async function recordStudyNowReveal(state, exercise) {
+  try {
+    // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
+    const attempt = await DB.attempts.start(exercise.id);
+    state.attemptId = attempt.id;
+    // Real, observable signal (same idiom as ensureAttemptStarted's
+    // exItem.dataset.attemptId above) — lets tests confirm a real
+    // server-owned attempt exists without a dedicated listing endpoint.
+    studyNowQuestionArea.dataset.attemptId = String(attempt.id);
+    if (exercise.hintText) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
+    }
+    await DB.attempts.revealSolution(attempt.id);
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa (prática inicial).", error);
+  }
+}
 
 async function judgeStudyNow(isCorrect) {
   const state = studyNowState;
@@ -3830,6 +3839,8 @@ async function judgeStudyNow(isCorrect) {
   if (REMOTE_MODE && DB.attempts) {
     state.judging = true;
     try {
+      // The reveal of this question may still be on its way to the server: judge only after it, never before.
+      await state.pendingReveal;
       if (!state.attemptId) {
         // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
         // or the screen would show progress the server does not have.
