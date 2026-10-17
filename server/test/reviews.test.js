@@ -105,6 +105,22 @@ test('completing with questions stores exact q/c once, server derives the score'
   } finally { cleanup(); }
 });
 
+test('REVIEW evidence_date is the student-local day (America/Sao_Paulo), not the UTC day (TG-01)', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'tg01@example.com');
+    const unit = makeUnitWithReviews(db, userId, '2026-10-01');
+    const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY offset_days LIMIT 1').get(userId, unit.unit.id);
+
+    // 23:30 on 2026-10-08 in Sao Paulo (UTC-3) is 02:30 UTC on 2026-10-09.
+    reviews.complete(db, userId, task.id, { questionsCount: 4, correctCount: 3 }, () => new Date('2026-10-09T02:30:00.000Z'));
+
+    const row = db.prepare('SELECT evidence_date, created_at FROM learning_evidence WHERE user_id = ?').get(userId);
+    assert.equal(row.evidence_date, '2026-10-08');
+    assert.equal(row.created_at, '2026-10-09T02:30:00.000Z', 'the instant stays UTC; only the day is local');
+  } finally { cleanup(); }
+});
+
 test('rejects correctCount greater than questionsCount', () => {
   const { db, cleanup } = tmpDb();
   try {

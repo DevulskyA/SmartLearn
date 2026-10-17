@@ -1,6 +1,8 @@
 import { citationsForVersion } from './exercises.js';
 import * as attemptsService from './attempts.js';
 import * as evidenceService from './evidence.js';
+import { get as getSettings } from './settings.js';
+import { localDateString } from './reviews.js';
 
 // EXAM-1/2/3: Modo Prova. MEASURE first, TEACH after.
 //
@@ -256,7 +258,7 @@ export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => 
     if (!byUnit.has(r.item_unit_id)) byUnit.set(r.item_unit_id, []);
     byUnit.get(r.item_unit_id).push(r);
   }
-  const date = evidenceDate ?? now().toISOString().slice(0, 10);
+  const date = evidenceDate ?? localDateString(now(), getSettings(db, userId).timezone);
   // Checked up front so a bad date is a typed 400 for the exam, not an evidence error thrown mid-transaction.
   if (!evidenceService.isAcceptableEvidenceDate(date, now)) {
     throw new ExamError('VALIDATION_FAILED', evidenceService.EVIDENCE_DATE_MESSAGE, 'evidenceDate');

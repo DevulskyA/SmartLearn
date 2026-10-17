@@ -125,7 +125,8 @@ export function complete(db, userId, reviewTaskId, { questionsCount, correctCoun
 
   const run = db.transaction(() => {
     const nowIso = now().toISOString();
-    const today = nowIso.slice(0, 10);
+    // The evidence day is the student's local day (saved timezone, default America/Sao_Paulo), not the UTC day (TG-01, D-T7).
+    const today = localDateString(new Date(nowIso), getUserTimezone(db, userId));
 
     db.prepare('UPDATE review_tasks SET completed_at = ? WHERE user_id = ? AND id = ?').run(nowIso, userId, reviewTaskId);
 

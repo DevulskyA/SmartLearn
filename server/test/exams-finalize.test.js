@@ -44,6 +44,17 @@ function judgedExam(db, userId, outcomes) {
 
 const count = (db, sql, ...args) => db.prepare(sql).get(...args).n;
 
+test('finalizing without an explicit evidenceDate uses the student-local day, not the UTC day (TG-01)', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'tg01@example.com');
+    const { unit, exam } = judgedExam(db, userId, ['CORRECT']);
+    // 02:30 UTC on 2026-10-09 is still 2026-10-08 in America/Sao_Paulo.
+    exams.finalize(db, userId, exam.id, {}, () => new Date('2026-10-09T02:30:00.000Z'));
+    assert.equal(evidence.list(db, userId, { unitId: unit.id })[0].evidenceDate, '2026-10-08');
+  } finally { cleanup(); }
+});
+
 test('finalizing writes exactly ONE aggregate evidence row with the right counts and one linked attempt per item', () => {
   const { db, cleanup } = tmpDb();
   try {
