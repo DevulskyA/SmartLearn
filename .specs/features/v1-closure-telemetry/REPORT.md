@@ -40,3 +40,16 @@ Sondagens P-1..P-5 e mutantes M-A..M-I rodaram em banco temporário e cópia des
 
 - TG-04, TG-02, TG-09, TG-12 corrigidos (e8e46a4, f0aae39, 3742827, 9603f21). TG-01 corrigido (760491c) com D-T7 = fuso do cliente/salvo (America/Sao_Paulo), também no padrão do `exams.finalize`.
 - Regra do produto (usuário): tempo de resposta por questão NÃO mede conhecimento nem penaliza o aluno; só avaliação cronometrada de propósito pode usá-lo. TG-05b/TG-05c (`think_ms`) valem apenas como dado de tempo de estudo, nunca entram em domínio, agendamento nem veredito.
+
+## 6. Verificação final no HEAD 9d572d5 (2026-10-17)
+
+| Critério | Resultado | Observação |
+|---|---|---|
+| AC-E1 lint | PASS | `npm run lint` sem erro nem aviso |
+| AC-E2 unitários raiz | 717/717 antes da TG-01 (a TG-01 só tocou o servidor) | reexecutar se o código da raiz mudar |
+| AC-E3 servidor | 1066/1066 | `dev-lock` verde depois de encerrar o backend órfão (pid 18996, filho do runner de `dev-lock.test.js` de 04:46) |
+| AC-E4 E2E completo | 258 passaram, 2 ignorados, 1 FALHA (`lesson-editor.spec.js:207`, `#account-login-form` oculto no setup `signInRegistered`) | o arquivo sozinho passou 19/19 em 3 execuções; causa sob carga NÃO provada; não rotulada instável |
+| AC-E5 jornada nativa | 18/18 duas vezes (build próprio, título `SmartLearn DEV - v0.1.0 - 9d572d5`) | banco descartável, sem modelo |
+| AC-E6 guardas | `context:check` e `test:inventory` PASS no relatório do agente (antes da TG-01) | |
+
+Aberto: a falha única do E2E completo (rodar de novo e, se repetir, diagnosticar com o trace); decisões D-T1..D-T6 e D-T8.
