@@ -12,6 +12,8 @@ O texto integral de D-T1..D-T8 não existe como bloco único. `REPORT.md` §3 d�
 
 ---
 
+> **VERIFICADO em 2026-10-17 (cópia somente leitura do banco vivo, nada alterado):** o banco já tem o PDF "Costanzo Physiology, 7th edition" (496 páginas, extração concluída em 03/10) e **1 rascunho real do Codex** (prompt v5, 03/10, status DRAFT, não aceito) na conta do seed (`user_id` 1). Logo o primeiro estudo pode usar esse rascunho **sem nenhuma chamada nova ao modelo** (R2 passa a "não precisa autorizar geração" se você escolher esse caminho), ao custo de ser de um prompt antigo (v5; o atual é o 10) e estar na conta do seed (ver D-T1: aceitar nessa conta, ou gerar de novo na conta nova). A dúvida "o rascunho ainda existe?" da seção 4 está resolvida por esta nota.
+
 ## 0. Responder primeiro (só o que destrava o primeiro estudo médico real)
 
 Cinco respostas. As demais decisões (D-T2 a D-T6, D-T8, migração 034) NÃO bloqueiam o primeiro estudo; ficam na seção 2.
