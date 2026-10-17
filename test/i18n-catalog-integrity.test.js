@@ -111,3 +111,10 @@ test('a translated catalog is used key by key, and a key it lacks falls back to 
     setLocale(DEFAULT_LOCALE);
   }
 });
+
+test('no pt-BR text ends in a stray capital glued to a lowercase letter ("resumoX"), and the lesson-editor save button keeps its original wording', () => {
+  // Found in the real catalog: 'editor.summary.save' read "Salvar resumoX" since the migration (9d2ac40); no spec looked at the label text.
+  const stray = Object.entries(ptBR).filter(([, value]) => /[a-zà-ú][A-Z]$/.test(String(value).trim())).map(([key, value]) => `${key}: ${value}`);
+  assert.deepEqual(stray, []);
+  assert.equal(ptBR['editor.summary.save'], 'Salvar resumo');
+});

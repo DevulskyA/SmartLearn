@@ -22,7 +22,7 @@ export default {
   // Summary
   'editor.summary.label': 'Resumo Mestre',
   'editor.summary.hint': 'Só o texto do resumo fica aqui. Salvar o resumo não altera nenhuma questão. Use uma linha começando com ## para criar um título de seção.',
-  'editor.summary.save': 'Salvar resumoX',
+  'editor.summary.save': 'Salvar resumo',
   'editor.summary.read': 'Ler como aula',
   'editor.summary.edit': 'Voltar a editar',
   'editor.summary.saved': 'Resumo salvo. As questões não foram alteradas.',
