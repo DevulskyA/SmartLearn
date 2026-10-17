@@ -181,7 +181,7 @@ Você NÃO precisa responder agora: D-T2 (migração 034), D-T3 (compromisso ant
 
 ## 4. Fatos que não pude verificar
 
-- Se o rascunho "Glomerular Filtration" do Costanzo ainda existe no banco vivo e em qual conta.
+- (RESOLVIDO em 2026-10-17, ver nota no topo da seção 0.) Se o rascunho "Glomerular Filtration" do Costanzo ainda existe no banco vivo e em qual conta.
 - Se o isolamento por conta se comporta como esperado no banco vivo (só li as consultas).
 - Se a conta ChatGPT/Codex está logada e a CLI `codex` responde no momento (não executei nada).
 - Se a janela do Desktop mostra o provedor CODEX em Sobre na build que vai abrir (li o código que monta a linha, não a tela).
