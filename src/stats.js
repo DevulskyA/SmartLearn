@@ -41,6 +41,12 @@ export function layoutEvolutionChart(dataPoints, plotWidth, minLabelGap = 46) {
   return { points, labels };
 }
 
+/** "71,4%" for a real average; "—" when there is no evidence yet (null), never "0,0%". */
+export function formatAverageScore(avgScore) {
+  if (avgScore == null || !Number.isFinite(Number(avgScore))) return "—";
+  return `${Number(avgScore).toFixed(1).replace(".", ",")}%`;
+}
+
 export const Stats = {
   calculate(reviewTasks, evidence, learningUnits, subjects, today = getLocalDateValue()) {
     const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
@@ -78,7 +84,8 @@ export const Stats = {
       (total, item) => total + item.correctCount,
       0,
     );
-    const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
+    // No answered question is NO evidence, not a 0% average (Charter P-03/D-03).
+    const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : null;
 
     const scoresBySubject = new Map();
     for (const item of completedExercises) {

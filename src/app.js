@@ -2,7 +2,7 @@
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
-import { Stats } from "./stats.js";
+import { Stats, formatAverageScore } from "./stats.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
@@ -1477,7 +1477,7 @@ export async function renderStats() {
   const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
   metricElements.totalQuestions.textContent = String(stats.totalQuestions);
   metricElements.totalCorrect.textContent = String(stats.totalCorrect);
-  metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
+  metricElements.avgScore.textContent = formatAverageScore(stats.avgScore);
   metricElements.reviewsDone.textContent = String(stats.reviewsDone);
   metricElements.reviewsPending.textContent = String(stats.reviewsPending);
   metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);

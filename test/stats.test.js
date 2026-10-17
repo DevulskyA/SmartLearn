@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Stats, layoutEvolutionChart } from "../src/stats.js";
+import { Stats, layoutEvolutionChart, formatAverageScore } from "../src/stats.js";
+
+test("formatAverageScore: sem evidência mostra traço; 0% real continua 0,0%", () => {
+  assert.equal(formatAverageScore(null), "—");
+  assert.equal(formatAverageScore(undefined), "—");
+  assert.equal(formatAverageScore(Number.NaN), "—");
+  assert.equal(formatAverageScore(0), "0,0%");
+  assert.equal(formatAverageScore(60), "60,0%");
+  assert.equal(formatAverageScore(71.428), "71,4%");
+});
 
 test("Stats.calculate usa média ponderada por disciplina", () => {
   const reviewTasks = [
@@ -87,7 +96,9 @@ test("Stats.calculate com subjects vazio não lança erro e retorna estrutura v�
 
   const stats = Stats.calculate(reviewTasks, [], [{ id: 1, subjectId: 99 }], [], "2026-09-02");
 
-  assert.equal(typeof stats.avgScore, "number");
+  // no questions answered: absence of evidence is not 0% (Charter P-03/D-03)
+  assert.equal(stats.avgScore, null);
+  assert.equal(formatAverageScore(stats.avgScore), "—");
   assert.equal(stats.reviewsPending, 1);
   assert.equal(stats.reviewsOverdue, 0);
   assert.equal(stats.avgBySubject.length, 0);
