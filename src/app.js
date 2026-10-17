@@ -3,6 +3,7 @@ import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError } from "./api-client.js";
 import { Stats, formatAverageScore } from "./stats.js";
+import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
@@ -2882,8 +2883,9 @@ export async function renderSettings() {
     generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? DEFAULT_LOCALE;
     syncSelect(generationLanguageSelect);
   }
-  lastBackupLabel.textContent = settings?.lastBackupAt
-    ? t("appBackup.last", { date: formatIntlDate(settings.lastBackupAt, { dateStyle: "medium", timeStyle: "short" }) })
+  const lastBackupAt = readLastBackupAt(AuthUI.getCurrentUser()?.id) ?? settings?.lastBackupAt ?? null;
+  lastBackupLabel.textContent = lastBackupAt
+    ? t("appBackup.last", { date: formatIntlDate(lastBackupAt, { dateStyle: "medium", timeStyle: "short" }) })
     : t("appBackup.none");
 
   // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
@@ -2954,13 +2956,18 @@ export async function exportBackup() {
     }
 
     // Best-effort bookkeeping only — the export itself already succeeded
-    // and was saved, so a failure here (e.g. remote mode doesn't track
-    // lastBackupAt at all, per T18's settings contract) must never turn
-    // an already-successful export into a reported failure.
-    try {
-      await DB.settings.update({ lastBackupAt: new Date().toISOString() });
-    } catch (metaError) {
-      console.warn("Não foi possível registrar a data do último backup.", metaError);
+    // and was saved, so a failure here must never turn an already-successful
+    // export into a reported failure. The date belongs to THIS device's file
+    // export: it is kept client-side per account (the server settings contract
+    // has no lastBackupAt field), and also in the legacy local database.
+    const exportedAt = new Date().toISOString();
+    writeLastBackupAt(AuthUI.getCurrentUser()?.id, exportedAt);
+    if (!REMOTE_MODE) {
+      try {
+        await DB.settings.update({ lastBackupAt: exportedAt });
+      } catch (metaError) {
+        console.warn("Não foi possível registrar a data do último backup.", metaError);
+      }
     }
     await renderSettings();
     backupMessage.textContent = t("appBackup.exported");
