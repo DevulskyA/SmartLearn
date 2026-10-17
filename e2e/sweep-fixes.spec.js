@@ -131,3 +131,21 @@ test('Disciplinas > Editar: the name field has an accessible name (axe "label")'
   const result = await new AxeBuilder({ page }).include('#screen-subjects').withRules(['label']).analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
 });
+
+test('Conta: after "Criar conta" the success text is shown where the student can see it (login form)', async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  await page.goto('/');
+  await page.locator('[data-screen="account"]').click();
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(uniqueEmail());
+  await page.locator('#account-register-password').fill(PASSWORD);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible();
+  await expect(page.locator('#account-register-form')).toBeHidden();
+  await expect(page.locator('#account-login-message')).toHaveText('Conta criada com sucesso. Entre com suas credenciais.');
+  await expect(page.locator('#account-login-message')).toBeVisible();
+});

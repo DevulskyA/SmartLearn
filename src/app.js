@@ -5990,10 +5990,12 @@ accountRegisterForm?.addEventListener("submit", async (event) => {
     setAccountMessage("account-register", result.message, true);
     return;
   }
-  setAccountMessage("account-register", t("account.registered"));
+  setAccountMessage("account-register");
   accountRegisterForm.reset();
   accountRegisterForm.hidden = true;
   accountLoginForm.hidden = false;
+  // the register form is hidden now: the success text goes where the student is looking (the login form)
+  setAccountMessage("account-login", t("account.registered"));
 });
 
 accountPasswordForm?.addEventListener("submit", async (event) => {
