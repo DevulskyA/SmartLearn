@@ -53,3 +53,7 @@ Sondagens P-1..P-5 e mutantes M-A..M-I rodaram em banco temporário e cópia des
 | AC-E6 guardas | `context:check` e `test:inventory` PASS no relatório do agente (antes da TG-01) | |
 
 Aberto: a falha única do E2E completo (rodar de novo e, se repetir, diagnosticar com o trace); decisões D-T1..D-T6 e D-T8.
+
+## 7. Reexecução do E2E completo (5174b28)
+
+259 passaram, 2 ignorados, 0 falhas (EXIT=0, 9,4 min). A falha única de `lesson-editor.spec.js:207` na execução anterior NÃO repetiu; a causa não foi provada (formulário de login oculto no setup `signInRegistered` sob carga). Registrada como ocorrência isolada sem causa, não como instabilidade comprovada; se voltar, diagnosticar com o trace.
