@@ -43,7 +43,8 @@ F0 Reconciliação e higiene de estado
      ├─ F10 Geração segura: escopo, reuso, créditos e idiomas (R-12/R-13) — ANTES de estabilizar F3
      ├─ F4 UI/UX da aula, Materiais e acessibilidade           (validação humana)
      └─ F6 Plataforma de teste (pode andar em paralelo com F2–F4)
-F7 Produto de estudo (HG-09) — após F4
+F7 Produto de estudo (HG-09) — após F4        [frente B 2026-10-17: T-F7-04..09 no registro "Frentes A e B"]
+F12 Planejamento da aprendizagem (HG-14)       [frente A 2026-10-17: T-F12-01..13 no registro; sem dependência de F7 no incremento 1]
 F8 Segurança e empacotamento — após F1; antes de F9
 F9 Integração e entrega (HG-05/10) — por último
 ```
@@ -599,6 +600,7 @@ Objetivo: melhorias que o uso real do banco DEV já pede, sem mexer no algoritmo
 - Evidência de necessidade: 27 revisões vencidas, a mais antiga com 104 dias de atraso no banco DEV.
 - Subtarefas: (a) spec de comportamento (o que acontece com o histórico, com a data de origem, com `review_tasks`); (b) operação de servidor com `undo` (snapshot lógico das datas alteradas); (c) UI com pré-visualização do efeito e confirmação; (d) testes de que o histórico (`learning_evidence`, tentativas) não é alterado.
 - Sensor crítico: tabelas históricas idênticas por hash antes/depois, exceto datas de vencimento declaradas.
+- Nota 2026-10-17 (frente B): a direção do aluno (uma obrigação exigível por unidade; Constituição I.19; AC-11.4) é CANÔNICA e esta tarefa passa a ser a REALIZAÇÃO dela, só depois da decisão formal HG-09 (T-F7-07). O desenho vive em `hg-09-proposal.md` (seção 0 reconcilia; HG9-C* detalham). Tarefas de preparo: T-F7-04 a T-F7-09 no registro "Frentes A e B" (fim deste arquivo). CONFLITO com Constituição §21/§91-C registrado em DECISION_CONFLICT-3.
 
 ### T-F7-02 — Onboarding e estado vazio de produção (DEBT-007) · M
 - Status: `[H]` · Requisitos: R-11 (AC-11.2) · Dependências: HG-09
@@ -738,7 +740,9 @@ Objetivo: infográficos e mnemônicos como artefatos de aprendizagem ligados ao 
 | `scripts/launch-desktop-dev.ps1` | T-F1-01/02/04/07/08, T-F8-04 | uma tarefa por vez; teste de entrypoint sempre verde |
 | `src-tauri/src/lib.rs` | T-F1-04, T-F1-08 | rodar `cargo test --lib` a cada tarefa |
 | `playwright.config.js` | T-F6-02/03 | antes de F2 se possível, para reduzir o custo de gate |
-| `server/migrations/` | T-F3-01 (e futuras) | só adição; backup pre-migrate obrigatório |
+| `server/migrations/` | T-F3-01 (e futuras), T-F12-03, T-F12-10, HG9-C2 (034/035 provisórios) | só adição; backup pre-migrate obrigatório; numeração linear: coordenar o número livre no momento |
+| `user_settings` (`server/src/services/settings.js`, `routes/settings.js`) | T-F10-01 (feito), T-F10-06, T-F12-03 | um autor por vez; GET nunca grava; PATCH na mesma transação |
+| `src/app.js` `renderToday`, `src/today-priority.js` | T-F12-05, HG9-00, HG9-T1..T4, T-F7-01 | sequenciar: agrupamento (HG9-00) antes do bloco "Plano de hoje"; um autor por vez |
 
 ## Registro de riscos (probabilidade × impacto, mitigação, sinal de alarme)
 
@@ -770,6 +774,8 @@ Uma fase só fecha com: todas as tarefas `[✓]` com `IMPLEMENTATION_SHA`; gate 
 
 ## Próxima ação exata
 
+HISTÓRICO (2026-10-04, preservado). A ordem vigente de marcos e frentes está em `PROGRAM.md` §2c (2026-10-17) e a posição exata em `npm run context:resume`.
+
 1. Humano responde HG-02, HG-03 e HG-05 (destravam F0-05, F1-05, F2-03) — as demais decisões podem esperar suas fases.
 2. Executar T-F0-01 (Memento do baseline) e T-F0-04 (ignore de artefatos), as duas de menor risco, e fechar o checkpoint F0.
 3. Iniciar T-F1-01 (lock do Desktop) e T-F1-04 (Job Object) em paralelo controlado; em seguida T-F1-02.
@@ -785,3 +791,48 @@ Uma fase só fecha com: todas as tarefas `[✓]` com `IMPLEMENTATION_SHA`; gate 
 - OPEN-06 · prévia do aceite (T-F2-05) sem avaliação humana e sem axe do painel aberto · UAT em T-F4-01 · evidência: `validation.md` "T-F2-05"
 - OPEN-07 · fonte Costanzo já gravada no banco DEV NÃO foi reextraída após T-F5-08 (ordem antiga de colunas) · decisão separada com backup (INV-06/07) · evidência: `validation.md` "T-F5-08"
 - OPEN-08 · `T-F1-05` (HG-03) e provas manuais do Desktop do checkpoint F1 (a fumaça mecânica IMPORT-1/VERDICT-1 já está PROVADA em T-F1-09) · UAT humano em T-F4-01
+
+## Frentes A e B (2026-10-17): registro de tarefas PROPOSTAS
+
+Classificação: a direção das duas frentes é CANÔNICA (Constituição I.19; spec.md R-11 AC-11.4, R-14, INV-15..17, HG-09, HG-14); cada tarefa abaixo é DERIVADA (proposta de agente) e NÃO está autorizada. Esta seção é um REGISTRO de IDs, dependências e resultados: as linhas não são blocos de tarefa do ledger executável (o cockpit `context:resume` e o plano do conductor só leem blocos de tarefa com Status). Promoção: depois de HG-14 ou HG-09 respondidos e de a tarefa ser escolhida como ativa, a linha vira um bloco de tarefa (Status, Fazer, Gate) e o plano é sincronizado (`npm run plan:sync`). Detalhe de T-F12-01..06: `.specs/features/daily-plan-time-budget-v1/tasks.md`. Ordem de marcos: `PROGRAM.md` §2c.
+
+### Frente B — corrigir a dívida artificial de revisões (HG-09). Tarefas de desenho: `hg-09-proposal.md` (IDs HG9-*; mapa em §0.5). Nenhum ID abaixo repete um HG9-*.
+
+| ID | Tarefa | Tam. | Estado proposto | Dependências | Decisão ou gate | Resultado verificável |
+|---|---|---|---|---|---|---|
+| T-F7-01 | Recuperação de atraso (ledger, `[H]`): passa a REALIZAR a direção B depois da decisão; detalhe em HG9-C* | L | `[H]` (no ledger) | T-F7-07, T-F7-08 | HG-09 | histórico idêntico por hash fora das datas declaradas; desfazer testado |
+| T-F7-02 | Onboarding e estado vazio (ledger) | M | `[H]` (no ledger) | HG-09 | independente da direção B | ver o ledger |
+| T-F7-03 | Medição somente leitura em snapshot verificado (= HG9-S3) | M | `[H]` (no ledger) | D-10, uso real | HG-09 (D-10) | relatório; regra de amostra do próprio T-F7-03 |
+| HG9-00 | Agrupamento por unidade (FEITO na branch `claude/smartlearn-v1-split-fatia2`, não integrado) | S | FEITO, aguardando integração | HG-05, HG-10 | integrar é decisão humana | integração com E2E verde incluindo a guarda de branch |
+| T-F7-04 | Análise de impacto e migração do calendário "uma obrigação exigível por unidade": Opção 2, Opção 2 depois 3, Opção 3 (consumidores do predicado "etapa aberta" com arquivo e linha, DTOs, backup e restore lógico, snapshot offline, estados e transições, `reopen`, calendário das unidades em dia, migração das 16 linhas, reversão, paridade) | M | PROPOSTA, executável pelo agente (só documentação, nova seção de `hg-09-proposal.md`) | nenhuma | nenhuma (a decisão vem depois) | cada consumidor listado com comando de busca reproduzível; nenhuma afirmação sem arquivo |
+| T-F7-05 | Simulador somente leitura do calendário sobre dados sintéticos: compara fixo (hoje), Opção 2 e Opção 3 em carga por dia e dívida visível, com o caso de 34 etapas em 10 unidades e atraso de 104 dias | M | PROPOSTA, executável (script isolado, sem tocar app nem banco humano) | T-F7-04 | nenhuma | propriedades: nenhuma etapa some sem `SUPERSEDED` e histórico; contagem de unidades bate com o seed; determinístico, relógio explícito. NÃO prova retenção |
+| T-F7-06 | Contrato de cobertura de conteúdo e critério de "recuperada" para unidade extensa e para unidade sem questões adequadas | M | `[H]` PROPOSTA | T-F7-04 | D-13; entidade de conhecimento (`learning-loop-v2`, F2) para cobertura por conceito | tabela de casos (um acerto isolado, unidade extensa, sem questões) com o resultado esperado |
+| T-F7-07 | Decisão formal HG-09 e emenda registrada (ADR; Constituição §21/§91-C; INV-04/INV-20; V1-09; heritage H-01) = HG9-S1 | S | `[H]` PROPOSTA | T-F7-04, T-F7-05, T-F7-06 | HG-09: D-1 e D-12 a D-16 | ADR assinado pelo aluno; conflito C13 e C14 fechado |
+| T-F7-08 | Plano de migração e paridade do calendário escolhido (estados, linhas existentes, backup, reversão, plataformas) | M | `[H]` PROPOSTA | T-F7-07 | D-15, D-11 | procedimento reversível ensaiado em banco temporário |
+| T-F7-09 | Validação de retenção antes de afirmar equivalência (retenção tardia por minuto de estudo, contra o fluxo atual) | L (dividir) | `[H]` PROPOSTA | T-F7-01 em uso real, T-F7-03 | protocolo aprovado | só vale com amostra suficiente; NÃO afirma que recuperar retém mais |
+
+### Frente A — prevenir sobrecarga (R-14). Família nova F12 (planejamento da aprendizagem). Primeiro incremento: T-F12-01..06.
+
+| ID | Tarefa | Tam. | Estado proposto | Dependências | Decisão ou gate | Resultado verificável |
+|---|---|---|---|---|---|---|
+| T-F12-01 | Aprovar o spec do plano do dia e responder DP-D1..DP-D9 | S | `[H]` PROPOSTA | HG-14 | HG-14 | respostas registradas com data |
+| T-F12-02 | Estimativa de duração por item (função pura, provisória e rotulada) | S | PROPOSTA | T-F12-01 | DP-D2 | tabela 0→3, 4→9, 10→18, 7→14; mutações vermelhas |
+| T-F12-03 | Orçamento de tempo: disponibilidade por dia da semana (migração aditiva, serviço, rota, restore lógico, campo em Configurações) | M | PROPOSTA | T-F12-01 | DP-D1, DP-D3, DP-D6 | GET não grava; validação; backup ida e volta |
+| T-F12-04 | Plano do dia: função pura (itens por unidade, ordem do protocolo, corte, déficit) | M | PROPOSTA | T-F12-02 | DP-D4, DP-D5, DP-D8 | conservação de itens e de etapas; `plan[0]` = ação primária |
+| T-F12-05 | UI "Plano de hoje" em Hoje com déficit visível (após mockup aprovado) | M | PROPOSTA | T-F12-03, T-F12-04 | DP-D9, DP-D7 | e2e com a base sintética; 375 px; axe; i18n 0; hash histórico idêntico |
+| T-F12-06 | Prova de uso: o aluno lê o déficit e decide | S | `[H]` PROPOSTA | T-F12-05 | UAT humano | registro humano com autoria e data; NÃO PROVADO sem ele |
+| T-F12-07 | Calibração da estimativa com tempo medido (viabilidade dos timestamps de tentativa; proposta de constantes) | M | `[H]` PROPOSTA | T-F12-02, uso real, autorização de snapshot (D-10) | decisão de trocar a política | relatório somente leitura; regra de amostra (n por faixa < 30 ou < 4 semanas = nenhuma conclusão) |
+| T-F12-08 | Ajuste "só para hoje" do tempo disponível (candidato v1.1) | S | `[H]` PROPOSTA | T-F12-05 | decisão de produto | cálculo do plano muda sem tocar a disponibilidade semanal |
+| T-F12-09 | Previsão de carga: minutos por dia nos próximos N dias pelo calendário vigente e efeito hipotético de K aulas novas por dia (rotulado hipótese; sem controlar a entrada) | M | PROPOSTA | T-F12-02, T-F12-05; contrato de calendário da frente B (T-F7-07) ou adaptador sobre o vigente | decisão de produto | previsão = recomputável do calendário; muda junto quando B mudar o calendário |
+| T-F12-10 | Datas de prova: campo ou entidade compartilhado pelas frentes A e B (subsume HG9-E1 a HG9-E3) | M | `[H]` PROPOSTA | T-F12-01, D-6 | D-6 | ausência de data = comportamento idêntico (AC-9.19 da proposta); migração aditiva |
+| T-F12-11 | Priorização acadêmica com critérios explícitos, versionados e justificáveis (prova próxima, bases clínicas, dificuldade observada, retenção); nenhum conteúdo dispensável | L (dividir) | `[H]` PROPOSTA | T-F12-04, T-F12-10, mapa de conhecimento (`learning-loop-v2`, F2) | decisão de produto; CONFLITO C-I19-3 | cada posição tem motivo legível; sem escore de domínio; validação própria |
+| T-F12-12 | Rastreio de comportamento: tempo efetivo, sessões concluídas e abandonadas, ausências | L (dividir) | `[H]` PROPOSTA | T-F12-05 em uso, decisão do modelo de sessão | decisão de produto e de privacidade | sessão registrada sem alterar evidência; nenhum rótulo sobre o aluno (Constituição §54) |
+| T-F12-13 | Pausas e retomadas (futuro) | L (dividir) | `[H]` PROPOSTA | T-F12-09, T-F12-12, T-F7-07 | decisão de produto | retomada nunca vale várias revisões feitas (INV-17) |
+
+### Dependências entre as frentes (resumo)
+- O incremento 1 da frente A (T-F12-02..06) é independente da frente B: lê o calendário vigente e não o altera.
+- A previsão de carga (T-F12-09) e as pausas (T-F12-13) dependem do contrato de calendário que a frente B decidir (T-F7-07).
+- A data de prova é um só campo, de dono T-F12-10; HG9-E4/E5 da frente B dependem dele.
+- `shared/day-plan.js` entra na lista de consumidores do predicado "etapa aberta" (HG9-C4) quando B mudar o calendário.
+- Número de migração: coordenar o da disponibilidade (T-F12-03) com os provisórios 034/035 da proposta HG-09.
+- Ambas dependem de "produto utilizável" demonstrado (T-F4-01) antes de implementar, e a UI de Hoje convive com HG9-00 (integração: HG-05/HG-10).

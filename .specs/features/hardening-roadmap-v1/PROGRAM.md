@@ -64,6 +64,29 @@ Reclassificação das tarefas JÁ existentes (sem IDs novos, sem reescrever hist
 
 Regra: nenhuma tarefa de M1–M3 vira ativa antes do M0 ser usado de verdade; o achado do uso real decide o próximo outcome.
 
+## 2c. Precedência de marcos e frentes A e B (2026-10-17)
+
+Origem: decisões do aluno de 2026-10-17 (Constituição I.19; spec.md R-11 AC-11.4, R-14, INV-15..17, HG-14). Classificação: a ORDEM abaixo é CANÔNICA; os detalhes de cada tarefa são DERIVADOS. Onde divergir da ordem implícita de M1 a M3 (2b), esta seção prevalece; M0 segue como definido. Não altera a tabela de sprints (2) nem o estado de nenhuma tarefa (o estado vive em `tasks.md`).
+
+| Prec. | Marco | Resultado observável | Itens | Situação em 2026-10-17 |
+|---|---|---|---|---|
+| 1 | Corrigir P0 e demonstrar um SmartLearn utilizável | M0 usado de verdade no Desktop real; defeitos P0 que o uso revelar corrigidos; decisão sobre integrar o agrupamento de vencidas; jornada nativa Windows repetida no HEAD final | T-F4-01 (`[H]`), HG9-00 (integração: HG-05, HG-10), defeitos P0 do uso (sem ID até aparecerem) | M0 comprovado no que é automatizável; falta o uso humano. O agrupamento está só na branch `claude/smartlearn-v1-split-fatia2`; a repetição nativa em `f55da10` está com outro agente (INFORMADO, não reverificado aqui) |
+| 2 | Completar o primeiro estudo real e anotar as limitações | uma sessão de estudo real concluída, com tempo gasto, atritos e o que faltou registrados | T-F4-01; registro em `validation.md`/`uat-visual.md` | pendente (só o aluno faz) |
+| 3 | Spec executável do planejamento diário, começando pela menor solução (orçamento de tempo + plano do dia) | spec PROPOSED aprovada pelo aluno | `.specs/features/daily-plan-time-budget-v1/spec.md`; T-F12-01 (`[H]`, HG-14) | spec escrita (PROPOSED); aprovação pendente |
+| 4 | Preparar a decisão HG-09 com impacto e migração | pacote de decisão: análise de impacto, simulação em dados sintéticos, contrato de cobertura | T-F7-04, T-F7-05, T-F7-06; decisão T-F7-07 (`[H]`) | reconciliação feita (`hg-09-proposal.md` §0); análise de impacto, simulador e cobertura pendentes |
+| 5 | Implementar as novas funcionalidades em incrementos verificáveis, depois das aprovações | cada incremento com prova própria e regressão proporcional | ordem abaixo | bloqueado por aprovações e por 1 e 2 |
+
+Ordem dentro do marco 5 (uma tarefa ativa por vez; cada frente com tarefas e dependências próprias, nunca uma tarefa grande):
+- Frente A (R-14, prevenir sobrecarga): T-F12-02, T-F12-03, T-F12-04, T-F12-05, T-F12-06; depois T-F12-07 (calibração com tempo medido), T-F12-09 (previsão de carga, depende do contrato de calendário da B), T-F12-10 (data de prova, compartilhada com B) e T-F12-11 (priorização), T-F12-12 (rastreio), T-F12-13 (pausas, futuro). O incremento 1 (T-F12-02..06) NÃO espera a frente B.
+- Frente B (HG-09, dívida artificial): T-F7-07 (decisão e emenda), T-F7-08 (migração), T-F7-01 (realização), T-F7-09 (validação de retenção). A direção do aluno (uma obrigação exigível por unidade) está ACEITA; a decisão formal e toda implementação seguem PENDENTES.
+
+Regras:
+1. Trabalho documental e analítico dos marcos 3 e 4 (spec, análise, simulação sobre dados sintéticos) pode andar durante os marcos 1 e 2 e não consome a janela de uso. Código, migração ou mudança de dado das frentes A e B só depois dos marcos 1 e 2 e das aprovações.
+2. AUTORIZADO hoje: registrar, especificar, analisar e simular em dados sintéticos. NÃO autorizado: qualquer mudança de código, migração, dado, calendário de revisões ou comportamento de Hoje; adotar a Opção 3 (uma linha exigível por vez); usar FSRS ou ajuste adaptativo; classificar conteúdo como dispensável.
+3. Decisões do aluno que destravam: HG-14 (DP-D1..DP-D9), HG-09 (D-1 e D-12 a D-16 de `hg-09-proposal.md`), D-6 (data de prova), HG-05/HG-10 (integração do agrupamento).
+4. Conflitos abertos (CONFLITO): DECISION_CONFLICT-3 (frente B × Constituição §21/§91-C e INV-04), -4 (disponibilidade diária × §23/§39), -5 (priorização × §35) em `spec.md` §11.
+5. Tarefas novas (T-F7-04..09, T-F12-01..13) estão no registro "Frentes A e B" de `tasks.md` e NÃO são blocos do ledger executável até serem promovidas (cada promoção sincroniza o plano do conductor).
+
 ## 3. Gate Registry (comandos reais de `package.json`)
 
 | ID | Nível | Comando |
@@ -92,11 +115,12 @@ E2E completo só em S3 (medição) e S9. Por tarefa, apenas as specs da superfí
 | HG-06 avaliação humana VALID-4/5/8 | VALID-8, V1_VALIDATED | sim |
 | HG-07 orçamento do Codex | F5 geração | sim |
 | HG-08 política de armazenamento de PDF/dados reais (o Costanzo já existe; não pedir outro) | F5 geração | sim |
-| HG-09 produto de estudo | F7 | sim |
+| HG-09 produto de estudo (direção da frente B aceita em 2026-10-17; decisão formal D-1 e D-12..D-16 pendente) | F7 (T-F7-01, T-F7-07, T-F7-08) | sim |
 | HG-10 push/merge/deploy/release | T-F9-03 | sim |
 | HG-11 valores e unidade de custo das franquias | T-F10-04a (valores), produção com provedor real | sim (estrutura configurável) |
 | HG-12 política de prefetch | execução de prefetch (T-F10-03 já traz o parâmetro, padrão 0) | sim |
 | HG-13 diretiva mínima de idioma no prompt; alcance de `uiLocale` es/en | T-F10-02b, T-F10-06 | sim (DECISION_CONFLICT-1/2 em `spec.md` §11) |
+| HG-14 aprovar o spec do plano do dia (DP-D1..DP-D9) | T-F12-02..06 | sim (preparo documental segue) |
 | Julgamento perceptivo do UAT (`uat-visual.md`) | T-F4-01, `VISUAL_VALIDATION` | sim |
 
 Reabrir o Desktop e provas mecânicas por CDP NÃO são gate.

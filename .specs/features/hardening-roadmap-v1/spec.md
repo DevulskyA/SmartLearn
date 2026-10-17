@@ -3,6 +3,7 @@
 Status: EM EXECUÇÃO desde 2026-10-04 (F0 fechada; F1 com código completo; demais fases conforme `tasks.md`, cujo `Status:` por tarefa é autoritativo). HUMAN_GATES HG-01..HG-10 (seção 8) permanecem PENDENTES: nenhum está registrado como decidido, e a coluna "Recomendação do plano" é sugestão, não decisão. Ordem de sprints: `PROGRAM.md`.
 Data-base: 2026-10-04 · Branch `claude/smartlearn-v1-complete` · HEAD de referência `620307d`
 Metodologia: `tlc-spec-driven-strict` (GOV-2 = opção A, sem segunda governança). Este arquivo é a SPEC; o ledger executável está em `tasks.md`.
+Atualização 2026-10-17 (decisões do aluno, Constituição I.19): R-11 AC-11.4 (frente B), R-14 (frente A), INV-15..17, HG-09 reescrito, HG-14, DECISION_CONFLICT-3..5. Todas são DIREÇÃO CANÔNICA, nenhuma autoriza implementação.
 Hierarquia de autoridade (nesta ordem): Git/código/dados reais > evidência de validação > decisão humana registrada > spec > STATE/handoff > plano > narrativa de agente.
 
 ---
@@ -198,6 +199,18 @@ Cada requisito é verificável por sensor. IDs `R-xx`; tarefas em `tasks.md` apo
 - AC-11.1: O aluno com atraso grande tem uma ação de recuperação ("reagendar atrasadas") que preserva histórico e é reversível.
 - AC-11.2: Primeira abertura em produção tem onboarding/estado vazio decididos (DEBT-007).
 - AC-11.3: A decisão sobre FSRS (DEBT-003) é tomada com dados do uso real antes de qualquer implementação.
+- AC-11.4 (frente B, DIREÇÃO CANÔNICA de 2026-10-17, Constituição I.19; NÃO implementado, NÃO autorizado): a dívida de revisões representa conhecimento a recuperar, não datas perdidas: uma obrigação de revisão exigível por unidade, próxima revisão agendada a partir da revisão realmente feita, histórico intacto e auditável, nenhuma etapa perdida declarada concluída, reteste nunca substitui a evidência original, acerto isolado não prova unidade extensa, unidade sem questões adequadas sem crédito automático, provas consideradas. Depende de HG-09 (D-1, D-12 a D-16 em `hg-09-proposal.md`). Tarefas: T-F7-01, T-F7-03 a T-F7-09. CONFLITO com Constituição §21/§91-C e INV-04 do MVP: ver DECISION_CONFLICT-3.
+
+### R-14 — Planejamento da aprendizagem (frente A: prevenir sobrecarga; decisão do aluno de 2026-10-17)
+Classificação: CANÔNICO como requisito de direção; TODOS os critérios abaixo estão NOT_IMPLEMENTED. A escola define a carga; o SmartLearn não bloqueia aulas novas, não presume conteúdo pequeno e não descarta conhecimento obrigatório para caber no tempo (INV-15). As capacidades NÃO nascem juntas; a ordem e as dependências estão em `tasks.md` (F12) e o primeiro incremento candidato está especificado, como PROPOSED, em `.specs/features/daily-plan-time-budget-v1/`.
+- AC-14.1 Orçamento de tempo: o aluno declara a disponibilidade e o plano a respeita (T-F12-03, T-F12-04).
+- AC-14.2 Plano do dia executável: sessão ordenada por prioridade com duração estimada por item, em vez de fila longa (T-F12-02, T-F12-04, T-F12-05).
+- AC-14.3 Tempo insuficiente: o déficit e suas consequências observáveis são MOSTRADOS; nenhuma tarefa some; nada é declarado dominado (INV-16) (T-F12-04, T-F12-05, T-F12-06).
+- AC-14.4 Previsão de carga: efeito de aulas novas nas revisões futuras, sem controlar a entrada de aulas (T-F12-09; depende do contrato de calendário da frente B).
+- AC-14.5 Priorização acadêmica por critérios explícitos e justificáveis (provas, bases clínicas, dificuldades, retenção); nenhum conteúdo classificado como dispensável de modo arbitrário (T-F12-10, T-F12-11).
+- AC-14.6 Rastreio de comportamento: tempo efetivo, sessões concluídas e abandonadas, ausências (T-F12-12).
+- AC-14.7 Pausas e retomadas (futuro) (T-F12-13).
+- AC-14.8 Estimativa de duração rotulada como estimativa, com origem declarada e calibrável por tempo medido; nenhum número tratado como fato (T-F12-02, T-F12-07).
 
 ## 5. Invariantes a preservar (não podem regredir)
 
@@ -215,6 +228,9 @@ Cada requisito é verificável por sensor. IDs `R-xx`; tarefas em `tasks.md` apo
 - INV-12 Fontes importadas e backups nunca são apagados por rotinas automáticas.
 - INV-13 `IMPORTAR != GERAR`: nenhum caminho (rota, job, prefetch, batch) chama o provedor sem `sourceScope` validado, estimativa dentro dos limites e reserva atômica; nenhum job amplia seu escopo depois de criado sem nova validação.
 - INV-14 `sourceLanguage`, `uiLocale` e `generationLocale` são independentes; `generationLocale` só muda por ação explícita do aluno.
+- INV-15 (CANÔNICO, 2026-10-17) A escola define a carga acadêmica (aulas, materiais, conteúdo, provas). O SmartLearn não bloqueia aulas novas, não presume que o conteúdo é pequeno e não descarta conhecimento obrigatório para caber no tempo.
+- INV-16 (CANÔNICO, 2026-10-17) Quando o tempo não basta, o déficit e suas consequências observáveis são MOSTRADOS: nenhuma tarefa é escondida e nenhum conhecimento é declarado dominado de forma artificial; nenhum conteúdo é classificado como dispensável sem critério explícito aprovado pelo aluno.
+- INV-17 (CANÔNICO, 2026-10-17; vale para qualquer mudança de calendário ou retomada) a revisão espaçada continua necessária; retomar não equivale automaticamente a várias revisões feitas; nenhuma etapa perdida é declarada concluída; histórico íntegro e auditável; reteste nunca substitui a evidência original; acerto isolado não prova unidade extensa; unidade sem questões adequadas não recebe crédito automático de domínio.
 
 ## 6. Estratégia de proteção de regressão (brownfield)
 
@@ -238,6 +254,7 @@ Regra do Cardboard Test: para cada tarefa de risco médio/alto, perguntar "qual 
 - Qualquer mudança de prompt ou provedor pedagógico alternativo antes do Prompt Lab aprovado — EXCETO a diretiva mínima de idioma de saída exigida por R-13, que depende de HG-13 (ver §11).
 - Sincronização multi-dispositivo (DEBT-006 item 3) — exige ADR e decisão de produto próprias.
 - FSRS completo (DEBT-003) — só a decisão baseada em dados está no plano.
+- Implementação do calendário de uma obrigação por unidade (frente B) e das capacidades de planejamento (frente A, R-14): este plano cobre especificação, análise e decisão; código só depois de HG-09 e HG-14 respondidos (registro de 2026-10-17).
 - Reescrita de `app.js` por estilo; extrações só quando um sensor exigir (DEBT-002).
 - Deploy, release, assinatura de código e distribuição pública (T51) — gate humano.
 
@@ -253,11 +270,12 @@ Regra do Cardboard Test: para cada tarefa de risco médio/alto, perguntar "qual 
 | HG-06 | Avaliação humana de VALID-4/5 (PDF real, rubrica) e decisão VALID-8 | F5 | humano avalia 1 unidade por rodada com rubrica fixa |
 | HG-07 | Orçamento de chamadas ao Codex do Prompt Lab | F5 | teto por rodada e por dia, configurável |
 | HG-08 | Política de ARMAZENAMENTO de PDF/dados reais usados em teste (nunca no repositório; onde ficam e como são referenciados). Não é pedido de outro PDF: o Costanzo já existe localmente e não deve ser solicitado de novo | F5 | diretório fora do repositório, listado em `.gitignore` global |
-| HG-09 | Decisão de produto sobre recuperação de atraso e onboarding | F7 | começar por "reagendar atrasadas" reversível |
+| HG-09 | Decisão de produto sobre recuperação de atraso e onboarding. Direção da frente B ACEITA em 2026-10-17 (uma obrigação exigível por unidade; sem autorização de implementação). Falta a decisão formal: D-1 a D-16 de `hg-09-proposal.md` (arquitetura-alvo, calendário, estados, erro/ajuda, cobertura, migração) | F7 (T-F7-01, T-F7-07, T-F7-08) | recomendação ANTERIOR (DERIVADA, em CONFLITO com a direção para unidades em dia): recuperação por unidade com as 16 linhas; ver `hg-09-proposal.md` §0 |
 | HG-10 | Push, merge, deploy, release | F9 | só por ordem explícita, uma ação por vez |
 | HG-11 | Valores e unidade de custo: máximo por job, franquia semanal e mensal (R-12). A estrutura é configurável; faltam dados medidos | T-F10-04 (valores), produção com provedor real | experimento mínimo: medir custo real de 3–5 unidades de tamanhos diferentes por provedor e propor franquias com folga; até lá, limites configuráveis e produção com provedor real recusa subir sem eles |
 | HG-12 | Política de prefetch (janela e condição de orçamento) | T-F10-03 (parâmetro), execução de prefetch | JIT puro (janela 0) até medir latência de geração e consumo; janela 1 só com orçamento ≥ 3× a estimativa da unidade seguinte e sem job em andamento |
 | HG-13 | Autorizar a diretiva mínima de idioma no prompt (e a mudança de versão do prompt) e confirmar o alcance de `uiLocale` em es/en no V1 (catálogos das chaves existentes + fallback pt-BR, sem tradução completa do app) | T-F10-02b, T-F10-06 | autorizar a diretiva aditiva sem rodar o Prompt Lab; prova com modelo real fica `NOT_PROVEN` até execução manual; UI es/en só nas chaves do catálogo |
+| HG-14 | Aprovar (ou ajustar) o spec PROPOSED do primeiro incremento da frente A, `.specs/features/daily-plan-time-budget-v1/`, e responder DP-D1..DP-D9 (entrada de disponibilidade, estimativa provisória, ordem do plano, corte por orçamento, tratamento de etapas empilhadas, plataformas, aparência) | T-F12-02..06 (implementação); T-F12-07 em diante por dependência | aprovar a Opção A de cada DP-D marcada como recomendada no spec; aparência só após mockup aprovado |
 
 ## 9. Riscos (resumo; detalhes em `tasks.md`)
 
@@ -291,6 +309,24 @@ EVIDENCE=`spec.md` §7 ("nenhuma mudança de prompt antes do Prompt Lab aprovado
 IMPACT=Alto para a qualidade real: sem a diretiva o idioma de saída do modelo é indeterminado; com o contrato de idioma ativo, saída em idioma diferente do alvo é recusada (fail-closed), o que expõe o problema em vez de escondê-lo.
 MINIMUM_RESOLUTION=HG-13: autorizar a diretiva aditiva mínima (bloco OUTPUT LANGUAGE + campo `language` + bump de promptVersion), SEM rodar Prompt Lab/Codex. Enquanto isso o domínio, o contrato de validação, as preferências e o provedor simulado entram (T-F10-01/02a); T-F10-02b fica `[H]`. Não bloqueia.
 
+
+DECISION_CONFLICT-3 (registrado em 2026-10-17)
+DECISION=Frente B (CANÔNICO, Constituição I.19): evoluir para uma obrigação de revisão exigível por unidade, próxima revisão agendada a partir da revisão realmente feita; a dívida representa conhecimento a recuperar.
+EVIDENCE=Constituição §21 ("scheduler vencedor FIXO; 16 review_tasks; não implementar na V1 scheduler adaptativo") e §91-C ("não reabrir sem nova evidência"); V1-09; heritage H-01; INV-04/INV-05 do MVP (todas as revisões geradas no cadastro; só a corrente preguiçosa as viola de fato); Evolução V3 H5 (memória adaptativa EVIDENCE_GATED, não autorizada).
+IMPACT=Alto: muda o contrato do agendador e o predicado "etapa aberta" lido por Hoje, Plano, Estatísticas, Acompanhamento, snapshot offline, backup e restauração lógica. Cada opção cumpre a direção em graus diferentes (`hg-09-proposal.md` §0.2).
+MINIMUM_RESOLUTION=HG-09: responder D-1 junto com D-12 e registrar a emenda (T-F7-07). Até lá o código segue §21; o trabalho permitido é análise, simulação sobre dados sintéticos e especificação (T-F7-04, T-F7-05, T-F7-06). Não bloqueia a frente A: o primeiro incremento dela lê o calendário vigente e não o altera.
+
+DECISION_CONFLICT-4 (registrado em 2026-10-17)
+DECISION=Frente A (CANÔNICO, Constituição I.19): o SmartLearn considera o tempo real disponível do aluno e entrega um plano diário executável.
+EVIDENCE=Constituição §23 (não transformar o resumo temporal em "calendário carregado ou planejamento manual"), §39 (zero meta-work: tudo que é derivável deve ser derivado), INV-01/INV-23 do MVP (menos trabalho que a planilha; energia para estudar, não para gerenciar), INV-20 do MVP ("redistribuição avançada de revisões" fora do MVP; pode estar obsoleto, NÃO VERIFICADO).
+IMPACT=Médio: a disponibilidade diária é a única entrada nova que não pode ser derivada; o plano em si é derivado dos dados existentes e não altera o calendário.
+MINIMUM_RESOLUTION=HG-14 (DP-D1): aceitar uma entrada opcional de disponibilidade, sem valor padrão inventado; sem ela o plano mostra só o tempo estimado total e NÃO declara déficit. Aceite do aluno ainda pendente.
+
+DECISION_CONFLICT-5 (registrado em 2026-10-17)
+DECISION=Priorização acadêmica (provas, bases clínicas, dificuldades, retenção) deve ordenar o trabalho com critérios que se possa justificar.
+EVIDENCE=Constituição §35 ("não inventar fórmula de impacto esperado sem contrato validado; pesos exigem decisão e validação") e §92 (recomendação curricular automática e escore de domínio não negociados); I.12 (não inventar domínio).
+IMPACT=Médio-alto: sem campo de data de prova, sem marcação de relevância clínica e sem entidade de conhecimento/subtema, não existe base de dados para priorizar além da regra vigente de Hoje (atrasado, hoje, reforço).
+MINIMUM_RESOLUTION=O incremento 1 da frente A mantém a ordem vigente do protocolo e NÃO introduz critério novo. Critérios novos (T-F12-10, T-F12-11) exigem decisão do aluno e validação própria, e nunca classificam conteúdo como dispensável.
 
 ## 12. Mobile/Companion: arquitetura suportada e lacuna (reconciliação ARCH-01, 2026-10-05)
 - Arquitetura canônica (ARCH-01): Desktop Windows/Tauri = produto completo local-first; Companion Web/PWA = superfície menor, somente leitura. O código Tauri-SQLite é legado inativo (T-F6-06c); não é alvo mobile.
