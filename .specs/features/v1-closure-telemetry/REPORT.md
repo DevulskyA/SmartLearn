@@ -57,3 +57,9 @@ Aberto: a falha única do E2E completo (rodar de novo e, se repetir, diagnostica
 ## 7. Reexecução do E2E completo (5174b28)
 
 259 passaram, 2 ignorados, 0 falhas (EXIT=0, 9,4 min). A falha única de `lesson-editor.spec.js:207` na execução anterior NÃO repetiu; a causa não foi provada (formulário de login oculto no setup `signInRegistered` sob carga). Registrada como ocorrência isolada sem causa, não como instabilidade comprovada; se voltar, diagnosticar com o trace.
+
+## 8. Cobertura de HEAD e diagnóstico da falha única (3806a89)
+
+- Entre `9d572d5` (jornada nativa 18/18 x2, servidor 1066/1066) e o HEAD só mudou este REPORT (`git diff --name-only`, nada fora de `.specs/`): as provas valem para o código final.
+- Depois da TG-01, no mesmo código: `npm test` 717/717, `context:check` PASS, `test:inventory` PASS, `codemap` 3/3, lint limpo, E2E completo 259/0.
+- Falha única `lesson-editor.spec.js:207`: o trace mostra que o clique em `[data-screen="account"]` foi executado e a tela seguiu em "Hoje" (o formulário de login ficou oculto). Reexecução: 3x o arquivo sozinho (19/19), E2E completo (259/0) e `--repeat-each=6 --workers=4` (114/114). NÃO reproduzida. Causa NÃO provada (hipótese não testada: o clique chegou antes da inicialização do app terminar de montar a tela). Sem alteração de código por falta de evidência; se reaparecer, abrir o trace e ver se a inicialização redefiniu a tela depois do clique.
