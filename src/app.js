@@ -4548,6 +4548,13 @@ export function showScreen(screenId, { focus = false } = {}) {
     nextScreen = DEFAULT_SCREEN;
   }
 
+  // The study and exam screens only exist while their in-memory session does. After a reload (or a stale link) there is
+  // nothing to show: an empty card with a "Ver resposta" that does nothing is worse than starting over from Plano, where
+  // an interrupted "Estudar agora" offers to continue and a started exam is reopened from where it stopped.
+  if ((nextScreen === "study-now" && !studyNowState && studyNowResultCard.hidden) || (nextScreen === "exam" && !examState)) {
+    nextScreen = "plan";
+  }
+
   // A redo's "return to the block" intent only lives until the student is
   // back on Hoje; wandering elsewhere drops it instead of surprising them later.
   if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;

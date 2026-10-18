@@ -110,3 +110,23 @@ test('ROBUST-2: if the lesson\'s questions cannot be loaded, the screen says so 
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 2');
   await expect(page.locator('#study-now-no-exercises')).toBeHidden();
 });
+
+test('ROBUST-3: reloading (or following a link to) a study or exam screen whose session is gone lands on Plano, not on an empty screen with a dead button; the interrupted pass can be continued', async ({ page }) => {
+  await seedLesson(page, 'Aula recarregada', { n: 3 });
+  await openStudyNow(page, 'Aula recarregada');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('[data-screen-panel="plan"]')).toBeVisible();
+  await expect(page.locator('#study-now-reveal-btn')).toBeHidden();
+  expect(await page.evaluate(() => window.location.hash)).toBe('#plan');
+  await page.evaluate(() => { window.location.hash = '#exam'; }); // a stale link to a prova that is not open
+  await expect(page.locator('[data-screen-panel="plan"]')).toBeVisible();
+  await expect(page.locator('[data-screen-panel="exam"]')).toBeHidden();
+  await openStudyNow(page, 'Aula recarregada');
+  await expect(page.locator('#study-now-resume')).toBeVisible(); // what was judged is not lost: continue from question 2
+  await page.locator('#study-now-resume-continue').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
+});
