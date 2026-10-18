@@ -298,7 +298,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     box.className = "summary-grounding";
     box.dataset.part = "summary-grounding";
     box.append(createTextElement("p", "summary-grounding-line", g.orphaned > 0
-      ? t("editor.grounding.lineOrphaned", { supported: g.supported, total: g.total, orphaned: g.orphaned })
+      ? t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned })
       : t("editor.grounding.line", { supported: g.supported, total: g.total })));
     const unconfirmed = g.sentences.filter((sentence) => sentence.status !== "SOURCE_LINKED");
     if (unconfirmed.length > 0) {
@@ -784,7 +784,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
     accepted = true;
     acceptBtn.textContent = t("editor.accept.done");
-    setMessage(acceptMessage, t("editor.accept.created", { exercises: result.acceptance.exerciseCount, reviews: result.acceptance.reviewCount }));
+    const reviewCount = result.acceptance.reviewCount;
+    setMessage(acceptMessage, t("editor.accept.created", {
+      exercises: exercisesText(result.acceptance.exerciseCount),
+      reviews: t(reviewCount === 1 ? "editor.accept.reviews.one" : "editor.accept.reviews.other", { count: reviewCount }),
+    }));
     const study = button("primary-button", t("editor.accept.studyNow"), "study-now");
     study.addEventListener("click", () => deps.startStudyNow(result.acceptance.unit, result.acceptance.subject?.name));
     afterAccept.replaceChildren(study);

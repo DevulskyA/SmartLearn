@@ -135,7 +135,7 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   // 1) material -> pages -> proposal -> draft on the live path
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 15000 });

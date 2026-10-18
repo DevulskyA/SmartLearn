@@ -67,7 +67,7 @@ async function openLesson(page, name = 'aula.pdf') {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const pdf = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']);
   await page.setInputFiles('#sources-file-input', { name, mimeType: 'application/pdf', buffer: pdf });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
 }
@@ -165,7 +165,7 @@ test('a rejected question does not become an exercise when the lesson is accepte
   await expect(editor.locator('.lesson-accept-note')).toContainText('2 questões viram exercícios');
   await editor.locator('.source-draft-subject-input').fill('Fisiologia');
   await editor.locator('[data-action="accept-draft"]').click();
-  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada: 2 exercício(s)', { timeout: 10000 });
+  await expect(editor.locator('.source-draft-result')).toContainText(/Aula criada: 2 exercícios/, { timeout: 10000 });
 });
 
 test('PREVIEW before accepting: shows what will be created, writes nothing, is dropped when the lesson changes, and matches the real acceptance', async ({ page }) => {
@@ -200,7 +200,7 @@ test('PREVIEW before accepting: shows what will be created, writes nothing, is d
     await editor.locator('[data-action="preview-accept"]').click();
     await expect(panel.locator('.lesson-accept-preview-exercises li')).toHaveCount(3);
     await editor.locator('[data-action="accept-draft"]').click();
-    await expect(editor.locator('.source-draft-result')).toContainText('Aula criada: 3 exercício(s)', { timeout: 10000 });
+    await expect(editor.locator('.source-draft-result')).toContainText(/Aula criada: 3 exercícios/, { timeout: 10000 });
   } finally { db.close(); }
 });
 
@@ -239,7 +239,7 @@ test('topic search finds a section by its heading and generates ONLY that sectio
   await page.locator('[data-screen="materials"]').click();
   const pdf = buildFixturePdf(['Fisiologia renal introdução', 'Filtração glomerular: barreira e forças', 'Clearance de inulina mede a TFG', 'Reabsorção tubular proximal']);
   await page.setInputFiles('#sources-file-input', { name: 'renal.pdf', mimeType: 'application/pdf', buffer: pdf });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
   // give the document an outline the way a real textbook has one (the fixture PDF has none)
   const db = new Database(dbPath);
@@ -280,7 +280,7 @@ test('a processed document is reopened from "Documentos já enviados" without se
   const existing = page.locator('#sources-existing-list .source-existing-item', { hasText: 'reaberto.pdf' });
   await expect(existing).toBeVisible({ timeout: 10000 });
   await existing.locator('[data-action="open-source"]').click();
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
@@ -311,7 +311,7 @@ test('RELOAD: a saved question and a saved summary survive a full page reload; u
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'recarga.pdf' }).locator('[data-action="open-source"]').click();
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
   await expect(editor.locator('.lesson-summary-input')).toHaveValue('Resumo persistido após recarga');

@@ -92,6 +92,8 @@ export default {
   'materials.upload.chunking': 'Gerando trechos propostos…',
   'materials.upload.chunkFailed': 'Não foi possível gerar propostas para este PDF.',
   'materials.upload.processFailed': 'Não foi possível processar o arquivo selecionado.',
-  'materials.upload.proposed': '{count} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.',
-  'materials.upload.proposedWithNote': '{count} trecho(s) proposto(s). Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso. {note}',
+  'materials.upload.proposed.one': '{count} trecho proposto. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.',
+  'materials.upload.proposed.other': '{count} trechos propostos. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.',
+  'materials.upload.proposedWithNote.one': '{count} trecho proposto. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso. {note}',
+  'materials.upload.proposedWithNote.other': '{count} trechos propostos. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso. {note}',
 };

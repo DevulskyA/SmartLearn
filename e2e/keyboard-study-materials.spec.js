@@ -167,7 +167,7 @@ test('ACCESS-2 Materiais: generate a draft, review it and accept it with the key
   // the OS file dialog is the one step a test cannot press; the input itself is in the page and reachable
   await expect(page.locator('#sources-file-input')).toBeAttached();
   await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').focus();
@@ -212,7 +212,7 @@ test('ACCESS-5 Materiais: a proposal title is named, renamed and its source exce
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   const item = page.locator('.source-proposal-item').first();
 
   // the title field says what it is and which proposal it belongs to (several rows have one)

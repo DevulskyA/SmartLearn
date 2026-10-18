@@ -84,7 +84,7 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
 
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'real-source.pdf', mimeType: 'application/pdf', buffer: readFileSync(pdfPath) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 180_000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 180_000 });
 
   // ONE bounded section only: the model never sees the rest of the book.
   // The title lives in an <input> and several items merely MENTION the section in their (hidden) excerpt: select by the

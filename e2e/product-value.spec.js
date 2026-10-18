@@ -101,7 +101,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
     mimeType: 'application/pdf',
     buffer: pdfBuffer,
   });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
   // 5. Proposal.
   const item = page.locator('.source-proposal-item').first();

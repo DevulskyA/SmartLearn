@@ -68,7 +68,7 @@ test('a 150-page lecture PDF: extracted in bounded time, 15 proposals covering e
   await page.locator('[data-screen="materials"]').click();
   const started = Date.now();
   await page.setInputFiles('#sources-file-input', { name: 'aula-completa.pdf', mimeType: 'application/pdf', buffer: pdf });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 60000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 60000 });
   const elapsedMs = Date.now() - started;
   console.log(`[LARGEPDF] 150 pages, ${(pdf.length / 1024).toFixed(0)} KB -> proposals in ${elapsedMs} ms`);
   expect(elapsedMs).toBeLessThan(45000);
@@ -98,7 +98,7 @@ test('dense pages: chunks close before the model input limit, so every proposal 
   const pages = Array.from({ length: 10 }, (_, i) => pageText(i + 1, 6500));
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'capitulo-denso.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 30000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
   const proposals = page.locator('.source-proposal-item');
   expect(await proposals.count()).toBeGreaterThanOrEqual(2); // split by size, not one impossible chunk
   const first = proposals.first();
@@ -127,7 +127,7 @@ test('TRACKUX-1: on a 375px Materiais the proposals are cards with a full-width 
   await page.locator('[data-screen="materials"]').click();
   const pages = Array.from({ length: 30 }, (_, n) => pageText(n + 1, 1500));
   await page.setInputFiles('#sources-file-input', { name: 'aula-de-fisiologia-renal-completa-com-nome-longo.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 30000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
   await page.setViewportSize({ width: 375, height: 800 });
   const item = page.locator('.source-proposal-item').first();
   const m = await item.evaluate((el) => {

@@ -65,7 +65,7 @@ test('sending the same PDF again lands on its existing trechos and their rascunh
 
   const file = { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Introdução à fisiologia renal', 'A taxa de filtração glomerular é de 120 mL/min.']) };
   await page.setInputFiles('#sources-file-input', file);
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').click();
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });

@@ -375,7 +375,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       name: 'materia-a.pdf', mimeType: 'application/pdf',
       buffer: buildFixturePdf(['Conteudo da primeira materia sobre Nefrologia']),
     });
-    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
     const firstItem = page.locator('.source-proposal-item').first();
     await firstItem.locator('[data-action="generate-draft"]').click();
     const firstPanel = page.locator('.lesson-editor');
@@ -391,7 +391,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       name: 'materia-b.pdf', mimeType: 'application/pdf',
       buffer: buildFixturePdf(['Conteudo da segunda materia sobre outro assunto']),
     });
-    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
     const secondItem = page.locator('.source-proposal-item').first();
     await secondItem.locator('[data-action="generate-draft"]').click();
     const secondPanel = page.locator('.lesson-editor');

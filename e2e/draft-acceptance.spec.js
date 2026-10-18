@@ -72,7 +72,7 @@ async function openFirstDraft(page, name, pages) {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name, mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   return page.locator('.lesson-editor');
@@ -164,7 +164,7 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
     name: 'materia-b.pdf', mimeType: 'application/pdf',
     buffer: buildFixturePdf(['Conteudo da segunda materia']),
   });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   // renderSourceProposals replaces the list wholesale per upload (it shows this source's own proposals, not an accumulating
   // history) — the only item visible now is this second material's own proposal.
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();

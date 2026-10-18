@@ -30,7 +30,8 @@ export default {
   'editor.summary.source.one': 'Fonte do resumo · página {pages}',
   'editor.summary.source.other': 'Fonte do resumo · páginas {pages}',
   'editor.grounding.line': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo.',
-  'editor.grounding.lineOrphaned': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo. {orphaned} apontamento(s) antigo(s) deixaram de valer porque a frase ou a fonte mudou.',
+  'editor.grounding.lineOrphaned.one': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo. {orphaned} apontamento antigo deixou de valer porque a frase ou a fonte mudou.',
+  'editor.grounding.lineOrphaned.other': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo. {orphaned} apontamentos antigos deixaram de valer porque a frase ou a fonte mudou.',
   'editor.grounding.unconfirmed': 'Frases sem trecho confirmado, ou só em parte ({count}) — confira na fonte',
 
   // Questions
@@ -119,7 +120,9 @@ export default {
   'editor.accept.rejected.other': '{count} rejeitadas não entram',
   'editor.accept.note': '{kept}. Revisões são agendadas ao aceitar.',
   'editor.accept.noteRejected': '{kept}; {rejected}. Revisões são agendadas ao aceitar.',
-  'editor.accept.created': 'Aula criada: {exercises} exercício(s), {reviews} revisões agendadas.',
+  'editor.accept.created': 'Aula criada: {exercises}, {reviews}.',
+  'editor.accept.reviews.one': '{count} revisão agendada',
+  'editor.accept.reviews.other': '{count} revisões agendadas',
   'editor.accept.savePendingPreview': 'Salve as alterações pendentes (resumo ou questões) antes de ver o que será criado.',
   'editor.accept.savePendingAccept': 'Salve as alterações pendentes (resumo ou questões) antes de aceitar a aula.',
   'editor.accept.previewFailed': 'Não foi possível pré-visualizar o aceite.',

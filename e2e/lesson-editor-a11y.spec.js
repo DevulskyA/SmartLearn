@@ -60,7 +60,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const pdf = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']);
   await page.setInputFiles('#sources-file-input', { name: 'teclado.pdf', mimeType: 'application/pdf', buffer: pdf });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
 });

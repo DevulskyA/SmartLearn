@@ -82,7 +82,7 @@ test('uploading a real PDF through the Fontes card produces inspectable proposal
     buffer: pdfBuffer,
   });
 
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   const items = page.locator('.source-proposal-item');
   // Default chunking groups up to 10 pages per proposal (design.md §8) —
   // this 3-page fixture stays entirely within one proposal.
@@ -131,7 +131,7 @@ test('SCANNED-1: a PDF with a page that has no text says which page was left out
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const pdfBuffer = buildFixturePdf(['Farmacocinética: absorção e distribuição', 'figura sem texto', 'Farmacodinâmica: receptores e afinidade'], { emptyPages: [2] });
   await page.setInputFiles('#sources-file-input', { name: 'misto.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await expect(page.locator('#sources-message')).toContainText('1 página sem texto extraível (p. 2)');
   await expect(page.locator('#sources-message')).toContainText('O resumo não cobre essa página');
   await expect(page.locator('#sources-message')).not.toHaveClass(/is-error/);
@@ -153,7 +153,7 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const mixed = buildFixturePdf(['Farmacocinética: absorção e distribuição', 'figura sem texto', 'Farmacodinâmica: receptores e afinidade'], { emptyPages: [2] });
   await page.setInputFiles('#sources-file-input', { name: 'misto.pdf', mimeType: 'application/pdf', buffer: mixed });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   const note = page.locator('#sources-coverage-note');
   await expect(note).toBeVisible();
   await expect(note).toContainText('1 página sem texto extraível (p. 2)');
@@ -168,7 +168,7 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
   // a PDF with every page readable leaves no stale warning behind
   const clean = buildFixturePdf(['Anatomia: sistema nervoso central']);
   await page.setInputFiles('#sources-file-input', { name: 'limpo.pdf', mimeType: 'application/pdf', buffer: clean });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await expect(note).toBeHidden();
 });
 
@@ -179,7 +179,7 @@ test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft 
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'ordem.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   // no draft yet: the block is not there and the search is the first thing of the panel
   await expect(page.locator('#sources-drafts')).toBeHidden();
   await expect(page.locator('#sources-topic-form')).toBeVisible();

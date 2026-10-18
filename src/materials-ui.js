@@ -36,6 +36,14 @@ const editorView = document.querySelector("#sources-editor-view");
 const existingBox = document.querySelector("#sources-existing");
 const existingList = document.querySelector("#sources-existing-list");
 
+// "1 trecho proposto" / "N trechos propostos" (0 too: only 1 is singular, unlike the pt-BR plural category tn() would pick).
+function proposedText(count, note) {
+  const form = count === 1 ? "one" : "other";
+  return note
+    ? t(`materials.upload.proposedWithNote.${form}`, { count, note })
+    : t(`materials.upload.proposed.${form}`, { count });
+}
+
 // What Materiais needs from the rest of the app (set once at start-up, before any user event can fire):
 //   listActiveSubjects()  -> Promise<subject[]>   disciplines offered when accepting a draft
 //   getLocalDateValue()   -> "YYYY-MM-DD"         default date of the lesson
@@ -671,7 +679,7 @@ existingList?.addEventListener("click", async (event) => {
   }
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; }
   await showProposals(listed.proposals);
-  setSourcesMessage(t("materials.upload.proposed", { count: listed.proposals.length }));
+  setSourcesMessage(proposedText(listed.proposals.length));
   topicInput?.focus({ preventScroll: true });
 });
 
@@ -737,9 +745,7 @@ sourcesFileInput?.addEventListener("change", async () => {
     const skippedNote = SourceProposalsUI.skippedPagesNote(extractResult.extraction);
     // the status line is overwritten by the next action; the coverage note stays with the proposals it describes
     if (sourcesCoverageNote && skippedNote) { sourcesCoverageNote.textContent = skippedNote; sourcesCoverageNote.hidden = false; }
-    setSourcesMessage(skippedNote
-      ? t("materials.upload.proposedWithNote", { count: chunkResult.proposals.length, note: skippedNote })
-      : t("materials.upload.proposed", { count: chunkResult.proposals.length }));
+    setSourcesMessage(proposedText(chunkResult.proposals.length, skippedNote));
     topicInput?.focus({ preventScroll: true });
     loadExistingSources();
   } catch (error) {

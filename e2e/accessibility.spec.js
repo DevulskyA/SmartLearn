@@ -162,7 +162,7 @@ for (const { theme, width, height } of EDITOR_CASES) {
     await page.locator('[data-screen="materials"]:visible').first().click();
     await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
     await page.setInputFiles('#sources-file-input', { name: 'editor.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos']) });
-    await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+    await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
     await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
     const editor = page.locator('.lesson-editor');
     await expect(editor).toBeVisible({ timeout: 10000 });

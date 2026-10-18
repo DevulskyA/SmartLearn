@@ -115,7 +115,7 @@ const inViewport = (locator) => locator.evaluate((el) => {
 test('a 50-question draft: find the flagged items from the findings, fix them, keep every other edit, accept, and get exactly what was reviewed', async ({ page }) => {
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'grande.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES) });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 15000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   const started = Date.now();
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const panel = page.locator('.lesson-editor');
@@ -187,7 +187,7 @@ test('a 50-question draft: find the flagged items from the findings, fix them, k
   await panel.locator('.source-draft-subject-input').fill('Grande CQ7');
   await panel.locator('.source-draft-date-input').fill('2026-05-01');
   await panel.locator('[data-action="accept-draft"]').click();
-  await expect(panel.locator('.source-draft-result')).toContainText('50 exercício(s)', { timeout: 20000 });
+  await expect(panel.locator('.source-draft-result')).toContainText(/50 exercícios/, { timeout: 20000 });
   const exercises = await page.evaluate(async (base) => {
     const units = await (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json();
     const res = await fetch(`${base}/v1/learning-units/${units.units[0].id}/exercises`, { credentials: 'include' });

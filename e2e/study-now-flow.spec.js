@@ -71,7 +71,7 @@ async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, 
 
   const pdfBuffer = buildFixturePdf(sourcePages ?? [sourceText]);
   await page.setInputFiles('#sources-file-input', { name: 'material.pdf', mimeType: 'application/pdf', buffer: pdfBuffer });
-  await expect(page.locator('#sources-message')).toContainText('trecho(s) proposto(s)', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').click();
