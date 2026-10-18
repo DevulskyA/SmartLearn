@@ -5323,6 +5323,18 @@ reviewDashboard.addEventListener("change", async (event) => {
     await renderToday();
     refocusReviewDone(taskId);
   } catch (error) {
+    // An earlier tap reached the server and only its reply was lost: the review IS completed (what the server holds
+    // stands, including any score it recorded). Showing "could not save" for that, forever, would be false.
+    if (error?.code === "ALREADY_COMPLETED" && input.checked) {
+      try {
+        setReviewMessage();
+        await renderToday();
+        refocusReviewDone(taskId);
+        return;
+      } catch (refreshError) {
+        console.error("Falha ao atualizar Hoje após revisão já concluída.", refreshError);
+      }
+    }
     input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
     input.focus({ preventScroll: true });

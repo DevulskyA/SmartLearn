@@ -1,0 +1,86 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { signInRegistered } from './support/session.js';
+
+// ROBUSTNESS sweep of the core study loop (open lesson -> Estudar agora -> judge -> Hoje review -> done): what the student
+// sees and what the server holds when something goes wrong in the middle. One real server per file, one account per test.
+
+const SERVER_PORT = serverPort(13940);
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+let serverProcess;
+let dataDir;
+
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-robustness-'));
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
+    stdio: 'ignore',
+  });
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error('robustness E2E: real server did not become ready in time');
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+  }, API_BASE);
+  const email = `robust-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  await signInRegistered(page, { email, password: 'a genuinely long test password 1' });
+});
+
+async function apiCall(page, path, body) {
+  return page.evaluate(async ({ base, path, body }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+}
+const getJson = (page, path) => page.evaluate(async ({ base, path }) => (await fetch(`${base}${path}`, { credentials: 'include' })).json(), { base: API_BASE, path });
+
+/** A lesson with `n` manual questions. A past `studyDate` makes its reviews overdue, so Hoje lists them. */
+async function seedLesson(page, title, { n = 3, studyDate = '2030-01-01' } = {}) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Disc ${title}`, title, studyDate });
+  for (let i = 1; i <= n; i++) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} ${i}?`, answer: `Resp ${i}`, provenance: 'MANUAL' });
+  return unit;
+}
+
+test('ROBUST-1: Revisão feita whose reply was lost: the retry completes the review instead of failing forever on "já concluída"', async ({ page }) => {
+  const unit = await seedLesson(page, 'Aula resposta perdida', { n: 1, studyDate: '2020-01-01' });
+  await page.locator('[data-screen="today"]').click();
+  const first = page.locator('.review-row').first();
+  await expect(first).toBeVisible({ timeout: 8000 });
+  const reviewId = await first.getAttribute('data-review-id');
+  let lost = false;
+  await page.route('**/v1/review-tasks/*/complete', async (route) => {
+    if (!lost) { lost = true; await route.fetch(); await route.abort(); return; } // the server recorded it; the answer never came back
+    await route.continue();
+  });
+  await first.locator('[data-action="review-done"]').check();
+  const message = page.locator('#review-dashboard-message');
+  await expect(message).toContainText('Não foi possível salvar'); // the student cannot know it was recorded
+  const completedCount = async () => (await getJson(page, `/v1/review-tasks?unitId=${unit.id}`)).reviewTasks.filter((r) => r.completedAt || r.completed_at).length;
+  expect(await completedCount()).toBe(1); // ...but the server has it
+  await page.locator(`.review-row[data-review-id="${reviewId}"] [data-action="review-done"]`).check(); // the student follows the message and taps again
+  await expect(message).toHaveText('');
+  await expect(page.locator(`.review-row[data-review-id="${reviewId}"]`)).toHaveAttribute('data-group', 'doneToday');
+  expect(await completedCount()).toBe(1);
+});
