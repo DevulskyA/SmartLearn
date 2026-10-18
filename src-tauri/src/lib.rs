@@ -60,6 +60,34 @@ fn pick_free_local_port() -> Result<u16, String> {
     listener.local_addr().map(|addr| addr.port()).map_err(|e| e.to_string())
 }
 
+/// Where the backend's last port is remembered: next to the database it serves, so the human's Desktop and any isolated test
+/// instance (different database) never share or overwrite each other's memory.
+fn backend_port_file(db_path: &Path) -> PathBuf {
+    db_path.with_extension("port")
+}
+
+/// Same free-port-at-runtime policy as `pick_free_local_port`, but it prefers the port the previous launch used when that port can be
+/// bound right now. The WebView keeps localStorage per origin (http://127.0.0.1:<port>), so a port that changes on every launch
+/// silently drops everything kept on the device — the "continue where you stopped" snapshot of Estudar agora, drafts, preferences —
+/// at each restart. The memory is best-effort: a missing, unreadable, junk or unwritable file only means a fresh port is used.
+fn pick_stable_local_port(state_file: &Path) -> Result<u16, String> {
+    let remembered = std::fs::read_to_string(state_file)
+        .ok()
+        .and_then(|text| text.trim().parse::<u16>().ok())
+        .filter(|port| *port >= 1024);
+    if let Some(port) = remembered {
+        if TcpListener::bind((LOCAL_BACKEND_HOST, port)).is_ok() {
+            return Ok(port);
+        }
+    }
+    let port = pick_free_local_port()?;
+    if let Some(dir) = state_file.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(state_file, port.to_string());
+    Ok(port)
+}
+
 /// Pure, independently testable: the exact environment this local backend
 /// is launched with. Kept separate from the actual `Command::spawn` so
 /// tests can assert on it directly (loopback-only host, paths rooted under
@@ -272,7 +300,12 @@ fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<Local
     let (node_program, server_entry, static_dir) =
         resolve_backend_launch(resource_dir, manifest_dir, cfg!(debug_assertions))?;
 
-    let port = pick_free_local_port()?;
+    let db_path = std::env::var("SMARTLEARN_DB_PATH")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| app_data_dir.join("smartlearn-server").join("smartlearn.db"));
+    let port = pick_stable_local_port(&backend_port_file(&db_path))?;
     let env = with_data_overrides(
         local_backend_env(app_data_dir, port, &static_dir),
         std::env::var("SMARTLEARN_DB_PATH").ok(),
@@ -521,7 +554,7 @@ pub fn run() {
 mod tests {
     use super::{
         window_title, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
-        pick_free_local_port, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
+        pick_free_local_port, pick_stable_local_port, backend_port_file, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
         strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
         TransactionStatement, LOCAL_BACKEND_HOST,
     };
@@ -1845,6 +1878,65 @@ mod tests {
         // never satisfy a Secure/__Host- cookie (design.md §3), so this must
         // stay off the production-cookie path.
         assert!(get("NODE_ENV").is_none(), "must not force NODE_ENV=production on loopback HTTP");
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        let dir = std::env::temp_dir().join(format!("smartlearn-port-{label}-{unique}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    // The WebView keeps localStorage (the "continue where you stopped" snapshot, drafts, preferences) PER ORIGIN, and the origin is
+    // http://127.0.0.1:<backend port>. A port that changes on every launch silently drops all of it on the next start.
+    #[test]
+    fn stable_port_is_remembered_and_reused_by_the_next_launch() {
+        let dir = unique_temp_dir("reuse");
+        let state_file = dir.join("smartlearn.port");
+        let first = pick_stable_local_port(&state_file).expect("first launch picks a port");
+        assert_eq!(fs::read_to_string(&state_file).expect("port remembered").trim(), first.to_string());
+        let second = pick_stable_local_port(&state_file).expect("second launch");
+        assert_eq!(first, second, "the origin must survive a restart while the port is still free");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn occupied_remembered_port_falls_back_to_a_fresh_free_port_and_remembers_that_one() {
+        let dir = unique_temp_dir("busy");
+        let state_file = dir.join("smartlearn.port");
+        let first = pick_stable_local_port(&state_file).expect("first launch");
+        let _holder = TcpListener::bind((LOCAL_BACKEND_HOST, first)).expect("someone else now owns the remembered port");
+        let second = pick_stable_local_port(&state_file).expect("second launch must still start");
+        assert_ne!(first, second, "a port that is taken cannot be reused");
+        assert_eq!(fs::read_to_string(&state_file).expect("new port remembered").trim(), second.to_string());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unreadable_or_unwritable_port_memory_never_blocks_the_launch() {
+        let dir = unique_temp_dir("junk");
+        let state_file = dir.join("smartlearn.port");
+        for junk in ["not a port", "", "99999999", "0", "80"] {
+            fs::write(&state_file, junk).expect("write junk");
+            let port = pick_stable_local_port(&state_file).expect("junk memory falls back to a fresh port");
+            assert!(port >= 1024, "port {port} for memory {junk:?}");
+            assert_eq!(fs::read_to_string(&state_file).expect("repaired").trim(), port.to_string());
+        }
+        // the parent of the memory file is a regular file, so it can be neither read nor written
+        let blocker = dir.join("blocker");
+        fs::write(&blocker, "x").expect("blocker file");
+        assert!(pick_stable_local_port(&blocker.join("smartlearn.port")).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn port_memory_lives_next_to_the_database_it_belongs_to() {
+        // the isolated test instances and the human's Desktop use different databases, so they never share (or overwrite) a port memory
+        let human = backend_port_file(Path::new("C:/Users/x/AppData/Roaming/app/smartlearn-server/smartlearn.db"));
+        let isolated = backend_port_file(Path::new("C:/Temp/sl-journey-1/journey.db"));
+        assert_eq!(human, PathBuf::from("C:/Users/x/AppData/Roaming/app/smartlearn-server/smartlearn.port"));
+        assert_eq!(isolated, PathBuf::from("C:/Temp/sl-journey-1/journey.port"));
+        assert_ne!(human, isolated);
     }
 
     // http_get_ok's own contract: only a real 200 response counts as ready.
