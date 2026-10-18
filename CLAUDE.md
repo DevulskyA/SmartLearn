@@ -5,6 +5,13 @@ Canonical policy (read it): `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md
 Core rule: one observable outcome → proportional proof → next outcome. Ceremony shrinks; guarantees (data, isolation, auth, migration, provenance, security) do not.
 Do NOT create formal tasks for implementation mechanics, tests, documentation or findings that belong to the active outcome.
 
+Smallest complete solution (default for all engineering work, level FULL; it works inside the contracts below, never replaces them):
+deliver the smallest solution that is complete, correct, readable and maintainable, with the least code, dependencies, time and tokens, and without giving up any essential property.
+- Before writing code, look for what the project already has (module, helper, pattern, installed library, platform feature) and reuse it; reuse only where the meaning is the same (SAFE_SOFTWARE_EVOLUTION A3 / 4.8), never to force a shared abstraction.
+- No new feature, abstraction, option, dependency or layer without a demonstrated need; when a cause is structural, fix the cause instead of stacking patches, and prefer removing complexity to adding it.
+- Smallest check that would catch a material failure first, widen with risk; no speculative refactors, redundant docs, extra agents or planning that buy nothing.
+- "Smallest" means the smallest solution that stays correct for the relevant cases, not the fewest lines: never trade away data integrity, correctness, security, accessibility, medical fidelity, compatibility or tests the risk requires. Ask a human only where the existing authority rules say so; do not contest legitimate requests (this is not an ULTRA mode).
+
 Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` and
 `.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` in full: the canonical inherited quality-and-evolution contract.
 Task-local requirements add to it; they do not silently weaken it.
