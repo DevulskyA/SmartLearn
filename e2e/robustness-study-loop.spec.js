@@ -130,3 +130,24 @@ test('ROBUST-3: reloading (or following a link to) a study or exam screen whose 
   await page.locator('#study-now-resume-continue').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
 });
+
+test('ROBUST-4: a session that expires in the middle of studying sends the student to Conta WITH an explanation; after signing in again the pass continues where it stopped', async ({ page, context }) => {
+  await seedLesson(page, 'Aula sessao expirada', { n: 3 });
+  const email = (await getJson(page, '/v1/auth/me')).user.emailDisplay;
+  await openStudyNow(page, 'Aula sessao expirada');
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
+  await context.clearCookies(); // the server no longer knows this browser
+  await page.locator('#study-now-reveal-btn').click();
+  await expect(page.locator('#account-login-form')).toBeVisible();
+  await expect(page.locator('#account-login-message')).toContainText('sessão expirou');
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill('a genuinely long test password 1');
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible();
+  await openStudyNow(page, 'Aula sessao expirada');
+  await expect(page.locator('#study-now-resume')).toBeVisible();
+  await page.locator('#study-now-resume-continue').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
+});

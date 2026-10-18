@@ -6068,9 +6068,14 @@ if (REMOTE_MODE) {
   OfflineUI.onUnauthenticated(async () => {
     const user = await AuthUI.bootstrap();
     if (user) return; // a stray/transient 401 — the session is actually still valid
+    const wasOnDataScreen = DATA_SCREENS.has(window.location.hash.slice(1));
     authenticated = false;
     await renderAccount();
-    if (DATA_SCREENS.has(window.location.hash.slice(1))) showScreen("account");
+    if (wasOnDataScreen) {
+      showScreen("account");
+      // Without this the student is thrown onto a bare login form with no idea why (the form clears it on the next attempt).
+      setAccountMessage("account-login", t("account.sessionExpired"), true);
+    }
   });
 }
 
