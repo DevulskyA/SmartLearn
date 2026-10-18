@@ -110,7 +110,9 @@ test('Hoje mobile 375: the suggestion fits without horizontal scroll and its act
   const row = page.locator('#block-weak .weak-practice-row');
   await expect(row).toBeVisible({ timeout: 5000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-  const box = await row.getByRole('button', { name: 'Ver no Plano' }).boundingBox();
+  const action = row.getByRole('button', { name: 'Ver no Plano' });
+  await expect(action).toBeVisible(); // boundingBox() returns null for a not-yet-visible element (seen once in a full run)
+  const box = await action.boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
 });
 
