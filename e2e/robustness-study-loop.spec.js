@@ -151,3 +151,35 @@ test('ROBUST-4: a session that expires in the middle of studying sends the stude
   await page.locator('#study-now-resume-continue').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 3');
 });
+
+test('ROBUST-5: while a judgment is on its way to the server the buttons show it is busy and the other button cannot overrule it; one attempt, one outcome', async ({ page }) => {
+  await seedLesson(page, 'Aula lenta', { n: 2 });
+  await openStudyNow(page, 'Aula lenta');
+  const attemptStarted = page.waitForResponse((res) => /\/v1\/attempts\/\d+\/reveal-solution$/.test(res.url()));
+  await page.locator('#study-now-reveal-btn').click();
+  await attemptStarted;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let submits = 0;
+  await page.route('**/v1/attempts/*/submit', async (route) => { submits += 1; await gate; await route.continue(); });
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-message')).toContainText('Registrando');
+  await expect(page.locator('#study-now-correct-btn')).toBeDisabled();
+  await expect(page.locator('#study-now-incorrect-btn')).toBeDisabled();
+  await page.locator('#study-now-incorrect-btn').click({ force: true }); // the student taps the other one while waiting
+  release();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 2');
+  await expect(page.locator('#study-now-message')).toHaveText('');
+  expect(submits).toBe(1);
+  await expect(page.locator('#study-now-reveal-btn')).toBeFocused();
+  // a failure gives the buttons (and focus) back
+  await page.unroute('**/v1/attempts/*/submit');
+  await page.locator('#study-now-reveal-btn').click();
+  await expect(page.locator('#study-now-judgment')).toBeVisible();
+  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-message')).toContainText('Não foi possível registrar');
+  await expect(page.locator('#study-now-incorrect-btn')).toBeEnabled();
+  await expect(page.locator('#study-now-correct-btn')).toBeEnabled();
+  await expect(page.locator('#study-now-incorrect-btn')).toBeFocused();
+});
