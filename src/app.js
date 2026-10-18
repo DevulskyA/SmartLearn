@@ -5360,7 +5360,8 @@ reviewDashboard.addEventListener("change", async (event) => {
   } catch (error) {
     // An earlier tap reached the server and only its reply was lost: the review IS completed (what the server holds
     // stands, including any score it recorded). Showing "could not save" for that, forever, would be false.
-    if (error?.code === "ALREADY_COMPLETED" && input.checked) {
+    // (the same for undoing it: "not completed" means the first undo already took effect)
+    if ((error?.code === "ALREADY_COMPLETED" && input.checked) || (error?.code === "NOT_COMPLETED" && !input.checked)) {
       try {
         setReviewMessage();
         await renderToday();

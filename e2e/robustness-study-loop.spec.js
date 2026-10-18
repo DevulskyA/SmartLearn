@@ -183,3 +183,27 @@ test('ROBUST-5: while a judgment is on its way to the server the buttons show it
   await expect(page.locator('#study-now-correct-btn')).toBeEnabled();
   await expect(page.locator('#study-now-incorrect-btn')).toBeFocused();
 });
+
+test('ROBUST-6: undoing a Revisão feita whose reply was lost: the retry leaves the review reopened instead of failing forever', async ({ page }) => {
+  const unit = await seedLesson(page, 'Aula desfazer perdida', { n: 1, studyDate: '2020-01-01' });
+  await page.locator('[data-screen="today"]').click();
+  const first = page.locator('.review-row').first();
+  await expect(first).toBeVisible({ timeout: 8000 });
+  const reviewId = await first.getAttribute('data-review-id');
+  const rowBox = () => page.locator(`.review-row[data-review-id="${reviewId}"] [data-action="review-done"]`);
+  await rowBox().check();
+  await expect(page.locator(`.review-row[data-review-id="${reviewId}"]`)).toHaveAttribute('data-group', 'doneToday');
+  let lost = false;
+  await page.route('**/v1/review-tasks/*/reopen', async (route) => {
+    if (!lost) { lost = true; await route.fetch(); await route.abort(); return; }
+    await route.continue();
+  });
+  await rowBox().uncheck();
+  const message = page.locator('#review-dashboard-message');
+  await expect(message).toContainText('Não foi possível salvar');
+  await rowBox().uncheck(); // the student follows the message and tries again
+  await expect(message).toHaveText('');
+  await expect(page.locator(`.review-row[data-review-id="${reviewId}"]`)).not.toHaveAttribute('data-group', 'doneToday');
+  const open = (await getJson(page, `/v1/review-tasks?unitId=${unit.id}`)).reviewTasks.filter((r) => !(r.completedAt || r.completed_at)).length;
+  expect(open).toBeGreaterThan(0);
+});

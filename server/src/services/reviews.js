@@ -169,7 +169,8 @@ export function complete(db, userId, reviewTaskId, { questionsCount, correctCoun
 export function reopen(db, userId, reviewTaskId) {
   const task = db.prepare('SELECT * FROM review_tasks WHERE user_id = ? AND id = ?').get(userId, reviewTaskId);
   if (!task) throw new ReviewError('NOT_FOUND', 'Revisão não encontrada.');
-  if (!task.completed_at) throw new ReviewError('VALIDATION_FAILED', 'Esta revisão ainda não foi concluída.');
+  // its own code: a client whose first reopen reply was lost must be able to tell "already reopened" from a bad request
+  if (!task.completed_at) throw new ReviewError('NOT_COMPLETED', 'Esta revisão ainda não foi concluída.');
 
   db.prepare('UPDATE review_tasks SET completed_at = NULL WHERE user_id = ? AND id = ?').run(userId, reviewTaskId);
   return { reviewTaskId, reopened: true };

@@ -326,3 +326,16 @@ test('HTTP: GET /v1/agenda accepts the client timezone (UTC and nested names), a
     assert.equal(JSON.parse(bad.body).error.field, 'timezone');
   } finally { await app.close(); db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+test('reopening a review that is not completed fails with its own code (NOT_COMPLETED), so a client whose first reopen reply was lost can tell it already took effect', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'k@example.com');
+    const unit = makeUnitWithReviews(db, userId, '2026-01-01');
+    const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY offset_days LIMIT 1').get(userId, unit.unit.id);
+    assert.throws(() => reviews.reopen(db, userId, task.id), (err) => err.code === 'NOT_COMPLETED');
+    reviews.complete(db, userId, task.id, {});
+    reviews.reopen(db, userId, task.id);
+    assert.throws(() => reviews.reopen(db, userId, task.id), (err) => err.code === 'NOT_COMPLETED', 'the second reopen of the same review');
+  } finally { cleanup(); }
+});
