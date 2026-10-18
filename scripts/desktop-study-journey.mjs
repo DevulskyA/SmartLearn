@@ -75,10 +75,25 @@ const PAGES = [
 
 let app; let browser; let page; let cdpPort; let closing = false;
 
+// The person works on the larger display: the window under test is moved onto the SMALLEST one as soon as it exists (no focus steal).
+// SL_JOURNEY_NO_MOVE=1 leaves it where Windows puts it. Resolves to the mover's JSON line (or an error note), never rejects.
+let windowPlacement = null;
+function placeWindowOnSmallDisplay(pid) {
+  if (process.env.SL_JOURNEY_NO_MOVE) return Promise.resolve({ moved: false, reason: 'SL_JOURNEY_NO_MOVE' });
+  return new Promise((done) => {
+    let out = '';
+    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'] });
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.on('error', (error) => done({ moved: false, reason: String(error.message) }));
+    child.on('close', () => { try { done(JSON.parse(out.trim().split('\n').pop())); } catch { done({ moved: false, reason: `unreadable: ${out.slice(0, 120)}` }); } });
+  });
+}
+
 async function launch() {
   cdpPort = await freePort();
   const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` };
   app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
+  const placement = placeWindowOnSmallDisplay(app.pid);
   const deadline = Date.now() + 90000;
   for (;;) {
     try { if ((await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok) break; } catch { /* not yet */ }
@@ -93,6 +108,7 @@ async function launch() {
     if (!page) await sleep(300);
   }
   if (!page) throw new Error('the Desktop window page was not found over CDP');
+  windowPlacement = await placement;
   closing = false;
   const tag = () => (closing ? '[while closing] ' : '');
   page.on('pageerror', (error) => consoleErrors.push(`${tag()}pageerror: ${error.message}`));
@@ -190,7 +206,7 @@ try {
     const pid = app.pid;
     const procPath = ps(`(Get-Process -Id ${pid}).Path`);
     expect(procPath.toLowerCase() === exe.toLowerCase(), `running process path ${procPath} is not the binary under test ${exe}`);
-    return { pid, processPath: procPath, appUrl: page.url(), cdpPort };
+    return { pid, processPath: procPath, appUrl: page.url(), cdpPort, windowPlacement };
   });
 
   await step(2, 'confirm frontend, backend and database (title, health, version)', async () => {
@@ -230,7 +246,7 @@ try {
 
   await step(4, 'import an authorized test PDF', async () => {
     await page.setInputFiles('#sources-file-input', { name: 'farmacologia-desktop.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES) });
-    await page.locator('#sources-message').getByText(/trecho\(s\) proposto\(s\)/).waitFor({ timeout: 20000 });
+    await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 20000 });
     const message = squash(await page.locator('#sources-message').innerText());
     const sources = await api('GET', '/v1/sources');
     expect(sources.sources.length === 1, `expected 1 source, got ${sources.sources.length}`);
@@ -276,7 +292,7 @@ try {
     const how = await signIn();
     await page.locator('[data-screen="materials"]:visible').first().click();
     await page.locator('#sources-existing-list .source-existing-item', { hasText: 'farmacologia-desktop.pdf' }).locator('[data-action="open-source"]').click();
-    await page.locator('#sources-message').getByText(/trecho\(s\) proposto\(s\)/).waitFor({ timeout: 15000 });
+    await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 15000 });
     await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
     await editor.waitFor({ state: 'visible', timeout: 15000 });
     const summaryAfter = await editor.locator('.lesson-summary-input').inputValue();
