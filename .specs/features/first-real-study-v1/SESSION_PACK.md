@@ -11,6 +11,14 @@ REGRA=tempo de resposta por questão NUNCA mede conhecimento nem penaliza. Nada 
 
 Decisões a responder antes (ver `DECISIONS_BRIEF.md`, seção 0): R1 qual PDF e seção, R2 autorizar UMA geração real, R3 quem aprova o conteúdo, R4 onde ficam os dados, R5 código congelado.
 
+**CAMINHO A DECIDIDO (2026-10-18, pelo usuário): aceitar o rascunho Costanzo que já existe, sem modelo.** Substitui A5 (conta nova) e B1–B4 (upload, busca, geração): não há PDF a enviar nem geração. Ensaio mecânico em CÓPIA do banco, duas execuções, 10/10 passos (não é T-F4-01 nem validação médica), mais um estudo completo das 35 questões com reinício no meio (evidência 35/23, retomada oferecida):
+1. Entre na conta existente (`dev@smartlearn.local`; credenciais em `scripts/seed-dev.mjs`). **Não clique em "Gerar rascunho com IA"**: o launcher liga o provedor CODEX e o clique chama o modelo real na hora.
+2. Materiais > documento "Costanzo Physiology, 7th edition PDF.pdf" > "Abrir" > caixa "Rascunhos em andamento" > "Glomerular Filtration - páginas 267–272" > "Abrir rascunho" (35 questões, resumo de 7.171 caracteres, gerado com prompt v5, não aceito).
+3. A aba Revisão mostra 67 pontos de regras antigas (⚠ 67). "Reauditar" (sem IA) os troca por "1 ponto novo, 67 removidos" (✓); recomendado clicar. PASS da auditoria é filtro, não validação médica: confira na fonte (seção B, B6–B9) antes de aceitar.
+4. Rodapé "Aceitar a aula": disciplina (existente ou "Criar nova disciplina", no ensaio "Fisiologia Renal"), data da aula (B10), "Ver o que será criado" (35 exercícios, 16 revisões), marcar a caixa de conferência só se conferiu, "Aceitar e criar aula", "Estudar agora".
+5. Cuidados: (a) a Hoje continua mostrando as 34 revisões sintéticas vencidas e o "Começar agora" aponta para uma unidade sintética; estude pelo "Estudar agora" do aceite ou pelo Plano. (b) Existe a unidade sintética "Fisiologia renal: filtração glomerular": não confunda com a "Glomerular Filtration" real. (c) O passe de Estudar agora vai até a questão 35; se fechar o app no meio, o reinício oferece continuar de onde parou.
+6. Aceitar muda o banco humano: é ato SEU, no app, e só depois de R3 (quem aprova o conteúdo) e R5 (código congelado) estarem respondidos. Nenhum agente aceita nem abre o banco vivo.
+
 ---
 
 ## A. Antes de abrir (5 minutos)
