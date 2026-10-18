@@ -3390,6 +3390,11 @@ h1 {
   font-size: 0.9rem;
 }
 
+/* The cited source page rides along with the answer: hidden while the answer is hidden. */
+.review-exercise-answer[hidden] + .review-exercise-source {
+  display: none;
+}
+
 .review-exercise-answer {
   margin: 0;
   font-size: 0.92rem;

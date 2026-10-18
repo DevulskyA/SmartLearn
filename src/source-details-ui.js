@@ -38,6 +38,23 @@ export function createSourceDetails(label, pages) {
   return details;
 }
 
+// The exact source page(s) an exercise was drafted from (frozen at acceptance), one collapsed block per page, so the
+// student can go back to the material when an answer was wrong. Citations without page text (manual exercises, edited
+// versions) produce nothing: no invented explanation. `citations` = [{sourceName, pageIndex, pageText}].
+export function citationDetails(citations) {
+  const blocks = [];
+  for (const citation of citations ?? []) {
+    if (!citation.pageText) continue;
+    const details = document.createElement("details");
+    details.className = "study-now-source";
+    const summary = document.createElement("summary");
+    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
+    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
+    blocks.push(details);
+  }
+  return blocks;
+}
+
 // Where an AI-generated unit's Resumo Mestre came from (frozen at acceptance). Manual units, units
 // accepted before this existed, and the offline store have nothing to show — and show nothing.
 // `learningUnits` is the remote learning-units API, or null/undefined when there is none (offline store):

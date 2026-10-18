@@ -17,7 +17,7 @@ class FakeEl {
 }
 globalThis.document = { createElement: (tag) => new FakeEl(tag) };
 
-const { formatPageList, createSourceDetails, appendSummarySources } = await import('../src/source-details-ui.js');
+const { formatPageList, createSourceDetails, citationDetails, appendSummarySources } = await import('../src/source-details-ui.js');
 
 test('formatPageList: compact, sorted, de-duplicated ranges', () => {
   assert.equal(formatPageList([3]), '3');
@@ -44,6 +44,23 @@ test('createSourceDetails: collapsed <details> with a <summary> label, then labe
 test('createSourceDetails: a page without text is left out entirely (no empty label)', () => {
   const el = createSourceDetails('x', [{ pageIndex: 1, text: '' }, { pageIndex: 2 }, { pageIndex: 3, text: 'ok' }]);
   assert.deepEqual(el.children.slice(1).map((c) => c.textContent), ['Página 3', 'ok']);
+});
+
+test('citationDetails: one collapsed block per cited page, exactly the frozen text; nothing for manual/edited exercises', () => {
+  const blocks = citationDetails([
+    { sourceName: 'fisio.pdf', pageIndex: 269, pageText: 'Kf é mais de 100 vezes maior' },
+    { sourceName: 'fisio.pdf', pageIndex: 270, pageText: null },
+  ]);
+  assert.equal(blocks.length, 1);
+  assert.deepEqual(blocks[0].shape(), {
+    tag: 'details', cls: 'study-now-source', text: '',
+    kids: [
+      { tag: 'summary', cls: '', text: 'Trecho do material · fisio.pdf, página 269', kids: [] },
+      { tag: 'p', cls: 'study-now-source-text', text: 'Kf é mais de 100 vezes maior', kids: [] },
+    ],
+  });
+  assert.deepEqual(citationDetails([]), []);
+  assert.deepEqual(citationDetails(undefined), []);
 });
 
 test('appendSummarySources: nothing is shown without an API, without a container, or when the call fails', async () => {

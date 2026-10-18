@@ -198,8 +198,11 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   const outcomes = ['correct', 'incorrect', 'correct'];
   for (let i = 0; i < 3; i += 1) {
     await expect(page.locator('#study-now-explanation-text')).toBeHidden();
+    await expect(page.locator('.study-now-source-box')).toBeHidden();
     await page.locator('#study-now-reveal-btn').click();
     await expect(page.locator('#study-now-explanation-text')).toContainText('Por quê:');
+    // back to the material, right at the reveal: the cited page, not only on the final result
+    await expect(page.locator('.study-now-source-box .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
     await page.locator(`#study-now-${outcomes[i]}-btn`).click();
   }
 
@@ -230,6 +233,19 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   }, API_BASE);
   expect(evidence.evidence).toHaveLength(1);
   expect(evidence.evidence[0]).toMatchObject({ type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2 });
+
+  // 10b) the daily review also goes back to the material: the cited page rides along with the revealed answer
+  await page.locator('[data-screen="today"]').click();
+  const reviewRow = page.locator('.review-row', { hasText: 'fisiologia-renal' }).first();
+  await expect(reviewRow).toBeVisible({ timeout: 8000 });
+  await reviewRow.locator('.review-row-toggle').first().click();
+  const reviewItem = reviewRow.locator('.review-exercise-item').first();
+  await expect(reviewItem).toBeVisible({ timeout: 5000 });
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
 
   // 11) the model was consulted only to PRODUCE the material: studying and redoing added no model call
   expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);

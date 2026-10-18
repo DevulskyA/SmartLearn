@@ -26,7 +26,7 @@ import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
-import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+import { formatPageList, createSourceDetails, citationDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
@@ -324,6 +324,11 @@ const studyNowHintText = document.querySelector("#study-now-hint-text");
 const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
 const studyNowAnswerText = document.querySelector("#study-now-answer-text");
 const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
+// The cited source page(s) for the current question, revealed together with the answer.
+const studyNowSourceBox = document.createElement("div");
+studyNowSourceBox.className = "study-now-source-box";
+studyNowSourceBox.hidden = true;
+studyNowExplanationText?.after(studyNowSourceBox);
 const studyNowJudgment = document.querySelector("#study-now-judgment");
 const studyNowMessage = document.querySelector("#study-now-message");
 const studyNowResume = document.querySelector("#study-now-resume");
@@ -965,6 +970,14 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
         exItem.append(qEl, hintEl, revealBtn, answerEl, judgmentRow);
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
+      }
+      // Back to the material: the cited source page, shown with the answer (CSS hides it while the answer is hidden).
+      const sourceBlocks = citationDetails(exercise.citations);
+      if (sourceBlocks.length) {
+        const sourceBox = document.createElement("div");
+        sourceBox.className = "review-exercise-source";
+        sourceBox.append(...sourceBlocks);
+        answerEl.after(sourceBox);
       }
       // Retention cue from the longitudinal ledger: the last time this item was
       // answered it was wrong and no correct answer has followed.
@@ -3347,6 +3360,8 @@ function renderStudyNowQuestion() {
   studyNowAnswerText.hidden = true;
   studyNowExplanationText.textContent = exercise.explanationText ? t("appStudyNow.why", { text: exercise.explanationText }) : "";
   studyNowExplanationText.hidden = true;
+  studyNowSourceBox.replaceChildren(...citationDetails(exercise.citations));
+  studyNowSourceBox.hidden = true;
   if (exercise.hintText) {
     // Honest reuse, not invention: shown unconditionally exactly like the
     // Hoje review UI already does (a hint the learner can already see is
@@ -3480,15 +3495,7 @@ function createStudyErrorItem(exercise) {
   // The only explanation the product really holds: the exact source page the
   // question was drafted from (frozen at acceptance). Shown as evidence, not
   // paraphrased -- and absent (nothing invented) for manual exercises.
-  for (const citation of exercise.citations ?? []) {
-    if (!citation.pageText) continue;
-    const details = document.createElement("details");
-    details.className = "study-now-source";
-    const summary = document.createElement("summary");
-    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
-    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
-    li.append(details);
-  }
+  li.append(...citationDetails(exercise.citations));
   return li;
 }
 
@@ -3898,6 +3905,7 @@ studyNowRevealBtn?.addEventListener("click", async () => {
 
   studyNowAnswerText.hidden = false;
   studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
+  studyNowSourceBox.hidden = studyNowSourceBox.children.length === 0;
   studyNowJudgment.hidden = false;
   studyNowRevealBtn.hidden = true;
   // The focused button just disappeared: keep keyboard users in the flow.
