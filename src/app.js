@@ -3943,11 +3943,11 @@ async function judgeStudyNow(isCorrect) {
   // does not have, so the result, the evidence and "para reforçar" always agree.
   if (REMOTE_MODE && DB.attempts) {
     state.judging = true;
-    let failed = false;
-    // Visible while the server is answering (slow connection): both buttons are off, so the student can see the tap was
-    // taken and cannot tap the other one believing it would replace it.
-    studyNowCorrectBtn.disabled = true;
-    studyNowIncorrectBtn.disabled = true;
+    // Visible while the server is answering (slow connection): both buttons look off, so the student can see the tap was
+    // taken and does not tap the other one believing it would replace it (state.judging ignores it anyway). aria-disabled,
+    // not disabled: a disabled button drops keyboard focus and leaves the screen with nothing focusable.
+    studyNowCorrectBtn.setAttribute("aria-disabled", "true");
+    studyNowIncorrectBtn.setAttribute("aria-disabled", "true");
     studyNowJudgment.setAttribute("aria-busy", "true");
     studyNowMessage.textContent = t("appStudyNow.saving");
     try {
@@ -3985,15 +3985,12 @@ async function judgeStudyNow(isCorrect) {
     } catch (error) {
       console.error("Falha ao registrar resultado (prática inicial).", error);
       studyNowMessage.textContent = t("appStudyNow.judgeFailed");
-      failed = true;
       return;
     } finally {
       state.judging = false;
-      studyNowCorrectBtn.disabled = false;
-      studyNowIncorrectBtn.disabled = false;
+      studyNowCorrectBtn.removeAttribute("aria-disabled");
+      studyNowIncorrectBtn.removeAttribute("aria-disabled");
       studyNowJudgment.removeAttribute("aria-busy");
-      // a disabled button drops keyboard focus: the student retries from the button they had pressed
-      if (failed) (tapped === "CORRECT" ? studyNowCorrectBtn : studyNowIncorrectBtn).focus();
     }
   }
   studyNowMessage.textContent = "";

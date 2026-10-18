@@ -3411,6 +3411,12 @@ h1 {
   display: none;
 }
 
+/* a judgment on its way to the server: the buttons stay focusable (aria-disabled) but look, and answer, as waiting */
+.exercise-judgment[aria-busy="true"] button {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .exercise-correct-btn {
   background: var(--status-done-fill);
   color: var(--status-done-text);
