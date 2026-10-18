@@ -4290,7 +4290,15 @@ h1 {
   display: flex;
   gap: 0.25rem;
   border-bottom: 1px solid var(--color-border);
-  overflow-x: auto;
+  /* wrap instead of scrolling sideways: on a phone the last tab ("Revisão", where the draft is accepted) sat off-screen */
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .lesson-tab {
+    flex: 1 1 auto;
+    text-align: center;
+  }
 }
 
 .lesson-tab {

@@ -147,3 +147,25 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 
     await expect(editor.locator('.lesson-qitem').nth(2)).toHaveAttribute('aria-current', 'true');
   });
 }
+
+// F-34 follow-up (Playwright sweep): at 375px the four tabs scrolled sideways and "Revisão" (the step that accepts the draft) sat
+// off-screen. All four must be reachable without scrolling the tab strip, at phone widths from 320 to 414.
+for (const width of [320, 375, 414]) {
+  test(`${width}px: all four editor tabs are inside the viewport (no sideways scroll of the tab strip) and keep 44px targets`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await openLesson(page);
+    const editor = page.locator('.lesson-editor');
+    const strip = await editor.locator('.lesson-tabs').evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(strip.scroll, 'the tab strip must not overflow').toBeLessThanOrEqual(strip.client);
+    const tabs = editor.getByRole('tab');
+    await expect(tabs).toHaveCount(4);
+    for (let index = 0; index < 4; index += 1) {
+      const box = await tabs.nth(index).boundingBox();
+      expect(box.x, `tab ${index} left edge`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `tab ${index} right edge`).toBeLessThanOrEqual(width);
+      expect(box.height, `tab ${index} height`).toBeGreaterThanOrEqual(TARGET - 0.5);
+    }
+    await editor.getByRole('tab', { name: /Revisão/ }).click();
+    await expect(editor.locator('[data-panel="review"]')).toBeVisible();
+  });
+}
