@@ -181,6 +181,6 @@ Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [!] bloqueada (ag
 
 ## VALIDAÇÃO
 
-VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA / DESATUALIZADA — e2e DESATUALIZADO (testado 4641fc3) · server DESATUALIZADO (testado 4641fc3) · unit DESATUALIZADO (testado 765fd05); HEAD atual ≠ HEAD testado
+VALIDAÇÃO DO HEAD ATUAL: ✓ PASS (e2e, server, unit) no HEAD atual
 
 <!-- PLAN:END -->
