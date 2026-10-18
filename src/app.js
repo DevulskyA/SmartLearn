@@ -3207,13 +3207,22 @@ async function startStudyNow(unit, subjectName) {
   }
   resetStudyNowResult();
   studyNowState = newStudyNowState("initial", unit.id, []);
+  // Nothing of a previous lesson's question (or an empty one) is shown while this lesson's questions are on their way.
+  studyNowQuestionArea.hidden = true;
+  studyNowResume.hidden = true;
+  setStudyNowNotice("screens.studyNow.noExercises");
+  studyNowNoExercises.hidden = true;
   showScreen("study-now", { focus: true });
 
   try {
     studyNowState.exercises = await DB.exercises.getAll(unit.id);
   } catch (error) {
+    // "Could not load" is not "this lesson has no exercises": say which one it is, and leave nothing to tap.
     console.error("Falha ao carregar exercícios da unidade.", error);
-    studyNowState.exercises = [];
+    studyNowState = null;
+    setStudyNowNotice("appStudyNow.loadFailed");
+    studyNowNoExercises.hidden = false;
+    return;
   }
   const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
   if (snapshot) {
@@ -3234,6 +3243,12 @@ async function startStudyNow(unit, subjectName) {
   studyNowResume.hidden = true;
   renderStudyNowQuestion();
   focusStudyNowQuestion();
+}
+
+/** The one notice of the study screen that stands in for the question: no exercises, or the exercises could not be loaded. */
+function setStudyNowNotice(key) {
+  studyNowNoExercises.dataset.i18n = key;
+  studyNowNoExercises.textContent = t(key);
 }
 
 /** Keyboard/screen-reader users start on the first action of the question ("Ver resposta"), not on the page container. */

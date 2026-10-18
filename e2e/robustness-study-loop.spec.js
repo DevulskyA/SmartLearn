@@ -84,3 +84,29 @@ test('ROBUST-1: Revisão feita whose reply was lost: the retry completes the rev
   await expect(page.locator(`.review-row[data-review-id="${reviewId}"]`)).toHaveAttribute('data-group', 'doneToday');
   expect(await completedCount()).toBe(1);
 });
+
+/** Opens the lesson in Plano; `beforeStart` runs once the row is expanded, right before "Estudar agora" is pressed. */
+async function openStudyNow(page, title, beforeStart) {
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: title });
+  await expect(row).toBeVisible({ timeout: 8000 });
+  await row.locator('.plan-expand-btn').click();
+  const start = row.locator('[data-action="plan-study-now"]');
+  await expect(start).toBeVisible();
+  await beforeStart?.();
+  await start.click();
+}
+
+test('ROBUST-2: if the lesson\'s questions cannot be loaded, the screen says so instead of claiming the lesson has no exercises; opening it again works', async ({ page }) => {
+  await seedLesson(page, 'Aula sem rede', { n: 2 });
+  await openStudyNow(page, 'Aula sem rede', () => page.route('**/v1/learning-units/*/exercises', (route) => (route.request().method() === 'GET' ? route.abort() : route.continue())));
+  const notice = page.locator('#study-now-no-exercises');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Não foi possível carregar');
+  await expect(notice).not.toContainText('ainda não tem exercícios');
+  await expect(page.locator('#study-now-reveal-btn')).toBeHidden();
+  await page.unroute('**/v1/learning-units/*/exercises');
+  await openStudyNow(page, 'Aula sem rede');
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 2');
+  await expect(page.locator('#study-now-no-exercises')).toBeHidden();
+});
