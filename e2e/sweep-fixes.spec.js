@@ -157,3 +157,16 @@ test('Conta > Alterar senha: a wrong current password says so (no e-mail/senha w
   await page.locator('#account-password-form button[type="submit"]').click();
   await expect(page.locator('#account-password-message')).toHaveText('Senha atual incorreta.');
 });
+
+test('Materiais: the topic search input has a real accessible name (axe label + label-title-only) and a Portuguese example', async ({ page }) => {
+  await signIn(page);
+  await openScreen(page, 'materials');
+  // the panel only appears once a document has proposals; its markup is static, so audit it as a student would see it
+  await page.evaluate(() => { document.querySelector('#sources-proposals-panel').hidden = false; });
+  const input = page.locator('#sources-topic-input');
+  await expect(input).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: /título da seção/i })).toBeVisible();
+  expect(await input.getAttribute('placeholder')).not.toMatch(/Measurement|Filtration/);
+  const result = await new AxeBuilder({ page }).include('#sources-topic-form').withRules(['label', 'label-title-only']).analyze();
+  expect(result.violations.map((v) => `${v.impact} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+});
