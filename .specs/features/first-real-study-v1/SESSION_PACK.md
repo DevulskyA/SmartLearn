@@ -17,7 +17,7 @@ Decisões a responder antes (ver `DECISIONS_BRIEF.md`, seção 0): R1 qual PDF e
 3. A aba Revisão mostra 67 pontos de regras antigas (⚠ 67). "Reauditar" (sem IA) os troca por "1 ponto novo, 67 removidos" (✓); recomendado clicar. PASS da auditoria é filtro, não validação médica: confira na fonte (seção B, B6–B9) antes de aceitar.
 4. Rodapé "Aceitar a aula": disciplina (existente ou "Criar nova disciplina", no ensaio "Fisiologia Renal"), data da aula (B10), "Ver o que será criado" (35 exercícios, 16 revisões), marcar a caixa de conferência só se conferiu, "Aceitar e criar aula", "Estudar agora".
 5. Cuidados: (a) a Hoje continua mostrando as 34 revisões sintéticas vencidas e o "Começar agora" aponta para uma unidade sintética; estude pelo "Estudar agora" do aceite ou pelo Plano. (b) Existe a unidade sintética "Fisiologia renal: filtração glomerular": não confunda com a "Glomerular Filtration" real. (c) O passe de Estudar agora vai até a questão 35; se fechar o app no meio, o reinício oferece continuar de onde parou.
-6. Aceitar muda o banco humano: é ato SEU, no app, e só depois de R3 (quem aprova o conteúdo) e R5 (código congelado) estarem respondidos. Nenhum agente aceita nem abre o banco vivo.
+6. Aceitar muda o banco humano: é ato SEU, no app, e com R3 (você aprova o conteúdo) e R5 (código de produto congelado) já respondidos em 2026-10-18. Nenhum agente aceita nem abre o banco vivo.
 
 ---
 
