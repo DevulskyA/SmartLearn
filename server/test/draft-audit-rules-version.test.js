@@ -55,7 +55,7 @@ async function draftWithOldAudit(db, sourcesDir) {
   const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(generated.id);
   const json = JSON.parse(row.draft_json);
   delete json.audit.rulesVersion; delete json.audit.auditedAt;
-  json.audit.findings = [{ issue: 'OLD_RULE_THAT_NO_LONGER_EXISTS', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+  json.audit.findings = [{ issue: 'OLD_RULE_THAT_NO_LONGER_EXISTS', severity: 'MEDIUM', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
   db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(json), generated.id);
   return { userId, draftId: generated.id, withQ };
 }
@@ -112,6 +112,22 @@ test('reaudit changes ONLY audit: content, versions and revision are byte-identi
     // idempotent: a second run changes no findings
     const again = drafts.reauditDraft(db, userId, draftId);
     assert.deepEqual([again.reaudit.added, again.reaudit.removed], [0, 0]);
+  } finally { cleanup(); }
+});
+
+test('reaudit counts only actionable findings: a LOW advisory is neither a point removed nor a point before (the review list never showed it)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId } = await draftWithOldAudit(db, sourcesDir);
+    const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);
+    const json = JSON.parse(row.draft_json);
+    json.audit.findings = [{ ...json.audit.findings[0], issue: 'LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE', severity: 'LOW', scope: 'draft' }];
+    db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(json), draftId);
+    const out = drafts.reauditDraft(db, userId, draftId);
+    assert.equal(out.reaudit.before, 0, 'the LOW advisory was not counted as an existing point');
+    assert.equal(out.reaudit.removed, 0, 'and its disappearance is not "a point removed"');
+    assert.equal(out.reaudit.added, out.reaudit.after, 'every actionable finding of the fresh audit is new relative to an empty before');
+    assert.equal(out.reaudit.after, out.draft.audit.findings.filter((f) => f.severity !== 'LOW').length);
   } finally { cleanup(); }
 });
 
