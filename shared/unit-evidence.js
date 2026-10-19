@@ -34,20 +34,31 @@ function effectiveOutcomes(events) {
   return events.filter((e) => e.kind === 'ATTEMPT').map((e) => ({ ...e, outcome: latestCorrection.get(e.id)?.outcome ?? e.outcome }));
 }
 
+/** Observed evidence per unit: the grain is the existing learning unit. */
 export function unitEvidence(events) {
-  const byUnit = new Map();
+  return groupEvidence(events, (e) => e.unitId).map(({ key, ...rest }) => ({ unitId: key, ...rest })).sort((a, b) => a.unitId - b.unitId);
+}
+
+/**
+ * The same observed-evidence summary for ANY grouping the caller can SUSTAIN (e.g. a section of the source). `keyOf(attempt)` returns the group
+ * key, or null/undefined to leave the attempt out (an attempt that cannot be attributed is never forced into a group).
+ */
+export function groupEvidence(events, keyOf) {
+  const byKey = new Map();
   for (const attempt of effectiveOutcomes(events)) {
-    if (!byUnit.has(attempt.unitId)) byUnit.set(attempt.unitId, []);
-    byUnit.get(attempt.unitId).push(attempt);
+    const key = keyOf(attempt);
+    if (key === null || key === undefined) continue;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(attempt);
   }
-  return [...byUnit.entries()].map(([unitId, list]) => {
+  return [...byKey.entries()].map(([unitId, list]) => {
     const known = list.filter((a) => a.outcome !== 'UNKNOWN');
     const independent = known.filter((a) => a.assistanceUsed === 'NONE');
     const correct = independent.filter((a) => a.outcome === 'CORRECT').length;
     const distinct = new Set(independent.map((a) => a.exerciseVersionId)).size;
     const sorted = [...list].sort((a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt)) || a.id - b.id);
     return {
-      unitId,
+      key: unitId,
       attempts: list.length,
       independent: { attempts: independent.length, correct, distinctQuestions: distinct },
       assisted: known.filter((a) => a.assistanceUsed !== 'NONE' && a.assistanceUsed !== 'UNKNOWN').length,
@@ -57,5 +68,5 @@ export function unitEvidence(events) {
         : cautiousState({ attempts: independent.length, correct, distinct }) === 'OK' ? 'NO_GAP_SIGNAL' : 'INSUFFICIENT',
       recent: sorted.slice(-5).map((a) => a.outcome),
     };
-  }).sort((a, b) => a.unitId - b.unitId);
+  });
 }

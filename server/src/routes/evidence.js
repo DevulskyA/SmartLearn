@@ -1,6 +1,7 @@
 import * as evidence from '../services/evidence.js';
 import * as exerciseReview from '../services/exercise-review.js';
 import { unitSignals } from '../services/unit-signals.js';
+import { knowledgeMap } from '../services/knowledge-map.js';
 
 function handleError(err, reply) {
   if (err instanceof evidence.EvidenceError || err instanceof exerciseReview.ExerciseReviewError) {
@@ -14,6 +15,8 @@ function handleError(err, reply) {
 export function registerEvidenceRoutes(app, db) {
   // EXPERIMENTAL (knowledge/gaps), read-only; no screen uses it. See unit-signals.js.
   app.get('/unit-signals', async (request) => unitSignals(db, request.actor.userId));
+  // EXPERIMENTAL: the same observed evidence per section of the source (sustained links only). See knowledge-map.js.
+  app.get('/knowledge-map', async (request) => knowledgeMap(db, request.actor.userId));
 
   app.post('/learning-evidence', {
     schema: {
