@@ -12,13 +12,14 @@
 
 import { differentLanguages } from './language-detect.js';
 import { auditRisk } from './risk-checks.js';
+import { stripSummaryMarkup } from '../../../shared/summary-figure-refs.js';
 
 export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
 
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js): draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-4';
+export const AUDIT_RULES_VERSION = 'audit-rules-5';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -353,7 +354,10 @@ function auditQuestionVolume(count, sourceChars) {
  * @param {{summary:string, questions:object[]}} draft an already schema-validated draft
  * @param {{segments:{pageIndex:number,text:string}[]}} context the exact source pages sent to the provider
  */
-export function auditDraft(draft, { segments }) {
+export function auditDraft(rawDraft, { segments }) {
+  // The summary's technical markers ([[fig:UUID]] lines, \( \) \[ \] delimiters) are not claims: their digits and letters must not be read as
+  // invented values or terms. The equations themselves stay in the text and are still screened like any other content.
+  const draft = { ...rawDraft, summary: stripSummaryMarkup(rawDraft.summary) };
   // Word overlap says nothing across languages (an English textbook, a Portuguese lesson): those checks step aside, loudly but
   // as an advisory, and the language-independent ones — values, units, citations, duplicates, leaks — keep running.
   const sourceText = segments.map((s) => s.text).join(' ');

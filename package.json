@@ -47,7 +47,9 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-sql": "^2.4.0",
-    "katex": "^0.16.22"
+    "katex": "^0.16.22",
+    "markdown-it": "^15.0.3",
+    "mathlive": "^0.111.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

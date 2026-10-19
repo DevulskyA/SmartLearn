@@ -33,7 +33,7 @@ import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { renderSummary } from "./summary-render.js";
-import { createSummaryToolbar } from "./summary-toolbar.js";
+import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -907,7 +907,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   summaryMessage.setAttribute("role", "status");
   summaryMessage.setAttribute("aria-live", "polite");
 
-  summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
+  const hojeAuthoring = createSummaryAuthoring(summaryTextarea);
+  summaryEditArea.append(hojeAuthoring.bar, summaryTextarea, hojeAuthoring.preview, saveSummaryButton, summaryMessage);
   summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
@@ -1877,7 +1878,9 @@ export async function renderPlan() {
         });
 
         summaryDisplayWrap.append(summaryText, summaryPlaceholder);
-        summaryEditArea.prepend(createSummaryToolbar(summaryTextarea));
+        const planAuthoring = createSummaryAuthoring(summaryTextarea);
+        summaryEditArea.prepend(planAuthoring.bar);
+        summaryTextarea.after(planAuthoring.preview);
         summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
         detail.append(summarySection);
 

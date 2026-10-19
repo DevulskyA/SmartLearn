@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, summaryBlocks, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
+import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -58,16 +58,6 @@ test("elapsed time reads mm:ss and h:mm:ss", () => {
   assert.equal(elapsedLabel(192_000), "03:12");
   assert.equal(elapsedLabel(3_727_000), "1:02:07");
   assert.equal(elapsedLabel(-5), "00:00");
-});
-
-test("summary blocks keep headings and paragraphs apart", () => {
-  const blocks = summaryBlocks("## Ideia central\nA filtração é...\n\nSegundo parágrafo\ncontinua aqui.");
-  assert.deepEqual(blocks, [
-    { type: "heading", level: 2, text: "Ideia central" },
-    { type: "paragraph", text: "A filtração é..." },
-    { type: "paragraph", text: "Segundo parágrafo\ncontinua aqui." },
-  ]);
-  assert.deepEqual(summaryBlocks(""), []);
 });
 
 test("COPY: copying the summary returns only the summary; copying a question only its own content", () => {

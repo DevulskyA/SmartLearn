@@ -115,23 +115,6 @@ export function elapsedLabel(ms) {
   return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`;
 }
 
-/** Splits a summary into display blocks: a line starting with "#" is a heading, other consecutive lines form a paragraph. */
-export function summaryBlocks(text) {
-  const blocks = [];
-  for (const raw of String(text ?? "").split(/\n{2,}/)) {
-    const chunk = raw.trim();
-    if (!chunk) continue;
-    const heading = /^(#{1,3})\s+(.+)$/.exec(chunk.split("\n")[0]);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2].trim() });
-      const rest = chunk.split("\n").slice(1).join("\n").trim();
-      if (rest) blocks.push({ type: "paragraph", text: rest });
-    } else {
-      blocks.push({ type: "paragraph", text: chunk });
-    }
-  }
-  return blocks;
-}
 
 /** The text a "copy" of one part must contain — never labels, badges, buttons or findings. */
 export function copyTextOf(draft, part) {

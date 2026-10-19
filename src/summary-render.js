@@ -1,119 +1,183 @@
-// Draws a Resumo Mestre (summary_body) as DOM: headings, paragraphs, lists, tables, KaTeX formulas and figures.
-// Nothing here uses innerHTML for user text: text goes through textContent and formulas through katex.render with trust:false,
-// so a hostile summary can at worst show an error-colored formula, never run code or load a foreign URL.
-import katex from "katex";
+// The single presentation component of the Resumo Mestre: markdown tokens -> DOM, used by EVERY screen that shows the summary.
+// Nothing here uses innerHTML for user text: text goes through text nodes and formulas through katex.render, so a hostile summary can at
+// worst show an error-marked formula, never run code or load a foreign URL. Figures are references to the owner's private assets only.
 import "katex/dist/katex.min.css";
-import { inlineParts, parseSummary } from "../shared/summary-markup.js";
+import { parseSummaryTokens, locateMath } from "../shared/summary-markdown.js";
+import { katex, katexOptions } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
 
-const MAX_MACRO_EXPANSION = 1000;
+const BLOCK_TAGS = new Set(["p", "ul", "ol", "li", "blockquote", "table", "thead", "tbody", "tr", "th", "td"]);
+const INLINE_TAGS = new Set(["strong", "em", "s"]);
 
-function renderMath(tex, displayMode) {
+function renderMath(tex, displayMode, ctx, location) {
   const el = document.createElement(displayMode ? "div" : "span");
   el.className = displayMode ? "summary-math summary-math-display" : "summary-math";
+  const editable = ctx.onEditMath && location && location.start >= 0;
   try {
-    katex.render(tex, el, { displayMode, throwOnError: true, trust: false, maxExpand: MAX_MACRO_EXPANSION, strict: "ignore" });
-  } catch {
-    // Invalid formula: keep what the author typed, visibly marked, instead of hiding it or breaking the whole summary.
-    el.textContent = displayMode ? `$$ ${tex} $$` : `$${tex}$`;
-    el.classList.add("summary-math-error");
-    el.title = t("summary.math.invalid");
+    katex.render(tex, el, katexOptions(displayMode));
+    if (editable) {
+      el.classList.add("summary-math-editable");
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", t("summary.math.edit"));
+      el.title = t("summary.math.edit");
+      const open = () => ctx.onEditMath(location);
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+    }
+  } catch (err) {
+    // Invalid formula: say so, show what the author typed, and offer the fix where the text can be edited. Never hide it.
+    el.className = `${el.className} summary-math-error`;
+    el.replaceChildren();
+    const message = document.createElement("span");
+    message.className = "summary-math-error-message";
+    message.textContent = `${t("summary.math.invalid")}: ${String(err?.message ?? err).replace(/^KaTeX parse error:\s*/, "")}`;
+    const original = document.createElement("code");
+    original.className = "summary-math-original";
+    original.textContent = tex;
+    el.append(message, " ", original);
+    if (editable) {
+      const fix = document.createElement("button");
+      fix.type = "button";
+      fix.className = "text-button summary-math-fix";
+      fix.textContent = t("summary.math.fix");
+      fix.addEventListener("click", () => ctx.onEditMath(location));
+      el.append(" ", fix);
+    }
   }
   return el;
 }
 
-function appendParts(parent, parts) {
-  for (const part of parts) parent.append(part.type === "math" ? renderMath(part.tex, false) : document.createTextNode(part.text));
+function unavailableFigure(id, reason) {
+  const missing = document.createElement("p");
+  missing.className = "summary-figure-missing";
+  missing.dataset.figureId = id;
+  missing.textContent = t(reason === "loading" ? "summary.figure.loading" : "summary.figure.unavailableId", { id: id.slice(0, 8) });
+  return missing;
 }
 
-function inlineElement(tag, className, parts) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  appendParts(el, parts);
-  return el;
-}
-
-function renderTable(block) {
-  const wrap = document.createElement("div");
-  wrap.className = "summary-table-wrap";
-  const table = document.createElement("table");
-  table.className = "summary-table";
-  const head = table.createTHead().insertRow();
-  block.header.forEach((cell, k) => {
-    const th = document.createElement("th");
-    th.scope = "col";
-    if (block.align[k]) th.style.textAlign = block.align[k];
-    appendParts(th, cell.parts);
-    head.append(th);
-  });
-  const body = table.createTBody();
-  for (const row of block.rows) {
-    const tr = body.insertRow();
-    row.forEach((cell, k) => {
-      const td = tr.insertCell();
-      if (block.align[k]) td.style.textAlign = block.align[k];
-      appendParts(td, cell.parts);
-    });
+function drawFigure(figure, id, record, ctx) {
+  figure.replaceChildren();
+  const img = document.createElement("img");
+  img.src = record.url;
+  img.alt = record.alt;
+  img.loading = "lazy";
+  img.tabIndex = 0;
+  img.addEventListener("error", () => figure.replaceChildren(unavailableFigure(id, "missing")));
+  const open = () => ctx.onOpenFigure?.(record);
+  if (ctx.onOpenFigure) {
+    img.classList.add("summary-figure-zoomable");
+    img.setAttribute("role", "button");
+    img.addEventListener("click", open);
+    img.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   }
-  wrap.append(table);
-  return wrap;
-}
-
-function renderFigure(block, figureSrc) {
-  const figure = document.createElement("figure");
-  figure.className = "summary-figure";
-  const src = figureSrc?.(block.figureId);
-  if (src) {
-    const img = document.createElement("img");
-    img.src = src;
-    img.alt = block.alt;
-    img.loading = "lazy";
-    figure.append(img);
-  } else {
-    const missing = document.createElement("p");
-    missing.className = "summary-figure-missing";
-    missing.textContent = block.alt ? t("summary.figure.unavailableNamed", { alt: block.alt }) : t("summary.figure.unavailable");
-    figure.append(missing);
-  }
-  if (block.caption) {
+  figure.append(img);
+  if (record.caption) {
     const cap = document.createElement("figcaption");
-    cap.textContent = block.caption;
+    cap.textContent = record.caption;
     figure.append(cap);
   }
+}
+
+// A figure is the owner's private asset: loaded by id through `ctx.loadFigure`. Unknown or unavailable ones show an explicit marker.
+function renderFigure(id, ctx) {
+  const figure = document.createElement("figure");
+  figure.className = "summary-figure";
+  figure.dataset.figureId = id;
+  if (!ctx.loadFigure) {
+    figure.append(unavailableFigure(id, "missing"));
+    return figure;
+  }
+  figure.append(unavailableFigure(id, "loading"));
+  Promise.resolve(ctx.loadFigure(id)).then(
+    (record) => (record ? drawFigure(figure, id, record, ctx) : figure.replaceChildren(unavailableFigure(id, "missing"))),
+    () => figure.replaceChildren(unavailableFigure(id, "missing")),
+  );
   return figure;
 }
 
-function renderBlock(block, figureSrc) {
-  switch (block.type) {
-    case "heading": {
-      const h = document.createElement(`h${Math.min(block.level + 2, 6)}`);
-      h.className = "summary-heading";
-      h.textContent = block.text;
-      return h;
-    }
-    case "paragraph": return inlineElement("p", "summary-paragraph", block.parts);
-    case "math": return renderMath(block.tex, true);
-    case "list": {
-      const list = document.createElement(block.ordered ? "ol" : "ul");
-      list.className = "summary-list";
-      for (const item of block.items) list.append(inlineElement("li", "", inlineParts(item)));
-      return list;
-    }
-    case "table": return renderTable(block);
-    case "figure": return renderFigure(block, figureSrc);
-    default: return document.createComment("");
+function alignOf(token) {
+  const style = token.attrGet?.("style") ?? "";
+  const m = /text-align:(left|right|center)/.exec(style);
+  return m ? m[1] : null;
+}
+
+function appendInline(parent, children, ctx) {
+  const stack = [parent];
+  const top = () => stack[stack.length - 1];
+  for (const child of children ?? []) {
+    if (child.type === "text") top().append(document.createTextNode(child.content));
+    else if (child.type === "softbreak") top().append(document.createTextNode("\n"));
+    else if (child.type === "hardbreak") top().append(document.createElement("br"));
+    else if (child.type === "code_inline") { const c = document.createElement("code"); c.textContent = child.content; top().append(c); }
+    else if (child.type === "math_inline") top().append(renderMath(child.content, false, ctx, ctx.nextMath()));
+    else if (child.nesting === 1 && INLINE_TAGS.has(child.tag)) { const el = document.createElement(child.tag); top().append(el); stack.push(el); }
+    else if (child.nesting === -1 && INLINE_TAGS.has(child.tag) && stack.length > 1) stack.pop();
   }
 }
 
-// Same-origin (or the configured API origin) and cookie-authenticated, exactly like the original-PDF link: the owner sees the image, nobody else does.
-function ownerFigureUrl(id) {
-  const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
-  return `${base}/v1/summary-figures/${id}`;
+function buildBlocks(tokens, root, ctx) {
+  const stack = [root];
+  const top = () => stack[stack.length - 1];
+  for (const token of tokens) {
+    if (token.type === "inline") { appendInline(top(), token.children, ctx); continue; }
+    if (token.type === "heading_open") {
+      const h = document.createElement(`h${Math.min(Number(token.tag.slice(1)) + 2, 6)}`);
+      h.className = "summary-heading";
+      top().append(h);
+      stack.push(h);
+    } else if (token.type === "heading_close") stack.pop();
+    else if (token.type === "paragraph_open") {
+      if (token.hidden) continue; // tight list item: the text goes straight into the item
+      const p = document.createElement("p");
+      p.className = "summary-paragraph";
+      top().append(p);
+      stack.push(p);
+    } else if (token.type === "paragraph_close") { if (!token.hidden) stack.pop(); }
+    else if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {
+      const list = document.createElement(token.tag === "ol" ? "ol" : "ul");
+      list.className = "summary-list";
+      top().append(list);
+      stack.push(list);
+    } else if (token.type === "bullet_list_close" || token.type === "ordered_list_close") stack.pop();
+    else if (token.nesting === 1 && BLOCK_TAGS.has(token.tag)) {
+      const el = document.createElement(token.tag);
+      if (token.tag === "table") el.className = "summary-table";
+      if (token.tag === "th" || token.tag === "td") { const a = alignOf(token); if (a) el.style.textAlign = a; if (token.tag === "th") el.scope = "col"; }
+      if (token.tag === "table") {
+        const wrap = document.createElement("div");
+        wrap.className = "summary-table-wrap";
+        wrap.append(el);
+        top().append(wrap);
+      } else top().append(el);
+      stack.push(el);
+    } else if (token.nesting === -1 && BLOCK_TAGS.has(token.tag)) stack.pop();
+    else if (token.type === "hr") top().append(document.createElement("hr"));
+    else if (token.type === "fence" || token.type === "code_block") {
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = token.content;
+      pre.append(code);
+      top().append(pre);
+    } else if (token.type === "math_block") top().append(renderMath(token.content, true, ctx, ctx.nextMath()));
+    else if (token.type === "figure") top().append(renderFigure(token.meta.id, ctx));
+  }
 }
 
-/** Replaces the children of `container` with the rendered summary. `figureSrc(id)` returns an image URL or null. */
-export function renderSummary(container, text, { figureSrc = ownerFigureUrl } = {}) {
+/**
+ * Replaces the children of `container` with the rendered summary.
+ *   onEditMath(location)  - makes formulas clickable (and invalid ones fixable); location = {kind, tex, start, end} in the source text
+ *   loadFigure(id)        - async: {url, alt, caption, ...} for a figure the owner can see, or null
+ *   onOpenFigure(record)  - enlarges a figure
+ */
+export function renderSummary(container, text, { onEditMath = null, loadFigure = null, onOpenFigure = null } = {}) {
+  const source = String(text ?? "");
+  const locations = onEditMath ? locateMath(source) : [];
+  let mathIndex = 0;
+  const ctx = { onEditMath, loadFigure, onOpenFigure, nextMath: () => locations[mathIndex++] ?? null };
   container.classList.add("summary-rendered");
-  container.replaceChildren(...parseSummary(text).map((block) => renderBlock(block, figureSrc)));
+  const root = document.createDocumentFragment();
+  buildBlocks(parseSummaryTokens(source), root, ctx);
+  container.replaceChildren(root);
   return container;
 }

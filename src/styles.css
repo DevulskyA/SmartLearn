@@ -4846,7 +4846,88 @@ h1 {
 
 .summary-math-error {
   color: var(--color-danger, #b91c1c);
+  border: 1px dashed currentColor;
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.summary-math-original {
   font-family: monospace;
+  color: var(--color-text);
+}
+
+.summary-math-editable {
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+
+.summary-math-editable:hover,
+.summary-math-editable:focus-visible {
+  outline: 2px solid var(--color-accent, #2563eb);
+  outline-offset: 2px;
+}
+
+.summary-preview {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
+
+.summary-preview-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.math-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface, Canvas);
+  color: var(--color-text);
+}
+
+.math-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.math-dialog-field,
+.math-dialog-preview {
+  min-height: 3rem;
+  margin: 0.5rem 0;
+}
+
+.math-dialog-mathfield {
+  width: 100%;
+  font-size: 1.4rem;
+}
+
+.math-dialog-label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.875rem;
+}
+
+.math-dialog-latex {
+  width: 100%;
+  font-family: monospace;
+}
+
+.math-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.math-dialog-status {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
 }
 
 .summary-table-wrap {
@@ -4892,19 +4973,4 @@ h1 {
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   margin: 0 0 0.35rem;
-}
-
-.summary-figure-panel {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0.4rem 0;
-  padding: 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-}
-
-.summary-figure-field {
-  display: grid;
-  gap: 0.2rem;
-  font-size: 0.875rem;
 }
