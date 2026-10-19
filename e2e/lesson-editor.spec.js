@@ -370,7 +370,7 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
       if (content.audit) {
         delete content.audit.rulesVersion;
         delete content.audit.auditedAt;
-        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'MEDIUM', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
       }
       db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), row.id);
     }
