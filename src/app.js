@@ -32,6 +32,7 @@ import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningR
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { renderSummary } from "./summary-render.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -866,7 +867,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   summarySection.className = "review-row-summary";
 
   const summaryHasBody = Boolean(unit?.summaryBody);
-  const summaryDisplay = createTextElement("p", "review-summary-text", unit?.summaryBody ?? "");
+  const summaryDisplay = renderSummary(createTextElement("div", "review-summary-text", ""), unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
   summaryDisplay.hidden = !summaryHasBody;
 
@@ -1804,9 +1805,7 @@ export async function renderPlan() {
         const summaryDisplayWrap = document.createElement("div");
         summaryDisplayWrap.className = "plan-summary-display-wrap";
 
-        const summaryText = document.createElement("p");
-        summaryText.className = "plan-summary-body";
-        summaryText.textContent = currentSummary;
+        const summaryText = renderSummary(createTextElement("div", "plan-summary-body", ""), currentSummary);
         summaryText.hidden = !currentSummary;
 
         const summaryPlaceholder = document.createElement("p");
@@ -1862,7 +1861,7 @@ export async function renderPlan() {
           try {
             await DB.learningUnits.update(unit.id, { summaryBody: newBody });
             currentSummary = newBody ?? "";
-            summaryText.textContent = currentSummary;
+            renderSummary(summaryText, currentSummary);
             summaryText.hidden = !currentSummary;
             summaryPlaceholder.hidden = !!currentSummary;
             editSummaryBtn.textContent = currentSummary ? t("plan.detail.summary.edit") : t("plan.detail.summary.add");
@@ -3230,7 +3229,7 @@ async function startStudyNow(unit, subjectName) {
   studyNowTitleEl.textContent = unit.title ?? "";
   if (unit.summaryBody) {
     studyNowSummaryCard.hidden = false;
-    studyNowSummaryBody.textContent = unit.summaryBody;
+    renderSummary(studyNowSummaryBody, unit.summaryBody);
     studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
     appendSummarySources(studyNowSummaryCard, unit.id);
   } else {
@@ -5304,7 +5303,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? "";
+      renderSummary(displayEl, updated.summaryBody ?? "");
       displayEl.hidden = !updated.summaryBody;
       if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
@@ -5477,9 +5476,7 @@ dailySummaryBtn?.addEventListener("click", async () => {
     const title = document.createElement("p");
     title.className = "daily-summary-title";
     title.textContent = record.title;
-    const body = document.createElement("p");
-    body.className = "daily-summary-body";
-    body.textContent = record.summaryBody ?? record.title;
+    const body = renderSummary(createTextElement("div", "daily-summary-body", ""), record.summaryBody ?? record.title);
     item.append(title, body);
     dailySummaryList.append(item);
   }

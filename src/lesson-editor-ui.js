@@ -5,12 +5,13 @@
 // DOM semantics matter here because people copy text out of this screen: content lives only in <textarea>s and content <p>s;
 // state words, counts, buttons and findings are separate elements, always separated by real text, never glued to the content.
 import { createTextElement } from "./dom-utils.js";
+import { renderSummary as renderSummaryBody } from "./summary-render.js";
 import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, summaryBlocks, groundingLine,
+  QUESTION_TYPE_LABELS, issueLabel, groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -695,12 +696,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   summaryToggle.addEventListener("click", () => {
     const reading = summaryRead.hidden;
     if (reading) {
-      summaryRead.replaceChildren();
-      for (const block of summaryBlocks(summaryBuffer !== null ? summaryBuffer : draft.summary)) {
-        summaryRead.append(block.type === "heading"
-          ? createTextElement(block.level === 1 ? "h3" : "h4", "lesson-summary-heading", block.text)
-          : createTextElement("p", "lesson-summary-paragraph", block.text));
-      }
+      renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary);
     }
     summaryRead.hidden = !reading;
     summaryField.wrap.hidden = reading;
