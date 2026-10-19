@@ -599,6 +599,6 @@ try {
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.steps.sort((a, b) => a.step - b.step);
-result.pass = !result.fatal && result.steps.length === 18 && result.steps.every((s) => s.status === 'PASS');
+result.pass = !result.fatal && result.steps.length === 19 && result.steps.every((s) => s.status === 'PASS');
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);
