@@ -65,7 +65,17 @@ const consoleErrors = [];
 const password = 'a genuinely long test password 1';
 const email = `journey-${Date.now()}@example.com`;
 const SUBJECT = 'Farmacologia Desktop';
-const SUMMARY_EDIT = 'Resumo mestre editado na jornada Desktop: absorção, distribuição e eliminação.';
+const SUMMARY_EDIT = 'Resumo mestre editado na jornada Desktop: absorção, distribuição e eliminação, com $C=C_0 e^{-kt}$.\n\n| Fase | Efeito |\n|---|---|\n| Absorção | sobe |\n| Eliminação | desce |';
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+// the scientific parts of the summary as DRAWN (formula, table, figure that really loaded through the WebView2 CSP)
+async function expectScientificSummary(body) {
+  await body.locator('.katex').first().waitFor({ timeout: 10000 });
+  expect((await body.locator('table.summary-table tbody tr').count()) === 2, 'summary table not drawn');
+  const loaded = await body.locator('figure.summary-figure img').evaluate((img) => new Promise((resolve) => {
+    if (img.complete) resolve(img.naturalWidth); else { img.addEventListener('load', () => resolve(img.naturalWidth)); img.addEventListener('error', () => resolve(0)); }
+  }));
+  expect(loaded === 1, `summary figure did not load in the WebView (naturalWidth ${loaded})`);
+}
 const ANSWER_EDIT = 'Resposta editada na jornada Desktop';
 const PAGES = [
   'Farmacocinética descreve absorção, distribuição, metabolismo e excreção dos fármacos no organismo humano durante o tratamento clínico.',
@@ -302,6 +312,13 @@ try {
     await editor.locator('.lesson-qeditor .lesson-message').getByText('Questão salva').waitFor({ timeout: 10000 });
     await editor.getByRole('tab', { name: /Resumo/ }).click();
     await editor.locator('.lesson-summary-input').fill(SUMMARY_EDIT);
+    await editor.locator('[data-panel="summary"]').getByRole('button', { name: 'Figura', exact: true }).click();
+    await editor.locator('.summary-figure-file').setInputFiles({ name: 'esquema.png', mimeType: 'image/png', buffer: PIXEL_PNG });
+    await editor.locator('.summary-figure-alt').fill('Esquema da jornada');
+    await editor.locator('.summary-figure-insert').click();
+    await editor.locator('.summary-figure-panel').waitFor({ state: 'detached', timeout: 10000 });
+    ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim(); // saving trims the text
+    expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /!\[Esquema da jornada\]\(smartlearn-figure:\d+\)/.test(ctx.summaryFinal), `figure not inserted: ${ctx.summaryFinal}`);
     await editor.locator('[data-action="save-summary"]').click();
     await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
     await page.locator('[data-action="lesson-back"]').click();
@@ -314,13 +331,13 @@ try {
     await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
     await editor.waitFor({ state: 'visible', timeout: 15000 });
     const summaryAfter = await editor.locator('.lesson-summary-input').inputValue();
-    expect(summaryAfter === SUMMARY_EDIT, `summary after reload: ${summaryAfter}`);
+    expect(summaryAfter === ctx.summaryFinal, `summary after reload: ${summaryAfter}`);
     await editor.getByRole('tab', { name: /Questões/ }).click();
     await editor.locator('.lesson-qitem').nth(1).click();
     const answerAfter = await editor.locator('.lesson-qeditor textarea').nth(1).inputValue();
     expect(answerAfter === ANSWER_EDIT, `answer after reload: ${answerAfter}`);
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
-    expect(squash(draft.summary) === SUMMARY_EDIT, 'server draft summary differs');
+    expect(draft.summary === ctx.summaryFinal, 'server draft summary differs');
     return { reload: how, summaryPersisted: true, answerPersisted: true, serverDraftRevision: draft.revision };
   });
 
@@ -333,7 +350,7 @@ try {
     const units = (await api('GET', '/v1/learning-units')).units;
     expect(units.length === 1, `units ${units.length}`);
     ctx.unit = units[0];
-    expect(ctx.unit.summaryBody === SUMMARY_EDIT, 'accepted unit does not carry the edited summary');
+    expect(ctx.unit.summaryBody === ctx.summaryFinal, 'accepted unit does not carry the edited summary');
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
     expect(draft.status === 'ACCEPTED', `draft status ${draft.status}`);
     return { result: squash(await editor.locator('.source-draft-result').innerText()), unitId: ctx.unit.id, unitTitle: ctx.unit.title, draftStatus: draft.status };
@@ -345,7 +362,8 @@ try {
     await row.locator('.plan-expand-btn').click();
     const planSummary = squash(await row.locator('.plan-summary-body').innerText());
     expect(planSummary.includes('Resumo mestre editado'), `Plano summary: ${planSummary}`);
-    return { planSummary };
+    await expectScientificSummary(row.locator('.plan-summary-body'));
+    return { planSummary, scientific: 'formula + table + figure drawn' };
   });
 
   await step(10, 'Estudar agora', async () => {
@@ -642,6 +660,7 @@ try {
     await row.locator('.plan-expand-btn').click();
     const summary = squash(await row.locator('.plan-summary-body').innerText());
     expect(summary.includes('Resumo mestre editado'), 'summary lost after reopen');
+    await expectScientificSummary(row.locator('.plan-summary-body'));
     const closing = await shutdown({ graceful: true });
     const snapshotAfter = dbSnapshot();
     expect(JSON.stringify(snapshotAfter) === JSON.stringify(snapshotBefore), 'the database rows differ after the second session');

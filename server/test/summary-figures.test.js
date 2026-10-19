@@ -79,3 +79,19 @@ test('the same image uploaded again is the same figure; another user can neither
     assert.notEqual(bobsCopy.id, first.id, 'dedupe is per owner');
   } finally { cleanup(); }
 });
+
+test('the logical export carries the figures (bytes as base64) for their owner only', async () => {
+  const { createLogicalExport } = await import('../src/backup.js');
+  const { db, cleanup } = tmpDb();
+  try {
+    const alice = makeUser(db, 'a@example.com');
+    const bob = makeUser(db, 'b@example.com');
+    const mine = figures.create(db, alice, { buffer: PNG, alt: 'um' });
+    figures.create(db, bob, { buffer: JPEG, alt: 'do Bob' });
+    const exported = createLogicalExport(db, alice);
+    assert.equal(exported.summaryFigures.length, 1);
+    assert.equal(exported.summaryFigures[0].id, mine.id);
+    assert.deepEqual(Buffer.from(exported.summaryFigures[0].dataBase64, 'base64'), PNG);
+    assert.equal('data' in exported.summaryFigures[0], false);
+  } finally { cleanup(); }
+});
