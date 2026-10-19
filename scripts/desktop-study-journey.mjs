@@ -99,11 +99,19 @@ function placeWindowOnSmallDisplay(pid) {
   });
 }
 
-async function launch() {
+// The outer rectangle of the main window (optionally set first), read from the OS: the window position the student sees.
+function windowRect(pid, set = null) {
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(pid)];
+  if (set) args.push('-X', String(set.x), '-Y', String(set.y), '-W', String(set.w), '-H', String(set.h));
+  const line = execFileSync('powershell', args, { encoding: 'utf8' }).trim().split('\n').pop();
+  return JSON.parse(line).rect;
+}
+
+async function launch({ place = true } = {}) {
   cdpPort = await freePort();
   const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` };
   app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
-  const placement = placeWindowOnSmallDisplay(app.pid);
+  const placement = place ? placeWindowOnSmallDisplay(app.pid) : Promise.resolve({ moved: false, reason: 'window restore check: the app must place itself' });
   const deadline = Date.now() + 90000;
   for (;;) {
     try { if ((await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok) break; } catch { /* not yet */ }
@@ -625,6 +633,10 @@ try {
   let snapshotBefore; let exportBefore; let health1;
   await step(17, 'close and reopen the isolated instance (same throwaway data dir)', async () => {
     exportBefore = stripVolatile(await api('GET', '/v1/export'));
+    // the student moves/resizes the window: put it at a distinctive spot inside the display it is on, give the app time to save it
+    const current = windowRect(app.pid);
+    ctx.rectBefore = windowRect(app.pid, { x: current[0] + 37, y: current[1] + 29, w: 1111, h: 777 });
+    await sleep(1500);
     const closing = await shutdown({ graceful: true });
     snapshotBefore = dbSnapshot();
     expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 1, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 retest`);
@@ -638,7 +650,10 @@ try {
     for (const a of snapshotBefore.attempts.filter((x) => String(x.reviewTaskId) === String(ctx.reviewId))) perExercise[a.exerciseId] = (perExercise[a.exerciseId] ?? 0) + 1;
     expect(Object.keys(perExercise).length === 2 && Object.values(perExercise).every((n) => n === 1), `DB: attempts per exercise inside the Hoje review ${JSON.stringify(perExercise)} (expected 2 exercises, 1 attempt each)`);
     ctx.hojePerExercise = perExercise;
-    await launch();
+    await launch({ place: false });
+    const rectAfter = windowRect(app.pid);
+    expect(JSON.stringify(rectAfter) === JSON.stringify(ctx.rectBefore), `window position after reopen ${JSON.stringify(rectAfter)} != before ${JSON.stringify(ctx.rectBefore)}`);
+    ctx.windowRestored = { before: ctx.rectBefore, after: rectAfter };
     const title = ps(`(Get-Process -Id ${app.pid}).MainWindowTitle`);
     expect(title === expectedTitle, `title after reopen: ${title}`);
     health1 = await page.evaluate(async () => ({ ready: (await fetch('/health/ready')).status, build: await (await fetch('/health/build')).json() }));

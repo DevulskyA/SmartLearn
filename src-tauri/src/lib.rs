@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod kill_on_close_job;
+mod window_state;
 
 const DEV_APP_ORIGIN: &str = "http://127.0.0.1:3000";
 
@@ -448,6 +449,54 @@ async fn execute_sqlite_transaction(
     execute_sqlite_transaction_at_path(&database_path, statements).await
 }
 
+/// Restores the saved window rectangle (only if it lies on a connected monitor), shows the window, and keeps the file current while the
+/// student moves or resizes it. A maximized window is saved as "maximized" plus its last normal size, placed on the monitor it is on.
+fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
+    let monitors: Vec<window_state::MonitorRect> = window
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| (m.position().x, m.position().y, m.size().width, m.size().height))
+        .collect();
+    let mut last = window_state::load(&file)
+        .filter(|saved| window_state::is_visible_on(saved, &monitors))
+        .map(|saved| window_state::clamp_to_monitor(saved, &monitors));
+    if let Some(saved) = last {
+        let _ = window.set_size(tauri::PhysicalSize::new(saved.width, saved.height));
+        let _ = window.set_position(tauri::PhysicalPosition::new(saved.x, saved.y));
+        if saved.maximized {
+            let _ = window.maximize();
+        }
+    }
+    let _ = window.show();
+
+    let shared = std::sync::Mutex::new((last.take(), window_state::Throttle::new()));
+    let watched = window.clone();
+    window.on_window_event(move |event| {
+        let closing = matches!(event, tauri::WindowEvent::CloseRequested { .. });
+        if !closing && !matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+            return;
+        }
+        if watched.is_minimized().unwrap_or(false) {
+            return; // a minimized window reports a fake off-screen position
+        }
+        let (Ok(pos), Ok(size)) = (watched.outer_position(), watched.inner_size()) else { return };
+        let maximized = watched.is_maximized().unwrap_or(false);
+        let mut guard = shared.lock().unwrap();
+        let (previous, throttle) = &mut *guard;
+        let next = if maximized {
+            let base = previous.unwrap_or(window_state::WindowState { x: pos.x, y: pos.y, width: 1000, height: 700, maximized: true });
+            window_state::WindowState { x: pos.x + 40, y: pos.y + 40, width: base.width, height: base.height, maximized: true }
+        } else {
+            window_state::WindowState { x: pos.x, y: pos.y, width: size.width, height: size.height, maximized: false }
+        };
+        *previous = Some(next);
+        if closing || throttle.due() {
+            window_state::save(&file, &next);
+        }
+    });
+}
+
 // T42: the plugins/command below (tauri-plugin-sql/dialog/fs,
 // execute_sqlite_transaction) are the OLD local-first architecture's data
 // broker — still registered so their own proven Rust test suite above stays
@@ -525,7 +574,22 @@ pub fn run() {
                 .inner_size(800.0, 600.0)
                 .resizable(true)
                 .initialization_script(init_script)
+                .visible(false) // shown only after the remembered position is applied: no flash on the wrong monitor
                 .build()?;
+
+            // Remember the window (position, size, maximized -> also which monitor) next to the data it belongs to.
+            let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+            let state_dir = if local_authority {
+                std::env::var("SMARTLEARN_DB_PATH")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(PathBuf::from)
+                    .and_then(|db| db.parent().map(Path::to_path_buf))
+                    .unwrap_or_else(|| app_data_dir.join("smartlearn-server"))
+            } else {
+                app_data_dir
+            };
+            watch_window_state(&window, window_state::state_file_for(&state_dir));
 
             // Kept alive for the window's lifetime, killed explicitly on
             // close. Relying on LocalBackend's Drop impl ALONE was proven
