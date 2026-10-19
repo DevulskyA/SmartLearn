@@ -20,6 +20,7 @@ import { registerBackupRoutes } from './routes/backup.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerAttemptRoutes } from './routes/attempts.js';
 import { registerSourceRoutes } from './routes/sources.js';
+import { registerSummaryFigureRoutes } from './routes/summary-figures.js';
 import { registerContentProposalRoutes } from './routes/content-proposals.js';
 import { registerGeneratedDraftRoutes } from './routes/generated-drafts.js';
 import { registerGenerationJobRoutes } from './routes/generation-jobs.js';
@@ -127,6 +128,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerImportRoutes(v1, db);
     registerAttemptRoutes(v1, db);
     registerSourceRoutes(v1, db, sources);
+    registerSummaryFigureRoutes(v1, db);
     registerContentProposalRoutes(v1, db);
     registerGeneratedDraftRoutes(v1, db, ai);
     registerGenerationJobRoutes(v1, db, ai, jobRunner);

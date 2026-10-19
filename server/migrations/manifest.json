@@ -178,5 +178,10 @@
     "version": 36,
     "name": "source-openings-experiment",
     "checksum": "ce0b844d6bf2ffbc6d50153fc03ec1e7a96ffe9e67af5b96f3d3427c30cb392b"
+  },
+  {
+    "version": 37,
+    "name": "summary-figures",
+    "checksum": "e246be6b571713618a961e82043de57237671b03decad7a82a9fc6c31d40dfdb"
   }
 ]

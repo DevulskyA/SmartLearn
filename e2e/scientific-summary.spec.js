@@ -128,3 +128,38 @@ test('Plano: the insert bar puts a formula and a table at the cursor and they ar
   await expect(row.locator('.plan-summary-body .katex')).toHaveCount(1, { timeout: 5000 });
   await expect(row.locator('.plan-summary-body table.summary-table th')).toHaveText(['Coluna 1', 'Coluna 2']);
 });
+
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
+test('Plano: a figure is uploaded with its description, inserted at the cursor, drawn from the owner-only route, and kept as plain text', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Fisiologia');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2026-04-01');
+  await page.locator('#study-content').fill('Aula com figura');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula com figura' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('.plan-edit-summary-btn').click();
+  const textarea = row.locator('.plan-summary-textarea');
+  await textarea.fill('Barreira de filtração.');
+  await row.getByRole('button', { name: 'Figura', exact: true }).click();
+  await row.locator('.summary-figure-file').setInputFiles({ name: 'barreira.png', mimeType: 'image/png', buffer: PIXEL_PNG });
+  await row.locator('.summary-figure-insert').click();
+  await expect(row.locator('.summary-figure-message')).toContainText('Descreva a imagem'); // description is required: nothing was uploaded
+  await row.locator('.summary-figure-alt').fill('Esquema da barreira de filtração');
+  await row.locator('.summary-figure-caption').fill('Figura 1. Barreira glomerular');
+  await row.locator('.summary-figure-insert').click();
+  await expect(textarea).toHaveValue(/Barreira de filtração\.\n\n!\[Esquema da barreira de filtração\]\(smartlearn-figure:\d+ "Figura 1\. Barreira glomerular"\)\n/);
+
+  await row.locator('.plan-summary-edit-actions .primary-button').click();
+  const img = row.locator('.plan-summary-body figure.summary-figure img');
+  await expect(img).toHaveAttribute('alt', 'Esquema da barreira de filtração');
+  await expect(row.locator('.plan-summary-body figcaption')).toHaveText('Figura 1. Barreira glomerular');
+  await expect.poll(async () => img.evaluate((el) => el.complete && el.naturalWidth), { timeout: 5000 }).toBe(1);
+});

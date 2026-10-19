@@ -4,6 +4,7 @@
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { inlineParts, parseSummary } from "../shared/summary-markup.js";
+import { t } from "./i18n/index.js";
 
 const MAX_MACRO_EXPANSION = 1000;
 
@@ -16,7 +17,7 @@ function renderMath(tex, displayMode) {
     // Invalid formula: keep what the author typed, visibly marked, instead of hiding it or breaking the whole summary.
     el.textContent = displayMode ? `$$ ${tex} $$` : `$${tex}$`;
     el.classList.add("summary-math-error");
-    el.title = "Fórmula inválida";
+    el.title = t("summary.math.invalid");
   }
   return el;
 }
@@ -71,7 +72,7 @@ function renderFigure(block, figureSrc) {
   } else {
     const missing = document.createElement("p");
     missing.className = "summary-figure-missing";
-    missing.textContent = block.alt ? `Figura indisponível: ${block.alt}` : "Figura indisponível";
+    missing.textContent = block.alt ? t("summary.figure.unavailableNamed", { alt: block.alt }) : t("summary.figure.unavailable");
     figure.append(missing);
   }
   if (block.caption) {
@@ -104,8 +105,14 @@ function renderBlock(block, figureSrc) {
   }
 }
 
+// Same-origin (or the configured API origin) and cookie-authenticated, exactly like the original-PDF link: the owner sees the image, nobody else does.
+function ownerFigureUrl(id) {
+  const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
+  return `${base}/v1/summary-figures/${id}`;
+}
+
 /** Replaces the children of `container` with the rendered summary. `figureSrc(id)` returns an image URL or null. */
-export function renderSummary(container, text, { figureSrc = null } = {}) {
+export function renderSummary(container, text, { figureSrc = ownerFigureUrl } = {}) {
   container.classList.add("summary-rendered");
   container.replaceChildren(...parseSummary(text).map((block) => renderBlock(block, figureSrc)));
   return container;
