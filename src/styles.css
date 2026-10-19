@@ -1215,6 +1215,16 @@ h1 {
   border-radius: 0.3rem;
 }
 
+/* "Abrir o PDF original": a real touch target (44px) wherever the cited page is shown. */
+.study-now-source-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 0.4rem;
+  color: var(--color-primary, inherit);
+  text-decoration: underline;
+}
+
 .study-now-source-text {
   margin: 0.6rem 0 0;
   max-height: 14rem;
