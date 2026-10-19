@@ -18,7 +18,7 @@ import {
 } from "./theme.js";
 import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
-import { formatDate as formatIntlDate } from "./i18n/format.js";
+import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
@@ -394,7 +394,7 @@ function formatPerformanceScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   const rounded = Math.round(number * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${formatDecimal(rounded)}%`;
 }
 
 const PERFORMANCE_BAND_CLASS = {
@@ -600,7 +600,7 @@ function createScoreInput(task, field, label) {
 }
 
 function formatReviewScore(value) {
-  return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+  return value == null ? "—" : `${formatDecimal(Number(value))}%`;
 }
 
 // Several overdue stages of the same unit as ONE card (native <details>, so
@@ -1031,7 +1031,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     if (answered === total) {
       const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
       for (const el of row.querySelectorAll("[data-score-for]")) {
-        el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+        el.textContent = `${formatDecimal(scorePercent)}%`;
         el.classList.remove("is-empty");
       }
       restoredSection.dataset.allAnswered = "true";
@@ -2134,7 +2134,7 @@ export async function renderStatsBySubject() {
     identityCell.append(chip);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2595,7 +2595,7 @@ let selectedUnitSubjectId = null;
 
 function formatContentContextMeta(row) {
   if (!row || row.totalQuestions <= 0) return t("statsView.context.noEvidence");
-  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  const pct = formatDecimal(row.weightedAccuracy, 1, { trim: true });
   return t("statsView.context.meta", { percent: pct, questions: row.totalQuestions });
 }
 
@@ -2708,7 +2708,7 @@ export async function renderStatsByUnit() {
     identityCell.append(chip, title);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2772,7 +2772,7 @@ function showUnitDetail(r) {
   const score = document.createElement("div");
   score.className = "unit-detail-score";
   score.textContent = r.weightedAccuracy != null
-    ? t("statsView.unit.score", { percent: r.weightedAccuracy.toFixed(1).replace(".", ","), questions: r.totalQuestions })
+    ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
     : t("statsView.unit.noEvidence");
 
   const trend = createTrendBadge(r.trend.direction);
@@ -3414,7 +3414,7 @@ async function finishStudyNowSession() {
     studyNowResultNote.hidden = false;
     studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
   } else {
-    const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+    const pct = answeredCount > 0 ? formatDecimal((correctCount / answeredCount) * 100) : formatDecimal(0);
     studyNowResultTitle.textContent = t("appStudyNow.result");
     studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
   }
@@ -3753,7 +3753,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   examEls.submittedText.textContent = t(judged < exam.items.length ? "appExam.submitted.pending" : "appExam.submitted.complete", { answered, total: exam.items.length, judged });
 
   if (exam.score) {
-    const pct = exam.score.percent.toFixed(1).replace(".", ",");
+    const pct = formatDecimal(exam.score.percent);
     examEls.resultScore.textContent = t("appExam.score", { correct: exam.score.correct, total: exam.score.total, percent: pct });
     examEls.resultScore.hidden = false;
     examEls.counts.textContent = t("appExam.counts", { correct: exam.score.correct, wrong: exam.score.total - exam.score.correct });
@@ -5063,7 +5063,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (aInput) aInput.value = "";
     if (msgEl) {
       msgEl.classList.remove("is-error");
-      const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
+      const pct = formatDecimal((correctCount / questionsCount) * 100);
       msgEl.textContent = t("appReview.external.recorded", { questions: questionsCount, correct: correctCount, percent: pct });
     }
   } catch (error) {
@@ -5214,7 +5214,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   if (answered === total && row) {
     const scorePercent = total > 0 ? (correct / total) * 100 : 0;
     for (const el of row.querySelectorAll("[data-score-for]")) {
-      el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+      el.textContent = `${formatDecimal(scorePercent)}%`;
       el.classList.remove("is-empty");
     }
     section.dataset.allAnswered = "true";
@@ -5509,7 +5509,7 @@ function getScoreState(card) {
 
 function updateScoreDisplay(card) {
   const { values } = getScoreState(card);
-  const text = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  const text = values.scorePercent == null ? "—" : `${formatDecimal(values.scorePercent)}%`;
   for (const element of card.querySelectorAll("[data-score-for]")) {
     element.textContent = text;
     element.classList.toggle("is-empty", values.scorePercent == null);
