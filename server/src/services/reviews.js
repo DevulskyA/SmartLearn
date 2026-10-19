@@ -55,6 +55,10 @@ const TASK_SELECT = `
   WHERE rt.user_id = ?
 `;
 
+// A review the student did NOT perform but that a performed one retired (experimental D-13 option) is no longer asked for. Without a row in
+// review_task_supersessions (every V1 flow) this filter removes nothing.
+const NOT_SUPERSEDED = ' AND NOT EXISTS (SELECT 1 FROM review_task_supersessions sup WHERE sup.user_id = rt.user_id AND sup.task_id = rt.id)';
+
 /**
  * Agenda buckets with explicit local-day semantics (design.md §4).
  * completedToday includes REVIEW-ONLY completions (no questions), not just
@@ -67,9 +71,9 @@ export function agenda(db, userId, { date, timezoneOverride } = {}) {
   const today = date ?? localDateString(new Date(), timezone);
   const tomorrow = addDays(today, 1);
 
-  const overdue = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
-  const dueToday = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
-  const dueTomorrow = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, tomorrow).map(taskDto);
+  const overdue = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
+  const dueToday = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
+  const dueTomorrow = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, tomorrow).map(taskDto);
 
   // completedToday: any task whose completed_at falls on `today` in the
   // user's timezone — computed in JS (not SQL date()) so the same
@@ -91,7 +95,7 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
   if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
   const timezone = timezoneOverride ?? getUserTimezone(db, userId);
   const today = date ?? localDateString(new Date(), timezone);
-  const tasks = db.prepare(`${TASK_SELECT} ORDER BY rt.due_date`).all(userId).map((row) => ({ ...taskDto(row), completedAt: row.completed_at ?? null }));
+  const tasks = db.prepare(`${TASK_SELECT}${NOT_SUPERSEDED} ORDER BY rt.due_date`).all(userId).map((row) => ({ ...taskDto(row), completedAt: row.completed_at ?? null }));
   const titles = new Map(tasks.map((t) => [t.unitId, t.unitTitle]));
   const brief = (t) => (t ? { id: t.id, dueDate: t.dueDate, offsetDays: t.offsetDays } : null);
   const units = deriveObligations(tasks, today).map((u) => ({
@@ -103,6 +107,50 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
     pendingCount: u.pendingCount,
   }));
   return { date: today, timezone, recovery, units };
+}
+
+export const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE: 'ACTUAL_DATE' });
+
+/**
+ * EXPERIMENTAL (HG-09 / D-12 option 3), D4b: perform the ONE review a unit requires today, with the two open decisions as NAMED parameters.
+ *   recovery  D-13  NONE (default = V1: the older overdue ones stay owed) | SUPERSEDE_OVERDUE (they are retired as NOT performed: no completion,
+ *                   no evidence, a row in review_task_supersessions; history rows are never deleted)
+ *   anchor    D-14  PLANNED_DATE (default = V1: no date moves) | ACTUAL_DATE (the still-pending LATER stages are re-dated from the day the review was
+ *                   really done, keeping each gap of the fixed schedule; the original date stays in review_task_reschedules)
+ * The completion itself is the existing complete() (same rules, same evidence rules: without questions it is activity, not evidence).
+ * Disposable databases only until the student integrates migration 034.
+ */
+export function completeObligation(db, userId, unitId, { date, timezoneOverride, recovery = RECOVERY.NONE, anchor = ANCHORS.PLANNED_DATE, questionsCount, correctCount, operationKey } = {}, now = () => new Date()) {
+  if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
+  if (!Object.values(ANCHORS).includes(anchor)) throw new ReviewError('VALIDATION_FAILED', 'anchor não é reconhecido.', 'anchor');
+  const run = db.transaction(() => {
+    const view = obligations(db, userId, { date, timezoneOverride, recovery });
+    const entry = view.units.find((u) => u.unitId === unitId);
+    const base = { recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [] };
+    if (!entry?.required) return base;
+    const completed = complete(db, userId, entry.required.id, { questionsCount, correctCount, operationKey }, now);
+    const nowIso = completed.completedAt;
+    const pending = db.prepare(`${TASK_SELECT} AND rt.unit_id = ? AND rt.completed_at IS NULL${NOT_SUPERSEDED} ORDER BY rt.due_date`).all(userId, unitId);
+    const supersededIds = [];
+    if (recovery === RECOVERY.SUPERSEDE_OVERDUE) {
+      const insert = db.prepare('INSERT INTO review_task_supersessions (user_id, task_id, superseded_by_task_id, policy, superseded_at) VALUES (?, ?, ?, ?, ?)');
+      for (const t of pending.filter((p) => p.due_date <= view.date)) { insert.run(userId, t.id, entry.required.id, recovery, nowIso); supersededIds.push(t.id); }
+    }
+    const rescheduled = [];
+    if (anchor === ANCHORS.ACTUAL_DATE) {
+      const update = db.prepare('UPDATE review_tasks SET due_date = ? WHERE user_id = ? AND id = ?');
+      const log = db.prepare('INSERT INTO review_task_reschedules (user_id, task_id, from_due_date, to_due_date, anchor, anchored_on_task_id, rescheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      for (const t of pending.filter((p) => !supersededIds.includes(p.id) && p.offset_days > entry.required.offsetDays)) {
+        const to = addDays(view.date, t.offset_days - entry.required.offsetDays);
+        if (to === t.due_date) continue;
+        update.run(to, userId, t.id);
+        log.run(userId, t.id, t.due_date, to, anchor, entry.required.id, nowIso);
+        rescheduled.push({ taskId: t.id, from: t.due_date, to });
+      }
+    }
+    return { ...base, completedId: entry.required.id, completedAt: nowIso, reviewOnly: completed.reviewOnly, evidenceId: completed.evidenceId, supersededIds, rescheduled };
+  });
+  return run();
 }
 
 /**

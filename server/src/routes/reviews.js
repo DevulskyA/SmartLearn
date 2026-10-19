@@ -53,6 +53,29 @@ export function registerReviewRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // EXPERIMENTAL (HG-09 / D-12 option 3), D4b: do the one review a unit requires, with D-13 (recovery) and D-14 (anchor) as named parameters.
+  // Defaults = today's calendar. No screen uses it.
+  app.post('/review-obligations/:unitId/complete', {
+    schema: {
+      params: { type: 'object', required: ['unitId'], properties: { unitId: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 },
+          recovery: { type: 'string' }, anchor: { type: 'string' },
+          questionsCount: { type: 'integer' }, correctCount: { type: 'integer' }, operationKey: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const unitId = Number(request.params.unitId);
+    if (!Number.isInteger(unitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    const { timezone, ...rest } = request.body ?? {};
+    try {
+      return reviews.completeObligation(db, request.actor.userId, unitId, { ...rest, timezoneOverride: timezone });
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/review-tasks/:id/complete', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
