@@ -58,6 +58,18 @@ export function groupFindings(draft) {
   return { summary, byQuestion, other };
 }
 
+/**
+ * The one sentence above the summary about how many of its sentences point at a real passage of the source. When NOT ONE sentence is
+ * linked (e.g. a draft generated before sentence-level quotes existed) a bare "confirmado em 0 de N" reads like a failed check; it says
+ * plainly that nothing was checked automatically instead.
+ */
+export function groundingLine(g) {
+  if (!g || g.total === 0) return "";
+  if (g.supported === 0 && g.orphaned === 0 && g.sentences.every((sentence) => sentence.status === "NOT_LINKED")) return t("editor.grounding.none", { total: g.total });
+  if (g.orphaned > 0) return t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned });
+  return t("editor.grounding.line", { supported: g.supported, total: g.total });
+}
+
 /** The review state a question shows in the list: a symbol (decorative), a word (always present) and how many findings it has. */
 export function questionState(question, findingCount = 0) {
   if (question.status === "REJECTED") return { key: "rejected", symbol: "✕", label: t("lesson.questionState.rejected"), count: 0 };

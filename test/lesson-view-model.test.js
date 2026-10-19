@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, summaryBlocks, copyTextOf, issueLabel } from "../src/lesson-view-model.js";
+import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, summaryBlocks, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -143,4 +143,15 @@ test("jobListStatus: active = Gerando (with the phase), STALLED stays Gerando bu
   assert.match(jobListStatus(job({ state: "FAILED", errorCode: "TIMEOUT" })).label, /^Falhou/);
   assert.equal(jobListStatus(job({ state: "CANCELLED" })), null);
   assert.equal(jobListStatus(undefined), null);
+});
+
+test("groundingLine: a summary with NO linked sentence says nothing was checked instead of a bare '0 de N confirmadas'", () => {
+  const unlinked = (n) => ({ total: n, supported: 0, orphaned: 0, sentences: Array.from({ length: n }, () => ({ status: "NOT_LINKED" })) });
+  assert.match(groundingLine(unlinked(55)), /Nenhuma das 55 frases do resumo tem trecho da fonte vinculado/);
+  assert.match(groundingLine(unlinked(55)), /confira o resumo na fonte/);
+  const some = { total: 4, supported: 1, orphaned: 0, sentences: [{ status: "SOURCE_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }] };
+  assert.equal(groundingLine(some), "Trecho da fonte confirmado em 1 de 4 frases do resumo.");
+  const stale = { total: 4, supported: 0, orphaned: 2, sentences: [{ status: "NOT_LINKED" }] };
+  assert.match(groundingLine(stale), /confirmado em 0 de 4 frases do resumo\. 2 apontamentos antigos/);
+  assert.equal(groundingLine({ total: 0, supported: 0, orphaned: 0, sentences: [] }), "");
 });
