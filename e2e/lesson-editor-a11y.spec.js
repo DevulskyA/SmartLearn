@@ -155,7 +155,7 @@ test('keyboard only: saving the summary announces it from a standing region and 
   await field.focus();
   await page.keyboard.press('Control+End');
   await page.keyboard.type(' Acrescentado pelo teclado.');
-  const status = editor.locator('[data-panel="summary"] [role="status"]');
+  const status = editor.locator('[data-panel="summary"] .lesson-message[role="status"]'); // the insert toolbar has its own status region
   await tagRegion(status);
   await tabTo(page, editor.locator('[data-action="save-summary"]'));
   await page.keyboard.press('Enter');

@@ -645,7 +645,7 @@ try {
     exportBefore = stripVolatile(await api('GET', '/v1/export'));
     // the student moves/resizes the window: put it at a distinctive spot inside the display it is on, give the app time to save it
     const current = windowRect(app.pid);
-    ctx.rectBefore = windowRect(app.pid, { x: current[0] + 37, y: current[1] + 29, w: 1111, h: 777 });
+    ctx.rectBefore = windowRect(app.pid, { x: current[0], y: current[1] + 29, w: 1111, h: 777 });
     await sleep(1500);
     const closing = await shutdown({ graceful: true });
     snapshotBefore = dbSnapshot();
