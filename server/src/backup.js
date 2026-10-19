@@ -58,7 +58,7 @@ export function createLogicalExport(db, userId) {
     examItems: db.prepare('SELECT * FROM exam_items WHERE user_id = ? ORDER BY id').all(userId),
     examEvidence: db.prepare('SELECT * FROM exam_evidence WHERE user_id = ? ORDER BY exam_id, evidence_id').all(userId),
     // The images placed in Resumo Mestre texts (`smartlearn-figure:ID`), bytes as base64 so the file alone still carries them. Additive like the
-    // keys above: the importer ignores it today, so a logical restore shows "Figura indisponível" until it learns to read this key.
+    // keys above; the logical restore (services/logical-restore.js) reads it, re-creates the images under new ids and rewrites the references.
     summaryFigures: db.prepare('SELECT id, mime, byte_size, sha256, alt, data, created_at FROM summary_figures WHERE user_id = ? ORDER BY id').all(userId)
       .map(({ data, ...row }) => ({ ...row, dataBase64: Buffer.from(data).toString('base64') })),
   };

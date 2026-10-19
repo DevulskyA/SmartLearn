@@ -66,6 +66,7 @@ const ENTITY_LABEL_KEYS = {
   exams: 'migration.entity.exams',
   examItems: 'migration.entity.examItems',
   examEvidence: 'migration.entity.examEvidence',
+  summaryFigures: 'migration.entity.summaryFigures',
 };
 
 export function entityLabel(key) {
