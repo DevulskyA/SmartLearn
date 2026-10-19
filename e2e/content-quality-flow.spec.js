@@ -213,6 +213,11 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
       return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
     }, href.split('#')[0]);
     expect(pdf).toEqual({ status: 200, type: 'application/pdf', head: '%PDF-' });
+    // the opened source block fits a 375px screen (long page text + the link must not push the page sideways)
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await page.setViewportSize({ width: 375, height: 800 });
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator(`#study-now-${outcomes[i]}-btn`).click();
   }
 
