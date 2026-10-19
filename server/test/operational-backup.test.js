@@ -12,6 +12,7 @@ import * as learningUnits from '../src/services/learning-units.js';
 import * as exercises from '../src/services/exercises.js';
 import { acceptUpload } from '../src/services/source-storage.js';
 import * as ops from '../src/operational-backup.js';
+import * as figures from '../src/services/summary-figures.js';
 
 const PDF = (marker) => Buffer.from(`%PDF-1.4\n1 0 obj\n<< /Marker (${marker}) >>\nendobj\ntrailer\n<< >>\n%%EOF\n`, 'latin1');
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -250,5 +251,27 @@ test('CLI: --package / --verify / --rehearse work end to end, a damaged package 
     assert.equal(t19.status, 0, t19.stderr);
     assert.match(t19.stdout, /Physical backup written/);
     assert.equal(cli([]).status, 1, 'no args prints usage');
+  } finally { env.cleanup(); }
+});
+
+test('summary figures travel inside the database: after backup and restore the image bytes and the summary text that points at them are intact', async () => {
+  const env = makeEnv();
+  try {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('figure-body')]);
+    const figure = figures.create(env.db, env.userId, { buffer: png, alt: 'Esquema' });
+    const body = `Texto com fórmula $x^2$.\n\n![Esquema](smartlearn-figure:${figure.id} "Figura 1")`;
+    env.db.prepare('UPDATE learning_units SET summary_body = ? WHERE id = ?').run(body, env.unit.id);
+
+    const dest = join(env.root, 'backups', 'fig');
+    await ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, destDir: dest });
+    assert.deepEqual(ops.verifyOperationalBackup(dest), []);
+    const target = join(env.root, 'restored');
+    await ops.restoreOperationalBackup(dest, target);
+
+    const restored = openDb(join(target, 'smartlearn.db'));
+    try {
+      assert.deepEqual(figures.read(restored, env.userId, figure.id).bytes, png);
+      assert.equal(restored.prepare('SELECT summary_body FROM learning_units WHERE id = ?').get(env.unit.id).summary_body, body);
+    } finally { restored.close(); }
   } finally { env.cleanup(); }
 });
