@@ -204,7 +204,7 @@ function citedPagesFor(db, userId, row, draft) {
   return db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
     .all(userId, proposal.source_id)
     .filter((p) => cited.has(p.page_index))
-    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP) }));
+    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP), sourceId: proposal.source_id }));
 }
 
 /**

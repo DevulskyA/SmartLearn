@@ -34,6 +34,7 @@ export function createSourceDetails(label, pages) {
       createTextElement("p", "study-now-error-label", t("sourceDetails.pageLabel", { pageIndex: page.pageIndex })),
       createTextElement("p", "study-now-source-text", page.text),
     );
+    if (page.sourceId != null) details.append(originalPdfLink(page));
   }
   return details;
 }
@@ -86,6 +87,6 @@ export async function appendSummarySources(container, unitId, learningUnits) {
   const pages = sources.map((s) => s.pageIndex);
   container.append(createSourceDetails(
     tn("sourceDetails.summaryOrigin", pages.length, { name, pages: formatPageList(pages) }),
-    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
+    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText, sourceId: s.sourceId })),
   ));
 }

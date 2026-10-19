@@ -41,6 +41,15 @@ test('createSourceDetails: collapsed <details> with a <summary> label, then labe
   });
 });
 
+test('createSourceDetails: a page that knows its source gets a link to the ORIGINAL PDF at that page; one that does not gets none', () => {
+  const el = createSourceDetails('Fonte', [{ pageIndex: 269, text: 'texto', sourceId: 7 }, { pageIndex: 270, text: 'outro' }]);
+  const links = el.children.filter((c) => c.tagName === 'a');
+  assert.equal(links.length, 1);
+  assert.equal(links[0].href, '/v1/sources/7/file#page=269');
+  assert.equal(links[0].textContent, 'Abrir o PDF original, página 269');
+  assert.equal(links[0].target, '_blank');
+});
+
 test('createSourceDetails: a page without text is left out entirely (no empty label)', () => {
   const el = createSourceDetails('x', [{ pageIndex: 1, text: '' }, { pageIndex: 2 }, { pageIndex: 3, text: 'ok' }]);
   assert.deepEqual(el.children.slice(1).map((c) => c.textContent), ['Página 3', 'ok']);

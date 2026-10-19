@@ -90,6 +90,14 @@ test('the draft opens as a lesson editor with four separate areas; the rest of t
   await editor.getByRole('tab', { name: /Fonte/ }).click();
   await expect(editor.locator('[data-panel="source"]')).toContainText('aula.pdf');
   await expect(editor.locator('[data-panel="source"]')).toContainText('exatamente a fonte aprovada');
+  // the excerpts are cut at 1.500 characters: the reviewer can open the ORIGINAL PDF at each cited page
+  const original = editor.locator('[data-panel="source"] .study-now-source-open').first();
+  await expect(original).toHaveAttribute('href', /\/v1\/sources\/\d+\/file#page=\d+$/);
+  const pdfHead = await page.evaluate(async (href) => {
+    const res = await fetch(href.split('#')[0], { credentials: 'include' });
+    return { status: res.status, head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+  }, await original.getAttribute('href'));
+  expect(pdfHead).toEqual({ status: 200, head: '%PDF-' });
   await editor.getByRole('tab', { name: /Revisão/ }).click();
   await expect(editor.locator('[data-panel="review"]')).toBeVisible();
 });
