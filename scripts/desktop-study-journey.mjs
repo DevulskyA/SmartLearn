@@ -192,9 +192,17 @@ async function step(n, name, fn) {
     entry.status = 'FAIL';
     entry.error = String(error?.message ?? error).split('\n').slice(0, 6).join(' | ');
     state.halted = true;
+    // what the student's screen held at the moment of the failure (review rows and their visibility), to diagnose without guessing
+    entry.dom = await page?.evaluate(() => [...document.querySelectorAll('.review-row')].slice(0, 20).map((r) => ({
+      id: r.dataset.reviewId, shown: r.offsetParent !== null, done: r.classList.contains('is-done') || r.dataset.done || null, text: r.innerText.replace(/\s+/g, ' ').slice(0, 70),
+    }))).catch(() => null);
   }
   const newErrors = consoleErrors.slice(errorsBefore);
   if (newErrors.length) entry.consoleErrors = newErrors.slice(0, 5);
+  // Optional: SL_JOURNEY_SHOTS=<dir> saves one screenshot of the window after every step, so a person (or an agent) can LOOK at what the student saw.
+  if (process.env.SL_JOURNEY_SHOTS && page) {
+    await page.screenshot({ path: join(process.env.SL_JOURNEY_SHOTS, `step-${String(n).padStart(2, '0')}.png`) }).catch(() => {});
+  }
   return entry;
 }
 const expect = (condition, message) => { if (!condition) throw new Error(`expectation failed: ${message}`); };
@@ -526,6 +534,47 @@ try {
     return { primaryAction: primaryText, reviewId, delayedWrites: delayed, startRequests: starts.length, judged: ctx.hoje, reviewTaskAttemptsViaApi: taskAttempts.map((t) => ({ exerciseId: t.exerciseId, outcome: t.outcome, maxAssistance: t.maxAssistance })) };
   });
 
+  await step(20, 'the student marks the review "Revisão feita" in Hoje: it completes ONCE, leaves the overdue list, shows as done today, creates one honest REVIEW evidence; unchecking is observed', async () => {
+    const id = ctx.reviewId;
+    const box = page.locator(`[data-action="review-done"][data-review-id="${id}"]`);
+    await box.waitFor({ state: 'visible', timeout: 10000 });
+    expect(!(await box.isChecked()), 'the box was already checked before the click');
+    const agendaBefore = await api('GET', '/v1/agenda');
+    const evidenceBefore = (await api('GET', '/v1/learning-evidence')).evidence;
+    await box.click();
+    await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.waitForFunction((rid) => document.querySelector(`[data-action="review-done"][data-review-id="${rid}"]`)?.checked === true, id, { timeout: 15000 });
+    const tasks = (await api('GET', '/v1/review-tasks')).reviewTasks;
+    const done = tasks.find((t) => String(t.id) === String(id));
+    expect(done?.completedAt, 'the server did not record the completion');
+    expect(tasks.filter((t) => t.completedAt).length === 1, `exactly ONE review completed, got ${tasks.filter((t) => t.completedAt).length}`);
+    const agendaAfter = await api('GET', '/v1/agenda');
+    expect(agendaAfter.overdue.length === agendaBefore.overdue.length - 1, `overdue ${agendaBefore.overdue.length} -> ${agendaAfter.overdue.length}`);
+    expect(agendaAfter.completedToday.some((t) => String(t.id) === String(id)), 'not listed as done today');
+    const evidenceAfter = (await api('GET', '/v1/learning-evidence')).evidence;
+    const added = evidenceAfter.filter((e) => !evidenceBefore.some((b) => b.id === e.id));
+    expect(added.length === 1 && added[0].type === 'REVIEW', `evidence added: ${JSON.stringify(added.map((e) => [e.type, e.questionsCount, e.correctCount]))}`);
+    expect(added[0].questionsCount === 2 && added[0].correctCount === 1, `the evidence must carry what the student judged (2 questions, 1 right): ${added[0].questionsCount}/${added[0].correctCount}`);
+    // the same checkbox again: what does the student get? (observed, not assumed)
+    await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).click();
+    await sleep(2500);
+    const tasksAfterUncheck = (await api('GET', '/v1/review-tasks')).reviewTasks;
+    const evidenceAfterUncheck = (await api('GET', '/v1/learning-evidence')).evidence;
+    const stillChecked = await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).isChecked();
+    ctx.afterReviewDone = { completedReviews: tasksAfterUncheck.filter((t) => t.completedAt).length, evidenceRows: evidenceAfterUncheck.length };
+    // a student who unchecks by accident checks it again: the SAME review must not count twice in the statistics
+    await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).click();
+    await page.waitForFunction((rid) => document.querySelector(`[data-action="review-done"][data-review-id="${rid}"]`)?.checked === true, id, { timeout: 15000 });
+    const evidenceAfterRecheck = (await api('GET', '/v1/learning-evidence')).evidence;
+    ctx.recheck = { evidenceRows: evidenceAfterRecheck.length, reviewRows: evidenceAfterRecheck.filter((e) => e.type === 'REVIEW').length };
+    return {
+      reviewId: id, completedAt: done.completedAt, overdue: [agendaBefore.overdue.length, agendaAfter.overdue.length], doneToday: true,
+      evidence: added.map((e) => ({ type: e.type, questions: e.questionsCount, correct: e.correctCount })),
+      afterUncheck: { boxStillChecked: stillChecked, completedReviews: ctx.afterReviewDone.completedReviews, evidenceRows: evidenceAfterUncheck.length, evidenceBeforeUncheck: evidenceAfter.length },
+      afterRecheck: ctx.recheck,
+    };
+  });
+
   await step(16, 'Hoje, Plano and Estatísticas load without error', async () => {
     const out = {};
     const before = consoleErrors.length;
@@ -599,6 +648,6 @@ try {
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.steps.sort((a, b) => a.step - b.step);
-result.pass = !result.fatal && result.steps.length === 19 && result.steps.every((s) => s.status === 'PASS');
+result.pass = !result.fatal && result.steps.length === 20 && result.steps.every((s) => s.status === 'PASS');
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);
