@@ -58,6 +58,8 @@ const TASK_SELECT = `
 // A review the student did NOT perform but that a performed one retired (experimental D-13 option) is no longer asked for. Without a row in
 // review_task_supersessions (every V1 flow) this filter removes nothing.
 const NOT_SUPERSEDED = ' AND NOT EXISTS (SELECT 1 FROM review_task_supersessions sup WHERE sup.user_id = rt.user_id AND sup.task_id = rt.id)';
+// A unit whose reviews the student paused is not asked for (experimental). With no pause event (every V1 flow) this removes nothing.
+const NOT_PAUSED = " AND COALESCE((SELECT p.action FROM review_unit_pauses p WHERE p.user_id = rt.user_id AND p.unit_id = rt.unit_id ORDER BY p.id DESC LIMIT 1), 'RESUME') != 'PAUSE'";
 
 /**
  * Agenda buckets with explicit local-day semantics (design.md §4).
@@ -71,9 +73,9 @@ export function agenda(db, userId, { date, timezoneOverride } = {}) {
   const today = date ?? localDateString(new Date(), timezone);
   const tomorrow = addDays(today, 1);
 
-  const overdue = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
-  const dueToday = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
-  const dueTomorrow = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, tomorrow).map(taskDto);
+  const overdue = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
+  const dueToday = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
+  const dueTomorrow = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, tomorrow).map(taskDto);
 
   // completedToday: any task whose completed_at falls on `today` in the
   // user's timezone — computed in JS (not SQL date()) so the same
@@ -99,11 +101,15 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
   const titles = new Map(tasks.map((t) => [t.unitId, t.unitTitle]));
   const subjects = new Map(tasks.map((t) => [t.unitId, t.subjectId]));
   const brief = (t) => (t ? { id: t.id, dueDate: t.dueDate, offsetDays: t.offsetDays } : null);
+  const paused = pausedUnitIds(db, userId);
   const units = deriveObligations(tasks, today).map((u) => ({
     unitId: u.unitId,
     unitTitle: titles.get(u.unitId),
     subjectId: subjects.get(u.unitId),
-    required: brief(u.required),
+    paused: paused.has(u.unitId),
+    // a paused unit owes nothing today, but what WOULD be owed stays visible (the plan lists it as deferred with the reason PAUSED)
+    required: paused.has(u.unitId) ? null : brief(u.required),
+    pausedRequired: paused.has(u.unitId) ? brief(u.required) : null,
     collapsedCount: u.collapsed.length,
     upcoming: brief(u.upcoming),
     pendingCount: u.pendingCount,
@@ -111,7 +117,43 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
   return { date: today, timezone, recovery, units };
 }
 
+/** Units whose latest pause event is PAUSE. */
+function pausedUnitIds(db, userId) {
+  const rows = db.prepare(`
+    SELECT p.unit_id AS unitId, p.action FROM review_unit_pauses p
+    WHERE p.user_id = ? AND p.id = (SELECT MAX(q.id) FROM review_unit_pauses q WHERE q.user_id = p.user_id AND q.unit_id = p.unit_id)
+  `).all(userId);
+  return new Set(rows.filter((r) => r.action === 'PAUSE').map((r) => r.unitId));
+}
+
+function setPause(db, userId, unitId, action) {
+  const unit = db.prepare('SELECT id FROM learning_units WHERE user_id = ? AND id = ?').get(userId, unitId);
+  if (!unit) throw new ReviewError('NOT_FOUND', 'Unidade não encontrada.');
+  const wasPaused = pausedUnitIds(db, userId).has(unitId);
+  const changed = (action === 'PAUSE') !== wasPaused;
+  if (changed) db.prepare('INSERT INTO review_unit_pauses (user_id, unit_id, action, at) VALUES (?, ?, ?, ?)').run(userId, unitId, action, new Date().toISOString());
+  return { unitId, paused: action === 'PAUSE', changed };
+}
+
+/**
+ * EXPERIMENTAL: the student pauses (or resumes) the reviews of one unit. A fact in an append-only log: it completes nothing, retires nothing, moves no
+ * date and is no learning; repeating it changes nothing (idempotent). A paused unit is not asked for (agenda, obligations) but stays visible in the plan.
+ */
+export const pauseUnit = (db, userId, unitId) => setPause(db, userId, unitId, 'PAUSE');
+export const resumeUnit = (db, userId, unitId) => setPause(db, userId, unitId, 'RESUME');
+
 export const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE: 'ACTUAL_DATE' });
+
+/**
+ * Named combinations of the two parameters. V1 is today's calendar. DECIDED is the student's experimental decision of 2026-10-19: a performed review
+ * satisfies the unit's single obligation (D-13), nothing is retired or forgiven - the later stages, overdue or not, are re-dated from the day it was
+ * really done, so progression advances ONE stage per performed review and the planned dates that passed stay in the reschedule log (D-14).
+ * SUPERSEDE_OVERDUE is NOT part of DECIDED: it would skip stages, which D-14 forbids.
+ */
+export const PROFILES = Object.freeze({
+  V1: { recovery: RECOVERY.NONE, anchor: ANCHORS.PLANNED_DATE },
+  DECIDED: { recovery: RECOVERY.NONE, anchor: ANCHORS.ACTUAL_DATE },
+});
 
 /**
  * EXPERIMENTAL (HG-09 / D-12 option 3), D4b: perform the ONE review a unit requires today, with the two open decisions as NAMED parameters.
@@ -122,13 +164,16 @@ export const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE
  * The completion itself is the existing complete() (same rules, same evidence rules: without questions it is activity, not evidence).
  * Disposable databases only until the student integrates migration 034.
  */
-export function completeObligation(db, userId, unitId, { date, timezoneOverride, recovery = RECOVERY.NONE, anchor = ANCHORS.PLANNED_DATE, questionsCount, correctCount, operationKey } = {}, now = () => new Date()) {
+export function completeObligation(db, userId, unitId, { date, timezoneOverride, profile, recovery: recoveryArg, anchor: anchorArg, questionsCount, correctCount, operationKey } = {}, now = () => new Date()) {
+  if (profile !== undefined && !Object.hasOwn(PROFILES, profile)) throw new ReviewError('VALIDATION_FAILED', 'profile não é reconhecido.', 'profile');
+  const recovery = recoveryArg ?? PROFILES[profile ?? 'V1'].recovery;
+  const anchor = anchorArg ?? PROFILES[profile ?? 'V1'].anchor;
   if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
   if (!Object.values(ANCHORS).includes(anchor)) throw new ReviewError('VALIDATION_FAILED', 'anchor não é reconhecido.', 'anchor');
   const run = db.transaction(() => {
     const view = obligations(db, userId, { date, timezoneOverride, recovery });
     const entry = view.units.find((u) => u.unitId === unitId);
-    const base = { recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [] };
+    const base = { profile: profile ?? null, recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [], ...(entry?.paused ? { reason: 'PAUSED' } : {}) };
     if (!entry?.required) return base;
     const completed = complete(db, userId, entry.required.id, { questionsCount, correctCount, operationKey }, now);
     const nowIso = completed.completedAt;

@@ -4,7 +4,7 @@
 // without a minute estimate is `UNESTIMATED` (not guessed), an exam date is an optional input and only matters when it is given.
 // The weights are NAMED parameters with documented experimental defaults, not a policy.
 //
-// item = { id, minutes: number|null, dueDate: 'YYYY-MM-DD'|null, required: boolean, examDate?: 'YYYY-MM-DD' }
+// item = { id, minutes: number|null, dueDate: 'YYYY-MM-DD'|null, required: boolean, examDate?: 'YYYY-MM-DD', paused?: boolean }
 
 export const DEFAULT_WEIGHTS = Object.freeze({
   requiredFirst: 1000,   // an item the schedule says is owed today comes before anything optional
@@ -44,6 +44,8 @@ export function planDay({ items, availableMinutes, today, weights = DEFAULT_WEIG
   const deferred = [];
   let used = 0;
   for (const { item, score, reasons } of ranked) {
+    // a unit the student paused is never planned, but never hidden either
+    if (item.paused) { deferred.push({ id: item.id, reason: 'PAUSED', score, reasons }); continue; }
     if (item.minutes === null || item.minutes === undefined || !(item.minutes > 0)) { deferred.push({ id: item.id, reason: 'UNESTIMATED', score, reasons }); continue; }
     if (item.minutes > availableMinutes) { deferred.push({ id: item.id, reason: 'LONGER_THAN_THE_DAY', score, reasons }); continue; }
     if (used + item.minutes > availableMinutes) { deferred.push({ id: item.id, reason: 'NO_TIME_LEFT', score, reasons }); continue; }

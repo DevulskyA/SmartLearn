@@ -90,7 +90,7 @@ export function registerReviewRoutes(app, db) {
         type: 'object',
         properties: {
           date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 },
-          recovery: { type: 'string' }, anchor: { type: 'string' },
+          profile: { type: 'string' }, recovery: { type: 'string' }, anchor: { type: 'string' },
           questionsCount: { type: 'integer' }, correctCount: { type: 'integer' }, operationKey: { type: 'string' },
         },
       },
@@ -103,6 +103,19 @@ export function registerReviewRoutes(app, db) {
       return reviews.completeObligation(db, request.actor.userId, unitId, { ...rest, timezoneOverride: timezone });
     } catch (err) { return handleError(err, reply); }
   });
+
+  // EXPERIMENTAL: pause / resume the reviews of one unit (append-only fact, idempotent; completes and re-dates nothing).
+  for (const action of ['pause', 'resume']) {
+    app.post(`/review-obligations/:unitId/${action}`, {
+      schema: { params: { type: 'object', required: ['unitId'], properties: { unitId: { type: 'string' } } } },
+    }, async (request, reply) => {
+      const unitId = Number(request.params.unitId);
+      if (!Number.isInteger(unitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+      try {
+        return (action === 'pause' ? reviews.pauseUnit : reviews.resumeUnit)(db, request.actor.userId, unitId);
+      } catch (err) { return handleError(err, reply); }
+    });
+  }
 
   app.post('/review-tasks/:id/complete', {
     schema: {

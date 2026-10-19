@@ -10,16 +10,18 @@ import { planDay } from '../../../shared/daily-plan.js';
 export function dailyPlan(db, userId, { date, timezoneOverride, availableMinutes, perReviewMinutes, exams = {} } = {}) {
   if (!Number.isFinite(availableMinutes) || availableMinutes < 0) throw new Error('availableMinutes must be a non-negative number');
   const view = obligations(db, userId, { date, timezoneOverride });
-  const required = view.units.filter((u) => u.required);
+  // a paused unit keeps its would-be review in the list (reason PAUSED) so nothing the student owes disappears silently
+  const required = view.units.filter((u) => u.required || u.pausedRequired).map((u) => ({ ...u, task: u.required ?? u.pausedRequired }));
   const items = required.map((u) => ({
-    id: `review:${u.required.id}`,
+    id: `review:${u.task.id}`,
     minutes: Number.isFinite(perReviewMinutes) ? perReviewMinutes : null,
-    dueDate: u.required.dueDate,
-    required: true,
+    dueDate: u.task.dueDate,
+    required: !u.paused,
+    paused: u.paused,
     ...(exams[u.subjectId] ? { examDate: exams[u.subjectId] } : {}),
   }));
   const result = planDay({ items, availableMinutes, today: view.date });
-  const unitOf = new Map(required.map((u) => [`review:${u.required.id}`, { unitId: u.unitId, unitTitle: u.unitTitle }]));
+  const unitOf = new Map(required.map((u) => [`review:${u.task.id}`, { unitId: u.unitId, unitTitle: u.unitTitle }]));
   const decorate = (x) => ({ ...x, ...unitOf.get(x.id) });
   return { date: view.date, ...result, planned: result.planned.map(decorate), deferred: result.deferred.map(decorate) };
 }
