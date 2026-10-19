@@ -1,5 +1,6 @@
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
 import { get as getSettings } from './settings.js';
+import { deriveObligations, RECOVERY } from '../../../shared/review-obligation.js';
 
 export class ReviewError extends Error {
   constructor(code, message, field) {
@@ -79,6 +80,29 @@ export function agenda(db, userId, { date, timezoneOverride } = {}) {
     .map(taskDto);
 
   return { date: today, timezone, overdue, today: dueToday, tomorrow: dueTomorrow, completedToday };
+}
+
+/**
+ * EXPERIMENTAL (HG-09 / D-12 option 3), read-only: the one review each unit requires today, with its older overdue stages counted under it.
+ * Nothing is written and no due date moves. `recovery` (D-13) is only echoed: it describes what completing the required review WOULD do and is
+ * not applied here; the anchor of the next interval (D-14) is not modelled. Not used by any screen.
+ */
+export function obligations(db, userId, { date, timezoneOverride, recovery = RECOVERY.NONE } = {}) {
+  if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
+  const timezone = timezoneOverride ?? getUserTimezone(db, userId);
+  const today = date ?? localDateString(new Date(), timezone);
+  const tasks = db.prepare(`${TASK_SELECT} ORDER BY rt.due_date`).all(userId).map((row) => ({ ...taskDto(row), completedAt: row.completed_at ?? null }));
+  const titles = new Map(tasks.map((t) => [t.unitId, t.unitTitle]));
+  const brief = (t) => (t ? { id: t.id, dueDate: t.dueDate, offsetDays: t.offsetDays } : null);
+  const units = deriveObligations(tasks, today).map((u) => ({
+    unitId: u.unitId,
+    unitTitle: titles.get(u.unitId),
+    required: brief(u.required),
+    collapsedCount: u.collapsed.length,
+    upcoming: brief(u.upcoming),
+    pendingCount: u.pendingCount,
+  }));
+  return { date: today, timezone, recovery, units };
 }
 
 /**

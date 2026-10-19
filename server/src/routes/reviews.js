@@ -43,6 +43,16 @@ export function registerReviewRoutes(app, db) {
     return reviews.agenda(db, request.actor.userId, { date, timezoneOverride: timezone });
   });
 
+  // EXPERIMENTAL (HG-09 / D-12 option 3), read-only; no screen uses it. See reviews.obligations().
+  app.get('/review-obligations', {
+    schema: { querystring: { type: 'object', properties: { date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 }, recovery: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const { date, timezone, recovery } = request.query;
+    try {
+      return reviews.obligations(db, request.actor.userId, { date, timezoneOverride: timezone, recovery });
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/review-tasks/:id/complete', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
