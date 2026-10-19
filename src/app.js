@@ -26,6 +26,7 @@ import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
+import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experimental-obligations-ui.js";
 import { formatPageList, createSourceDetails, citationDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
@@ -1224,8 +1225,22 @@ async function renderWeakPractice(today) {
 // Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
 // that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
 let todayRenderSeq = 0;
+// EXPERIMENTAL panel on Hoje (see experimental-obligations-ui.js): only when the student turned the switch on in Configurações.
+function refreshExperimentPanel() {
+  const host = document.querySelector("#experiment-host");
+  if (!host) return;
+  if (isExperimentOn()) void renderObligationsPanel(host);
+  else host.replaceChildren();
+}
+const experimentSwitch = document.querySelector("#experiment-switch");
+if (experimentSwitch) {
+  experimentSwitch.checked = isExperimentOn();
+  experimentSwitch.addEventListener("change", () => { setExperiment(experimentSwitch.checked); refreshExperimentPanel(); });
+}
+
 export async function renderToday() {
   const renderId = ++todayRenderSeq;
+  refreshExperimentPanel();
   const existingOfflineBanner = document.querySelector("#offline-banner");
   // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
   // nothing about a loopback backend's reachability — Desktop must not
