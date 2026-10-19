@@ -196,6 +196,16 @@ async function step(n, name, fn) {
     entry.dom = await page?.evaluate(() => [...document.querySelectorAll('.review-row')].slice(0, 20).map((r) => ({
       id: r.dataset.reviewId, shown: r.offsetParent !== null, done: r.classList.contains('is-done') || r.dataset.done || null, text: r.innerText.replace(/\s+/g, ' ').slice(0, 70),
     }))).catch(() => null);
+    // ...and what the server and the persisted state said at the same instant: three views of one moment (database state via API, DOM, screen counters)
+    entry.apiState = await Promise.all([api('GET', '/v1/agenda'), api('GET', '/v1/review-tasks')]).then(([a, t]) => ({
+      overdueIds: a.overdue.map((x) => x.id), todayIds: a.today.map((x) => x.id), doneTodayIds: a.completedToday.map((x) => x.id),
+      completedTaskIds: t.reviewTasks.filter((x) => x.completedAt).map((x) => x.id), taskCount: t.reviewTasks.length, dates: t.reviewTasks.slice(0, 6).map((x) => [x.id, x.dueDate]),
+    })).catch((e) => String(e).slice(0, 120));
+    entry.screen = await page?.evaluate(() => ({
+      hash: location.hash, primary: document.querySelector('#today-primary-action-text')?.innerText?.slice(0, 120) ?? null,
+      counters: [...document.querySelectorAll('[data-count-for]')].map((c) => [c.dataset.countFor, c.textContent.trim()]),
+      activeScreen: document.querySelector('.screen:not([hidden])')?.id ?? null, scrollY: Math.round(window.scrollY),
+    })).catch(() => null);
   }
   const newErrors = consoleErrors.slice(errorsBefore);
   if (newErrors.length) entry.consoleErrors = newErrors.slice(0, 5);
