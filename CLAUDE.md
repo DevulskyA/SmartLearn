@@ -12,6 +12,8 @@ deliver the smallest solution that is complete, correct, readable and maintainab
 - Smallest check that would catch a material failure first, widen with risk; no speculative refactors, redundant docs, extra agents or planning that buy nothing.
 - "Smallest" means the smallest solution that stays correct for the relevant cases, not the fewest lines: never trade away data integrity, correctness, security, accessibility, medical fidelity, compatibility or tests the risk requires. Ask a human only where the existing authority rules say so; do not contest legitimate requests (this is not an ULTRA mode).
 
+Operational contract (permanent; canonical text: rule 10b in `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md`): authorized and executable task → act before reporting; done → show result and evidence; blocker → prove it and check independent authorized work; informational question → answer with no side effects; `/loop` with no material change → silence; never invent work or exceed an authorization. "Accepted", "understood", "will do later" are NOT deliveries. A recommendation is not a human decision.
+
 Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` and
 `.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` in full: the canonical inherited quality-and-evolution contract.
 Task-local requirements add to it; they do not silently weaken it.
