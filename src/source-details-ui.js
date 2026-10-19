@@ -38,6 +38,18 @@ export function createSourceDetails(label, pages) {
   return details;
 }
 
+// "Abrir o PDF original, página N": the stored file of the source (owner-only route), opened by the PDF viewer at that page.
+function originalPdfLink(citation) {
+  const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
+  const link = document.createElement("a");
+  link.className = "study-now-source-open";
+  link.href = `${base}/v1/sources/${citation.sourceId}/file#page=${citation.pageIndex}`;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = t("appStudyNow.openOriginal", { page: citation.pageIndex });
+  return link;
+}
+
 // The exact source page(s) an exercise was drafted from (frozen at acceptance), one collapsed block per page, so the
 // student can go back to the material when an answer was wrong. Citations without page text (manual exercises, edited
 // versions) produce nothing: no invented explanation. `citations` = [{sourceName, pageIndex, pageText}].
@@ -50,6 +62,7 @@ export function citationDetails(citations) {
     const summary = document.createElement("summary");
     summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
     details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
+    if (citation.sourceId != null) details.append(originalPdfLink(citation));
     blocks.push(details);
   }
   return blocks;

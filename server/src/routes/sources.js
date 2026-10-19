@@ -35,6 +35,24 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
     } catch (err) { return handleError(err, reply); }
   });
 
+  // The original PDF, for "go back to the material". GET only, owner only, never cached, bytes verified against the upload checksum.
+  app.get('/sources/:id/file', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const { bytes, originalName } = sourceStorage.readVerifiedFile(db, request.actor.userId, id, sourcesDir);
+      const ascii = originalName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+      reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(originalName)}`)
+        .header('cache-control', 'private, no-store')
+        .header('x-content-type-options', 'nosniff');
+      return reply.send(bytes);
+    } catch (err) { return handleError(err, reply); }
+  });
+
   // Multipart, not JSON: no `schema.body` is declared, so AJV never sees
   // this route's body at all. The fastify-multipart plugin (registered on
   // this same /v1 context, see app.js) streams the part and enforces

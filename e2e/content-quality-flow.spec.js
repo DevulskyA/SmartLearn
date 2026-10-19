@@ -203,6 +203,16 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
     await expect(page.locator('#study-now-explanation-text')).toContainText('Por quê:');
     // back to the material, right at the reveal: the cited page, not only on the final result
     await expect(page.locator('.study-now-source-box .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+    // ... and the original PDF itself is one click away: a real, owner-authenticated PDF at that page
+    const open = page.locator('.study-now-source-box .study-now-source-open').first();
+    await expect(open).toHaveText(/Abrir o PDF original, página \d+/);
+    const href = await open.getAttribute('href');
+    expect(href).toMatch(/\/v1\/sources\/\d+\/file#page=\d+$/);
+    const pdf = await page.evaluate(async (path) => {
+      const res = await fetch(path, { credentials: 'include' });
+      return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+    }, href.split('#')[0]);
+    expect(pdf).toEqual({ status: 200, type: 'application/pdf', head: '%PDF-' });
     await page.locator(`#study-now-${outcomes[i]}-btn`).click();
   }
 

@@ -48,17 +48,24 @@ test('createSourceDetails: a page without text is left out entirely (no empty la
 
 test('citationDetails: one collapsed block per cited page, exactly the frozen text; nothing for manual/edited exercises', () => {
   const blocks = citationDetails([
-    { sourceName: 'fisio.pdf', pageIndex: 269, pageText: 'Kf é mais de 100 vezes maior' },
-    { sourceName: 'fisio.pdf', pageIndex: 270, pageText: null },
+    { sourceId: 7, sourceName: 'fisio.pdf', pageIndex: 269, pageText: 'Kf é mais de 100 vezes maior' },
+    { sourceId: 7, sourceName: 'fisio.pdf', pageIndex: 270, pageText: null },
+    { sourceName: 'sem-id.pdf', pageIndex: 3, pageText: 'sem arquivo para abrir' },
   ]);
-  assert.equal(blocks.length, 1);
+  assert.equal(blocks.length, 2);
   assert.deepEqual(blocks[0].shape(), {
     tag: 'details', cls: 'study-now-source', text: '',
     kids: [
       { tag: 'summary', cls: '', text: 'Trecho do material · fisio.pdf, página 269', kids: [] },
       { tag: 'p', cls: 'study-now-source-text', text: 'Kf é mais de 100 vezes maior', kids: [] },
+      { tag: 'a', cls: 'study-now-source-open', text: 'Abrir o PDF original, página 269', kids: [] },
     ],
   });
+  const link = blocks[0].children[2];
+  assert.equal(link.href, '/v1/sources/7/file#page=269');
+  assert.equal(link.target, '_blank');
+  assert.equal(link.rel, 'noopener');
+  assert.equal(blocks[1].children.length, 2, 'no source id = no link to a file that cannot be addressed');
   assert.deepEqual(citationDetails([]), []);
   assert.deepEqual(citationDetails(undefined), []);
 });
