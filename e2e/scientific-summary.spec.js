@@ -102,3 +102,29 @@ test('Plano: formulas, table and list are drawn; the text stays canonical; hosti
   await row.locator('.plan-edit-summary-btn').click();
   await expect(row.locator('.plan-summary-textarea')).toHaveValue(SUMMARY);
 });
+
+test('Plano: the insert bar puts a formula and a table at the cursor and they are drawn after saving', async ({ page }) => {
+  await page.goto('/#register');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#show-subject-form').click();
+  await page.locator('#new-subject-input').fill('Fisiologia');
+  await page.locator('#new-subject-form button[type="submit"]').click();
+  await page.locator('#study-date').fill('2026-04-01');
+  await page.locator('#study-content').fill('Barra de inserção');
+  await page.locator('#study-form button[type="submit"]').click();
+  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Barra de inserção' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('.plan-edit-summary-btn').click();
+  const textarea = row.locator('.plan-summary-textarea');
+  await textarea.fill('Relação: ');
+  await row.getByRole('button', { name: 'Fórmula', exact: true }).click();
+  await page.keyboard.type('x^2');
+  await row.getByRole('button', { name: 'Tabela' }).click();
+  await expect(textarea).toHaveValue(/Relação: \$x\^2\$\n*\| Coluna 1 \| Coluna 2 \|/);
+  await row.locator('.plan-summary-edit-actions .primary-button').click();
+  await expect(row.locator('.plan-summary-body .katex')).toHaveCount(1, { timeout: 5000 });
+  await expect(row.locator('.plan-summary-body table.summary-table th')).toHaveText(['Coluna 1', 'Coluna 2']);
+});

@@ -4886,3 +4886,10 @@ h1 {
   font-size: 0.85em;
   margin: 0.25rem 0 0;
 }
+
+.summary-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.35rem;
+}

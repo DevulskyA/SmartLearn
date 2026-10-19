@@ -91,3 +91,24 @@ test('formulas are kept as written (the source of truth is the text), and a pars
   assert.equal(blocks[0].parts[1].tex, 'a+b');
   assert.equal(blocks[1].tex, 'x = \\frac{1}{2}');
 });
+
+test('toolbar insertion: formula wraps the selection or a placeholder; block formula and table start on their own paragraph; the result parses', async () => {
+  const { applyInsertion } = await import('../src/summary-toolbar.js');
+  let r = applyInsertion('A massa é E', 10, 11, 'inline');
+  assert.equal(r.value, 'A massa é $E$');
+  assert.equal(r.value.slice(r.selectFrom, r.selectTo), 'E');
+  r = applyInsertion('texto', 5, 5, 'block');
+  assert.equal(r.value, 'texto\n\n$$\nfórmula\n$$\n');
+  assert.equal(r.value.slice(r.selectFrom, r.selectTo), 'fórmula');
+  assert.deepEqual(parseSummary(r.value).map((b) => b.type), ['paragraph', 'math']);
+  r = applyInsertion('', 0, 0, 'table');
+  assert.deepEqual(parseSummary(r.value).map((b) => b.type), ['table']);
+  assert.equal(r.value.slice(r.selectFrom, r.selectTo), 'Coluna 1');
+});
+
+test('toolbar: a block inserted with the cursor mid-line goes after that line, never inside a formula', async () => {
+  const { applyInsertion } = await import('../src/summary-toolbar.js');
+  const r = applyInsertion('Relação: $x^2$ fim\noutra', 13, 13, 'table');
+  assert.ok(r.value.startsWith('Relação: $x^2$ fim\n\n| Coluna 1'), r.value);
+  assert.ok(r.value.endsWith('\noutra'));
+});

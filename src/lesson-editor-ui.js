@@ -6,6 +6,7 @@
 // state words, counts, buttons and findings are separate elements, always separated by real text, never glued to the content.
 import { createTextElement } from "./dom-utils.js";
 import { renderSummary as renderSummaryBody } from "./summary-render.js";
+import { createSummaryToolbar } from "./summary-toolbar.js";
 import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
@@ -152,6 +153,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryRead = document.createElement("div");
   summaryRead.className = "lesson-summary-read";
   summaryRead.hidden = true;
+  summaryField.wrap.insertBefore(createSummaryToolbar(summaryField.input), summaryField.input);
   summaryPanel.append(summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
 
   // ---- QUESTIONS panel -------------------------------------------------------------------------------------------------

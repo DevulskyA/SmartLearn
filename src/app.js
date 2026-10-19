@@ -33,6 +33,7 @@ import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { renderSummary } from "./summary-render.js";
+import { createSummaryToolbar } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -1876,6 +1877,7 @@ export async function renderPlan() {
         });
 
         summaryDisplayWrap.append(summaryText, summaryPlaceholder);
+        summaryEditArea.prepend(createSummaryToolbar(summaryTextarea));
         summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
         detail.append(summarySection);
 
