@@ -1,6 +1,7 @@
 import * as sourceStorage from '../services/source-storage.js';
 import { extractSource, SourceExtractionError } from '../services/source-extraction.js';
 import { config } from '../config.js';
+import * as sourceOpenings from '../services/source-openings.js';
 
 function handleError(err, reply) {
   if (err instanceof sourceStorage.SourceError || err instanceof SourceExtractionError) {
@@ -32,6 +33,56 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { source: sourceStorage.getById(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // EXPERIMENTAL return-to-source record: only the observable opening of the original document (never reading, never evidence). Idempotent per operationKey.
+  app.post('/source-openings', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['sourceId', 'context', 'operationKey'],
+        properties: { sourceId: { type: 'integer' }, pageIndex: { type: ['integer', 'null'] }, context: { type: 'string' }, operationKey: { type: 'string', maxLength: 100 } },
+      },
+    },
+  }, async (request, reply) => {
+    try {
+      return sourceOpenings.record(db, request.actor.userId, request.body);
+    } catch (err) {
+      if (err instanceof sourceOpenings.SourceOpeningError) {
+        reply.status(err.code === 'NOT_FOUND' ? 404 : 400);
+        return { error: { code: err.code, field: err.field, message: err.message } };
+      }
+      throw err;
+    }
+  });
+
+  app.get('/source-openings', {
+    schema: { querystring: { type: 'object', properties: { sourceId: { type: 'string' } } } },
+  }, async (request, reply) => {
+    let sourceId;
+    if (request.query.sourceId !== undefined) {
+      sourceId = Number(request.query.sourceId);
+      if (!Number.isInteger(sourceId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    }
+    return { openings: sourceOpenings.list(db, request.actor.userId, { sourceId }) };
+  });
+
+  // The original PDF, for "go back to the material". GET only, owner only, never cached, bytes verified against the upload checksum.
+  app.get('/sources/:id/file', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const { bytes, originalName } = sourceStorage.readVerifiedFile(db, request.actor.userId, id, sourcesDir);
+      const ascii = originalName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+      reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(originalName)}`)
+        .header('cache-control', 'private, no-store')
+        .header('x-content-type-options', 'nosniff');
+      return reply.send(bytes);
     } catch (err) { return handleError(err, reply); }
   });
 

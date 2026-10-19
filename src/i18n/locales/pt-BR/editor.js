@@ -30,6 +30,7 @@ export default {
   'editor.summary.source.one': 'Fonte do resumo · página {pages}',
   'editor.summary.source.other': 'Fonte do resumo · páginas {pages}',
   'editor.grounding.line': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo.',
+  'editor.grounding.none': 'Nenhuma das {total} frases do resumo tem trecho da fonte vinculado (rascunhos gerados antes desse registro não trazem). Nada foi conferido automaticamente: confira o resumo na fonte.',
   'editor.grounding.lineOrphaned.one': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo. {orphaned} apontamento antigo deixou de valer porque a frase ou a fonte mudou.',
   'editor.grounding.lineOrphaned.other': 'Trecho da fonte confirmado em {supported} de {total} frases do resumo. {orphaned} apontamentos antigos deixaram de valer porque a frase ou a fonte mudou.',
   'editor.grounding.unconfirmed': 'Frases sem trecho confirmado, ou só em parte ({count}) — confira na fonte',

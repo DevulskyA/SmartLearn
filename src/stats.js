@@ -1,5 +1,5 @@
 import { getReviewScoreValues } from "./review-score.js";
-import { compareText } from "./i18n/format.js";
+import { compareText, formatDecimal } from "./i18n/format.js";
 import { t } from "./i18n/index.js";
 
 function getLocalDateValue(date = new Date()) {
@@ -44,7 +44,7 @@ export function layoutEvolutionChart(dataPoints, plotWidth, minLabelGap = 46) {
 /** "71,4%" for a real average; "—" when there is no evidence yet (null), never "0,0%". */
 export function formatAverageScore(avgScore) {
   if (avgScore == null || !Number.isFinite(Number(avgScore))) return "—";
-  return `${Number(avgScore).toFixed(1).replace(".", ",")}%`;
+  return `${formatDecimal(Number(avgScore))}%`;
 }
 
 export const Stats = {

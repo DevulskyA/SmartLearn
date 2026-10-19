@@ -10,7 +10,7 @@ import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, summaryBlocks,
+  QUESTION_TYPE_LABELS, issueLabel, groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, summaryBlocks, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -297,9 +297,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const box = document.createElement("div");
     box.className = "summary-grounding";
     box.dataset.part = "summary-grounding";
-    box.append(createTextElement("p", "summary-grounding-line", g.orphaned > 0
-      ? t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned })
-      : t("editor.grounding.line", { supported: g.supported, total: g.total })));
+    box.append(createTextElement("p", "summary-grounding-line", groundingLine(g)));
     const unconfirmed = g.sentences.filter((sentence) => sentence.status !== "SOURCE_LINKED");
     if (unconfirmed.length > 0) {
       const details = document.createElement("details");

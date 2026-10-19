@@ -102,6 +102,8 @@ function withTimeout(promise, timeoutMs, onTimeoutCode) {
 }
 
 const isBlocking = (f) => f.severity === 'HIGH' || f.severity === 'MEDIUM';
+// LOW findings are advisories (e.g. the cross-language notice): the review list does not show them as points, so no count reported to the student includes them.
+const isActionable = (f) => f.severity !== 'LOW';
 const withSource = (findings, source) => findings.map((f) => ({ ...f, source }));
 
 /**
@@ -202,7 +204,7 @@ function citedPagesFor(db, userId, row, draft) {
   return db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
     .all(userId, proposal.source_id)
     .filter((p) => cited.has(p.page_index))
-    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP) }));
+    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP), sourceId: proposal.source_id }));
 }
 
 /**
@@ -852,7 +854,7 @@ const findingKey = (f) => `${f.issue}|${f.scope}|${f.generatedClaim ?? ''}`;
  * T-F2-03: the explicit "Reauditar". Deterministic rules only (no model, no network). Writes ONLY `audit` (new findings, rulesVersion,
  * auditedAt) in the draft JSON: summary, questions, their versions and the draft revision are untouched. Findings an earlier MODEL audit
  * raised about this very text are kept (they are not the deterministic rules' to judge); after a human edit they were already dropped.
- * Returns the draft and how many deterministic findings appeared/disappeared.
+ * Returns the draft and how many deterministic ACTIONABLE (non-LOW) findings appeared/disappeared, matching what the review list shows.
  */
 export function reauditDraft(db, userId, draftId, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
@@ -861,8 +863,8 @@ export function reauditDraft(db, userId, draftId, now = () => new Date()) {
   const deterministic = withSource(rescreen.findings, 'DETERMINISTIC');
   const keptModel = previous && !previous.editedByHuman ? (previous.findings ?? []).filter((f) => f.source === 'MODEL') : [];
   const findings = [...deterministic, ...keptModel];
-  const before = new Map((previous?.findings ?? []).filter((f) => f.source !== 'MODEL').map((f) => [findingKey(f), f]));
-  const after = new Map(deterministic.map((f) => [findingKey(f), f]));
+  const before = new Map((previous?.findings ?? []).filter((f) => f.source !== 'MODEL' && isActionable(f)).map((f) => [findingKey(f), f]));
+  const after = new Map(deterministic.filter(isActionable).map((f) => [findingKey(f), f]));
   const added = [...after.keys()].filter((k) => !before.has(k)).length;
   const removed = [...before.keys()].filter((k) => !after.has(k)).length;
   const audit = {

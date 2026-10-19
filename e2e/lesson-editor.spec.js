@@ -90,6 +90,14 @@ test('the draft opens as a lesson editor with four separate areas; the rest of t
   await editor.getByRole('tab', { name: /Fonte/ }).click();
   await expect(editor.locator('[data-panel="source"]')).toContainText('aula.pdf');
   await expect(editor.locator('[data-panel="source"]')).toContainText('exatamente a fonte aprovada');
+  // the excerpts are cut at 1.500 characters: the reviewer can open the ORIGINAL PDF at each cited page
+  const original = editor.locator('[data-panel="source"] .study-now-source-open').first();
+  await expect(original).toHaveAttribute('href', /\/v1\/sources\/\d+\/file#page=\d+$/);
+  const pdfHead = await page.evaluate(async (href) => {
+    const res = await fetch(href.split('#')[0], { credentials: 'include' });
+    return { status: res.status, head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+  }, await original.getAttribute('href'));
+  expect(pdfHead).toEqual({ status: 200, head: '%PDF-' });
   await editor.getByRole('tab', { name: /Revisão/ }).click();
   await expect(editor.locator('[data-panel="review"]')).toBeVisible();
 });
@@ -370,7 +378,7 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
       if (content.audit) {
         delete content.audit.rulesVersion;
         delete content.audit.auditedAt;
-        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'MEDIUM', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
       }
       db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), row.id);
     }

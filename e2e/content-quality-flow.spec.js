@@ -198,8 +198,41 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   const outcomes = ['correct', 'incorrect', 'correct'];
   for (let i = 0; i < 3; i += 1) {
     await expect(page.locator('#study-now-explanation-text')).toBeHidden();
+    await expect(page.locator('.study-now-source-box')).toBeHidden();
     await page.locator('#study-now-reveal-btn').click();
     await expect(page.locator('#study-now-explanation-text')).toContainText('Por quê:');
+    // back to the material, right at the reveal: the cited page, not only on the final result
+    await expect(page.locator('.study-now-source-box .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+    // ... and the original PDF itself is one click away: a real, owner-authenticated PDF at that page
+    const open = page.locator('.study-now-source-box .study-now-source-open').first();
+    await expect(open).toHaveText(/Abrir o PDF original, página \d+/);
+    const href = await open.getAttribute('href');
+    expect(href).toMatch(/\/v1\/sources\/\d+\/file#page=\d+$/);
+    const pdf = await page.evaluate(async (path) => {
+      const res = await fetch(path, { credentials: 'include' });
+      return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+    }, href.split('#')[0]);
+    expect(pdf).toEqual({ status: 200, type: 'application/pdf', head: '%PDF-' });
+    // clicking it opens the viewer INSIDE the app (an external browser has no session), at that page; Esc closes it
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await open.click();
+    const viewer = page.locator('.original-pdf-dialog[open]');
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator('.original-pdf-title')).toHaveText(/PDF original · página \d+/);
+    await expect(viewer.locator('.original-pdf-frame')).toHaveAttribute('src', /\/v1\/sources\/\d+\/file#page=\d+$/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.original-pdf-dialog[open]')).toHaveCount(0);
+    // the opening was recorded as a fact (and only that): one row, no evidence
+    await expect(async () => {
+      const rows = await page.evaluate(async (base) => (await (await fetch(`${base}/v1/source-openings`, { credentials: 'include' })).json()).openings, API_BASE);
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[0]).toMatchObject({ context: 'STUDY' });
+    }).toPass({ timeout: 5000 });
+    // the opened source block fits a 375px screen (long page text + the link must not push the page sideways)
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await page.setViewportSize({ width: 375, height: 800 });
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator(`#study-now-${outcomes[i]}-btn`).click();
   }
 
@@ -230,6 +263,19 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   }, API_BASE);
   expect(evidence.evidence).toHaveLength(1);
   expect(evidence.evidence[0]).toMatchObject({ type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2 });
+
+  // 10b) the daily review also goes back to the material: the cited page rides along with the revealed answer
+  await page.locator('[data-screen="today"]').click();
+  const reviewRow = page.locator('.review-row', { hasText: 'fisiologia-renal' }).first();
+  await expect(reviewRow).toBeVisible({ timeout: 8000 });
+  await reviewRow.locator('.review-row-toggle').first().click();
+  const reviewItem = reviewRow.locator('.review-exercise-item').first();
+  await expect(reviewItem).toBeVisible({ timeout: 5000 });
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
 
   // 11) the model was consulted only to PRODUCE the material: studying and redoing added no model call
   expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);

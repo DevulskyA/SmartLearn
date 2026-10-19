@@ -1,7 +1,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { setLocale } from '../src/i18n/index.js';
-import { formatDate, formatNumber, compareText, sameName } from '../src/i18n/format.js';
+import { formatDate, formatNumber, formatDecimal, compareText, sameName } from '../src/i18n/format.js';
 
 afterEach(() => { setLocale('pt-BR'); });
 
@@ -36,4 +36,25 @@ test('compareText orders by the active locale; sameName ignores case, keeps acce
   setLocale('en');
   assert.equal(sameName('Cardiologia', 'cardiologia'), true);
   assert.equal(sameName('Cardiologia', 'Cardiología'), false);
+});
+
+// The old call sites wrote `x.toFixed(1).replace(".", ",")`. formatDecimal must give the SAME text for pt-BR, including the
+// rounding of ties (0.05, 0.15, 2.25 ...), so that moving to the locale-aware helper changes nothing the student reads.
+test('formatDecimal equals toFixed(n)+comma for pt-BR over a grid that includes rounding ties; no thousands separator in 0-100 percents', () => {
+  const legacy = (x, n) => x.toFixed(n).replace('.', ',');
+  const values = [];
+  for (let i = 0; i <= 2000; i += 1) values.push(i / 20); // 0, 0.05, 0.1 ... 100 (many binary ties)
+  values.push(33.333333, 66.666667, 71.45, 71.55, 99.95, 0.04999, 12.25, 12.35);
+  for (const v of values) assert.equal(formatDecimal(v, 1), legacy(v, 1), `value ${v}`);
+  for (const v of [0, 5, 50, 100]) assert.equal(formatDecimal(v, 1), legacy(v, 1)); // keeps the ",0"
+});
+
+test('formatDecimal follows the active locale (en uses a point); trimmed form drops a ",0"', () => {
+  assert.equal(formatDecimal(85.5, 1), '85,5');
+  setLocale('en');
+  assert.equal(formatDecimal(85.5, 1), '85.5');
+  setLocale('pt-BR');
+  assert.equal(formatDecimal(85, 1, { trim: true }), '85');
+  assert.equal(formatDecimal(85.04, 1, { trim: true }), '85');
+  assert.equal(formatDecimal(85.5, 1, { trim: true }), '85,5');
 });

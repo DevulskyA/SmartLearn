@@ -411,6 +411,45 @@ try {
     return { attempts: out, evidence: evidence.map((e) => ({ type: e.type, questions: e.questionsCount, correct: e.correctCount })) };
   });
 
+  await step(19, 'the cited page offers the ORIGINAL PDF: the file is served and the WebView2 click is observed (R4)', async () => {
+    const link = page.locator('#study-now-errors-list .study-now-source-open').first();
+    await link.waitFor({ state: 'attached', timeout: 10000 });
+    const href = await link.getAttribute('href');
+    expect(/\/v1\/sources\/\d+\/file#page=\d+$/.test(href ?? ''), `href ${href}`);
+    // the file itself, with the session cookie of the window
+    const served = await page.evaluate(async (url) => {
+      const res = await fetch(url.split('#')[0], { credentials: 'include' });
+      return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+    }, href);
+    expect(served.status === 200 && served.head === '%PDF-', `served ${JSON.stringify(served)}`);
+    // the real click: it must open the viewer INSIDE the window (an external browser has no session and would get 401)
+    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
+    await page.locator('#study-now-errors-list details.study-now-source').first().evaluate((el) => { el.open = true; });
+    await link.click();
+    const viewer = page.locator('.original-pdf-dialog[open]');
+    await viewer.waitFor({ state: 'visible', timeout: 10000 });
+    let fileFrame = null;
+    for (let i = 0; i < 40 && !fileFrame; i += 1) {
+      fileFrame = page.frames().find((f) => /\/v1\/sources\/\d+\/file/.test(f.url())) ?? null;
+      if (!fileFrame) await sleep(250);
+    }
+    expect(fileFrame, 'the viewer frame never loaded the file');
+    const title = squash(await viewer.locator('.original-pdf-title').innerText());
+    await sleep(1500);
+    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
+    const frameUrl = fileFrame.url();
+    await viewer.locator('.original-pdf-close').click();
+    await page.locator('.original-pdf-dialog[open]').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+    const closed = (await page.locator('.original-pdf-dialog[open]').count()) === 0;
+    const stillOnStudy = await page.locator('#study-now-result-card').isVisible();
+    expect(closed && stillOnStudy, `closed ${closed}, study screen ${stillOnStudy}`);
+    return {
+      href, served, viewerTitle: title, frameUrl,
+      newExternalViewerProcesses: procsAfter.filter((p) => !procsBefore.includes(p)).length,
+      closedAndBackOnStudy: closed && stillOnStudy,
+    };
+  });
+
   await step(15, 'feedback, errors and retest after the study result', async () => {
     const errors = page.locator('#study-now-errors-list .study-now-error-item');
     expect(await errors.count() === 1, `errors listed ${await errors.count()}`);
@@ -560,6 +599,6 @@ try {
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.steps.sort((a, b) => a.step - b.step);
-result.pass = !result.fatal && result.steps.length === 18 && result.steps.every((s) => s.status === 'PASS');
+result.pass = !result.fatal && result.steps.length === 19 && result.steps.every((s) => s.status === 'PASS');
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);

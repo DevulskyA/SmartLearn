@@ -11,7 +11,7 @@ Usar a menor capacidade suficiente para produzir o melhor resultado comprovável
 - **Quem coordena:** verifica commits, diff, lint e o conteúdo do relatório sem refazer o trabalho. Em trabalho misto, cada responsabilidade vai ao modelo adequado; escalar só quando a complexidade real justificar. Não trocar modelo ou esforço em silêncio.
 
 ## O instrumento
-`scripts/desktop-study-journey.mjs` (jornada de 18 passos) e `scripts/desktop-smoke-import-verdict.mjs`: abrem o `smartlearn.exe` real (Tauri + WebView2) e o dirigem por CDP.
+`scripts/desktop-study-journey.mjs` (jornada de 19 passos; o 19º confere o PDF original aberto DENTRO da janela) e `scripts/desktop-smoke-import-verdict.mjs`: abrem o `smartlearn.exe` real (Tauri + WebView2) e o dirigem por CDP.
 - **Isolamento obrigatório:** banco, fontes, `WEBVIEW2_USER_DATA_FOLDER`, portas e porta CDP descartáveis em `%TEMP%`; binário próprio (`CARGO_TARGET_DIR` fora das worktrees). Os scripts recusam o datastore humano e um exe já em execução.
 - **Nunca** reiniciar, reconstruir sobre ou escrever no app aberto do usuário nem em `SmartLearn-DevData`; construir e testar em outra worktree.
 - **Sem modelo real:** o rascunho vem do provedor falso do servidor; chamada real exige autorização específica.

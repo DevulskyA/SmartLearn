@@ -1,7 +1,7 @@
 ﻿import "./styles.css";
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
-import { NetworkError } from "./api-client.js";
+import { NetworkError, apiRequest } from "./api-client.js";
 import { Stats, formatAverageScore } from "./stats.js";
 import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
@@ -18,7 +18,7 @@ import {
 } from "./theme.js";
 import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
-import { formatDate as formatIntlDate } from "./i18n/format.js";
+import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
@@ -26,7 +26,9 @@ import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
-import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experimental-obligations-ui.js";
+
+import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
@@ -324,6 +326,11 @@ const studyNowHintText = document.querySelector("#study-now-hint-text");
 const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
 const studyNowAnswerText = document.querySelector("#study-now-answer-text");
 const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
+// The cited source page(s) for the current question, revealed together with the answer.
+const studyNowSourceBox = document.createElement("div");
+studyNowSourceBox.className = "study-now-source-box";
+studyNowSourceBox.hidden = true;
+studyNowExplanationText?.after(studyNowSourceBox);
 const studyNowJudgment = document.querySelector("#study-now-judgment");
 const studyNowMessage = document.querySelector("#study-now-message");
 const studyNowResume = document.querySelector("#study-now-resume");
@@ -389,7 +396,7 @@ function formatPerformanceScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   const rounded = Math.round(number * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${formatDecimal(rounded)}%`;
 }
 
 const PERFORMANCE_BAND_CLASS = {
@@ -595,7 +602,7 @@ function createScoreInput(task, field, label) {
 }
 
 function formatReviewScore(value) {
-  return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+  return value == null ? "—" : `${formatDecimal(Number(value))}%`;
 }
 
 // Several overdue stages of the same unit as ONE card (native <details>, so
@@ -966,6 +973,14 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      // Back to the material: the cited source page, shown with the answer (CSS hides it while the answer is hidden).
+      const sourceBlocks = citationDetails(exercise.citations);
+      if (sourceBlocks.length) {
+        const sourceBox = document.createElement("div");
+        sourceBox.className = "review-exercise-source";
+        sourceBox.append(...sourceBlocks);
+        answerEl.after(sourceBox);
+      }
       // Retention cue from the longitudinal ledger: the last time this item was
       // answered it was wrong and no correct answer has followed.
       if (priorWrong.has(exercise.id) && !judgmentByExercise.has(exercise.id)) {
@@ -1018,7 +1033,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     if (answered === total) {
       const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
       for (const el of row.querySelectorAll("[data-score-for]")) {
-        el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+        el.textContent = `${formatDecimal(scorePercent)}%`;
         el.classList.remove("is-empty");
       }
       restoredSection.dataset.allAnswered = "true";
@@ -1211,8 +1226,25 @@ async function renderWeakPractice(today) {
 // Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
 // that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
 let todayRenderSeq = 0;
+// EXPERIMENTAL return-to-source record: the app tells the server only that the original was opened (remote mode; best effort).
+if (REMOTE_MODE) setSourceOpeningRecorder((opening) => apiRequest("/v1/source-openings", { method: "POST", body: opening }));
+
+// EXPERIMENTAL panel on Hoje (see experimental-obligations-ui.js): only when the student turned the switch on in Configurações.
+function refreshExperimentPanel() {
+  const host = document.querySelector("#experiment-host");
+  if (!host) return;
+  if (isExperimentOn()) void renderObligationsPanel(host);
+  else host.replaceChildren();
+}
+const experimentSwitch = document.querySelector("#experiment-switch");
+if (experimentSwitch) {
+  experimentSwitch.checked = isExperimentOn();
+  experimentSwitch.addEventListener("change", () => { setExperiment(experimentSwitch.checked); refreshExperimentPanel(); });
+}
+
 export async function renderToday() {
   const renderId = ++todayRenderSeq;
+  refreshExperimentPanel();
   const existingOfflineBanner = document.querySelector("#offline-banner");
   // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
   // nothing about a loopback backend's reachability — Desktop must not
@@ -2121,7 +2153,7 @@ export async function renderStatsBySubject() {
     identityCell.append(chip);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2582,7 +2614,7 @@ let selectedUnitSubjectId = null;
 
 function formatContentContextMeta(row) {
   if (!row || row.totalQuestions <= 0) return t("statsView.context.noEvidence");
-  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  const pct = formatDecimal(row.weightedAccuracy, 1, { trim: true });
   return t("statsView.context.meta", { percent: pct, questions: row.totalQuestions });
 }
 
@@ -2695,7 +2727,7 @@ export async function renderStatsByUnit() {
     identityCell.append(chip, title);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2759,7 +2791,7 @@ function showUnitDetail(r) {
   const score = document.createElement("div");
   score.className = "unit-detail-score";
   score.textContent = r.weightedAccuracy != null
-    ? t("statsView.unit.score", { percent: r.weightedAccuracy.toFixed(1).replace(".", ","), questions: r.totalQuestions })
+    ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
     : t("statsView.unit.noEvidence");
 
   const trend = createTrendBadge(r.trend.direction);
@@ -3347,6 +3379,8 @@ function renderStudyNowQuestion() {
   studyNowAnswerText.hidden = true;
   studyNowExplanationText.textContent = exercise.explanationText ? t("appStudyNow.why", { text: exercise.explanationText }) : "";
   studyNowExplanationText.hidden = true;
+  studyNowSourceBox.replaceChildren(...citationDetails(exercise.citations));
+  studyNowSourceBox.hidden = true;
   if (exercise.hintText) {
     // Honest reuse, not invention: shown unconditionally exactly like the
     // Hoje review UI already does (a hint the learner can already see is
@@ -3399,7 +3433,7 @@ async function finishStudyNowSession() {
     studyNowResultNote.hidden = false;
     studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
   } else {
-    const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+    const pct = answeredCount > 0 ? formatDecimal((correctCount / answeredCount) * 100) : formatDecimal(0);
     studyNowResultTitle.textContent = t("appStudyNow.result");
     studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
   }
@@ -3480,15 +3514,7 @@ function createStudyErrorItem(exercise) {
   // The only explanation the product really holds: the exact source page the
   // question was drafted from (frozen at acceptance). Shown as evidence, not
   // paraphrased -- and absent (nothing invented) for manual exercises.
-  for (const citation of exercise.citations ?? []) {
-    if (!citation.pageText) continue;
-    const details = document.createElement("details");
-    details.className = "study-now-source";
-    const summary = document.createElement("summary");
-    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
-    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
-    li.append(details);
-  }
+  li.append(...citationDetails(exercise.citations));
   return li;
 }
 
@@ -3746,7 +3772,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   examEls.submittedText.textContent = t(judged < exam.items.length ? "appExam.submitted.pending" : "appExam.submitted.complete", { answered, total: exam.items.length, judged });
 
   if (exam.score) {
-    const pct = exam.score.percent.toFixed(1).replace(".", ",");
+    const pct = formatDecimal(exam.score.percent);
     examEls.resultScore.textContent = t("appExam.score", { correct: exam.score.correct, total: exam.score.total, percent: pct });
     examEls.resultScore.hidden = false;
     examEls.counts.textContent = t("appExam.counts", { correct: exam.score.correct, wrong: exam.score.total - exam.score.correct });
@@ -3898,6 +3924,7 @@ studyNowRevealBtn?.addEventListener("click", async () => {
 
   studyNowAnswerText.hidden = false;
   studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
+  studyNowSourceBox.hidden = studyNowSourceBox.children.length === 0;
   studyNowJudgment.hidden = false;
   studyNowRevealBtn.hidden = true;
   // The focused button just disappeared: keep keyboard users in the flow.
@@ -5055,7 +5082,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (aInput) aInput.value = "";
     if (msgEl) {
       msgEl.classList.remove("is-error");
-      const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
+      const pct = formatDecimal((correctCount / questionsCount) * 100);
       msgEl.textContent = t("appReview.external.recorded", { questions: questionsCount, correct: correctCount, percent: pct });
     }
   } catch (error) {
@@ -5206,7 +5233,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   if (answered === total && row) {
     const scorePercent = total > 0 ? (correct / total) * 100 : 0;
     for (const el of row.querySelectorAll("[data-score-for]")) {
-      el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+      el.textContent = `${formatDecimal(scorePercent)}%`;
       el.classList.remove("is-empty");
     }
     section.dataset.allAnswered = "true";
@@ -5501,7 +5528,7 @@ function getScoreState(card) {
 
 function updateScoreDisplay(card) {
   const { values } = getScoreState(card);
-  const text = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  const text = values.scorePercent == null ? "—" : `${formatDecimal(values.scorePercent)}%`;
   for (const element of card.querySelectorAll("[data-score-for]")) {
     element.textContent = text;
     element.classList.toggle("is-empty", values.scorePercent == null);

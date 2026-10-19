@@ -34,8 +34,92 @@ export function createSourceDetails(label, pages) {
       createTextElement("p", "study-now-error-label", t("sourceDetails.pageLabel", { pageIndex: page.pageIndex })),
       createTextElement("p", "study-now-source-text", page.text),
     );
+    if (page.sourceId != null) details.append(originalPdfLink(page));
   }
   return details;
+}
+
+// The original PDF opens INSIDE the app: the file route is owner-only (session cookie), and an external browser has no session (401).
+// The dialog is created on first use; without dialog support the plain link (href + new tab) still works.
+let viewer = null;
+function openDialogViewer(url, title) {
+  if (typeof HTMLDialogElement === "undefined" || typeof document.body?.append !== "function") return false;
+  if (!viewer) {
+    const dialog = document.createElement("dialog");
+    dialog.className = "original-pdf-dialog";
+    const header = document.createElement("div");
+    header.className = "original-pdf-header";
+    const heading = createTextElement("h2", "original-pdf-title", "");
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "secondary-button original-pdf-close";
+    close.textContent = t("originalPdf.close");
+    const frame = document.createElement("iframe");
+    frame.className = "original-pdf-frame";
+    header.append(heading, close);
+    dialog.append(header, frame);
+    close.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("close", () => frame.removeAttribute("src"));
+    document.body.append(dialog);
+    viewer = { dialog, heading, frame, close };
+  }
+  viewer.heading.textContent = title;
+  viewer.frame.title = title;
+  viewer.frame.src = url;
+  viewer.dialog.showModal();
+  viewer.close.focus();
+  return true;
+}
+let openOriginalPdf = openDialogViewer;
+/** Test seam: replaces the dialog viewer; `null` restores it. */
+export function setOriginalPdfOpener(fn) { openOriginalPdf = fn ?? openDialogViewer; }
+
+// Experimental return-to-source record. It is wired by the app (remote mode only) and records ONLY that the original was opened at a page;
+// it is best-effort: a failing recorder never blocks the viewer, and an opening is never reading or evidence.
+let recordOpening = null;
+export function setSourceOpeningRecorder(fn) { recordOpening = fn ?? null; }
+const newOperationKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+function noteOpening(citation, context) {
+  if (!recordOpening) return;
+  try {
+    const done = recordOpening({ sourceId: citation.sourceId, pageIndex: citation.pageIndex ?? null, context, operationKey: newOperationKey() });
+    if (done && typeof done.catch === "function") done.catch(() => {});
+  } catch { /* best effort */ }
+}
+
+// "Abrir o PDF original, página N": the stored file of the source, at that page.
+function originalPdfLink(citation, context = "EDITOR") {
+  const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
+  const link = document.createElement("a");
+  link.className = "study-now-source-open";
+  link.href = `${base}/v1/sources/${citation.sourceId}/file#page=${citation.pageIndex}`;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = t("appStudyNow.openOriginal", { page: citation.pageIndex });
+  link.addEventListener("click", (event) => {
+    noteOpening(citation, context);
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return; // the user asked for a new tab/window: leave it to the browser
+    if (openOriginalPdf(link.href, t("originalPdf.title", { page: citation.pageIndex }))) event.preventDefault();
+  });
+  return link;
+}
+
+// The exact source page(s) an exercise was drafted from (frozen at acceptance), one collapsed block per page, so the
+// student can go back to the material when an answer was wrong. Citations without page text (manual exercises, edited
+// versions) produce nothing: no invented explanation. `citations` = [{sourceName, pageIndex, pageText}].
+export function citationDetails(citations) {
+  const blocks = [];
+  for (const citation of citations ?? []) {
+    if (!citation.pageText) continue;
+    const details = document.createElement("details");
+    details.className = "study-now-source";
+    const summary = document.createElement("summary");
+    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
+    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
+    if (citation.sourceId != null) details.append(originalPdfLink(citation, "STUDY"));
+    blocks.push(details);
+  }
+  return blocks;
 }
 
 // Where an AI-generated unit's Resumo Mestre came from (frozen at acceptance). Manual units, units
@@ -56,6 +140,6 @@ export async function appendSummarySources(container, unitId, learningUnits) {
   const pages = sources.map((s) => s.pageIndex);
   container.append(createSourceDetails(
     tn("sourceDetails.summaryOrigin", pages.length, { name, pages: formatPageList(pages) }),
-    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText })),
+    sources.map((s) => ({ pageIndex: s.pageIndex, text: s.pageText, sourceId: s.sourceId })),
   ));
 }
