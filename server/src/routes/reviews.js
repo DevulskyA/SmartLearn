@@ -1,4 +1,5 @@
 import * as reviews from '../services/reviews.js';
+import { dailyPlan } from '../services/daily-plan-experiment.js';
 import { IdempotencyConflictError } from '../services/idempotency.js';
 
 function handleError(err, reply) {
@@ -51,6 +52,33 @@ export function registerReviewRoutes(app, db) {
     try {
       return reviews.obligations(db, request.actor.userId, { date, timezoneOverride: timezone, recovery });
     } catch (err) { return handleError(err, reply); }
+  });
+
+  // EXPERIMENTAL (HG-14 prototype), read-only: today's plan by the minutes the student has. `exams` = "subjectId:YYYY-MM-DD,..." (optional).
+  app.get('/daily-plan-experiment', {
+    schema: { querystring: { type: 'object', properties: { date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 }, availableMinutes: { type: 'string' }, perReviewMinutes: { type: 'string' }, exams: { type: 'string', maxLength: 400 } } } },
+  }, async (request, reply) => {
+    const { date, timezone, availableMinutes, perReviewMinutes, exams } = request.query;
+    const minutes = Number(availableMinutes);
+    if (availableMinutes === undefined || !Number.isFinite(minutes) || minutes < 0) {
+      reply.status(400);
+      return { error: { code: 'VALIDATION_FAILED', field: 'availableMinutes', message: 'availableMinutes deve ser um número não negativo.' } };
+    }
+    const perReview = perReviewMinutes === undefined ? undefined : Number(perReviewMinutes);
+    if (perReview !== undefined && !(Number.isFinite(perReview) && perReview > 0)) {
+      reply.status(400);
+      return { error: { code: 'VALIDATION_FAILED', field: 'perReviewMinutes', message: 'perReviewMinutes deve ser um número positivo.' } };
+    }
+    const examMap = {};
+    for (const pair of String(exams ?? '').split(',').filter(Boolean)) {
+      const [subjectId, day] = pair.split(':');
+      if (!/^\d+$/.test(subjectId ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(day ?? '')) {
+        reply.status(400);
+        return { error: { code: 'VALIDATION_FAILED', field: 'exams', message: 'exams deve ser "subjectId:AAAA-MM-DD,...".' } };
+      }
+      examMap[Number(subjectId)] = day;
+    }
+    return dailyPlan(db, request.actor.userId, { date, timezoneOverride: timezone, availableMinutes: minutes, perReviewMinutes: perReview, exams: examMap });
   });
 
   // EXPERIMENTAL (HG-09 / D-12 option 3), D4b: do the one review a unit requires, with D-13 (recovery) and D-14 (anchor) as named parameters.

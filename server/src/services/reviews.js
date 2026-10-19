@@ -97,10 +97,12 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
   const today = date ?? localDateString(new Date(), timezone);
   const tasks = db.prepare(`${TASK_SELECT}${NOT_SUPERSEDED} ORDER BY rt.due_date`).all(userId).map((row) => ({ ...taskDto(row), completedAt: row.completed_at ?? null }));
   const titles = new Map(tasks.map((t) => [t.unitId, t.unitTitle]));
+  const subjects = new Map(tasks.map((t) => [t.unitId, t.subjectId]));
   const brief = (t) => (t ? { id: t.id, dueDate: t.dueDate, offsetDays: t.offsetDays } : null);
   const units = deriveObligations(tasks, today).map((u) => ({
     unitId: u.unitId,
     unitTitle: titles.get(u.unitId),
+    subjectId: subjects.get(u.unitId),
     required: brief(u.required),
     collapsedCount: u.collapsed.length,
     upcoming: brief(u.upcoming),
