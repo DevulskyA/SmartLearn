@@ -7,6 +7,7 @@
 //            the 95% Wilson interval for accuracy is under 70% (observed != mastery: a small n cannot support a claim).
 //   node scripts/gap-detection-sim.mjs
 import { fileURLToPath } from 'node:url';
+import { wilsonUpper, cautiousState } from '../shared/unit-evidence.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -19,18 +20,10 @@ export function mulberry32(seed) {
   };
 }
 
-/** Upper bound of the 95% Wilson score interval for k successes in n trials. */
-export function wilsonUpper(k, n) {
-  if (n === 0) return 1;
-  const z = 1.96, p = k / n, d = 1 + (z * z) / n;
-  return (p + (z * z) / (2 * n) + z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
-}
+// The cautious rule lives in shared/unit-evidence.js (one definition: this experiment measured exactly what the component runs).
+export { wilsonUpper, cautiousState };
 
 export const naiveFlag = ({ attempts, correct }) => attempts >= 1 && correct / attempts < 0.6;
-export const cautiousState = ({ attempts, correct, distinct }) => {
-  if (distinct < 3 || attempts < 5) return 'INSUFFICIENT';
-  return wilsonUpper(correct, attempts) < 0.7 ? 'GAP' : 'OK';
-};
 
 /** One synthetic student: `subtopics` subtopics of `pool` questions; the first `weak` are weak (ability 0.4), the rest strong (0.9). */
 export function runStudent({ seed, subtopics = 8, weak = 2, pool = 10, attempts }) {
