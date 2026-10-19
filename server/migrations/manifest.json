@@ -173,5 +173,10 @@
     "version": 35,
     "name": "review-unit-pauses-experiment",
     "checksum": "877768efcb404dcb04a0652b5aa0d7b01f24302a85abddcf254f6b79bd843dda"
+  },
+  {
+    "version": 36,
+    "name": "source-openings-experiment",
+    "checksum": "ce0b844d6bf2ffbc6d50153fc03ec1e7a96ffe9e67af5b96f3d3427c30cb392b"
   }
 ]

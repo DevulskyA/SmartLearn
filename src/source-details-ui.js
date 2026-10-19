@@ -74,8 +74,21 @@ let openOriginalPdf = openDialogViewer;
 /** Test seam: replaces the dialog viewer; `null` restores it. */
 export function setOriginalPdfOpener(fn) { openOriginalPdf = fn ?? openDialogViewer; }
 
+// Experimental return-to-source record. It is wired by the app (remote mode only) and records ONLY that the original was opened at a page;
+// it is best-effort: a failing recorder never blocks the viewer, and an opening is never reading or evidence.
+let recordOpening = null;
+export function setSourceOpeningRecorder(fn) { recordOpening = fn ?? null; }
+const newOperationKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+function noteOpening(citation, context) {
+  if (!recordOpening) return;
+  try {
+    const done = recordOpening({ sourceId: citation.sourceId, pageIndex: citation.pageIndex ?? null, context, operationKey: newOperationKey() });
+    if (done && typeof done.catch === "function") done.catch(() => {});
+  } catch { /* best effort */ }
+}
+
 // "Abrir o PDF original, página N": the stored file of the source, at that page.
-function originalPdfLink(citation) {
+function originalPdfLink(citation, context = "EDITOR") {
   const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
   const link = document.createElement("a");
   link.className = "study-now-source-open";
@@ -84,6 +97,7 @@ function originalPdfLink(citation) {
   link.rel = "noopener";
   link.textContent = t("appStudyNow.openOriginal", { page: citation.pageIndex });
   link.addEventListener("click", (event) => {
+    noteOpening(citation, context);
     if (event.ctrlKey || event.metaKey || event.shiftKey) return; // the user asked for a new tab/window: leave it to the browser
     if (openOriginalPdf(link.href, t("originalPdf.title", { page: citation.pageIndex }))) event.preventDefault();
   });
@@ -102,7 +116,7 @@ export function citationDetails(citations) {
     const summary = document.createElement("summary");
     summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
     details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
-    if (citation.sourceId != null) details.append(originalPdfLink(citation));
+    if (citation.sourceId != null) details.append(originalPdfLink(citation, "STUDY"));
     blocks.push(details);
   }
   return blocks;

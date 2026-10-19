@@ -18,7 +18,7 @@ class FakeEl {
 }
 globalThis.document = { createElement: (tag) => new FakeEl(tag) };
 
-const { formatPageList, createSourceDetails, citationDetails, appendSummarySources, setOriginalPdfOpener } = await import('../src/source-details-ui.js');
+const { formatPageList, createSourceDetails, citationDetails, appendSummarySources, setOriginalPdfOpener, setSourceOpeningRecorder } = await import('../src/source-details-ui.js');
 
 test('formatPageList: compact, sorted, de-duplicated ranges', () => {
   assert.equal(formatPageList([3]), '3');
@@ -65,6 +65,26 @@ test('the original-PDF link opens the IN-APP viewer on click (the external brows
   setOriginalPdfOpener(null);
   assert.equal(prevented, 1);
   assert.deepEqual(opened, [['/v1/sources/5/file#page=3', 'PDF original · página 3']]);
+});
+
+test('opening the original PDF records ONLY the observable opening (source, page, context, a fresh key per click); a failing recorder never blocks the viewer', () => {
+  const calls = [];
+  setSourceOpeningRecorder((o) => { calls.push(o); });
+  const study = citationDetails([{ sourceId: 7, sourceName: 'f.pdf', pageIndex: 269, pageText: 't' }])[0].children[2];
+  const editor = createSourceDetails('Fonte', [{ pageIndex: 3, text: 't', sourceId: 5 }]).children.find((c) => c.tagName === 'a');
+  const opened = [];
+  setOriginalPdfOpener((url) => { opened.push(url); return true; });
+  study.handlers.click({ preventDefault() {} });
+  study.handlers.click({ preventDefault() {} });
+  editor.handlers.click({ preventDefault() {} });
+  assert.deepEqual(calls.map(({ sourceId, pageIndex, context }) => [sourceId, pageIndex, context]), [[7, 269, 'STUDY'], [7, 269, 'STUDY'], [5, 3, 'EDITOR']]);
+  assert.equal(new Set(calls.map((c) => c.operationKey)).size, 3, 'each click is its own fact');
+  assert.equal(opened.length, 3);
+  setSourceOpeningRecorder(() => { throw new Error('offline'); });
+  study.handlers.click({ preventDefault() {} });
+  assert.equal(opened.length, 4, 'the viewer opens even if recording fails');
+  setSourceOpeningRecorder(null);
+  setOriginalPdfOpener(null);
 });
 
 test('createSourceDetails: a page without text is left out entirely (no empty label)', () => {

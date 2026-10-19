@@ -1,7 +1,7 @@
 ﻿import "./styles.css";
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
-import { NetworkError } from "./api-client.js";
+import { NetworkError, apiRequest } from "./api-client.js";
 import { Stats, formatAverageScore } from "./stats.js";
 import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
@@ -27,7 +27,8 @@ import { validateNamingField, validateTitleField } from "./naming-validation.js"
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
 import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experimental-obligations-ui.js";
-import { formatPageList, createSourceDetails, citationDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+
+import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
@@ -1225,6 +1226,9 @@ async function renderWeakPractice(today) {
 // Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
 // that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
 let todayRenderSeq = 0;
+// EXPERIMENTAL return-to-source record: the app tells the server only that the original was opened (remote mode; best effort).
+if (REMOTE_MODE) setSourceOpeningRecorder((opening) => apiRequest("/v1/source-openings", { method: "POST", body: opening }));
+
 // EXPERIMENTAL panel on Hoje (see experimental-obligations-ui.js): only when the student turned the switch on in Configurações.
 function refreshExperimentPanel() {
   const host = document.querySelector("#experiment-host");

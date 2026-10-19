@@ -222,6 +222,12 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
     await expect(viewer.locator('.original-pdf-frame')).toHaveAttribute('src', /\/v1\/sources\/\d+\/file#page=\d+$/);
     await page.keyboard.press('Escape');
     await expect(page.locator('.original-pdf-dialog[open]')).toHaveCount(0);
+    // the opening was recorded as a fact (and only that): one row, no evidence
+    await expect(async () => {
+      const rows = await page.evaluate(async (base) => (await (await fetch(`${base}/v1/source-openings`, { credentials: 'include' })).json()).openings, API_BASE);
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[0]).toMatchObject({ context: 'STUDY' });
+    }).toPass({ timeout: 5000 });
     // the opened source block fits a 375px screen (long page text + the link must not push the page sideways)
     await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
     await page.setViewportSize({ width: 375, height: 800 });
