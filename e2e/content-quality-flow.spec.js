@@ -213,6 +213,15 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
       return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
     }, href.split('#')[0]);
     expect(pdf).toEqual({ status: 200, type: 'application/pdf', head: '%PDF-' });
+    // clicking it opens the viewer INSIDE the app (an external browser has no session), at that page; Esc closes it
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await open.click();
+    const viewer = page.locator('.original-pdf-dialog[open]');
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator('.original-pdf-title')).toHaveText(/PDF original · página \d+/);
+    await expect(viewer.locator('.original-pdf-frame')).toHaveAttribute('src', /\/v1\/sources\/\d+\/file#page=\d+$/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.original-pdf-dialog[open]')).toHaveCount(0);
     // the opened source block fits a 375px screen (long page text + the link must not push the page sideways)
     await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
     await page.setViewportSize({ width: 375, height: 800 });

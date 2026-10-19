@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 class FakeEl {
   constructor(tagName) { this.tagName = tagName; this.className = ''; this.textContent = ''; this.children = []; }
   append(...nodes) { this.children.push(...nodes); }
+  addEventListener(type, fn) { (this.handlers ??= {})[type] = fn; }
   querySelector(selector) {
     assert.equal(selector, ':scope > .summary-source');
     return this.children.find((c) => c.className.split(' ').includes('summary-source')) ?? null;
@@ -17,7 +18,7 @@ class FakeEl {
 }
 globalThis.document = { createElement: (tag) => new FakeEl(tag) };
 
-const { formatPageList, createSourceDetails, citationDetails, appendSummarySources } = await import('../src/source-details-ui.js');
+const { formatPageList, createSourceDetails, citationDetails, appendSummarySources, setOriginalPdfOpener } = await import('../src/source-details-ui.js');
 
 test('formatPageList: compact, sorted, de-duplicated ranges', () => {
   assert.equal(formatPageList([3]), '3');
@@ -48,6 +49,22 @@ test('createSourceDetails: a page that knows its source gets a link to the ORIGI
   assert.equal(links[0].href, '/v1/sources/7/file#page=269');
   assert.equal(links[0].textContent, 'Abrir o PDF original, página 269');
   assert.equal(links[0].target, '_blank');
+});
+
+test('the original-PDF link opens the IN-APP viewer on click (the external browser has no session -> 401) and keeps its href as the fallback', () => {
+  const el = createSourceDetails('Fonte', [{ pageIndex: 3, text: 't', sourceId: 5 }]);
+  const link = el.children.find((c) => c.tagName === 'a');
+  let prevented = 0;
+  // no dialog support in this fake environment: the click must NOT be swallowed (the plain link still works)
+  link.handlers.click({ preventDefault() { prevented += 1; } });
+  assert.equal(prevented, 0);
+  // with a viewer available the click is taken over: the dialog gets the file URL and the page title
+  const opened = [];
+  setOriginalPdfOpener((url, title) => { opened.push([url, title]); return true; });
+  link.handlers.click({ preventDefault() { prevented += 1; } });
+  setOriginalPdfOpener(null);
+  assert.equal(prevented, 1);
+  assert.deepEqual(opened, [['/v1/sources/5/file#page=3', 'PDF original · página 3']]);
 });
 
 test('createSourceDetails: a page without text is left out entirely (no empty label)', () => {

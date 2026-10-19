@@ -39,7 +39,42 @@ export function createSourceDetails(label, pages) {
   return details;
 }
 
-// "Abrir o PDF original, página N": the stored file of the source (owner-only route), opened by the PDF viewer at that page.
+// The original PDF opens INSIDE the app: the file route is owner-only (session cookie), and an external browser has no session (401).
+// The dialog is created on first use; without dialog support the plain link (href + new tab) still works.
+let viewer = null;
+function openDialogViewer(url, title) {
+  if (typeof HTMLDialogElement === "undefined" || typeof document.body?.append !== "function") return false;
+  if (!viewer) {
+    const dialog = document.createElement("dialog");
+    dialog.className = "original-pdf-dialog";
+    const header = document.createElement("div");
+    header.className = "original-pdf-header";
+    const heading = createTextElement("h2", "original-pdf-title", "");
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "secondary-button original-pdf-close";
+    close.textContent = t("originalPdf.close");
+    const frame = document.createElement("iframe");
+    frame.className = "original-pdf-frame";
+    header.append(heading, close);
+    dialog.append(header, frame);
+    close.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("close", () => frame.removeAttribute("src"));
+    document.body.append(dialog);
+    viewer = { dialog, heading, frame, close };
+  }
+  viewer.heading.textContent = title;
+  viewer.frame.title = title;
+  viewer.frame.src = url;
+  viewer.dialog.showModal();
+  viewer.close.focus();
+  return true;
+}
+let openOriginalPdf = openDialogViewer;
+/** Test seam: replaces the dialog viewer; `null` restores it. */
+export function setOriginalPdfOpener(fn) { openOriginalPdf = fn ?? openDialogViewer; }
+
+// "Abrir o PDF original, página N": the stored file of the source, at that page.
 function originalPdfLink(citation) {
   const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
   const link = document.createElement("a");
@@ -48,6 +83,10 @@ function originalPdfLink(citation) {
   link.target = "_blank";
   link.rel = "noopener";
   link.textContent = t("appStudyNow.openOriginal", { page: citation.pageIndex });
+  link.addEventListener("click", (event) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return; // the user asked for a new tab/window: leave it to the browser
+    if (openOriginalPdf(link.href, t("originalPdf.title", { page: citation.pageIndex }))) event.preventDefault();
+  });
   return link;
 }
 

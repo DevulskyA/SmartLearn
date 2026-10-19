@@ -422,20 +422,33 @@ try {
       return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
     }, href);
     expect(served.status === 200 && served.head === '%PDF-', `served ${JSON.stringify(served)}`);
-    // the real click: what does the native window do with target=_blank? Observe, do not assume.
-    const pagesBefore = browser.contexts().flatMap((c) => c.pages()).map((p) => p.url());
-    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
+    // the real click: it must open the viewer INSIDE the window (an external browser has no session and would get 401)
+    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/?
+/).filter(Boolean);
     await page.locator('#study-now-errors-list details.study-now-source').first().evaluate((el) => { el.open = true; });
     await link.click();
-    await sleep(4000);
-    const pagesAfter = browser.contexts().flatMap((c) => c.pages()).map((p) => p.url());
-    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
-    const stillOnStudy = /^http:\/\/127\.0\.0\.1:\d+\//.test(page.url()) && await page.locator('#study-now-result-card').isVisible();
+    const viewer = page.locator('.original-pdf-dialog[open]');
+    await viewer.waitFor({ state: 'visible', timeout: 10000 });
+    let fileFrame = null;
+    for (let i = 0; i < 40 && !fileFrame; i += 1) {
+      fileFrame = page.frames().find((f) => /\/v1\/sources\/\d+\/file/.test(f.url())) ?? null;
+      if (!fileFrame) await sleep(250);
+    }
+    expect(fileFrame, 'the viewer frame never loaded the file');
+    const title = squash(await viewer.locator('.original-pdf-title').innerText());
+    await sleep(1500);
+    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/?
+/).filter(Boolean);
+    const frameUrl = fileFrame.url();
+    await viewer.locator('.original-pdf-close').click();
+    await page.locator('.original-pdf-dialog[open]').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+    const closed = (await page.locator('.original-pdf-dialog[open]').count()) === 0;
+    const stillOnStudy = await page.locator('#study-now-result-card').isVisible();
+    expect(closed && stillOnStudy, `closed ${closed}, study screen ${stillOnStudy}`);
     return {
-      href, served,
-      newPageTargets: pagesAfter.filter((u) => !pagesBefore.includes(u)),
+      href, served, viewerTitle: title, frameUrl,
       newExternalViewerProcesses: procsAfter.filter((p) => !procsBefore.includes(p)).length,
-      studyScreenStillThere: stillOnStudy,
+      closedAndBackOnStudy: closed && stillOnStudy,
     };
   });
 

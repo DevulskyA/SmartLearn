@@ -3456,6 +3456,45 @@ h1 {
   outline-offset: 1px;
 }
 
+/* The original PDF, inside the app (the file route needs the app's session). */
+.original-pdf-dialog {
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0;
+  width: min(60rem, 96vw);
+  height: min(52rem, 92vh);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.original-pdf-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.original-pdf-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.original-pdf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+.original-pdf-title {
+  margin: 0;
+  font-size: 1rem;
+}
+.original-pdf-close {
+  min-height: 44px;
+}
+.original-pdf-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
 /* Custom confirm dialog */
 #confirm-dialog {
   border: none;
