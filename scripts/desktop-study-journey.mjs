@@ -411,6 +411,34 @@ try {
     return { attempts: out, evidence: evidence.map((e) => ({ type: e.type, questions: e.questionsCount, correct: e.correctCount })) };
   });
 
+  await step(19, 'the cited page offers the ORIGINAL PDF: the file is served and the WebView2 click is observed (R4)', async () => {
+    const link = page.locator('#study-now-errors-list .study-now-source-open').first();
+    await link.waitFor({ state: 'attached', timeout: 10000 });
+    const href = await link.getAttribute('href');
+    expect(/\/v1\/sources\/\d+\/file#page=\d+$/.test(href ?? ''), `href ${href}`);
+    // the file itself, with the session cookie of the window
+    const served = await page.evaluate(async (url) => {
+      const res = await fetch(url.split('#')[0], { credentials: 'include' });
+      return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+    }, href);
+    expect(served.status === 200 && served.head === '%PDF-', `served ${JSON.stringify(served)}`);
+    // the real click: what does the native window do with target=_blank? Observe, do not assume.
+    const pagesBefore = browser.contexts().flatMap((c) => c.pages()).map((p) => p.url());
+    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
+    await page.locator('#study-now-errors-list details.study-now-source').first().evaluate((el) => { el.open = true; });
+    await link.click();
+    await sleep(4000);
+    const pagesAfter = browser.contexts().flatMap((c) => c.pages()).map((p) => p.url());
+    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
+    const stillOnStudy = /^http:\/\/127\.0\.0\.1:\d+\//.test(page.url()) && await page.locator('#study-now-result-card').isVisible();
+    return {
+      href, served,
+      newPageTargets: pagesAfter.filter((u) => !pagesBefore.includes(u)),
+      newExternalViewerProcesses: procsAfter.filter((p) => !procsBefore.includes(p)).length,
+      studyScreenStillThere: stillOnStudy,
+    };
+  });
+
   await step(15, 'feedback, errors and retest after the study result', async () => {
     const errors = page.locator('#study-now-errors-list .study-now-error-item');
     expect(await errors.count() === 1, `errors listed ${await errors.count()}`);
