@@ -423,8 +423,7 @@ try {
     }, href);
     expect(served.status === 200 && served.head === '%PDF-', `served ${JSON.stringify(served)}`);
     // the real click: it must open the viewer INSIDE the window (an external browser has no session and would get 401)
-    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/?
-/).filter(Boolean);
+    const procsBefore = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
     await page.locator('#study-now-errors-list details.study-now-source').first().evaluate((el) => { el.open = true; });
     await link.click();
     const viewer = page.locator('.original-pdf-dialog[open]');
@@ -437,8 +436,7 @@ try {
     expect(fileFrame, 'the viewer frame never loaded the file');
     const title = squash(await viewer.locator('.original-pdf-title').innerText());
     await sleep(1500);
-    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/?
-/).filter(Boolean);
+    const procsAfter = ps('Get-Process msedge,AcroRd32,Acrobat -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }').split(/\r?\n/).filter(Boolean);
     const frameUrl = fileFrame.url();
     await viewer.locator('.original-pdf-close').click();
     await page.locator('.original-pdf-dialog[open]').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
