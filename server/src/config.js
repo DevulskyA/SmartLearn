@@ -41,6 +41,14 @@ export const config = {
   sourcesDir: process.env.SMARTLEARN_SOURCES_DIR ?? './data/sources',
   sourceMaxBytes: Number(process.env.SMARTLEARN_SOURCE_MAX_BYTES ?? 25 * 1024 * 1024),
   sourceQuotaBytes: Number(process.env.SMARTLEARN_SOURCE_QUOTA_BYTES ?? 200 * 1024 * 1024),
+  // Private images of the Resumo Mestre: beside the sources by default (derived in app.js), never under a public root. Limits are configurable.
+  mediaDir: process.env.SMARTLEARN_MEDIA_DIR || null,
+  mediaLimits: {
+    ...(process.env.SMARTLEARN_MEDIA_MAX_BYTES ? { maxUploadBytes: Number(process.env.SMARTLEARN_MEDIA_MAX_BYTES) } : {}),
+    ...(process.env.SMARTLEARN_MEDIA_MAX_PIXELS ? { maxPixels: Number(process.env.SMARTLEARN_MEDIA_MAX_PIXELS) } : {}),
+    ...(process.env.SMARTLEARN_MEDIA_MAX_SIDE ? { maxSide: Number(process.env.SMARTLEARN_MEDIA_MAX_SIDE) } : {}),
+    ...(process.env.SMARTLEARN_MEDIA_QUOTA_BYTES ? { quotaBytes: Number(process.env.SMARTLEARN_MEDIA_QUOTA_BYTES) } : {}),
+  },
   // T37: the real-provider AI draft path is unavailable unless ALL THREE
   // are explicitly configured — an operator's deliberate choice, never a
   // default. No hardcoded model name/version: this is a business decision

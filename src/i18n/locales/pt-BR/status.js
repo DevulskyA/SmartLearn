@@ -36,6 +36,4 @@ export default {
   'migration.entity.learningEvents': 'Eventos de aprendizagem',
   'migration.entity.exams': 'Provas',
   'migration.entity.examItems': 'Itens de provas',
-  'migration.entity.examEvidence': 'Evidências de provas',
-  'migration.entity.summaryFigures': 'Figuras dos resumos',
-};
+  'migration.entity.examEvidence': 'Evidências de provas',};

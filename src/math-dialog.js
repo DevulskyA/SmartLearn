@@ -64,7 +64,7 @@ export function openMathDialog({ tex = "", display = false, lockDisplay = false 
     status.setAttribute("role", "status");
     const note = document.createElement("p");
     note.className = "lesson-hint";
-    note.textContent = t("summary.math.dialog.note");
+    note.textContent = `${t("summary.math.dialog.note")} \\ce{H2O}.`; // the example is code, not translatable text
 
     const actions = document.createElement("div");
     actions.className = "math-dialog-actions";

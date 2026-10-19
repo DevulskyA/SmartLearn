@@ -5,6 +5,8 @@ import "katex/dist/katex.min.css";
 import { parseSummaryTokens, locateMath } from "../shared/summary-markdown.js";
 import { katex, katexOptions } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
+import { loadFigureRecord } from "./visual-assets-api.js";
+import { openFigureViewer } from "./figure-ui.js";
 
 const BLOCK_TAGS = new Set(["p", "ul", "ol", "li", "blockquote", "table", "thead", "tbody", "tr", "th", "td"]);
 const INLINE_TAGS = new Set(["strong", "em", "s"]);
@@ -52,7 +54,7 @@ function unavailableFigure(id, reason) {
   const missing = document.createElement("p");
   missing.className = "summary-figure-missing";
   missing.dataset.figureId = id;
-  missing.textContent = t(reason === "loading" ? "summary.figure.loading" : "summary.figure.unavailableId", { id: id.slice(0, 8) });
+  missing.textContent = reason === "loading" ? t("summary.figure.loading") : t("summary.figure.unavailableId", { id: id.slice(0, 8) });
   return missing;
 }
 
@@ -170,10 +172,13 @@ function buildBlocks(tokens, root, ctx) {
  *   loadFigure(id)        - async: {url, alt, caption, ...} for a figure the owner can see, or null
  *   onOpenFigure(record)  - enlarges a figure
  */
-export function renderSummary(container, text, { onEditMath = null, loadFigure = null, onOpenFigure = null } = {}) {
+export function renderSummary(container, text, options = {}) {
   const source = String(text ?? "");
+  const { onEditMath = null, loadFigure = loadFigureRecord, onOpenSource = null } = options;
   const locations = onEditMath ? locateMath(source) : [];
   let mathIndex = 0;
+  // by default a figure opens enlarged, with a way to edit its texts; after an edit the same summary is drawn again
+  const onOpenFigure = options.onOpenFigure ?? ((record) => openFigureViewer(record, { onOpenSource, onEdited: () => renderSummary(container, source, options) }));
   const ctx = { onEditMath, loadFigure, onOpenFigure, nextMath: () => locations[mathIndex++] ?? null };
   container.classList.add("summary-rendered");
   const root = document.createDocumentFragment();

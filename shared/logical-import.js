@@ -370,29 +370,6 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
     }
   }
 
-  // ---- summary figures: images referenced from summary texts as smartlearn-figure:ID. Optional (exports before migration 037 have none).
-  // The bytes are base64; the server re-checks the real image type when it restores them, so this only validates the shape.
-  const summaryFigures = [];
-  if (raw.summaryFigures !== undefined) {
-    if (!Array.isArray(raw.summaryFigures)) {
-      issue('INVALID_SET', 'summaryFigures deve ser uma lista.');
-    } else {
-      const seen = new Set();
-      raw.summaryFigures.forEach((fig, index) => {
-        const where = describe('summaryFigures', index, fig);
-        if (fig === null || typeof fig !== 'object' || Array.isArray(fig)) { issue('INVALID_ROW', `${where}: linha inválida.`); return; }
-        if (!Number.isInteger(fig.id) || fig.id < 1) { issue('INVALID_ID', `${where}: id inválido.`); return; }
-        if (seen.has(fig.id)) { issue('DUPLICATE_ID', `${where}: id duplicado.`); return; }
-        seen.add(fig.id);
-        if (typeof fig.alt !== 'string' || fig.alt.trim() === '' || fig.alt.length > 300) { issue('INVALID_TYPE', `${where}: alt deve ser um texto de 1 a 300 caracteres.`); return; }
-        if (typeof fig.dataBase64 !== 'string' || fig.dataBase64 === '' || fig.dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fig.dataBase64)) { issue('INVALID_TYPE', `${where}: dataBase64 inválido.`); return; }
-        if (!isTimestamp(fig.created_at)) { issue('INVALID_DATE', `${where}: created_at não é uma data válida.`); return; }
-        summaryFigures.push({ id: fig.id, alt: fig.alt, dataBase64: fig.dataBase64, created_at: fig.created_at });
-      });
-      summaryFigures.sort((a, b) => a.id - b.id);
-    }
-  }
-
   // ---- settings: only the timezone is user-editable; the schedule is fixed ----
   let settings = { timezone: null, updatedAt: null, uiLocale: null, generationLocale: null };
   if (raw.settings !== undefined && raw.settings !== null) {
@@ -420,15 +397,20 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
 
   warnings.push({
     code: 'MATERIALS_NOT_RESTORED',
-    message: 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
+    message: 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos, imagens dos resumos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
   });
+  if (Array.isArray(raw.notices) && raw.notices.some((n) => n?.code === 'MEDIA_NOT_INCLUDED')) {
+    warnings.push({
+      code: 'MEDIA_NOT_INCLUDED',
+      message: 'Este arquivo foi exportado sem as imagens dos resumos: no lugar de cada figura há uma frase descritiva. Para recuperar as imagens use o backup operacional.',
+    });
+  }
 
   return {
     exportVersion: raw.exportVersion,
     schemaVersion: raw.schemaVersion,
     settings,
     sets,
-    summaryFigures,
     warnings,
   };
 }

@@ -7,7 +7,7 @@
 // T19  physical snapshot (database only):
 //   node server/scripts/backup.mjs <destination.db> [--db path/to/source.db]
 // T50  operational package (database + accepted source files + manifest/checksums):
-//   node server/scripts/backup.mjs --package <new-directory> [--db <file>] [--sources <dir>] [--retain-days N]
+//   node server/scripts/backup.mjs --package <new-directory> [--db <file>] [--sources <dir>] [--media <dir>] [--retain-days N]
 //   node server/scripts/backup.mjs --verify <package-directory>      (non-destructive; exit 1 on any problem)
 //   node server/scripts/backup.mjs --rehearse <package-directory>    (restore into a temp env, prove units/questions/citations resolve, remove the temp env)
 // Nothing here ever deletes a backup; --retain-days is only recorded in the manifest.
@@ -53,12 +53,14 @@ async function pack(args) {
   try {
     const manifest = await createOperationalBackup(db, {
       sourcesDir: flag(args, '--sources') ?? config.sourcesDir,
+      mediaDir: flag(args, '--media') ?? config.mediaDir ?? undefined, // undefined = beside the sources directory
       destDir,
       retainDays: retainRaw === undefined ? null : Number(retainRaw),
     });
     console.log(`Operational backup written to ${destDir}`);
     console.log(`  schema version: ${manifest.schemaVersion}, database sha256: ${manifest.database.sha256}`);
     console.log(`  sources: ${manifest.sources.length} file(s) verified against their checksums`);
+    console.log(`  images: ${manifest.media.length} file(s) verified against their hashes`);
     console.log('  sessions: NOT included; password hashes: included -> treat this directory as a secret');
     console.log(`  retention: ${manifest.retention.retainDays ?? 'not set'} day(s), recorded only — nothing is ever deleted automatically`);
     if (manifest.orphanSourceFiles.length > 0) console.log(`  note: ${manifest.orphanSourceFiles.length} file(s) in the sources directory are not referenced by the database and were NOT copied`);

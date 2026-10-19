@@ -6,6 +6,8 @@ import { mathSnippet, replaceMath } from "../shared/summary-markdown.js";
 import { openMathDialog } from "./math-dialog.js";
 import { renderSummary } from "./summary-render.js";
 import { applyInsertion } from "./summary-insert.js";
+import { figureRef } from "../shared/summary-figure-refs.js";
+import { openFigureDetailsDialog, ACCEPTED_IMAGE_TYPES } from "./figure-ui.js";
 
 function commit(textarea, result) {
   textarea.value = result.value;
@@ -47,8 +49,35 @@ export function createSummaryAuthoring(textarea, { extraButtons = [], previewOpt
   });
   const tableBtn = toolbarButton("table", t("summary.toolbar.table"));
   tableBtn.addEventListener("click", () => commit(textarea, applyInsertion(textarea.value, textarea.selectionStart, textarea.selectionEnd, "table")));
-  buttons.append(formulaBtn, tableBtn, ...extraButtons);
-  bar.append(buttons);
+  // Images: from a file, or pasted from the clipboard. Both end in the same details dialog (description is required) and insert [[fig:UUID]].
+  const message = document.createElement("span");
+  message.className = "form-message summary-toolbar-message";
+  message.setAttribute("role", "status");
+  const insertBlob = async (blob) => {
+    message.textContent = "";
+    if (!ACCEPTED_IMAGE_TYPES.includes(blob.type)) { message.textContent = t("summary.image.unsupported"); return; }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const record = await openFigureDetailsDialog({ blob });
+    if (!record) { textarea.focus({ preventScroll: true }); return; }
+    commit(textarea, applyInsertion(textarea.value, start, end, "figure", figureRef(record.id)));
+  };
+  const imageBtn = toolbarButton("image", t("summary.toolbar.image"));
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ACCEPTED_IMAGE_TYPES.join(",");
+  picker.hidden = true;
+  picker.className = "summary-image-picker";
+  picker.addEventListener("change", () => { const file = picker.files?.[0]; picker.value = ""; if (file) insertBlob(file); });
+  imageBtn.addEventListener("click", () => picker.click());
+  textarea.addEventListener("paste", (event) => {
+    const file = [...(event.clipboardData?.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile();
+    if (!file) return; // ordinary text paste: untouched
+    event.preventDefault();
+    insertBlob(file);
+  });
+  buttons.append(formulaBtn, tableBtn, imageBtn, picker, ...extraButtons);
+  bar.append(buttons, message);
 
   const preview = document.createElement("div");
   preview.className = "summary-preview";

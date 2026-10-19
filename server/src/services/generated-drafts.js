@@ -19,6 +19,7 @@ import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from '.
 import { effectiveKind } from './unit-kind.js';
 import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
+import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -754,6 +755,9 @@ export function reviseSummary(db, userId, draftId, { summary, expectedVersion } 
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
   requireFresh(current.summaryVersion, expectedVersion, 'O resumo');
   if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', 'Informe o texto do resumo.', 'summary');
+  // a [[fig:UUID]] must be one of the student's own figures, and a PDF crop must come from THIS draft's source
+  const refProblems = findUnresolvedRefs(db, userId, summary, { sourceId: found.proposal.source_id });
+  if (refProblems.length > 0) throw new DraftError('VALIDATION_FAILED', refsMessage(refProblems), 'summary');
   const validated = validateOrThrow({
     summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions.map(editableQuestion),
     modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,

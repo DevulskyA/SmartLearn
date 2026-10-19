@@ -12,7 +12,8 @@ import * as learningUnits from '../src/services/learning-units.js';
 import * as exercises from '../src/services/exercises.js';
 import { acceptUpload } from '../src/services/source-storage.js';
 import * as ops from '../src/operational-backup.js';
-import * as figures from '../src/services/summary-figures.js';
+import * as assets from '../src/services/visual-assets.js';
+import sharp from 'sharp';
 
 const PDF = (marker) => Buffer.from(`%PDF-1.4\n1 0 obj\n<< /Marker (${marker}) >>\nendobj\ntrailer\n<< >>\n%%EOF\n`, 'latin1');
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -254,24 +255,109 @@ test('CLI: --package / --verify / --rehearse work end to end, a damaged package 
   } finally { env.cleanup(); }
 });
 
-test('summary figures travel inside the database: after backup and restore the image bytes and the summary text that points at them are intact', async () => {
+// ---- private images of the summaries (migration 038): the operational backup carries the files, the records and the references ----
+const makePng = (color) => sharp({ create: { width: 40, height: 30, channels: 3, background: color } }).png().toBuffer();
+
+async function envWithFigure() {
+  const env = makeEnv();
+  const mediaDir = join(env.root, 'live', 'media');
+  const png = await makePng('#2563eb');
+  const { asset } = await assets.create(env.db, env.userId, { buffer: png, alt: 'Esquema', caption: 'Figura 1', operationKey: 'op-1' }, { mediaDir });
+  const body = `Texto antes.\n\n[[fig:${asset.id}]]\n\nTexto depois.`;
+  env.db.prepare('UPDATE learning_units SET summary_body = ? WHERE id = ?').run(body, env.unit.id);
+  return { ...env, mediaDir, asset, body };
+}
+
+test('operational backup carries the images: package -> verify -> restore -> the same bytes, record and summary reference', async () => {
+  const env = await envWithFigure();
+  try {
+    const dest = join(env.root, 'backups', 'media');
+    const manifest = await ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, mediaDir: env.mediaDir, destDir: dest });
+    assert.equal(manifest.media.length, 1);
+    assert.equal(manifest.media[0].id, env.asset.id);
+    assert.equal(manifest.media[0].userId, env.userId);
+    assert.deepEqual(ops.verifyOperationalBackup(dest), []);
+
+    const restoredAt = join(env.root, 'restored');
+    const restored = await ops.restoreOperationalBackup(dest, restoredAt);
+    const row = env.db.prepare('SELECT filename, sha256 FROM visual_assets WHERE id = ?').get(env.asset.id);
+    assert.equal(sha(readFileSync(join(restored.mediaDir, row.filename))), row.sha256, 'the restored file is byte-identical');
+
+    const copy = openDb(restored.dbPath);
+    try {
+      assert.equal(copy.prepare('SELECT summary_body FROM learning_units WHERE id = ?').get(env.unit.id).summary_body, env.body);
+      const served = assets.readFile(copy, env.userId, env.asset.id, restored.mediaDir);
+      assert.equal(served.mime, 'image/png');
+      assert.throws(() => assets.readFile(copy, env.userId + 1, env.asset.id, restored.mediaDir), (e) => e.code === 'NOT_FOUND', 'still owner-only after the restore');
+    } finally { copy.close(); }
+
+    const report = await ops.rehearseRestore(dest);
+    assert.equal(report.ok, true, JSON.stringify(report.problems));
+    assert.equal(report.mediaChecked, 1);
+    assert.equal(report.figureRefsChecked, 1);
+  } finally { env.cleanup(); }
+});
+
+test('a damaged or incomplete image set is detected: missing file, corrupt file, extra file, swapped owner in the manifest', async () => {
+  const env = await envWithFigure();
+  try {
+    const dest = join(env.root, 'backups', 'media-damage');
+    await ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, mediaDir: env.mediaDir, destDir: dest });
+    const filename = env.db.prepare('SELECT filename FROM visual_assets').get().filename;
+    const file = join(dest, 'media', filename);
+    const original = readFileSync(file);
+
+    unlinkSync(file);
+    assert.ok(ops.verifyOperationalBackup(dest).some((p) => p.code === 'MEDIA_MISSING'));
+    writeFileSync(file, Buffer.concat([original, Buffer.from('x')]));
+    assert.ok(ops.verifyOperationalBackup(dest).some((p) => p.code === 'MEDIA_CORRUPT'));
+    writeFileSync(file, original);
+    writeFileSync(join(dest, 'media', 'stranger.png'), original);
+    assert.ok(ops.verifyOperationalBackup(dest).some((p) => p.code === 'MEDIA_UNLISTED'));
+    unlinkSync(join(dest, 'media', 'stranger.png'));
+    assert.deepEqual(ops.verifyOperationalBackup(dest), [], 'baseline repaired');
+
+    const manifestPath = join(dest, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.media[0].userId = env.userId + 7;
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    assert.ok(ops.verifyOperationalBackup(dest).some((p) => p.code === 'MEDIA_DB_MISMATCH'), 'the owner in the manifest must match the database');
+    await assert.rejects(() => ops.restoreOperationalBackup(dest, join(env.root, 'refused')), (e) => e.code === 'RESTORE_REFUSED');
+  } finally { env.cleanup(); }
+});
+
+test('backup fails closed when an image file is missing or altered on disk, and a summary pointing at nothing is reported by the rehearsal', async () => {
+  const env = await envWithFigure();
+  try {
+    const filename = env.db.prepare('SELECT filename FROM visual_assets').get().filename;
+    const file = join(env.mediaDir, filename);
+    const original = readFileSync(file);
+    writeFileSync(file, Buffer.concat([original, Buffer.from('tampered')]));
+    await assert.rejects(() => ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, mediaDir: env.mediaDir, destDir: join(env.root, 'b1') }), (e) => e.code === 'MEDIA_CORRUPT');
+    unlinkSync(file);
+    await assert.rejects(() => ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, mediaDir: env.mediaDir, destDir: join(env.root, 'b2') }), (e) => e.code === 'MEDIA_MISSING');
+    assert.equal(existsSync(join(env.root, 'b1')) || existsSync(join(env.root, 'b2')), false, 'no partial package is left behind');
+
+    writeFileSync(file, original);
+    env.db.prepare('UPDATE learning_units SET summary_body = ? WHERE id = ?').run('Aponta para\n\n[[fig:00000000-0000-4000-8000-000000000000]]\n\nque não existe.', env.unit.id);
+    const dest = join(env.root, 'backups', 'dangling');
+    await ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, mediaDir: env.mediaDir, destDir: dest });
+    const report = await ops.rehearseRestore(dest);
+    assert.equal(report.ok, false);
+    assert.ok(report.problems.some((p) => p.code === 'FIGURE_REF_UNRESOLVED'));
+  } finally { env.cleanup(); }
+});
+
+test('a package made before images existed (no media in the manifest) still verifies and restores', async () => {
   const env = makeEnv();
   try {
-    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('figure-body')]);
-    const figure = figures.create(env.db, env.userId, { buffer: png, alt: 'Esquema' });
-    const body = `Texto com fórmula $x^2$.\n\n![Esquema](smartlearn-figure:${figure.id} "Figura 1")`;
-    env.db.prepare('UPDATE learning_units SET summary_body = ? WHERE id = ?').run(body, env.unit.id);
-
-    const dest = join(env.root, 'backups', 'fig');
+    const dest = join(env.root, 'backups', 'legacy');
     await ops.createOperationalBackup(env.db, { sourcesDir: env.sourcesDir, destDir: dest });
+    const manifestPath = join(dest, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    delete manifest.media; delete manifest.orphanMediaFiles;
+    writeFileSync(manifestPath, JSON.stringify(manifest));
     assert.deepEqual(ops.verifyOperationalBackup(dest), []);
-    const target = join(env.root, 'restored');
-    await ops.restoreOperationalBackup(dest, target);
-
-    const restored = openDb(join(target, 'smartlearn.db'));
-    try {
-      assert.deepEqual(figures.read(restored, env.userId, figure.id).bytes, png);
-      assert.equal(restored.prepare('SELECT summary_body FROM learning_units WHERE id = ?').get(env.unit.id).summary_body, body);
-    } finally { restored.close(); }
+    await ops.restoreOperationalBackup(dest, join(env.root, 'restored-legacy'));
   } finally { env.cleanup(); }
 });

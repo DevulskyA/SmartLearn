@@ -21,7 +21,11 @@ export function applyInsertion(value, start, end, kind, text = "") {
   const at = eol === -1 ? value.length : eol;
   const lead = blockLead(value, at);
   const body = kind === "table" ? TABLE_TEMPLATE : text;
-  const snippet = `${lead}${body}\n`;
+  // exactly one blank line between the new block and whatever follows (never a pile of empty lines); at the very end, one final newline
+  const rest = value.slice(at);
+  const newlinesAfter = /^\n*/.exec(rest)[0].length;
+  const tail = rest.trim() === "" ? (newlinesAfter === 0 ? "\n" : "") : "\n".repeat(Math.max(0, 2 - newlinesAfter));
+  const snippet = `${lead}${body}${tail}`;
   const selectFrom = kind === "table" ? at + lead.length + 2 : at + snippet.length;
   const selectTo = kind === "table" ? selectFrom + "Coluna 1".length : selectFrom;
   return { value: value.slice(0, at) + snippet + value.slice(at), selectFrom, selectTo };

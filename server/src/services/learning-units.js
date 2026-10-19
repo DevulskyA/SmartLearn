@@ -1,6 +1,7 @@
 import { validateNamingField, normalizeEntityName, nameKey } from '../../../shared/text-validation.js';
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
+import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 
 export class LearningUnitError extends Error {
   constructor(code, message, field) {
@@ -11,6 +12,13 @@ export class LearningUnitError extends Error {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// A [[fig:UUID]] in a summary must point at one of the student's own visual assets; anything else is refused instead of saved as a dead reference.
+function assertFigureRefs(db, userId, summaryBody) {
+  if (typeof summaryBody !== 'string' || !summaryBody.includes('[[fig:')) return;
+  const problems = findUnresolvedRefs(db, userId, summaryBody);
+  if (problems.length > 0) throw new LearningUnitError('VALIDATION_FAILED', refsMessage(problems), 'summaryBody');
+}
 
 function validateTitleField(value) {
   if (typeof value !== 'string') return 'O conteúdo estudado deve ser uma string.';
@@ -103,6 +111,7 @@ export function create(db, userId, data) {
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
   if (!DATE_RE.test(studyDate ?? '')) throw new LearningUnitError('VALIDATION_FAILED', 'Informe uma data de estudo válida (YYYY-MM-DD).', 'studyDate');
   generateReviewDates(studyDate); // throws if calendar-invalid (e.g. Feb 30)
+  assertFigureRefs(db, userId, summaryBody);
 
   const idempotencyPayload = { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate };
   const check = checkIdempotency(db, { userId, operation: 'create-learning-unit', operationKey, payload: idempotencyPayload });
@@ -187,6 +196,7 @@ export function updateFields(db, userId, id, { title, sourceText, summaryBody } 
   const titleError = validateTitleField(nextTitle);
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
 
+  assertFigureRefs(db, userId, summaryBody);
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE learning_units SET title = ?, source_text = ?, summary_body = ?, updated_at = ?

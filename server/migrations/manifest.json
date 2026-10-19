@@ -183,5 +183,10 @@
     "version": 37,
     "name": "summary-figures",
     "checksum": "e246be6b571713618a961e82043de57237671b03decad7a82a9fc6c31d40dfdb"
+  },
+  {
+    "version": 38,
+    "name": "visual-assets",
+    "checksum": "03c532ad3d8db8905f8fb48afd27361fa054302c5c24da51b9b50b2d6020017d"
   }
 ]

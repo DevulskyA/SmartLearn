@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { renameSync, rmSync, existsSync } from 'node:fs';
 import { get as getSettings } from './services/settings.js';
+import { replaceFigureRefs } from '../../shared/summary-figure-refs.js';
 
 // PR-1 foundation (T5, aa62c67): simple timestamped physical snapshot into
 // a directory. Predates T19's atomic destPath + verification API below;
@@ -38,6 +39,25 @@ export function createLogicalExport(db, userId) {
 
   const { version: schemaVersion } = db.prepare('SELECT MAX(version) as version FROM schema_migrations').get();
 
+  // The logical export carries NO binary files (neither PDFs nor images). A summary that points at a figure ([[fig:UUID]]) would restore as a
+  // reference to an image that does not exist, so each reference is replaced here by an explicit sentence in plain words, and the file
+  // says so (`notices`). The complete restore of images is the operational backup (server/scripts/backup.mjs --package).
+  let figuresReplaced = 0;
+  const learningUnits = db.prepare('SELECT * FROM learning_units WHERE user_id = ? ORDER BY id').all(userId).map((unit) => {
+    if (typeof unit.summary_body !== 'string' || !unit.summary_body.includes('[[fig:')) return unit;
+    const body = replaceFigureRefs(unit.summary_body, (id) => {
+      figuresReplaced += 1;
+      const asset = db.prepare('SELECT caption, alt_text FROM visual_assets WHERE user_id = ? AND id = ?').get(userId, id);
+      return asset ? `[Figura não incluída nesta exportação: ${asset.caption || asset.alt_text}]` : '[Figura não incluída nesta exportação (indisponível)]';
+    });
+    return { ...unit, summary_body: body };
+  });
+  const notices = figuresReplaced === 0 ? [] : [{
+    code: 'MEDIA_NOT_INCLUDED',
+    figures: figuresReplaced,
+    message: `${figuresReplaced} figura(s) dos resumos não vão neste arquivo (a exportação lógica não carrega imagens): cada uma foi trocada por uma frase descritiva. Para restaurar as imagens use o backup operacional.`,
+  }];
+
   return {
     exportVersion: LOGICAL_EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -45,7 +65,7 @@ export function createLogicalExport(db, userId) {
     user: { id: user.id, email: user.email_display, createdAt: user.created_at },
     settings: getSettings(db, userId),
     subjects: db.prepare('SELECT * FROM subjects WHERE user_id = ? ORDER BY id').all(userId),
-    learningUnits: db.prepare('SELECT * FROM learning_units WHERE user_id = ? ORDER BY id').all(userId),
+    learningUnits,
     reviewTasks: db.prepare('SELECT * FROM review_tasks WHERE user_id = ? ORDER BY id').all(userId),
     exercises: db.prepare('SELECT * FROM exercises WHERE user_id = ? ORDER BY id').all(userId),
     exerciseVersions: db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? ORDER BY id').all(userId),
@@ -57,10 +77,8 @@ export function createLogicalExport(db, userId) {
     exams: db.prepare('SELECT * FROM exams WHERE user_id = ? ORDER BY id').all(userId),
     examItems: db.prepare('SELECT * FROM exam_items WHERE user_id = ? ORDER BY id').all(userId),
     examEvidence: db.prepare('SELECT * FROM exam_evidence WHERE user_id = ? ORDER BY exam_id, evidence_id').all(userId),
-    // The images placed in Resumo Mestre texts (`smartlearn-figure:ID`), bytes as base64 so the file alone still carries them. Additive like the
-    // keys above; the logical restore (services/logical-restore.js) reads it, re-creates the images under new ids and rewrites the references.
-    summaryFigures: db.prepare('SELECT id, mime, byte_size, sha256, alt, data, created_at FROM summary_figures WHERE user_id = ? ORDER BY id').all(userId)
-      .map(({ data, ...row }) => ({ ...row, dataBase64: Buffer.from(data).toString('base64') })),
+    // Additive, and ignored by the importer: what this file does NOT contain (see above). Absent when there is nothing to warn about.
+    ...(notices.length > 0 ? { notices } : {}),
   };
 }
 

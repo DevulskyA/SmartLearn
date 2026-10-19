@@ -20,7 +20,9 @@ import { registerBackupRoutes } from './routes/backup.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerAttemptRoutes } from './routes/attempts.js';
 import { registerSourceRoutes } from './routes/sources.js';
-import { registerSummaryFigureRoutes } from './routes/summary-figures.js';
+import { registerVisualAssetRoutes } from './routes/visual-assets.js';
+import { dirname, join } from 'node:path';
+import { DEFAULT_LIMITS as DEFAULT_MEDIA_LIMITS } from './services/visual-assets.js';
 import { registerContentProposalRoutes } from './routes/content-proposals.js';
 import { registerGeneratedDraftRoutes } from './routes/generated-drafts.js';
 import { registerGenerationJobRoutes } from './routes/generation-jobs.js';
@@ -37,7 +39,10 @@ const SERVER_VERSION = (() => { try { return JSON.parse(readFileSync(new URL('..
 
 const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
-export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, ai = {}, auth = {}, devPersistentSession = false } = {}) {
+export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isProduction = false, allowedOrigins = [], trustProxy = false, staticDir = null, sources = {}, media = {}, ai = {}, auth = {}, devPersistentSession = false } = {}) {
+  // Private media (images of the Resumo Mestre) lives beside the sources, outside any public root; never served by @fastify/static.
+  const mediaDir = media.mediaDir ?? config.mediaDir ?? join(dirname(sources.sourcesDir ?? config.sourcesDir), 'media');
+  const mediaLimits = media.limits ?? { ...DEFAULT_MEDIA_LIMITS, ...config.mediaLimits };
   // Throws when the DEV flag is combined with production.
   const sessionPolicy = resolveSessionPolicy({ isProduction, devPersistent: devPersistentSession });
   const app = Fastify({ logger: false, trustProxy });
@@ -128,7 +133,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerImportRoutes(v1, db);
     registerAttemptRoutes(v1, db);
     registerSourceRoutes(v1, db, sources);
-    registerSummaryFigureRoutes(v1, db);
+    registerVisualAssetRoutes(v1, db, { mediaDir, limits: mediaLimits });
     registerContentProposalRoutes(v1, db);
     registerGeneratedDraftRoutes(v1, db, ai);
     registerGenerationJobRoutes(v1, db, ai, jobRunner);

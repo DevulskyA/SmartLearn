@@ -13,7 +13,6 @@ import { ImportNormalizationError } from '../../../shared/import-normalization.j
 import { REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { config } from '../config.js';
 import { ImportError } from './import-error.js';
-import * as summaryFigures from './summary-figures.js';
 import { assertValidTimezone, SettingsError } from './settings.js';
 
 export const LOGICAL_KIND = 'LOGICAL_RESTORE';
@@ -26,7 +25,7 @@ const OWNED_DATA_TABLES = [
   'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions',
   'learning_evidence', 'exercise_attempts', 'learning_events', 'exams', 'exam_items',
   'exam_evidence', 'competencies', 'sources', 'source_pages', 'source_outline',
-  'content_proposals', 'generated_drafts', 'exercise_source_citations', 'unit_summary_citations', 'summary_figures',
+  'content_proposals', 'generated_drafts', 'exercise_source_citations', 'unit_summary_citations', 'visual_assets',
 ];
 
 function currentSchemaVersion(db) {
@@ -92,7 +91,6 @@ export function buildLogicalPreview(db, userId, rawSource) {
 
   const counts = {};
   for (const { key } of LOGICAL_SETS) counts[key] = normalized.sets[key].length;
-  if (normalized.summaryFigures.length > 0) counts.summaryFigures = normalized.summaryFigures.length; // only when the file has any: older previews keep their exact counts
   const report = {
     kind: LOGICAL_KIND,
     counts,
@@ -141,31 +139,6 @@ export function restoreLogical(db, userId, normalized, now = new Date()) {
       if (set.hasId) map.set(row.id, Number(result.lastInsertRowid));
     }
     inserted[set.key] = normalized.sets[set.key].length;
-  }
-
-  // Images placed in summary texts: restored with NEW ids, and the `smartlearn-figure:ID` references inside the restored summaries are
-  // rewritten to them. A file whose image bytes are not a real raster image refuses the whole restore (nothing half-restored).
-  const figures = normalized.summaryFigures ?? [];
-  if (figures.length > 0) {
-    const newIds = new Map();
-    for (const fig of figures) {
-      try {
-        const created = summaryFigures.create(db, userId, { buffer: Buffer.from(fig.dataBase64, 'base64'), alt: fig.alt, now: () => new Date(fig.created_at) });
-        newIds.set(fig.id, created.id);
-      } catch (err) {
-        if (err instanceof summaryFigures.SummaryFigureError) {
-          throw new ImportError('IMPORT_INTEGRITY_ERROR', `A figura ${fig.id} do arquivo não é uma imagem válida (${err.message}).`);
-        }
-        throw err;
-      }
-    }
-    const update = db.prepare('UPDATE learning_units SET summary_body = ? WHERE id = ? AND user_id = ?');
-    for (const unit of normalized.sets.learningUnits) {
-      if (typeof unit.summary_body !== 'string' || !unit.summary_body.includes('smartlearn-figure:')) continue;
-      const rewritten = unit.summary_body.replace(/\]\(smartlearn-figure:(\d+)/g, (whole, id) => (newIds.has(Number(id)) ? `](smartlearn-figure:${newIds.get(Number(id))}` : whole));
-      if (rewritten !== unit.summary_body) update.run(rewritten, idMaps.learningUnits.get(unit.id), userId);
-    }
-    inserted.summaryFigures = figures.length;
   }
 
   // Only a timezone the student had actually chosen is restored; an export from

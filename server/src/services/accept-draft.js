@@ -1,6 +1,7 @@
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { resolveOrCreateSubject, describeSubject, LearningUnitError } from './learning-units.js';
 import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
+import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
@@ -126,6 +127,10 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   }
 
   const run = db.transaction(() => {
+    // Inside the transaction: the figures the summary points at must STILL be the student's own, from this draft's source, at the moment
+    // the lesson is created. The references travel with the summary text into the new lesson; nothing is accepted with a dead one.
+    const refProblems = findUnresolvedRefs(db, userId, draftContent.summary, { sourceId: proposal.source_id });
+    if (refProblems.length > 0) throw new AcceptDraftError('VALIDATION_FAILED', refsMessage(refProblems), 'summary');
     let subject;
     try {
       subject = resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, newSubjectColor });

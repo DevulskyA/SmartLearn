@@ -65,7 +65,7 @@ const consoleErrors = [];
 const password = 'a genuinely long test password 1';
 const email = `journey-${Date.now()}@example.com`;
 const SUBJECT = 'Farmacologia Desktop';
-const SUMMARY_EDIT = 'Resumo mestre editado na jornada Desktop: absorção, distribuição e eliminação, com $C=C_0 e^{-kt}$.\n\n| Fase | Efeito |\n|---|---|\n| Absorção | sobe |\n| Eliminação | desce |';
+const SUMMARY_EDIT = 'Resumo mestre editado na jornada Desktop: absorção, distribuição e eliminação, com \\(C=C_0 e^{-kt}\\) e \\(\\ce{H2O}\\).\n\n| Fase | Efeito |\n|---|---|\n| Absorção | sobe |\n| Eliminação | desce |\n\nFim do resumo: ';
 const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 // the scientific parts of the summary as DRAWN (formula, table, figure that really loaded through the WebView2 CSP)
 async function expectScientificSummary(body) {
@@ -320,13 +320,23 @@ try {
     await editor.locator('.lesson-qeditor .lesson-message').getByText('Questão salva').waitFor({ timeout: 10000 });
     await editor.getByRole('tab', { name: /Resumo/ }).click();
     await editor.locator('.lesson-summary-input').fill(SUMMARY_EDIT);
-    await editor.locator('[data-panel="summary"]').getByRole('button', { name: 'Figura', exact: true }).click();
-    await editor.locator('.summary-figure-file').setInputFiles({ name: 'esquema.png', mimeType: 'image/png', buffer: PIXEL_PNG });
-    await editor.locator('.summary-figure-alt').fill('Esquema da jornada');
-    await editor.locator('.summary-figure-insert').click();
-    await editor.locator('.summary-figure-panel').waitFor({ state: 'detached', timeout: 10000 });
+    // the visual formula editor (MathLive) must really open inside the Desktop WebView: its mathfield, the LaTeX box and the KaTeX preview
+    await editor.getByRole('button', { name: 'Inserir fórmula' }).click();
+    const mathDialog = page.locator('dialog.math-dialog');
+    await mathDialog.locator('math-field').waitFor({ state: 'visible', timeout: 15000 });
+    await mathDialog.locator('.math-dialog-latex').fill('\\frac{a}{b}');
+    await mathDialog.locator('.math-dialog-preview .katex').waitFor({ timeout: 5000 });
+    await mathDialog.locator('.math-dialog-confirm').click();
+    await mathDialog.waitFor({ state: 'detached', timeout: 10000 });
+    expect((await editor.locator('.lesson-summary-input').inputValue()).startsWith(`${SUMMARY_EDIT}\\(\\frac{a}{b}\\)`), 'the formula dialog did not insert at the cursor');
+    await editor.locator('.summary-image-picker').setInputFiles({ name: 'esquema.png', mimeType: 'image/png', buffer: PIXEL_PNG });
+    const figureDialog = page.locator('dialog.figure-details-dialog');
+    await figureDialog.locator('.figure-dialog-alt').fill('Esquema da jornada');
+    await figureDialog.locator('.figure-dialog-caption').fill('Figura da jornada');
+    await figureDialog.locator('.figure-dialog-confirm').click();
+    await figureDialog.waitFor({ state: 'detached', timeout: 10000 });
     ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim(); // saving trims the text
-    expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /!\[Esquema da jornada\]\(smartlearn-figure:\d+\)/.test(ctx.summaryFinal), `figure not inserted: ${ctx.summaryFinal}`);
+    expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /\n\n\[\[fig:[0-9a-f-]{36}\]\]$/.test(ctx.summaryFinal), `figure not inserted: ${ctx.summaryFinal}`);
     await editor.locator('[data-action="save-summary"]').click();
     await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
     await page.locator('[data-action="lesson-back"]').click();

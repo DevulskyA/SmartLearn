@@ -65,9 +65,7 @@ const ENTITY_LABEL_KEYS = {
   learningEvents: 'migration.entity.learningEvents',
   exams: 'migration.entity.exams',
   examItems: 'migration.entity.examItems',
-  examEvidence: 'migration.entity.examEvidence',
-  summaryFigures: 'migration.entity.summaryFigures',
-};
+  examEvidence: 'migration.entity.examEvidence',};
 
 export function entityLabel(key) {
   return Object.hasOwn(ENTITY_LABEL_KEYS, key) ? t(ENTITY_LABEL_KEYS[key]) : key;
