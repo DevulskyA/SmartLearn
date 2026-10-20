@@ -18,6 +18,8 @@ import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import { acceptDraft } from '../src/services/accept-draft.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
+import * as ops from '../src/operational-backup.js';
+import { createLogicalExport } from '../src/backup.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const ORIGIN = 'https://smartlearn.test';
@@ -250,6 +252,54 @@ test('draft summary and acceptance: figures must be the student\'s and a PDF cro
     assert.equal(unit.summaryBody, body, 'the lesson carries the summary, references included, untouched');
     assert.deepEqual(assets.referencesOf(e.db, userId, own.id).map((r) => r.type), ['unit']);
     assert.equal(draft.summaryVersion >= 1, true);
+  } finally { e.cleanup(); }
+});
+
+test('the whole path: a draft summary with text, formula, an image and a PDF crop is edited, accepted, backed up, restored and reopened with the same content, bytes and provenance', async () => {
+  const e = env();
+  try {
+    const { userId, source, draftId } = await draftEnv(e);
+    const png = await raster('png');
+    const own = (await assets.create(e.db, userId, input(png), { mediaDir: e.mediaDir })).asset;
+    const crop = (await assets.create(e.db, userId, input(await raster('png', { color: '#dc2626' }), { operationKey: 'whole-crop', kind: 'PDF_CROP', crop: { sourceId: source.id, pageIndex: 1, x: 0.1, y: 0.2, w: 0.4, h: 0.3, rotation: 90 } }), { mediaDir: e.mediaDir })).asset;
+    const body = `A taxa é \\(C=C_0 e^{-kt}\\) e a água é \\(\\ce{H2O}\\).\n\n\\[\\frac{a}{b}\\]\n\n[[fig:${own.id}]]\n\nTexto entre figuras.\n\n[[fig:${crop.id}]]`;
+    drafts.reviseSummary(e.db, userId, draftId, { summary: body, expectedVersion: drafts.getDraft(e.db, userId, draftId).summaryVersion });
+    const accepted = acceptDraft(e.db, userId, draftId, { newSubjectName: 'Fisiologia', studyDate: '2026-09-01', expectedRevision: drafts.getDraft(e.db, userId, draftId).revision, acknowledgeSummaryFindings: true });
+    const unitId = accepted.unit.id;
+    assert.equal(learningUnits.getById(e.db, userId, unitId).summaryBody, body);
+
+    const dest = join(e.root, 'backup');
+    const manifest = await ops.createOperationalBackup(e.db, { sourcesDir: e.sourcesDir, mediaDir: e.mediaDir, destDir: dest });
+    assert.equal(manifest.media.length, 2);
+    assert.deepEqual(ops.verifyOperationalBackup(dest), []);
+    const restored = await ops.restoreOperationalBackup(dest, join(e.root, 'restored'));
+
+    const copy = openDb(restored.dbPath);
+    try {
+      assert.equal(learningUnits.getById(copy, userId, unitId).summaryBody, body, 'text, formulas and figure lines are identical after the restore');
+      for (const original of [own, crop]) {
+        const before = assets.get(e.db, userId, original.id);
+        const after = assets.get(copy, userId, original.id);
+        assert.deepEqual(after, before, 'the record, texts and provenance are identical');
+        const served = assets.readFile(copy, userId, original.id, restored.mediaDir);
+        assert.equal(served.mime, 'image/png');
+        assert.deepEqual(readFileSync(join(restored.mediaDir, copy.prepare('SELECT filename FROM visual_assets WHERE id = ?').get(original.id).filename)), readFileSync(join(e.mediaDir, e.db.prepare('SELECT filename FROM visual_assets WHERE id = ?').get(original.id).filename)));
+      }
+      const restoredCrop = assets.get(copy, userId, crop.id);
+      assert.deepEqual(restoredCrop.source.rect, { x: 0.1, y: 0.2, w: 0.4, h: 0.3 });
+      assert.equal(restoredCrop.source.rotation, 90);
+      assert.match(restoredCrop.source.sourceChecksum, /^[0-9a-f]{64}$/);
+      assert.ok(existsSync(join(restored.sourcesDir, copy.prepare('SELECT filename FROM sources WHERE id = ?').get(source.id).filename)), 'the PDF the crop came from is restored too');
+      assert.deepEqual(assets.referencesOf(copy, userId, own.id).map((r) => r.type), ['unit']);
+    } finally { copy.close(); }
+    const report = await ops.rehearseRestore(dest);
+    assert.equal(report.ok, true, JSON.stringify(report.problems));
+    assert.equal(report.mediaChecked, 2);
+    assert.equal(report.figureRefsChecked, 2);
+
+    // the textual export never carries a token that would restore as a missing image, and the lesson text and formulas stay
+    const exported = createLogicalExport(e.db, userId).learningUnits.find((u) => u.id === unitId).summary_body;
+    assert.ok(!exported.includes('[[fig:') && exported.includes('\\(C=C_0 e^{-kt}\\)') && exported.includes('Figura não incluída'));
   } finally { e.cleanup(); }
 });
 

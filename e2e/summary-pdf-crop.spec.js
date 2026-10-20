@@ -269,6 +269,32 @@ test('a save whose answer is lost is retried without creating a second figure', 
   expect(mediaFiles().length - before).toBe(1);
 });
 
+test('with no internet at all (every non-local request is refused): formulas draw with the bundled KaTeX fonts, the MathLive dialog opens, and the PDF picker renders its page', async ({ page }) => {
+  const refused = [];
+  await page.context().route((url) => !['localhost', '127.0.0.1'].includes(url.hostname), (route) => { refused.push(route.request().url()); return route.abort(); });
+  await uploadPdf(page, 'offline.pdf', markerPdf());
+  const row = await openPlanSummary(page, 'Sem internet');
+  const textarea = row.locator('.plan-summary-textarea');
+  await textarea.fill('Taxa \\(C=C_0 e^{-kt}\\) e \\(\\ce{H2O}\\).');
+  const preview = row.locator('.summary-preview-body');
+  await expect(preview.locator('.katex').first()).toBeVisible();
+  expect(await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('1em KaTeX_Main') && [...document.fonts].some((f) => f.family.startsWith('KaTeX') && f.status === 'loaded'); })).toBe(true);
+
+  await row.locator('[data-insert="formula"]').click();
+  const math = page.locator('dialog.math-dialog');
+  await expect(math.locator('math-field')).toBeVisible({ timeout: 15000 });
+  await math.locator('.math-dialog-latex').fill('\\sqrt{x}');
+  await expect(math.locator('.math-dialog-preview .katex')).toBeVisible();
+  await math.locator('.math-dialog-confirm').click();
+  await expect(math).toHaveCount(0);
+
+  await row.locator('[data-insert="pdf"]').click();
+  const dialog = page.locator('dialog.pdf-crop-dialog');
+  await expect(dialog.locator('.pdf-crop-status')).toContainText('Página 1 de 1', { timeout: 15000 });
+  await dialog.locator('button', { hasText: 'Cancelar' }).click();
+  expect(refused, 'nothing tried to leave the machine').toEqual([]);
+});
+
 test('without any uploaded PDF the picker says so instead of failing', async ({ page }) => {
   const row = await openPlanSummary(page, 'Sem PDF');
   await row.locator('[data-insert="pdf"]').click();
