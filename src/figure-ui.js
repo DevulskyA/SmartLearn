@@ -1,7 +1,7 @@
 // Dialogs of the figures of the Resumo Mestre: the details form (alternative text, caption, description) used to insert or edit one, and the
 // enlarged view. Native <dialog> elements: focus is trapped, Esc closes, focus returns to where it was.
 import { t } from "./i18n/index.js";
-import { uploadAsset, updateAssetTexts, forgetFigure } from "./visual-assets-api.js";
+import { uploadAsset, updateAssetTexts, forgetFigure, newOperationKey } from "./visual-assets-api.js";
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_ALT = 300;
@@ -70,6 +70,7 @@ export function openFigureDetailsDialog({ blob = null, record = null, crop = nul
     dialog.append(preview, field(t("summary.figure.dialog.alt"), alt), field(t("summary.figure.dialog.caption"), caption), field(t("summary.figure.dialog.description"), description), hint, status, actions);
 
     let settled = false;
+    const operationKey = newOperationKey(); // one per dialog: a retry after a lost answer returns the same figure instead of a second one
     const finish = (value) => {
       if (settled) return;
       settled = true;
@@ -85,7 +86,7 @@ export function openFigureDetailsDialog({ blob = null, record = null, crop = nul
       status.textContent = t("summary.figure.dialog.saving");
       try {
         const texts = { alt: alt.value.trim(), caption: caption.value.trim(), description: description.value.trim() };
-        const stored = record ? await updateAssetTexts(record.id, texts) : await uploadAsset(blob, { ...texts, crop });
+        const stored = record ? await updateAssetTexts(record.id, texts) : await uploadAsset(blob, { ...texts, crop, operationKey });
         finish(stored);
       } catch (err) {
         status.textContent = err?.message || t("summary.figure.dialog.failed");

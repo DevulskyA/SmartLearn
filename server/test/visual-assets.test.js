@@ -347,6 +347,33 @@ test('HTTP: upload, metadata, file with private headers, edit, idempotent repeat
   } finally { await h.app.close(); h.cleanup(); }
 });
 
+test('HTTP: a PDF crop travels as query text (source, page, rectangle, rotation), is stored with its provenance, repeats without duplicating, and bad or foreign values are refused', async () => {
+  const h = await httpApp();
+  try {
+    const alice = await h.account('a@example.com');
+    const bob = await h.account('b@example.com');
+    const checksum = 'c'.repeat(64);
+    const sourceId = Number(h.db.prepare("INSERT INTO sources (user_id, filename, original_name, content_type, byte_size, checksum, status, page_count, created_at) VALUES (?, 'f.pdf', 'aula.pdf', 'application/pdf', 10, ?, 'UPLOADED', 3, '2026-01-01T00:00:00Z')").run(alice.userId, checksum).lastInsertRowid);
+    const body = multipart(await raster('png'));
+    const send = (account, key, extra) => h.app.inject({
+      method: 'POST', url: `/v1/visual-assets?${query({ operationKey: key, alt: 'Recorte', kind: 'PDF_CROP', sourceId, pageIndex: 2, x: 0.1, y: 0.2, w: 0.5, h: 0.3, rotation: 90, ...extra })}`,
+      payload: body.payload, headers: { ...account.headers, 'content-type': body.contentType },
+    });
+    const created = await send(alice, 'c1');
+    assert.equal(created.statusCode, 201, created.body);
+    const { asset } = JSON.parse(created.body);
+    assert.equal(asset.kind, 'PDF_CROP');
+    assert.deepEqual(asset.source, { sourceId, pageIndex: 2, rect: { x: 0.1, y: 0.2, w: 0.5, h: 0.3 }, rotation: 90, sourceChecksum: checksum });
+    assert.equal((await send(alice, 'c1')).statusCode, 200, 'the same operation answers again');
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM visual_assets').get().n, 1);
+    assert.equal((await send(bob, 'c2')).statusCode, 404, 'a source of someone else');
+    for (const [name, extra] of Object.entries({ page: { pageIndex: 9 }, rotation: { rotation: 45 }, outside: { x: 0.8 }, noSource: { sourceId: '' }, text: { x: 'abc' } })) {
+      assert.equal((await send(alice, `bad-${name}`, extra)).statusCode, 400, name);
+    }
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM visual_assets').get().n, 1);
+  } finally { await h.app.close(); h.cleanup(); }
+});
+
 test('HTTP: a hostile upload is refused without touching the disk (SVG with an image extension, oversize), and alt is mandatory', async () => {
   const h = await httpApp();
   try {

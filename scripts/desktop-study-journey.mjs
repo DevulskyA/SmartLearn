@@ -71,10 +71,10 @@ const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD
 async function expectScientificSummary(body) {
   await body.locator('.katex').first().waitFor({ timeout: 10000 });
   expect((await body.locator('table.summary-table tbody tr').count()) === 2, 'summary table not drawn');
-  const loaded = await body.locator('figure.summary-figure img').evaluate((img) => new Promise((resolve) => {
+  const widths = await body.locator('figure.summary-figure img').evaluateAll((images) => Promise.all(images.map((img) => new Promise((resolve) => {
     if (img.complete) resolve(img.naturalWidth); else { img.addEventListener('load', () => resolve(img.naturalWidth)); img.addEventListener('error', () => resolve(0)); }
-  }));
-  expect(loaded === 1, `summary figure did not load in the WebView (naturalWidth ${loaded})`);
+  }))));
+  expect(widths.length === 2 && widths.every((w) => w >= 1), `summary figures did not load in the WebView (naturalWidths ${JSON.stringify(widths)})`);
 }
 const ANSWER_EDIT = 'Resposta editada na jornada Desktop';
 const PAGES = [
@@ -335,8 +335,21 @@ try {
     await figureDialog.locator('.figure-dialog-caption').fill('Figura da jornada');
     await figureDialog.locator('.figure-dialog-confirm').click();
     await figureDialog.waitFor({ state: 'detached', timeout: 10000 });
+    // a region of the uploaded PDF (pdf.js + its worker running inside the Desktop WebView under the app CSP), dragged with the mouse
+    await editor.getByRole('button', { name: 'Selecionar do PDF' }).click();
+    const cropDialog = page.locator('dialog.pdf-crop-dialog');
+    await cropDialog.locator('.pdf-crop-status').getByText(/Página 1 de 3/).waitFor({ timeout: 20000 });
+    const canvasBox = await cropDialog.locator('.pdf-crop-canvas').boundingBox();
+    await page.mouse.move(canvasBox.x + canvasBox.width * 0.1, canvasBox.y + canvasBox.height * 0.05);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + canvasBox.width * 0.5, canvasBox.y + canvasBox.height * 0.15, { steps: 6 });
+    await page.mouse.up();
+    await cropDialog.locator('.pdf-crop-confirm').click();
+    await figureDialog.locator('.figure-dialog-alt').fill('Recorte da página 1');
+    await figureDialog.locator('.figure-dialog-confirm').click();
+    await cropDialog.waitFor({ state: 'detached', timeout: 15000 });
     ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim(); // saving trims the text
-    expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /\n\n\[\[fig:[0-9a-f-]{36}\]\]$/.test(ctx.summaryFinal), `figure not inserted: ${ctx.summaryFinal}`);
+    expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /(\n\n\[\[fig:[0-9a-f-]{36}\]\]){2}$/.test(ctx.summaryFinal), `figures not inserted: ${ctx.summaryFinal}`);
     await editor.locator('[data-action="save-summary"]').click();
     await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
     await page.locator('[data-action="lesson-back"]').click();
@@ -644,8 +657,9 @@ try {
   await step(17, 'close and reopen the isolated instance (same throwaway data dir)', async () => {
     exportBefore = stripVolatile(await api('GET', '/v1/export'));
     // the student moves/resizes the window: put it at a distinctive spot inside the display it is on, give the app time to save it
-    const current = windowRect(app.pid);
-    ctx.rectBefore = windowRect(app.pid, { x: current[0], y: current[1] + 29, w: 1111, h: 777 });
+    // strictly inside the rectangle the mover gave the window on its (checked) display, so the spot is on that monitor and not clamped
+    const home = windowPlacement?.rect ?? windowRect(app.pid);
+    ctx.rectBefore = windowRect(app.pid, { x: home[0] + 20, y: home[1] + 20, w: Math.min(1111, home[2] - home[0] - 40), h: Math.min(777, home[3] - home[1] - 40) });
     await sleep(1500);
     const closing = await shutdown({ graceful: true });
     snapshotBefore = dbSnapshot();

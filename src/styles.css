@@ -4945,6 +4945,68 @@ h1 {
   background: rgb(0 0 0 / 0.45);
 }
 
+.pdf-crop-dialog {
+  width: min(60rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface, Canvas);
+  color: var(--color-text);
+}
+
+.pdf-crop-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.pdf-crop-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.pdf-crop-field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pdf-crop-page {
+  width: 5rem;
+}
+
+.pdf-crop-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.5rem auto;
+  overflow: auto;
+  touch-action: none;
+  cursor: crosshair;
+  border: 1px solid var(--color-border);
+}
+
+.pdf-crop-stage:focus-visible {
+  outline: 3px solid var(--color-focus, Highlight);
+  outline-offset: 2px;
+}
+
+.pdf-crop-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+}
+
+.pdf-crop-selection {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--color-focus, Highlight);
+  background: rgb(0 120 215 / 0.18);
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.25);
+}
+
 .figure-dialog-preview,
 .figure-viewer-image {
   display: block;

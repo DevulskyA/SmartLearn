@@ -87,6 +87,16 @@ function noteOpening(citation, context) {
   } catch { /* best effort */ }
 }
 
+/**
+ * Opens the original PDF of `source` at its page inside the app (from a figure cut from that page). Records only that the original was opened.
+ * `source` = {sourceId, pageIndex}. Returns false when the dialog viewer is unavailable.
+ */
+export function openSourcePage(source, context = "EDITOR") {
+  const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
+  noteOpening(source, context);
+  return openOriginalPdf(`${base}/v1/sources/${source.sourceId}/file#page=${source.pageIndex}`, t("originalPdf.title", { page: source.pageIndex }));
+}
+
 // "Abrir o PDF original, página N": the stored file of the source, at that page.
 function originalPdfLink(citation, context = "EDITOR") {
   const base = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";

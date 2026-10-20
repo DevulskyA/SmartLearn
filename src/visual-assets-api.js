@@ -2,7 +2,7 @@
 import { apiRequest, apiUpload } from "./api-client.js";
 
 const apiBase = () => (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
-const newOperationKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+export const newOperationKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 /** URL of the image bytes: owner-only and cookie-authenticated, exactly like the original-PDF link. */
 export const assetFileUrl = (id) => `${apiBase()}/v1/visual-assets/${id}/file`;

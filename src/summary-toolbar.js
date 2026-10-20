@@ -8,6 +8,7 @@ import { renderSummary } from "./summary-render.js";
 import { applyInsertion } from "./summary-insert.js";
 import { figureRef } from "../shared/summary-figure-refs.js";
 import { openFigureDetailsDialog, ACCEPTED_IMAGE_TYPES } from "./figure-ui.js";
+import { openPdfCropDialog } from "./pdf-crop-dialog.js";
 
 function commit(textarea, result) {
   textarea.value = result.value;
@@ -76,7 +77,16 @@ export function createSummaryAuthoring(textarea, { extraButtons = [], previewOpt
     event.preventDefault();
     insertBlob(file);
   });
-  buttons.append(formulaBtn, tableBtn, imageBtn, picker, ...extraButtons);
+  // PDF region: the figure is cut from a page of an uploaded PDF and remembers source, page and rectangle.
+  const pdfBtn = toolbarButton("pdf", t("summary.toolbar.pdf"));
+  pdfBtn.addEventListener("click", async () => {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const record = await openPdfCropDialog({});
+    if (!record) { textarea.focus({ preventScroll: true }); return; }
+    commit(textarea, applyInsertion(textarea.value, start, end, "figure", figureRef(record.id)));
+  });
+  buttons.append(formulaBtn, tableBtn, imageBtn, pdfBtn, picker, ...extraButtons);
   bar.append(buttons, message);
 
   const preview = document.createElement("div");

@@ -7,6 +7,7 @@ import { katex, katexOptions } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
 import { loadFigureRecord } from "./visual-assets-api.js";
 import { openFigureViewer } from "./figure-ui.js";
+import { openSourcePage } from "./source-details-ui.js";
 
 const BLOCK_TAGS = new Set(["p", "ul", "ol", "li", "blockquote", "table", "thead", "tbody", "tr", "th", "td"]);
 const INLINE_TAGS = new Set(["strong", "em", "s"]);
@@ -174,7 +175,7 @@ function buildBlocks(tokens, root, ctx) {
  */
 export function renderSummary(container, text, options = {}) {
   const source = String(text ?? "");
-  const { onEditMath = null, loadFigure = loadFigureRecord, onOpenSource = null } = options;
+  const { onEditMath = null, loadFigure = loadFigureRecord, onOpenSource = openSourcePage } = options;
   const locations = onEditMath ? locateMath(source) : [];
   let mathIndex = 0;
   // by default a figure opens enlarged, with a way to edit its texts; after an edit the same summary is drawn again

@@ -49,7 +49,8 @@
     "@tauri-apps/plugin-sql": "^2.4.0",
     "katex": "^0.16.22",
     "markdown-it": "^15.0.3",
-    "mathlive": "^0.111.1"
+    "mathlive": "^0.111.1",
+    "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

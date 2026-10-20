@@ -19,7 +19,10 @@ function handleError(err, reply) {
   throw err;
 }
 
-const idParams = { type: 'object', required: ['id'], properties: { id: { type: 'string', maxLength: 64 } } };
+// '' or a missing value stays undefined (so the service rejects it); anything else becomes a number (NaN is rejected by the service).
+const asNumber = (text) => (text === undefined || text === '' ? undefined : Number(text));
+
+const idParams ={ type: 'object', required: ['id'], properties: { id: { type: 'string', maxLength: 64 } } };
 
 export function registerVisualAssetRoutes(app, db, { mediaDir, limits = assets.DEFAULT_LIMITS } = {}) {
   // Multipart (the plugin stops reading at the size limit). The texts and the provenance travel in the query string, so the file part is
@@ -35,10 +38,11 @@ export function registerVisualAssetRoutes(app, db, { mediaDir, limits = assets.D
           caption: { type: 'string', maxLength: assets.MAX_CAPTION * 2 },
           description: { type: 'string', maxLength: assets.MAX_DESCRIPTION * 2 },
           kind: { type: 'string', enum: ['STUDENT_IMAGE', 'PDF_CROP'] },
-          sourceId: { type: 'integer' },
-          pageIndex: { type: 'integer' },
-          x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' }, h: { type: 'number' },
-          rotation: { type: 'integer' },
+          // numbers arrive as query-string text; they are converted below and validated as numbers by the service
+          sourceId: { type: 'string', maxLength: 20 },
+          pageIndex: { type: 'string', maxLength: 20 },
+          x: { type: 'string', maxLength: 32 }, y: { type: 'string', maxLength: 32 }, w: { type: 'string', maxLength: 32 }, h: { type: 'string', maxLength: 32 },
+          rotation: { type: 'string', maxLength: 20 },
         },
       },
     },
@@ -73,7 +77,9 @@ export function registerVisualAssetRoutes(app, db, { mediaDir, limits = assets.D
         description: q.description,
         operationKey: q.operationKey,
         kind: q.kind,
-        crop: q.kind === 'PDF_CROP' ? { sourceId: q.sourceId, pageIndex: q.pageIndex, x: q.x, y: q.y, w: q.w, h: q.h, rotation: q.rotation } : undefined,
+        crop: q.kind === 'PDF_CROP'
+          ? { sourceId: asNumber(q.sourceId), pageIndex: asNumber(q.pageIndex), x: asNumber(q.x), y: asNumber(q.y), w: asNumber(q.w), h: asNumber(q.h), rotation: asNumber(q.rotation) }
+          : undefined,
       }, { mediaDir, limits });
       reply.status(duplicate ? 200 : 201);
       return { asset, duplicate };
