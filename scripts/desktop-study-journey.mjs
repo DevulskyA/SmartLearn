@@ -109,7 +109,10 @@ function windowRect(pid, set = null) {
 
 async function launch({ place = true } = {}) {
   cdpPort = await freePort();
-  const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` };
+  // SL_JOURNEY_NO_INTERNET=1: the WebView sends everything that is not loopback to a dead proxy, so the whole journey runs with the internet unreachable
+  // (no system setting is touched). Loopback (the app's own server) is exempt by Chromium's default, as it would be on a machine with no network.
+  const offline = process.env.SL_JOURNEY_NO_INTERNET ? ' --proxy-server=http://127.0.0.1:9' : '';
+  const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}${offline}` };
   app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
   const placement = place ? placeWindowOnSmallDisplay(app.pid) : Promise.resolve({ moved: false, reason: 'window restore check: the app must place itself' });
   const deadline = Date.now() + 90000;
@@ -132,6 +135,10 @@ async function launch({ place = true } = {}) {
   page.on('pageerror', (error) => consoleErrors.push(`${tag()}pageerror: ${error.message}`));
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`${tag()}console.error: ${msg.text()}`); });
   await page.waitForLoadState('networkidle');
+  if (process.env.SL_JOURNEY_NO_INTERNET) {
+    const reached = await page.evaluate(() => fetch('https://example.com/', { mode: 'no-cors' }).then(() => true, () => false));
+    if (reached) throw new Error('SL_JOURNEY_NO_INTERNET: the WebView still reaches the internet, the offline run would prove nothing');
+  }
 }
 
 async function shutdown({ graceful }) {
