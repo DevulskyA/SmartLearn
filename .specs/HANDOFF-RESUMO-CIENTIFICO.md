@@ -70,6 +70,15 @@ Pacote auditado: `SmartLearn_AUDITORIA_2026-10-24.zip` (HEAD `7245d2c`). Achados
 - O auditor notou que o log nativo identificava o build como `6177f7e`: a jornada foi refeita sobre o HEAD final (ver `git log`).
 Fica registrado, não corrigido: bloco de texto bruto dividido por linha em branco é recusado (aviso) em vez de virar dois blocos.
 
+## Testes em níveis (2026-10-24)
+| Nível | Comando | Tempo medido | O que é |
+|---|---|---|---|
+| Unitário | `node --test test/summary-doc.test.js test/summary-visual-schema.test.js test/summary-figure-scan.test.js` ou `npm test` (800) | segundos | conversor, esquema, definição de figura |
+| Fumaça | `npm run test:e2e:smoke` | ~20 s | `e2e/smoke.spec.js`: 1 servidor, 1 página, 1 login e 1 rascunho compartilhados por 10 passos em série (abrir sem mudar bytes, editar, desfazer, fórmula, colar HTML, figura, recarregar, aceitar, Plano/Estudar/Hoje, nada saiu da máquina). Falha no passo N para o resto. |
+| Por área | `npm run test:e2e:summary` | ~150 s (72 testes, 4 workers; eram ~196 s com 2) | suíte `summary` em `e2e/support/suites.js`; o número de workers por suíte está em `SUITE_WORKERS` |
+| Completa | `npm run test:e2e` | ~12 min | isolada, 2 workers, cada teste com seu usuário e rascunho: é a prova antes de integrar |
+Fumaça mata 2 de 4 mutantes testados (separadores do conversor, moldura de fórmula); salvamento concorrente e o scanner de figuras ficam para a suíte por área e os unitários (o 4º mutante era equivalente). Compartilhar login/rascunho também na suíte por área economizaria só ~16 s de 196 s (o preparo é ~2 s de login + 1,4 s de geração por teste), então não foi feito. Com 4 workers houve 1 falha em 6 execuções (não identificada: o log não foi guardado); as 5 seguintes passaram. A suíte completa não usa 4 workers.
+
 ## Próximo (por ordem)
 1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
 2. Trabalho experimental independente: colar Markdown no editor visual; editor visual no Plano/Hoje; tabela editável.

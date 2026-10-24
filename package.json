@@ -26,7 +26,9 @@
     "prepreview": "node scripts/require-work-branch.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test:e2e:materials": "node scripts/e2e.mjs --suite materials"
+    "test:e2e:materials": "node scripts/e2e.mjs --suite materials",
+    "test:e2e:smoke": "node scripts/e2e.mjs --suite smoke",
+    "test:e2e:summary": "node scripts/e2e.mjs --suite summary"
   },
   "repository": {
     "type": "git",
