@@ -420,3 +420,134 @@ test('after the text changed elsewhere the editor starts a fresh history (undo c
   await page.locator('dialog.figure-details-dialog .figure-dialog-cancel, dialog.figure-details-dialog button:has-text("Cancelar")').first().click();
   expect(page.url()).toBe(url);
 });
+
+// The save round trip takes time. Whatever the student types while it is in flight must survive it, in both editors.
+async function holdSummarySave(page) {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let reached;
+  const arrived = new Promise((resolve) => { reached = resolve; });
+  await page.route('**/v1/drafts/*/summary', async (route) => {
+    if (route.request().method() !== 'PATCH') { await route.continue(); return; }
+    reached();
+    await gate; // the request is held here: the server has not answered yet
+    await route.continue();
+  });
+  return { arrived, release };
+}
+
+async function serverSummary(page, editor) {
+  const id = await editor.getAttribute('data-draft-id');
+  return page.evaluate(async ({ base, draftId }) => (await (await fetch(`${base}/v1/drafts/${draftId}`, { credentials: 'include' })).json()).draft.summary, { base: API_BASE, draftId: id });
+}
+
+test('typing in the text editor while the save is in flight is kept: the answer neither erases it nor marks it as saved', async ({ page }) => {
+  const editor = await startWith(page, 'Base.');
+  const input = editor.locator('.lesson-summary-input');
+  await input.fill('Base. Enviado.');
+  const held = await holdSummarySave(page);
+  await editor.locator('[data-action="save-summary"]').click();
+  await held.arrived;
+  await input.press('End');
+  await input.pressSequentially(' Digitado durante o envio.');
+  held.release();
+  await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo');
+  await expect(input).toHaveValue('Base. Enviado. Digitado durante o envio.'); // the newer text was not replaced by the saved one
+  await expect(editor.locator('[data-action="save-summary"]')).toBeEnabled(); // and it is still unsaved
+  await saveSummary(editor);
+  expect(await serverSummary(page, editor)).toBe('Base. Enviado. Digitado durante o envio.');
+});
+
+test('typing in the visual editor while the save is in flight is kept as well', async ({ page }) => {
+  const editor = await startWith(page, 'Base.');
+  const input = editor.locator('.lesson-summary-input');
+  await visualButton(editor).click();
+  await surface(editor).locator('p', { hasText: 'Base.' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' Enviado.');
+  await expect(input).toHaveValue('Base. Enviado.');
+  const held = await holdSummarySave(page);
+  await editor.locator('[data-action="save-summary"]').click();
+  await held.arrived;
+  await surface(editor).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' Durante.');
+  await expect(input).toHaveValue('Base. Enviado. Durante.'); // the newer text is already in the text while the answer is still on its way
+  held.release();
+  await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo');
+  await expect(surface(editor)).toContainText('Base. Enviado. Durante.');
+  await expect(input).toHaveValue('Base. Enviado. Durante.');
+  await expect(editor.locator('[data-action="save-summary"]')).toBeEnabled();
+  await saveSummary(editor);
+  expect(await serverSummary(page, editor)).toBe('Base. Enviado. Durante.');
+});
+
+test('an edit the visual editor could not write is "unsaved" for every way out: Voltar asks first, and so do the preview and the acceptance', async ({ page }) => {
+  const editor = await startWith(page, 'Um');
+  const input = editor.locator('.lesson-summary-input');
+  await visualButton(editor).click();
+  await surface(editor).locator('p', { hasText: 'Um' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Control+b');
+  await page.keyboard.type('(a)'); // "Um**(a)**" cannot be written back faithfully: the very first edit is already unwritable
+  await expect(editor.locator('.summary-visual-notice')).toBeVisible();
+  await expect(input).toHaveValue('Um'); // so the text never differs from the saved one: only the editor knows there is an edit
+  await expect(editor.locator('[data-action="save-summary"]')).toBeDisabled();
+
+  await editor.locator('.source-draft-subject-input').fill('Fisiologia');
+  await editor.locator('.source-draft-date-input').fill('2020-01-01');
+  await editor.locator('[data-action="preview-accept"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Salve as alterações pendentes');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Salve as alterações pendentes');
+  await expect(editor.locator('.lesson-accept-preview')).toBeHidden();
+
+  let asked = '';
+  page.once('dialog', (dialog) => { asked = dialog.message(); dialog.dismiss(); });
+  await editor.locator('[data-action="lesson-back"]').click();
+  expect(asked).toContain('alterações não salvas');
+  await expect(editor).toBeVisible(); // the student stayed
+  await expect(surface(editor)).toContainText('Um(a)'); // and the unwritten edit is still there to fix
+});
+
+test('pasted HTML that imitates the editor\'s own nodes: a malformed figure id becomes plain text, a well-formed foreign one is refused by the server on save, nothing leaks', async ({ page }) => {
+  const editor = await startWith(page, 'Início.');
+  const input = editor.locator('.lesson-summary-input');
+  await visualButton(editor).click();
+  await surface(editor).click();
+  await page.keyboard.press('Control+End');
+  const paste = (html, text) => surface(editor).evaluate((el, [h, t]) => {
+    const data = new DataTransfer();
+    data.setData('text/html', h);
+    data.setData('text/plain', t);
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, [html, text]);
+
+  await paste('<div data-figure-id="../../etc/passwd">falsa</div><span data-math="\href{http://evil.example}{x}">m</span>', 'falsa m');
+  await expect(surface(editor).locator('figure.summary-figure')).toHaveCount(0);
+  await expect(input).not.toHaveValue(/passwd|\[\[fig/);
+  expect(outside).toEqual([]);
+
+  // a well-formed id that is not the student's: it becomes a figure node in the editor, and the server refuses to save it
+  await paste('<div data-figure-id="3f2c9a54-7b1d-4e0a-8c55-0d9e6a7b1c42">x</div>', '');
+  await expect(input).toHaveValue(/\[\[fig:3f2c9a54-7b1d-4e0a-8c55-0d9e6a7b1c42\]\]/);
+  await editor.locator('[data-action="save-summary"]').click();
+  await expect(editor.locator('[data-panel="summary"] .lesson-message')).not.toContainText('Resumo salvo');
+  expect(await serverSummary(page, editor)).toBe('Início.');
+});
+
+test('leaving the lesson with the visual editor open ends it cleanly: no script error, and a timer that was still pending does not fire into the closed screen', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const editor = await startWith(page, 'Texto.');
+  await visualButton(editor).click();
+  await surface(editor).locator('p', { hasText: 'Texto.' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' pendente');
+  page.once('dialog', (dialog) => dialog.accept()); // leaving with an unsaved change asks first
+  await editor.locator('[data-action="lesson-back"]').click();
+  await expect(page.locator('.lesson-editor')).toHaveCount(0);
+  await page.waitForTimeout(700); // longer than the editor's own write-back delay
+  expect(await page.locator('.summary-visual-content').count()).toBe(0);
+  expect(errors).toEqual([]);
+});

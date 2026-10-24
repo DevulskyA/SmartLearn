@@ -15,7 +15,7 @@ import { BulletList, OrderedList, ListItem } from "@tiptap/extension-list";
 import { UndoRedo } from "@tiptap/extensions";
 import { newlineInCode, exitCode } from "@tiptap/pm/commands";
 import { NodeSelection } from "@tiptap/pm/state";
-import { figureRef } from "../shared/summary-figure-refs.js";
+import { figureRef, UUID_PATTERN } from "../shared/summary-figure-refs.js";
 
 const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "mathBlock", "figure", "rawBlock"];
 
@@ -66,7 +66,9 @@ export const Figure = Node.create({
   selectable: true,
   addOptions() { return { openSource: null }; },
   addAttributes() { return { id: { default: "" } }; },
-  parseHTML() { return [{ tag: "div[data-figure-id]", getAttrs: (el) => ({ id: el.getAttribute("data-figure-id") ?? "" }) }]; },
+  // pasted HTML may carry the attribute, but only a well-formed asset id becomes a figure (anything else is reduced to its text); whether the id is
+  // really the student's own asset is the server's decision on save and accept
+  parseHTML() { return [{ tag: "div[data-figure-id]", getAttrs: (el) => (UUID_PATTERN.test(el.getAttribute("data-figure-id") ?? "") ? { id: el.getAttribute("data-figure-id").toLowerCase() } : false) }]; },
   renderHTML({ node }) { return ["div", { "data-figure-id": node.attrs.id }, figureRef(node.attrs.id)]; },
 });
 

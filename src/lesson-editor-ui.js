@@ -722,14 +722,16 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (summaryBuffer === null) return;
     summarySave.disabled = true;
     setMessage(summaryMessage, t("editor.saving"));
-    const result = await deps.reviseSummary(draft.id, { summary: summaryBuffer.trim(), expectedVersion: draft.summaryVersion });
+    const sent = summaryBuffer;
+    const result = await deps.reviseSummary(draft.id, { summary: sent.trim(), expectedVersion: draft.summaryVersion });
     if (!result.ok) {
       setMessage(summaryMessage, result.message || t("editor.summary.saveFailed"), true);
       summarySave.disabled = false;
       summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
       return;
     }
-    summaryBuffer = null;
+    // what was sent is saved; whatever the student typed while the request was in flight is NOT, and stays in the field as unsaved text
+    if (summaryBuffer === sent) summaryBuffer = null;
     applyDraft(result.draft);
     setMessage(summaryMessage, t("editor.summary.saved"));
     // "Salvar resumo" is disabled now (nothing left to save): the focus goes back to the text the student was working on
@@ -737,14 +739,21 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     else summaryAuthoring.focusSummary();
   });
 
+  // The summary has unsaved changes when the text differs from the saved one OR the visual editor holds an edit it could not write to the text
+  // (then the text still equals the saved one, yet leaving, previewing or accepting would drop that edit).
+  function summaryHasUnsavedChanges() {
+    summaryAuthoring.flushVisual();
+    return summaryBuffer !== null || !summaryAuthoring.saveGuard().ok;
+  }
+
   back.addEventListener("click", () => {
-    const unsaved = summaryBuffer !== null || questionBuffers.size > 0;
+    const unsaved = summaryHasUnsavedChanges() || questionBuffers.size > 0;
     if (unsaved && !window.confirm(t("editor.confirmLeave"))) return;
     deps.onBack();
   });
 
   previewBtn.addEventListener("click", async () => {
-    if (summaryBuffer !== null || questionBuffers.size > 0) {
+    if (summaryHasUnsavedChanges() || questionBuffers.size > 0) {
       setMessage(acceptMessage, t("editor.accept.savePendingPreview"), true);
       return;
     }
@@ -768,7 +777,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   });
 
   acceptBtn.addEventListener("click", async () => {
-    if (summaryBuffer !== null || questionBuffers.size > 0) {
+    if (summaryHasUnsavedChanges() || questionBuffers.size > 0) {
       setMessage(acceptMessage, t("editor.accept.savePendingAccept"), true);
       return;
     }
@@ -804,7 +813,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   // Another window or device may have edited this lesson: when the user comes back, pick up the newer revision — unless
   // they have unsaved typing here, which is never overwritten.
   async function refreshIfNewer() {
-    if (accepted || summaryBuffer !== null || questionBuffers.size > 0 || !deps.getDraft) return;
+    if (accepted || summaryHasUnsavedChanges() || questionBuffers.size > 0 || !deps.getDraft) return;
     const result = await deps.getDraft(draft.id);
     if (result.ok && result.draft.revision > draft.revision) applyDraft(result.draft);
   }
@@ -822,6 +831,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     destroy: () => {
       window.removeEventListener("focus", refreshIfNewer);
       document.removeEventListener("visibilitychange", onVisible);
+      summaryAuthoring.destroyVisual(); // the Tiptap instance, its timer and its listeners go with the screen
     },
   };
 }

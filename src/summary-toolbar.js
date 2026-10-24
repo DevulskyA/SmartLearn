@@ -201,6 +201,8 @@ function createModeSwitch(textarea, bar, preview) {
     flushVisual: () => editor?.flush(),
     /** Re-read the textarea after something else changed it (a saved or re-audited draft). */
     reloadVisual: () => editor?.reload(),
+    /** Ends the visual editor (timer, listeners, ProseMirror view) when the screen that owns it is closed. */
+    destroyVisual() { editor?.destroy(); editor = null; },
     /** Puts the caret where the student writes: the visual editor in visual mode, the textarea otherwise. */
     focusSummary: () => (mode === "visual" && editor ? editor.focus() : textarea.focus({ preventScroll: true })),
     /** { ok: false, message } while the visual editor holds an edit it could not write back faithfully. */
