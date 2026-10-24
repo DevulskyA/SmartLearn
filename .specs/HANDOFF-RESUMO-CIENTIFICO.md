@@ -60,6 +60,16 @@ Autorizada pelo usuário em 2026-10-23. Aba Resumo do editor de rascunho (`src/l
 - Armadilhas: `setContent` precisa de `addToHistory:false` e o histórico é recriado ao recarregar (senão Ctrl+Z esvazia o editor); o documento nunca pode ficar sem bloco (parágrafo vazio de reserva); atributos novos de lista (`loose`) precisam estar no esquema; digitar `*x*` vira itálico (atalho padrão do Tiptap).
 - Não incluído nesta fatia (próximos candidatos): colar Markdown (texto puro) e convertê-lo em estrutura; usar o editor visual também no Plano e no Hoje; tabela editável (hoje é bloco de texto); padrão "Visual" depois de uso real.
 
+## Auditoria independente da Entrega D (ChatGPT, 2026-10-24) e correções
+Pacote auditado: `SmartLearn_AUDITORIA_2026-10-24.zip` (HEAD `7245d2c`). Achados, cada um reproduzido por teste que falhava antes da correção:
+- P1 salvamento concorrente: o que o aluno digitava durante a requisição era apagado pela resposta (texto e visual; defeito já existia no editor de texto). Corrigido: só o buffer enviado é zerado (`src/lesson-editor-ui.js`, E2E "in flight", 2 testes).
+- P1 edição visual bloqueada escapava de Voltar / ver o que será criado / Aceitar / atualizar ao voltar à janela: agora `summaryHasUnsavedChanges()` (descarrega o editor visual e considera o bloqueio) vale para todas as saídas (E2E "every way out").
+- P2 referências `[[fig:UUID]]`: o scanner do servidor contava linhas dentro de código recuado e de cerca de 4 crases, e a regra do renderizador aceitava figura dentro de lista/citação (que o scanner não via, logo o backup omitiria a mídia). Nova definição única: figura = linha própria na margem esquerda do documento, fora de código, fórmula, lista e citação. `shared/summary-figure-refs.js` é uma reimplementação sem dependências (o servidor não importa markdown-it) e `test/summary-figure-scan.test.js` a compara com a regra do markdown-it em 3000 documentos gerados (mais 180 mil fora do repositório, 0 divergências).
+- P2 `destroy()` não era propagado: agora `summaryAuthoring.destroyVisual()` roda no `destroy` da tela (E2E sem erro de script; a retenção de memória não foi medida).
+- Colagem de HTML: `data-figure-id` só vira figura se for UUID bem formado; o servidor continua recusando ids que não são do aluno (E2E).
+- O auditor notou que o log nativo identificava o build como `6177f7e`: a jornada foi refeita sobre o HEAD final (ver `git log`).
+Fica registrado, não corrigido: bloco de texto bruto dividido por linha em branco é recusado (aviso) em vez de virar dois blocos.
+
 ## Próximo (por ordem)
 1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
 2. Trabalho experimental independente: colar Markdown no editor visual; editor visual no Plano/Hoje; tabela editável.
