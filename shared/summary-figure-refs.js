@@ -1,6 +1,11 @@
-// A figure inside a Resumo Mestre is a block of its own: a line holding only `[[fig:UUID]]`. The UUID is the stable id of a PRIVATE visual
-// asset (never a path, URL or Base64); caption, alternative text and provenance live in the asset's record, not in the text.
-// Dependency-free so the server (validation on save/accept, backup, audit) and the client share the exact same rule.
+// A figure inside a Resumo Mestre is a block of its own: a line holding only `[[fig:UUID]]`, at the LEFT MARGIN of the document (no indentation,
+// not inside a list, a quote, a formula or a code block). The UUID is the stable id of a PRIVATE visual asset (never a path, URL or Base64);
+// caption, alternative text and provenance live in the asset's record, not in the text.
+//
+// Dependency-free so the server (validation on save/accept, backup, audit) and the client share the exact same rule. The renderer uses a
+// markdown-it rule (shared/summary-markdown.js) and the server cannot import markdown-it, so this file is a small re-implementation of the
+// block grammar that matters here (fenced code, formulas, list nesting); test/summary-figure-scan.test.js keeps the two EQUAL, line by line,
+// over thousands of generated documents. Change one, change the other.
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 export const FIGURE_REF_LINE = new RegExp(`^\\[\\[fig:(${UUID})\\]\\]$`, 'i');
@@ -8,22 +13,90 @@ export const UUID_PATTERN = new RegExp(`^${UUID}$`, 'i');
 
 export const figureRef = (id) => `[[fig:${id}]]`;
 
-/** The figure ids a summary text points at, in order of appearance, without repeats. Lines inside fenced code do not count. */
-export function listFigureRefs(text) {
-  const ids = [];
-  let fence = null;
-  for (const raw of String(text ?? '').split(/\r?\n/)) {
-    const line = raw.trim();
-    const marker = /^(```+|~~~+)/.exec(line);
-    if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const FENCE_CLOSE = /^ {0,3}(`+|~+)[ \t]*$/;
+const LIST_MARKER = /^( {0,3})([-+*]|\d{1,9}[.)])( +|$)/;
+const CONTAINER_PREFIX = /^(?: {0,3}>[ ]?|(?: {0,3})(?:[-+*]|\d{1,9}[.)])[ ]+| )*/;
+
+/** Width of the leading whitespace, tabs counting to the next multiple of four (as markdown-it does). */
+function indentOf(line) {
+  let width = 0;
+  for (const ch of line) {
+    if (ch === ' ') width += 1;
+    else if (ch === '\t') width += 4 - (width % 4);
+    else break;
+  }
+  return width;
+}
+
+/** Index of the last line of the formula block (`\[ ... \]`) that starts at `lines[at]`, or -1 when it is not a formula block. Same rule as summary-markdown.js. */
+function mathBlockEnd(lines, at) {
+  const line = lines[at];
+  const first = line.slice(CONTAINER_PREFIX.exec(line)[0].length).replace(/^[ \t]+/, '');
+  if (!first.startsWith('\\[')) return -1;
+  const sameLine = first.indexOf('\\]', 2);
+  if (sameLine !== -1) {
+    if (first.slice(sameLine + 2).trim() !== '') return -1;
+    return first.slice(2, sameLine).trim() === '' ? -1 : at;
+  }
+  const parts = [first.slice(2)];
+  for (let next = at + 1; next < lines.length; next += 1) {
+    const close = lines[next].indexOf('\\]');
+    if (close !== -1) {
+      if (lines[next].slice(close + 2).trim() !== '') return -1;
+      parts.push(lines[next].slice(0, close));
+      return parts.join('\n').trim() === '' ? -1 : next;
+    }
+    parts.push(lines[next]);
+  }
+  return -1;
+}
+
+/** [{ line, id }] for every figure line of the text, in order (id lower-cased, repeats kept). */
+export function scanFigureLines(text) {
+  const lines = String(text ?? '').split(/\r\n|\r|\n/);
+  const found = [];
+  let fence = null; // { char, length } while inside a fenced code block that starts at the document's own level
+  const items = []; // content offsets of the list items that are open at this point
+  let blankBefore = true;
+  for (let at = 0; at < lines.length; at += 1) {
+    const line = lines[at];
+    if (fence) {
+      const close = FENCE_CLOSE.exec(line);
+      if (close && close[1][0] === fence.char && close[1].length >= fence.length) fence = null;
       continue;
     }
-    if (fence !== null) continue;
-    const m = FIGURE_REF_LINE.exec(line);
-    if (m && !ids.includes(m[1].toLowerCase())) ids.push(m[1].toLowerCase());
+    if (line.trim() === '') { blankBefore = true; continue; }
+    const mathEnd = mathBlockEnd(lines, at);
+    if (mathEnd !== -1) { at = mathEnd; blankBefore = false; continue; }
+    const indent = indentOf(line);
+    const marker = LIST_MARKER.exec(line);
+    // a line that cannot belong to an open list item ends it (a lazy continuation of a paragraph keeps it)
+    const interrupts = marker !== null || FENCE_OPEN.test(line) || FIGURE_REF_LINE.test(line.trimEnd());
+    while (items.length > 0 && items[items.length - 1] > indent && (blankBefore || interrupts)) items.pop();
+    const open = FENCE_OPEN.exec(line);
+    if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
+      // inside a list item the fence belongs to the item: a left-margin line ends the item and the fence with it
+      if (!(items.length > 0 && items[items.length - 1] <= indent)) fence = { char: open[1][0], length: open[1].length };
+      blankBefore = false;
+      continue;
+    }
+    if (marker) {
+      const spaces = marker[3].length;
+      items.push(indent + marker[2].length + (spaces === 0 || spaces > 4 ? 1 : spaces));
+    } else if (indent === 0) {
+      const ref = FIGURE_REF_LINE.exec(line.trimEnd());
+      if (ref) found.push({ line: at, id: ref[1].toLowerCase() });
+    }
+    blankBefore = false;
   }
+  return found;
+}
+
+/** The figure ids a summary text points at, in order of appearance, without repeats. Lines inside code, formulas, lists and quotes do not count. */
+export function listFigureRefs(text) {
+  const ids = [];
+  for (const { id } of scanFigureLines(text)) if (!ids.includes(id)) ids.push(id);
   return ids;
 }
 
@@ -37,17 +110,14 @@ export function stripSummaryMarkup(text) {
  * `describe(id)` returns the note (e.g. the figure's caption/alt) or null when the figure is unknown.
  */
 export function replaceFigureRefs(text, describe) {
-  let fence = null;
-  return String(text ?? '').split('\n').map((raw) => {
-    const line = raw.trim();
-    const marker = /^(```+|~~~+)/.exec(line);
-    if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
-      return raw;
-    }
-    if (fence !== null) return raw;
-    const m = FIGURE_REF_LINE.exec(line.replace(/\r$/, ''));
-    return m ? describe(m[1].toLowerCase()) : raw;
-  }).join('\n');
+  const source = String(text ?? '');
+  const hits = new Map(scanFigureLines(source).map((hit) => [hit.line, hit.id]));
+  if (hits.size === 0) return source;
+  // the original line breaks are kept as they are: only the content of a figure line changes
+  const parts = source.split(/(\r\n|\r|\n)/);
+  for (let at = 0; at * 2 < parts.length; at += 1) {
+    const id = hits.get(at);
+    if (id !== undefined) parts[at * 2] = describe(id);
+  }
+  return parts.join('');
 }

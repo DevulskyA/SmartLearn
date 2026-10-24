@@ -64,8 +64,11 @@ function mathBlock(state, startLine, endLine, silent) {
 }
 
 function figureBlock(state, startLine, endLine, silent) {
-  const text = state.src.slice(state.bMarks[startLine] + state.tShift[startLine], state.eMarks[startLine]).trim();
-  if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+  // a figure sits at the left margin of the document itself: column 0, so never indented, never inside a list item or a quote (their content starts
+  // after a marker or an indent). A left-margin line also ends a list or quote it follows, like a heading would (shared/summary-figure-refs.js scans by the same rule)
+  // (inside a quote the line marks are moved past the ">" marker, so "column 0" also means: the content starts where the real line starts)
+  if (state.sCount[startLine] !== 0 || state.bMarks[startLine] !== state.src.lastIndexOf('\n', state.bMarks[startLine] - 1) + 1) return false;
+  const text = state.src.slice(state.bMarks[startLine], state.eMarks[startLine]).trimEnd();
   const m = FIGURE_REF_LINE.exec(text);
   if (!m) return false;
   if (silent) return true;
