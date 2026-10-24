@@ -422,12 +422,12 @@ test('after the text changed elsewhere the editor starts a fresh history (undo c
 });
 
 // The save round trip takes time. Whatever the student types while it is in flight must survive it, in both editors.
-async function holdSummarySave(page) {
+async function holdSave(page, urlGlob = '**/v1/drafts/*/summary') {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   let reached;
   const arrived = new Promise((resolve) => { reached = resolve; });
-  await page.route('**/v1/drafts/*/summary', async (route) => {
+  await page.route(urlGlob, async (route) => {
     if (route.request().method() !== 'PATCH') { await route.continue(); return; }
     reached();
     await gate; // the request is held here: the server has not answered yet
@@ -445,7 +445,7 @@ test('typing in the text editor while the save is in flight is kept: the answer 
   const editor = await startWith(page, 'Base.');
   const input = editor.locator('.lesson-summary-input');
   await input.fill('Base. Enviado.');
-  const held = await holdSummarySave(page);
+  const held = await holdSave(page);
   await editor.locator('[data-action="save-summary"]').click();
   await held.arrived;
   await input.press('End');
@@ -466,7 +466,7 @@ test('typing in the visual editor while the save is in flight is kept as well', 
   await page.keyboard.press('End');
   await page.keyboard.type(' Enviado.');
   await expect(input).toHaveValue('Base. Enviado.');
-  const held = await holdSummarySave(page);
+  const held = await holdSave(page);
   await editor.locator('[data-action="save-summary"]').click();
   await held.arrived;
   await surface(editor).click();
@@ -550,4 +550,26 @@ test('leaving the lesson with the visual editor open ends it cleanly: no script 
   await page.waitForTimeout(700); // longer than the editor's own write-back delay
   expect(await page.locator('.summary-visual-content').count()).toBe(0);
   expect(errors).toEqual([]);
+});
+
+test('typing in a question while its save is in flight is kept too: the answer neither erases it nor marks it as saved', async ({ page }) => {
+  const editor = await startWith(page, 'Resumo.');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').nth(1).click();
+  const answer = () => editor.locator('.lesson-qeditor textarea').nth(1);
+  await answer().fill('Resposta enviada.');
+  const held = await holdSave(page, '**/v1/drafts/*/questions/*');
+  await editor.locator('[data-action="save-question"]').click();
+  await held.arrived;
+  await answer().press('End');
+  await answer().pressSequentially(' Digitada durante o envio.');
+  held.release();
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await expect(answer()).toHaveValue('Resposta enviada. Digitada durante o envio.');
+  await expect(editor.locator('[data-action="save-question"]')).toBeEnabled(); // and it is still unsaved
+  await editor.locator('[data-action="save-question"]').click();
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  const id = await editor.getAttribute('data-draft-id');
+  const saved = await page.evaluate(async ({ base, draftId }) => (await (await fetch(`${base}/v1/drafts/${draftId}`, { credentials: 'include' })).json()).draft.questions[1].answer, { base: API_BASE, draftId: id });
+  expect(saved).toBe('Resposta enviada. Digitada durante o envio.');
 });

@@ -441,6 +441,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const run = async (fn, okText, pressed, { toQuestion = false } = {}) => {
       for (const b of actions.querySelectorAll("button")) b.disabled = true;
       setMessage(message, t("editor.saving"));
+      const sent = JSON.stringify(questionBuffers.get(q.id) ?? null);
       const result = await fn();
       if (!result.ok) {
         setMessage(message, result.message || t("editor.question.saveFailed"), true);
@@ -450,7 +451,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         actions.querySelector(`[data-action="${pressed}"]:not(:disabled)`)?.focus({ preventScroll: true });
         return;
       }
-      questionBuffers.delete(q.id);
+      // what was sent is saved; what the student typed while the request was in flight is NOT, and stays as unsaved text (a deleted question has nothing left to keep)
+      if (toQuestion || JSON.stringify(questionBuffers.get(q.id) ?? null) === sent) questionBuffers.delete(q.id);
       applyDraft(result.draft, { keepSelection: result.keepId ?? q.id });
       qMessageFor = selectedId; // a message about the question that stays (or the next one after a delete) is shown, not cleared
       setMessage(qMessage, okText);
