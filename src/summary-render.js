@@ -167,6 +167,23 @@ function buildBlocks(tokens, root, ctx) {
   }
 }
 
+/** One formula drawn exactly as on every screen (an invalid one shows its message and original text); `onEdit` makes it clickable. For the visual editor. */
+export function renderMathElement(tex, displayMode, onEdit = null) {
+  return renderMath(tex, displayMode, { onEditMath: onEdit ? () => onEdit() : null }, onEdit ? { start: 0 } : null);
+}
+
+/** One figure drawn exactly as on every screen, inside a host element that stays the same when the figure's texts are edited. For the visual editor. */
+export function renderFigureElement(id, { loadFigure = loadFigureRecord, onOpenSource = openSourcePage } = {}) {
+  const host = document.createElement("div");
+  host.className = "summary-figure-host";
+  const draw = () => {
+    const ctx = { loadFigure, onOpenFigure: (record) => openFigureViewer(record, { onOpenSource, onEdited: draw }) };
+    host.replaceChildren(renderFigure(id, ctx));
+  };
+  draw();
+  return host;
+}
+
 /**
  * Replaces the children of `container` with the rendered summary.
  *   onEditMath(location)  - makes formulas clickable (and invalid ones fixable); location = {kind, tex, start, end} in the source text

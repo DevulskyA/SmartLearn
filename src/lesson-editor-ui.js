@@ -153,8 +153,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryRead = document.createElement("div");
   summaryRead.className = "lesson-summary-read";
   summaryRead.hidden = true;
-  const summaryAuthoring = createSummaryAuthoring(summaryField.input);
+  const summaryAuthoring = createSummaryAuthoring(summaryField.input, { visual: true });
+  summaryField.wrap.insertBefore(summaryAuthoring.modeSwitch, summaryField.input);
   summaryField.wrap.insertBefore(summaryAuthoring.bar, summaryField.input);
+  summaryField.input.after(summaryAuthoring.visualHost);
   summaryField.wrap.append(summaryAuthoring.preview);
   summaryPanel.append(summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
 
@@ -318,7 +320,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function renderSummary() {
-    if (document.activeElement !== summaryField.input && summaryBuffer === null) summaryField.input.value = draft.summary;
+    if (document.activeElement !== summaryField.input && summaryBuffer === null) { summaryField.input.value = draft.summary; summaryAuthoring.reloadVisual(); }
     // where the summary came from, with the page text one click away (read live from the proposal's own pages)
     summaryPanel.querySelector(":scope > .summary-source")?.remove();
     const spans = draft.summarySourceSpans ?? [];
@@ -646,6 +648,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (summaryBuffer !== null && summaryBuffer === draft.summary) summaryBuffer = null;
     if (!questionById(selectedId) || keepSelection) selectedId = questionById(keepSelection) ? keepSelection : (draft.questions[0]?.id ?? null);
     summaryField.input.value = summaryBuffer !== null ? summaryBuffer : draft.summary;
+    summaryAuthoring.reloadVisual();
     root.dataset.revision = String(draft.revision);
     renderAll();
   }
@@ -687,7 +690,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (!goto) return;
     if (goto.dataset.target === "summary") {
       showTab("summary", { focus: false });
-      summaryField.input.focus();
+      summaryAuthoring.focusSummary();
     } else {
       selectedId = goto.dataset.target;
       showTab("questions");
@@ -713,6 +716,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     renderSummary();
   });
   summarySave.addEventListener("click", async () => {
+    summaryAuthoring.flushVisual(); // visual edits are written to the text first; if that cannot be done faithfully, nothing is saved
+    const guard = summaryAuthoring.saveGuard();
+    if (!guard.ok) { setMessage(summaryMessage, guard.message, true); return; }
     if (summaryBuffer === null) return;
     summarySave.disabled = true;
     setMessage(summaryMessage, t("editor.saving"));
@@ -727,7 +733,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     applyDraft(result.draft);
     setMessage(summaryMessage, t("editor.summary.saved"));
     // "Salvar resumo" is disabled now (nothing left to save): the focus goes back to the text the student was working on
-    (summaryField.wrap.hidden ? summaryToggle : summaryField.input).focus({ preventScroll: true });
+    if (summaryField.wrap.hidden) summaryToggle.focus({ preventScroll: true });
+    else summaryAuthoring.focusSummary();
   });
 
   back.addEventListener("click", () => {

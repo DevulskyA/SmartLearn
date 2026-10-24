@@ -379,6 +379,43 @@ try {
     return { reload: how, summaryPersisted: true, answerPersisted: true, serverDraftRevision: draft.revision };
   });
 
+  await step(21, 'the visual editor (Tiptap) opens the saved summary inside the Desktop WebView: formulas, the table as text and both figures are drawn, opening changes nothing, and a visual edit lands in the same text and is saved', async () => {
+    const editor = page.locator('.lesson-editor');
+    await editor.getByRole('tab', { name: /Resumo/ }).click();
+    const input = editor.locator('.lesson-summary-input');
+    const before = await input.inputValue();
+    expect(before === ctx.summaryFinal, 'the summary reopened differs from the one saved in step 7');
+    await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
+    const surface = editor.locator('.summary-visual-content');
+    await surface.waitFor({ state: 'visible', timeout: 20000 }); // the editor chunk is loaded on demand from the packaged app, under its CSP
+    await surface.locator('.katex').first().waitFor({ timeout: 10000 });
+    const formulas = await surface.locator('.katex').count();
+    expect(formulas >= 2, `formulas drawn: ${formulas}`);
+    expect((await surface.locator('pre[data-raw]').innerText()).includes('| Absorção | sobe |'), 'the table was not carried as text');
+    const figures = surface.locator('figure.summary-figure img');
+    for (let i = 0; i < 40 && (await figures.count()) < 2; i += 1) await page.waitForTimeout(250);
+    expect((await figures.count()) === 2, `figures drawn: ${await figures.count()}`);
+    for (let i = 0; i < 40 && !(await figures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0))); i += 1) await page.waitForTimeout(250);
+    expect(await figures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0)), 'a figure did not load in the editor');
+    expect((await input.inputValue()) === before, 'opening the visual editor changed the text');
+    const consoleBefore = consoleErrors.length;
+    await surface.locator('p', { hasText: 'Fim do resumo' }).click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' revisado no editor visual.');
+    // step 7 put the formula right after "Fim do resumo: ", so the closing paragraph ends with that formula: the typed text follows it
+    const wanted = before.replace('\\(\\frac{a}{b}\\)\n\n', '\\(\\frac{a}{b}\\) revisado no editor visual.\n\n');
+    expect(wanted !== before, 'the closing paragraph was not found in the text');
+    for (let i = 0; i < 40 && (await input.inputValue()) !== wanted; i += 1) await page.waitForTimeout(250);
+    expect((await input.inputValue()) === wanted, `visual edit not written to the text: ${await input.inputValue()}`);
+    ctx.summaryFinal = wanted.trim();
+    await editor.locator('[data-action="save-summary"]').click();
+    await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
+    const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
+    expect(draft.summary === ctx.summaryFinal, 'server draft summary differs after the visual save');
+    await editor.locator('.summary-mode-btn[data-mode="text"]').click(); // the remembered mode goes back to the default for the steps that follow
+    return { formulas, figures: 2, tableAsText: true, textUnchangedByOpening: true, visualEditSaved: true, consoleErrorsDuringEdit: consoleErrors.length - consoleBefore };
+  });
+
   await step(8, 'accept the lesson', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.locator('.source-draft-subject-input').fill(SUBJECT);
@@ -723,6 +760,6 @@ try {
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.steps.sort((a, b) => a.step - b.step);
-result.pass = !result.fatal && result.steps.length === 20 && result.steps.every((s) => s.status === 'PASS');
+result.pass = !result.fatal && result.steps.length === 21 && result.steps.every((s) => s.status === 'PASS');
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);

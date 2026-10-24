@@ -31,7 +31,7 @@ function toolbarButton(kind, label) {
  * `extraButtons` lets other features (images, PDF crop) add their own buttons to the same bar. `previewOptions` is passed to the
  * renderer (figure loading etc.).
  */
-export function createSummaryAuthoring(textarea, { extraButtons = [], previewOptions = {} } = {}) {
+export function createSummaryAuthoring(textarea, { extraButtons = [], previewOptions = {}, visual = false } = {}) {
   const bar = document.createElement("div");
   bar.className = "summary-toolbar";
   bar.setAttribute("role", "group");
@@ -117,5 +117,93 @@ export function createSummaryAuthoring(textarea, { extraButtons = [], previewOpt
   textarea.addEventListener("input", refresh);
   draw();
 
-  return { bar, preview, refresh: draw };
+  const authoring = { bar, preview, refresh: draw };
+  if (visual) Object.assign(authoring, createModeSwitch(textarea, bar, preview));
+  return authoring;
+}
+
+// ---- visual / text editing -------------------------------------------------------------------------------------------------------------------
+// The textarea is always the source of truth. "Texto" is the safe, original way to edit; "Visual" is the Tiptap editor over the same text.
+// The choice is a per-viewer convenience (remembered in this browser only); the editor code is loaded the first time "Visual" is used.
+const MODE_KEY = "smartlearn.summary-mode";
+const readMode = () => { try { return localStorage.getItem(MODE_KEY) === "visual" ? "visual" : "text"; } catch { return "text"; } };
+const rememberMode = (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* private window: the choice just is not remembered */ } };
+
+function createModeSwitch(textarea, bar, preview) {
+  const modeSwitch = document.createElement("div");
+  modeSwitch.className = "summary-mode";
+  modeSwitch.setAttribute("role", "group");
+  modeSwitch.setAttribute("aria-label", t("summary.mode.label"));
+  const visualHost = document.createElement("div");
+  visualHost.className = "summary-visual-host";
+  visualHost.hidden = true;
+  const note = document.createElement("span");
+  note.className = "form-message summary-mode-message";
+  note.setAttribute("role", "status");
+  const modeButton = (mode, label) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "text-button summary-mode-btn";
+    b.dataset.mode = mode;
+    b.textContent = label;
+    b.addEventListener("click", () => setMode(mode));
+    return b;
+  };
+  const textBtn = modeButton("text", t("summary.mode.text"));
+  const visualBtn = modeButton("visual", t("summary.mode.visual"));
+  modeSwitch.append(visualBtn, textBtn, note);
+
+  let editor = null;
+  let mode = "text";
+  const show = (next) => {
+    mode = next;
+    const visual = next === "visual";
+    textarea.hidden = visual;
+    bar.hidden = visual;
+    preview.hidden = visual;
+    visualHost.hidden = !visual;
+    visualBtn.setAttribute("aria-pressed", String(visual));
+    textBtn.setAttribute("aria-pressed", String(!visual));
+  };
+  async function setMode(next) {
+    note.textContent = "";
+    if (next === mode) return;
+    if (next === "visual") {
+      try {
+        if (!editor) {
+          const { createVisualSummaryEditor } = await import("./summary-visual-editor.js");
+          editor = createVisualSummaryEditor(textarea);
+          visualHost.append(editor.root);
+        } else editor.reload();
+      } catch (err) {
+        console.error("visual summary editor failed to start", err);
+        note.textContent = t("summary.mode.failed"); // the text editor keeps working: nothing was changed
+        return;
+      }
+      show("visual");
+      rememberMode("visual");
+      editor.focus();
+    } else {
+      editor?.flush();
+      if (editor?.isBlocked() && !window.confirm(t("summary.mode.confirmDiscard"))) return;
+      show("text");
+      rememberMode("text");
+      textarea.focus({ preventScroll: true });
+    }
+  }
+  show("text");
+  if (readMode() === "visual") setMode("visual");
+
+  return {
+    modeSwitch,
+    visualHost,
+    /** Write pending visual edits to the textarea (call before reading it to save). */
+    flushVisual: () => editor?.flush(),
+    /** Re-read the textarea after something else changed it (a saved or re-audited draft). */
+    reloadVisual: () => editor?.reload(),
+    /** Puts the caret where the student writes: the visual editor in visual mode, the textarea otherwise. */
+    focusSummary: () => (mode === "visual" && editor ? editor.focus() : textarea.focus({ preventScroll: true })),
+    /** { ok: false, message } while the visual editor holds an edit it could not write back faithfully. */
+    saveGuard: () => (mode === "visual" && editor?.isBlocked() ? { ok: false, message: t("summary.visual.cannotSave") } : { ok: true }),
+  };
 }
