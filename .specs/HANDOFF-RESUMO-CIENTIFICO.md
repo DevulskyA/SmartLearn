@@ -4,20 +4,19 @@ Missão: "SMARTLEARN — IMPLEMENTAÇÃO CIENTÍFICA MULTIMODAL". /goal ativo: i
 
 ## Onde está
 - Worktree: `C:\Projetos\SmartLearn\.claude\worktrees\smartlearn-next-sprints`, branch `claude/smartlearn-next-sprints`. Só commits locais; NUNCA push/merge/rebase/deploy/release; PR #7 fica DRAFT.
-- HEAD no momento da parada: `63a4cc9` + 1 commit de handoff/`SL_JOURNEY_NO_INTERNET` (ver `git log`).
+- HEAD: ver `git log` (`6177f7e` = parada de 2026-10-19; a Entrega D, editor visual, vem depois).
 - Entregas (todas commitadas): A `ebc8461` (renderer único markdown-it + KaTeX + mhchem + diálogo MathLive), B `f0acd59` (imagens privadas, migração 038, sharp, rotas dono-só, backup operacional com mídia, exportação textual com aviso), ajuste de teste `a90cf63`, C `cd5b3a9` (Selecionar do PDF com pdf.js), `63a4cc9` (teste de caminho completo no servidor + E2E sem internet).
 
 ## Provado (rodada final, antes do HEAD final)
 - Lint limpo; unitários e servidor sem falha (servidor 1122; unit ~777+).
 - Jornada nativa (`node scripts/desktop-study-journey.mjs`) 20/20; também 20/20 com `SL_JOURNEY_NO_INTERNET=1` (WebView manda tudo que não é loopback para proxy morto; `fetch` externo falha antes de começar). Rede NÃO foi desligada de verdade (seria mexer no sistema).
-- E2E completa: 292 passaram + 1 falha instável (`keyboard-study-materials` ACCESS-5, passa 4/4 isolada duas vezes). Uma nova E2E completa (`$LOCALAPPDATA/Temp/sl-e2e-final2.txt`, termina com `e2e_exit=`) foi iniciada e INTERROMPIDA/INCONCLUSIVA pela parada: reexecute se quiser fechar com 100% verde.
+- E2E completa em 2026-10-19, código de `6177f7e`: 293 passaram, 0 falharam, 2 ignorados, saída 0 (log `sl-e2e-final2.txt`, SHA-256 `574EC5DD43C833C6EC8D602E2212FF3782696ECEE98C430E8E45322AC240CF57`). Fecha a pendência da suíte completa; o instável `keyboard-study-materials` ACCESS-5 não falhou.
 - Caminho completo no servidor: rascunho com texto+fórmula+imagem+recorte → editar → aceitar → backup → restaurar → reabrir: bytes, registros e proveniência idênticos (`server/test/visual-assets.test.js`, teste "the whole path").
 - Auditoria dos 14 itens: mapa em "Mapa de provas" abaixo.
 
 ## NÃO provado / riscos
 - Recorte de PDF = só "imagem escolhida da página"; não é conferido com a fonte nem validado clinicamente. Sem aceite humano.
 - "Offline" provado por bloqueio de saída (proxy morto + rota Playwright), não por rede desligada.
-- E2E completa verde 100% no HEAD final não demonstrada (1 flaky conhecido).
 - Prompt de geração v10 ainda diz que tabelas não são renderizadas (decisão humana aberta; não mexer no MED-SUM nem no gerador).
 - Integração: bloqueada até T-F4-01 + autorização. Outras decisões humanas abertas: reconciliação da base do PR, texto do aviso de retomada.
 - Fila A–F de `.specs/LOOP_BACKLOG.md`: itens independentes esgotados (ver linhas do PROGRAMA A–F); restam só itens BLOQUEADOS por decisão do aluno.
@@ -52,7 +51,16 @@ node scripts/desktop-study-journey.mjs         # 20 passos; SL_JOURNEY_NO_INTERN
 ```
 Armadilhas: o classificador de Write/Edit/Bash cai às vezes (tentar de novo; migrações via scratchpad+cp); manifest de migrações tem checksum (arquivo .sql fora do manifest impede o servidor de subir); portas E2E 13950–13999 (usadas: 13970, 13972, 13974, 13976); `process-smoke` e `exam-mode`/ACCESS-5 oscilam sob carga; jornada falha se o código mudou depois do build (reconstruir); janela de teste precisa estar des-maximizada (`window-rect.ps1` faz `ShowWindow`).
 
+## Entrega D — editor visual do Resumo (Tiptap/ProseMirror, 2026-10-23)
+Autorizada pelo usuário em 2026-10-23. Aba Resumo do editor de rascunho (`src/lesson-editor-ui.js`): botões "Visual" / "Texto" (padrão **Texto**, escolha lembrada por navegador; mudar o padrão é uma linha em `src/summary-toolbar.js`, `readMode`). A textarea continua a fonte única: salvar, versão (`expectedVersion`), auditoria e Plano/Hoje não mudaram.
+- `shared/summary-doc.js`: conversor puro Markdown ↔ documento do editor. Bloco intacto volta com os bytes originais (`origin`, `gap`, `lead`, `tail`); o que o editor não modela (tabela, citação, código, regra, lista com conteúdo estranho, fórmula dentro de negrito) vira `rawBlock` editável como texto; `serializeVerified` relê o que escreveu e RECUSA (`{error}`) o que não voltaria igual. Não usa `@tiptap/markdown`.
+- `src/summary-visual-schema.js` (esquema, sem DOM) + `src/summary-visual-editor.js` (editor, barra, diálogos de fórmula/imagem/PDF reutilizados, colar imagem, soltar arquivo). Dependências `@tiptap/*` fixadas em 3.31.4, carregadas sob demanda (chunk próprio), sem CDN, sem `<style>` injetado.
+- Se a edição visual não puder ser gravada com fidelidade (ex.: negrito terminando em pontuação colado a uma letra, `**(a)**b`): aviso na tela, a textarea mantém a última versão fiel, "Salvar resumo" recusa com mensagem, e sair para Texto pede confirmação.
+- Provas: `test/summary-doc.test.js` (15+), `test/summary-visual-schema.test.js` (documentos × esquema real do Tiptap, edições via ProseMirror), `e2e/summary-visual-editor.spec.js` (11: padrão Texto, abrir sem mudar nem um byte, editar/salvar/recarregar, desfazer, teclado/axe, fórmulas, figuras, recorte de PDF, colar HTML hostil, estado bloqueado, histórico/arrastar arquivo), `scripts/desktop-study-journey.mjs` passo 21 (Desktop nativo, sem internet, 21/21).
+- Armadilhas: `setContent` precisa de `addToHistory:false` e o histórico é recriado ao recarregar (senão Ctrl+Z esvazia o editor); o documento nunca pode ficar sem bloco (parágrafo vazio de reserva); atributos novos de lista (`loose`) precisam estar no esquema; digitar `*x*` vira itálico (atalho padrão do Tiptap).
+- Não incluído nesta fatia (próximos candidatos): colar Markdown (texto puro) e convertê-lo em estrutura; usar o editor visual também no Plano e no Hoje; tabela editável (hoje é bloco de texto); padrão "Visual" depois de uso real.
+
 ## Próximo (por ordem)
-1. Reexecutar E2E completa no HEAD final para fechar 100% verde (aceitar 1 flaky conhecido só se passar isolado).
-2. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração. Nada autorizado resta sem essas decisões.
+1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
+2. Trabalho experimental independente: colar Markdown no editor visual; editor visual no Plano/Hoje; tabela editável.
 3. Se o usuário pedir: relatório final por entrega no formato RESULTADO / EVIDÊNCIA / ARQUIVOS / RISCO / PRÓXIMO.
