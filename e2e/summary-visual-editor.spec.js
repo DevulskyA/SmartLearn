@@ -207,8 +207,9 @@ test('formulas: insert inline and as a block through the dialog, edit an existin
   // by keyboard: arrow onto the formula, Enter opens the dialog
   await surface(editor).locator('p', { hasText: 'no meio' }).click();
   await page.keyboard.press('End');
-  for (let i = 0; i < 9; i += 1) await page.keyboard.press('ArrowLeft'); // " no meio." is 9 characters: the next step left is the formula itself
-  await page.keyboard.press('ArrowLeft');
+  // arrow left until the formula itself is the selection (ProseMirror follows the browser selection asynchronously, so the number of presses is not fixed)
+  for (let i = 0; i < 16 && (await surface(editor).locator('.ProseMirror-selectednode').count()) === 0; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(surface(editor).locator('.ProseMirror-selectednode')).toHaveCount(1);
   await page.keyboard.press('Enter');
   await expect(dialog).toBeVisible();
   await dialog.locator('.math-dialog-latex').fill('a\\times b');
