@@ -220,13 +220,17 @@ test('PREVIEW refuses what accepting refuses, with the server message and no pan
   await expect(editor.locator('.source-draft-result')).toHaveClass(/is-error/);
 });
 
-test('unsaved typing is never lost silently: accepting asks to save first', async ({ page }) => {
+test('unsaved typing is never lost silently, and saving is never accepting: the click saves it and STOPS; accepting is a second, deliberate click', async ({ page }) => {
   await openLesson(page);
   const editor = page.locator('.lesson-editor');
   await editor.locator('.lesson-summary-input').fill('Resumo alterado e ainda não salvo');
   await editor.locator('.source-draft-subject-input').fill('Fisiologia');
   await editor.locator('[data-action="accept-draft"]').click();
-  await expect(editor.locator('.source-draft-result')).toContainText('Salve as alterações pendentes');
+  await expect(editor.locator('.source-draft-result')).toContainText('Salvamos suas alterações agora');
+  await expect(editor.locator('.source-draft-result')).not.toContainText('Aula criada');
+  await expect(editor.locator('[data-action="save-summary"]')).toBeDisabled(); // it was saved by that click (nothing pending any more)
+  await editor.locator('[data-action="accept-draft"]').click(); // the second click is the acceptance
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 15000 });
 });
 
 test('COPY: the editable fields hold only pedagogical content, and the new-discipline control appears once', async ({ page }) => {

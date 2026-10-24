@@ -141,6 +141,14 @@ async function launch({ place = true } = {}) {
   }
 }
 
+// The summary also saves itself 2.5 s after the last keystroke, so by the time the journey gets to the button the text may already be saved:
+// click it when it still has something to do, and in every case wait until the indicator says the text is saved.
+async function saveSummary(editor) {
+  const button = editor.locator('[data-action="save-summary"]');
+  if (await button.isEnabled()) await button.click({ timeout: 3000 }).catch(() => {});
+  await editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]').waitFor({ timeout: 15000 });
+}
+
 async function shutdown({ graceful }) {
   closing = true;
   const pid = app.pid;
@@ -357,8 +365,7 @@ try {
     await cropDialog.waitFor({ state: 'detached', timeout: 15000 });
     ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim(); // saving trims the text
     expect(ctx.summaryFinal.startsWith(SUMMARY_EDIT) && /(\n\n\[\[fig:[0-9a-f-]{36}\]\]){2}$/.test(ctx.summaryFinal), `figures not inserted: ${ctx.summaryFinal}`);
-    await editor.locator('[data-action="save-summary"]').click();
-    await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
+    await saveSummary(editor);
     await page.locator('[data-action="lesson-back"]').click();
     await page.reload();
     await page.waitForLoadState('networkidle');
@@ -408,8 +415,7 @@ try {
     for (let i = 0; i < 40 && (await input.inputValue()) !== wanted; i += 1) await page.waitForTimeout(250);
     expect((await input.inputValue()) === wanted, `visual edit not written to the text: ${await input.inputValue()}`);
     ctx.summaryFinal = wanted.trim();
-    await editor.locator('[data-action="save-summary"]').click();
-    await editor.locator('[data-panel="summary"] .lesson-message').getByText('Resumo salvo').waitFor({ timeout: 10000 });
+    await saveSummary(editor);
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
     expect(draft.summary === ctx.summaryFinal, 'server draft summary differs after the visual save');
     await editor.locator('.summary-mode-btn[data-mode="text"]').click(); // the remembered mode goes back to the default for the steps that follow

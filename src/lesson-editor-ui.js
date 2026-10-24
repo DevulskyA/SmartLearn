@@ -7,6 +7,9 @@
 import { createTextElement } from "./dom-utils.js";
 import { renderSummary as renderSummaryBody } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
+import { createAutosaver } from "./draft-autosave.js";
+import { createRecoveryStore } from "./draft-recovery.js";
+import { createSaveIndicator, clockTime } from "./save-indicator.js";
 import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
@@ -87,6 +90,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const questionBuffers = new Map(); // questionId -> { question, answer, explanation, hint } typed but not saved
   let accepted = false;
 
+  // ---- autosave ---------------------------------------------------------------------------------------------------------
+  // The summary and each question save themselves 2.5 s after the last keystroke (src/draft-autosave.js). Every keystroke is first kept in a local,
+  // recoverable copy (src/draft-recovery.js) that is erased only when the server has the text. Saving never accepts anything: only text fields are sent.
+  const recovery = createRecoveryStore((() => { try { return window.localStorage; } catch { return null; } })(), draft.id);
+  const autosaveInfo = new Map(); // "summary" | "q:<id>" -> { state, info }: the last known state, to paint indicators that are rebuilt with the form
+  const kindOf = (result) => (result.code === "NETWORK_ERROR" ? "offline" : (result.code === "ENTITY_CONFLICT" || result.code === "REVISION_CONFLICT" ? "conflict" : "error"));
+
   const root = document.createElement("article");
   root.className = "lesson-editor";
   root.setAttribute("aria-labelledby", `${uid}-title`);
@@ -147,7 +157,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryDirty = createTextElement("span", "lesson-dirty", "");
   const summaryToggle = button("secondary-button", t("editor.summary.read"), "toggle-summary-read");
   summaryToggle.setAttribute("aria-pressed", "false");
-  summaryActions.append(summarySave, document.createTextNode(" "), summaryToggle, document.createTextNode(" "), summaryDirty);
+  const summaryIndicator = createSaveIndicator();
+  summaryActions.append(summarySave, document.createTextNode(" "), summaryToggle, document.createTextNode(" "), summaryDirty, document.createTextNode(" "), summaryIndicator.element);
   const summaryMessage = statusMessage();
   // Reading view: the same text laid out as headings and paragraphs (a "## " line is a section title). Display only.
   const summaryRead = document.createElement("div");
@@ -176,6 +187,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const qFindings = document.createElement("div");
   qEditor.append(qForm, qMessage, qFindings);
   let qMessageFor = null; // the question the message is about: another question never shows it
+  let questionIndicator = null; // the save indicator of the question form on screen (rebuilt with the form)
   qLayout.append(qList, qEditor);
   questionsPanel.append(qLayout);
 
@@ -265,7 +277,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (picked) nameField.input.value = "";
   });
 
-  root.append(head, tablist, ...TABS.map((tab) => panels.get(tab.key)), footer);
+  // Unsaved changes found from an earlier session (window closed, connection lost): offered to the student, never applied behind their back
+  const recoveryBanner = document.createElement("section");
+  recoveryBanner.className = "lesson-recovery";
+  recoveryBanner.setAttribute("role", "region");
+  recoveryBanner.setAttribute("aria-label", t("editor.recovery.label"));
+  recoveryBanner.hidden = true;
+
+  root.append(head, recoveryBanner, tablist, ...TABS.map((tab) => panels.get(tab.key)), footer);
 
   // ================================================================================================================
   // rendering
@@ -407,6 +426,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         save.disabled = false;
         dirtyEl.textContent = t("editor.dirty");
         renderQuestionList();
+        if (!accepted) { recovery.writeQuestion(q.id, current, questionById(q.id)?.version ?? q.version); autosaver.touch(`q:${q.id}`); }
       });
     }
 
@@ -430,7 +450,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const rejectQ = button("secondary-button", q.status === "REJECTED" ? t("editor.question.restore") : t("editor.question.reject"), "toggle-reject-question");
     const del = button("text-button lesson-danger", t("editor.question.delete"), "delete-question");
     const dirtyEl = createTextElement("span", "lesson-dirty", questionBuffers.has(q.id) ? t("editor.dirty") : "");
-    actions.append(save, acceptQ, rejectQ, del, document.createTextNode(" "), dirtyEl);
+    questionIndicator?.destroy();
+    questionIndicator = createSaveIndicator();
+    const known = autosaveInfo.get(`q:${q.id}`);
+    if (known) questionIndicator.set(known.state, known.info);
+    actions.append(save, acceptQ, rejectQ, del, document.createTextNode(" "), dirtyEl, document.createTextNode(" "), questionIndicator.element);
     const message = qMessage;
 
     const findings = findingsOfQuestion(q.id);
@@ -441,6 +465,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const run = async (fn, okText, pressed, { toQuestion = false } = {}) => {
       for (const b of actions.querySelectorAll("button")) b.disabled = true;
       setMessage(message, t("editor.saving"));
+      await autosaver.settle(`q:${q.id}`); // an autosave of this question still in flight finishes first: it moves the version this request must carry
       const sent = JSON.stringify(questionBuffers.get(q.id) ?? null);
       const result = await fn();
       if (!result.ok) {
@@ -452,7 +477,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         return;
       }
       // what was sent is saved; what the student typed while the request was in flight is NOT, and stays as unsaved text (a deleted question has nothing left to keep)
-      if (toQuestion || JSON.stringify(questionBuffers.get(q.id) ?? null) === sent) questionBuffers.delete(q.id);
+      if (toQuestion || JSON.stringify(questionBuffers.get(q.id) ?? null) === sent) { questionBuffers.delete(q.id); recovery.clearQuestion(q.id); autosaver.clear(`q:${q.id}`); }
       applyDraft(result.draft, { keepSelection: result.keepId ?? q.id });
       qMessageFor = selectedId; // a message about the question that stays (or the next one after a delete) is shown, not cleared
       setMessage(qMessage, okText);
@@ -465,9 +490,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       explanation: inputs.explanation.value.trim() || null,
       hint: inputs.hint.value.trim() || null,
     });
-    save.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), expectedVersion: q.version }), t("editor.question.msg.saved"), "save-question"));
-    acceptQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: "ACCEPTED", expectedVersion: q.version }), t("editor.question.msg.accepted"), "accept-question"));
-    rejectQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: q.status === "REJECTED" ? "PROPOSED" : "REJECTED", expectedVersion: q.version }), q.status === "REJECTED" ? t("editor.question.msg.restored") : t("editor.question.msg.rejected"), "toggle-reject-question"));
+    // the version to carry is read when the request is made, not when the form was drawn: an autosave in between moves it
+    const liveVersion = () => questionById(q.id)?.version ?? q.version;
+    save.addEventListener("click", () => autosaver.saveNow(`q:${q.id}`, { manual: true })); // the same single-flight path as the autosave
+    acceptQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: "ACCEPTED", expectedVersion: liveVersion() }), t("editor.question.msg.accepted"), "accept-question"));
+    rejectQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: q.status === "REJECTED" ? "PROPOSED" : "REJECTED", expectedVersion: liveVersion() }), q.status === "REJECTED" ? t("editor.question.msg.restored") : t("editor.question.msg.rejected"), "toggle-reject-question"));
     del.addEventListener("click", () => {
       if (!window.confirm(t("editor.question.confirmDelete", { number: index + 1 }))) return;
       const next = draft.questions[index + 1]?.id ?? draft.questions[index - 1]?.id ?? null;
@@ -716,30 +743,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   summaryField.input.addEventListener("input", () => {
     summaryBuffer = summaryField.input.value;
     renderSummary();
+    if (!accepted) { recovery.writeSummary(summaryBuffer, draft.summaryVersion); autosaver.touch("summary"); }
   });
-  summarySave.addEventListener("click", async () => {
-    summaryAuthoring.flushVisual(); // visual edits are written to the text first; if that cannot be done faithfully, nothing is saved
-    const guard = summaryAuthoring.saveGuard();
-    if (!guard.ok) { setMessage(summaryMessage, guard.message, true); return; }
-    if (summaryBuffer === null) return;
-    summarySave.disabled = true;
-    setMessage(summaryMessage, t("editor.saving"));
-    const sent = summaryBuffer;
-    const result = await deps.reviseSummary(draft.id, { summary: sent.trim(), expectedVersion: draft.summaryVersion });
-    if (!result.ok) {
-      setMessage(summaryMessage, result.message || t("editor.summary.saveFailed"), true);
-      summarySave.disabled = false;
-      summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
-      return;
-    }
-    // what was sent is saved; whatever the student typed while the request was in flight is NOT, and stays in the field as unsaved text
-    if (summaryBuffer === sent) summaryBuffer = null;
-    applyDraft(result.draft);
-    setMessage(summaryMessage, t("editor.summary.saved"));
-    // "Salvar resumo" is disabled now (nothing left to save): the focus goes back to the text the student was working on
-    if (summaryField.wrap.hidden) summaryToggle.focus({ preventScroll: true });
-    else summaryAuthoring.focusSummary();
-  });
+  // the deliberate button goes through the same single-flight path as the autosave
+  summarySave.addEventListener("click", () => { autosaver.saveNow("summary", { manual: true }); });
 
   // The summary has unsaved changes when the text differs from the saved one OR the visual editor holds an edit it could not write to the text
   // (then the text still equals the saved one, yet leaving, previewing or accepting would drop that edit).
@@ -748,17 +755,25 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     return summaryBuffer !== null || !summaryAuthoring.saveGuard().ok;
   }
 
-  back.addEventListener("click", () => {
+  back.addEventListener("click", async () => {
+    await autosaver.flush(); // what is waiting for its 2.5 s goes out now; only what could not be saved still needs the question below
     const unsaved = summaryHasUnsavedChanges() || questionBuffers.size > 0;
     if (unsaved && !window.confirm(t("editor.confirmLeave"))) return;
     deps.onBack();
   });
 
+  // Saving is not accepting. If there are changes the student has not seen saved, the click saves them (nothing is lost) and STOPS: the preview or the
+  // acceptance runs only on text that was already saved when the click was made, so a keystroke and "Aceitar" are never one single act.
+  async function pendingBeforeAccepting(savedNowKey, stillPendingKey) {
+    if (!summaryHasUnsavedChanges() && questionBuffers.size === 0) return false;
+    await autosaver.flush();
+    const stillPending = summaryHasUnsavedChanges() || questionBuffers.size > 0;
+    setMessage(acceptMessage, t(stillPending ? stillPendingKey : savedNowKey), stillPending);
+    return true;
+  }
+
   previewBtn.addEventListener("click", async () => {
-    if (summaryHasUnsavedChanges() || questionBuffers.size > 0) {
-      setMessage(acceptMessage, t("editor.accept.savePendingPreview"), true);
-      return;
-    }
+    if (await pendingBeforeAccepting("editor.accept.savedNowPreview", "editor.accept.savePendingPreview")) return;
     const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
     previewBtn.disabled = true;
     const result = await deps.previewAcceptance(draft.id, {
@@ -779,10 +794,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   });
 
   acceptBtn.addEventListener("click", async () => {
-    if (summaryHasUnsavedChanges() || questionBuffers.size > 0) {
-      setMessage(acceptMessage, t("editor.accept.savePendingAccept"), true);
-      return;
-    }
+    if (await pendingBeforeAccepting("editor.accept.savedNowAccept", "editor.accept.savePendingAccept")) return;
     const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
     acceptBtn.disabled = true;
     const result = await deps.acceptDraft(draft.id, {
@@ -823,8 +835,177 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   window.addEventListener("focus", refreshIfNewer);
   document.addEventListener("visibilitychange", onVisible);
 
+  // ---- autosave wiring ----------------------------------------------------------------------------------------------------
+  const FOCUSABLE = "textarea, input, select, button";
+
+  /** Where the caret is inside the question form. That form is rebuilt on every draft update, so an autosave must hand the caret back. */
+  function captureFocus() {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement) || !qForm.contains(el)) return null;
+    return { index: [...qForm.querySelectorAll(FOCUSABLE)].indexOf(el), start: el.selectionStart ?? null, end: el.selectionEnd ?? null, scroll: el.scrollTop };
+  }
+  function restoreFocus(saved) {
+    if (!saved || saved.index < 0) return;
+    const el = qForm.querySelectorAll(FOCUSABLE)[saved.index];
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    if (saved.start !== null) { try { el.setSelectionRange(saved.start, saved.end); } catch { /* not a text control */ } }
+    el.scrollTop = saved.scroll;
+  }
+  function redrawQuestions() {
+    const saved = captureFocus();
+    renderQuestionList();
+    renderQuestionEditor();
+    restoreFocus(saved);
+  }
+
+  /** The editable fields of a question as the server stores them (trimmed; an empty explanation or hint is "none"), from what was typed over what is saved. */
+  const fieldsOf = (q, typed) => ({
+    question: (typed.question ?? q.question ?? "").trim(),
+    answer: (typed.answer ?? q.answer ?? "").trim(),
+    explanation: (typed.explanation ?? q.explanation ?? "").trim() || null,
+    hint: (typed.hint ?? q.hint ?? "").trim() || null,
+  });
+
+  async function saveSummaryNow({ manual }) {
+    summaryAuthoring.flushVisual(); // visual edits are written to the text first; if that cannot be done faithfully, nothing is sent
+    const guard = summaryAuthoring.saveGuard();
+    if (!guard.ok) {
+      if (manual) setMessage(summaryMessage, guard.message, true);
+      return { ok: false, kind: "blocked", message: guard.message };
+    }
+    if (summaryBuffer === null) return { ok: true, nothing: true };
+    const sent = summaryBuffer;
+    if (sent.trim() === draft.summary) { // typed back to what the server already has
+      if (summaryBuffer === sent) { summaryBuffer = null; recovery.clearSummary(); renderSummary(); }
+      return { ok: true, nothing: true };
+    }
+    if (manual) { summarySave.disabled = true; setMessage(summaryMessage, t("editor.saving")); }
+    const result = await deps.reviseSummary(draft.id, { summary: sent.trim(), expectedVersion: draft.summaryVersion });
+    if (!result.ok) {
+      summarySave.disabled = summaryBuffer === null;
+      if (manual) {
+        setMessage(summaryMessage, result.message || t("editor.summary.saveFailed"), true);
+        summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
+      }
+      return { ok: false, kind: kindOf(result), message: result.message };
+    }
+    // what was sent is saved; whatever the student typed while the request was in flight is NOT, and stays in the field as unsaved text
+    if (summaryBuffer === sent) { summaryBuffer = null; recovery.clearSummary(); }
+    const focus = captureFocus();
+    applyDraft(result.draft);
+    restoreFocus(focus);
+    if (manual) {
+      setMessage(summaryMessage, t("editor.summary.saved"));
+      // "Salvar resumo" is disabled now (nothing left to save): the focus goes back to the text the student was working on
+      if (summaryField.wrap.hidden) summaryToggle.focus({ preventScroll: true });
+      else summaryAuthoring.focusSummary();
+    }
+    return { ok: true };
+  }
+
+  async function saveQuestionNow(questionId, { manual }) {
+    const q = questionById(questionId);
+    const typed = questionBuffers.get(questionId);
+    if (!q || !typed) { recovery.clearQuestion(questionId); return { ok: true, nothing: true }; }
+    const sent = JSON.stringify(typed);
+    const fields = fieldsOf(q, typed);
+    if (JSON.stringify(fields) === JSON.stringify(fieldsOf(q, {}))) { // typed back to what the server already has
+      if (JSON.stringify(questionBuffers.get(questionId) ?? null) === sent) { questionBuffers.delete(questionId); recovery.clearQuestion(questionId); redrawQuestions(); }
+      return { ok: true, nothing: true };
+    }
+    if (manual && selectedId === questionId) setMessage(qMessage, t("editor.saving"));
+    const result = await deps.reviseQuestion(draft.id, questionId, { ...fields, expectedVersion: q.version });
+    if (!result.ok) {
+      if (manual && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, result.message || t("editor.question.saveFailed"), true); }
+      return { ok: false, kind: kindOf(result), message: result.message };
+    }
+    if (JSON.stringify(questionBuffers.get(questionId) ?? null) === sent) { questionBuffers.delete(questionId); recovery.clearQuestion(questionId); }
+    const focus = captureFocus();
+    applyDraft(result.draft, { keepSelection: selectedId });
+    if (manual && selectedId === questionId) {
+      qMessageFor = selectedId;
+      setMessage(qMessage, t("editor.question.msg.saved"));
+      // "Salvar questão" is disabled now (nothing left to save): the focus goes to the question itself, as after every other action on a question
+      (qForm.querySelector('[data-action="save-question"]:not(:disabled)') ?? qForm.querySelector(".lesson-qheading"))?.focus({ preventScroll: true });
+    } else restoreFocus(focus);
+    return { ok: true };
+  }
+
+  const autosaver = createAutosaver({
+    save: (key, ctx) => (key === "summary" ? saveSummaryNow({ manual: ctx.manual === true }) : saveQuestionNow(key.slice(2), { manual: ctx.manual === true })),
+    onState(key, state, info) {
+      autosaveInfo.set(key, { state, info });
+      const isSummary = key === "summary";
+      if (!isSummary && key !== `q:${selectedId}`) return; // a question that is not on screen: its indicator is painted when its form is
+      (isSummary ? summaryIndicator : questionIndicator)?.set(state, info);
+      const target = isSummary ? summaryMessage : qMessage;
+      if (!isSummary) qMessageFor = selectedId;
+      if (info.manual) return; // a deliberate save already wrote its own message
+      if (state === "offline") setMessage(target, t("editor.autosave.offline"), true);
+      else if (state === "conflict") setMessage(target, t("editor.autosave.conflict"), true);
+      else if (state === "error") setMessage(target, t("editor.autosave.error", { message: info.message ?? "" }), true);
+      else if (state === "saved" && target.classList.contains("is-error")) setMessage(target, "");
+    },
+  });
+
+  // ---- recovery of what an earlier session left unsaved ---------------------------------------------------------------------
+  function offerRecovery() {
+    const stored = recovery.read();
+    const found = [];
+    if (stored.summary && stored.summary.text.trim() !== draft.summary) found.push({ at: stored.summary.at, stale: stored.summary.baseVersion !== draft.summaryVersion });
+    else if (stored.summary) recovery.clearSummary();
+    for (const [id, record] of Object.entries(stored.questions)) {
+      const q = questionById(id);
+      if (q && JSON.stringify(fieldsOf(q, record.fields)) !== JSON.stringify(fieldsOf(q, {}))) found.push({ at: record.at, stale: record.baseVersion !== q.version });
+      else recovery.clearQuestion(id);
+    }
+    if (found.length === 0) { recoveryBanner.hidden = true; return; }
+    const latest = Math.max(...found.map((item) => item.at));
+    const day = new Date(latest);
+    const when = day.toDateString() === new Date().toDateString() ? clockTime(latest) : `${day.toLocaleDateString("pt-BR")} ${clockTime(latest)}`;
+    const text = createTextElement("p", "lesson-recovery-text", t(found.some((item) => item.stale) ? "editor.recovery.textStale" : "editor.recovery.text", { when }));
+    const recover = button("primary-button", t("editor.recovery.recover"), "recover");
+    const discard = button("secondary-button", t("editor.recovery.discard"), "discard");
+    const row = document.createElement("div");
+    row.className = "lesson-actions";
+    row.append(recover, discard);
+    recoveryBanner.replaceChildren(text, row);
+    recoveryBanner.hidden = false;
+    recover.addEventListener("click", () => {
+      if (stored.summary && stored.summary.text.trim() !== draft.summary) {
+        summaryBuffer = stored.summary.text;
+        summaryField.input.value = summaryBuffer;
+        summaryAuthoring.reloadVisual();
+        recovery.writeSummary(summaryBuffer, draft.summaryVersion); // from now on based on the version on screen
+        autosaver.touch("summary");
+        renderSummary();
+      }
+      for (const [id, record] of Object.entries(stored.questions)) {
+        const q = questionById(id);
+        if (!q || JSON.stringify(fieldsOf(q, record.fields)) === JSON.stringify(fieldsOf(q, {}))) continue;
+        questionBuffers.set(id, { ...record.fields });
+        recovery.writeQuestion(id, record.fields, q.version);
+        autosaver.touch(`q:${id}`);
+      }
+      recoveryBanner.hidden = true;
+      redrawQuestions();
+    });
+    discard.addEventListener("click", () => { recovery.clearAll(); recoveryBanner.hidden = true; });
+  }
+
+  // a window sent to the background or closed gets one last chance to save; coming back online retries at once
+  const onPageHide = () => { autosaver.flush(); };
+  const onHidden = () => { if (document.visibilityState === "hidden") autosaver.flush(); };
+  const onOnline = () => { autosaver.retryOffline(); };
+  window.addEventListener("pagehide", onPageHide);
+  document.addEventListener("visibilitychange", onHidden);
+  window.addEventListener("online", onOnline);
+
   renderAll();
   enhanceSelect(subjectSelect);
+  offerRecovery();
+  if (!recovery.available) setMessage(summaryMessage, t("editor.autosave.noCopy"), true);
 
   return {
     element: root,
@@ -833,6 +1014,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     destroy: () => {
       window.removeEventListener("focus", refreshIfNewer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("online", onOnline);
+      autosaver.dispose();
+      summaryIndicator.destroy();
+      questionIndicator?.destroy();
       summaryAuthoring.destroyVisual(); // the Tiptap instance, its timer and its listeners go with the screen
     },
   };

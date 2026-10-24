@@ -3,14 +3,14 @@
 export const SUITES = {
   materials: [
     'content-quality-flow', 'draft-acceptance', 'generation-jobs', 'keyboard-study-materials', 'large-draft-review', 'large-pdf',
-    'lesson-editor', 'materials-a11y', 'source-proposals', 'source-reupload',
+    'lesson-editor', 'materials-a11y', 'source-proposals', 'source-reupload', 'draft-autosave',
   ],
   // the shortest honest check, one shared page and one draft (about a minute): run it after every small change
   smoke: ['smoke'],
   // the Resumo Mestre: renderer, formulas, figures, PDF crop, visual editor, and the lesson editor that hosts them
   summary: [
     'summary-visual-editor', 'summary-math-editor', 'summary-math-plano', 'summary-images', 'summary-pdf-crop',
-    'lesson-editor', 'lesson-editor-responsive', 'lesson-editor-a11y', 'draft-acceptance',
+    'lesson-editor', 'lesson-editor-responsive', 'lesson-editor-a11y', 'draft-acceptance', 'draft-autosave',
   ],
 };
 
