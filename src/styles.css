@@ -5267,3 +5267,12 @@ h1 {
     opacity: 0.5;
   }
 }
+
+/* the indicator owns the status line: while it speaks, the older "unsaved changes" text steps aside, and the indicator sits at the end of the row */
+.lesson-actions:has(.save-indicator:not([hidden])) .lesson-dirty {
+  display: none;
+}
+
+.lesson-actions > .save-indicator {
+  margin-inline-start: auto;
+}
