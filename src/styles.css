@@ -5117,6 +5117,11 @@ h1 {
   margin: 0 0 0.35rem;
 }
 
+.summary-mode-btn,
+.summary-visual-btn {
+  min-width: 44px;
+}
+
 .summary-visual-btn:disabled {
   opacity: 0.5;
 }
