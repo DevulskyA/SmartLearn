@@ -125,3 +125,14 @@ Pedido do usuário (brief R-1): o estudante edita uma página formatada, sem Mar
 1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
 2. Trabalho experimental independente: colar Markdown no editor visual; editor visual no Plano/Hoje; fórmulas químicas no lugar. (Tabela editável: FEITA em 2026-10-25.) Registrado sem iniciar: R-2, regressão do monitor do Desktop (`.specs/LOOP_BACKLOG.md`).
 3. Se o usuário pedir: relatório final por entrega no formato RESULTADO / EVIDÊNCIA / ARQUIVOS / RISCO / PRÓXIMO.
+
+## Estatísticas AAA (2026-10-25, worktree stats-aaa-6405e1, branch claude/stats-aaa-6405e1)
+
+Autorização humana da mudança da superfície protegida (ADR-0001): mensagem de 2026-10-25.
+
+- HEAD: ver `git log` (commits 290219c feat(stats) e 95ba3ff style(stats), mais o commit do script de captura nativa, se existir). Sem push.
+- Feito: base única de evidências por período (`evidenceInPeriod`, `periodSubjectRows`, `periodSummary`, `performanceDistribution`, `evolutionSeries` em `src/analytics.js`); cabeçalho em linha compacta, tabela 2/3 (Disciplina, Desempenho, Evidência, Tendência em p.p.), coluna lateral 1/3 (Evolução geral + Distribuição); 90 dias e pior desempenho como padrão. Corrigido: SVG não tem `hidden` (usar atributo).
+- Provas: unit `test/analytics-period.test.js` (a–e); e2e `e2e/stats-aaa.spec.js` (f + layout 800x600/1280x820/1920x1080); e2e stats-responsive/sorting/drilldown/select-ui/feature-parity 47/47; lint OK; npm test 816/818 (a única falha era o arquivo removido ainda não commitado, resolvido no commit).
+- Testes atualizados com justificativa: rótulo Prática→Evidência (stats-sorting); removidos contadores de revisões e o seletor de período do gráfico (não existem mais).
+- Pendente: capturas REAIS do Desktop nativo nos 3 tamanhos (subagente construiu `scripts/desktop-stats-capture.mjs`; ver relatório/commit); revisão visual no tema noturno; humano decide se mantém o aviso "Meu estudo está funcionando?" acima da tabela.
+- Ambiente: o worktree precisou de `npm ci` (raiz e `server/`).

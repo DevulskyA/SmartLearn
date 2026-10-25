@@ -8,7 +8,7 @@
 // Prerequisites: SMARTLEARN_BUILD_MODE=DEV `npx vite build`, `node scripts/package-standalone.mjs`, `cargo build` in src-tauri (CARGO_TARGET_DIR
 // outside the worktrees). Exe = $CARGO_TARGET_DIR/debug/smartlearn.exe (or src-tauri/target), SL_JOURNEY_EXE overrides.
 // Usage: node scripts/desktop-stats-capture.mjs  -> ONE JSON line on stdout; exit 0 only if every capture exists and none overflows horizontally.
-// PNGs go to %TEMP%\sl-stats-aaa-shots (SL_STATS_SHOTS overrides): <theme>-<WxH>.png (viewport) and <theme>-<WxH>-full.png (whole page).
+// PNGs go to %TEMP%\sl-stats-aaa-shots (SL_STATS_SHOTS overrides): <theme>-<WxH>.png (top of the page) and <theme>-<WxH>-scrollN.png (the same page scrolled down screen by screen).
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -211,9 +211,27 @@ try {
         };
       });
       const base = `${theme}-${w}x${h}`;
-      const shot = join(shotsDir, `${base}.png`); const full = join(shotsDir, `${base}-full.png`);
+      const shot = join(shotsDir, `${base}.png`);
       await page.screenshot({ path: shot });
-      await page.screenshot({ path: full, fullPage: true });
+      // the app scrolls inside its shell, so a fullPage shot would not grow: step the real scroller down one screen at a time instead
+      const extra = [];
+      for (let n = 2; n <= 6; n += 1) {
+        const more = await page.evaluate(() => {
+          let el = document.querySelector('#screen-stats');
+          while (el && !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+          const scroller = el ?? document.scrollingElement;
+          const before = scroller.scrollTop;
+          scroller.scrollTop = before + Math.round(scroller.clientHeight * 0.85);
+          return scroller.scrollTop > before;
+        });
+        if (!more) break;
+        await sleep(300);
+        const file = join(shotsDir, `${base}-scroll${n}.png`);
+        await page.screenshot({ path: file });
+        extra.push(file);
+      }
+      await page.evaluate(() => { let el = document.querySelector('#screen-stats'); while (el) { el.scrollTop = 0; el = el.parentElement; } document.scrollingElement.scrollTop = 0; });
+      const full = extra;
       const overflowX = m.scrollWidth > m.clientWidth;
       result.captures.push({
         theme, requested: [w, h], viewport: m.viewport, window: [rect[2] - rect[0], rect[3] - rect[1]], dpr: m.dpr,
@@ -223,7 +241,7 @@ try {
         period: m.period, expectedForPeriod: expectedFor(m.period),
         reconciled: String(m.tableQuestionsSum) === String(m.questions).replace(/\D/g, '') && m.tableQuestionsSum === expectedFor(m.period),
         sideBelowTable: m.sideBelowTable, tableScrollOverflow: m.tableScrollOverflow, textOverflowLeaves: m.textOverflowLeaves,
-        files: [shot, full].filter((f) => existsSync(f) && statSync(f).size > 0),
+        files: [shot, ...full].filter((f) => existsSync(f) && statSync(f).size > 0),
       });
     }
   }
@@ -237,6 +255,6 @@ try {
 }
 result.consoleErrors = consoleErrors.slice(0, 5);
 result.pass = !result.fatal && result.captures.length === SIZES.length * THEMES.length
-  && result.captures.every((c) => c.files.length === 2 && !c.overflowX && c.reconciled);
+  && result.captures.every((c) => c.files.length >= 1 && !c.overflowX && c.reconciled);
 console.log(JSON.stringify(result));
 process.exit(result.pass ? 0 : 1);
