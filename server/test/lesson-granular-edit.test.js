@@ -45,6 +45,8 @@ async function lessonWithThreeQuestions(db, sourcesDir) {
 }
 
 const snapshot = (q) => JSON.stringify(q);
+// Back in review: stored as PROPOSED, shown as FLAGGED when the audit has something to say about it (the DTO decides that, not the edit rule).
+const backInReview = (status) => status === 'PROPOSED' || status === 'FLAGGED';
 
 test('every question has a stable id, a version and a review status; the summary has its own version', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
@@ -275,6 +277,59 @@ test('editing the text of a REJECTED question keeps it REJECTED with the same id
     const approved = drafts.reviseQuestion(db, userId, draftId, target.id, { status: 'ACCEPTED' });
     assert.equal(approved.questions[1].status, 'ACCEPTED');
     const reworded2 = drafts.reviseQuestion(db, userId, draftId, target.id, { answer: 'Resposta B de novo' });
-    assert.equal(reworded2.questions[1].status, 'ACCEPTED', 'a non-default status survives a text edit');
+    assert.ok(backInReview(reworded2.questions[1].status), 'a text edit of an ACCEPTED question sends it back to review (see the tests below)');
+  } finally { cleanup(); }
+});
+
+// Saving is not accepting, and a changed text is not the text that was accepted: the review status belongs to the content the student reviewed.
+test('changing the TEXT of an ACCEPTED question sends it back to PROPOSED; the other questions and the summary are untouched', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    const [a, b, c] = draft.questions;
+    for (const q of [a, b, c]) drafts.reviseQuestion(db, userId, draftId, q.id, { status: 'ACCEPTED' });
+    const before = drafts.getDraft(db, userId, draftId);
+    const edited = drafts.reviseQuestion(db, userId, draftId, b.id, { answer: 'Resposta B corrigida', expectedVersion: before.questions[1].version });
+    assert.ok(backInReview(edited.questions[1].status), 'the reviewed text is gone: it must be accepted again');
+    assert.equal(edited.questions[1].answer, 'Resposta B corrigida');
+    assert.equal(edited.questions[1].version, before.questions[1].version + 1);
+    assert.equal(snapshot(edited.questions[0]), snapshot(before.questions[0]));
+    assert.equal(snapshot(edited.questions[2]), snapshot(before.questions[2]));
+    assert.equal(edited.questions[0].status, 'ACCEPTED');
+    assert.equal(edited.summary, before.summary);
+  } finally { cleanup(); }
+});
+
+test('an edit that changes nothing, a status-only change and an edit that carries an explicit ACCEPTED keep their status', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    const target = draft.questions[0];
+    const accepted = drafts.reviseQuestion(db, userId, draftId, target.id, { status: 'ACCEPTED' });
+    const same = drafts.reviseQuestion(db, userId, draftId, target.id, { question: target.question, answer: target.answer });
+    assert.equal(same.questions[0].status, 'ACCEPTED', 'saving the very same text changes nothing');
+    assert.equal(same.questions[0].version, accepted.questions[0].version);
+    const acceptedWithEdit = drafts.reviseQuestion(db, userId, draftId, target.id, { answer: 'Resposta nova e aceita junto', status: 'ACCEPTED' });
+    assert.equal(acceptedWithEdit.questions[0].status, 'ACCEPTED', 'the reviewer who accepts together with the edit is accepting the NEW text deliberately');
+    const rejected = drafts.reviseQuestion(db, userId, draftId, target.id, { status: 'REJECTED' });
+    const rewordedRejected = drafts.reviseQuestion(db, userId, draftId, target.id, { answer: 'Outra' });
+    assert.equal(rejected.questions[0].status, 'REJECTED');
+    assert.equal(rewordedRejected.questions[0].status, 'REJECTED');
+  } finally { cleanup(); }
+});
+
+test('the same rule holds when the whole question list is replaced: only a question whose text changed leaves ACCEPTED', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId, draft } = await lessonWithThreeQuestions(db, sourcesDir);
+    for (const q of draft.questions) drafts.reviseQuestion(db, userId, draftId, q.id, { status: 'ACCEPTED' });
+    const current = drafts.getDraft(db, userId, draftId);
+    const spans = [{ pageIndex: 1 }];
+    const replaced = drafts.replaceDraftContent(db, userId, draftId, {
+      summary: current.summary,
+      questions: current.questions.map((q, i) => ({ question: q.question, answer: i === 2 ? 'Resposta C mudou' : q.answer, explanation: q.explanation ?? null, hint: q.hint ?? null, sourceSpans: spans })),
+    });
+    assert.deepEqual(replaced.questions.slice(0, 2).map((q) => q.status), ['ACCEPTED', 'ACCEPTED']);
+    assert.ok(backInReview(replaced.questions[2].status));
   } finally { cleanup(); }
 });

@@ -409,3 +409,26 @@ test('with reduced motion the saved check is still drawn (no animation hides it)
   const offset = await summaryIndicator(editor).locator('svg path').evaluate((el) => getComputedStyle(el).strokeDashoffset);
   expect(parseFloat(offset)).toBe(0);
 });
+
+test('an accepted question whose text changes goes back to review: the server does it, the screen says so, and accepting again is a deliberate click', async ({ page }) => {
+  const editor = await startWith(page, 'Resumo.');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').nth(1).click();
+  await editor.locator('[data-action="accept-question"]').click();
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão aceita');
+  expect((await serverDraft(page, editor)).questions[1].status).toBe('ACCEPTED');
+  await expect(editor.locator('[data-action="accept-question"]')).toBeDisabled(); // accepted: nothing left to accept
+
+  const answer = editor.locator('.lesson-qeditor textarea').nth(1);
+  await answer.click();
+  await answer.press('End');
+  await answer.pressSequentially(' ajustada depois de aceita');
+  await expect.poll(async () => (await serverDraft(page, editor)).questions[1].status, { timeout: 8000 }).not.toBe('ACCEPTED');
+  const changed = (await serverDraft(page, editor)).questions[1];
+  expect(changed.answer).toContain('ajustada depois de aceita'); // the text was saved...
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('voltou a "proposta"'); // ...the student is told what that did...
+  await expect(editor.locator('[data-action="accept-question"]')).toBeEnabled(); // ...and can accept the new text on purpose
+  await editor.locator('[data-action="accept-question"]').click();
+  await expect.poll(async () => (await serverDraft(page, editor)).questions[1].status, { timeout: 5000 }).toBe('ACCEPTED');
+  expect((await serverDraft(page, editor)).questions[1].answer).toContain('ajustada depois de aceita');
+});

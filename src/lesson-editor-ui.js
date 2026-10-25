@@ -915,6 +915,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       return { ok: true, nothing: true };
     }
     if (manual && selectedId === questionId) setMessage(qMessage, t("editor.saving"));
+    const wasAccepted = q.status === "ACCEPTED";
     const result = await deps.reviseQuestion(draft.id, questionId, { ...fields, expectedVersion: q.version });
     if (!result.ok) {
       if (manual && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, result.message || t("editor.question.saveFailed"), true); }
@@ -923,9 +924,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (JSON.stringify(questionBuffers.get(questionId) ?? null) === sent) { questionBuffers.delete(questionId); recovery.clearQuestion(questionId); }
     const focus = captureFocus();
     applyDraft(result.draft, { keepSelection: selectedId });
+    // the review status belongs to the text that was reviewed (server rule): an accepted question whose text changed is back in review, and the student is told
+    const backInReview = wasAccepted && questionById(questionId)?.status !== "ACCEPTED";
+    if (backInReview && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, t("editor.question.msg.backInReview")); }
     if (manual && selectedId === questionId) {
       qMessageFor = selectedId;
-      setMessage(qMessage, t("editor.question.msg.saved"));
+      if (!backInReview) setMessage(qMessage, t("editor.question.msg.saved"));
       // "Salvar questão" is disabled now (nothing left to save): the focus goes to the question itself, as after every other action on a question
       (qForm.querySelector('[data-action="save-question"]:not(:disabled)') ?? qForm.querySelector(".lesson-qheading"))?.focus({ preventScroll: true });
     } else restoreFocus(focus);

@@ -72,6 +72,7 @@ export default {
   'editor.question.delete': 'Excluir questão',
   'editor.question.saveFailed': 'Não foi possível salvar.',
   'editor.question.msg.saved': 'Questão salva.',
+  'editor.question.msg.backInReview': 'Você alterou uma questão que estava aceita: ela voltou a "proposta" e precisa ser aceita de novo.',
   'editor.question.msg.accepted': 'Questão aceita.',
   'editor.question.msg.restored': 'Questão restaurada.',
   'editor.question.msg.rejected': 'Questão rejeitada: não vira exercício.',

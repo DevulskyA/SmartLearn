@@ -671,7 +671,9 @@ function mergeIdentity(previous, validatedQuestion, nowIso) {
   return {
     ...validatedQuestion,
     id: previous?.id,
-    status: previous?.status ?? 'PROPOSED',
+    // The review status belongs to the content that was reviewed: an ACCEPTED question whose text changed is no longer the one that was accepted and goes back to
+    // PROPOSED (the reviewer accepts it again, deliberately). REJECTED stays REJECTED; a status given explicitly with the edit (reviseQuestion) overrides this.
+    status: changed && previous?.status === 'ACCEPTED' ? 'PROPOSED' : (previous?.status ?? 'PROPOSED'),
     version: (previous?.version ?? 1) + (changed ? 1 : 0),
     // Provenance moves only when the TEXT moved: a status change or a no-op edit keeps it. Who generated it is never erased.
     origin: changed && origin === 'GENERATED' ? 'HUMAN_EDITED' : origin,
