@@ -200,7 +200,8 @@ export function createVisualSummaryEditor(textarea, { openSource = null, editInT
             field = new module.MathfieldElement();
             field.className = "summary-math-field";
             field.setAttribute("aria-label", t("summary.math.inplace"));
-            field.mathVirtualKeyboardPolicy = "auto";
+            // the symbol keyboard (fractions, roots, Greek letters, indices) opens with the field: the student picks symbols, nothing to type or to know
+            field.mathVirtualKeyboardPolicy = "onfocus";
             field.value = current.attrs.tex;
             field.addEventListener("keydown", (event) => {
               if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); finish(true); }
