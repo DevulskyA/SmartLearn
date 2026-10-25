@@ -56,13 +56,13 @@ test('the Prática header cycles practice-asc -> practice-desc -> recency-asc ->
   const chipsInOrder = () => page.locator('#subject-kpi-list tr.matrix-row .subject-cell').allTextContents();
 
   // Idle state before any click: shows "Prática", not active.
-  await expect(btn).toHaveText(/Prática/);
+  await expect(btn).toHaveText(/Evidência/);
   await expect(btn).not.toHaveClass(/is-active/);
 
   // Click 1: practice, ascending.
   await btn.click();
   await expect(btn).toHaveAttribute('data-sort-key', 'practice');
-  await expect(btn).toHaveText(/Prática/);
+  await expect(btn).toHaveText(/Evidência/);
   await expect(btn).toHaveClass(/is-active/);
   await expect(th).toHaveAttribute('aria-sort', 'ascending');
 
@@ -93,7 +93,7 @@ test('the Prática header cycles practice-asc -> practice-desc -> recency-asc ->
   // Click 5: wraps back to practice, ascending.
   await btn.click();
   await expect(btn).toHaveAttribute('data-sort-key', 'practice');
-  await expect(btn).toHaveText(/Prática/);
+  await expect(btn).toHaveText(/Evidência/);
   await expect(th).toHaveAttribute('aria-sort', 'ascending');
 });
 
@@ -107,7 +107,7 @@ test('clicking a different header (Desempenho) deactivates the Prática/Recênci
   await performanceBtn.click();
   await expect(performanceBtn).toHaveClass(/is-active/);
   await expect(combinedBtn).not.toHaveClass(/is-active/);
-  await expect(combinedBtn).toHaveText(/Prática/); // idle default, not stuck on "Recência"
+  await expect(combinedBtn).toHaveText(/Evidência/); // idle default, not stuck on "Recência"
 });
 
 test('sorting by Conteúdo (alphabetical) also works in Por conteúdo, independent of Por disciplina', async ({ page }) => {
