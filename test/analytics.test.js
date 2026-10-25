@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Analytics, filterByPeriod, sortMatrixRows } from "../src/analytics.js";
+import { Analytics, sortMatrixRows } from "../src/analytics.js";
 
 // --- bySubject window boundary tests (P1-4) ---
 
@@ -128,7 +128,7 @@ test("bySubject: adding a 31st day (today-30) does NOT increase recentQuestions"
   assert.equal(results[0].recentQuestions, 30, "31st day (today-30) must NOT appear in recent window");
 });
 
-// --- filterByPeriod / sortMatrixRows (extracted from app.js, TEST SHIELD
+// --- sortMatrixRows (extracted from app.js, TEST SHIELD
 // item 2, 2026-09-15: these drive what Estatísticas' matrix tables show,
 // previously only exercised end-to-end via e2e/stats-sorting.spec.js and
 // e2e/stats-responsive-regression.spec.js — no isolated unit-speed gate) ---
@@ -145,36 +145,6 @@ function row(overrides = {}) {
     ...overrides,
   };
 }
-
-test("filterByPeriod: falsy periodValue returns all rows unfiltered", () => {
-  const rows = [row(), row({ lastEvidence: null })];
-  assert.equal(filterByPeriod(rows, "", "2026-09-04").length, 2);
-  assert.equal(filterByPeriod(rows, null, "2026-09-04").length, 2);
-});
-
-test("filterByPeriod: a row with no lastEvidence is excluded, never shown as if it matched", () => {
-  const rows = [row({ lastEvidence: null })];
-  assert.equal(filterByPeriod(rows, "last-30", "2026-09-04").length, 0);
-});
-
-test("filterByPeriod: last-30 boundary — cutoff is today-30 inclusive, today-31 is OUT", () => {
-  // Contract differs on purpose from Analytics.bySubject's own 30-day recent
-  // window (today-29..today): filterByPeriod's cutoff is subtractDays(today,
-  // days) with an inclusive >= comparison, so for "last-30" the cutoff day
-  // itself (today-30) is included.
-  const today = "2026-09-04";
-  const cutoffDay = row({ lastEvidence: { evidenceDate: "2026-08-05" } }); // today-30, the cutoff itself
-  const justOutside = row({ lastEvidence: { evidenceDate: "2026-08-04" } }); // today-31
-  assert.equal(filterByPeriod([cutoffDay], "last-30", today).length, 1, "cutoff day itself is included (>=)");
-  assert.equal(filterByPeriod([justOutside], "last-30", today).length, 0);
-});
-
-test("filterByPeriod: last-90 and the default (anything else -> 365) use distinct cutoffs", () => {
-  const today = "2026-09-04";
-  const at91Days = row({ lastEvidence: { evidenceDate: "2026-06-05" } }); // today-91
-  assert.equal(filterByPeriod([at91Days], "last-90", today).length, 0, "excluded from last-90");
-  assert.equal(filterByPeriod([at91Days], "last-365", today).length, 1, "included in the 365 default");
-});
 
 test("sortMatrixRows: performance (default key) ascending puts weakest first, nulls last regardless of direction", () => {
   const rows = [row({ subjectId: 1, weightedAccuracy: 80 }), row({ subjectId: 2, weightedAccuracy: null }), row({ subjectId: 3, weightedAccuracy: 20 })];

@@ -419,30 +419,27 @@
         </section>
 
         <section class="screen" id="screen-stats" data-screen-panel="stats" aria-labelledby="title-stats" hidden>
-          <div class="screen-heading">
+          <div class="screen-heading stats-heading">
             <div>
-              <p class="eyebrow" data-i18n="screens.stats.eyebrow">Seu desempenho</p>
               <h1 id="title-stats" data-i18n="screens.stats.title">Estatísticas</h1>
+              <p class="stats-lede" data-i18n="screens.stats.lede">Onde você está forte e onde precisa revisar.</p>
             </div>
             <label class="select-control sort-control">
               <span class="visually-hidden" data-i18n="screens.filter.period">Período</span>
               <select id="stats-unit-filter-period" aria-label="Período" data-i18n-aria-label="screens.filter.period">
-                <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
                 <option value="last-30" data-i18n="screens.filter.last30">Últimos 30 dias</option>
-                <option value="last-90" data-i18n="screens.filter.last90">Últimos 90 dias</option>
+                <option value="last-90" selected data-i18n="screens.filter.last90">Últimos 90 dias</option>
                 <option value="last-365" data-i18n="screens.filter.lastYear">Último ano</option>
+                <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
               </select>
             </label>
           </div>
 
-          <div class="metric-grid" aria-label="Resumo de desempenho" data-i18n-aria-label="screens.stats.metrics.label">
-            <article class="metric-card metric-card--alert"><span data-i18n="screens.stats.metric.overdue">Vencidas</span><strong id="metric-reviews-overdue">0</strong></article>
-            <article class="metric-card"><span data-i18n="screens.stats.metric.pending">Não feitas hoje</span><strong id="metric-reviews-pending">0</strong></article>
-            <article class="metric-card"><span data-i18n="screens.stats.metric.done">Revisões feitas</span><strong id="metric-reviews-done">0</strong></article>
-            <article class="metric-card"><span data-i18n="screens.stats.metric.average">Média geral</span><strong id="metric-average">—</strong></article>
-            <article class="metric-card"><span data-i18n="screens.stats.metric.questions">Questões</span><strong id="metric-questions">0</strong></article>
-            <article class="metric-card"><span data-i18n="screens.stats.metric.correct">Acertos</span><strong id="metric-correct">0</strong></article>
-          </div>
+          <dl class="stats-kpis" aria-label="Resumo do período" data-i18n-aria-label="screens.stats.metrics.label">
+            <div class="stats-kpi stats-kpi--lead"><dt data-i18n="screens.stats.metric.average">Média geral</dt><dd><strong id="metric-average" data-state="NO_EVIDENCE">—</strong></dd></div>
+            <div class="stats-kpi"><dt data-i18n="screens.stats.metric.questions">Questões</dt><dd><strong id="metric-questions">0</strong><span class="stats-kpi-note"><span id="metric-correct">0</span> <span data-i18n="screens.stats.metric.correct">acertos</span></span></dd></div>
+            <div class="stats-kpi"><dt data-i18n="screens.stats.metric.subjects">Disciplinas</dt><dd><strong id="metric-subjects">0</strong><span class="stats-kpi-note"><span id="metric-subjects-with-data">0</span> <span data-i18n="screens.stats.metric.withData">com questões</span></span></dd></div>
+          </dl>
 
           <div class="view-tabs" role="tablist" aria-label="Profundidade da análise" data-i18n-aria-label="screens.stats.tabs.label">
             <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0" data-i18n="screens.stats.tabs.subject">Por disciplina</button>
@@ -454,7 +451,6 @@
               <section class="stats-panel table-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
                 <div class="stats-panel-heading wrap">
                   <div>
-                    <p class="eyebrow" data-i18n="screens.stats.tabs.subject">Por disciplina</p>
                     <h2 id="subject-kpi-title" data-i18n="screens.stats.subject.title">Desempenho por disciplina</h2>
                   </div>
                 </div>
@@ -472,7 +468,7 @@
                       <tr id="subject-kpi-head">
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.form.subject">Disciplina</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Evidência<span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
@@ -482,30 +478,28 @@
                 <p class="panel-empty" id="subject-kpi-empty" hidden data-i18n="screens.stats.subject.empty">Registre questões para ver o desempenho por disciplina.</p>
               </section>
 
-              <aside class="stats-panel analysis-panel chart-panel" aria-labelledby="evolution-title">
-                <div class="stats-panel-heading">
-                  <div><p class="eyebrow" data-i18n="screens.stats.evolution.eyebrow">Histórico</p><h2 id="evolution-title" data-i18n="screens.stats.evolution.title">Evolução por disciplina</h2></div>
-                </div>
-                <div class="panel-heading-actions analysis-filters">
-                  <label class="select-control sort-control">
-                    <span class="visually-hidden" data-i18n="screens.stats.evolution.subjectLabel">Filtrar disciplina no gráfico</span>
-                    <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico" data-i18n-aria-label="screens.stats.evolution.subjectLabel">
-                      <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
-                    </select>
-                  </label>
-                  <label class="select-control sort-control">
-                    <span class="visually-hidden" data-i18n="screens.stats.evolution.periodLabel">Período do gráfico</span>
-                    <select id="evolution-filter-period" aria-label="Período do gráfico" data-i18n-aria-label="screens.stats.evolution.periodLabel">
-                      <option value="3" data-i18n="screens.stats.evolution.months3">3 meses</option>
-                      <option value="6" data-i18n="screens.stats.evolution.months6">6 meses</option>
-                      <option value="12" data-i18n="screens.stats.evolution.months12">12 meses</option>
-                      <option value="0" data-i18n="screens.stats.evolution.all">Tudo</option>
-                    </select>
-                  </label>
-                </div>
-                <svg id="evolution-svg" class="evolution-svg" aria-label="Gráfico de evolução" data-i18n-aria-label="screens.stats.evolution.chartLabel" hidden></svg>
-                <canvas id="evolution-chart" hidden></canvas>
-                <p class="panel-empty" id="chart-empty" data-i18n="screens.stats.evolution.empty">O gráfico será exibido quando houver dados suficientes.</p>
+              <aside class="stats-side" aria-label="Evolução e distribuição" data-i18n-aria-label="screens.stats.side.label">
+                <section class="stats-panel analysis-panel chart-panel" aria-labelledby="evolution-title">
+                  <div class="stats-panel-heading">
+                    <h2 id="evolution-title" data-i18n="screens.stats.evolution.title">Evolução geral</h2>
+                    <label class="select-control sort-control">
+                      <span class="visually-hidden" data-i18n="screens.stats.evolution.subjectLabel">Filtrar disciplina no gráfico</span>
+                      <select id="evolution-filter-subject" aria-label="Filtrar disciplina no gráfico" data-i18n-aria-label="screens.stats.evolution.subjectLabel">
+                        <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
+                      </select>
+                    </label>
+                  </div>
+                  <svg id="evolution-svg" class="evolution-svg" role="img" aria-labelledby="evolution-title" aria-describedby="evolution-svg-description evolution-caption" hidden></svg>
+                  <p class="evolution-caption" id="evolution-caption" hidden></p>
+                  <p class="visually-hidden" id="evolution-svg-description"></p>
+                  <p class="panel-empty" id="chart-empty" data-i18n="screens.stats.evolution.empty">O gráfico será exibido quando houver dados suficientes.</p>
+                </section>
+                <section class="stats-panel analysis-panel" aria-labelledby="stats-band-title">
+                  <div class="stats-panel-heading">
+                    <h2 id="stats-band-title" data-i18n="screens.stats.bands.title">Distribuição do desempenho</h2>
+                  </div>
+                  <ul class="band-list" id="stats-band-list"></ul>
+                </section>
               </aside>
             </div>
           </div>
@@ -522,7 +516,6 @@
               <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
                 <div class="stats-panel-heading wrap">
                   <div>
-                    <p class="eyebrow" data-i18n="screens.stats.tabs.unit">Por conteúdo</p>
                     <h2 id="unit-stats-title" data-i18n="screens.stats.unit.title">Desempenho por conteúdo</h2>
                   </div>
                 </div>
@@ -532,7 +525,7 @@
                       <tr id="unit-stats-head">
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.stats.col.content">Conteúdo</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Prática<span class="sort-arrow" aria-hidden="true"></span></button></th>
+                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Evidência<span class="sort-arrow" aria-hidden="true"></span></button></th>
                         <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
                       </tr>
                     </thead>
@@ -552,7 +545,6 @@
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
               <div>
-                <p class="eyebrow" data-i18n="screens.stats.exercises.eyebrow">Exercícios</p>
                 <h2 id="exercise-notes-title" data-i18n="screens.stats.exercises.title">Exercícios resolvidos</h2>
               </div>
             </div>

@@ -282,11 +282,6 @@ test.describe('local BrowserStore consumers', () => {
     await auditSelectConsumer(page, '#evolution-filter-subject');
   });
 
-  test('Estatísticas — evolution chart period filter — full checklist', async ({ page }) => {
-    await seedUatAndGoto(page, 'stats');
-    await auditSelectConsumer(page, '#evolution-filter-period');
-  });
-
   test('menu width is never narrower than its trigger', async ({ page }) => {
     await seedUatAndGoto(page, 'tracking');
     const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');

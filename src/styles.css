@@ -936,52 +936,6 @@ h1 {
   font-weight: 700;
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-
-.metric-card {
-  min-height: 7.5rem;
-  display: grid;
-  align-content: space-between;
-  gap: 1rem;
-  padding: 1.15rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.9rem;
-  background: var(--color-surface);
-}
-
-.metric-card span {
-  color: var(--color-muted);
-  font-size: 0.84rem;
-  font-weight: 650;
-}
-
-.metric-card strong {
-  color: var(--color-primary);
-  font-size: 1.8rem;
-  letter-spacing: -0.035em;
-}
-
-.metric-card-warning strong {
-  color: var(--status-overdue-text);
-}
-
-.metric-card--alert {
-  border-color: color-mix(in oklch, var(--status-overdue-text) 28%, var(--color-border));
-  background: color-mix(in oklch, var(--status-overdue-fill) 45%, var(--color-surface));
-}
-
-.metric-card--alert span {
-  color: var(--status-overdue-text);
-}
-
-.metric-card--alert strong {
-  color: var(--status-overdue-text);
-}
-
 .stats-panel {
   margin-top: 1.25rem;
   padding: 1.25rem;
@@ -1948,21 +1902,6 @@ h1 {
     margin-top: 1.5rem;
   }
 
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.6rem;
-  }
-
-  .metric-card {
-    min-height: 5.5rem;
-    gap: 0.5rem;
-    padding: 0.85rem;
-  }
-
-  .metric-card strong {
-    font-size: 1.5rem;
-  }
-
   .screen-heading {
     align-items: start;
     flex-direction: column;
@@ -2031,10 +1970,6 @@ h1 {
 }
 
 @media (max-width: 22rem) {
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
   .settings-actions {
     align-items: stretch;
     flex-direction: column;
@@ -3879,28 +3814,6 @@ h1 {
   margin: 0;
 }
 
-.trend-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.12rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-sunken);
-  color: var(--color-muted);
-}
-
-.trend-badge[data-direction="IMPROVING"] { color: #166534; background: #dcfce7; border-color: #86efac; }
-.trend-badge[data-direction="DECLINING"] { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
-.trend-badge[data-direction="STABLE"]    { color: var(--color-muted); }
-
-:root[data-theme-mode="dark"] .trend-badge[data-direction="IMPROVING"] { color: #86efac; background: #14532d; border-color: #166534; }
-:root[data-theme-mode="dark"] .trend-badge[data-direction="DECLINING"] { color: #fca5a5; background: #450a0a; border-color: #7f1d1d; }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme-mode="light"]) .trend-badge[data-direction="IMPROVING"] { color: #86efac; background: #14532d; border-color: #166534; }
-  :root:not([data-theme-mode="light"]) .trend-badge[data-direction="DECLINING"] { color: #fca5a5; background: #450a0a; border-color: #7f1d1d; }
-}
-
 .stats-panel-heading {
   display: flex;
   justify-content: space-between;
@@ -5503,3 +5416,108 @@ h1 {
 .lesson-actions > .save-indicator {
   margin-inline-start: auto;
 }
+
+/* ── Estatísticas ─────────────────────────────────────────────────────────
+   Performance bands (Crítico / Atenção / Adequado / Forte / Sem evidência) are the app's canonical
+   getState() bands. One token set colours the table bars, the distribution bars and the trend badge,
+   so a band means the same thing everywhere on the screen. Colours are never the only signal: every
+   band also has its name and its number next to it. */
+:root {
+  --band-critical: oklch(0.56 0.2 27);
+  --band-critical-text: oklch(0.47 0.17 27);
+  --band-attention: oklch(0.72 0.15 72);
+  --band-adequate: oklch(0.6 0.12 235);
+  --band-strong: oklch(0.6 0.14 155);
+  --band-none: oklch(0.72 0.02 260);
+}
+:root[data-theme-mode="dark"] {
+  --band-critical: oklch(0.68 0.18 25);
+  --band-critical-text: oklch(0.82 0.11 25);
+  --band-attention: oklch(0.8 0.14 78);
+  --band-adequate: oklch(0.74 0.12 232);
+  --band-strong: oklch(0.78 0.15 155);
+  --band-none: oklch(0.45 0.02 262);
+}
+
+.stats-heading { align-items: center; }
+.stats-lede { margin: 0.3rem 0 0; color: var(--color-muted); font-size: 0.95rem; max-width: 52ch; }
+
+.stats-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 2.75rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+}
+.stats-kpi { display: grid; gap: 0.2rem; margin: 0; }
+.stats-kpi dt { color: var(--color-muted); font-size: 0.82rem; font-weight: 650; }
+.stats-kpi dd { display: flex; align-items: baseline; gap: 0.55rem; margin: 0; }
+.stats-kpi strong { font-size: 1.65rem; font-weight: 760; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stats-kpi--lead strong { font-size: 2.3rem; }
+.stats-kpi-note { color: var(--color-muted); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+
+#view-stats-subject .workspace-grid { grid-template-columns: minmax(0, 2fr) minmax(17rem, 1fr); }
+@media (max-width: 900px) {
+  #view-stats-subject .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+}
+#view-stats-subject .table-panel { margin-top: 0; }
+.stats-side { display: grid; gap: 1rem; min-width: 0; }
+.stats-side .stats-panel { margin-top: 0; }
+.stats-side .stats-panel-heading { flex-wrap: nowrap; align-items: center; }
+.stats-side .stats-panel-heading h2 { flex: 1 1 auto; min-width: 0; }
+.stats-side .select-control { flex: 0 1 11rem; min-width: 0; }
+
+/* Table: percentage first, band bar under it, quiet supporting columns. */
+#view-stats-subject .matrix-table th:nth-child(1) { width: 30%; }
+#view-stats-subject .matrix-table th:nth-child(2) { width: 25%; }
+#view-stats-subject .matrix-table th:nth-child(3) { width: 21%; }
+#view-stats-subject .matrix-table th:nth-child(4) { width: 24%; }
+#subject-kpi-list td { padding-block: 0.8rem; vertical-align: middle; }
+#subject-kpi-list .subject-compare-value { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+#subject-kpi-list td[data-state="NO_EVIDENCE"] .subject-compare-value,
+#unit-stats-list td[data-state="NO_EVIDENCE"] .subject-compare-value { color: var(--color-muted); font-size: 0.88rem; font-weight: 600; }
+.subject-compare-bar { height: 0.5rem; }
+.subject-compare-bar-fill { background: var(--band-none); }
+.subject-compare-bar-fill[data-state="CRITICAL"] { background: var(--band-critical); }
+.subject-compare-bar-fill[data-state="ATTENTION"] { background: var(--band-attention); }
+.subject-compare-bar-fill[data-state="ADEQUATE"] { background: var(--band-adequate); }
+.subject-compare-bar-fill[data-state="STRONG"] { background: var(--band-strong); }
+.matrix-table tr.matrix-row.is-selected { background: var(--color-primary-soft); box-shadow: none; }
+#subject-kpi-list .practice-compact { font-variant-numeric: tabular-nums; }
+
+.trend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.trend-arrow { flex: none; width: 0.75rem; height: 0.75rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.trend-badge[data-direction="IMPROVING"] { color: var(--status-done-text); background: var(--status-done-fill); }
+.trend-badge[data-direction="DECLINING"] { color: var(--band-critical-text); background: color-mix(in oklch, var(--band-critical) 14%, var(--color-surface)); }
+#subject-kpi-list .trend-badge,
+#unit-stats-list .trend-badge { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* Distribution */
+.band-list { display: grid; gap: 0.95rem; margin: 0; padding: 0; list-style: none; }
+.band-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0.35rem 0.75rem; }
+.band-row .subject-compare-bar { grid-column: 1 / -1; min-width: 0; }
+.band-name { font-size: 0.92rem; font-weight: 700; }
+.band-figures { color: var(--color-muted); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+
+/* Evolution */
+.evolution-svg { height: auto; }
+.evo-grid { stroke: var(--color-border); stroke-width: 1; }
+.evo-axis { fill: var(--color-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.evo-line { fill: none; stroke: var(--color-primary); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+.evo-dot { fill: var(--color-primary); stroke: var(--color-surface); stroke-width: 1.5; }
+.evolution-caption { margin: 0.6rem 0 0; color: var(--color-muted); font-size: 0.82rem; max-width: 46ch; }

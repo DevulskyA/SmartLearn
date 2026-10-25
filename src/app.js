@@ -16,9 +16,9 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
-import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
-import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
+import { colorVarForKey, SUBJECT_COLOR_KEYS, getState, THRESHOLDS } from "./performance-thresholds.js";
+import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
+import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
@@ -231,10 +231,10 @@ const metricElements = {
   totalQuestions: document.querySelector("#metric-questions"),
   totalCorrect: document.querySelector("#metric-correct"),
   avgScore: document.querySelector("#metric-average"),
-  reviewsDone: document.querySelector("#metric-reviews-done"),
-  reviewsPending: document.querySelector("#metric-reviews-pending"),
-  reviewsOverdue: document.querySelector("#metric-reviews-overdue"),
+  subjects: document.querySelector("#metric-subjects"),
+  subjectsWithData: document.querySelector("#metric-subjects-with-data"),
 };
+const statsBandList = document.querySelector("#stats-band-list");
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
 const studyVerdictEl = document.querySelector("#stats-verdict");
@@ -254,10 +254,10 @@ const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
-const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
+const evolutionDescription = document.querySelector("#evolution-svg-description");
+const evolutionCaption = document.querySelector("#evolution-caption");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
-const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
 const chooseBackupFileButton = document.querySelector("#choose-backup-file");
@@ -1479,13 +1479,13 @@ export async function renderToday() {
 // different questions ("how well" vs "how much") and must never share a
 // bar or a color scale — a short green bar (little practice, good score)
 // must never look like a short red one (lots of practice, bad score).
-function createComparisonBar(fillPercent, background, extraClass) {
+function createComparisonBar(fillPercent, state) {
   const bar = document.createElement("div");
   bar.className = "subject-compare-bar";
   const fill = document.createElement("div");
-  fill.className = ["subject-compare-bar-fill", extraClass].filter(Boolean).join(" ");
+  fill.className = "subject-compare-bar-fill";
+  fill.dataset.state = state;
   fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
-  fill.style.background = background;
   bar.append(fill);
   return bar;
 }
@@ -1510,13 +1510,8 @@ export async function renderStats() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
+  // The exercise list below is a ledger of finished exercises, not a period-bound indicator.
   const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
-  metricElements.totalQuestions.textContent = String(stats.totalQuestions);
-  metricElements.totalCorrect.textContent = String(stats.totalCorrect);
-  metricElements.avgScore.textContent = formatAverageScore(stats.avgScore);
-  metricElements.reviewsDone.textContent = String(stats.reviewsDone);
-  metricElements.reviewsPending.textContent = String(stats.reviewsPending);
-  metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);
 
   exerciseNotesBody.replaceChildren();
   exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
@@ -1524,30 +1519,11 @@ export async function renderStats() {
     exerciseNotesBody.append(createExerciseRow(exercise));
   }
 
-  const dataPoints = evidence
-    .filter((ev) => ev.scorePercent != null && ev.evidenceDate != null)
-    .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate))
-    .map((ev) => ({
-      date: ev.evidenceDate,
-      scorePercent: Number(ev.scorePercent),
-    }));
-  const chartRendered = Stats.renderChart(evolutionChart, dataPoints);
-  evolutionChart.hidden = !chartRendered;
-  chartEmpty.hidden = chartRendered;
-  if (!chartRendered) {
-    chartEmpty.textContent = t("statsView.chart.empty");
-  }
+  // Header, table, distribution and chart all derive from the same period evidence (renderStatsBySubject).
   await renderStatsBySubject();
   await renderStatsByUnit();
-  // WP-D3: SVG evolution chart
-  const [allEvidence, allUnits, allSubjects] = await Promise.all([
-    DB.learningEvidence.getAll(),
-    DB.learningUnits.getAll(),
-    DB.subjects.getAll(),
-  ]);
-  // Populate evolution subject filter
   if (evolutionFilterSubject && evolutionFilterSubject.options.length <= 1) {
-    for (const s of allSubjects.filter((s) => s.isActive)) {
+    for (const s of subjects.filter((s) => s.isActive)) {
       const opt = document.createElement("option");
       opt.value = String(s.id);
       opt.textContent = s.name;
@@ -1555,8 +1531,7 @@ export async function renderStats() {
     }
     syncSelect(evolutionFilterSubject);
   }
-  const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
-  chartEmpty.hidden = svgRendered;
+  renderEvolutionSvg(evidence, learningUnits, subjects);
 }
 const TRACKING_STATE_LABELS = {
   get ATRASADO() { return t("plan.state.overdue"); },
@@ -1993,17 +1968,42 @@ export async function renderPlan() {
   }
 }
 
-function createTrendBadge(direction) {
+const TREND_ARROWS = {
+  IMPROVING: "M6 10V2M6 2L2.5 5.5M6 2l3.5 3.5",
+  DECLINING: "M6 2v8M6 10L2.5 6.5M6 10l3.5-3.5",
+  STABLE: "M2 6h8M10 6L6.5 2.5M10 6L6.5 9.5",
+  INSUFFICIENT: "M3 6h6",
+};
+
+// Trend in percentage points. The comparison windows are named in the tooltip; an insufficient
+// sample says so instead of showing a number or a "stable" it cannot support.
+function createTrendBadge(trend, kind = "subject") {
+  const { direction, delta, olderAccuracy, recentAccuracy, olderQuestions, recentQuestions } = trend;
   const span = document.createElement("span");
   span.className = "trend-badge";
   span.dataset.direction = direction;
-  const labels = {
-    IMPROVING: t("statsView.trend.improving"),
-    DECLINING: t("statsView.trend.declining"),
-    STABLE: t("statsView.trend.stable"),
-    INSUFFICIENT: t("statsView.trend.insufficient"),
-  };
-  span.textContent = labels[direction] ?? direction;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("trend-arrow");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", TREND_ARROWS[direction] ?? TREND_ARROWS.INSUFFICIENT);
+  svg.append(path);
+  const points = delta == null ? 0 : Math.round(delta * 100);
+  const label = document.createElement("span");
+  label.textContent = direction === "INSUFFICIENT" ? t("statsView.trend.insufficient")
+    : points === 0 || direction === "STABLE" ? t("statsView.trend.stable")
+    : t(points > 0 ? "statsView.trend.up" : "statsView.trend.down", { points: Math.abs(points) });
+  span.append(svg, label);
+  span.title = direction === "INSUFFICIENT"
+    ? t(kind === "unit" ? "statsView.trend.title.unit.insufficient" : "statsView.trend.title.subject.insufficient", { days: TREND_WINDOW_DAYS })
+    : t(kind === "unit" ? "statsView.trend.title.unit" : "statsView.trend.title.subject", {
+      days: TREND_WINDOW_DAYS,
+      from: Math.round(olderAccuracy),
+      to: Math.round(recentAccuracy),
+      olderQuestions,
+      recentQuestions,
+    });
   return span;
 }
 
@@ -2013,11 +2013,8 @@ function createTrendBadge(direction) {
 const subjectSortState = { key: "performance", dir: "asc" };
 const unitSortState = { key: "performance", dir: "asc" };
 
-// Global período control (screen-heading): shared by both Por disciplina
-// and Por conteúdo, same cutoff rule either table already used.
-// filterByPeriod/sortMatrixRows themselves live in analytics.js (pure,
-// unit-tested there — see test/analytics.test.js) since they're plain row
-// transforms with no DOM dependency; this file only wires them to the UI.
+// The global período control (screen heading) selects the evidence period (90 days at first) for the header,
+// both tables, the distribution and the chart; analytics.js owns that selection (evidenceInPeriod) and sortMatrixRows.
 
 // P0-3 (revised): Recência shares the exact same single Prática button
 // instead of a second stacked button — a visually-stacked version briefly
@@ -2117,6 +2114,48 @@ async function renderStudyVerdict(subjectRows, unitRows) {
   };
 }
 
+const BAND_LABELS = {
+  get CRITICAL() { return t("statsView.band.CRITICAL"); },
+  get ATTENTION() { return t("statsView.band.ATTENTION"); },
+  get ADEQUATE() { return t("statsView.band.ADEQUATE"); },
+  get STRONG() { return t("statsView.band.STRONG"); },
+  get NO_EVIDENCE() { return t("statsView.band.NO_EVIDENCE"); },
+};
+
+function bandRange(state) {
+  return t(`statsView.band.range.${state}`, { attention: THRESHOLDS.ATTENTION, adequate: THRESHOLDS.ADEQUATE, strong: THRESHOLDS.STRONG });
+}
+
+// Indicators line: the same rows the table shows, so questions and subjects always reconcile.
+function renderStatsHeader(summary) {
+  metricElements.avgScore.textContent = formatAverageScore(summary.average);
+  metricElements.avgScore.dataset.state = getState(summary.average, summary.totalQuestions);
+  metricElements.totalQuestions.textContent = formatNumber(summary.totalQuestions);
+  metricElements.totalCorrect.textContent = formatNumber(summary.totalCorrect);
+  metricElements.subjects.textContent = formatNumber(summary.subjectCount);
+  metricElements.subjectsWithData.textContent = formatNumber(summary.withEvidence);
+}
+
+function renderStatsDistribution(rows) {
+  if (!statsBandList) return;
+  statsBandList.replaceChildren();
+  for (const band of performanceDistribution(rows)) {
+    const item = document.createElement("li");
+    item.className = "band-row";
+    item.dataset.state = band.state;
+    item.title = bandRange(band.state);
+    const name = document.createElement("span");
+    name.className = "band-name";
+    name.textContent = BAND_LABELS[band.state];
+    const bar = createComparisonBar(band.percent, band.state);
+    const figures = document.createElement("span");
+    figures.className = "band-figures";
+    figures.textContent = t("statsView.band.figures", { percent: band.percent, count: tn("statsView.band.subjects", band.count) });
+    item.append(name, bar, figures);
+    statsBandList.append(item);
+  }
+}
+
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const today = getLocalDateValue();
@@ -2125,23 +2164,25 @@ export async function renderStatsBySubject() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.bySubject(evidence, units, subjects, today);
-  await renderStudyVerdict(results, Analytics.byUnit(evidence, units, subjects));
-  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  // "Is my study working?" compares periods over time, so it uses all valid history, not the period slice.
+  const history = validEvidence(evidence);
+  await renderStudyVerdict(Analytics.bySubject(history, units, subjects, today), Analytics.byUnit(history, units, subjects));
+  let results = periodSubjectRows(evidence, units, subjects, { periodValue, today });
+  renderStatsHeader(periodSummary(results));
+  renderStatsDistribution(results);
   results = sortMatrixRows(results, subjectSortState);
   wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
   updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
 
   const hasAny = results.some((r) => r.totalQuestions > 0);
-  subjectKpiEmpty.hidden = hasAny || results.length > 0;
+  subjectKpiEmpty.hidden = hasAny;
+  subjectKpiEmpty.textContent = t(results.length === 0 ? "screens.stats.subject.empty" : "statsView.period.empty");
   subjectKpiList.replaceChildren();
 
-  // Matrix row: identidade (subject-cell) | desempenho (% + barra, nunca
-  // texto quando sem evidência) | prática (volume, independente de
-  // desempenho) | tendência (seta, neutra em relação à cor de performance).
-  // Selecionar uma linha também dirige o gráfico de evolução ao lado — evita
-  // duas formas redundantes de escolher a mesma disciplina (linha + dropdown
-  // do gráfico ficam em sincronia, nenhuma delas é removida).
+  // Matrix row: identity (subject-cell) | performance (% + band bar, never a number without evidence)
+  // | evidence (real question count) | trend (p.p. between named windows). Activating a row opens its
+  // contents; the evolution filter follows it (see openSubjectContents).
   for (const r of results) {
     const row = document.createElement("tr");
     row.className = "matrix-row";
@@ -2152,35 +2193,31 @@ export async function renderStatsBySubject() {
     const chip = document.createElement("span");
     chip.className = "subject-cell";
     chip.textContent = r.subjectName;
-    // P1-2: at narrower table widths this chip can be visually truncated
-    // (ellipsis) to keep the table from silently overflowing — the native
-    // title tooltip keeps the full name one hover/long-press away instead
-    // of losing it outright.
+    // At narrower widths the chip can be truncated (ellipsis); the native tooltip keeps the full name.
     chip.title = r.subjectName;
     chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     identityCell.append(chip);
 
     const hasEvidence = r.weightedAccuracy != null;
     const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
-    const perfBar = createComparisonBar(
-      hasEvidence ? r.weightedAccuracy : 100,
-      performanceColor(r.weightedAccuracy, r.totalQuestions),
-      !hasEvidence ? "is-no-evidence" : undefined
-    );
-    const perfCell = createComparisonCell(perfValueText, perfBar);
+    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
+    perfCell.dataset.state = r.state;
 
     const practiceCell = document.createElement("td");
     practiceCell.className = "practice-cell";
     const practiceMain = document.createElement("div");
     practiceMain.className = "practice-compact";
-    practiceMain.textContent = t("statsView.subject.practice", { questions: r.totalQuestions, correct: r.totalCorrect });
-    const practiceRecent = document.createElement("div");
-    practiceRecent.className = "practice-recent";
-    practiceRecent.textContent = t("statsView.subject.recent", { questions: r.recentQuestions });
-    practiceCell.append(practiceMain, practiceRecent);
+    practiceMain.textContent = hasEvidence ? tn("statsView.evidence.questions", r.totalQuestions, { count: formatNumber(r.totalQuestions) }) : t("statsView.evidence.none");
+    practiceCell.append(practiceMain);
+    if (r.lastEvidence) {
+      const last = document.createElement("div");
+      last.className = "practice-recent";
+      last.textContent = t("statsView.evidence.last", { date: formatDate(r.lastEvidence.evidenceDate) });
+      practiceCell.append(last);
+    }
 
     const trendCell = document.createElement("td");
-    trendCell.append(createTrendBadge(r.trend.direction));
+    trendCell.append(createTrendBadge(r.trend));
 
     row.append(identityCell, perfCell, practiceCell, trendCell);
     row.addEventListener("click", () => openSubjectContents(r.subjectId));
@@ -2192,6 +2229,14 @@ export async function renderStatsBySubject() {
     });
     subjectKpiList.append(row);
   }
+  syncSelectedSubjectRow();
+}
+
+function syncSelectedSubjectRow() {
+  const selected = evolutionFilterSubject?.value ?? "";
+  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", selected !== "" && tr.dataset.subjectId === selected);
+  }
 }
 
 function selectSubjectForEvolution(subjectId) {
@@ -2200,9 +2245,7 @@ function selectSubjectForEvolution(subjectId) {
     syncSelect(evolutionFilterSubject);
     evolutionFilterSubject.dispatchEvent(new Event("change"));
   }
-  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
-    tr.classList.toggle("is-selected", tr.dataset.subjectId === String(subjectId));
-  }
+  syncSelectedSubjectRow();
 }
 
 // Single semantic action for "activate a discipline row in Por disciplina":
@@ -2675,7 +2718,8 @@ export async function renderStatsByUnit() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.byUnit(evidence, units, subjects);
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  let results = Analytics.byUnit(evidenceInPeriod(evidence, periodValue, today), units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
   // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
@@ -2683,7 +2727,7 @@ export async function renderStatsByUnit() {
   // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
   // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
   // reaproveitado aqui, não recalculado.
-  const activeSubjectRows = Analytics.bySubject(evidence, units, subjects, today).filter(
+  const activeSubjectRows = periodSubjectRows(evidence, units, subjects, { periodValue, today }).filter(
     (r) => subjectsById.get(r.subjectId)?.isActive,
   );
   if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
@@ -2693,7 +2737,7 @@ export async function renderStatsByUnit() {
 
   // Apply filters (AC-EST2-04)
   if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
-  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  if (periodValue) results = results.filter((r) => r.totalQuestions > 0);
 
   // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
   results = sortMatrixRows(results, unitSortState);
@@ -2736,12 +2780,8 @@ export async function renderStatsByUnit() {
 
     const hasEvidence = r.weightedAccuracy != null;
     const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
-    const perfBar = createComparisonBar(
-      hasEvidence ? r.weightedAccuracy : 100,
-      performanceColor(r.weightedAccuracy, r.totalQuestions),
-      !hasEvidence ? "is-no-evidence" : undefined
-    );
-    const perfCell = createComparisonCell(perfValueText, perfBar);
+    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
+    perfCell.dataset.state = r.state;
 
     const practiceCell = document.createElement("td");
     practiceCell.className = "practice-cell";
@@ -2758,7 +2798,7 @@ export async function renderStatsByUnit() {
     }
 
     const trendCell = document.createElement("td");
-    trendCell.append(createTrendBadge(r.trend.direction));
+    trendCell.append(createTrendBadge(r.trend, "unit"));
 
     row.append(identityCell, perfCell, practiceCell, trendCell);
     row.addEventListener("click", () => showUnitDetail(r));
@@ -2802,7 +2842,7 @@ function showUnitDetail(r) {
     ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
     : t("statsView.unit.noEvidence");
 
-  const trend = createTrendBadge(r.trend.direction);
+  const trend = createTrendBadge(r.trend, "unit");
 
   unitDetailBody.append(heading, score, trend);
 
@@ -2820,111 +2860,77 @@ function showUnitDetail(r) {
   }
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgElement(name, attributes = {}) {
+  const el = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attributes)) el.setAttribute(key, String(value));
+  return el;
+}
+
+const shortDate = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+// General evolution of the CURRENT period and subject filter, from the same evidence as the header and
+// table. X is proportional to calendar time; an interval without questions is not a point and breaks the
+// line, so a silent stretch is never drawn as a steady trend.
 function renderEvolutionSvg(evidence, units, subjects) {
   if (!evolutionSvg) return false;
-  const { months: allMonths, series } = monthlyAccuracySeries(evidence, units, subjects, {
-    subjectFilter: evolutionFilterSubject?.value ?? "",
-    periodMonths: Number(evolutionFilterPeriod?.value ?? "6"),
-    today: getLocalDateValue(),
-  });
-  if (allMonths.length < 1) { evolutionSvg.hidden = true; return false; }
+  const today = getLocalDateValue();
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  const filter = evolutionFilterSubject?.value ?? "";
+  const rows = periodSubjectRows(evidence, units, subjects, { periodValue, today });
+  const subjectIds = new Set(rows.filter((r) => !filter || String(r.subjectId) === filter).map((r) => r.subjectId));
+  const series = evolutionSeries(evidence, units, { periodValue, today, subjectIds });
+  chartEmpty.hidden = series.points.length > 0;
+  // SVGElement has no `hidden` property (only the attribute), unlike the HTML elements around it.
+  evolutionSvg.toggleAttribute("hidden", series.points.length === 0);
+  if (evolutionCaption) evolutionCaption.hidden = series.points.length === 0;
+  if (series.points.length === 0) {
+    chartEmpty.textContent = t("screens.stats.evolution.empty");
+    if (evolutionDescription) evolutionDescription.textContent = "";
+    return false;
+  }
 
-  // SVG layout
-  const W = 320, H = 160, padL = 36, padR = 12, padT = 10, padB = 28;
+  const W = 360, H = 200, padL = 36, padR = 14, padT = 12, padB = 26;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
+  const xOf = (offset) => padL + (series.spanDays > 1 ? (offset / (series.spanDays - 1)) * chartW : chartW / 2);
+  const yOf = (pct) => padT + chartH * (1 - pct / 100);
 
   evolutionSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  evolutionSvg.setAttribute("width", "100%");
-  evolutionSvg.setAttribute("height", H);
   evolutionSvg.replaceChildren();
 
-  const ns = "http://www.w3.org/2000/svg";
-
-  // Y axis labels 0 / 50 / 100
-  for (const pct of [0, 50, 100]) {
-    const y = padT + chartH * (1 - pct / 100);
-    const text = document.createElementNS(ns, "text");
-    text.setAttribute("x", padL - 4);
-    text.setAttribute("y", y + 4);
-    text.setAttribute("text-anchor", "end");
-    text.setAttribute("font-size", "9");
-    text.setAttribute("fill", "currentColor");
-    text.setAttribute("opacity", "0.5");
-    text.textContent = `${pct}%`;
-    evolutionSvg.append(text);
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", padL);
-    line.setAttribute("x2", W - padR);
-    line.setAttribute("y1", y);
-    line.setAttribute("y2", y);
-    line.setAttribute("stroke", "currentColor");
-    line.setAttribute("stroke-width", "0.5");
-    line.setAttribute("opacity", "0.2");
-    evolutionSvg.append(line);
+  for (const pct of [0, 25, 50, 75, 100]) {
+    evolutionSvg.append(svgElement("line", { class: "evo-grid", x1: padL, x2: W - padR, y1: yOf(pct), y2: yOf(pct) }));
+    const label = svgElement("text", { class: "evo-axis", x: padL - 6, y: yOf(pct) + 3.5, "text-anchor": "end" });
+    label.textContent = `${pct}%`;
+    evolutionSvg.append(label);
   }
-
-  // X axis labels (month abbreviations)
-  const xStep = allMonths.length > 1 ? chartW / (allMonths.length - 1) : chartW;
-  for (let i = 0; i < allMonths.length; i++) {
-    const x = padL + i * xStep;
-    const label = formatIntlDate(`${allMonths[i]}-15T12:00:00`, { month: "short" });
-    const text = document.createElementNS(ns, "text");
-    text.setAttribute("x", x);
-    text.setAttribute("y", H - padB + 14);
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "9");
-    text.setAttribute("fill", "currentColor");
-    text.setAttribute("opacity", "0.6");
-    text.textContent = label;
-    evolutionSvg.append(text);
-  }
-
-  // Lines per subject
-  const palette = ["#3b82f6", "#16a34a", "#7c3aed", "#ea580c", "#dc2626", "#0d9488", "#db2777", "#4338ca"];
-  series.forEach(({ points, subject }, idx) => {
-    const color = palette[idx % palette.length];
-    const pts = [];
-    for (let i = 0; i < points.length; i++) {
-      if (points[i] == null) continue;
-      const x = padL + i * xStep;
-      const y = padT + chartH * (1 - points[i] / 100);
-      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-    }
-    if (pts.length < 1) return;
-    if (pts.length === 1) {
-      const [x, y] = pts[0].split(",");
-      const circle = document.createElementNS(ns, "circle");
-      circle.setAttribute("cx", x);
-      circle.setAttribute("cy", y);
-      circle.setAttribute("r", "3");
-      circle.setAttribute("fill", color);
-      evolutionSvg.append(circle);
-    } else {
-      const polyline = document.createElementNS(ns, "polyline");
-      polyline.setAttribute("points", pts.join(" "));
-      polyline.setAttribute("fill", "none");
-      polyline.setAttribute("stroke", color);
-      polyline.setAttribute("stroke-width", "2");
-      polyline.setAttribute("stroke-linejoin", "round");
-      polyline.setAttribute("stroke-linecap", "round");
-      evolutionSvg.append(polyline);
-    }
-    // Legend label
-    if (subject) {
-      const lastPt = pts[pts.length - 1];
-      const [lx, ly] = lastPt.split(",");
-      const text = document.createElementNS(ns, "text");
-      text.setAttribute("x", Number(lx) + 3);
-      text.setAttribute("y", Number(ly) + 4);
-      text.setAttribute("font-size", "8");
-      text.setAttribute("fill", color);
-      text.textContent = subject.name;
-      evolutionSvg.append(text);
-    }
+  const last = series.spanDays - 1;
+  [0, last / 2, last].forEach((offset, index) => {
+    const label = svgElement("text", { class: "evo-axis", x: xOf(offset), y: H - 8, "text-anchor": index === 0 ? "start" : index === 2 ? "end" : "middle" });
+    label.textContent = shortDate(subtractDays(series.from, -Math.round(offset)));
+    evolutionSvg.append(label);
   });
 
-  evolutionSvg.hidden = false;
+  for (const segment of series.segments) {
+    if (segment.length < 2) continue;
+    evolutionSvg.append(svgElement("polyline", { class: "evo-line", points: segment.map((p) => `${xOf(p.offset).toFixed(1)},${yOf(p.accuracy).toFixed(1)}`).join(" ") }));
+  }
+  for (const p of series.points) {
+    const dot = svgElement("circle", { class: "evo-dot", cx: xOf(p.offset).toFixed(1), cy: yOf(p.accuracy).toFixed(1), r: 3.6 });
+    const title = svgElement("title");
+    title.textContent = t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) });
+    dot.append(title);
+    evolutionSvg.append(dot);
+  }
+
+  if (evolutionCaption) evolutionCaption.textContent = t("statsView.evolution.caption", { days: series.bucketDays });
+  if (evolutionDescription) {
+    evolutionDescription.textContent = series.points
+      .map((p) => t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) }))
+      .join("; ");
+  }
   return true;
 }
 
@@ -5762,15 +5768,9 @@ document.addEventListener("click", (event) => {
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
+  syncSelectedSubjectRow();
   const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
-  const ok = renderEvolutionSvg(ev, units, subjs);
-  chartEmpty.hidden = ok;
-});
-evolutionFilterPeriod?.addEventListener("change", async () => {
-  if (!databaseAvailable) return;
-  const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
-  const ok = renderEvolutionSvg(ev, units, subjs);
-  chartEmpty.hidden = ok;
+  renderEvolutionSvg(ev, units, subjs);
 });
 
 planFilterSubject?.addEventListener("change", () => {
@@ -5795,8 +5795,7 @@ trackingFilterPeriod?.addEventListener("change", () => {
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
   if (!databaseAvailable) return;
-  renderStatsBySubject().catch(console.error);
-  renderStatsByUnit().catch(console.error);
+  renderStats().catch(console.error);
 });
 
 let newSubjectColor = "DISC-BLUE";

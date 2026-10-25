@@ -187,13 +187,127 @@ export function verdictText(v) {
   return { headline, detail: t('analytics.verdict.detail.subjects', { parts: parts.join(' · ') }) };
 }
 
-// Rows without a lastEvidence date are excluded by a period filter (there's
-// nothing recent to include), never shown as if they matched.
-export function filterByPeriod(results, periodValue, today) {
-  if (!periodValue) return results;
-  const days = periodValue === 'last-30' ? 30 : periodValue === 'last-90' ? 90 : 365;
-  const cutoff = subtractDays(today, days);
-  return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
+// ---------------------------------------------------------------------------
+// ESTATÍSTICAS: UMA ÚNICA BASE DE EVIDÊNCIAS POR PERÍODO
+// The header, the discipline table, the distribution and the evolution chart all derive from
+// evidenceInPeriod(): the same valid rows, the same window. A period never filters finished
+// rows by "last activity" (that kept old questions in the totals); it selects evidence first and
+// every number is recomputed from it. The average is POOLED (sum correct / sum questions), never a
+// mean of percentages. A discipline with no evidence in the period is "no evidence", never 0%.
+// ---------------------------------------------------------------------------
+const PERIOD_DAYS = { 'last-30': 30, 'last-90': 90, 'last-365': 365 };
+export const TREND_WINDOW_DAYS = 30;
+
+const dayNumber = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000;
+
+// First day (ISO) of the period, N days ending today inclusive; null for "any period".
+export function periodStart(periodValue, today) {
+  const days = PERIOD_DAYS[periodValue];
+  return days ? subtractDays(today, days - 1) : null;
+}
+
+// Only observable, internally consistent rows: a date, at least one question, 0 <= correct <= questions.
+export function validEvidence(evidence) {
+  return (evidence ?? []).filter((e) => {
+    const q = Number(e.questionsCount);
+    const c = Number(e.correctCount);
+    return typeof e.evidenceDate === 'string' && e.evidenceDate.length >= 10
+      && Number.isInteger(q) && q > 0 && Number.isInteger(c) && c >= 0 && c <= q;
+  });
+}
+
+export function evidenceInPeriod(evidence, periodValue, today) {
+  const from = periodStart(periodValue, today);
+  return validEvidence(evidence).filter((e) => e.evidenceDate <= today && (from == null || e.evidenceDate >= from));
+}
+
+// Subject rows for the period. Performance, volume and last activity come from the period's evidence only;
+// the TREND keeps its own explicit windows (last 30 days vs the 30 before, relative to today), so it is
+// not truncated by a short period. Archived subjects appear only when they have evidence in the period.
+export function periodSubjectRows(evidence, units, subjects, { periodValue = '', today = getLocalDateValue() } = {}) {
+  const valid = validEvidence(evidence).filter((e) => e.evidenceDate <= today);
+  const trendBySubject = new Map(Analytics.bySubject(valid, units, subjects, today).map((r) => [r.subjectId, r.trend]));
+  const inPeriod = evidenceInPeriod(evidence, periodValue, today);
+  const activeById = new Map(subjects.map((s) => [s.id, s.isActive !== false]));
+  return Analytics.bySubject(inPeriod, units, subjects, today)
+    .filter((r) => activeById.get(r.subjectId) || r.totalQuestions > 0)
+    .map((r) => ({ ...r, trend: trendBySubject.get(r.subjectId) ?? r.trend }));
+}
+
+// Header numbers, taken from the very rows the table shows (so they always reconcile).
+export function periodSummary(rows) {
+  const totalQuestions = sumField(rows, 'totalQuestions');
+  const totalCorrect = sumField(rows, 'totalCorrect');
+  return {
+    totalQuestions,
+    totalCorrect,
+    average: totalQuestions > 0 ? (100 * totalCorrect) / totalQuestions : null,
+    subjectCount: rows.length,
+    withEvidence: rows.filter((r) => r.totalQuestions > 0).length,
+  };
+}
+
+// Whole percentages that always add up to 100 (largest remainder); all zeros when there is nothing to split.
+export function largestRemainderPercents(counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (total === 0) return counts.map(() => 0);
+  const exact = counts.map((c) => (100 * c) / total);
+  const floors = exact.map(Math.floor);
+  let left = 100 - floors.reduce((a, b) => a + b, 0);
+  const order = exact.map((x, i) => ({ i, r: x - floors[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
+  for (const { i } of order) { if (left <= 0) break; floors[i] += 1; left -= 1; }
+  return floors;
+}
+
+// Canonical bands (getState), worst first; counts are disciplines.
+export const PERFORMANCE_BAND_ORDER = ['CRITICAL', 'ATTENTION', 'ADEQUATE', 'STRONG', 'NO_EVIDENCE'];
+export function performanceDistribution(rows) {
+  const counts = PERFORMANCE_BAND_ORDER.map((state) => rows.filter((r) => r.state === state).length);
+  const percents = largestRemainderPercents(counts);
+  return PERFORMANCE_BAND_ORDER.map((state, i) => ({ state, count: counts[i], percent: percents[i] }));
+}
+
+// General evolution: pooled accuracy per time bucket. Buckets are anchored to the period start and
+// placed by DATE (offset in days), so a quiet stretch looks quiet. A bucket without questions is not a
+// point, and a gap between two non-adjacent buckets breaks the line into separate segments.
+export function evolutionSeries(evidence, units, { periodValue = '', today = getLocalDateValue(), subjectIds = null } = {}) {
+  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
+  const rows = evidenceInPeriod(evidence, periodValue, today).filter((e) => {
+    const sid = unitToSubject.get(e.unitId);
+    return sid != null && (subjectIds == null || subjectIds.has(sid));
+  });
+  if (rows.length === 0) return { from: null, to: today, spanDays: 0, bucketDays: 0, points: [], segments: [] };
+  const from = periodStart(periodValue, today) ?? rows.reduce((min, e) => (e.evidenceDate < min ? e.evidenceDate : min), today);
+  const spanDays = dayNumber(today) - dayNumber(from) + 1;
+  const bucketDays = spanDays <= 35 ? 3 : spanDays <= 100 ? 7 : 30;
+  const buckets = new Map();
+  for (const e of rows) {
+    const index = Math.floor((dayNumber(e.evidenceDate) - dayNumber(from)) / bucketDays);
+    const b = buckets.get(index) ?? { index, questions: 0, correct: 0 };
+    b.questions += Number(e.questionsCount);
+    b.correct += Number(e.correctCount);
+    buckets.set(index, b);
+  }
+  const points = [...buckets.values()].sort((a, b) => a.index - b.index).map((b) => {
+    const startOffset = b.index * bucketDays;
+    const lengthDays = Math.min(bucketDays, spanDays - startOffset);
+    return {
+      index: b.index,
+      from: subtractDays(from, -startOffset),
+      to: subtractDays(from, -(startOffset + lengthDays - 1)),
+      offset: startOffset + (lengthDays - 1) / 2,
+      questions: b.questions,
+      correct: b.correct,
+      accuracy: (100 * b.correct) / b.questions,
+    };
+  });
+  const segments = [];
+  for (const p of points) {
+    const last = segments[segments.length - 1];
+    if (last && p.index - last[last.length - 1].index === 1) last.push(p);
+    else segments.push([p]);
+  }
+  return { from, to: today, spanDays, bucketDays, points, segments };
 }
 
 // Header-click sorting for the Estatísticas matrix tables (Por disciplina /
@@ -238,44 +352,6 @@ export function sortMatrixRows(results, { key, dir }) {
     return [...results].sort(cmpString((r) => r.lastEvidence?.evidenceDate ?? null));
   }
   return [...results].sort(cmp((r) => r.weightedAccuracy)); // "performance"
-}
-
-// Evolution chart data (Estatísticas): per subject, accuracy in percent for each calendar month ("YYYY-MM") that has evidence,
-// null where a subject has none. `periodMonths` > 0 keeps the last N months counted from `today` (UTC month arithmetic);
-// 0 keeps everything. `subjectFilter` is a subject id as a string, "" for all. Pure: the chart drawing stays in app.js.
-export function monthlyAccuracySeries(evidence, units, subjects, { subjectFilter = '', periodMonths = 6, today } = {}) {
-  const cutoff = periodMonths > 0
-    ? (() => { const d = new Date(`${today}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - periodMonths); return d.toISOString().slice(0, 7); })()
-    : '0000-01';
-  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-
-  const dataBySubject = new Map();
-  for (const ev of evidence) {
-    const month = ev.evidenceDate.slice(0, 7);
-    if (month < cutoff) continue;
-    const subjectId = unitToSubject.get(ev.unitId);
-    if (!subjectId) continue;
-    if (subjectFilter && String(subjectId) !== subjectFilter) continue;
-    if (!dataBySubject.has(subjectId)) dataBySubject.set(subjectId, new Map());
-    const monthMap = dataBySubject.get(subjectId);
-    if (!monthMap.has(month)) monthMap.set(month, { q: 0, c: 0 });
-    const m = monthMap.get(month);
-    m.q += ev.questionsCount;
-    m.c += ev.correctCount;
-  }
-  if (dataBySubject.size === 0) return { months: [], series: [] };
-
-  const months = [...new Set([...dataBySubject.values()].flatMap((mm) => [...mm.keys()]))].sort();
-  const series = [];
-  for (const [subjectId, monthMap] of dataBySubject) {
-    const points = months.map((m) => {
-      const d = monthMap.get(m);
-      return d && d.q > 0 ? (d.c / d.q) * 100 : null;
-    });
-    series.push({ subject: subjectsById.get(subjectId), points, subjectId });
-  }
-  return { months, series };
 }
 
 export const Analytics = {
