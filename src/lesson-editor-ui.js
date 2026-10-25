@@ -673,6 +673,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function applyDraft(next, { keepSelection } = {}) {
+    // Answers can arrive out of order (the summary's save and a question's save are separate requests): an OLDER snapshot of the lesson must never
+    // replace a newer one already on screen, or the form would show a question as it was before the student's last save and the next save would
+    // carry a stale version. Every edit raises the revision, so the older answer is simply dropped (its own entity was already settled by its caller).
+    if (draft && next.revision < draft.revision) return false;
     draft = next;
     if (summaryBuffer !== null && summaryBuffer === draft.summary) summaryBuffer = null;
     if (!questionById(selectedId) || keepSelection) selectedId = questionById(keepSelection) ? keepSelection : (draft.questions[0]?.id ?? null);

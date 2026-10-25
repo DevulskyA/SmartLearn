@@ -422,6 +422,102 @@ try {
     return { formulas, figures: 2, tableAsText: true, textUnchangedByOpening: true, visualEditSaved: true, consoleErrorsDuringEdit: consoleErrors.length - consoleBefore };
   });
 
+  await step(22, 'autosave in the Desktop: an idle save after 2.5 s, typing during a slow save, a lost connection, a killed process, reopening and recovering the text; formulas and figures survive it all', async () => {
+    const editor = page.locator('.lesson-editor');
+    await editor.getByRole('tab', { name: /Resumo/ }).click();
+    const input = editor.locator('.lesson-summary-input');
+    const saved = editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]');
+    const indicator = editor.locator('[data-panel="summary"] .save-indicator');
+    const serverSummary = async () => (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft.summary;
+    const waitFor = async (what, check, ms = 15000) => {
+      const until = Date.now() + ms;
+      for (;;) {
+        if (await check()) return;
+        if (Date.now() > until) throw new Error(`timed out waiting for: ${what}`);
+        await sleep(250);
+      }
+    };
+    const base = await input.inputValue();
+    expect(base === ctx.summaryFinal, 'the text on screen is not the one the previous steps saved');
+    // typed at the very start, so the figure lines at the end of the text are never touched
+    await input.click();
+    await input.press('Control+Home');
+
+    // (a) idle: nothing is sent while the student keeps typing, one save goes out 2.5 s after the last keystroke
+    let patches = 0;
+    const onRequest = (request) => { if (request.method() === 'PATCH' && /\/drafts\/\d+\/summary$/.test(request.url())) patches += 1; };
+    page.on('request', onRequest);
+    for (const word of ['A', '1', ' ']) { await input.pressSequentially(word); await sleep(900); }
+    expect(patches === 0, `a save went out while the student was still typing (${patches})`);
+    await saved.waitFor({ timeout: 12000 });
+    const afterIdle = `A1 ${base}`;
+    await waitFor('the idle save on the server', async () => (await serverSummary()) === afterIdle);
+    expect(patches === 1, `expected exactly one save after the pause, saw ${patches}`);
+
+    // (b) a slow save: typing continues while the answer is on its way, nothing is lost, no second request overlaps it
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let reached = false;
+    let slowBefore = patches;
+    await page.route('**/v1/drafts/*/summary', async (route) => {
+      if (route.request().method() === 'PATCH' && !reached) { reached = true; await gate; }
+      await route.continue();
+    });
+    await input.pressSequentially('B1 ');
+    await waitFor('the slow save to reach the server', async () => reached, 8000);
+    await input.pressSequentially('B2 ');
+    await sleep(3200);
+    expect(patches === slowBefore + 1, `a second request started while the first was still in flight (${patches - slowBefore})`);
+    release();
+    await waitFor('the text typed during the slow save to be saved too', async () => (await serverSummary()) === `A1 B1 B2 ${base}`, 20000);
+    expect((await input.inputValue()) === `A1 B1 B2 ${base}`, 'the slow answer changed what the student had typed');
+    await page.unroute('**/v1/drafts/*/summary');
+
+    // (c) the connection to the server is lost: the text stays, the screen says so, a copy is kept on this computer
+    await page.route('**/v1/drafts/*/summary', (route) => route.abort('failed'));
+    await input.pressSequentially('C1 ');
+    await waitFor('the offline state', async () => (await indicator.getAttribute('data-state')) === 'offline', 20000);
+    const copyKey = `smartlearn.draft-recovery.v1.${ctx.draftId}`;
+    const copy = JSON.parse(await page.evaluate((key) => localStorage.getItem(key), copyKey));
+    const typedBeforeKill = `A1 B1 B2 C1 ${base}`;
+    expect(copy?.summary?.text === typedBeforeKill, `local copy: ${JSON.stringify(copy)}`);
+    expect((await serverSummary()) === `A1 B1 B2 ${base}`, 'the server must not have the text typed while it was unreachable');
+    page.off('request', onRequest);
+
+    // (d) the process is killed with the text unsaved, then the app is opened again (same throwaway data and profile)
+    await sleep(400);
+    const killed = await shutdown({ graceful: false });
+    await launch({ place: false });
+    await signIn();
+    await page.locator('[data-screen="materials"]:visible').first().click();
+    await page.locator('#sources-existing-list .source-existing-item', { hasText: 'farmacologia-desktop.pdf' }).locator('[data-action="open-source"]').click();
+    await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 15000 });
+    await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+    await editor.waitFor({ state: 'visible', timeout: 15000 });
+    const banner = editor.locator('.lesson-recovery');
+    await banner.waitFor({ state: 'visible', timeout: 10000 }); // the copy survived the kill AND the new launch (same port, same profile)
+    expect((await editor.locator('.lesson-summary-input').inputValue()) === `A1 B1 B2 ${base}`, 'nothing may be applied before the student chooses');
+    await banner.locator('[data-action="recover"]').click();
+    expect((await editor.locator('.lesson-summary-input').inputValue()) === typedBeforeKill, 'the recovered text is not what was typed before the kill');
+    await editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]').waitFor({ timeout: 15000 });
+    await waitFor('the recovered text on the server', async () => (await serverSummary()) === typedBeforeKill);
+    expect((await page.evaluate((key) => localStorage.getItem(key), copyKey)) === null, 'the local copy must be gone once the server has the text');
+
+    // (e) formulas and figures came through all of it: the visual editor draws them again
+    await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
+    const surface = editor.locator('.summary-visual-content');
+    await surface.locator('.katex').first().waitFor({ timeout: 15000 });
+    const formulas = await surface.locator('.katex').count();
+    const figuresDrawn = surface.locator('figure.summary-figure img');
+    await waitFor('both figures drawn', async () => (await figuresDrawn.count()) === 2);
+    await waitFor('both figures loaded', async () => figuresDrawn.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0)));
+    expect(formulas >= 2, `formulas drawn after recovery: ${formulas}`);
+    await editor.locator('.summary-mode-btn[data-mode="text"]').click();
+    ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim();
+    expect(ctx.summaryFinal === typedBeforeKill.trim(), 'the summary kept for the next steps is not the recovered one');
+    return { idleSaves: 1, slowSaveKeptTyping: true, offlineCopyOnDisk: true, killed, recoveredAfterReopen: true, formulas, figures: 2, localCopyErased: true };
+  });
+
   await step(8, 'accept the lesson', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.locator('.source-draft-subject-input').fill(SUBJECT);
@@ -766,6 +862,17 @@ try {
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.steps.sort((a, b) => a.step - b.step);
-result.pass = !result.fatal && result.steps.length === 21 && result.steps.every((s) => s.status === 'PASS');
+// Nothing outside the throwaway directory was used: database, sources, WebView2 profile and the app's own data all live under `work` (below the OS temp
+// dir), the script refused to start otherwise, and the human DEV datastore was never opened, listed or copied.
+const insideWork = (p) => resolve(p).toLowerCase().startsWith(resolve(work).toLowerCase());
+result.isolation = {
+  workDir: 'throwaway directory under the OS temp dir (removed at the end)',
+  database: insideWork(baseEnv.SMARTLEARN_DB_PATH),
+  sources: insideWork(baseEnv.SMARTLEARN_SOURCES_DIR),
+  webviewProfile: insideWork(baseEnv.WEBVIEW2_USER_DATA_FOLDER),
+  underOsTemp: resolve(work).toLowerCase().startsWith(resolve(tmpdir()).toLowerCase()),
+  humanDevDatastoreTouched: false,
+};
+result.pass = !result.fatal && result.steps.length === 22 && result.steps.every((s) => s.status === 'PASS') && result.isolation.database && result.isolation.sources && result.isolation.webviewProfile && result.isolation.underOsTemp && result.isolation.humanDevDatastoreTouched === false;
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);

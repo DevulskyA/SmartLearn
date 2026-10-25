@@ -432,3 +432,106 @@ test('an accepted question whose text changes goes back to review: the server do
   await expect.poll(async () => (await serverDraft(page, editor)).questions[1].status, { timeout: 5000 }).toBe('ACCEPTED');
   expect((await serverDraft(page, editor)).questions[1].answer).toContain('ajustada depois de aceita');
 });
+
+test('answers that arrive out of order never roll the screen back: an OLDER answer for the summary landing after a NEWER one for a question', async ({ page }) => {
+  const editor = await startWith(page, 'Base.');
+  const input = editor.locator('.lesson-summary-input');
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let held = false;
+  await page.route(SUMMARY_URL, async (route) => {
+    if (route.request().method() !== 'PATCH' || held) { await route.continue(); return; }
+    held = true;
+    const response = await route.fetch(); // the server has processed it (revision N+1)...
+    await gate; // ...but the page only hears about it after the question's answer (revision N+2)
+    await route.fulfill({ response });
+  });
+  await input.click();
+  await input.press('End');
+  await input.pressSequentially(' resumo novo');
+  await expect.poll(async () => (await serverDraft(page, editor)).summary, { timeout: 8000 }).toBe('Base. resumo novo');
+
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').nth(1).click();
+  const answer = () => editor.locator('.lesson-qeditor textarea').nth(1);
+  const base = (await serverDraft(page, editor)).questions[1].answer;
+  await answer().click();
+  await answer().press('End');
+  await answer().pressSequentially(' pergunta nova');
+  await expect.poll(async () => (await serverDraft(page, editor)).questions[1].answer, { timeout: 8000 }).toBe(`${base} pergunta nova`);
+  await expect(questionIndicator(editor)).toHaveAttribute('data-state', 'saved');
+
+  release(); // now the older answer reaches the page
+  await expect(summaryIndicator(editor)).toHaveAttribute('data-state', 'saved');
+  await expect(answer()).toHaveValue(`${base} pergunta nova`); // the screen did not go back to the question as it was before
+  // and the question can still be saved: its version on screen is the newest one, so nothing conflicts
+  await answer().click();
+  await answer().press('End');
+  await answer().pressSequentially(' e mais');
+  await expect.poll(async () => (await serverDraft(page, editor)).questions[1].answer, { timeout: 8000 }).toBe(`${base} pergunta nova e mais`);
+  await expect(questionIndicator(editor)).toHaveAttribute('data-state', 'saved');
+  await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toContainText('alterada em outro lugar');
+  expect((await serverDraft(page, editor)).summary).toBe('Base. resumo novo');
+});
+
+test('leaving with a pending autosave saves first, asks nothing and loses nothing: summary and question', async ({ page }) => {
+  let asked = 0;
+  page.on('dialog', (dialog) => { asked += 1; dialog.dismiss(); });
+  const editor = await startWith(page, 'Base.');
+  const input = editor.locator('.lesson-summary-input');
+  await input.click();
+  await input.press('End');
+  await input.pressSequentially(' escrito antes de sair');
+  await editor.locator('[data-action="lesson-back"]').click(); // well inside the 2.5 s wait
+  await expect(page.locator('.lesson-editor')).toHaveCount(0);
+  expect(asked).toBe(0);
+  const again = await reopenDraft(page);
+  await expect(again.locator('.lesson-summary-input')).toHaveValue('Base. escrito antes de sair'); // it was saved on the way out
+  await expect(again.locator('.lesson-recovery')).toBeHidden();
+
+  await again.getByRole('tab', { name: /Questões/ }).click();
+  await again.locator('.lesson-qitem').nth(1).click();
+  const answer = again.locator('.lesson-qeditor textarea').nth(1);
+  const base = (await serverDraft(page, again)).questions[1].answer;
+  await answer.click();
+  await answer.press('End');
+  await answer.pressSequentially(' questão antes de sair');
+  await again.locator('[data-action="lesson-back"]').click();
+  await expect(page.locator('.lesson-editor')).toHaveCount(0);
+  expect(asked).toBe(0);
+  const third = await reopenDraft(page);
+  expect((await serverDraft(page, third)).questions[1].answer).toBe(`${base} questão antes de sair`);
+});
+
+test('moving to another question or switching Visual/Texto with an edit pending loses nothing, and the pending edit is still saved by itself', async ({ page }) => {
+  const editor = await startWith(page, 'Base.');
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('.lesson-qitem').nth(1).click();
+  const answer = () => editor.locator('.lesson-qeditor textarea').nth(1);
+  const base = (await serverDraft(page, editor)).questions[1].answer;
+  await answer().click();
+  await answer().press('End');
+  await answer().pressSequentially(' pendente');
+  await editor.locator('.lesson-qitem').nth(2).click(); // another question while the first one still waits for its 2.5 s
+  await expect.poll(async () => (await serverDraft(page, editor)).questions[1].answer, { timeout: 8000 }).toBe(`${base} pendente`);
+  await editor.locator('.lesson-qitem').nth(1).click(); // coming back shows the saved text and a saved state
+  await expect(answer()).toHaveValue(`${base} pendente`);
+  await expect(editor.locator('[data-action="save-question"]')).toBeDisabled();
+
+  await editor.getByRole('tab', { name: /Resumo/ }).click();
+  const input = editor.locator('.lesson-summary-input');
+  await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
+  const surface = editor.locator('.summary-visual-content');
+  await surface.locator('p', { hasText: 'Base.' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' visual');
+  await editor.locator('.summary-mode-btn[data-mode="text"]').click(); // switching right away: the visual edit is written to the text first
+  await expect(input).toHaveValue('Base. visual');
+  await input.click();
+  await input.press('End');
+  await input.pressSequentially(' texto');
+  await editor.locator('.summary-mode-btn[data-mode="visual"]').click(); // and back: the text typed a moment ago is what the visual editor shows
+  await expect(surface).toContainText('Base. visual texto');
+  await expect.poll(async () => (await serverDraft(page, editor)).summary, { timeout: 8000 }).toBe('Base. visual texto');
+  await expect(summaryIndicator(editor)).toHaveAttribute('data-state', 'saved');
+});
