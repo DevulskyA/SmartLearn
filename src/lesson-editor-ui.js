@@ -223,6 +223,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const footer = document.createElement("section");
   footer.className = "lesson-accept";
   footer.setAttribute("aria-label", t("editor.accept.label"));
+  const acceptTitle = createTextElement("h3", "lesson-accept-title", t("editor.accept.label"));
   const acceptNote = createTextElement("p", "lesson-accept-note", "");
   const subjectField = document.createElement("div");
   subjectField.className = "lesson-field";
@@ -270,7 +271,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptMessage.classList.add("source-draft-result");
   const afterAccept = document.createElement("div");
   afterAccept.className = "lesson-actions";
-  footer.append(acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
+  footer.append(acceptTitle, acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     nameField.input.disabled = picked;
