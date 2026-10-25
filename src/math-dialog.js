@@ -5,6 +5,8 @@
 import { katex, katexOptions, mathProblem } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
 
+const createSummary = (text) => Object.assign(document.createElement("summary"), { textContent: text });
+
 let mathliveLoading = null;
 export function loadMathLive() {
   mathliveLoading ??= import("mathlive").then((module) => {
@@ -83,7 +85,11 @@ export function openMathDialog({ tex = "", display = false, lockDisplay = false 
     confirm.textContent = t("summary.math.dialog.confirm");
     actions.append(keyboardBtn, cancel, confirm);
 
-    dialog.append(title, fieldHost, texLabel, displayLabel, preview, status, note, actions);
+    const advanced = document.createElement("details");
+    advanced.className = "math-dialog-advanced";
+    advanced.open = /\\(?:ce|pu)\b/.test(tex);
+    advanced.append(createSummary(t("summary.math.dialog.advanced")), texLabel, note);
+    dialog.append(title, fieldHost, displayLabel, preview, status, advanced, actions);
 
     let mathfield = null;
     let settled = false;
@@ -145,6 +151,7 @@ export function openMathDialog({ tex = "", display = false, lockDisplay = false 
       });
     }).catch(() => {
       fieldHost.replaceChildren(Object.assign(document.createElement("p"), { className: "math-dialog-loading", textContent: t("summary.math.dialog.noVisual") }));
+      advanced.open = true;
     });
   });
 }

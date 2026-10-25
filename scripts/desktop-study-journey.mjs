@@ -368,6 +368,7 @@ try {
     await editor.getByRole('button', { name: 'Inserir fórmula' }).click();
     const mathDialog = page.locator('dialog.math-dialog');
     await mathDialog.locator('math-field').waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
     await mathDialog.locator('.math-dialog-latex').fill('\\frac{a}{b}');
     await mathDialog.locator('.math-dialog-preview .katex').waitFor({ timeout: 5000 });
     await mathDialog.locator('.math-dialog-confirm').click();

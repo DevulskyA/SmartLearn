@@ -4941,6 +4941,19 @@ h1 {
   font-family: monospace;
 }
 
+.math-dialog-advanced {
+  margin: 0.5rem 0;
+}
+
+.math-dialog-advanced > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 .math-dialog-actions {
   display: flex;
   flex-wrap: wrap;

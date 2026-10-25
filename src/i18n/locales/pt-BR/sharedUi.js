@@ -59,6 +59,7 @@ export default {
   'summary.math.dialog.loading': 'Carregando o editor visual…',
   'summary.math.dialog.noVisual': 'O editor visual não carregou. Use o campo LaTeX abaixo.',
   'summary.math.dialog.visual': 'Editor visual de fórmula',
+  'summary.math.dialog.advanced': 'Avançado: fórmula em código (química e casos especiais)',
   'summary.math.dialog.latex': 'Fórmula em LaTeX (texto)',
   'summary.math.dialog.block': 'Fórmula em bloco (linha própria)',
   'summary.math.dialog.symbols': 'Símbolos',

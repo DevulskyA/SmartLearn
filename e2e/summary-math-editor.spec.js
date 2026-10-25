@@ -69,6 +69,7 @@ test('lesson editor: a formula inserted through the dialog is saved, survives a 
   // add one more formula through the visual dialog, at the end of the text
   await input.evaluate((el) => el.setSelectionRange(el.value.length, el.value.length));
   await editor.getByRole('button', { name: 'Inserir fórmula' }).click();
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await page.locator('dialog.math-dialog .math-dialog-latex').fill('\\alpha + \\beta');
   await page.locator('dialog.math-dialog .math-dialog-display input').check();
   await page.locator('dialog.math-dialog .math-dialog-confirm').click();

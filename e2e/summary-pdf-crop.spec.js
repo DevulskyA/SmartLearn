@@ -283,6 +283,7 @@ test('with no internet at all (every non-local request is refused): formulas dra
   await row.locator('[data-insert="formula"]').click();
   const math = page.locator('dialog.math-dialog');
   await expect(math.locator('math-field')).toBeVisible({ timeout: 15000 });
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await math.locator('.math-dialog-latex').fill('\\sqrt{x}');
   await expect(math.locator('.math-dialog-preview .katex')).toBeVisible();
   await math.locator('.math-dialog-confirm').click();

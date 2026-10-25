@@ -152,10 +152,12 @@ test('"Inserir fórmula": the visual dialog inserts at the cursor, keeps the tex
   await expect(dialog.locator('math-field')).toBeVisible({ timeout: 10000 });
   await expect(dialog.locator('.math-dialog-confirm')).toBeDisabled(); // nothing typed yet
 
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await dialog.locator('.math-dialog-latex').fill('\\frac{a}{');
   await expect(dialog.locator('.math-dialog-status')).toContainText('Fórmula inválida');
   await expect(dialog.locator('.math-dialog-confirm')).toBeDisabled();
 
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await dialog.locator('.math-dialog-latex').fill('');
   await dialog.locator('math-field').click();
   await page.keyboard.type('x^2');
@@ -182,6 +184,7 @@ test('clicking a drawn formula re-opens it; confirming rewrites only that formul
   const dialog = page.locator('dialog.math-dialog');
   await expect(dialog.locator('.math-dialog-latex')).toHaveValue('a+b');
   await expect(dialog.locator('.math-dialog-display')).toBeHidden(); // an existing formula keeps its form
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await dialog.locator('.math-dialog-latex').fill('\\sqrt{a+b}');
   await dialog.locator('.math-dialog-confirm').click();
   await expect(textarea).toHaveValue('Um \\(a+b\\) e outro \\(c+d\\) e igual \\(\\sqrt{a+b}\\) fim.');
@@ -190,6 +193,7 @@ test('clicking a drawn formula re-opens it; confirming rewrites only that formul
   await textarea.fill('Quebrada \\(\\frac{1}{\\nope}\\) fim');
   await preview.locator('.summary-math-fix').click();
   await expect(page.locator('dialog.math-dialog .math-dialog-latex')).toHaveValue('\\frac{1}{\\nope}');
+  await page.locator('dialog.math-dialog .math-dialog-advanced').evaluate((el) => { el.open = true; });
   await page.locator('dialog.math-dialog .math-dialog-latex').fill('\\frac{1}{2}');
   await page.locator('dialog.math-dialog .math-dialog-confirm').click();
   await expect(textarea).toHaveValue('Quebrada \\(\\frac{1}{2}\\) fim');
