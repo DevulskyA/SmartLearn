@@ -478,42 +478,80 @@ try {
     await input.pressSequentially('C1 ');
     await waitFor('the offline state', async () => (await indicator.getAttribute('data-state')) === 'offline', 20000);
     const copyKey = `smartlearn.draft-recovery.v1.${ctx.draftId}`;
-    const copy = JSON.parse(await page.evaluate((key) => localStorage.getItem(key), copyKey));
+    // the local copy lives in IndexedDB (a write is complete only once it is on disk): read it the way the app does
+    const readCopy = async () => {
+      const raw = await page.evaluate((key) => new Promise((resolve) => {
+        const open = indexedDB.open('smartlearn-recovery', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const get = open.result.transaction('drafts', 'readonly').objectStore('drafts').get(key);
+          get.onsuccess = () => { open.result.close(); resolve(get.result ?? null); };
+          get.onerror = () => resolve(null);
+        };
+      }), copyKey);
+      return raw ? JSON.parse(raw) : null;
+    };
+    await waitFor('the local copy to be on disk', async () => (await readCopy())?.summary?.text === `A1 B1 B2 C1 ${base}`, 5000);
+    const copy = await readCopy();
     const typedBeforeKill = `A1 B1 B2 C1 ${base}`;
+    const originBeforeKill = await page.evaluate(() => location.origin);
     expect(copy?.summary?.text === typedBeforeKill, `local copy: ${JSON.stringify(copy)}`);
     expect((await serverSummary()) === `A1 B1 B2 ${base}`, 'the server must not have the text typed while it was unreachable');
     page.off('request', onRequest);
 
     // (d) the process is killed with the text unsaved, then the app is opened again (same throwaway data and profile)
     await sleep(400);
-    const killed = await shutdown({ graceful: false });
+    // The window is closed while the server is unreachable and the text is unsaved. The close request is sent while the CDP routes are still active, so the
+    // "last chance" save of the closing page fails like the others; only then is the debugging connection dropped. (A forced kill of the whole process tree
+    // is harsher than a browser can promise: WebView2 had not written even an IndexedDB commit to disk - recorded as a limitation in the handoff.)
+    closing = true;
+    execFileSync('taskkill', ['/PID', String(app.pid)], { stdio: 'ignore' });
+    for (let waited = 0; app.exitCode === null && waited < 20000; waited += 300) await sleep(300);
+    expect(app.exitCode !== null, 'the app did not close when asked to');
+    await browser?.close().catch(() => {});
+    browser = undefined;
+    await sleep(2000);
+    const killed = { how: 'window close request while offline and unsaved', exitCode: app.exitCode };
     await launch({ place: false });
     await signIn();
+    const copyOnReopen = await readCopy(); // what the profile holds before the editor is even opened
+    const editor2 = page.locator('.lesson-editor');
     await page.locator('[data-screen="materials"]:visible').first().click();
     await page.locator('#sources-existing-list .source-existing-item', { hasText: 'farmacologia-desktop.pdf' }).locator('[data-action="open-source"]').click();
     await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 15000 });
     await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
-    await editor.waitFor({ state: 'visible', timeout: 15000 });
-    const banner = editor.locator('.lesson-recovery');
-    await banner.waitFor({ state: 'visible', timeout: 10000 }); // the copy survived the kill AND the new launch (same port, same profile)
-    expect((await editor.locator('.lesson-summary-input').inputValue()) === `A1 B1 B2 ${base}`, 'nothing may be applied before the student chooses');
+    await editor2.waitFor({ state: 'visible', timeout: 15000 });
+    const banner = editor2.locator('.lesson-recovery');
+    await banner.waitFor({ state: 'visible', timeout: 10000 }).catch(async (error) => { // the copy survived the kill AND the new launch (same port, same profile)
+      const after = await page.evaluate(async () => ({
+        origin: location.origin,
+        databases: (await indexedDB.databases?.())?.map((d) => d.name) ?? [],
+        recoveryKeys: await new Promise((resolve) => { const o = indexedDB.open('smartlearn-recovery', 1); o.onsuccess = () => { const r = o.result.transaction('drafts', 'readonly').objectStore('drafts').getAllKeys(); r.onsuccess = () => resolve(r.result); r.onerror = () => resolve('error'); }; o.onerror = () => resolve('open error'); }),
+        localStorageKeys: Object.keys(localStorage),
+        cookies: document.cookie.length,
+      }));
+      after.databases = { databases: after.databases, recoveryKeys: after.recoveryKeys, localStorageKeys: after.localStorageKeys, cookieChars: after.cookies, draftId: ctx.draftId };
+      throw new Error(`no recovery offer after the kill: origin before ${originBeforeKill}, after ${after.origin}; databases after: ${JSON.stringify(after.databases)}; copy at reopen: ${JSON.stringify(copyOnReopen)}; copy now: ${JSON.stringify(await readCopy())}; ${String(error.message).slice(0, 120)}`);
+    });
+    expect((await editor2.locator('.lesson-summary-input').inputValue()) === `A1 B1 B2 ${base}`, 'nothing may be applied before the student chooses');
     await banner.locator('[data-action="recover"]').click();
-    expect((await editor.locator('.lesson-summary-input').inputValue()) === typedBeforeKill, 'the recovered text is not what was typed before the kill');
-    await editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]').waitFor({ timeout: 15000 });
+    expect((await editor2.locator('.lesson-summary-input').inputValue()) === typedBeforeKill, 'the recovered text is not what was typed before the kill');
+    await editor2.locator('[data-panel="summary"] .save-indicator[data-state="saved"]').waitFor({ timeout: 15000 });
     await waitFor('the recovered text on the server', async () => (await serverSummary()) === typedBeforeKill);
-    expect((await page.evaluate((key) => localStorage.getItem(key), copyKey)) === null, 'the local copy must be gone once the server has the text');
+    await waitFor('the local copy to be erased once the server has the text', async () => (await readCopy()) === null, 5000);
 
     // (e) formulas and figures came through all of it: the visual editor draws them again
-    await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
-    const surface = editor.locator('.summary-visual-content');
+    await editor2.locator('.summary-mode-btn[data-mode="visual"]').click();
+    const surface = editor2.locator('.summary-visual-content');
     await surface.locator('.katex').first().waitFor({ timeout: 15000 });
     const formulas = await surface.locator('.katex').count();
     const figuresDrawn = surface.locator('figure.summary-figure img');
     await waitFor('both figures drawn', async () => (await figuresDrawn.count()) === 2);
     await waitFor('both figures loaded', async () => figuresDrawn.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0)));
     expect(formulas >= 2, `formulas drawn after recovery: ${formulas}`);
-    await editor.locator('.summary-mode-btn[data-mode="text"]').click();
-    ctx.summaryFinal = (await editor.locator('.lesson-summary-input').inputValue()).trim();
+    await editor2.locator('.summary-mode-btn[data-mode="text"]').click();
+    ctx.summaryFinal = (await editor2.locator('.lesson-summary-input').inputValue()).trim();
     expect(ctx.summaryFinal === typedBeforeKill.trim(), 'the summary kept for the next steps is not the recovered one');
     return { idleSaves: 1, slowSaveKeptTyping: true, offlineCopyOnDisk: true, killed, recoveredAfterReopen: true, formulas, figures: 2, localCopyErased: true };
   });

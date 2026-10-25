@@ -8,7 +8,7 @@ import { createTextElement } from "./dom-utils.js";
 import { renderSummary as renderSummaryBody } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import { createAutosaver } from "./draft-autosave.js";
-import { createRecoveryStore } from "./draft-recovery.js";
+import { createRecoveryStore, createIndexedDbStorage } from "./draft-recovery.js";
 import { createSaveIndicator, clockTime } from "./save-indicator.js";
 import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
@@ -93,7 +93,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   // ---- autosave ---------------------------------------------------------------------------------------------------------
   // The summary and each question save themselves 2.5 s after the last keystroke (src/draft-autosave.js). Every keystroke is first kept in a local,
   // recoverable copy (src/draft-recovery.js) that is erased only when the server has the text. Saving never accepts anything: only text fields are sent.
-  const recovery = createRecoveryStore((() => { try { return window.localStorage; } catch { return null; } })(), draft.id);
+  const recovery = createRecoveryStore((() => { try { return createIndexedDbStorage(); } catch { return null; } })(), draft.id);
   const autosaveInfo = new Map(); // "summary" | "q:<id>" -> { state, info }: the last known state, to paint indicators that are rebuilt with the form
   const kindOf = (result) => (result.code === "NETWORK_ERROR" ? "offline" : (result.code === "ENTITY_CONFLICT" || result.code === "REVISION_CONFLICT" ? "conflict" : "error"));
 
@@ -958,8 +958,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   });
 
   // ---- recovery of what an earlier session left unsaved ---------------------------------------------------------------------
-  function offerRecovery() {
-    const stored = recovery.read();
+  async function offerRecovery() {
+    const stored = await recovery.read();
     const found = [];
     if (stored.summary && stored.summary.text.trim() !== draft.summary) found.push({ at: stored.summary.at, stale: stored.summary.baseVersion !== draft.summaryVersion });
     else if (stored.summary) recovery.clearSummary();
@@ -1012,8 +1012,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   renderAll();
   enhanceSelect(subjectSelect);
-  offerRecovery();
-  if (!recovery.available) setMessage(summaryMessage, t("editor.autosave.noCopy"), true);
+  offerRecovery().catch(() => { /* no copy to offer */ });
+  recovery.ready.then(() => { if (!recovery.available) setMessage(summaryMessage, t("editor.autosave.noCopy"), true); });
 
   return {
     element: root,

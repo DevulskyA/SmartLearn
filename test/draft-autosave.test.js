@@ -170,37 +170,66 @@ test('a save that throws is reported as an error, not lost in the scheduler', as
 });
 
 // ---- the local, recoverable copy -------------------------------------------------------------------------------------------------------------------
-function memoryStorage() {
+// An async key-value storage like the IndexedDB one: every call returns a promise, and a write is only "there" once its promise resolved.
+function memoryStorage({ failWrites = false } = {}) {
   const data = new Map();
-  return { getItem: (k) => (data.has(k) ? data.get(k) : null), setItem: (k, v) => { data.set(k, String(v)); }, removeItem: (k) => { data.delete(k); }, data };
+  const log = [];
+  return {
+    data,
+    log,
+    getItem: async (k) => (data.has(k) ? data.get(k) : null),
+    setItem: async (k, v) => { if (failWrites) throw new Error('QuotaExceededError'); log.push(['set', k]); data.set(k, String(v)); },
+    removeItem: async (k) => { log.push(['remove', k]); data.delete(k); },
+  };
 }
 
-test('the recoverable copy is written at once, kept per draft, and erased only when told', () => {
+test('the recoverable copy is kept per draft, applied in order, written durably, and erased only when told', async () => {
   const storage = memoryStorage();
   const store = createRecoveryStore(storage, 7, { now: () => 1000 });
   store.writeSummary('texto novo', 3);
   store.writeQuestion('q2', { answer: 'resposta' }, 5);
   store.writeQuestion('q2', { answer: 'resposta maior', hint: 'dica' }, 5);
-  assert.deepEqual(store.read(), { summary: { text: 'texto novo', baseVersion: 3, at: 1000 }, questions: { q2: { fields: { answer: 'resposta maior', hint: 'dica' }, baseVersion: 5, at: 1000 } } });
-  assert.deepEqual(createRecoveryStore(storage, 8).read(), { summary: undefined, questions: {} }, 'another draft has its own copy');
+  await store.settled();
+  assert.deepEqual(await store.read(), { summary: { text: 'texto novo', baseVersion: 3, at: 1000 }, questions: { q2: { fields: { answer: 'resposta maior', hint: 'dica' }, baseVersion: 5, at: 1000 } } });
+  assert.ok(storage.data.has('smartlearn.draft-recovery.v1.7'), 'it is on the storage, not only in memory');
+  assert.deepEqual(await createRecoveryStore(storage, 8).read(), { summary: undefined, questions: {} }, 'another draft has its own copy');
   store.clearQuestion('q2');
-  assert.deepEqual(store.read().questions, {});
   store.clearSummary();
+  await store.settled();
   assert.equal(storage.data.size, 0, 'an empty record leaves nothing behind');
 });
 
-test('a missing, full, blocked or corrupt storage never throws: the screen is told the copy is unavailable', () => {
+test('a burst of keystrokes is coalesced into few writes, and the last write holds the last text', async () => {
+  const storage = memoryStorage();
+  const store = createRecoveryStore(storage, 1);
+  for (let i = 0; i < 200; i += 1) store.writeSummary(`texto ${i}`, 1);
+  await store.settled();
+  assert.ok(storage.log.filter(([op]) => op === 'set').length <= 3, `writes: ${storage.log.length}`);
+  assert.equal(JSON.parse(storage.data.get('smartlearn.draft-recovery.v1.1')).summary.text, 'texto 199');
+});
+
+test('what an earlier session left is read first, and changes made before that read finished are applied on top of it, never lost', async () => {
+  const storage = memoryStorage();
+  storage.data.set('smartlearn.draft-recovery.v1.3', JSON.stringify({ v: 1, questions: { q1: { fields: { answer: 'de antes' }, baseVersion: 2, at: 5 } } }));
+  const store = createRecoveryStore(storage, 3, { now: () => 9 });
+  store.writeSummary('digitado logo ao abrir', 4); // before the stored record was even read
+  const seen = await store.read();
+  assert.equal(seen.questions.q1.fields.answer, 'de antes');
+  assert.equal(seen.summary.text, 'digitado logo ao abrir');
+});
+
+test('a missing, full, blocked or corrupt storage never throws: the screen is told the copy is unavailable', async () => {
   assert.equal(createRecoveryStore(null, 1).available, false);
-  assert.deepEqual(createRecoveryStore(null, 1).read(), { summary: undefined, questions: {} });
-  const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); }, removeItem: () => {} };
-  const store = createRecoveryStore(full, 1);
-  assert.equal(store.writeSummary('x', 1), false);
+  assert.deepEqual(await createRecoveryStore(null, 1).read(), { summary: undefined, questions: {} });
+  const store = createRecoveryStore(memoryStorage({ failWrites: true }), 1);
+  store.writeSummary('x', 1);
+  await store.settled();
   assert.equal(store.available, false);
   const corrupt = memoryStorage();
-  corrupt.setItem('smartlearn.draft-recovery.v1.1', '{not json');
-  assert.deepEqual(createRecoveryStore(corrupt, 1).read(), { summary: undefined, questions: {} });
-  corrupt.setItem('smartlearn.draft-recovery.v1.2', JSON.stringify({ v: 99, summary: { text: 'de outro formato' } }));
-  assert.deepEqual(createRecoveryStore(corrupt, 2).read(), { summary: undefined, questions: {} });
+  corrupt.data.set('smartlearn.draft-recovery.v1.1', '{not json');
+  assert.deepEqual(await createRecoveryStore(corrupt, 1).read(), { summary: undefined, questions: {} });
+  corrupt.data.set('smartlearn.draft-recovery.v1.2', JSON.stringify({ v: 99, summary: { text: 'de outro formato' } }));
+  assert.deepEqual(await createRecoveryStore(corrupt, 2).read(), { summary: undefined, questions: {} });
 });
 
 // ---- what the student reads --------------------------------------------------------------------------------------------------------------------------

@@ -91,7 +91,21 @@ const serverDraft = async (page, editor) => {
 };
 const localCopy = async (page, editor) => {
   const id = await draftId(editor);
-  return page.evaluate((key) => { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }, `smartlearn.draft-recovery.v1.${id}`);
+  return page.evaluate((key) => new Promise((resolve) => {
+    const open = indexedDB.open('smartlearn-recovery', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+    open.onerror = () => resolve(null);
+    open.onsuccess = () => {
+      const get = open.result.transaction('drafts', 'readonly').objectStore('drafts').get(key);
+      get.onsuccess = () => { open.result.close(); resolve(get.result ? JSON.parse(get.result) : null); };
+      get.onerror = () => resolve(null);
+    };
+  }), `smartlearn.draft-recovery.v1.${id}`);
+};
+/** The local copy once it satisfies `check` (the write is durable a few milliseconds after the keystroke, not at the same instant). */
+const copyWhen = async (page, editor, check, timeout = 3000) => {
+  await expect.poll(async () => { const copy = await localCopy(page, editor); return Boolean(copy) && check(copy); }, { timeout }).toBe(true);
+  return localCopy(page, editor);
 };
 const patchCounter = (page, pattern) => {
   const seen = { count: 0, active: 0, maxActive: 0 };
@@ -119,8 +133,7 @@ test.afterEach(async () => { await forwarder?.close(); forwarder = null; });
 
 /**
  * The connection is lost and the window closed in the middle of an edit: the server never gets the text. A short pause first: the browser hands
- * localStorage writes to its storage process in the background, and a renderer killed within milliseconds of the last keystroke can lose that last
- * write; what the student typed a moment before is what the recovery has to find. Returns the page the student opens afterwards, with the connection back.
+ * writes to disk in a few milliseconds (IndexedDB, strict durability); what the student typed a moment before is what the recovery has to find. Returns the page the student opens afterwards, with the connection back.
  */
 async function closeWithServerUnreachable(page, context, after = async () => {}) {
   await after();
@@ -163,7 +176,7 @@ test('every keystroke is kept at once in a recoverable local copy, before any re
   await input.click();
   await input.press('End');
   await input.pressSequentially(' guardado');
-  const copy = await localCopy(page, editor); // read right away: nothing waited for 2.5 s
+  const copy = await copyWhen(page, editor, (c) => c.summary?.text === 'Base. guardado', 1500); // within a moment of the keystroke, long before the 2.5 s wait
   expect(copy.summary.text).toBe('Base. guardado');
   expect(typeof copy.summary.baseVersion).toBe('number');
 });
@@ -202,7 +215,7 @@ test('a lost connection keeps the text, says so, retries by itself and saves whe
   await input.pressSequentially(' sem rede');
   await expect(summaryMessage(editor)).toContainText('Sem conexão', { timeout: 7000 });
   await expect(input).toHaveValue('Base. sem rede');
-  expect((await localCopy(page, editor)).summary.text).toBe('Base. sem rede');
+  await copyWhen(page, editor, (c) => c.summary?.text === 'Base. sem rede');
   expect((await serverDraft(page, editor)).summary).toBe('Base.');
   await page.unroute(SUMMARY_URL); // the network is back
   await expect.poll(async () => (await serverDraft(page, editor)).summary, { timeout: 12000 }).toBe('Base. sem rede');
@@ -218,7 +231,7 @@ test('a window closed in the middle: the text comes back from the local copy, is
     await input.click();
     await input.press('End');
     await input.pressSequentially(' escrito antes de fechar');
-    expect((await localCopy(page, editor)).summary.text).toBe('Base. escrito antes de fechar');
+    await copyWhen(page, editor, (c) => c.summary?.text === 'Base. escrito antes de fechar');
   });
 
   const editor2 = await reopenDraft(again);
@@ -270,7 +283,7 @@ test('a conflict (the lesson was changed somewhere else) is never overwritten an
   expect(patches.count).toBe(1); // one attempt, no retry loop
   expect((await serverDraft(page, editor)).summary).toBe('Outro dispositivo.');
   await expect(input).toHaveValue('Base. meu texto');
-  expect((await localCopy(page, editor)).summary.text).toBe('Base. meu texto');
+  await copyWhen(page, editor, (c) => c.summary?.text === 'Base. meu texto');
 });
 
 test('a refusal by the server (a figure that is not yours) keeps the text and the copy, says why, and does not loop', async ({ page }) => {
@@ -284,7 +297,7 @@ test('a refusal by the server (a figure that is not yours) keeps the text and th
   await page.waitForTimeout(4000);
   expect(patches.count).toBe(1);
   await expect(input).toHaveValue(`Base.\n\n[[fig:${FOREIGN_FIGURE}]]`);
-  expect((await localCopy(page, editor)).summary.text).toContain(FOREIGN_FIGURE);
+  await copyWhen(page, editor, (c) => c.summary?.text.includes(FOREIGN_FIGURE));
 });
 
 test('the visual editor autosaves through the same path, and an edit it cannot write is never sent', async ({ page }) => {
@@ -355,7 +368,7 @@ test('typing in a question while its autosave is in flight is kept, and a closed
   // now the network drops and the window is closed in the middle of an edit
   const again = await closeWithServerUnreachable(page, context, async () => {
     await answer().pressSequentially(' fim');
-    const copy = await localCopy(page, editor);
+    const copy = await copyWhen(page, editor, (c) => Object.values(c.questions ?? {})[0]?.fields.answer === `${base} AB fim`);
     expect(Object.values(copy.questions)[0].fields.answer).toBe(`${base} AB fim`);
   });
   const editor2 = await reopenDraft(again);
