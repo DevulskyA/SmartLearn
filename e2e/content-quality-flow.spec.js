@@ -144,7 +144,7 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);
 
   // 3) what the reviewer sees is the REPAIRED draft, marked as such, still a DRAFT for a human
-  await expect(panel).toContainText('não verificado');
+  await expect(panel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
   await expect(panel.locator('.lesson-summary-input')).toHaveValue(/10 mmHg/);
   await expect(panel.locator('.lesson-summary-input')).not.toHaveValue(/25 mmHg/);
   await panel.getByRole('tab', { name: /Revisão/ }).click();

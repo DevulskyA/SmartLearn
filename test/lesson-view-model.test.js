@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
+import { draftState, groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -167,4 +167,26 @@ test("findings are grouped by WHY they were raised, most serious cause first; a 
   assert.deepEqual(groupByCause([]), []);
   assert.equal(findingCause({ issue: "ANSWER_CONTRADICTS_SOURCE" }), "contradiction", "an older model finding without a verdict still reads as a contradiction by its name");
   assert.equal(findingCause({ issue: "SOMETHING_NEW" }), "unsupported", "an unknown issue is never filed under 'only words'");
+});
+
+test("the header state follows the REAL state of the draft: draft -> pending critical items -> accepted; the automatic check never changes it", () => {
+  const open = (extra = {}) => ({ status: "DRAFT", acceptanceBlockers: { questions: [], summary: 0 }, ...extra });
+  assert.deepEqual(draftState(open()), { key: "draft", label: "Rascunho gerado por IA — aguardando sua conferência", pending: 0 });
+  assert.equal(draftState({ status: "DRAFT" }).key, "draft", "a draft without the blockers field is still just a draft");
+  // critical points waiting for the person: one question, then the summary and two questions
+  const one = draftState(open({ acceptanceBlockers: { questions: ["q2"], summary: 0 } }));
+  assert.deepEqual(one, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 1 item crítico", pending: 1 });
+  const many = draftState(open({ acceptanceBlockers: { questions: ["q1", "q2"], summary: 3 } }));
+  assert.deepEqual(many, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 3 itens críticos", pending: 3 });
+  // resolving them (the server answers with an empty list) brings the draft back to waiting for the person
+  assert.equal(draftState(open({ acceptanceBlockers: { questions: [], summary: 0 } })).key, "draft");
+  // accepted: by this window, or because the server says so, whatever blockers were left over
+  assert.deepEqual(draftState(open({ acceptanceBlockers: { questions: ["q1"], summary: 1 } }), { accepted: true }), { key: "accepted", label: "Aula aceita após sua conferência", pending: 0 });
+  assert.equal(draftState({ status: "ACCEPTED" }).key, "accepted");
+  // the automatic audit result (PASS or REPAIR, repaired or not) is not a state of the lesson
+  for (const audit of [{ result: "PASS", findings: [] }, { result: "REPAIR", findings: [{ severity: "MEDIUM" }], repaired: true }]) {
+    assert.equal(draftState(open({ audit })).key, "draft");
+  }
+  // no draft state claims the content was verified
+  for (const d of [open(), open({ acceptanceBlockers: { questions: ["q"], summary: 0 } })]) assert.doesNotMatch(draftState(d).label, /verificad|validad|aprovad/i);
 });

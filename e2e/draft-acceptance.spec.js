@@ -81,7 +81,7 @@ async function openFirstDraft(page, name, pages) {
 test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
   const editor = await openFirstDraft(page, 'farmaco.pdf', ['Farmacocinética: absorção e distribuição']);
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
-  await expect(editor).toContainText('não verificado');
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
 
   // The drafted answer is attributable to the exact real source text.
   await editor.getByRole('tab', { name: /Questões/ }).click();
@@ -109,6 +109,9 @@ test('generating and accepting a draft through the real UI creates a real unit w
 
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
   await expect(editor.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+  // the header says what is true now: after the student accepts it is no longer an unchecked draft
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Aula aceita após sua conferência');
+  await expect(editor).not.toContainText('aguardando sua conferência');
 
   // The unit is real: it shows up on Plano.
   await page.locator('[data-screen="plan"]').click();
@@ -282,4 +285,32 @@ test('a correction the server rejects (empty answer) is reported in place and th
   await expect(editor.locator('.lesson-qeditor .lesson-message')).toHaveClass(/is-error/, { timeout: 10000 });
   await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toHaveText('');
   expect(await editor.getAttribute('data-revision')).toBe(revisionBefore);
+});
+
+// R-5: the header is the REAL state of the draft, never a fixed text and never the automatic check. The first answer for the draft is
+// altered to report one critical item waiting (the fake provider cannot produce a HIGH finding); every answer after that is the real
+// server's, so the move to "waiting for you" and then to "accepted" is the product's own.
+test('R-5: the header follows the real state - critical item pending, then waiting for the student, then accepted', async ({ page }) => {
+  let injected = false;
+  await page.route(/\/v1\/drafts\/\d+$/, async (route) => {
+    if (route.request().method() !== 'GET' || injected) return route.fallback();
+    injected = true;
+    const response = await route.fetch();
+    const body = await response.json();
+    body.draft.acceptanceBlockers = { questions: [body.draft.questions[0].id], summary: 0 };
+    return route.fulfill({ response, json: body });
+  });
+  const editor = await openFirstDraft(page, 'estado-r5.pdf', ['Farmacocinética: absorção e distribuição']);
+  const header = editor.locator('.lesson-head .eyebrow');
+  await expect(header).toHaveText('Rascunho gerado por IA — conferência pendente: 1 item crítico');
+
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('[data-action="accept-question"]').click();
+  await expect(header).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
+
+  await editor.locator('.source-draft-subject-input').fill('Estado R5');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(header).toHaveText('Aula aceita após sua conferência');
 });

@@ -102,7 +102,7 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
 
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText('não verificado');
+  await expect(panel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
   await panel.getByRole('tab', { name: /Questões/ }).click();
   expect(await panel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(3);
   await panel.getByRole('tab', { name: /Revisão/ }).click();

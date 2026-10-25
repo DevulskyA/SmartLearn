@@ -2,7 +2,7 @@
 // shows each as its own area. This module only decides WHAT is shown (labels, grouping, counts); lesson-editor-ui.js draws it.
 
 import { formatNumber } from "./i18n/format.js";
-import { t } from "./i18n/index.js";
+import { t, tn } from "./i18n/index.js";
 
 // A label table whose texts are read from the catalog when a label is read (not once at import), so the active locale applies.
 function catalogLabels(makers) {
@@ -101,6 +101,21 @@ export function groundingLine(g) {
   if (g.supported === 0 && g.orphaned === 0 && g.sentences.every((sentence) => sentence.status === "NOT_LINKED")) return t("editor.grounding.none", { total: g.total });
   if (g.orphaned > 0) return t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned });
   return t("editor.grounding.line", { supported: g.supported, total: g.total });
+}
+
+/**
+ * What the header says about the lesson, read from the REAL state the server reports and never from the automatic check:
+ *   accepted  a person accepted it (this window, or the server says ACCEPTED);
+ *   pending   still a draft and critical points (HIGH findings, see acceptanceBlockers) wait for the person's explicit decision;
+ *   draft     AI output that no person has accepted yet.
+ * The automatic check only shows where to look; it is not a medical validation, so it never moves the lesson to a "verified" state.
+ */
+export function draftState(draft, { accepted = false } = {}) {
+  if (accepted || draft?.status === "ACCEPTED") return { key: "accepted", label: t("editor.eyebrow.accepted"), pending: 0 };
+  const blockers = draft?.acceptanceBlockers ?? {};
+  const pending = (blockers.questions?.length ?? 0) + ((blockers.summary ?? 0) > 0 ? 1 : 0);
+  if (pending > 0) return { key: "pending", label: tn("editor.eyebrow.pending", pending), pending };
+  return { key: "draft", label: t("editor.eyebrow"), pending: 0 };
 }
 
 /** The review state a question shows in the list: a symbol (decorative), a word (always present) and how many findings it has. */

@@ -15,7 +15,7 @@ import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
+  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, draftState, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -298,6 +298,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function renderHeader() {
+    eyebrow.textContent = draftState(draft, { accepted }).label;
     sourceEl.textContent = sourceLine(draft);
     sourceEl.hidden = sourceEl.textContent === "";
   }
@@ -845,6 +846,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       return;
     }
     accepted = true;
+    renderHeader(); // the header says what is true now: a person accepted it
     acceptBtn.textContent = t("editor.accept.done");
     const reviewCount = result.acceptance.reviewCount;
     setMessage(acceptMessage, t("editor.accept.created", {

@@ -2,7 +2,10 @@
 export default {
   // Header and tabs
   'editor.back': 'Voltar às unidades',
-  'editor.eyebrow': 'Rascunho gerado por IA — não verificado',
+  'editor.eyebrow': 'Rascunho gerado por IA — aguardando sua conferência',
+  'editor.eyebrow.pending.one': 'Rascunho gerado por IA — conferência pendente: {count} item crítico',
+  'editor.eyebrow.pending.other': 'Rascunho gerado por IA — conferência pendente: {count} itens críticos',
+  'editor.eyebrow.accepted': 'Aula aceita após sua conferência',
   'editor.tabs.label': 'Partes da aula',
   'editor.tab.summary': 'Resumo',
   'editor.tab.questions': 'Questões',
