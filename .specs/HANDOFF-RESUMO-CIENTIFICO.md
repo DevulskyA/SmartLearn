@@ -113,6 +113,7 @@ Pedido do usuário (brief R-1): o estudante edita uma página formatada, sem Mar
 - Regressão: E2E da suíte `summary` **97/97** com 1 worker; unidades afetadas **33/33**; lint, `context:check`, `node --check` e `git diff --check` passaram. `CI=1 npm run build` e `package:standalone` + `cargo build` passaram no target isolado. Sem instalação, push, merge ou deploy.
 - O build local sem `CI=1` continua bloqueado pela trava de branch (`SMARTLEARN_WRONG_WORKTREE`); a proteção não foi enfraquecida.
 - Alterações paralelas existentes em `src-tauri`, locale, estilos e backlog foram preservadas fora deste commit.
+- Verificação final no HEAD `2b719a8`: executável reconstruído no target isolado confirmou novamente **22/22** e `pass=true`; capturas finais em `.specs/evidence/wysiwyg-2026-10-25-final-head/`.
 
 ## Próximo (por ordem)
 1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
