@@ -190,7 +190,8 @@ export function updateTexts(db, userId, id, patch, now = () => new Date()) {
 
 /** Where a figure is still used: accepted lessons and drafts still open. Scanned from the texts themselves, so it cannot drift. */
 export function referencesOf(db, userId, id) {
-  const needle = `%[[fig:${String(id).toLowerCase()}]]%`;
+  // both forms: `[[fig:ID]]` and `[[fig:ID|w=420]]` (a width on the marker must never make a figure look unused)
+  const needle = `%[[fig:${String(id).toLowerCase()}%`;
   const units = db.prepare('SELECT id FROM learning_units WHERE user_id = ? AND lower(summary_body) LIKE ?').all(userId, needle).map((r) => ({ type: 'unit', id: r.id }));
   const drafts = db.prepare("SELECT id FROM generated_drafts WHERE user_id = ? AND status = 'DRAFT' AND lower(draft_json) LIKE ?").all(userId, needle).map((r) => ({ type: 'draft', id: r.id }));
   return [...units, ...drafts];

@@ -5080,6 +5080,63 @@ h1 {
   height: auto;
 }
 
+/* a figure with a stored display width: that width, never wider than the space available (a narrow window shrinks it without changing the saved size) */
+.summary-figure[data-figure-width] {
+  width: var(--figure-width);
+  max-width: 100%;
+}
+
+.summary-figure[data-figure-width] img {
+  width: 100%;
+}
+
+/* in the editor the library's wrapper carries the width */
+.summary-figure-host.is-sized {
+  max-width: 100%;
+}
+
+.summary-figure-host.is-sized img {
+  width: 100%;
+}
+
+.summary-visual-content [data-resize-container] {
+  justify-content: flex-start;
+}
+
+/* the image itself must not start the browser's own image drag: the figure (its draggable wrapper) is what moves, and ProseMirror drops it between blocks */
+.summary-visual-content figure img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.summary-visual-content [data-resize-handle] {
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.summary-visual-content [data-resize-container]:hover [data-resize-handle],
+.summary-visual-content [data-resize-container].ProseMirror-selectednode [data-resize-handle],
+.summary-visual-content [data-resize-container]:focus-within [data-resize-handle],
+.summary-visual-content [data-resize-container][data-resize-state="true"] [data-resize-handle] {
+  opacity: 1;
+}
+
+.summary-visual-content [data-resize-handle="bottom-right"] {
+  transform: translate(50%, 50%);
+  cursor: nwse-resize;
+}
+
+.summary-visual-content [data-resize-handle="bottom-left"] {
+  transform: translate(-50%, 50%);
+  cursor: nesw-resize;
+}
+
 .summary-figure figcaption,
 .summary-figure-missing {
   color: var(--color-muted);

@@ -210,3 +210,41 @@ test('deterministic fuzz: random documents of supported blocks are written, read
   // the verifier may refuse a rare unrepresentable mix, but it must not refuse the ordinary case wholesale
   assert.ok(written > 300, `written ${written}, refused ${refused}`);
 });
+
+// ---- figure width in the document model ---------------------------------------------------------------------------------------------------------
+test('legacy and sized figure markers are written back byte for byte when the figure was not touched', () => {
+  const legacy = `Antes\n\n[[fig:${ID}]]\n\nDepois`;
+  const sized = `Antes\n\n[[fig:${ID}|w=420]]\n\nDepois\r\n\r\n[[fig:${ID.toUpperCase()}|w=60]]`;
+  for (const source of [legacy, sized]) assert.equal(back(source), source);
+  const [, figure] = open(legacy).doc.content;
+  assert.deepEqual([figure.type, figure.attrs.id, figure.attrs.width], ['figure', ID, null]);
+  const [, , , second] = open(sized).doc.content;
+  assert.deepEqual([second.attrs.id, second.attrs.width], [ID, 60], 'the same figure twice keeps a width per occurrence');
+});
+
+test('resizing writes the width on that occurrence only; clearing it goes back to the legacy marker; an unsafe width is never written', () => {
+  const source = `A\n\n[[fig:${ID}]]\n\nB\n\n[[fig:${ID}|w=300]]\n\nC`;
+  const { doc, lead, tail } = open(source);
+  doc.content[1].attrs.width = 420;
+  assert.equal(docToMarkdown(doc, { lead, tail }), source.replace(`[[fig:${ID}]]`, `[[fig:${ID}|w=420]]`), 'only the edited line changes');
+  doc.content[1].attrs.width = null;
+  doc.content[3].attrs.width = null;
+  assert.equal(docToMarkdown(doc, { lead, tail }), `A\n\n[[fig:${ID}]]\n\nB\n\n[[fig:${ID}]]\n\nC`);
+  doc.content[1].attrs.width = 99999;
+  assert.equal(serializeBlock(doc.content[1]), `[[fig:${ID}]]`);
+});
+
+test('a marker with an invalid width is an ordinary paragraph: shown as text, kept byte for byte, never turned into a figure', () => {
+  const source = `A\n\n[[fig:${ID}|w=5]]\n\n[[fig:${ID}|w=420|h=2]]`;
+  const blocks = open(source).doc.content;
+  assert.deepEqual(blocks.map((b) => b.type), ['paragraph', 'paragraph', 'paragraph']);
+  assert.equal(back(source), source);
+});
+
+test('text typed in a paragraph that looks like a figure marker (with or without a width) is escaped, so it can never become a figure by accident', () => {
+  for (const marker of [`[[fig:${ID}]]`, `[[fig:${ID}|w=420]]`]) {
+    const out = writeNew(para(text(marker)));
+    assert.equal(out.error, undefined);
+    assert.ok(out.text.startsWith('\\[['), out.text);
+  }
+});

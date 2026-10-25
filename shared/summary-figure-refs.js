@@ -1,6 +1,8 @@
 // A figure inside a Resumo Mestre is a block of its own: a line holding only `[[fig:UUID]]`, at the LEFT MARGIN of the document (no indentation,
 // not inside a list, a quote, a formula or a code block). The UUID is the stable id of a PRIVATE visual asset (never a path, URL or Base64);
 // caption, alternative text and provenance live in the asset's record, not in the text.
+// An occurrence may carry its display width: `[[fig:UUID|w=420]]` (CSS pixels, FIGURE_WIDTH_MIN..FIGURE_WIDTH_MAX). The legacy `[[fig:UUID]]` is the same figure at
+// its natural size. A marker with any other option, or a width outside the limits, is NOT a figure line: it stays literal text and is never rewritten.
 //
 // Dependency-free so the server (validation on save/accept, backup, audit) and the client share the exact same rule. The renderer uses a
 // markdown-it rule (shared/summary-markdown.js) and the server cannot import markdown-it, so this file is a small re-implementation of the
@@ -8,10 +10,25 @@
 // over thousands of generated documents. Change one, change the other.
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-export const FIGURE_REF_LINE = new RegExp(`^\\[\\[fig:(${UUID})\\]\\]$`, 'i');
+export const FIGURE_REF_LINE = new RegExp(`^\\[\\[fig:(${UUID})(?:\\|w=(\\d{1,4}))?\\]\\]$`, 'i');
+export const FIGURE_WIDTH_MIN = 40;
+export const FIGURE_WIDTH_MAX = 1600;
 export const UUID_PATTERN = new RegExp(`^${UUID}$`, 'i');
 
-export const figureRef = (id) => `[[fig:${id}]]`;
+/** True for an integer width inside the safe limits. */
+export const isFigureWidth = (width) => Number.isInteger(width) && width >= FIGURE_WIDTH_MIN && width <= FIGURE_WIDTH_MAX;
+
+/** The marker of one figure occurrence; `width` (optional, validated) is the display width in CSS pixels. */
+export const figureRef = (id, width = null) => (isFigureWidth(width) ? `[[fig:${id}|w=${width}]]` : `[[fig:${id}]]`);
+
+/** { id, width } (width null when absent) for a line that is exactly one figure marker, or null (not a marker, or a width outside the limits). */
+export function parseFigureLine(line) {
+  const m = FIGURE_REF_LINE.exec(line);
+  if (!m) return null;
+  if (m[2] === undefined) return { id: m[1].toLowerCase(), width: null };
+  const width = Number(m[2]);
+  return isFigureWidth(width) && String(width) === m[2] ? { id: m[1].toLowerCase(), width } : null;
+}
 
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const FENCE_CLOSE = /^ {0,3}(`+|~+)[ \t]*$/;
@@ -52,7 +69,7 @@ function mathBlockEnd(lines, at) {
   return -1;
 }
 
-/** [{ line, id }] for every figure line of the text, in order (id lower-cased, repeats kept). */
+/** [{ line, id, width }] for every figure line of the text, in order (id lower-cased, repeats kept). */
 export function scanFigureLines(text) {
   const lines = String(text ?? '').split(/\r\n|\r|\n/);
   const found = [];
@@ -72,7 +89,7 @@ export function scanFigureLines(text) {
     const indent = indentOf(line);
     const marker = LIST_MARKER.exec(line);
     // a line that cannot belong to an open list item ends it (a lazy continuation of a paragraph keeps it)
-    const interrupts = marker !== null || FENCE_OPEN.test(line) || FIGURE_REF_LINE.test(line.trimEnd());
+    const interrupts = marker !== null || FENCE_OPEN.test(line) || parseFigureLine(line.trimEnd()) !== null;
     while (items.length > 0 && items[items.length - 1] > indent && (blankBefore || interrupts)) items.pop();
     const open = FENCE_OPEN.exec(line);
     if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
@@ -85,8 +102,8 @@ export function scanFigureLines(text) {
       const spaces = marker[3].length;
       items.push(indent + marker[2].length + (spaces === 0 || spaces > 4 ? 1 : spaces));
     } else if (indent === 0) {
-      const ref = FIGURE_REF_LINE.exec(line.trimEnd());
-      if (ref) found.push({ line: at, id: ref[1].toLowerCase() });
+      const ref = parseFigureLine(line.trimEnd());
+      if (ref) found.push({ line: at, id: ref.id, width: ref.width });
     }
     blankBefore = false;
   }

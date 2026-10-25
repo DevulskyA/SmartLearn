@@ -1,9 +1,9 @@
 // The controlled Markdown of the Resumo Mestre: markdown-it with raw HTML, links and Markdown images switched OFF, plus three small rules:
-//   \( ... \)   inline math       \[ ... \]   block math       [[fig:UUID]]   a figure on its own line
+//   \( ... \)   inline math       \[ ... \]   block math       [[fig:UUID]] or [[fig:UUID|w=420]]   a figure on its own line
 // `$` is NOT a math delimiter (it is money in ordinary text). The parser only produces TOKENS; the screens build DOM from them (src/summary-render.js),
 // so no user text is ever treated as HTML.
 import MarkdownIt from 'markdown-it';
-import { FIGURE_REF_LINE } from './summary-figure-refs.js';
+import { parseFigureLine } from './summary-figure-refs.js';
 
 function mathInline(state, silent) {
   const { src, pos, posMax } = state;
@@ -69,11 +69,11 @@ function figureBlock(state, startLine, endLine, silent) {
   // (inside a quote the line marks are moved past the ">" marker, so "column 0" also means: the content starts where the real line starts)
   if (state.sCount[startLine] !== 0 || state.bMarks[startLine] !== state.src.lastIndexOf('\n', state.bMarks[startLine] - 1) + 1) return false;
   const text = state.src.slice(state.bMarks[startLine], state.eMarks[startLine]).trimEnd();
-  const m = FIGURE_REF_LINE.exec(text);
-  if (!m) return false;
+  const ref = parseFigureLine(text);
+  if (!ref) return false;
   if (silent) return true;
   const token = state.push('figure', 'figure', 0);
-  token.meta = { id: m[1].toLowerCase() };
+  token.meta = { id: ref.id, width: ref.width };
   token.map = [startLine, startLine + 1];
   state.line = startLine + 1;
   return true;

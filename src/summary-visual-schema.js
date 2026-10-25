@@ -18,7 +18,7 @@ import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import { UndoRedo } from "@tiptap/extensions";
 import { NodeSelection } from "@tiptap/pm/state";
-import { figureRef, UUID_PATTERN } from "../shared/summary-figure-refs.js";
+import { figureRef, isFigureWidth, UUID_PATTERN } from "../shared/summary-figure-refs.js";
 
 const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "table", "codeBlock", "horizontalRule", "mathBlock", "figure", "rawBlock"];
 
@@ -69,11 +69,13 @@ export const Figure = Node.create({
   atom: true,
   selectable: true,
   addOptions() { return { openSource: null }; },
-  addAttributes() { return { id: { default: "" } }; },
+  draggable: true, // the student drags a figure to another place of the text (a figure is a block line, so any place between two blocks)
+  // `width` is the display width of THIS occurrence in CSS pixels (null = natural size): the same figure can appear twice with two widths
+  addAttributes() { return { id: { default: "" }, width: { default: null, parseHTML: (el) => { const n = Number(el.getAttribute("data-figure-width")); return isFigureWidth(n) ? n : null; }, renderHTML: (a) => (isFigureWidth(a.width) ? { "data-figure-width": String(a.width) } : {}) } }; },
   // pasted HTML may carry the attribute, but only a well-formed asset id becomes a figure (anything else is reduced to its text); whether the id is
   // really the student's own asset is the server's decision on save and accept
   parseHTML() { return [{ tag: "div[data-figure-id]", getAttrs: (el) => (UUID_PATTERN.test(el.getAttribute("data-figure-id") ?? "") ? { id: el.getAttribute("data-figure-id").toLowerCase() } : false) }]; },
-  renderHTML({ node }) { return ["div", { "data-figure-id": node.attrs.id }, figureRef(node.attrs.id)]; },
+  renderHTML({ node }) { return ["div", { "data-figure-id": node.attrs.id, ...(isFigureWidth(node.attrs.width) ? { "data-figure-width": String(node.attrs.width) } : {}) }, figureRef(node.attrs.id, node.attrs.width)]; },
 });
 
 // Markdown that has no visual form here (an indented code block, ...) is carried as an atom holding its exact text: the editor draws it as a preserved

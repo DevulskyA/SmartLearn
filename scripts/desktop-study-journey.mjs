@@ -16,6 +16,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { chromium } from '@playwright/test';
@@ -66,7 +67,28 @@ const password = 'a genuinely long test password 1';
 const email = `journey-${Date.now()}@example.com`;
 const SUBJECT = 'Farmacologia Desktop';
 const SUMMARY_EDIT = 'Resumo mestre editado na jornada Desktop: absorção, distribuição e eliminação, com \\(C=C_0 e^{-kt}\\) e \\(\\ce{H2O}\\).\n\n| Fase | Efeito |\n|---|---|\n| Absorção | sobe |\n| Eliminação | desce |\n\nFim do resumo: ';
-const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+// a real 400x200 image (2:1), so that moving and resizing it in the window means something
+function solidPng(width, height, [r, g, b]) {
+  const row = Buffer.alloc(1 + width * 3);
+  for (let x = 0; x < width; x += 1) { row[1 + x * 3] = r; row[2 + x * 3] = g; row[3 + x * 3] = b; }
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(data.length, 0);
+    head.write(type, 4, 'ascii');
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(zlib.crc32(Buffer.concat([head.subarray(4), data])), 0);
+    return Buffer.concat([head, data, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+const PIXEL_PNG = solidPng(400, 200, [37, 99, 235]);
+const FIGURE_MARKER = /\[\[fig:([0-9a-f-]{36})(\|w=\d+)?\]\]/g;
+const figureMarkers = (text) => [...text.matchAll(FIGURE_MARKER)].map((m) => m[0]);
 // the scientific parts of the summary as DRAWN (formula, table, figure that really loaded through the WebView2 CSP)
 async function expectScientificSummary(body) {
   await body.locator('.katex').first().waitFor({ timeout: 10000 });
@@ -587,6 +609,93 @@ try {
     return { idleSaves: 1, slowSaveKeptTyping: true, offlineCopyOnDisk: true, killed, recoveredAfterReopen: true, formulas, figures: 2, localCopyErased: true };
   });
 
+  await step(23, 'a figure is dragged to another place and resized with its handles in the REAL window; the text saves itself; one copy; a figure still in use cannot be deleted', async () => {
+    const editor = page.locator('.lesson-editor');
+    await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
+    const surface = editor.locator('.summary-visual-content');
+    const images = surface.locator('figure.summary-figure img');
+    for (let i = 0; i < 40 && (await images.count()) < 2; i += 1) await page.waitForTimeout(250);
+    expect((await images.count()) === 2, 'the two figures are not drawn');
+    const input = editor.locator('.lesson-summary-input');
+    const before = await input.inputValue();
+    const idsBefore = figureMarkers(before);
+    expect(idsBefore.length === 2 && idsBefore.every((m) => !m.includes('|w=')), `two legacy markers expected: ${idsBefore}`);
+    // a drop point has to be on the screen: give the window the room for the closing paragraph and both figures
+    const home = windowRect(app.pid);
+    windowRect(app.pid, { x: home[0], y: home[1], w: 1300, h: 1000 });
+    await sleep(600);
+    await shot('figure-before-move');
+
+    // drag the second figure above the first one (a drop on the lower edge of the paragraph that comes before them): the two swap places.
+    // Both ends of the drag must be on the screen at once: put the closing paragraph near the top of the window first.
+    const closing = surface.locator('p', { hasText: 'Fim do resumo' }).first();
+    await closing.scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, Math.max(0, (await closing.boundingBox()).y - 120));
+    await page.waitForTimeout(500);
+    const from = await images.nth(1).boundingBox();
+    const to = await closing.boundingBox();
+    expect(from.y + from.height < (await page.evaluate(() => window.innerHeight)), `the figure is not fully on the screen: ${JSON.stringify(from)}`);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 - 12, { steps: 4 });
+    await page.mouse.move(to.x + 30, to.y + to.height - 2, { steps: 16 });
+    await page.mouse.up();
+    for (let i = 0; i < 40 && (await input.inputValue()) === before; i += 1) await page.waitForTimeout(250);
+    const moved = await input.inputValue();
+    const idsMoved = figureMarkers(moved);
+    expect(moved !== before && idsMoved.length === 2, `the move did not land as one copy each: ${idsMoved}`);
+    expect(idsMoved[0] === idsBefore[1] && idsMoved[1] === idsBefore[0], `the two figures did not swap places: ${idsBefore} -> ${idsMoved}`);
+    await shot('figure-after-move');
+    // every figure must be on the page with a real height (a moved figure that stays collapsed would be invisible to the student)
+    const probe = await surface.evaluate((root) => [...root.querySelectorAll('[data-resize-container]')].map((c) => ({
+      box: Math.round(c.getBoundingClientRect().width) + 'x' + Math.round(c.getBoundingClientRect().height),
+      host: c.querySelector('.summary-figure-host')?.outerHTML.slice(0, 260) ?? null,
+      imgs: [...c.querySelectorAll('img')].map((i) => ({ complete: i.complete, natural: i.naturalWidth, h: Math.round(i.getBoundingClientRect().height), loading: i.loading })),
+    })));
+    expect(probe.length === 2 && probe.every((p) => p.imgs.length === 1 && p.imgs[0].complete && p.imgs[0].natural > 0 && p.imgs[0].h >= 10), `a figure is not drawn after the move: ${JSON.stringify(probe)}`);
+
+    // resize the 400x200 picture (now the second figure), by the handle in its corner: proportion kept, width written in its marker only
+    const first = images.nth(1);
+    await first.hover();
+    const handle = surface.locator('[data-resize-handle="bottom-right"]').nth(1);
+    await handle.waitFor({ state: 'visible', timeout: 10000 });
+    const hb = await handle.boundingBox();
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hb.x - 110, hb.y - 30, { steps: 12 });
+    await page.mouse.up();
+    for (let i = 0; i < 40 && !/\|w=\d+\]\]/.test(await input.inputValue()); i += 1) await page.waitForTimeout(250);
+    const sized = await input.inputValue();
+    const sizedMarkers = figureMarkers(sized);
+    expect(sizedMarkers.filter((m) => m.includes('|w=')).length === 1, `exactly one marker carries a width: ${sizedMarkers}`);
+    const width = Number(/\|w=(\d+)\]\]/.exec(sized)[1]);
+    expect(width >= 40 && width < 400, `width ${width}`);
+    const box = await first.boundingBox();
+    expect(Math.abs(box.width / box.height - 2) < 0.05 && Math.abs(box.width - width) <= 2, `drawn ${box.width}x${box.height} for width ${width}`);
+    await shot('figure-after-resize');
+
+    // nobody pressed Save: the text is saved by itself 2.5 s after the last change
+    await editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]').waitFor({ timeout: 15000 });
+    ctx.summaryFinal = (await input.inputValue()).trim();
+    ctx.figureWidth = width;
+    ctx.figureMarkers = figureMarkers(ctx.summaryFinal);
+    const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
+    expect(draft.summary === ctx.summaryFinal, 'server draft summary differs after the automatic save');
+    // a figure that is still used (here also resized) cannot be deleted
+    const sizedId = /\[\[fig:([0-9a-f-]{36})\|w=/.exec(ctx.summaryFinal)[1];
+    // (a DELETE carries no body: the journey's JSON helper would send an empty JSON body and be refused for that, not for the figure)
+    const refusal = await page.evaluate(async ({ id }) => {
+      const base = window.__SMARTLEARN_API_BASE__;
+      const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+      const res = await fetch(`${base}/v1/visual-assets/${id}`, { method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-Token': me.csrfToken } });
+      return { status: res.status, body: await res.text() };
+    }, { id: sizedId });
+    expect(refusal.status === 409 && /ASSET_IN_USE/.test(refusal.body), `the delete of a figure in use was not refused: ${JSON.stringify(refusal)}`);
+    await editor.locator('.summary-mode-btn[data-mode="text"]').click();
+    return { moved: true, copies: 2, width, markers: ctx.figureMarkers, autosaved: true, deleteRefused: 'ASSET_IN_USE' };
+  });
+
   await step(8, 'accept the lesson', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.locator('.source-draft-subject-input').fill(SUBJECT);
@@ -920,6 +1029,11 @@ try {
     const summary = squash(await row.locator('.plan-summary-body').innerText());
     expect(summary.includes('Resumo mestre editado'), 'summary lost after reopen');
     await expectScientificSummary(row.locator('.plan-summary-body'));
+    // the moved and resized figure came back as it was left: same order, same width, drawn at that width
+    const reopened = row.locator('.plan-summary-body figure.summary-figure');
+    expect((await reopened.evaluateAll((els) => els.map((el) => el.dataset.figureId))).join() === ctx.figureMarkers.map((m) => /fig:([0-9a-f-]{36})/.exec(m)[1]).join(), 'the order of the figures changed after the reopen');
+    expect((await row.locator('.plan-summary-body figure.summary-figure[data-figure-width]').evaluateAll((els) => els.map((el) => Number(el.dataset.figureWidth)))).join() === String(ctx.figureWidth), 'the figure width changed after the reopen');
+    ctx.figureWidthAfterReopen = ctx.figureWidth;
     // Reopen the accepted unit's Resumo Mestre editor in the native Desktop after restart.
     // The Plan card proves reading; this proves the real editable WYSIWYG surface for accepted data.
     const reopenedEditButton = row.locator('.plan-edit-summary-btn');
@@ -983,6 +1097,6 @@ result.isolation = {
   underOsTemp: resolve(work).toLowerCase().startsWith(resolve(tmpdir()).toLowerCase()),
   humanDevDatastoreTouched: false,
 };
-result.pass = !result.fatal && result.steps.length === 22 && result.steps.every((s) => s.status === 'PASS') && result.isolation.database && result.isolation.sources && result.isolation.webviewProfile && result.isolation.underOsTemp && result.isolation.humanDevDatastoreTouched === false;
+result.pass = !result.fatal && result.steps.length === 23 && result.steps.every((s) => s.status === 'PASS') && result.isolation.database && result.isolation.sources && result.isolation.webviewProfile && result.isolation.underOsTemp && result.isolation.humanDevDatastoreTouched === false;
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.pass ? 0 : 1);

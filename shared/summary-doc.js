@@ -10,7 +10,7 @@
 //   3. NOTHING IS WRITTEN BLINDLY. `serializeVerified` re-reads what it produced and refuses (returns the reason) when the text would not
 //      mean the same thing, instead of saving something the student did not write.
 import { parseSummaryTokens } from './summary-markdown.js';
-import { FIGURE_REF_LINE } from './summary-figure-refs.js';
+import { figureRef, parseFigureLine } from './summary-figure-refs.js';
 
 const MARK_ORDER = ['bold', 'italic', 'strike', 'code'];
 const WRAP = { bold: '**', italic: '*', strike: '~~' };
@@ -167,7 +167,7 @@ function blockNode(block) {
   }
   if (first.type === 'bullet_list_open' || first.type === 'ordered_list_open') return listNode(block.tokens);
   if (first.type === 'math_block') return { type: 'mathBlock', attrs: { tex: first.content } };
-  if (first.type === 'figure') return { type: 'figure', attrs: { id: first.meta.id } };
+  if (first.type === 'figure') return { type: 'figure', attrs: { id: first.meta.id, width: first.meta.width ?? null } };
   if (first.type === 'blockquote_open') return quoteNode(block.tokens);
   if (first.type === 'table_open') return tableNode(block.tokens);
   if (first.type === 'hr') return { type: 'horizontalRule' };
@@ -328,7 +328,7 @@ function serializeInline(nodes, { heading = false } = {}) {
   closeTo(0);
   if (heading) out = out.replace(/(^|\s)(#+)$/, (m, sp, hashes) => `${sp}\\${hashes}`);
   // a line that is exactly a figure reference would turn into a figure
-  return out.split('\n').map((line) => (FIGURE_REF_LINE.test(line.trim()) ? line.replace('[', '\\[') : line)).join('\n');
+  return out.split('\n').map((line) => (parseFigureLine(line.trim()) !== null ? line.replace('[', '\\[') : line)).join('\n');
 }
 
 function itemBlocks(item) {
@@ -390,7 +390,7 @@ export function serializeBlock(block) {
     case 'bulletList':
     case 'orderedList': return serializeList(block);
     case 'mathBlock': return `\\[\n${String(block.attrs?.tex ?? '').trim()}\n\\]`;
-    case 'figure': return `[[fig:${block.attrs.id}]]`;
+    case 'figure': return figureRef(block.attrs.id, block.attrs.width ?? null);
     case 'rawBlock': { const s = String(block.attrs?.text ?? '').replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, ''); return s === '' ? null : s; }
     case 'table': return serializeTable(block);
     case 'blockquote': return serializeQuote(block);
@@ -448,7 +448,7 @@ function signature(node) {
     return { k: node.type, start: node.type === 'orderedList' ? Number(node.attrs?.start ?? 1) : 0, loose: Boolean(node.attrs?.loose), c: items.map(signature) };
   }
   if (node.type === 'mathBlock') return { k: 'mb', tex: String(node.attrs?.tex ?? '').trim() };
-  if (node.type === 'figure') return { k: 'fig', id: node.attrs.id };
+  if (node.type === 'figure') return { k: 'fig', id: node.attrs.id, w: node.attrs.width ?? null };
   if (node.type === 'blockquote') return { k: 'quote', c: (node.content ?? []).filter((p) => serializeInline(p.content) !== '').map(signature) };
   if (node.type === 'table') {
     const rows = (node.content ?? []).map((row) => row.content ?? []);

@@ -6,6 +6,7 @@ import { parseSummaryTokens, locateMath } from "../shared/summary-markdown.js";
 import { katex, katexOptions } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
 import { loadFigureRecord } from "./visual-assets-api.js";
+import { isFigureWidth } from "../shared/summary-figure-refs.js";
 import { openFigureViewer } from "./figure-ui.js";
 import { openSourcePage } from "./source-details-ui.js";
 
@@ -64,7 +65,9 @@ function drawFigure(figure, id, record, ctx) {
   const img = document.createElement("img");
   img.src = record.url;
   img.alt = record.alt;
-  img.loading = "lazy";
+  // reading screens load images when they come near; the editor loads them at once: a figure that was just moved or inserted must have its real height
+  // (a lazy image below the fold is 0 px tall, and the resize handles would measure that)
+  img.loading = ctx.eager ? "eager" : "lazy";
   img.tabIndex = 0;
   img.addEventListener("error", () => figure.replaceChildren(unavailableFigure(id, "missing")));
   const open = () => ctx.onOpenFigure?.(record);
@@ -83,10 +86,16 @@ function drawFigure(figure, id, record, ctx) {
 }
 
 // A figure is the owner's private asset: loaded by id through `ctx.loadFigure`. Unknown or unavailable ones show an explicit marker.
-function renderFigure(id, ctx) {
+function renderFigure(id, ctx, width = null) {
   const figure = document.createElement("figure");
   figure.className = "summary-figure";
   figure.dataset.figureId = id;
+  // this occurrence's display width (CSS pixels, validated by the parser); CSS caps it at the available width, so a narrow window shows the whole
+  // image without touching the stored size, and the height follows the image's own proportion
+  if (isFigureWidth(width)) {
+    figure.dataset.figureWidth = String(width);
+    figure.style.setProperty("--figure-width", `${width}px`);
+  }
   if (!ctx.loadFigure) {
     figure.append(unavailableFigure(id, "missing"));
     return figure;
@@ -163,7 +172,7 @@ function buildBlocks(tokens, root, ctx) {
       pre.append(code);
       top().append(pre);
     } else if (token.type === "math_block") top().append(renderMath(token.content, true, ctx, ctx.nextMath()));
-    else if (token.type === "figure") top().append(renderFigure(token.meta.id, ctx));
+    else if (token.type === "figure") top().append(renderFigure(token.meta.id, ctx, token.meta.width ?? null));
   }
 }
 
@@ -177,7 +186,7 @@ export function renderFigureElement(id, { loadFigure = loadFigureRecord, onOpenS
   const host = document.createElement("div");
   host.className = "summary-figure-host";
   const draw = () => {
-    const ctx = { loadFigure, onOpenFigure: (record) => openFigureViewer(record, { onOpenSource, onEdited: draw }) };
+    const ctx = { eager: true, loadFigure, onOpenFigure: (record) => openFigureViewer(record, { onOpenSource, onEdited: draw }) };
     host.replaceChildren(renderFigure(id, ctx));
   };
   draw();

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSummaryTokens } from '../shared/summary-markdown.js';
-import { listFigureRefs, replaceFigureRefs, figureRef } from '../shared/summary-figure-refs.js';
+import { listFigureRefs, replaceFigureRefs, figureRef, scanFigureLines } from '../shared/summary-figure-refs.js';
 
 // A figure reference means ONE thing everywhere: the renderer (markdown-it rule), the server validation, the operational backup and the textual
 // export must agree on which lines are figures. The server cannot import markdown-it, so its scanner (shared/summary-figure-refs.js) is a
@@ -83,4 +83,40 @@ test('deterministic fuzz: for random mixes of blocks the scanner and the markdow
   }
   assert.equal(mismatches, 0);
   assert.ok(withFigures > 300, `the fuzz must actually produce figures (${withFigures})`);
+});
+
+// ---- display width of a figure occurrence: [[fig:UUID|w=420]] ----------------------------------------------------------------------------------------
+const tokenFigures = (text) => parseSummaryTokens(text).filter((t) => t.type === 'figure').map((t) => [t.meta.id, t.meta.width]);
+
+test('a figure occurrence may carry a display width: the renderer rule and the scanner agree on which markers are figures and on their width', () => {
+  const text = `${figureRef(A, 420)}\n\n${figureRef(A, 60)}\n\n${figureRef(B)}\n\n${figureRef(C, 1600)}\n\n${figureRef(C, 40)}`;
+  const expected = [[A, 420], [A, 60], [B, null], [C, 1600], [C, 40]];
+  assert.deepEqual(tokenFigures(text), expected);
+  assert.deepEqual(scanFigureLines(text).map((hit) => [hit.id, hit.width]), expected);
+  assert.deepEqual(listFigureRefs(text), [A, B, C], 'the same figure twice counts once as a reference, whatever the widths');
+  assert.equal(figureRef(A, 420), `[[fig:${A}|w=420]]`);
+  assert.equal(figureRef(A, 5), `[[fig:${A}]]`, 'an unsafe width is never written');
+  assert.equal(figureRef(A, null), `[[fig:${A}]]`);
+});
+
+test('a marker with a width outside the grammar or the limits, or another option, is plain text for every consumer (and so is never rewritten)', () => {
+  for (const option of ['|w=39', '|w=1601', '|w=0', '|w=042', '|w=4.5', '|w=', '|w=-5', '|h=300', '|x=1', '|w=420|h=3', '|w=99999', '| w=420', '|w=420 ']) {
+    const text = `antes\n\n[[fig:${A}${option}]]\n\ndepois`;
+    assert.deepEqual(tokenFigures(text), [], `parser ${option}`);
+    assert.deepEqual(listFigureRefs(text), [], `scanner ${option}`);
+    assert.equal(replaceFigureRefs(text, () => '[x]'), text, `replace ${option}`);
+  }
+});
+
+test('a width marker follows the same layout rules as a plain one: code, lists, quotes and indentation make it text; CRLF and trailing spaces do not', () => {
+  const sized = figureRef(A, 300);
+  const cases = { fence: `\`\`\`\n${sized}\n\`\`\``, indented: `    ${sized}`, list: `- ${sized}`, quote: `> ${sized}`, math: `\\[\n${sized}\n\\]` };
+  for (const [name, text] of Object.entries(cases)) {
+    assert.deepEqual(tokenFigures(text), [], `parser ${name}`);
+    assert.deepEqual(listFigureRefs(text), [], `scanner ${name}`);
+  }
+  const real = `a\r\n${sized}   \r\n\r\nb`;
+  assert.deepEqual(tokenFigures(real), [[A, 300]]);
+  assert.deepEqual(scanFigureLines(real).map((hit) => [hit.id, hit.width]), [[A, 300]]);
+  assert.equal(replaceFigureRefs(real, () => '[figura]'), 'a\r\n[figura]\r\n\r\nb', 'the line breaks around the marker are kept');
 });

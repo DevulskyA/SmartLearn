@@ -4,12 +4,13 @@
 // cannot model as a preserved block (shown rendered, with a way to edit it in the Text mode), and REFUSES (instead of guessing) what it
 // could not write back faithfully.
 // Nothing here uses innerHTML for user text, and the schema has no link, image, script or HTML node, so pasted HTML cannot become any of them.
-import { Editor } from "@tiptap/core";
+import { Editor, ResizableNodeView } from "@tiptap/core";
 import { Gapcursor } from "@tiptap/extensions";
 import { createTable } from "@tiptap/extension-table";
 import { EditorState } from "@tiptap/pm/state";
 import { markdownToDoc, serializeVerified } from "../shared/summary-doc.js";
 import { mathProblem } from "../shared/summary-math.js";
+import { FIGURE_WIDTH_MIN, FIGURE_WIDTH_MAX, isFigureWidth } from "../shared/summary-figure-refs.js";
 import { MathInline, MathBlock, Figure, RawBlock, summaryExtensions } from "./summary-visual-schema.js";
 import { t } from "./i18n/index.js";
 import { openMathDialog, loadMathLive } from "./math-dialog.js";
@@ -242,12 +243,39 @@ export function createVisualSummaryEditor(textarea, { openSource = null, editInT
   const MathInlineView = mathView(MathInline, true);
   const MathBlockView = mathView(MathBlock, false);
 
+  // Drag (the node is draggable: a figure is a block line, so any place between two blocks) and resize (corner handles, proportion kept) come from
+  // Tiptap itself; the figure inside is still the app's own (private image by id, caption, provenance, enlarge). The size is this occurrence's `width`.
   const FigureView = Figure.extend({
     addNodeView() {
-      return ({ node }) => {
-        const dom = renderFigureElement(node.attrs.id, { onOpenSource: this.options.openSource ?? undefined });
-        dom.contentEditable = "false";
-        return { dom, update: (next) => next.type === node.type && next.attrs.id === node.attrs.id, stopEvent: () => false, ignoreMutation: () => true };
+      return ({ node, getPos, editor: ed }) => {
+        const host = renderFigureElement(node.attrs.id, { onOpenSource: this.options.openSource ?? undefined });
+        host.contentEditable = "false";
+        const size = (width) => {
+          host.classList.toggle("is-sized", isFigureWidth(width));
+          if (isFigureWidth(width)) host.style.width = `${width}px`;
+          else host.style.removeProperty("width");
+        };
+        size(node.attrs.width);
+        const view = new ResizableNodeView({
+          element: host,
+          node,
+          editor: ed,
+          getPos,
+          onResize: (width) => size(Math.round(width)),
+          onCommit: (width) => {
+            const pos = getPos();
+            if (pos === undefined) return;
+            const next = Math.min(FIGURE_WIDTH_MAX, Math.max(FIGURE_WIDTH_MIN, Math.round(width)));
+            ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos).attrs, width: next }));
+          },
+          onUpdate: (updated) => {
+            if (updated.type !== node.type || updated.attrs.id !== node.attrs.id) return false;
+            size(updated.attrs.width); // undo/redo or a reload change the stored width
+            return true;
+          },
+          options: { directions: ["bottom-right", "bottom-left"], min: { width: FIGURE_WIDTH_MIN }, max: { width: FIGURE_WIDTH_MAX }, preserveAspectRatio: true },
+        });
+        return view;
       };
     },
   });
