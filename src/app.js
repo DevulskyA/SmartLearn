@@ -1847,6 +1847,7 @@ export async function renderPlan() {
 
         editSummaryBtn.addEventListener("click", () => {
           summaryTextarea.value = currentSummary;
+          planAuthoring.reloadVisual?.();
           summaryDisplayWrap.hidden = true;
           editSummaryBtn.hidden = true;
           summaryEditArea.hidden = false;
@@ -1858,6 +1859,7 @@ export async function renderPlan() {
           summaryEditArea.hidden = true;
         });
         saveSummaryBtn.addEventListener("click", async () => {
+          planAuthoring.flushVisual?.();
           const newBody = summaryTextarea.value.trim() || null;
           summaryMsg.textContent = t("shell.saving");
           try {
@@ -1878,9 +1880,11 @@ export async function renderPlan() {
         });
 
         summaryDisplayWrap.append(summaryText, summaryPlaceholder);
-        const planAuthoring = createSummaryAuthoring(summaryTextarea);
+        const planAuthoring = createSummaryAuthoring(summaryTextarea, { visual: true });
+        summaryEditArea.prepend(planAuthoring.modeSwitch);
         summaryEditArea.prepend(planAuthoring.bar);
         summaryTextarea.after(planAuthoring.preview);
+        summaryTextarea.after(planAuthoring.visualHost);
         summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
         detail.append(summarySection);
 

@@ -116,6 +116,25 @@ test('formulas, chemistry, matrices, table and list are drawn; invalid formulas 
   await expect(row.locator('.plan-summary-textarea')).toHaveValue(SUMMARY); // the stored text is exactly what was typed
 });
 
+test('an accepted Plan summary reopens as an editable visual document', async ({ page }) => {
+  const row = await openPlanSummary(page, 'Resumo visual reaberto');
+  await row.locator('.plan-summary-textarea').fill(SUMMARY);
+  await row.locator('.plan-summary-edit-actions .primary-button').click();
+
+  await row.locator('.plan-edit-summary-btn').click();
+  await row.locator('.summary-mode-btn[data-mode="text"]').click();
+  await row.locator('.summary-mode-btn[data-mode="visual"]').click();
+  const surface = row.locator('.summary-visual-content');
+  await expect(surface).toBeVisible();
+  await expect(surface.locator('.katex')).toHaveCount(7);
+  await expect(surface.locator('table tr')).toHaveCount(3);
+  await expect(surface.locator('table th')).toHaveCount(3);
+
+  const cell = surface.locator('td', { hasText: 'Aferente' }).first();
+  expect(await cell.evaluate((el) => Boolean(el.closest('[contenteditable="true"]')))).toBe(true);
+  await row.getByRole('button', { name: /cancelar/i }).click();
+});
+
 test('"Inserir fórmula": the visual dialog inserts at the cursor, keeps the text around, flags bad syntax, and loads nothing from outside', async ({ page }) => {
   const outside = [];
   page.on('request', (req) => {

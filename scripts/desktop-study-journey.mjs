@@ -903,7 +903,7 @@ try {
     health1 = await page.evaluate(async () => ({ ready: (await fetch('/health/ready')).status, build: await (await fetch('/health/build')).json() }));
     expect(health1.ready === 200 && health1.build.head === head, `health after reopen ${JSON.stringify(health1)}`);
     const how = await signIn();
-    return { closing, dbAfterClose: { hojeAttemptsPerExercise: ctx.hojePerExercise, units: snapshotBefore.units, exercises: snapshotBefore.exercises, attempts: snapshotBefore.attempts.length, outcomes, evidenceRows: snapshotBefore.evidence.length }, reopened: { title, newBackendUrl: page.url(), readyStatus: health1.ready, signIn: how } };
+    return { windowRestored: ctx.windowRestored, closing, dbAfterClose: { hojeAttemptsPerExercise: ctx.hojePerExercise, units: snapshotBefore.units, exercises: snapshotBefore.exercises, attempts: snapshotBefore.attempts.length, outcomes, evidenceRows: snapshotBefore.evidence.length }, reopened: { title, newBackendUrl: page.url(), readyStatus: health1.ready, signIn: how } };
   });
 
   await step(18, 'data and evidence unchanged after the reopen', async () => {
@@ -920,10 +920,46 @@ try {
     const summary = squash(await row.locator('.plan-summary-body').innerText());
     expect(summary.includes('Resumo mestre editado'), 'summary lost after reopen');
     await expectScientificSummary(row.locator('.plan-summary-body'));
+    // Reopen the accepted unit's Resumo Mestre editor in the native Desktop after restart.
+    // The Plan card proves reading; this proves the real editable WYSIWYG surface for accepted data.
+    const reopenedEditButton = row.locator('.plan-edit-summary-btn');
+    await reopenedEditButton.click();
+    const reopenedEditArea = row.locator('.plan-summary-edit-area');
+    await reopenedEditArea.waitFor({ state: 'visible', timeout: 10000 });
+    const reopenedInput = reopenedEditArea.locator('.plan-summary-textarea');
+    const reopenedBefore = await reopenedInput.inputValue();
+    await reopenedEditArea.locator('.summary-mode-btn[data-mode="visual"]').click();
+    const reopenedSurface = reopenedEditArea.locator('.summary-visual-content');
+    await reopenedSurface.waitFor({ state: 'visible', timeout: 20000 });
+    await reopenedSurface.locator('.katex').first().waitFor({ timeout: 10000 });
+    const reopenedFormulas = await reopenedSurface.locator('.katex').count();
+    const reopenedRows = await reopenedSurface.locator('table tr').count();
+    const reopenedHeaders = await reopenedSurface.locator('table th').count();
+    const reopenedFigures = reopenedSurface.locator('figure.summary-figure img');
+    for (let i = 0; i < 40 && (await reopenedFigures.count()) < 2; i += 1) await page.waitForTimeout(250);
+    for (let i = 0; i < 40 && !(await reopenedFigures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0))); i += 1) await page.waitForTimeout(250);
+    expect(reopenedFormulas >= 2, `reopened formulas drawn: ${reopenedFormulas}`);
+    expect(reopenedRows === 3 && reopenedHeaders === 2, `reopened table ${reopenedRows} rows/${reopenedHeaders} headers`);
+    expect((await reopenedFigures.count()) === 2 && await reopenedFigures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0)), 'reopened figures did not load');
+    const reopenedReading = await reopenedSurface.evaluate((root) => { const copy = root.cloneNode(true); copy.querySelectorAll('pre, .katex-mathml').forEach((el) => el.remove()); return copy.innerText; });
+    for (const syntax of ['|---', '| Fase', '\\(', '[[fig:']) expect(!reopenedReading.includes(syntax), `reopened page shows source syntax: ${syntax}`);
+    await shot('visual-after-reopen');
+    const reopenedCell = reopenedSurface.locator('td', { hasText: 'sobe rapidamente' });
+    expect(await reopenedCell.evaluate((el) => Boolean(el.closest('[contenteditable="true"]'))), 'reopened table cell is not editable');
+    await reopenedCell.click();
+    await reopenedSurface.locator('.summary-math-editable').first().click();
+    const reopenedField = reopenedSurface.locator('.summary-math-field');
+    await reopenedField.waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForFunction(() => document.activeElement?.tagName === 'MATH-FIELD', undefined, { timeout: 10000 });
+    await page.keyboard.press('Escape');
+    await reopenedField.waitFor({ state: 'detached', timeout: 5000 });
+    await reopenedEditArea.locator('.summary-mode-btn[data-mode="text"]').click();
+    expect(await reopenedInput.inputValue() === reopenedBefore, 'opening/editability probe changed persisted summary');
+    await reopenedEditArea.getByRole('button', { name: /cancelar/i }).click();
     const closing = await shutdown({ graceful: true });
     const snapshotAfter = dbSnapshot();
     expect(JSON.stringify(snapshotAfter) === JSON.stringify(snapshotBefore), 'the database rows differ after the second session');
-    return { exportEqual: true, exportBytes: JSON.stringify(exportAfter).length, dbRowsEqual: true, attempts: snapshotAfter.attempts.length, evidenceRows: snapshotAfter.evidence.length, summaryAfterReopen: summary.slice(0, 80), closing };
+    return { exportEqual: true, exportBytes: JSON.stringify(exportAfter).length, dbRowsEqual: true, summaryVisualAfterReopen: { reopenedFormulas, tableRows: reopenedRows, tableHeaders: reopenedHeaders, figures: 2, noSourceSyntax: true, tableEditable: true, formulaEditable: true, openingUnchanged: true }, attempts: snapshotAfter.attempts.length, evidenceRows: snapshotAfter.evidence.length, summaryAfterReopen: summary.slice(0, 80), closing };
   });
 } catch (error) {
   result.fatal = String(error?.message ?? error);
