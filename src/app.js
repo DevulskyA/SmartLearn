@@ -2212,7 +2212,7 @@ export async function renderStatsBySubject() {
     if (r.lastEvidence) {
       const last = document.createElement("div");
       last.className = "practice-recent";
-      last.textContent = t("statsView.evidence.last", { date: formatDate(r.lastEvidence.evidenceDate) });
+      last.textContent = t("statsView.evidence.last", { date: formatIntlDate(r.lastEvidence.evidenceDate, { day: "2-digit", month: "2-digit", year: "2-digit" }) });
       practiceCell.append(last);
     }
 

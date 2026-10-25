@@ -49,7 +49,7 @@ export default {
   'statsView.trend.title.unit.insufficient': 'Sem comparação: são necessárias ao menos 10 questões em cada metade das datas deste conteúdo.',
   'statsView.evidence.questions.one': '{count} questão',
   'statsView.evidence.questions.other': '{count} questões',
-  'statsView.evidence.none': 'Sem questões no período',
+  'statsView.evidence.none': 'Sem questões',
   'statsView.evidence.last': 'Última: {date}',
   'statsView.period.empty': 'Nenhuma questão registrada neste período. Escolha um período maior para ver o histórico.',
   'statsView.band.CRITICAL': 'Crítico',

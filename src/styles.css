@@ -5467,6 +5467,8 @@ h1 {
 #view-stats-subject .table-panel { margin-top: 0; }
 .stats-side { display: grid; gap: 1rem; min-width: 0; }
 .stats-side .stats-panel { margin-top: 0; }
+.stats-side .analysis-panel { position: static; }
+.stats-side .stats-panel-heading { gap: 0.75rem; }
 .stats-side .stats-panel-heading { flex-wrap: nowrap; align-items: center; }
 .stats-side .stats-panel-heading h2 { flex: 1 1 auto; min-width: 0; }
 .stats-heading .select-control,
