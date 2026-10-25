@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditDraft, AUDIT_RESULT } from '../src/ai/draft-audit.js';
+import { auditDraft, AUDIT_RESULT, triggersRepair } from '../src/ai/draft-audit.js';
 
 // CONTENT-QUALITY CQ-2: a deterministic SCREEN over a draft, before a human ever sees it.
 // It is honest about what it is: PASS means "no flag raised", never "medically verified".
@@ -41,12 +41,36 @@ test('a value that IS in the source is never flagged, even written with a decima
   assert.deepEqual(issues(r, 'summary').filter((i) => i === 'SUMMARY_UNSUPPORTED_VALUE'), []);
 });
 
-test('a specific term that appears nowhere in the source (drug, condition) is flagged for verification', () => {
+test('a specific term that appears nowhere in the source (drug, condition) is flagged for verification, but a word alone never asks for a REPAIR', () => {
   const r = auditDraft(draft({ summary: GOOD_SUMMARY + ' A furosemida dilata a arteríola aferente em diabéticos.' }), { segments: SEGMENTS });
   const f = r.findings.find((x) => x.issue === 'SUMMARY_UNSUPPORTED_TERM');
   assert.ok(f);
   assert.match(f.generatedClaim, /furosemida/i);
-  assert.equal(r.result, AUDIT_RESULT.REPAIR);
+  assert.equal(f.blocksRepair, false, 'a signal for the reviewer, not a reason to rewrite the draft');
+  assert.equal(r.result, AUDIT_RESULT.PASS);
+});
+
+test('a faithful paraphrase (the source says "cruza", the draft says "atravessa") raises a signal at most and never a REPAIR; a changed value still does', () => {
+  const source = [{ pageIndex: 1, text: 'A bactéria cruza a camada de muco gástrico e se fixa ao epitélio. A urease reduz a acidez ao redor da bactéria. A infecção causa gastrite crônica em muitos pacientes.' }];
+  const paraphrase = auditDraft({ summary: 'A bactéria atravessa a camada de muco gástrico e se fixa ao epitélio. A urease reduz a acidez ao redor da bactéria. A infecção causa gastrite crônica em muitos pacientes.', questions: [] }, { segments: source });
+  assert.equal(paraphrase.result, AUDIT_RESULT.PASS);
+  assert.ok(paraphrase.findings.every((f) => f.severity === 'LOW' || f.blocksRepair === false), 'whatever was raised is non-blocking');
+  const wrongValue = auditDraft({ summary: 'A bactéria cruza a camada de muco gástrico e se fixa ao epitélio. A urease reduz a acidez ao redor da bactéria em 90%. A infecção causa gastrite crônica em muitos pacientes.', questions: [] }, { segments: source });
+  assert.equal(wrongValue.result, AUDIT_RESULT.REPAIR, 'a value the source does not state is still a blocking finding');
+});
+
+test('the four word-level findings are visible but never block a repair; every other MEDIUM/HIGH finding still does', () => {
+  const lexical = ['SUMMARY_UNSUPPORTED_TERM', 'SUMMARY_OMITS_CENTRAL_CONCEPT', 'QUESTION_UNSUPPORTED_TERM', 'QUESTION_LOW_SOURCE_SUPPORT'];
+  const q = { question: 'O que a angiotensina II faz?', answer: 'A angiotensina II contrai a arteríola eferente.', explanation: 'Isso mantém a pressão glomerular e aumenta a filtração.', hint: null, sourceSpans: [{ pageIndex: 1 }] };
+  const r = auditDraft({ summary: 'A cápsula de Bowman exerce uma pressão de 18 mmHg no glomérulo. A furosemida age em diabéticos.', questions: [q] }, { segments: SEGMENTS });
+  const found = r.findings.filter((f) => lexical.includes(f.issue));
+  assert.deepEqual(found.map((f) => f.issue).sort(), [...lexical].sort(), 'all four are still reported');
+  assert.ok(found.every((f) => f.blocksRepair === false));
+  assert.equal(r.result, AUDIT_RESULT.PASS);
+  assert.equal(triggersRepair({ severity: 'MEDIUM' }), true);
+  assert.equal(triggersRepair({ severity: 'HIGH' }), true);
+  assert.equal(triggersRepair({ severity: 'HIGH', blocksRepair: false }), false);
+  assert.equal(triggersRepair({ severity: 'LOW' }), false);
 });
 
 test('terminology silently swapped (oncótica -> osmótica) is flagged, not accepted as a paraphrase', () => {

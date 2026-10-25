@@ -8,7 +8,7 @@
 // Finding shape (one per issue, no decorative score):
 //   { issue, severity: 'HIGH'|'MEDIUM'|'LOW', scope: 'summary'|'question:<index>',
 //     generatedClaim, sourceEvidence, repair }
-// Result: REPAIR when any HIGH or MEDIUM finding exists, else PASS (LOW = advisory only).
+// Result: REPAIR when any HIGH or MEDIUM finding that triggersRepair() exists, else PASS (LOW and lexical-only signals = advisory only).
 
 import { differentLanguages } from './language-detect.js';
 import { auditRisk } from './risk-checks.js';
@@ -16,10 +16,15 @@ import { stripSummaryMarkup } from '../../../shared/summary-figure-refs.js';
 
 export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
 
+// A word-level difference (a term or a concept the source does not repeat) is a SIGNAL for the reviewer, never proof of an error: a faithful
+// paraphrase, synonym or translation trips it. Such findings stay in the list but never make the result REPAIR nor trigger the model repair.
+const LEXICAL_ONLY = { blocksRepair: false };
+export const triggersRepair = (f) => (f.severity === 'HIGH' || f.severity === 'MEDIUM') && f.blocksRepair !== false;
+
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js): draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-5';
+export const AUDIT_RULES_VERSION = 'audit-rules-6';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -142,6 +147,7 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
   if (unsupportedTerms.length > 0) {
     findings.push({
       issue: 'SUMMARY_UNSUPPORTED_TERM',
+      ...LEXICAL_ONLY,
       severity: 'MEDIUM',
       scope: 'summary',
       generatedClaim: unsupportedTerms.slice(0, 5).join(', '),
@@ -170,6 +176,7 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
     if ((central.length - missing.length) / central.length < 0.5) {
       findings.push({
         issue: 'SUMMARY_OMITS_CENTRAL_CONCEPT',
+        ...LEXICAL_ONLY,
         severity: 'MEDIUM',
         scope: 'summary',
         generatedClaim: clip(summary, 160),
@@ -214,8 +221,8 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
 
   questions.forEach((q, index) => {
     const scope = `question:${index}`;
-    const add = (issue, severity, generatedClaim, sourceEvidence, repair) =>
-      findings.push({ issue, severity, scope, generatedClaim: clip(generatedClaim, 240), sourceEvidence, repair });
+    const add = (issue, severity, generatedClaim, sourceEvidence, repair, extra = {}) =>
+      findings.push({ issue, severity, scope, generatedClaim: clip(generatedClaim, 240), sourceEvidence, repair, ...extra });
 
     const cited = segments.filter((s) => (q.sourceSpans ?? []).some((span) => span.pageIndex === s.pageIndex));
     const citedText = cited.map((s) => s.text).join(' ');
@@ -296,7 +303,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
     if (unsupported.length > 0) {
       add('QUESTION_UNSUPPORTED_TERM', 'MEDIUM', unsupported.slice(0, 5).join(', '),
         'Nenhuma dessas palavras (nem uma forma próxima) aparece na página citada.',
-        'Confirme na fonte. Se for informação complementar, remova; se a citação estiver na página errada, corrija-a.');
+        'Confirme na fonte. Se for informação complementar, remova; se a citação estiver na página errada, corrija-a.', LEXICAL_ONLY);
     }
 
     // 4) Little lexical footing on the cited page at all (same language only).
@@ -308,7 +315,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
         if (supported / contentStems.length < 0.4) {
           add('QUESTION_LOW_SOURCE_SUPPORT', 'MEDIUM', q.answer,
             `Só ${supported} de ${contentStems.length} termos da resposta/explicação aparecem na(s) página(s) citada(s).`,
-            'Confira se a citação aponta para a página que sustenta a resposta e se a explicação não acrescenta fatos.');
+            'Confira se a citação aponta para a página que sustenta a resposta e se a explicação não acrescenta fatos.', LEXICAL_ONLY);
         }
       }
     }
@@ -378,6 +385,6 @@ export function auditDraft(rawDraft, { segments }) {
   findings.push(...auditRisk(draft, { segments }));
   const volume = auditQuestionVolume((draft.questions ?? []).length, sourceText.length);
   if (volume) findings.push(volume);
-  const blocking = findings.some((f) => f.severity === 'HIGH' || f.severity === 'MEDIUM');
+  const blocking = findings.some(triggersRepair);
   return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
 }

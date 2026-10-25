@@ -17,7 +17,7 @@ import {
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
-import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION } from '../ai/draft-audit.js';
+import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 
@@ -102,7 +102,16 @@ function withTimeout(promise, timeoutMs, onTimeoutCode) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-const isBlocking = (f) => f.severity === 'HIGH' || f.severity === 'MEDIUM';
+const isBlocking = triggersRepair;
+/** Which parts of the draft a repair rewrote: 'summary' and/or 'question:<index>' (the position in the list). */
+function repairedScopes(before, after) {
+  const scopes = before.summary === after.summary ? [] : ['summary'];
+  for (let i = 0; i < Math.max(before.questions.length, after.questions.length); i += 1) {
+    const [b, a] = [before.questions[i], after.questions[i]];
+    if (!b || !a || questionText(b) !== questionText(a)) scopes.push(`question:${i}`);
+  }
+  return scopes;
+}
 // LOW findings are advisories (e.g. the cross-language notice): the review list does not show them as points, so no count reported to the student includes them.
 const isActionable = (f) => f.severity !== 'LOW';
 const withSource = (findings, source) => findings.map((f) => ({ ...f, source }));
@@ -138,6 +147,7 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
   let repaired = false;
   let repairRejected = false;
   let addressed = [];
+  let kept = null;
   const blocking = findings.filter(isBlocking);
   if (provider.live && provider.repair && blocking.length > 0) {
     try {
@@ -147,6 +157,8 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
       // provider-owned metadata is not the model's to rewrite
       const revalidated = validateDraft({ ...rawRepair, modelVersion: draft.modelVersion, promptVersion: draft.promptVersion }, { segments });
       addressed = blocking.map((f) => ({ issue: f.issue, scope: f.scope }));
+      // the repair replaces the text the reviewer would have read: keep the original and say what changed, so nothing is lost silently
+      kept = { original: { summary: draft.summary, questions: draft.questions }, repairChanges: repairedScopes(draft, revalidated) };
       draft = revalidated;
       repaired = true;
       // the model's own findings were about the text that no longer exists; re-screen what is there now
@@ -164,6 +176,7 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
     repaired,
     repairRejected,
     addressed,
+    ...kept,
   };
   return { draft, audit };
 }
@@ -726,6 +739,8 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     repaired: false,
     repairRejected: false,
     addressed: [],
+    // the pre-repair text and what the repair rewrote stay with the draft after a human edit
+    ...(current.audit?.original ? { original: current.audit.original, repairChanges: current.audit.repairChanges } : {}),
     editedByHuman: true,
     rulesVersion: AUDIT_RULES_VERSION,
     auditedAt: now().toISOString(),

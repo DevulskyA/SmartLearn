@@ -142,6 +142,41 @@ test('an invented value is caught, ONE targeted repair fixes it, and the repaire
   } finally { cleanup(); }
 });
 
+test('the repair keeps the ORIGINAL text and says which parts it rewrote; a human edit afterwards keeps them too', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'keep@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const bad = good({ summary: GOOD_SUMMARY.replace('cerca de 125 mL/min', 'cerca de 300 mL/min') });
+    const { fetchImpl } = scriptedFetch([bad, { result: 'PASS', findings: [] }, good()]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(draft.audit.repaired, true);
+    assert.ok(draft.audit.original.summary.includes('300 mL/min'), 'the text the model wrote before the repair is kept');
+    assert.ok(!draft.summary.includes('300'), 'while the draft itself carries the repaired text');
+    assert.deepEqual(draft.audit.repairChanges, ['summary'], 'only the summary was rewritten, not the question');
+    const edited = drafts.replaceDraftContent(db, userId, draft.id, { summary: `${draft.summary} Fim.`, questions: draft.questions.map((q) => ({ question: q.question, answer: q.answer, explanation: q.explanation, hint: q.hint, sourceSpans: q.sourceSpans })) });
+    assert.ok(edited.audit.original.summary.includes('300 mL/min'));
+    assert.deepEqual(edited.audit.repairChanges, ['summary']);
+  } finally { cleanup(); }
+});
+
+test('a draft whose only findings are word-level signals is NOT sent to repair: 2 calls, text untouched, no original stored', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'lex@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const paraphrase = good({ summary: `${GOOD_SUMMARY} A furosemida nao esta na fonte.` });
+    const { fetchImpl, calls } = scriptedFetch([paraphrase, { result: 'PASS', findings: [] }]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(calls.length, 2, 'generation + audit, no repair call');
+    assert.ok(draft.audit.findings.some((f) => f.issue === 'SUMMARY_UNSUPPORTED_TERM'), 'the signal is still shown to the reviewer');
+    assert.equal(draft.audit.result, 'PASS');
+    assert.equal(draft.audit.repaired, false);
+    assert.equal(draft.audit.original, undefined);
+    assert.ok(draft.summary.includes('furosemida'), 'the model text is not overwritten');
+  } finally { cleanup(); }
+});
+
 test('a semantic contradiction the deterministic screen cannot see is caught by the model audit and repaired', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
