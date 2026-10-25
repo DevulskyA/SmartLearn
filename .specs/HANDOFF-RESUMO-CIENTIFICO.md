@@ -115,6 +115,12 @@ Pedido do usuário (brief R-1): o estudante edita uma página formatada, sem Mar
 - Alterações paralelas existentes em `src-tauri`, locale, estilos e backlog foram preservadas fora deste commit.
 - Verificação final no HEAD `2b719a8`: executável reconstruído no target isolado confirmou novamente **22/22** e `pass=true`; capturas finais em `.specs/evidence/wysiwyg-2026-10-25-final-head/`.
 
+## Janela do Desktop e rótulos do editor (2026-10-25, validado, branch next-sprints)
+- Requisito do usuário (R-2): o Desktop abre sempre no último monitor, posição e tamanho; se o monitor salvo não existe, recomeça do zero no monitor ligado; no primeiro uso o tamanho é livre. Feito: tamanho inicial 1280×820 centralizado e limitado a 95% do monitor (`window_state::first_run_size`), restauração já existente (`95433d8`) mantida. Provas: `cargo test window_state` 7/7 (inclui "dois monitores ontem, um hoje"); jornada nativa 22/22 com a janela no monitor secundário (DISPLAY1, X negativo): passo 17 devolveu o mesmo retângulo antes e depois de fechar e reabrir ([-1428,12,-317,789]).
+- Causa da regressão registrada em `.specs/LOOP_BACKLOG.md` (R-2): a função só existe nesta branch; o launcher humano abre só a V1, que não a tem. Levar à V1 é decisão do usuário (código da V1 congelado).
+- Rótulos: o modo de código passou a "Código-fonte (avançado)" e o botão do bloco preservado a "Editar no código-fonte"; os botões da barra do modo código e o seletor Visual/código ficaram separados e com 44 px (antes eram o botão genérico, colados).
+- A branch `claude/smartlearn-figure-width` (figuras móveis e redimensionáveis) NÃO foi integrada aqui, por decisão do usuário.
+
 ## Próximo (por ordem)
 1. Esperar do usuário: metodologia, T-F4-01, decisão do prompt v10, autorização de integração (decisões humanas separadas).
 2. Trabalho experimental independente: colar Markdown no editor visual; editor visual no Plano/Hoje; fórmulas químicas no lugar. (Tabela editável: FEITA em 2026-10-25.) Registrado sem iniciar: R-2, regressão do monitor do Desktop (`.specs/LOOP_BACKLOG.md`).

@@ -189,7 +189,7 @@ test('markdown with no visual form is preserved and shown as such, with a clear 
   await expect(raw).toBeVisible();
   await expect(raw).toContainText('Trecho preservado');
   await expect(input).toHaveValue(source);
-  await raw.getByRole('button', { name: 'Editar no modo Texto' }).click();
+  await raw.getByRole('button', { name: 'Editar no código-fonte' }).click();
   await expect(input).toBeVisible();
   await expect.poll(() => input.evaluate((el) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('    bloco recuado\n    segunda linha');
   await expect(visualButton(editor)).toHaveAttribute('aria-pressed', 'false');

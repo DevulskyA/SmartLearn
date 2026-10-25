@@ -5157,6 +5157,28 @@ h1 {
   min-height: 44px;
 }
 
+/* the insert bar of the Text mode and the Visual/Text switch: real, separate buttons (the generic .text-button has no padding or border, so neighbours looked glued) */
+.summary-toolbar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.summary-toolbar-btn,
+.summary-mode-btn {
+  margin-top: 0;
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  background: var(--color-surface);
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.summary-mode {
+  gap: 0.4rem;
+}
+
 .summary-visual-btn {
   display: inline-flex;
   align-items: center;
