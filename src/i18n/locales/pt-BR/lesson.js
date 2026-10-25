@@ -32,7 +32,7 @@ export default {
 
   // Audit issues
   'lesson.issue.summaryUnsupportedValue': 'Valor que a fonte não traz',
-  'lesson.issue.summaryUnsupportedTerm': 'Termo que não aparece na fonte',
+  'lesson.issue.summaryUnsupportedTerm': 'Palavra que a fonte não repete',
   'lesson.issue.summaryOmitsCentralConcept': 'Pode omitir um conceito central',
   'lesson.issue.summaryTooThin': 'Resumo curto demais para a fonte',
   'lesson.issue.questionAnswerTooThin': 'Resposta sem explicação suficiente',
@@ -40,11 +40,18 @@ export default {
   'lesson.issue.questionAnswerLeaked': 'O enunciado já dá a resposta',
   'lesson.issue.hintRevealsAnswer': 'A dica entrega a resposta',
   'lesson.issue.questionUnsupportedValue': 'Valor que a página citada não traz',
-  'lesson.issue.questionUnsupportedTerm': 'Termo que não aparece na página citada',
-  'lesson.issue.questionLowSourceSupport': 'Pouco apoio na página citada',
+  'lesson.issue.questionUnsupportedTerm': 'Palavra que a página citada não repete',
+  'lesson.issue.questionLowSourceSupport': 'Poucas palavras em comum com a página citada',
   'lesson.issue.questionDuplicate': 'Questão repetida',
   'lesson.issue.questionVolumeOutOfRange': 'Quantidade de questões fora do esperado',
   'lesson.issue.questionLiteralCopy': 'Resposta copiada da fonte',
+
+  // Why a point was raised (groups of the review)
+  'lesson.cause.contradiction': 'A fonte diz outra coisa',
+  'lesson.cause.unsupported': 'A fonte não traz esse ponto',
+  'lesson.cause.wording': 'Só uma diferença de palavras',
+  'lesson.cause.notEvaluable': 'Não deu para avaliar',
+  'lesson.cause.teaching': 'Como a questão ensina',
 
   // Question review state
   'lesson.questionState.rejected': 'Rejeitada',

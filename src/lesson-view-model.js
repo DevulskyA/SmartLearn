@@ -40,6 +40,39 @@ export const ISSUE_LABELS = catalogLabels({
 
 export const issueLabel = (issue) => ISSUE_LABELS[issue] ?? issue;
 
+// WHY a point was raised, in the student's terms. A difference of WORDS is its own cause and is never worded as an error: a paraphrase,
+// a synonym or a faithful translation raises it too.
+const WORDING_ISSUES = new Set(["SUMMARY_UNSUPPORTED_TERM", "SUMMARY_OMITS_CENTRAL_CONCEPT", "QUESTION_UNSUPPORTED_TERM", "QUESTION_LOW_SOURCE_SUPPORT"]);
+const TEACHING_ISSUES = new Set([
+  "SUMMARY_TOO_THIN", "QUESTION_ANSWER_TOO_THIN", "EXPLANATION_MISSING", "EXPLANATION_ADDS_NOTHING", "QUESTION_ANSWER_LEAKED",
+  "HINT_REVEALS_ANSWER", "HINT_REVEALS_VALUE", "QUESTION_DUPLICATE", "QUESTION_VOLUME_OUT_OF_RANGE", "QUESTION_LITERAL_COPY",
+]);
+const CONTRADICTION_ISSUES = new Set(["UNIT_MISMATCH", "QUALIFIER_LOST", "QUALIFIER_ADDED"]);
+const CAUSE_ORDER = ["contradiction", "unsupported", "wording", "notEvaluable", "teaching"];
+const CAUSE_LABELS = catalogLabels({
+  contradiction: () => t("lesson.cause.contradiction"),
+  unsupported: () => t("lesson.cause.unsupported"),
+  wording: () => t("lesson.cause.wording"),
+  notEvaluable: () => t("lesson.cause.notEvaluable"),
+  teaching: () => t("lesson.cause.teaching"),
+});
+
+export function findingCause(finding) {
+  if (finding.verdict === "CONTRADICTED" || CONTRADICTION_ISSUES.has(finding.issue) || /CONTRADICT/.test(finding.issue ?? "")) return "contradiction";
+  if (finding.verdict === "NOT_EVALUABLE") return "notEvaluable";
+  if (finding.verdict === "NOT_FOUND") return "unsupported";
+  if (WORDING_ISSUES.has(finding.issue)) return "wording";
+  if (TEACHING_ISSUES.has(finding.issue)) return "teaching";
+  return "unsupported";
+}
+
+/** Findings grouped by cause, most serious cause first; empty causes are left out: [{ cause, label, findings }]. */
+export function groupByCause(findings) {
+  const buckets = new Map(CAUSE_ORDER.map((cause) => [cause, []]));
+  for (const finding of findings) buckets.get(findingCause(finding)).push(finding);
+  return CAUSE_ORDER.filter((cause) => buckets.get(cause).length > 0).map((cause) => ({ cause, label: CAUSE_LABELS[cause], findings: buckets.get(cause) }));
+}
+
 const isActionable = (finding) => finding.severity !== "LOW";
 
 /** Findings of the lesson grouped by the entity they are about: { summary: Finding[], byQuestion: Map<questionId, Finding[]>, other: Finding[] }. */

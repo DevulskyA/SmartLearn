@@ -15,7 +15,7 @@ import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
+  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -515,18 +515,47 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       return block;
     }
     block.append(createTextElement("h4", "lesson-findings-title", t("editor.findings.title", { heading, count: findings.length })));
-    const list = document.createElement("ul");
-    list.className = "lesson-findings-list";
-    for (const f of findings) {
-      const li = document.createElement("li");
-      li.append(createTextElement("p", "lesson-finding-issue", issueLabel(f.issue)));
-      if (f.generatedClaim) li.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: f.generatedClaim })));
-      if (f.sourceEvidence) li.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: f.sourceEvidence })));
-      if (f.repair) li.append(createTextElement("p", "lesson-finding-repair", f.repair));
-      list.append(li);
+    // Grouped by WHY the point was raised. A difference of words is never presented as an error, so for that cause the server's
+    // "restore the term" advice is replaced by the note that a missing word proves nothing.
+    for (const group of groupByCause(findings)) {
+      block.append(createTextElement("h5", "lesson-findings-cause", `${group.label} (${group.findings.length})`));
+      const note = group.cause === "wording" ? t("editor.finding.note.wording") : group.cause === "notEvaluable" ? t("editor.finding.note.notEvaluable") : "";
+      if (note) block.append(createTextElement("p", "lesson-hint lesson-findings-note", note));
+      const list = document.createElement("ul");
+      list.className = "lesson-findings-list";
+      for (const f of group.findings) {
+        const li = document.createElement("li");
+        li.append(createTextElement("p", "lesson-finding-issue", issueLabel(f.issue)));
+        if (f.generatedClaim) li.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: f.generatedClaim })));
+        if (f.sourceEvidence) li.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: f.sourceEvidence })));
+        if (f.repair && !note) li.append(createTextElement("p", "lesson-finding-repair", f.repair));
+        list.append(li);
+      }
+      block.append(list);
     }
-    block.append(list);
     return block;
+  }
+
+  /** After an automatic repair the text the model first wrote is still there: the reviewer can read what was rewritten. */
+  function renderOriginal() {
+    const { original, repairChanges } = draft.audit ?? {};
+    if (!draft.audit?.repaired || !original || !(repairChanges?.length > 0)) return null;
+    const details = document.createElement("details");
+    details.className = "lesson-original";
+    details.append(createTextElement("summary", "", t("editor.review.original.title")));
+    for (const scope of repairChanges) {
+      const m = /^question:(\d+)$/.exec(scope);
+      if (scope === "summary") {
+        details.append(createTextElement("h5", "lesson-findings-cause", t("editor.review.original.summary")), createTextElement("p", "lesson-original-text", original.summary ?? ""));
+      } else if (m && original.questions?.[Number(m[1])]) {
+        const q = original.questions[Number(m[1])];
+        details.append(
+          createTextElement("h5", "lesson-findings-cause", t("editor.review.original.question", { number: Number(m[1]) + 1 })),
+          createTextElement("p", "lesson-original-text", [q.question, q.answer, q.explanation].filter(Boolean).join("\n\n")),
+        );
+      }
+    }
+    return details;
   }
 
   function renderSource() {
@@ -580,7 +609,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
     reviewPanel.append(reauditMessage);
     reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.filter")));
-    if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")));
+    if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")), ...[renderOriginal()].filter(Boolean));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");
     if (skipped) {
       reviewPanel.append(createTextElement("p", "lesson-hint lesson-cross-language", `${skipped.generatedClaim} ${skipped.sourceEvidence} ${skipped.repair}`));

@@ -87,6 +87,8 @@ export default {
   'editor.findings.none': 'Nenhum ponto sinalizado pela conferência automática.',
   'editor.finding.claim': 'No rascunho: {text}',
   'editor.finding.evidence': 'Na fonte: {text}',
+  'editor.finding.note.wording': 'Uma palavra que a fonte não repete não prova erro: paráfrase, sinônimo e tradução fiel aparecem aqui do mesmo jeito. Compare o sentido com a fonte e só corrija se a frase acrescentar ou trocar um fato.',
+  'editor.finding.note.notEvaluable': 'Com o trecho enviado a conferência não tinha como julgar estes pontos. Isso não indica erro: leia a fonte.',
 
   // Source panel
   'editor.source.document': 'Documento',
@@ -108,8 +110,11 @@ export default {
   'editor.review.reaudit': 'Reauditar',
   'editor.review.reauditing': 'Reauditando…',
   'editor.review.reauditFailed': 'Não foi possível reauditar.',
-  'editor.review.filter': 'A conferência automática é um filtro que mostra onde olhar. Ausência de pontos não é validação médica: confira a fonte.',
-  'editor.review.repaired': 'O rascunho foi corrigido automaticamente uma vez antes de chegar aqui.',
+  'editor.review.filter': 'A conferência automática é um filtro que mostra onde olhar. Ausência de pontos não é validação médica: confira a fonte. E uma palavra que a fonte não repete também não prova erro.',
+  'editor.review.repaired': 'O rascunho foi corrigido automaticamente uma vez antes de chegar aqui. O texto original foi guardado.',
+  'editor.review.original.title': 'Ver o texto original, antes da correção automática',
+  'editor.review.original.summary': 'Resumo original',
+  'editor.review.original.question': 'Questão {number} original',
   'editor.review.clear': 'Nada sinalizado.',
   'editor.review.total': '{points} em {items}',
   'editor.review.summaryName': 'Resumo',

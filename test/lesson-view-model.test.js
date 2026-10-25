@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
+import { groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -64,7 +64,7 @@ test("COPY: copying the summary returns only the summary; copying a question onl
   assert.equal(copyTextOf(draft, "summary"), draft.summary);
   assert.equal(copyTextOf(draft, "q1"), "P1?\n\nR1\n\nE1");
   assert.equal(copyTextOf(draft, "q2"), "P2?\n\nR2");
-  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar rascunho|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece/;
+  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar rascunho|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece|Poucas palavras em comum|Palavra que a fonte não repete|Palavra que a página citada não repete/;
   for (const part of ["summary", "q1", "q2", "q3", "q4"]) assert.doesNotMatch(copyTextOf(draft, part), UI_WORDS);
   assert.equal(copyTextOf(draft, "nope"), "");
 });
@@ -144,4 +144,27 @@ test("groundingLine: a summary with NO linked sentence says nothing was checked 
   const stale = { total: 4, supported: 0, orphaned: 2, sentences: [{ status: "NOT_LINKED" }] };
   assert.match(groundingLine(stale), /confirmado em 0 de 4 frases do resumo\. 2 apontamentos antigos/);
   assert.equal(groundingLine({ total: 0, supported: 0, orphaned: 0, sentences: [] }), "");
+});
+
+test("findings are grouped by WHY they were raised, most serious cause first; a difference of words is its own cause, never a contradiction", () => {
+  const f = (issue, extra = {}) => ({ issue, severity: "MEDIUM", ...extra });
+  const groups = groupByCause([
+    f("QUESTION_DUPLICATE"),
+    f("SUMMARY_UNSUPPORTED_TERM", { blocksRepair: false }),
+    f("SUMMARY_UNSUPPORTED_VALUE", { severity: "HIGH" }),
+    f("CLAIM_X", { verdict: "CONTRADICTED", severity: "HIGH" }),
+    f("QUALIFIER_LOST"),
+    f("CLAIM_Y", { verdict: "NOT_EVALUABLE", blocksRepair: false }),
+    f("QUESTION_LOW_SOURCE_SUPPORT", { blocksRepair: false }),
+  ]);
+  assert.deepEqual(groups.map((g) => [g.cause, g.label, g.findings.map((x) => x.issue)]), [
+    ["contradiction", "A fonte diz outra coisa", ["CLAIM_X", "QUALIFIER_LOST"]],
+    ["unsupported", "A fonte não traz esse ponto", ["SUMMARY_UNSUPPORTED_VALUE"]],
+    ["wording", "Só uma diferença de palavras", ["SUMMARY_UNSUPPORTED_TERM", "QUESTION_LOW_SOURCE_SUPPORT"]],
+    ["notEvaluable", "Não deu para avaliar", ["CLAIM_Y"]],
+    ["teaching", "Como a questão ensina", ["QUESTION_DUPLICATE"]],
+  ]);
+  assert.deepEqual(groupByCause([]), []);
+  assert.equal(findingCause({ issue: "ANSWER_CONTRADICTS_SOURCE" }), "contradiction", "an older model finding without a verdict still reads as a contradiction by its name");
+  assert.equal(findingCause({ issue: "SOMETHING_NEW" }), "unsupported", "an unknown issue is never filed under 'only words'");
 });
