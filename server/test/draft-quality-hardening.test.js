@@ -262,7 +262,7 @@ test('B end to end: a value-leaking hint is blocking and is repaired once', asyn
 
 test('D end to end: a dropped clinical condition is caught by the MODEL audit (deterministic cannot see it) and repaired once', async () => {
   const dropped = { ...NSAID, answer: 'Porque reduzem as prostaglandinas vasodilatadoras da arteríola aferente.', explanation: 'Sem as prostaglandinas, a aferente perde a dilatação que mantém o fluxo ao glomérulo, e a filtração cai, com risco de lesão renal aguda.' };
-  const qualifierFinding = { issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope: 'question:0', generatedClaim: 'AINEs causam lesão renal aguda (sem condição)', sourceEvidence: 'em pacientes com depleção de volume', repair: 'Restaure a condição "em pacientes com depleção de volume".' };
+  const qualifierFinding = { issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope: 'question:0', verdict: 'CONTRADICTED', evidencePage: 2, evidenceQuote: 'podem precipitar lesão renal aguda em pacientes com depleção de volume', generatedClaim: 'AINEs causam lesão renal aguda (sem condição)', sourceEvidence: 'em pacientes com depleção de volume', repair: 'Restaure a condição "em pacientes com depleção de volume".' };
   const restored = { ...dropped, answer: 'Porque reduzem as prostaglandinas vasodilatadoras da arteríola aferente, e isso pesa em pacientes com depleção de volume, em que a filtração depende dessa dilatação.' };
   const { draft, calls } = await run([draftJson(dropped), { result: 'REPAIR', findings: [qualifierFinding] }, draftJson(restored)]);
   assert.equal(calls.length, 3);

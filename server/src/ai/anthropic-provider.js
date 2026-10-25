@@ -99,7 +99,7 @@ export function generateDraft({ segments, promptVersion, generationLocale }, opt
  */
 export async function auditDraftWithModel({ draft, segments }, options = {}) {
   const raw = await callModel(buildAuditPrompt(draft, segments), { ...options, maxTokens: 2048 });
-  return parseModelAudit(raw, { questionCount: draft.questions.length });
+  return parseModelAudit(raw, { questionCount: draft.questions.length, segments });
 }
 
 /** One targeted repair: returns the RAW repaired draft (the caller re-validates it like any draft). */

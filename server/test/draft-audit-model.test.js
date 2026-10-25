@@ -11,7 +11,7 @@ import { extractSource } from '../src/services/source-extraction.js';
 import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
-import { parseModelAudit } from '../src/ai/draft-audit-model.js';
+import { parseModelAudit, buildAuditPrompt, buildRepairPrompt } from '../src/ai/draft-audit-model.js';
 
 // CONTENT-QUALITY CQ-2/CQ-3: the production-time gate around a LIVE provider, driven by a scripted
 // fetch (no network, no key). 1 generation -> deterministic screen + 1 independent model audit ->
@@ -184,7 +184,7 @@ test('a semantic contradiction the deterministic screen cannot see is caught by 
     const proposal = await makeProposal(db, userId, sourcesDir);
     const wrongQ = { question: 'O que a angiotensina II faz na arteriola eferente?', answer: 'Dilata a arteriola eferente, reduzindo a taxa de filtracao glomerular, segundo a pagina.', hint: null, sourceSpans: [{ pageIndex: 2 }] };
     const rightQ = { ...wrongQ, answer: 'Contrai a arteriola eferente, o que mantem a pressao hidrostatica glomerular e sustenta a taxa de filtracao glomerular.' };
-    const modelFinding = { issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'question:1', generatedClaim: 'Dilata a arteriola eferente', sourceEvidence: 'A angiotensina II contrai preferencialmente a arteriola eferente.', repair: 'A angiotensina II contrai a arteriola eferente.' };
+    const modelFinding = { issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'question:1', verdict: 'CONTRADICTED', evidencePage: 2, evidenceQuote: 'A angiotensina II contrai preferencialmente a arteriola eferente', generatedClaim: 'Dilata a arteriola eferente', sourceEvidence: 'A angiotensina II contrai preferencialmente a arteriola eferente.', repair: 'A angiotensina II contrai a arteriola eferente.' };
     const { fetchImpl } = scriptedFetch([
       good({ questions: [GOOD_Q, wrongQ] }),
       { result: 'REPAIR', findings: [modelFinding] },
@@ -313,9 +313,106 @@ test('parseModelAudit: drops unknown scopes and out-of-range questions, clamps s
       'garbage',
     ],
   };
-  const { findings, malformed } = parseModelAudit(raw, { questionCount: 2 });
+  const { findings, malformed } = parseModelAudit(raw, { questionCount: 2, segments: PAGES.map((text, i) => ({ pageIndex: i + 1, text })) });
   assert.equal(malformed, false);
   assert.deepEqual(findings.map((f) => [f.issue, f.severity, f.source]), [['OK_ONE', 'HIGH', 'MODEL'], ['BAD_SEVERITY', 'MEDIUM', 'MODEL']]);
   assert.equal(parseModelAudit({ result: 'PASS' }, { questionCount: 1 }).malformed, true);
   assert.equal(parseModelAudit(null, { questionCount: 1 }).malformed, true);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R-3 step 3: a verdict per claim, with evidence that can be located; only a located contradiction may trigger the repair
+// ---------------------------------------------------------------------------------------------------------------------
+
+const SEGMENTS = PAGES.map((text, i) => ({ pageIndex: i + 1, text }));
+const QUOTE_P2 = 'A angiotensina II contrai preferencialmente a arteriola eferente';
+const finding = (o = {}) => ({ issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'summary', verdict: 'CONTRADICTED', generatedClaim: 'c', evidencePage: 2, evidenceQuote: QUOTE_P2, sourceEvidence: 'prose of the model', repair: 'r', ...o });
+const parse = (findings, segments = SEGMENTS) => parseModelAudit({ result: 'REPAIR', findings }, { questionCount: 1, segments });
+
+test('parseModelAudit: a CONTRADICTED finding is kept only with a quote found on a page that was sent, and shows that quote as its evidence', () => {
+  const { findings, discarded } = parse([finding()]);
+  assert.equal(discarded, 0);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, 'CONTRADICTED');
+  assert.equal(findings[0].evidencePage, 2);
+  assert.equal(findings[0].sourceEvidence, `p. 2: ${QUOTE_P2}`, "the evidence shown is the located quote, not the model's own prose");
+  assert.equal(findings[0].blocksRepair, undefined, 'a located contradiction may trigger the repair');
+  // case, accents and punctuation are not part of a quotation
+  assert.equal(parse([finding({ evidenceQuote: 'a ANGIOTENSINA ii, contrai preferencialmente a arteríola eferente.' })]).findings.length, 1);
+});
+
+test('parseModelAudit: a CONTRADICTED finding with a quote that is nowhere in the pages (invented, too short, or no pages sent) is discarded and counted', () => {
+  const out = parse([
+    finding({ evidenceQuote: 'A angiotensina II dilata a arteriola eferente' }),
+    finding({ evidenceQuote: 'angiotensina' }),
+    finding({ evidenceQuote: '' }),
+  ]);
+  assert.deepEqual(out.findings, []);
+  assert.equal(out.discarded, 3);
+  assert.deepEqual(parse([finding()], []).findings, [], 'with no pages to check against nothing can be proven, so nothing survives');
+});
+
+test('parseModelAudit: a quote that is on another page than the one the model named is accepted with the REAL page', () => {
+  const { findings } = parse([finding({ evidencePage: 1 })]);
+  assert.equal(findings[0].evidencePage, 2);
+  assert.match(findings[0].sourceEvidence, /^p\. 2: /);
+});
+
+test('parseModelAudit: NOT_FOUND, NOT_EVALUABLE and a reply with no verdict stay visible with their severity but can never trigger the repair; SUPPORTED is not a problem', () => {
+  const { findings } = parse([
+    finding({ verdict: 'NOT_FOUND', evidencePage: null, evidenceQuote: '' }),
+    finding({ verdict: 'NOT_EVALUABLE', severity: 'MEDIUM', evidencePage: null, evidenceQuote: '' }),
+    finding({ verdict: undefined }),
+    finding({ verdict: 'SUPPORTED' }),
+  ]);
+  assert.deepEqual(findings.map((f) => [f.verdict, f.severity, f.blocksRepair]), [['NOT_FOUND', 'HIGH', false], ['NOT_EVALUABLE', 'MEDIUM', false], ['NOT_EVALUABLE', 'HIGH', false]]);
+});
+
+test('prompts: the auditor judges meaning and asks for verbatim evidence; the repair no longer bans every term the source does not repeat', () => {
+  const audit = buildAuditPrompt({ summary: 's', questions: [] }, SEGMENTS);
+  assert.match(audit, /Judge MEANING, never wording/);
+  assert.match(audit, /paraphrase, a synonym or a faithful translation is NOT a problem/);
+  assert.match(audit, /VERBATIM excerpt/);
+  assert.match(audit, /CONTRADICTED[\s\S]*NOT_FOUND[\s\S]*NOT_EVALUABLE/);
+  const repair = buildRepairPrompt({ summary: 's', summarySourceSpans: [], questions: [], modelVersion: 'm', promptVersion: '10' }, [], SEGMENTS, '10');
+  assert.doesNotMatch(repair, /value or term the source does not contain/);
+  assert.match(repair, /never introduce a fact, mechanism, causal relation, value or condition/);
+  assert.match(repair, /Paraphrases, synonyms and faithful translations are allowed/);
+});
+
+test('end to end: a HIGH claim the model could only call NOT_FOUND is shown to the reviewer but costs no repair and rewrites nothing', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'nf@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const notFound = finding({ issue: 'CLAIM_NOT_IN_SOURCE', verdict: 'NOT_FOUND', evidencePage: null, evidenceQuote: '' });
+    const { fetchImpl, calls } = scriptedFetch([good(), { result: 'REPAIR', findings: [notFound] }]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(calls.length, 2, 'generation + audit, no repair call');
+    assert.equal(draft.audit.repaired, false);
+    assert.equal(draft.summary, GOOD_SUMMARY, 'the model text is untouched');
+    const shown = draft.audit.findings.find((f) => f.issue === 'CLAIM_NOT_IN_SOURCE');
+    assert.equal(shown.severity, 'HIGH', 'the human gate on HIGH findings still applies');
+    assert.equal(draft.audit.result, 'PASS');
+  } finally { cleanup(); }
+});
+
+test('end to end: a contradiction whose quote is invented is discarded (no repair, no finding); one whose quote is real triggers exactly one repair', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'inv@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const invented = finding({ issue: 'INVENTED_QUOTE', evidenceQuote: 'A angiotensina II dilata a arteriola eferente' });
+    const first = scriptedFetch([good(), { result: 'REPAIR', findings: [invented] }]);
+    const a = await create(db, userId, proposal.id, first.fetchImpl);
+    assert.equal(first.calls.length, 2);
+    assert.ok(!a.audit.findings.some((f) => f.issue === 'INVENTED_QUOTE'));
+    const secondUser = makeUser(db, 'real@example.com');
+    const secondProposal = await makeProposal(db, secondUser, sourcesDir);
+    const second = scriptedFetch([good(), { result: 'REPAIR', findings: [finding({ issue: 'REAL_QUOTE' })] }, good()]);
+    const b = await create(db, secondUser, secondProposal.id, second.fetchImpl);
+    assert.equal(second.calls.length, 3);
+    assert.match(second.calls[2], /REAL_QUOTE/);
+    assert.equal(b.audit.repaired, true);
+  } finally { cleanup(); }
 });
