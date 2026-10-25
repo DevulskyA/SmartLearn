@@ -5469,13 +5469,24 @@ h1 {
 .stats-side .stats-panel { margin-top: 0; }
 .stats-side .stats-panel-heading { flex-wrap: nowrap; align-items: center; }
 .stats-side .stats-panel-heading h2 { flex: 1 1 auto; min-width: 0; }
-.stats-side .select-control { flex: 0 1 11rem; min-width: 0; }
+.stats-heading .select-control,
+.stats-side .select-control { height: auto; padding: 0; border: 0; background: none; }
+.stats-side .select-control { flex: 0 1 9rem; min-width: 0; }
+.stats-side .stats-panel-heading h2 { white-space: nowrap; }
+
+/* the study verdict reads as one quiet callout above the table, not a second heading */
+#subject-kpi-section .stats-verdict { margin: 0 0 1.1rem; padding: 0.75rem 0.9rem; border-radius: 0.7rem; background: var(--color-surface-sunken); }
+#subject-kpi-section .stats-verdict-headline { font-size: 0.95rem; }
+#subject-kpi-section .stats-verdict-detail,
+#subject-kpi-section .stats-verdict-attention { font-size: 0.84rem; }
+#subject-kpi-section .stats-verdict-attention { margin-top: 0.35rem; }
+#subject-kpi-section .stats-verdict-attention .text-button { min-height: 0; padding: 0; }
 
 /* Table: percentage first, band bar under it, quiet supporting columns. */
-#view-stats-subject .matrix-table th:nth-child(1) { width: 30%; }
-#view-stats-subject .matrix-table th:nth-child(2) { width: 25%; }
+#view-stats-subject .matrix-table th:nth-child(1) { width: 34%; }
+#view-stats-subject .matrix-table th:nth-child(2) { width: 22%; }
 #view-stats-subject .matrix-table th:nth-child(3) { width: 21%; }
-#view-stats-subject .matrix-table th:nth-child(4) { width: 24%; }
+#view-stats-subject .matrix-table th:nth-child(4) { width: 23%; }
 #subject-kpi-list td { padding-block: 0.8rem; vertical-align: middle; }
 #subject-kpi-list .subject-compare-value { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 #subject-kpi-list td[data-state="NO_EVIDENCE"] .subject-compare-value,
