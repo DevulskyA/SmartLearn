@@ -143,6 +143,11 @@ async function launch({ place = true } = {}) {
 
 // The summary also saves itself 2.5 s after the last keystroke, so by the time the journey gets to the button the text may already be saved:
 // click it when it still has something to do, and in every case wait until the indicator says the text is saved.
+// A screenshot of the REAL Desktop window content (the WebView2 page), kept when SL_JOURNEY_SHOTS names a folder.
+async function shot(name) {
+  if (!process.env.SL_JOURNEY_SHOTS || !page) return;
+  await page.screenshot({ path: join(process.env.SL_JOURNEY_SHOTS, `${name}.png`) }).catch(() => {});
+}
 async function saveSummary(editor) {
   const button = editor.locator('[data-action="save-summary"]');
   if (await button.isEnabled()) await button.click({ timeout: 3000 }).catch(() => {});
@@ -290,6 +295,8 @@ try {
   });
 
   await step(3, 'open Materiais', async () => {
+    // the summary editor opens in Visual by default; the steps below that fill the plain text work as a student who chose Text (step 21 is the Visual one)
+    await page.evaluate(() => localStorage.setItem('smartlearn.summary-mode', 'text'));
     await page.locator('[data-screen="materials"]:visible').first().click();
     await page.locator('#sources-card').waitFor({ state: 'visible', timeout: 10000 });
     return { sourcesCardVisible: true };
@@ -386,7 +393,7 @@ try {
     return { reload: how, summaryPersisted: true, answerPersisted: true, serverDraftRevision: draft.revision };
   });
 
-  await step(21, 'the visual editor (Tiptap) opens the saved summary inside the Desktop WebView: formulas, the table as text and both figures are drawn, opening changes nothing, and a visual edit lands in the same text and is saved', async () => {
+  await step(21, 'the visual editor shows a formatted page in the REAL Desktop window (rendered formulas, a real table, both figures, no Markdown); opening changes nothing; text, a table cell and a formula are edited IN PLACE, with window screenshots before and after, and saved', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
     const input = editor.locator('.lesson-summary-input');
@@ -398,28 +405,52 @@ try {
     await surface.locator('.katex').first().waitFor({ timeout: 10000 });
     const formulas = await surface.locator('.katex').count();
     expect(formulas >= 2, `formulas drawn: ${formulas}`);
-    expect((await surface.locator('pre[data-raw]').innerText()).includes('| Absorção | sobe |'), 'the table was not carried as text');
+    expect((await surface.locator('table tr').count()) === 3 && (await surface.locator('table th').count()) === 2, 'the table is not a real table (3 rows, 2 header cells)');
     const figures = surface.locator('figure.summary-figure img');
     for (let i = 0; i < 40 && (await figures.count()) < 2; i += 1) await page.waitForTimeout(250);
     expect((await figures.count()) === 2, `figures drawn: ${await figures.count()}`);
     for (let i = 0; i < 40 && !(await figures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0))); i += 1) await page.waitForTimeout(250);
     expect(await figures.evaluateAll((els) => els.every((el) => el.complete && el.naturalWidth > 0)), 'a figure did not load in the editor');
+    // what the student READS: no Markdown, LaTeX or figure identifier
+    const reading = await surface.evaluate((root) => { const copy = root.cloneNode(true); copy.querySelectorAll('pre, .katex-mathml').forEach((el) => el.remove()); return copy.innerText; });
+    for (const syntax of ['|---', '| Fase', '\\(', '[[fig:']) expect(!reading.includes(syntax), `the page shows source syntax: ${syntax}`);
     expect((await input.inputValue()) === before, 'opening the visual editor changed the text');
+    await shot('visual-before-editing');
     const consoleBefore = consoleErrors.length;
-    await surface.locator('p', { hasText: 'Fim do resumo' }).click();
+
+    // text: the closing paragraph ends with the formula step 7 inserted; the typed text follows it
+    await surface.locator('p', { hasText: 'Fim do resumo' }).click({ position: { x: 6, y: 6 } });
     await page.keyboard.press('End');
     await page.keyboard.type(' revisado no editor visual.');
-    // step 7 put the formula right after "Fim do resumo: ", so the closing paragraph ends with that formula: the typed text follows it
-    const wanted = before.replace('\\(\\frac{a}{b}\\)\n\n', '\\(\\frac{a}{b}\\) revisado no editor visual.\n\n');
-    expect(wanted !== before, 'the closing paragraph was not found in the text');
+    // a table cell, in the cell itself
+    await surface.locator('td', { hasText: 'sobe' }).click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' rapidamente');
+    // a formula, in place with the visual formula editor (no LaTeX typed)
+    await surface.locator('.summary-math-editable').first().click();
+    const field = surface.locator('.summary-math-field');
+    await field.waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForFunction(() => document.activeElement?.tagName === 'MATH-FIELD', undefined, { timeout: 10000 }); // typing starts once the field holds the focus
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('x^2');
+    await shot('visual-formula-editing');
+    await page.keyboard.press('Enter');
+    await field.waitFor({ state: 'detached', timeout: 5000 });
+    const wanted = before
+      .replace('\\(\\frac{a}{b}\\)\n\n', '\\(\\frac{a}{b}\\) revisado no editor visual.\n\n')
+      .replace('|---|---|', '| --- | --- |')
+      .replace('| Absorção | sobe |', '| Absorção | sobe rapidamente |')
+      .replace('\\(C=C_0 e^{-kt}\\)', '\\(x^2\\)');
+    expect(wanted !== before, 'the expected text was not built');
     for (let i = 0; i < 40 && (await input.inputValue()) !== wanted; i += 1) await page.waitForTimeout(250);
-    expect((await input.inputValue()) === wanted, `visual edit not written to the text: ${await input.inputValue()}`);
+    expect((await input.inputValue()) === wanted, `visual edits not written to the text: ${await input.inputValue()}`);
+    await shot('visual-after-editing');
     ctx.summaryFinal = wanted.trim();
     await saveSummary(editor);
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
     expect(draft.summary === ctx.summaryFinal, 'server draft summary differs after the visual save');
-    await editor.locator('.summary-mode-btn[data-mode="text"]').click(); // the remembered mode goes back to the default for the steps that follow
-    return { formulas, figures: 2, tableAsText: true, textUnchangedByOpening: true, visualEditSaved: true, consoleErrorsDuringEdit: consoleErrors.length - consoleBefore };
+    await editor.locator('.summary-mode-btn[data-mode="text"]').click(); // the Text mode is the one the next steps drive
+    return { formulas, tableRows: 3, figures: 2, noSourceSyntaxOnPage: true, textUnchangedByOpening: true, editedInPlace: ['text', 'table cell', 'formula'], visualEditSaved: true, screenshots: process.env.SL_JOURNEY_SHOTS ?? null, consoleErrorsDuringEdit: consoleErrors.length - consoleBefore };
   });
 
   await step(22, 'autosave in the Desktop: an idle save after 2.5 s, typing during a slow save, a lost connection, a killed process, reopening and recovering the text; formulas and figures survive it all', async () => {
@@ -560,6 +591,11 @@ try {
     const editor = page.locator('.lesson-editor');
     await editor.locator('.source-draft-subject-input').fill(SUBJECT);
     await editor.locator('.source-draft-date-input').fill('2020-01-01');
+    // editing a formula or a number in the summary (step 21) raises a critical point the student must check against the source before accepting: the student does
+    // it here, as the screen asks (the acceptance gate itself is proven in e2e/lesson-editor.spec.js)
+    const ack = editor.locator('[data-action="ack-summary-findings"]');
+    const acknowledged = await ack.isVisible();
+    if (acknowledged) await ack.check();
     await editor.locator('[data-action="accept-draft"]').click();
     await editor.locator('.source-draft-result').getByText('Aula criada').waitFor({ timeout: 15000 });
     const units = (await api('GET', '/v1/learning-units')).units;
@@ -568,7 +604,7 @@ try {
     expect(ctx.unit.summaryBody === ctx.summaryFinal, 'accepted unit does not carry the edited summary');
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
     expect(draft.status === 'ACCEPTED', `draft status ${draft.status}`);
-    return { result: squash(await editor.locator('.source-draft-result').innerText()), unitId: ctx.unit.id, unitTitle: ctx.unit.title, draftStatus: draft.status };
+    return { acknowledgedCriticalPoints: acknowledged, result: squash(await editor.locator('.source-draft-result').innerText()), unitId: ctx.unit.id, unitTitle: ctx.unit.title, draftStatus: draft.status };
   });
 
   await step(9, 'open Resumo Mestre (Plano row and the study screen)', async () => {

@@ -121,6 +121,40 @@ function listNode(tokens) {
   return node.content.length > 0 ? node : null;
 }
 
+/** A quote (tokens from its opening to its closing token) -> blockquote node of paragraphs, or null when it holds anything else. */
+function quoteNode(tokens) {
+  const content = [];
+  for (let k = 1; k < tokens.length - 1; k += 1) {
+    const t = tokens[k];
+    if (t.level !== tokens[0].level + 1) continue;
+    if (t.type !== 'paragraph_open') return null;
+    const inline = inlineNodes(tokens[k + 1].children);
+    if (!inline) return null;
+    content.push(inline.length > 0 ? { type: 'paragraph', content: inline } : { type: 'paragraph' });
+    k += 2;
+  }
+  return content.length > 0 ? { type: 'blockquote', content } : null;
+}
+
+/** A GFM table (tokens from table_open to table_close) -> table node (first row = header), or null when a cell holds more than inline text. */
+function tableNode(tokens) {
+  const rows = [];
+  let row = null;
+  for (let k = 0; k < tokens.length; k += 1) {
+    const t = tokens[k];
+    if (t.type === 'tr_open') row = { type: 'tableRow', content: [] };
+    else if (t.type === 'tr_close') { rows.push(row); row = null; }
+    else if (t.type === 'th_open' || t.type === 'td_open') {
+      const inline = inlineNodes(tokens[k + 1].children);
+      if (!inline) return null;
+      const align = /text-align:(left|right|center)/.exec(t.attrGet('style') ?? '')?.[1] ?? null;
+      row.content.push({ type: t.type === 'th_open' ? 'tableHeader' : 'tableCell', attrs: { align }, content: [inline.length > 0 ? { type: 'paragraph', content: inline } : { type: 'paragraph' }] });
+      k += 2;
+    }
+  }
+  return rows.length > 0 ? { type: 'table', content: rows } : null;
+}
+
 function blockNode(block) {
   const [first] = block.tokens;
   if (first.type === 'paragraph_open') {
@@ -134,6 +168,14 @@ function blockNode(block) {
   if (first.type === 'bullet_list_open' || first.type === 'ordered_list_open') return listNode(block.tokens);
   if (first.type === 'math_block') return { type: 'mathBlock', attrs: { tex: first.content } };
   if (first.type === 'figure') return { type: 'figure', attrs: { id: first.meta.id } };
+  if (first.type === 'blockquote_open') return quoteNode(block.tokens);
+  if (first.type === 'table_open') return tableNode(block.tokens);
+  if (first.type === 'hr') return { type: 'horizontalRule' };
+  if (first.type === 'fence') {
+    const text = first.content.replace(/\n$/, '');
+    const language = first.info.trim();
+    return { type: 'codeBlock', attrs: { language: language || null }, ...(text === '' ? {} : { content: [{ type: 'text', text }] }) };
+  }
   return null;
 }
 
@@ -158,7 +200,7 @@ export function markdownToDoc(source) {
     const origin = text.slice(begin, end);
     const gap = text.slice(cursor, begin);
     let node = blockNode(block);
-    if (!node) node = { type: 'rawBlock', content: [{ type: 'text', text: origin }] };
+    if (!node) node = { type: 'rawBlock', attrs: { text: origin } };
     if (content.length === 0) lead = gap;
     node.attrs = { ...(node.attrs ?? {}), origin, gap: content.length === 0 ? '' : gap };
     node.attrs.canon = serializeBlock(node);
@@ -308,6 +350,39 @@ function serializeList(list) {
 }
 
 /** Canonical Markdown of one block, or null when the block is empty (empty paragraphs/headings/items have no Markdown form). */
+const SEPARATOR_OF = { left: ':---', right: '---:', center: ':---:' };
+
+/** One table cell as it goes between pipes: its inline Markdown with the pipes escaped (a line break cannot be written in a GFM cell: the verification will refuse it). */
+function tableCell(cell) {
+  const paragraph = (cell.content ?? [])[0];
+  return serializeInline(paragraph?.content ?? []).replace(/\|/g, '\\|');
+}
+
+function serializeTable(table) {
+  const rows = (table.content ?? []).map((row) => (row.content ?? []));
+  const columns = Math.max(0, ...rows.map((cells) => cells.length));
+  if (columns === 0) return null;
+  const line = (cells) => `| ${Array.from({ length: columns }, (_, i) => (cells[i] ? tableCell(cells[i]) : '')).join(' | ')} |`;
+  const header = rows[0];
+  const separator = `| ${Array.from({ length: columns }, (_, i) => SEPARATOR_OF[header[i]?.attrs?.align] ?? '---').join(' | ')} |`;
+  return [line(header), separator, ...rows.slice(1).map(line)].join('\n');
+}
+
+function serializeQuote(quote) {
+  const paragraphs = (quote.content ?? []).map((p) => serializeInline(p.content)).filter((s) => s !== '');
+  if (paragraphs.length === 0) return null;
+  return paragraphs.map((p) => p.split('\n').map((l) => (l === '' ? '>' : `> ${l}`)).join('\n')).join('\n>\n');
+}
+
+function serializeCode(block) {
+  const text = (block.content ?? []).map((n) => n.text ?? '').join('');
+  let longest = 0;
+  for (const run of text.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  const language = String(block.attrs?.language ?? '').trim();
+  return `${fence}${language}\n${text}${text === '' ? '' : '\n'}${fence}`;
+}
+
 export function serializeBlock(block) {
   switch (block.type) {
     case 'paragraph': { const s = serializeInline(block.content); return s === '' ? null : s; }
@@ -316,7 +391,11 @@ export function serializeBlock(block) {
     case 'orderedList': return serializeList(block);
     case 'mathBlock': return `\\[\n${String(block.attrs?.tex ?? '').trim()}\n\\]`;
     case 'figure': return `[[fig:${block.attrs.id}]]`;
-    case 'rawBlock': { const s = (block.content ?? []).map((n) => n.text ?? '').join('').replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, ''); return s === '' ? null : s; }
+    case 'rawBlock': { const s = String(block.attrs?.text ?? '').replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, ''); return s === '' ? null : s; }
+    case 'table': return serializeTable(block);
+    case 'blockquote': return serializeQuote(block);
+    case 'codeBlock': return serializeCode(block);
+    case 'horizontalRule': return '---';
     default: return null;
   }
 }
@@ -370,6 +449,15 @@ function signature(node) {
   }
   if (node.type === 'mathBlock') return { k: 'mb', tex: String(node.attrs?.tex ?? '').trim() };
   if (node.type === 'figure') return { k: 'fig', id: node.attrs.id };
+  if (node.type === 'blockquote') return { k: 'quote', c: (node.content ?? []).filter((p) => serializeInline(p.content) !== '').map(signature) };
+  if (node.type === 'table') {
+    const rows = (node.content ?? []).map((row) => row.content ?? []);
+    const columns = Math.max(0, ...rows.map((cells) => cells.length));
+    // the first row is the header whichever kind of cell it holds; short rows are padded with empty cells, as Markdown does
+    return { k: 'table', align: Array.from({ length: columns }, (_, i) => rows[0]?.[i]?.attrs?.align ?? null), rows: rows.map((cells) => Array.from({ length: columns }, (_, i) => (cells[i] ? normalizeInline(cells[i].content?.[0]?.content).map(signature) : []))) };
+  }
+  if (node.type === 'codeBlock') return { k: 'code', language: String(node.attrs?.language ?? '').trim(), text: (node.content ?? []).map((n) => n.text ?? '').join('') };
+  if (node.type === 'rawBlock') return { k: 'raw', text: String(node.attrs?.text ?? '').trim() };
   return { k: node.type };
 }
 

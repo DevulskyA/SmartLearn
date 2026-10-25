@@ -88,7 +88,7 @@ test('4. the visual editor opens it without changing one byte, and draws the for
   await expect(surface().locator('h2')).toHaveText('Fisiologia renal');
   await expect(surface().locator('.katex')).toHaveCount(2);
   await expect(surface().locator('li')).toHaveCount(2);
-  await expect(surface().locator('pre[data-raw]')).toContainText('| Filtração | sobe |');
+  await expect(surface().locator('table td', { hasText: 'sobe' })).toHaveCount(1);
   await expect(input()).toHaveValue(SUMMARY);
   await expect(editor().locator('[data-action="save-summary"]')).toBeDisabled();
 });
@@ -110,12 +110,13 @@ test('5. a visual edit changes only its own block, undo restores the original by
   await saveSummary();
 });
 
-test('6. a formula is inserted through the dialog and a hostile paste stays plain text', async () => {
+test('6. a formula is typed in place and a hostile paste stays plain text', async () => {
   await surface().locator('p', { hasText: 'Segundo parágrafo' }).click();
   await page.keyboard.press('End');
   await editor().locator('[data-visual="formula"]').click();
-  await page.locator('dialog.math-dialog .math-dialog-latex').fill('x^2');
-  await page.locator('dialog.math-dialog .math-dialog-confirm').click();
+  await expect(surface().locator('.summary-math-field')).toBeFocused();
+  await page.keyboard.type('x^2');
+  await page.keyboard.press('Enter');
   await expect(input()).toHaveValue(/Com \*\*negrito\*\*\\\(x\^2\\\)/);
   await surface().evaluate((el) => {
     const data = new DataTransfer();

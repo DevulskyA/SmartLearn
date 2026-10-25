@@ -12,12 +12,15 @@ import Strike from "@tiptap/extension-strike";
 import Code from "@tiptap/extension-code";
 import HardBreak from "@tiptap/extension-hard-break";
 import { BulletList, OrderedList, ListItem } from "@tiptap/extension-list";
+import Blockquote from "@tiptap/extension-blockquote";
+import CodeBlock from "@tiptap/extension-code-block";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import { UndoRedo } from "@tiptap/extensions";
-import { newlineInCode, exitCode } from "@tiptap/pm/commands";
 import { NodeSelection } from "@tiptap/pm/state";
 import { figureRef, UUID_PATTERN } from "../shared/summary-figure-refs.js";
 
-const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "mathBlock", "figure", "rawBlock"];
+const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "table", "codeBlock", "horizontalRule", "mathBlock", "figure", "rawBlock"];
 
 // Bookkeeping that lets an untouched block be written back as its original bytes (see shared/summary-doc.js). Never rendered.
 // `loose` is the list spacing (blank lines between items), which is part of the text and must survive an edit.
@@ -27,6 +30,7 @@ export const SourceMemory = Extension.create({
     const memory = { default: null, rendered: false, keepOnSplit: false };
     return [
       { types: BLOCK_TYPES, attributes: { origin: memory, canon: memory, gap: memory } },
+      { types: ["tableHeader", "tableCell"], attributes: { align: { default: null, rendered: false } } },
       { types: ["bulletList", "orderedList"], attributes: { loose: { default: false, rendered: false } } },
     ];
   },
@@ -72,24 +76,37 @@ export const Figure = Node.create({
   renderHTML({ node }) { return ["div", { "data-figure-id": node.attrs.id }, figureRef(node.attrs.id)]; },
 });
 
-// Markdown that has no visual form here (tables, quotes, code, rules ...) stays as plain editable text, never dropped or reformatted.
+// Markdown that has no visual form here (an indented code block, ...) is carried as an atom holding its exact text: the editor draws it as a preserved
+// block with a button to edit it in the Text mode; it is never dropped, reformatted or silently turned into something else.
 export const RawBlock = Node.create({
   name: "rawBlock",
   group: "block",
-  content: "text*",
-  marks: "",
-  code: true,
+  atom: true,
+  selectable: true,
   defining: true,
-  addOptions() { return { label: "Markdown" }; },
-  parseHTML() { return [{ tag: "pre[data-raw]", preserveWhitespace: "full" }]; },
-  renderHTML() { return ["pre", { "data-raw": "", "aria-label": this.options.label }, ["code", 0]]; },
-  addKeyboardShortcuts() {
-    return {
-      Enter: ({ editor }) => (editor.isActive("rawBlock") ? newlineInCode(editor.state, editor.view.dispatch) : false),
-      "Mod-Enter": ({ editor }) => (editor.isActive("rawBlock") ? exitCode(editor.state, editor.view.dispatch) : false),
-    };
-  },
+  addOptions() { return { label: "Markdown", editSource: null }; },
+  addAttributes() { return { text: { default: "" } }; },
+  parseHTML() { return [{ tag: "pre[data-raw]", priority: 100, getAttrs: (el) => ({ text: el.textContent ?? "" }) }]; },
+  renderHTML({ node }) { return ["pre", { "data-raw": "", "aria-label": this.options.label }, node.attrs.text]; },
 });
+
+// A quote holds paragraphs only (what Markdown can say without nesting other blocks).
+export const Quote = Blockquote.extend({ content: "paragraph+" });
+
+// A table cell holds exactly one paragraph (a Markdown cell is one line of inline text); a line break would not survive the file format, so
+// Enter and Shift-Enter move to the next row / do nothing instead of breaking the cell.
+function cellNode(base) {
+  return base.extend({
+    content: "paragraph",
+    addKeyboardShortcuts() {
+      return { "Shift-Enter": () => true, "Mod-Enter": () => true };
+    },
+  });
+}
+export const SummaryTable = Table.configure({ resizable: false, renderWrapper: false });
+export const SummaryTableHeader = cellNode(TableHeader);
+export const SummaryTableCell = cellNode(TableCell);
+
 
 // A line break that came from the text itself (a single newline inside a paragraph), kept distinct from a deliberate "hard" break.
 export const SoftBreak = Node.create({
@@ -102,7 +119,7 @@ export const SoftBreak = Node.create({
 });
 
 /** Every extension of the editor, in one list, so the Node test and the browser build the very same schema. */
-export function summaryExtensions({ math = [MathInline, MathBlock], figure = Figure, rawLabel = "Markdown", editFormula = null, openSource = null } = {}) {
+export function summaryExtensions({ math = [MathInline, MathBlock], figure = Figure, raw = RawBlock, rawLabel = "Markdown", editFormula = null, openSource = null } = {}) {
   const [inlineMath, blockMath] = math;
   return [
     Document, Paragraph, Text, SoftBreak,
@@ -112,7 +129,8 @@ export function summaryExtensions({ math = [MathInline, MathBlock], figure = Fig
     inlineMath.configure({ editFormula }),
     blockMath.configure({ editFormula }),
     figure.configure({ openSource }),
-    RawBlock.configure({ label: rawLabel }),
+    raw.configure({ label: rawLabel }),
+    Quote, CodeBlock, HorizontalRule, SummaryTable, TableRow, SummaryTableHeader, SummaryTableCell,
     SourceMemory, UndoRedo,
   ];
 }

@@ -14,22 +14,44 @@ test('a summary that was only opened is written back byte for byte (every shape,
   for (const [name, source] of Object.entries(CORPUS)) assert.equal(back(source), source, name);
 });
 
-test('Markdown the editor cannot model is carried as raw blocks with the exact text, never dropped or reformatted', () => {
+test('tables, quotes, code and rules are real blocks; only what has no visual form is carried as a preserved atom with its exact text', () => {
   const kinds = (source) => open(source).doc.content.map((b) => b.type);
-  assert.deepEqual(kinds(CORPUS.table), ['rawBlock', 'paragraph']);
-  assert.deepEqual(kinds(CORPUS.quote), ['rawBlock', 'paragraph']);
-  assert.deepEqual(kinds(CORPUS.code), ['rawBlock', 'rawBlock', 'rawBlock', 'paragraph']);
+  assert.deepEqual(kinds(CORPUS.table), ['table', 'paragraph']);
+  assert.deepEqual(kinds(CORPUS.quote), ['blockquote', 'paragraph']);
+  assert.deepEqual(kinds(CORPUS.code), ['codeBlock', 'rawBlock', 'horizontalRule', 'paragraph']);
   const [table] = open(CORPUS.table).doc.content;
-  assert.equal(table.content[0].text, '| A | B |\n|---|---|\n| 1 | 2 |');
+  assert.deepEqual(table.content.map((row) => row.content.map((c) => [c.type, c.content[0].content[0].text])), [[['tableHeader', 'A'], ['tableHeader', 'B']], [['tableCell', '1'], ['tableCell', '2']]]);
+  const [code, indented] = open(CORPUS.code).doc.content;
+  assert.deepEqual([code.attrs.language, code.content[0].text], ['js', 'const x = `a`;']);
+  assert.equal(indented.attrs.text, '    bloco recuado');
   // links, images and html are switched off in the controlled Markdown: they are plain text, and plain text is what is edited
   assert.equal(open(CORPUS.unknown).doc.content[0].type, 'paragraph');
 });
+
+test('a table keeps its alignment, escapes pipes inside cells and pads short rows; a changed cell rewrites only its table', () => {
+  const source = 'Antes\n\n| Droga | Dose |\n| :--- | ---: |\n| a \\| b | 5 |\n\nDepois\n';
+  assert.equal(back(source), source);
+  const { doc, lead, tail } = open(source);
+  const table = doc.content[1];
+  assert.deepEqual(table.content[0].content.map((c) => c.attrs.align), ['left', 'right']);
+  table.content[1].content[1].content[0].content = [text('10')];
+  assert.equal(docToMarkdown(doc, { lead, tail }), source.replace('| 5 |', '| 10 |'));
+  table.content.push({ type: 'tableRow', content: [{ type: 'tableCell', attrs: { align: null }, content: [para(text('novo'))] }] });
+  assert.ok(docToMarkdown(doc, { lead, tail }).includes('| novo |  |\n'));
+});
+
+test('a quote and a fenced block written new are valid Markdown that reads back as the same blocks; a long fence survives backticks', () => {
+  const out = writeNew({ type: 'blockquote', content: [para(text('um')), para(text('dois', 'bold'))] }, { type: 'codeBlock', attrs: { language: 'js' }, content: [text('x = ```y```')] }, { type: 'horizontalRule' });
+  assert.equal(out.error, undefined);
+  assert.equal(out.text, '> um\n>\n> **dois**\n\n````js\nx = ```y```\n````\n\n---');
+});
+
 
 test('a formula inside bold or italic is not flattened into an unformatted atom: the block stays text with its formatting', () => {
   const source = 'Valor **importante \\(x^2\\)** e *\\(y\\)* no texto.';
   const [block] = open(source).doc.content;
   assert.equal(block.type, 'rawBlock');
-  assert.equal(block.content[0].text, source);
+  assert.equal(block.attrs.text, source);
   assert.equal(back(source), source);
 });
 
@@ -129,10 +151,12 @@ test('what cannot be written back faithfully is refused with a reason, never sav
   assert.equal(fine.text, 'x \\(a+b\\)');
 });
 
-test('a raw block stays editable text: edits go through verbatim', () => {
-  const { doc, lead, tail } = open('| a | b |\n|---|---|\n| 1 | 2 |');
-  doc.content[0].content = [{ type: 'text', text: '| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |' }];
-  assert.equal(docToMarkdown(doc, { lead, tail }), '| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |');
+test('a preserved block (no visual form) is written back verbatim, even when it is the only thing a new document holds', () => {
+  const source = '    bloco recuado\n    segunda linha';
+  const { doc, lead, tail } = open(source);
+  assert.equal(doc.content[0].type, 'rawBlock');
+  assert.equal(docToMarkdown(doc, { lead, tail }), source);
+  assert.equal(writeNew({ type: 'rawBlock', attrs: { text: source } }).text, source);
 });
 
 test('a document emptied by the student is the empty text (outside whitespace kept), not a refusal', () => {

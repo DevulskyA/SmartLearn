@@ -94,10 +94,10 @@ async function startWith(page, text) {
   return editor;
 }
 
-test('the text editor is still the default, and opening the visual editor on an untouched summary changes nothing: not one byte, not the save state', async ({ page }) => {
+test('a student who chose the Text editor keeps it, and opening the visual editor on an untouched summary changes nothing: not one byte, not the save state', async ({ page }) => {
   const editor = await startWith(page, LEGACY);
   const input = editor.locator('.lesson-summary-input');
-  await expect(input).toBeVisible(); // default: the original text editor
+  await expect(input).toBeVisible(); // the stored choice of Text is respected (the default for a new student is Visual: summary-wysiwyg.spec.js)
   await expect(surface(editor)).toHaveCount(0); // and the visual code was not even loaded
 
   await visualButton(editor).click();
@@ -105,7 +105,7 @@ test('the text editor is still the default, and opening the visual editor on an 
   await expect(input).toBeHidden();
   await expect(surface(editor).locator('h2')).toHaveText('Fisiologia renal');
   await expect(surface(editor).locator('.katex')).toHaveCount(2);
-  await expect(surface(editor).locator('pre[data-raw]')).toContainText('| Filtração | sobe |'); // the table is carried as text, not dropped
+  await expect(surface(editor).locator('table td', { hasText: 'sobe' })).toHaveCount(1); // the table is a real table, not text
   await expect(surface(editor).locator('li')).toHaveCount(2);
 
   // walk through the text with the keyboard and focus out: still no edit
@@ -175,46 +175,76 @@ test('undo returns the text to the original bytes; the keyboard reaches every to
   await expect(surface(editor)).toHaveAttribute('role', 'textbox');
 });
 
-test('formulas: insert inline and as a block through the dialog, edit an existing one by click and by keyboard; invalid ones stay visible and fixable', async ({ page }) => {
+test('formulas: inserted, edited and fixed IN PLACE with the visual formula editor (no LaTeX typed); chemistry keeps the dialog', async ({ page }) => {
   const editor = await startWith(page, 'Antes.\n\nCom \\(a+b\\) no meio.\n\nDepois.');
   const input = editor.locator('.lesson-summary-input');
   await visualButton(editor).click();
+  const field = surface(editor).locator('.summary-math-field');
 
-  // inline, at the caret
+  // inline, at the caret: a visual field opens where the formula goes, the student types the maths, Enter draws it
   await surface(editor).locator('p', { hasText: 'Antes.' }).click();
   await page.keyboard.press('End');
   await editor.locator('[data-visual="formula"]').click();
-  await page.locator('dialog.math-dialog .math-dialog-latex').fill('x^2');
-  await page.locator('dialog.math-dialog .math-dialog-confirm').click();
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await expect(input).toHaveValue('Antes.\n\nCom \\(a+b\\) no meio.\n\nDepois.'); // nothing is written while the formula is being typed
+  await page.keyboard.type('x^2');
+  await page.keyboard.press('Enter');
+  await expect(field).toHaveCount(0);
   await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a+b\\) no meio.\n\nDepois.');
+  await expect(page.locator('dialog.math-dialog')).toHaveCount(0);
 
-  // as a block, after the paragraph of the caret
+  // as a highlighted block
+  await surface(editor).locator('p', { hasText: 'Depois.' }).click();
+  await editor.locator('[data-visual="formulaBlock"]').click();
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await page.keyboard.type('a+b');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a+b\\) no meio.\n\nDepois.\n\n\\[\na+b\n\\]');
+
+  // an abandoned new formula leaves no trace
   await surface(editor).locator('p', { hasText: 'Depois.' }).click();
   await editor.locator('[data-visual="formula"]').click();
-  await page.locator('dialog.math-dialog .math-dialog-latex').fill('\\alpha + \\beta');
-  await page.locator('dialog.math-dialog .math-dialog-display input').check();
-  await page.locator('dialog.math-dialog .math-dialog-confirm').click();
-  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a+b\\) no meio.\n\nDepois.\n\n\\[\n\\alpha + \\beta\n\\]');
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await page.keyboard.press('Escape');
+  await expect(field).toHaveCount(0);
+  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a+b\\) no meio.\n\nDepois.\n\n\\[\na+b\n\\]');
 
   // edit one existing formula by clicking it: only its characters change
-  await surface(editor).locator('.summary-math-editable').filter({ has: page.locator('annotation', { hasText: /^a\+b$/ }) }).click();
-  const dialog = page.locator('dialog.math-dialog');
-  await expect(dialog.locator('.math-dialog-latex')).toHaveValue('a+b');
-  await dialog.locator('.math-dialog-latex').fill('a-b');
-  await dialog.locator('.math-dialog-confirm').click();
-  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a-b\\) no meio.\n\nDepois.\n\n\\[\n\\alpha + \\beta\n\\]');
+  await surface(editor).locator('.summary-math-editable').filter({ has: page.locator('annotation', { hasText: /^a\+b$/ }) }).first().click();
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('a-b');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a-b\\) no meio.\n\nDepois.\n\n\\[\na+b\n\\]');
 
-  // by keyboard: arrow onto the formula, Enter opens the dialog
+  // by keyboard: arrow onto the formula, Enter opens the field
   await surface(editor).locator('p', { hasText: 'no meio' }).click();
   await page.keyboard.press('End');
   // arrow left until the formula itself is the selection (ProseMirror follows the browser selection asynchronously, so the number of presses is not fixed)
   for (let i = 0; i < 16 && (await surface(editor).locator('.ProseMirror-selectednode').count()) === 0; i += 1) await page.keyboard.press('ArrowLeft');
   await expect(surface(editor).locator('.ProseMirror-selectednode')).toHaveCount(1);
   await page.keyboard.press('Enter');
-  await expect(dialog).toBeVisible();
-  await dialog.locator('.math-dialog-latex').fill('a\\times b');
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('a+c');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a+c\\) no meio.\n\nDepois.\n\n\\[\na+b\n\\]');
+
+  // chemistry cannot be edited visually: its dialog still opens, with the exact text
+  await textButton(editor).click();
+  await input.fill('Água \\(\\ce{H2O}\\) aqui.');
+  await visualButton(editor).click();
+  await surface(editor).locator('.summary-math-editable').first().click();
+  const dialog = page.locator('dialog.math-dialog');
+  await expect(dialog.locator('.math-dialog-latex')).toHaveValue('\\ce{H2O}');
+  await dialog.locator('.math-dialog-latex').fill('\\ce{CO2}');
   await dialog.locator('.math-dialog-confirm').click();
-  await expect(input).toHaveValue('Antes.\\(x^2\\)\n\nCom \\(a\\times b\\) no meio.\n\nDepois.\n\n\\[\n\\alpha + \\beta\n\\]');
+  await expect(input).toHaveValue('Água \\(\\ce{CO2}\\) aqui.');
 
   // an invalid formula from the text is shown as invalid, with the original text and a way to fix it
   await textButton(editor).click();
@@ -224,9 +254,12 @@ test('formulas: insert inline and as a block through the dialog, edit an existin
   await expect(broken).toContainText('Fórmula inválida');
   await expect(broken.locator('.summary-math-original')).toHaveText('\\frac{a');
   await broken.locator('.summary-math-fix').click();
-  await dialog.locator('.math-dialog-latex').fill('\\frac{a}{b}');
-  await dialog.locator('.math-dialog-confirm').click();
-  await expect(input).toHaveValue('Quebrada \\(\\frac{a}{b}\\) aqui.');
+  await expect(field).toBeVisible();
+  await expect(field).toBeFocused(); // typing starts once the field holds the focus
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('a/b');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue(/^Quebrada \\\(\\frac\{a\}\{b\}\\\) aqui\.$/);
   expect(outside).toEqual([]);
 });
 
@@ -374,13 +407,13 @@ test('accessibility: the visual editor, its toolbar and the mode switch have no 
   expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
 
   // Tab from the toolbar reaches the text, and the tools carry accessible names
-  const names = await editor.locator('.summary-visual-toolbar button').evaluateAll((els) => els.map((el) => el.textContent.trim()));
-  expect(names).toEqual(['Negrito', 'Itálico', 'Riscado', 'Título', 'Lista', 'Lista numerada', 'Inserir fórmula', 'Inserir imagem', 'Selecionar do PDF', 'Desfazer', 'Refazer']);
+  const names = await editor.locator('.summary-visual-toolbar button').evaluateAll((els) => els.filter((el) => !el.closest('[hidden]')).map((el) => el.getAttribute('aria-label')));
+  expect(names).toEqual(['Desfazer', 'Refazer', 'Negrito', 'Itálico', 'Riscado', 'Lista', 'Lista numerada', 'Citação', 'Bloco de código', 'Linha divisória', 'Tabela', 'Inserir fórmula', 'Fórmula em destaque', 'Inserir imagem', 'Selecionar do PDF']);
   await editor.locator('[data-visual="bold"]').focus();
   let presses = 0;
   while (presses < names.length + 2 && !(await surface(editor).evaluate((el) => el === document.activeElement))) { await page.keyboard.press('Tab'); presses += 1; }
-  await expect(surface(editor)).toBeFocused(); // disabled tools (nothing to undo yet) are skipped, so this takes at most one press per tool
-  expect(presses).toBeLessThanOrEqual(names.length);
+  await expect(surface(editor)).toBeFocused(); // the whole toolbar is ONE tab stop, so the text is the very next stop
+  expect(presses).toBeLessThanOrEqual(2);
 });
 
 test('after the text changed elsewhere the editor starts a fresh history (undo cannot resurrect the old text), and a dropped file never navigates the window away', async ({ page }) => {

@@ -6,7 +6,7 @@ import { katex, katexOptions, mathProblem } from "../shared/summary-math.js";
 import { t } from "./i18n/index.js";
 
 let mathliveLoading = null;
-function loadMathLive() {
+export function loadMathLive() {
   mathliveLoading ??= import("mathlive").then((module) => {
     module.MathfieldElement.fontsDirectory = null; // the KaTeX fonts are already in the page (katex.min.css, bundled locally)
     module.MathfieldElement.soundsDirectory = null;

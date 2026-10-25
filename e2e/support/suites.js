@@ -9,7 +9,7 @@ export const SUITES = {
   smoke: ['smoke'],
   // the Resumo Mestre: renderer, formulas, figures, PDF crop, visual editor, and the lesson editor that hosts them
   summary: [
-    'summary-visual-editor', 'summary-math-editor', 'summary-math-plano', 'summary-images', 'summary-pdf-crop',
+    'summary-visual-editor', 'summary-wysiwyg', 'summary-math-editor', 'summary-math-plano', 'summary-images', 'summary-pdf-crop',
     'lesson-editor', 'lesson-editor-responsive', 'lesson-editor-a11y', 'draft-acceptance', 'draft-autosave',
   ],
 };

@@ -5110,31 +5110,121 @@ h1 {
   font-weight: 600;
 }
 
+/* The toolbar: one rounded ribbon, tools in labelled groups with a visible gap and a divider between groups (never glued together) */
 .summary-visual-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
-  margin: 0 0 0.35rem;
+  align-items: center;
+  gap: 0.35rem 0;
+  margin: 0 0 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface-sunken);
+}
+
+.summary-visual-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+}
+
+.summary-visual-group + .summary-visual-group {
+  border-left: 1px solid var(--color-border);
+}
+
+.summary-visual-group:first-of-type {
+  padding-left: 0.1rem;
+}
+
+.summary-visual-group[hidden] {
+  display: none;
+}
+
+.summary-visual-group[data-contextual="table"] {
+  flex-basis: 100%;
+  margin-top: 0.1rem;
+  padding: 0.35rem 0.1rem 0;
+  border-left: 0;
+  border-top: 1px solid var(--color-border);
 }
 
 .summary-mode-btn,
 .summary-visual-btn {
   min-width: 44px;
+  min-height: 44px;
+}
+
+.summary-visual-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.summary-visual-btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.summary-visual-btn:focus-visible,
+.summary-visual-style:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.summary-visual-btn-text {
+  padding: 0 0.7rem;
+  font-size: 0.85rem;
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
 .summary-visual-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
+  cursor: default;
 }
 
+.summary-visual-face {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.summary-face-bold { font-weight: 800; }
+.summary-face-italic { font-style: italic; font-family: Georgia, serif; }
+.summary-face-strike { text-decoration: line-through; }
+.summary-face-math { font-family: Georgia, "Times New Roman", serif; }
+
+.summary-visual-style {
+  min-height: 44px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+/* The page: the formatted document the student edits */
 .summary-visual-content {
-  min-height: 12rem;
-  max-height: 60vh;
+  min-height: 14rem;
+  max-height: 65vh;
   overflow-y: auto;
-  padding: 0.6rem 0.8rem;
+  padding: 1rem 1.25rem;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface);
-  white-space: pre-wrap;
+  line-height: 1.55;
+  white-space: pre-wrap; /* ProseMirror needs it: without it the browser turns a typed trailing space into a no-break space */
+  word-wrap: break-word;
   outline: none;
 }
 
@@ -5144,7 +5234,7 @@ h1 {
 }
 
 .summary-visual-content > * + * {
-  margin-top: 0.6rem;
+  margin-top: 0.7rem;
 }
 
 .summary-visual-content p,
@@ -5158,34 +5248,149 @@ h1 {
 .summary-visual-content h4,
 .summary-visual-content h5,
 .summary-visual-content h6 {
-  margin: 0.8rem 0 0.2rem;
-  font-size: 1rem;
+  margin: 1rem 0 0.25rem;
+  line-height: 1.25;
 }
+
+.summary-visual-content h1 { font-size: 1.5rem; }
+.summary-visual-content h2 { font-size: 1.25rem; }
+.summary-visual-content h3 { font-size: 1.1rem; }
+.summary-visual-content h4,
+.summary-visual-content h5,
+.summary-visual-content h6 { font-size: 1rem; }
 
 .summary-visual-content ul,
 .summary-visual-content ol {
   margin: 0;
-  padding-left: 1.4rem;
+  padding-left: 1.5rem;
 }
 
+.summary-visual-content blockquote {
+  margin: 0;
+  padding: 0.2rem 0 0.2rem 0.9rem;
+  border-left: 3px solid var(--color-primary);
+  color: var(--color-muted);
+}
+
+.summary-visual-content blockquote > * + * {
+  margin-top: 0.4rem;
+}
+
+.summary-visual-content hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 1rem 0;
+}
+
+/* a code block is the one place where Markdown-like text is shown on purpose: literal code */
 .summary-visual-content pre {
   margin: 0;
-  padding: 0.4rem 0.6rem;
-  border: 1px dashed var(--color-border);
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-border);
   border-radius: 0.35rem;
   background: var(--color-surface-sunken);
-  font-family: monospace;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9rem;
   white-space: pre-wrap;
   overflow-x: auto;
 }
 
+.summary-visual-content table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.summary-visual-content th,
+.summary-visual-content td {
+  position: relative;
+  min-width: 3rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.summary-visual-content th {
+  background: var(--color-surface-sunken);
+  font-weight: 700;
+  text-align: left;
+}
+
+.summary-visual-content .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  pointer-events: none;
+}
+
 .summary-math-node-block {
   display: block;
+  text-align: center;
+}
+
+.summary-math-field {
+  display: inline-block;
+  min-width: 4rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 0.35rem;
+  background: var(--color-surface);
+  font-size: 1.1rem;
+}
+
+.summary-math-field[aria-invalid="true"] {
+  border-color: var(--color-danger, #b3261e);
 }
 
 .summary-visual-content .ProseMirror-selectednode {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+.summary-visual-content .ProseMirror-gapcursor {
+  display: none;
+  position: relative;
+  pointer-events: none;
+}
+
+.summary-visual-content .ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid var(--color-text);
+  animation: summary-gapcursor-blink 1.1s steps(2, start) infinite;
+}
+
+.summary-visual-content.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+@keyframes summary-gapcursor-blink {
+  to { visibility: hidden; }
+}
+
+/* a preserved block: shown as it will look, marked, with the way to edit its text */
+.summary-raw {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.4rem;
+  background: var(--color-surface-sunken);
+}
+
+.summary-raw-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.summary-raw-edit {
+  justify-self: start;
 }
 
 .summary-visual-notice {

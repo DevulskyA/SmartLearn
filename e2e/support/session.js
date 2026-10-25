@@ -18,8 +18,17 @@ async function ensureAppBooted(page) {
   expect(await booted(), 'src/app.js did not boot after a reload (no screen in the URL hash)').toBeTruthy();
 }
 
-/** Creates `email` over HTTP while the page settles, then signs in through the real login form and waits for the logged-in view. */
-export async function signInRegistered(page, { email, password }) {
+/**
+ * Creates `email` over HTTP while the page settles, then signs in through the real login form and waits for the logged-in view.
+ * The summary editor opens in Visual mode unless the student chose otherwise. Most specs drive the plain textarea, so they start as a student who
+ * chose Text (only when no choice was stored yet: an explicit click on Visual later is kept across reloads). `summaryMode: null` = a new student.
+ */
+export async function signInRegistered(page, { email, password, summaryMode = 'text' }) {
+  if (summaryMode) {
+    await page.addInitScript((mode) => {
+      try { if (localStorage.getItem('smartlearn.summary-mode') === null) localStorage.setItem('smartlearn.summary-mode', mode); } catch { /* storage unavailable */ }
+    }, summaryMode);
+  }
   await page.goto('/');
   await ensureAppBooted(page);
   // the account is created on the SAME server the page was told to use (a spec may run several), exactly where the form would post

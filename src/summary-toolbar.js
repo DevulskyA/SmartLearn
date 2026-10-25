@@ -126,7 +126,7 @@ export function createSummaryAuthoring(textarea, { extraButtons = [], previewOpt
 // The textarea is always the source of truth. "Texto" is the safe, original way to edit; "Visual" is the Tiptap editor over the same text.
 // The choice is a per-viewer convenience (remembered in this browser only); the editor code is loaded the first time "Visual" is used.
 const MODE_KEY = "smartlearn.summary-mode";
-const readMode = () => { try { return localStorage.getItem(MODE_KEY) === "visual" ? "visual" : "text"; } catch { return "text"; } };
+const readMode = () => { try { return localStorage.getItem(MODE_KEY) === "text" ? "text" : "visual"; } catch { return "visual"; } };
 const rememberMode = (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* private window: the choice just is not remembered */ } };
 
 function createModeSwitch(textarea, bar, preview) {
@@ -165,21 +165,32 @@ function createModeSwitch(textarea, bar, preview) {
     visualBtn.setAttribute("aria-pressed", String(visual));
     textBtn.setAttribute("aria-pressed", String(!visual));
   };
-  async function setMode(next) {
+  async function startVisual() {
+    if (editor) { editor.reload(); return true; }
+    try {
+      const { createVisualSummaryEditor } = await import("./summary-visual-editor.js");
+      editor = createVisualSummaryEditor(textarea, { editInText: jumpToText });
+      visualHost.append(editor.root);
+      return true;
+    } catch (err) {
+      console.error("visual summary editor failed to start", err);
+      note.textContent = t("summary.mode.failed"); // the text editor keeps working: nothing was changed
+      return false;
+    }
+  }
+  // A preserved block has no visual form: the Text mode opens with its text selected (this one trip is not remembered as the preference).
+  async function jumpToText(text) {
+    await setMode("text", { remember: false });
+    const at = textarea.value.indexOf(text);
+    if (at < 0) return;
+    textarea.setSelectionRange(at, at + text.length);
+    textarea.scrollTop = Math.max(0, (at / Math.max(1, textarea.value.length)) * textarea.scrollHeight - textarea.clientHeight / 2);
+  }
+  async function setMode(next, { remember = true } = {}) {
     note.textContent = "";
     if (next === mode) return;
     if (next === "visual") {
-      try {
-        if (!editor) {
-          const { createVisualSummaryEditor } = await import("./summary-visual-editor.js");
-          editor = createVisualSummaryEditor(textarea);
-          visualHost.append(editor.root);
-        } else editor.reload();
-      } catch (err) {
-        console.error("visual summary editor failed to start", err);
-        note.textContent = t("summary.mode.failed"); // the text editor keeps working: nothing was changed
-        return;
-      }
+      if (!(await startVisual())) return;
       show("visual");
       rememberMode("visual");
       editor.focus();
@@ -187,12 +198,15 @@ function createModeSwitch(textarea, bar, preview) {
       editor?.flush();
       if (editor?.isBlocked() && !window.confirm(t("summary.mode.confirmDiscard"))) return;
       show("text");
-      rememberMode("text");
+      if (remember) rememberMode("text");
       textarea.focus({ preventScroll: true });
     }
   }
-  show("text");
-  if (readMode() === "visual") setMode("visual");
+  // Visual is the default; a stored explicit choice of Text is respected. The visual state is shown at once so the raw text never flashes.
+  if (readMode() === "visual") {
+    show("visual");
+    startVisual().then((ok) => { if (!ok) show("text"); });
+  } else show("text");
 
   return {
     modeSwitch,
