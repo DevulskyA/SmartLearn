@@ -3232,12 +3232,16 @@ const STUDY_PROVENANCE_KEY = {
   AI_GENERATED: "appStudyNow.origin.ai",
 };
 
+// The summary contains the very answers being retrieved: while questions are on the screen it stays out of sight, and returns with the result.
+// (Set to false to show it above the questions again, as before.)
+const STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING = true;
+
 async function startStudyNow(unit, subjectName) {
   if (!unit) return;
   studyNowSubjectEl.textContent = subjectName ?? "";
   studyNowTitleEl.textContent = unit.title ?? "";
   if (unit.summaryBody) {
-    studyNowSummaryCard.hidden = false;
+    studyNowSummaryCard.hidden = STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING;
     renderSummary(studyNowSummaryBody, unit.summaryBody);
     studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
     appendSummarySources(studyNowSummaryCard, unit.id);
@@ -3264,6 +3268,8 @@ async function startStudyNow(unit, subjectName) {
     studyNowNoExercises.hidden = false;
     return;
   }
+  // a lesson with no questions has nothing to hide the summary from: reading is all this screen can do for it
+  if (studyNowState.exercises.length === 0 && unit.summaryBody) studyNowSummaryCard.hidden = false;
   const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
   if (snapshot) {
     // Interrupted earlier: offer to continue instead of silently repeating what was already answered.

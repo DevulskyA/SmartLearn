@@ -255,5 +255,7 @@ test('lesson editor: an image inserted in the draft survives the save and the ac
   await row.locator('.plan-expand-btn').click();
   await expect.poll(() => row.locator('.plan-summary-body figure img').evaluate((el) => el.complete && el.naturalWidth)).toBe(1);
   await row.locator('[data-action="plan-study-now"]').click();
-  await expect.poll(() => page.locator('#study-now-summary-body figure img').evaluate((el) => el.complete && el.naturalWidth)).toBe(1);
+  // the figure is drawn into the summary kept for the result; the card itself stays hidden while the questions are on the screen
+  await expect(page.locator('#study-now-summary-body figure img')).toHaveCount(1);
+  await expect(page.locator('#study-now-summary-card')).toBeHidden();
 });
