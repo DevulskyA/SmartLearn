@@ -2,12 +2,15 @@ import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-
 import { resolveOrCreateSubject, describeSubject, LearningUnitError } from './learning-units.js';
 import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
+import { dm, splitMessage } from '../draft-error-messages.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -42,27 +45,27 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
     throw new AcceptDraftError('VALIDATION_FAILED', 'Informe expectedRevision (a revisão do rascunho que foi revisada).', 'expectedRevision');
   }
   if (checkRevision && expectedRevision !== draftRow.revision) {
-    throw new AcceptDraftError('REVISION_CONFLICT', 'O rascunho foi editado desde a última leitura. Recarregue e revise a versão atual antes de aceitar.');
+    throw new AcceptDraftError('REVISION_CONFLICT', dm('ACCEPT_REVISION_CONFLICT'));
   }
 
   if (!DATE_RE.test(studyDate ?? '')) {
-    throw new AcceptDraftError('VALIDATION_FAILED', 'Informe uma data de estudo válida (YYYY-MM-DD).', 'studyDate');
+    throw new AcceptDraftError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
   }
   let dueDates;
   try {
     dueDates = generateReviewDates(studyDate); // throws on a calendar-invalid date (e.g. Feb 30)
   } catch {
     // Was an untyped Error (an HTTP 500); found by the preview/accept parity test. A bad date is the caller's mistake.
-    throw new AcceptDraftError('VALIDATION_FAILED', 'Informe uma data de estudo válida (YYYY-MM-DD).', 'studyDate');
+    throw new AcceptDraftError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
   }
 
   const proposal = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, draftRow.proposal_id);
-  if (!proposal) throw new AcceptDraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+  if (!proposal) throw new AcceptDraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
 
   // SPRINT-04: the draft was generated from specific source text. If the proposal's pages now hold different text
   // (re-extraction), freezing citations from them would attribute text B to content produced from text A.
   if (isDraftStale(db, userId, draftRow)) {
-    throw new AcceptDraftError('SOURCE_CHANGED', 'O texto da fonte mudou depois que este rascunho foi gerado (a fonte foi extraída de novo). Gere o rascunho novamente a partir do texto atual antes de aceitar.');
+    throw new AcceptDraftError('SOURCE_CHANGED', dm('SOURCE_CHANGED_SINCE_DRAFT'));
   }
 
   const content = normalizeContent(JSON.parse(draftRow.draft_json));
@@ -71,7 +74,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
   const excluded = content.questions.filter((q) => q.status === 'REJECTED');
   const draftContent = { ...content, questions: content.questions.filter((q) => q.status !== 'REJECTED') };
   if (draftContent.questions.length === 0) {
-    throw new AcceptDraftError('VALIDATION_FAILED', 'Todas as questões foram rejeitadas. Mantenha ao menos uma para criar a aula.', 'questions');
+    throw new AcceptDraftError('VALIDATION_FAILED', dm('ALL_QUESTIONS_REJECTED'), 'questions');
   }
 
   // A1 (audit): source_pages is a mutable, recomputable projection
@@ -108,13 +111,13 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
  */
 export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
-  if (!draftRow) throw new AcceptDraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (!draftRow) throw new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
 
   if (draftRow.status === 'ACCEPTED') {
     return JSON.parse(draftRow.acceptance_result_json);
   }
   if (draftRow.status !== 'DRAFT') {
-    throw new AcceptDraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser aceito.`);
+    throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
   }
 
   const plan = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
@@ -211,12 +214,12 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
  */
 export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
-  if (!draftRow) throw new AcceptDraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (!draftRow) throw new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
   if (draftRow.status === 'ACCEPTED') {
     return { status: 'ACCEPTED', draftId: draftRow.id, revision: draftRow.revision, acceptance: JSON.parse(draftRow.acceptance_result_json) };
   }
   if (draftRow.status !== 'DRAFT') {
-    throw new AcceptDraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser aceito.`);
+    throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
   }
   const { proposal, dueDates, draftContent, excluded, pageTextByIndex, blockers } = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: false, acknowledgeSummaryFindings });
   let subject;

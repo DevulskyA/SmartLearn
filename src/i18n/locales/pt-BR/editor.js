@@ -175,4 +175,23 @@ export default {
 
   // Leaving
   'editor.confirmLeave': 'Há alterações não salvas nesta aula. Sair mesmo assim?',
+
+  // Draft editing and acceptance errors the server sends as code + params (server/src/draft-error-messages.js, shown by src/api-client.js)
+  'api.draft.DRAFT_NOT_FOUND': 'Rascunho não encontrado.',
+  'api.draft.PROPOSAL_NOT_FOUND': 'Proposta não encontrada.',
+  'api.draft.SOURCE_PROPOSAL_NOT_FOUND': 'Proposta de origem não encontrada.',
+  'api.draft.QUESTION_NOT_FOUND': 'Questão não encontrada.',
+  'api.draft.DRAFT_STATE_NOT_EDITABLE': 'Rascunho no estado {status} não pode ser editado.',
+  'api.draft.DRAFT_STATE_NOT_ACCEPTABLE': 'Rascunho no estado {status} não pode ser aceito.',
+  'api.draft.SUMMARY_REQUIRED': 'Informe o texto do resumo.',
+  'api.draft.QUESTION_STATE_INVALID': 'Estado de questão inválido.',
+  'api.draft.CITATION_OUT_OF_RANGE': 'A citação da questão aponta para uma página fora do trecho da fonte.',
+  'api.draft.LAST_QUESTION_REQUIRED': 'A aula precisa manter ao menos uma questão.',
+  'api.draft.DRAFT_CHANGED_REORDER': 'O rascunho foi alterado desde a última leitura. Recarregue e reordene de novo.',
+  'api.draft.ORDER_INVALID': 'A ordem deve listar exatamente as questões atuais, cada uma uma vez.',
+  'api.draft.REJECTED_QUESTIONS_REPLACE': 'Há questões rejeitadas: altere a lista por questão (editar ou excluir), não substituindo todas de uma vez.',
+  'api.draft.ACCEPT_REVISION_CONFLICT': 'O rascunho foi editado desde a última leitura. Recarregue e revise a versão atual antes de aceitar.',
+  'api.draft.STUDY_DATE_INVALID': 'Informe uma data de estudo válida (YYYY-MM-DD).',
+  'api.draft.SOURCE_CHANGED_SINCE_DRAFT': 'O texto da fonte mudou depois que este rascunho foi gerado (a fonte foi extraída de novo). Gere o rascunho novamente a partir do texto atual antes de aceitar.',
+  'api.draft.ALL_QUESTIONS_REJECTED': 'Todas as questões foram rejeitadas. Mantenha ao menos uma para criar a aula.',
 };

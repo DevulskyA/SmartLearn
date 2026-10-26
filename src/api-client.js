@@ -13,7 +13,7 @@
 // risks reporting local success for an uncertain remote write — that is
 // exactly what design.md/T20 forbid ("API errors never create local
 // success"). Every write path in remote-store.js must let both propagate.
-import { t } from './i18n/index.js';
+import { has, t } from './i18n/index.js';
 
 // Relative by default (T21 "one origin"): the Vite dev proxy and the
 // production static+API server both make '/v1/...' resolve to the right
@@ -23,8 +23,11 @@ import { t } from './i18n/index.js';
 const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE__) || '';
 
 export class ApiError extends Error {
-  constructor(code, message, { status, field, requestId } = {}) {
-    super(message || code);
+  constructor(code, message, { status, field, requestId, msg } = {}) {
+    // A sentence the server sends as a stable code + params is shown from the catalog (follows the interface language); the server's own
+    // text is the reserve for an old server, an unknown code or a sentence with no code.
+    const key = typeof msg?.code === 'string' ? `api.draft.${msg.code}` : '';
+    super((key && has(key) ? t(key, msg.params ?? {}) : message) || code);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
@@ -96,7 +99,7 @@ async function handleResponse(res) {
     if (res.status === 401 && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('smartlearn:unauthenticated'));
     }
-    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId });
+    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId, msg: err.msg });
   }
   return json;
 }
