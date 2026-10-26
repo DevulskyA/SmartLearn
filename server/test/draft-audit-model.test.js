@@ -12,6 +12,7 @@ import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 import { parseModelAudit, buildAuditPrompt, buildRepairPrompt } from '../src/ai/draft-audit-model.js';
+import { acceptDraft } from '../src/services/accept-draft.js';
 
 // CONTENT-QUALITY CQ-2/CQ-3: the production-time gate around a LIVE provider, driven by a scripted
 // fetch (no network, no key). 1 generation -> deterministic screen + 1 independent model audit ->
@@ -431,6 +432,7 @@ test('guard: EVERY human edit route and the reaudit keep audit.original and audi
     const routes = [
       ['reviseSummary', () => drafts.reviseSummary(db, userId, draft.id, { summary: `${draft.summary} Fim.` })],
       ['reviseQuestion', () => drafts.reviseQuestion(db, userId, draft.id, draft.questions[0].id, { hint: 'Pense no balanco das pressoes.' })],
+      ['acceptQuestion', () => drafts.reviseQuestion(db, userId, draft.id, draft.questions[0].id, { status: 'ACCEPTED' })],
       ['addQuestion', () => drafts.addQuestion(db, userId, draft.id, { question: 'Qual pressao se opoe a filtracao?', answer: 'A pressao oncotica e a da capsula de Bowman.', explanation: null, hint: null, sourceSpans: [{ pageIndex: 1 }] })],
       ['reorderQuestions', () => drafts.reorderQuestions(db, userId, draft.id, draft.questions.map((q) => q.id).reverse())],
       ['deleteQuestion', () => drafts.deleteQuestion(db, userId, draft.id, draft.questions[0].id)],
@@ -444,5 +446,13 @@ test('guard: EVERY human edit route and the reaudit keep audit.original and audi
       const reread = drafts.getDraft(db, userId, draft.id);
       assert.deepEqual(reread.audit.original, kept.original, `${name}: still there when the draft is read back from the database`);
     }
+    // accepting the lesson changes its status, never the history kept with the draft
+    acceptDraft(db, userId, draft.id, { newSubjectName: "Farmacologia", studyDate: "2026-03-01", expectedRevision: draft.revision });
+    const accepted = drafts.getDraft(db, userId, draft.id);
+    assert.equal(accepted.status, "ACCEPTED");
+    assert.deepEqual(accepted.audit.original, kept.original, "accepting kept audit.original");
+    assert.deepEqual(accepted.audit.repairChanges, kept.repairChanges, "accepting kept audit.repairChanges");
+    const stored = JSON.parse(db.prepare("SELECT draft_json FROM generated_drafts WHERE id = ?").get(draft.id).draft_json);
+    assert.deepEqual(stored.audit.original, kept.original, "the stored row still has it");
   } finally { cleanup(); }
 });
