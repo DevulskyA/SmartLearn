@@ -17,7 +17,7 @@ import {
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
-import { dm, splitMessage } from '../api-error-messages.js';
+import { carry, dm, splitMessage } from '../api-error-messages.js';
 import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
@@ -472,7 +472,7 @@ export async function createDraft(db, userId, proposalId, {
       reservation = reserve(db, userId, { proposalId, estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }), limits: budgetLimits, now });
       hooks?.onReservation?.(reservation);
     } catch (err) {
-      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', err.message);
+      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
       throw err;
     }
   }

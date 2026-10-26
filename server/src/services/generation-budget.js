@@ -11,13 +11,16 @@
 // dimension". The estimation constants below are internal safety multipliers, NOT commercial prices, and are to be calibrated
 // by the measurement experiment HG-11 proposes.
 import { MAX_SUMMARY_LENGTH } from '../ai/draft-schema.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { config } from '../config.js';
 
 export class BudgetError extends Error {
   constructor(code, message, details = {}) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     Object.assign(this, details);
+    if (msg) this.msg = msg;
   }
 }
 
@@ -89,7 +92,7 @@ export function reserve(db, userId, { proposalId = null, estimatedUnits, limits 
   const run = db.transaction(() => {
     const at = now();
     const { weekKey, monthKey } = periodKeys(at);
-    const refuse = (limit, remaining) => new BudgetError('BUDGET_EXCEEDED', `Esta geração (estimada em ${estimatedUnits}) excede o limite ${limit === 'PER_JOB' ? 'por geração' : limit === 'WEEKLY' ? 'semanal' : 'mensal'} disponível. Nenhuma chamada foi feita e nada foi debitado.`, { limit, remaining, requested: estimatedUnits });
+    const refuse = (limit, remaining) => new BudgetError('BUDGET_EXCEEDED', dm({ PER_JOB: 'BUDGET_EXCEEDED_PER_JOB', WEEKLY: 'BUDGET_EXCEEDED_WEEKLY' }[limit] ?? 'BUDGET_EXCEEDED_MONTHLY', { units: estimatedUnits }), { limit, remaining, requested: estimatedUnits });
     if (limits.maxPerJob !== null && limits.maxPerJob !== undefined && estimatedUnits > limits.maxPerJob) throw refuse('PER_JOB', limits.maxPerJob);
     const weekLeft = remainingOf(limits.weekly, usageOf(db, userId, 'week_key', weekKey).spent);
     if (weekLeft !== null && estimatedUnits > weekLeft) throw refuse('WEEKLY', weekLeft);

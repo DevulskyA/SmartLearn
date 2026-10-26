@@ -292,4 +292,12 @@ export default {
   'api.msg.ATTEMPT_NOT_SUBMITTED': 'Tentativa {attemptId} ainda não foi finalizada.',
   'api.msg.ATTEMPT_IN_REVIEW': 'Tentativa {attemptId} já pertence a uma revisão.',
   'api.msg.ATTEMPT_IN_OTHER_EVIDENCE': 'Tentativa {attemptId} já está vinculada a outra evidência.',
+  'api.msg.EXAM_INCOMPLETE_ONE': 'Falta corrigir 1 questão antes de concluir.',
+  'api.msg.EXAM_INCOMPLETE_OTHER': 'Falta corrigir {pending} questões antes de concluir.',
+  'api.msg.SOURCE_INTEGRITY_FAILED_NOTHING_CHANGED': 'O arquivo armazenado desta fonte não confere mais com o que foi enviado (tamanho/checksum). Nada foi extraído nem alterado; restaure o arquivo original ou envie o PDF novamente.',
+  'api.msg.SOURCE_FILE_TOO_LARGE': 'Arquivo excede o limite de {bytes} bytes.',
+  'api.msg.TEXT_TOO_LONG': 'Texto longo demais (máximo {max} caracteres).',
+  'api.msg.BUDGET_EXCEEDED_PER_JOB': 'Esta geração (estimada em {units}) excede o limite por geração disponível. Nenhuma chamada foi feita e nada foi debitado.',
+  'api.msg.BUDGET_EXCEEDED_WEEKLY': 'Esta geração (estimada em {units}) excede o limite semanal disponível. Nenhuma chamada foi feita e nada foi debitado.',
+  'api.msg.BUDGET_EXCEEDED_MONTHLY': 'Esta geração (estimada em {units}) excede o limite mensal disponível. Nenhuma chamada foi feita e nada foi debitado.',
 };

@@ -42,7 +42,7 @@ function cleanText(raw, max, { required = false, field }) {
   for (const ch of String(raw ?? '')) if (!/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ch) || ch === '\n') out += ch;
   out = out.trim();
   if (required && out === '') throw new VisualAssetError('VALIDATION_FAILED', dm('IMAGE_ALT_REQUIRED'), field);
-  if (out.length > max) throw new VisualAssetError('VALIDATION_FAILED', `Texto longo demais (máximo ${max} caracteres).`, field);
+  if (out.length > max) throw new VisualAssetError('VALIDATION_FAILED', dm('TEXT_TOO_LONG', { max }), field);
   return out;
 }
 

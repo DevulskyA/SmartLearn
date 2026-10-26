@@ -93,7 +93,7 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
     throw new SourceExtractionError('SOURCE_FILE_MISSING', dm('SOURCE_FILE_MISSING_NOTHING_CHANGED'));
   }
   if (verifiedBytes.length !== source.byte_size || sha256Hex(verifiedBytes) !== source.checksum) {
-    throw new SourceExtractionError('SOURCE_INTEGRITY_FAILED', 'O arquivo armazenado desta fonte não confere mais com o que foi enviado (tamanho/checksum). Nada foi extraído nem alterado; restaure o arquivo original ou envie o PDF novamente.');
+    throw new SourceExtractionError('SOURCE_INTEGRITY_FAILED', dm('SOURCE_INTEGRITY_FAILED_NOTHING_CHANGED'));
   }
 
   const myGeneration = db.transaction(() => {

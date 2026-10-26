@@ -252,7 +252,7 @@ export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => 
   if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', dm('EXAM_SUBMIT_BEFORE_FINISH'));
   const rows = itemRows(db, userId, examId);
   const pending = rows.filter((r) => r.outcome == null).length;
-  if (pending > 0) throw new ExamError('INCOMPLETE', `Falta corrigir ${pending} ${pending === 1 ? 'questão' : 'questões'} antes de concluir.`);
+  if (pending > 0) throw new ExamError('INCOMPLETE', (pending === 1 ? dm('EXAM_INCOMPLETE_ONE') : dm('EXAM_INCOMPLETE_OTHER', { pending })));
 
   // One evidence row PER UNIT: a discipline exam measures several units, and each unit's history must only
   // count the questions that belong to it. A single-unit exam is the one-group case of the same code.

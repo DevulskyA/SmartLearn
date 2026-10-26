@@ -1,4 +1,4 @@
-// i18n slices 2-9: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
+// i18n slices 2-10: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
@@ -122,6 +122,14 @@ const TEXT = {
   ATTEMPT_NOT_SUBMITTED: ({ attemptId }) => `Tentativa ${attemptId} ainda não foi finalizada.`,
   ATTEMPT_IN_REVIEW: ({ attemptId }) => `Tentativa ${attemptId} já pertence a uma revisão.`,
   ATTEMPT_IN_OTHER_EVIDENCE: ({ attemptId }) => `Tentativa ${attemptId} já está vinculada a outra evidência.`,
+  EXAM_INCOMPLETE_ONE: () => 'Falta corrigir 1 questão antes de concluir.',
+  EXAM_INCOMPLETE_OTHER: ({ pending }) => `Falta corrigir ${pending} questões antes de concluir.`,
+  SOURCE_INTEGRITY_FAILED_NOTHING_CHANGED: () => 'O arquivo armazenado desta fonte não confere mais com o que foi enviado (tamanho/checksum). Nada foi extraído nem alterado; restaure o arquivo original ou envie o PDF novamente.',
+  SOURCE_FILE_TOO_LARGE: ({ bytes }) => `Arquivo excede o limite de ${bytes} bytes.`,
+  TEXT_TOO_LONG: ({ max }) => `Texto longo demais (máximo ${max} caracteres).`,
+  BUDGET_EXCEEDED_PER_JOB: ({ units }) => `Esta geração (estimada em ${units}) excede o limite por geração disponível. Nenhuma chamada foi feita e nada foi debitado.`,
+  BUDGET_EXCEEDED_WEEKLY: ({ units }) => `Esta geração (estimada em ${units}) excede o limite semanal disponível. Nenhuma chamada foi feita e nada foi debitado.`,
+  BUDGET_EXCEEDED_MONTHLY: ({ units }) => `Esta geração (estimada em ${units}) excede o limite mensal disponível. Nenhuma chamada foi feita e nada foi debitado.`,
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));

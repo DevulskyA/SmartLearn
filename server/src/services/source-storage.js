@@ -111,7 +111,7 @@ export function acceptUpload(db, userId, { buffer, originalName, contentType, so
     throw new SourceError('VALIDATION_FAILED', dm('SOURCE_FILE_EMPTY'), 'file');
   }
   if (buffer.length > maxBytes) {
-    throw new SourceError('FILE_TOO_LARGE', 'Arquivo excede o limite de ' + maxBytes + ' bytes.', 'file');
+    throw new SourceError('FILE_TOO_LARGE', dm('SOURCE_FILE_TOO_LARGE', { bytes: maxBytes }), 'file');
   }
   if (contentType !== 'application/pdf') {
     throw new SourceError('UNSUPPORTED_FILE_TYPE', dm('SOURCE_NOT_PDF_TYPE'), 'contentType');

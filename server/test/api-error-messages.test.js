@@ -170,3 +170,18 @@ test('provider/operation, import size and attempt-id sentences carry their param
   assert.equal(tooLarge.message, 'A restauração excede o limite de capacidade configurado.');
   assert.deepEqual(tooLarge.details, { rowTotal: 1 });
 });
+
+test('exam completion, upload size, text length and budget sentences carry params; BudgetError keeps its details', async () => {
+  const { BudgetError } = await import('../src/services/generation-budget.js');
+  assert.equal(dm('EXAM_INCOMPLETE_ONE').text, 'Falta corrigir 1 questão antes de concluir.');
+  assert.equal(dm('EXAM_INCOMPLETE_OTHER', { pending: 3 }).text, 'Falta corrigir 3 questões antes de concluir.');
+  assert.equal(dm('SOURCE_FILE_TOO_LARGE', { bytes: 1024 }).text, 'Arquivo excede o limite de 1024 bytes.');
+  assert.equal(dm('TEXT_TOO_LONG', { max: 500 }).text, 'Texto longo demais (máximo 500 caracteres).');
+  const budget = new BudgetError('BUDGET_EXCEEDED', dm('BUDGET_EXCEEDED_WEEKLY', { units: 12 }), { limit: 'WEEKLY', remaining: 3, requested: 12 });
+  assert.match(budget.message, /excede o limite semanal disponível/);
+  assert.deepEqual(budget.msg, { code: 'BUDGET_EXCEEDED_WEEKLY', params: { units: 12 } });
+  assert.equal(budget.limit, 'WEEKLY');
+  const wrapped = new DraftError('BUDGET_EXCEEDED', carry(budget));
+  assert.deepEqual(wrapped.msg, { code: 'BUDGET_EXCEEDED_WEEKLY', params: { units: 12 } });
+  assert.equal(new BudgetError('NOT_FOUND', 'Reserva não encontrada.').msg, undefined);
+});
