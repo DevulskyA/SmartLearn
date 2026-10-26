@@ -2,7 +2,7 @@ import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-
 import { resolveOrCreateSubject, describeSubject, LearningUnitError } from './learning-units.js';
 import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
-import { dm, splitMessage } from '../draft-error-messages.js';
+import { carry, dm, splitMessage } from '../api-error-messages.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
@@ -138,7 +138,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     try {
       subject = resolveOrCreateSubject(db, userId, { subjectId, newSubjectName, newSubjectColor });
     } catch (err) {
-      if (err instanceof LearningUnitError) throw new AcceptDraftError(err.code, err.message, err.field);
+      if (err instanceof LearningUnitError) throw new AcceptDraftError(err.code, carry(err), err.field);
       throw err;
     }
 
@@ -226,7 +226,7 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
   try {
     subject = describeSubject(db, userId, { subjectId, newSubjectName, newSubjectColor });
   } catch (err) {
-    if (err instanceof LearningUnitError) throw new AcceptDraftError(err.code, err.message, err.field);
+    if (err instanceof LearningUnitError) throw new AcceptDraftError(err.code, carry(err), err.field);
     throw err;
   }
   const summaryPages = draftContent.summarySourceSpans?.length

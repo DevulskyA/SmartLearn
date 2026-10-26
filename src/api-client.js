@@ -26,7 +26,7 @@ export class ApiError extends Error {
   constructor(code, message, { status, field, requestId, msg } = {}) {
     // A sentence the server sends as a stable code + params is shown from the catalog (follows the interface language); the server's own
     // text is the reserve for an old server, an unknown code or a sentence with no code.
-    const key = typeof msg?.code === 'string' ? `api.draft.${msg.code}` : '';
+    const key = typeof msg?.code === 'string' ? `api.msg.${msg.code}` : '';
     super((key && has(key) ? t(key, msg.params ?? {}) : message) || code);
     this.name = 'ApiError';
     this.code = code;

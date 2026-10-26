@@ -1,7 +1,7 @@
-// CONTENT-QUALITY / i18n slice 2: the student-visible error sentences of the draft editing and acceptance paths, as a stable CODE + PARAMETERS.
+// i18n slices 2-3: the student-visible error sentences of the draft editing and acceptance paths, subjects and lessons, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
-// The client turns `msg.code` into the student's language with the catalog key `api.draft.<CODE>` (src/api-client.js) and uses
+// The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
 // `message` (the same sentence in Portuguese, the RESERVE) for a code it does not know, so older clients and text-only consumers
 // keep working. Deleting the reserve text is a LATER slice. Params are strings or numbers only (they travel as JSON).
 // Not in this table yet: the dynamic sentences (refsMessage, FINDINGS_UNRESOLVED, ENTITY_CONFLICT "what"), provider/ops errors, developer-facing ones.
@@ -24,20 +24,31 @@ const TEXT = {
   STUDY_DATE_INVALID: () => 'Informe uma data de estudo válida (YYYY-MM-DD).',
   SOURCE_CHANGED_SINCE_DRAFT: () => 'O texto da fonte mudou depois que este rascunho foi gerado (a fonte foi extraída de novo). Gere o rascunho novamente a partir do texto atual antes de aceitar.',
   ALL_QUESTIONS_REJECTED: () => 'Todas as questões foram rejeitadas. Mantenha ao menos uma para criar a aula.',
+  SUBJECT_NOT_FOUND: () => 'Disciplina não encontrada.',
+  UNIT_NOT_FOUND: () => 'Aula não encontrada.',
+  SUBJECT_NAME_CONFLICT: () => 'Já existe uma disciplina com esse nome.',
+  SUBJECT_ACTIVE_NAME_CONFLICT: () => 'Já existe uma disciplina ativa com esse nome.',
+  SUBJECT_ARCHIVED_NAME_CONFLICT: () => 'Já existe uma disciplina arquivada com esse nome. Reative-a em vez de criar uma nova.',
+  SUBJECT_NOT_EMPTY: () => 'Não é possível excluir uma disciplina com aulas cadastradas. Arquive-a em vez disso.',
+  SUBJECT_REQUIRED: () => 'Informe uma disciplina para esta aula.',
+  SUBJECT_INACTIVE: () => 'Selecione uma disciplina ativa.',
 };
 
-export const DRAFT_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));
+export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));
 
 /** Reserve text of one message. */
-export const draftMessageText = (code, params = {}) => TEXT[code](params);
+export const apiMessageText = (code, params = {}) => TEXT[code](params);
 
 /** A sentence for DraftError / AcceptDraftError: carries its code and params next to the Portuguese text. */
 export function dm(code, params = {}) {
-  if (!Object.hasOwn(TEXT, code)) throw new Error(`unknown draft error message code ${code}`);
+  if (!Object.hasOwn(TEXT, code)) throw new Error(`unknown API error message code ${code}`);
   return { code, params, text: TEXT[code](params) };
 }
 
-/** Constructor helper of the two error classes: a plain string stays a plain string; a dm() object gives its text and its `msg`. */
+/** When one error class wraps another (LearningUnitError -> AcceptDraftError), keeps the code and params of the inner sentence. */
+export const carry = (err) => (err.msg ? { text: err.message, code: err.msg.code, params: err.msg.params } : err.message);
+
+/** Constructor helper of the error classes: a plain string stays a plain string; a dm() object gives its text and its `msg`. */
 export function splitMessage(message) {
   return typeof message === 'object' && message !== null && typeof message.text === 'string'
     ? { text: message.text, msg: { code: message.code, params: message.params } }

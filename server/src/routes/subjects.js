@@ -9,7 +9,7 @@ function handleError(err, reply) {
       SUBJECT_NOT_EMPTY: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, message: err.message } };
+    return { error: { code: err.code, message: err.message, msg: err.msg } };
   }
   throw err; // let the domain envelope's error handler classify unexpected errors
 }

@@ -5,7 +5,7 @@ function handleError(err, reply) {
   if (err instanceof learningUnits.LearningUnitError) {
     const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, SUBJECT_CONFLICT: 409 };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, field: err.field, message: err.message } };
+    return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
   }
   if (err instanceof IdempotencyConflictError) {
     reply.status(409);

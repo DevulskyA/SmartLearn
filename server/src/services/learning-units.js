@@ -2,12 +2,15 @@ import { validateNamingField, normalizeEntityName, nameKey } from '../../../shar
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 
 export class LearningUnitError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -66,9 +69,7 @@ export function describeSubject(db, userId, { subjectId, newSubjectName, newSubj
     const key = nameKey(newSubjectName);
     const existing = db.prepare('SELECT id, is_active FROM subjects WHERE user_id = ? AND LOWER(name) = ?').get(userId, key);
     if (existing) {
-      throw new LearningUnitError('SUBJECT_CONFLICT', existing.is_active
-        ? 'Já existe uma disciplina com esse nome.'
-        : 'Já existe uma disciplina arquivada com esse nome. Reative-a em vez de criar uma nova.', 'newSubjectName');
+      throw new LearningUnitError('SUBJECT_CONFLICT', dm(existing.is_active ? 'SUBJECT_NAME_CONFLICT' : 'SUBJECT_ARCHIVED_NAME_CONFLICT'), 'newSubjectName');
     }
 
     return { existing: null, create: { name: normalizeEntityName(newSubjectName), color: newSubjectColor || 'DISC-BLUE' } };
@@ -77,10 +78,10 @@ export function describeSubject(db, userId, { subjectId, newSubjectName, newSubj
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: found in a real manual journey —
   // this message previously leaked raw API field names ("Informe subjectId
   // ou newSubjectName.") straight to the end user.
-  if (!subjectId) throw new LearningUnitError('VALIDATION_FAILED', 'Informe uma disciplina para esta aula.', 'subjectId');
+  if (!subjectId) throw new LearningUnitError('VALIDATION_FAILED', dm('SUBJECT_REQUIRED'), 'subjectId');
   const subject = db.prepare('SELECT * FROM subjects WHERE user_id = ? AND id = ?').get(userId, subjectId);
-  if (!subject) throw new LearningUnitError('NOT_FOUND', 'Disciplina não encontrada.', 'subjectId');
-  if (!subject.is_active) throw new LearningUnitError('VALIDATION_FAILED', 'Selecione uma disciplina ativa.', 'subjectId');
+  if (!subject) throw new LearningUnitError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'), 'subjectId');
+  if (!subject.is_active) throw new LearningUnitError('VALIDATION_FAILED', dm('SUBJECT_INACTIVE'), 'subjectId');
   return { existing: subject, create: null };
 }
 
@@ -109,7 +110,7 @@ export function create(db, userId, data) {
 
   const titleError = validateTitleField(title);
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
-  if (!DATE_RE.test(studyDate ?? '')) throw new LearningUnitError('VALIDATION_FAILED', 'Informe uma data de estudo válida (YYYY-MM-DD).', 'studyDate');
+  if (!DATE_RE.test(studyDate ?? '')) throw new LearningUnitError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
   generateReviewDates(studyDate); // throws if calendar-invalid (e.g. Feb 30)
   assertFigureRefs(db, userId, summaryBody);
 
@@ -159,7 +160,7 @@ const SUMMARY_SOURCE_TEXT_CAP = 2000;
 /** The source pages an AI-generated unit's Resumo Mestre was drafted from (frozen at acceptance).
  * [] for manual units and for units accepted before summary provenance existed — nothing invented. */
 export function summarySources(db, userId, id) {
-  if (!findOwned(db, userId, id)) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+  if (!findOwned(db, userId, id)) throw new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   return db.prepare(`
     SELECT c.source_id, c.page_index, c.page_text_snapshot, s.original_name
     FROM unit_summary_citations c
@@ -176,7 +177,7 @@ export function summarySources(db, userId, id) {
 
 export function getById(db, userId, id) {
   const unit = findOwned(db, userId, id);
-  if (!unit) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+  if (!unit) throw new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   return unitDto(unit);
 }
 
@@ -190,7 +191,7 @@ export function getById(db, userId, id) {
  */
 export function updateFields(db, userId, id, { title, sourceText, summaryBody } = {}) {
   const unit = findOwned(db, userId, id);
-  if (!unit) throw new LearningUnitError('NOT_FOUND', 'Aula não encontrada.');
+  if (!unit) throw new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
   const nextTitle = title !== undefined ? title : unit.title;
   const titleError = validateTitleField(nextTitle);

@@ -17,7 +17,7 @@ import {
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
-import { dm, splitMessage } from '../draft-error-messages.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';

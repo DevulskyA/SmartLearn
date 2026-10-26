@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DraftError } from '../src/services/generated-drafts.js';
 import { AcceptDraftError } from '../src/services/accept-draft.js';
 import { handleError } from '../src/routes/generated-drafts.js';
-import { dm, draftMessageText, DRAFT_ERROR_MESSAGE_CODES } from '../src/draft-error-messages.js';
+import { carry, dm, apiMessageText, API_ERROR_MESSAGE_CODES } from '../src/api-error-messages.js';
 
 // Slice 2 of the server-text migration: a draft error keeps {code, field, message} and, for the sentences in the table, adds
 // msg: { code, params }. `message` is the same Portuguese sentence as before (reserve), so a text-only consumer sees no change.
@@ -37,7 +37,33 @@ test('the API body carries code, field, message (reserve) and msg; a plain error
 });
 
 test('every code in the table builds its reserve text and rejects unknown codes', () => {
-  for (const code of DRAFT_ERROR_MESSAGE_CODES) assert.equal(typeof dm(code, { status: 'X' }).text, 'string');
-  assert.equal(draftMessageText('SUMMARY_REQUIRED'), 'Informe o texto do resumo.');
-  assert.throws(() => dm('NOPE'), /unknown draft error message code/);
+  for (const code of API_ERROR_MESSAGE_CODES) assert.equal(typeof dm(code, { status: 'X' }).text, 'string');
+  assert.equal(apiMessageText('SUMMARY_REQUIRED'), 'Informe o texto do resumo.');
+  assert.throws(() => dm('NOPE'), /unknown API error message code/);
+});
+
+test('subject and lesson errors carry code + params with the old text kept, and the route bodies expose msg', async () => {
+  const { SubjectError } = await import('../src/services/subjects.js');
+  const { LearningUnitError } = await import('../src/services/learning-units.js');
+  const subject = new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
+  assert.equal(subject.message, 'Disciplina não encontrada.');
+  assert.deepEqual(subject.msg, { code: 'SUBJECT_NOT_FOUND', params: {} });
+  const plain = new SubjectError('VALIDATION_FAILED', 'Informe o nome da disciplina.');
+  assert.equal(plain.msg, undefined);
+  const unit = new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'), 'id');
+  assert.equal(unit.message, 'Aula não encontrada.');
+  assert.equal(unit.field, 'id');
+  assert.deepEqual(unit.msg, { code: 'UNIT_NOT_FOUND', params: {} });
+});
+
+test('an AcceptDraftError wrapping a LearningUnitError keeps the inner code and params; a plain inner error stays plain', async () => {
+  const { LearningUnitError } = await import('../src/services/learning-units.js');
+  const inner = new LearningUnitError('SUBJECT_CONFLICT', dm('SUBJECT_ARCHIVED_NAME_CONFLICT'), 'newSubjectName');
+  const wrapped = new AcceptDraftError(inner.code, carry(inner), inner.field);
+  assert.equal(wrapped.message, inner.message);
+  assert.deepEqual(wrapped.msg, { code: 'SUBJECT_ARCHIVED_NAME_CONFLICT', params: {} });
+  const plainInner = new LearningUnitError('VALIDATION_FAILED', 'Nome inválido.', 'title');
+  const plainWrapped = new AcceptDraftError(plainInner.code, carry(plainInner), plainInner.field);
+  assert.equal(plainWrapped.message, 'Nome inválido.');
+  assert.equal(plainWrapped.msg, undefined);
 });
