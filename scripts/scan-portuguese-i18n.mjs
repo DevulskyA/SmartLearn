@@ -195,6 +195,25 @@ export function scanAll() {
   return { byFile, findings };
 }
 
+/**
+ * Portuguese prose in server/ and shared/ code: texts the server returns to the screen (audit findings, import notices, backup text) or sends to a
+ * model (prompts). The client cannot translate them. MEASURED and frozen here, not migrated: moving them needs a contract decision (a code plus
+ * parameters from the server, the text in the client catalog), which is the product owner's. Lower the number when that migration happens.
+ */
+export const SERVER_PROSE_BASELINE = 640;
+export function scanServerAndShared() {
+  const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'server/src', 'shared'], { cwd: root, encoding: 'utf8' }).split('\n')
+    .filter((f) => f.endsWith('.js') && existsSync(join(root, f)));
+  const byFile = {};
+  let total = 0;
+  for (const file of files) {
+    const count = scanSource(readFileSync(join(root, file), 'utf8'), file).length;
+    if (count > 0) byFile[file] = count;
+    total += count;
+  }
+  return { byFile, total };
+}
+
 /** What the ratchet counts: text that must eventually move to the catalog (visible + html). */
 export const toMigrate = (counts) => (counts?.visible ?? 0) + (counts?.html ?? 0);
 
@@ -205,6 +224,10 @@ if (isMain) {
     const baseline = Object.fromEntries(Object.entries(byFile).map(([f, c]) => [f, toMigrate(c)]).filter(([, n]) => n > 0));
     writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
     console.log(`baseline written: ${Object.keys(baseline).length} files, ${Object.values(baseline).reduce((a, b) => a + b, 0)} strings`);
+  } else if (process.argv.includes('--server')) {
+    const { byFile: serverFiles, total } = scanServerAndShared();
+    for (const [file, count] of Object.entries(serverFiles).sort((a, b) => b[1] - a[1])) console.log(`${String(count).padStart(4)}  ${file}`);
+    console.log(`SERVER+SHARED Portuguese prose: ${total} (frozen at ${SERVER_PROSE_BASELINE})`);
   } else if (process.argv.includes('--list')) {
     for (const f of findings) console.log(`${f.file}:${f.line} [${f.category}] ${f.text}`);
   } else {
