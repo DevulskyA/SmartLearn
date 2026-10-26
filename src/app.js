@@ -17,6 +17,7 @@ import {
   resolveThemePreference,
 } from "./theme.js";
 import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
+import { findLesson } from "./lesson-link.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
@@ -1609,10 +1610,17 @@ async function loadReinforcementByUnit() {
 // Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
 let pendingPlanFocusUnitId = null;
 
-/** Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. */
-function openLessonInPlan(unitId) {
-  pendingPlanFocusUnitId = unitId;
+/**
+ * Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. It goes only where the lesson
+ * still exists; otherwise it opens nothing and answers false, so the caller says so instead of leaving a dead button.
+ */
+async function openLessonInPlan(unitId) {
+  const units = await DB.learningUnits.getAll().catch(() => []);
+  const lesson = findLesson(units, unitId);
+  if (!lesson) return false;
+  pendingPlanFocusUnitId = lesson.id;
   showScreen("plan", { focus: true });
+  return true;
 }
 
 // Plano can be refreshed from several independent actions (navigation, exam finalization,
@@ -2832,8 +2840,12 @@ function showUnitDetail(r) {
     study.className = "secondary-button unit-detail-study";
     study.dataset.action = "study-unit";
     study.textContent = t("statsView.unit.study");
-    study.addEventListener("click", () => openLessonInPlan(r.unitId));
-    unitDetailBody.append(study);
+    const gone = createTextElement("p", "form-message is-error", "");
+    gone.setAttribute("role", "status");
+    study.addEventListener("click", async () => {
+      gone.textContent = (await openLessonInPlan(r.unitId)) ? "" : t("plan.openLesson.missing");
+    });
+    unitDetailBody.append(study, gone);
   }
 }
 

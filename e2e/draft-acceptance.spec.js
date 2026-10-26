@@ -322,11 +322,18 @@ test('R-4: after accepting, "Abrir Resumo" opens the new lesson in Plano - from 
   await editor.locator('.source-draft-subject-input').fill('Atalho Resumo');
   await editor.locator('.source-draft-date-input').fill('2026-04-01');
   await expect(editor.locator('[data-action="open-summary"]')).toHaveCount(0); // nothing to open before the lesson exists
-  await editor.locator('[data-action="accept-draft"]').click();
+  const [accepted] = await Promise.all([
+    page.waitForResponse((r) => /\/v1\/drafts\/\d+\/accept$/.test(r.url()) && r.request().method() === 'POST'),
+    editor.locator('[data-action="accept-draft"]').click(),
+  ]);
+  const newUnitId = (await accepted.json()).acceptance.unit.id; // the lesson that was JUST created
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
 
   await editor.locator('[data-action="open-summary"]').click();
   await expect(page.locator('#screen-plan')).toBeVisible();
+  // exactly that lesson is open, and no other
+  await expect(page.locator('#screen-plan .plan-row[data-unit-id="' + newUnitId + '"] .plan-row-detail')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#screen-plan .plan-row-detail:visible')).toHaveCount(1);
   const row = page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' });
   await expect(row.locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
   await expect(row.locator('.plan-summary-section')).toBeVisible();

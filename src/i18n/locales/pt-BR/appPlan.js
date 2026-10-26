@@ -6,6 +6,7 @@ export default {
   'plan.unit.subjectRequired': 'Selecione uma disciplina.',
   'plan.unit.saved': 'Aula salva. 16 revisões criadas.',
   'plan.unit.savedReload': 'Aula salva. Recarregue para ver o resultado.',
+  'plan.openLesson.missing': 'Esta aula não está mais disponível.',
   'plan.unit.saveFailed': 'Não foi possível salvar a aula. Tente novamente.',
   'plan.state.overdue': 'Atrasada',
   'plan.state.noEvidence': 'Sem prática registrada',

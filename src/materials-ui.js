@@ -811,7 +811,7 @@ async function onIndexClick(event) {
 
   const summaryBtn = event.target.closest('[data-action="open-summary"]');
   if (summaryBtn) {
-    deps.openSummary(Number(summaryBtn.dataset.unitId));
+    if (!(await deps.openSummary(Number(summaryBtn.dataset.unitId)))) setSourcesMessage(t("plan.openLesson.missing"), true);
     return;
   }
 
