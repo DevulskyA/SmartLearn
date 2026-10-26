@@ -1,0 +1,44 @@
+# PONTO DE RETOMADA — 2026-10-26 (ler este arquivo primeiro; substitui o de 2026-10-25 no que ele disser diferente)
+
+Aluno de Medicina, Desktop first. Regras permanentes dele (também na memória do projeto): máxima facilidade e mínima sobrecarga; **Haiku só executa testes e lê resultados, nunca cria código nem sonda** (toda criação é Sonnet); **não abrir janela do app nativo sem avisar e combinar o momento** (a jornada nativa rouba o foco; builds não abrem janela); **ponytail ativo (full)**: menor mudança completa, e fechar cada resposta com o que foi pulado e o risco; commits por assunto com arquivos explícitos (nunca `git add .`); sem `push --force`, sem merge em `main`, sem tocar em `~/SmartLearn-DevData` (nem abrir o banco); toda prévia diz branch, SHA, executável, dados e estado da validação; trabalho de outro agente entra por SHA, em worktree separada, com compatibilidade verificada.
+
+## Branches e SHAs (todas publicadas em origin, push normal)
+| Branch | SHA | O que é |
+|---|---|---|
+| `claude/smartlearn-figure-width` | ver `git log` (último de código: `cc09d47`; este handoff vem depois) | R-3, R-4, R-5 e guardas, tudo abaixo |
+| `claude/v1-window-memory-product` | `ecc2f32` | V1 (`eb9337c`) + memória de janela (`95433d8`, partes Rust do `03ca6b8`) + `PRODUCT.md` (`2db2853`) |
+| `claude/smartlearn-v1-complete` (local) | `ecc2f32` | avançou por fast-forward LOCAL; **o remoto dela segue em `ed15172`, sem push** (PR #6 aberto) |
+| `claude/smartlearn-window-state` | `bad47ac` | figure-width + partes Rust do `03ca6b8` (experimento de compatibilidade) |
+| `claude/product-md-on-main` / `-on-next-sprints` / `-on-stats-aaa` | `0bef107` / `f6439d2` / `6921f11` | só a correção do `PRODUCT.md` (Medicina, Desktop first) |
+| `claude/smartlearn-next-sprints`, `claude/stats-aaa-6405e1` | `03ca6b8`, `70e9190` | NÃO foram tocadas (stats-aaa segue separada; testes dela não validados) |
+Worktrees em `C:\Projetos\SmartLearn\.claude\worktrees\`: `smartlearn-figure-width`, `smartlearn-v1-complete`, `smartlearn-v1-window-memory`, `smartlearn-window-state`, `smartlearn-pmd-main`, `smartlearn-pmd-next`, `smartlearn-pmd-stats`, `smartlearn-next-sprints`, `stats-aaa-6405e1`.
+
+## Entregue em figure-width (cada item com commit e prova)
+- **R-3 (auditoria médica):** os 4 achados lexicais (`SUMMARY_UNSUPPORTED_TERM`, `SUMMARY_OMITS_CENTRAL_CONCEPT`, `QUESTION_UNSUPPORTED_TERM`, `QUESTION_LOW_SOURCE_SUPPORT`) têm `blocksRepair:false` (`triggersRepair()` em `draft-audit.js`): continuam visíveis, não pedem reparo; erro real (valor, dose, unidade, qualificador) continua bloqueando. O reparo guarda `audit.original` e `audit.repairChanges`, preservados por TODAS as rotas de edição, reauditoria, releitura e aceite (teste de guarda). Auditor de modelo: veredito por afirmação (`CONTRADICTED` com citação literal localizável de ≥3 palavras/20 caracteres, senão descartado; `NOT_FOUND`/`NOT_EVALUABLE` nunca reparam). Aviso `SOURCE_TEXT_INSUFFICIENT` (LOW: <250 caracteres/página em 2+ páginas, página sem texto, ou ≥5 U+FFFD). UI da revisão agrupada por causa, com aviso "palavra ausente não prova erro". Regras: `audit-rules-8` (hash fixado em `draft-audit-rules-version.test.js`, inclui `draft-audit-model.js`). Testes médicos: `server/test/draft-audit-medical.test.js`.
+- **R-5:** cabeçalho do rascunho segue o estado do servidor (`draftState()`: aguardando conferência, conferência pendente N itens, "Aula aceita e adicionada aos seus estudos.").
+- **R-4:** "Abrir Resumo" depois de aceitar (editor e linha do trecho; o servidor devolve `latestDraft.acceptedUnitId` só se a aula existe e é do usuário); "Estudar conteúdo" no detalhe de Estatísticas; ambos usam `openLessonInPlan` + `findLesson` (`src/lesson-link.js`) e mostram "Esta aula não está mais disponível." se a aula sumiu. Cadastro de disciplinas: um componente (`src/subject-create-form.js`) em Disciplinas, Cadastro, Plano e rodapé de aceite (modo atômico, com cor); cores como grupo de rádio (uma parada de Tab, setas), alvo de 44 px no editor.
+- **Guardas:** `scan-portuguese-i18n.mjs` e `text-integrity.mjs` agora varrem arquivos NOVOS não rastreados; o scanner cobre `index.html` (baseline 16) e tem catraca do servidor/shared (**640** mensagens em português, `--server`).
+
+## Prova (resultados reais)
+Último estado completo: lint limpo; unitários **833/833**; servidor **1158** (1 intermitente `process-smoke`, passou ao repetir); E2E completo **358/0/2** em `1967909` (+30/30 nos arquivos afetados depois). Jornada nativa (Windows, WebView2, dados descartáveis): figure-width 23/23 (1 falha única no passo 17 em monitor secundário, não reproduziu), window-state 23/23 ×2, **V1+memória 18/18 ×3**; `cargo test window_state` 7/7. Capturas headless (NÃO nativas) de revisão, rodapé, aceite, Plano, Disciplinas e Estatísticas em 800×600 e 1280×800, claro e escuro: sem defeito (um, o peso do rótulo "Cor", corrigido).
+
+## Pendências (todas dependem do usuário)
+1. **Launcher real:** o atalho `SmartLearn DEV.lnk` roda `scripts/launch-desktop-dev.ps1` da V1 (`npm run tauri dev`, recompila o Rust). Última abertura registrada: **18/10, `eb9337c`**; `window-state.json` **não existe** em `C:\Users\Ariel\SmartLearn-DevData`. Ele precisa abrir pelo atalho (1ª vez recompila e abre centralizada no monitor principal = DISPLAY2, 0,0, 1920×1080; DISPLAY1 fica à esquerda, x=-1440), arrastar para o monitor desejado e fechar. Depois dizer "gravou"/"não gravou" (ou colar a linha do arquivo). O código grava ao fechar e a cada 0,6 s ao mover/redimensionar, e guarda posição E tamanho.
+2. **Capturas do app nativo:** script pronto e local, `scripts/zz-native-shots.mjs` (não rastreado; usa `sl-fw-target`); só rodar quando ele disser "pode abrir" (1 execução, ~2 min).
+3. **Contrato das 640 mensagens do servidor em português** (achados da auditoria, importação, backup, prompts): recomendação já proposta e SEM resposta: servidor devolve **código + parâmetros**, texto no catálogo do cliente, em fatias (começar pelos achados da auditoria), texto antigo como reserva até a fatia ser provada, baixando o número da catraca. Sem esse "ok" a auditoria de i18n fica parcial.
+4. **V1 no remoto:** o fast-forward local da V1 não foi enviado (`ed15172` no remoto, PR #6). Enviar só com ordem dele.
+5. `PRODUCT.md` corrigido só nas branches novas; levar para `main`/`next-sprints`/`stats-aaa` de fato = merge, só com ordem.
+
+## Armadilhas medidas (não repetir)
+- `git ls-files` sem `--others` não vê arquivo novo (já corrigido nos dois guardas); `git apply --cached --unidiff-zero` coloca adição pura no lugar errado: para commit parcial use hunks com contexto normal e confira com `git show :arquivo`.
+- `node -e` e heredoc engolem barras invertidas e mutilam crases, `\uFFFD` e regex: usar o Edit; U+FFFD literal em arquivo rastreado quebra `text-integrity` (usar `\uFFFD`).
+- `npm run build` recusa fora da V1; o modo documentado `CI=1` dispensa só esse guarda (esta worktree tem `npm ci` próprio). Alvos de build: `%LOCALAPPDATA%\Temp\sl-fw-target` (figure-width), `sl-ws-target` (window-state), `sl-v1w-target` (V1+memória); não rodar dois executáveis nativos juntos.
+- Não editar `src/` nem `e2e/` com E2E rodando (o Vite serve ao vivo). `playwright` roda sem tela por padrão (não abre janela).
+- Testes de spec novos que dependem de lista (Estatísticas) devem esperar `#subject-kpi-list tr.matrix-row` antes de trocar de aba; servidor de teste precisa de `SMARTLEARN_ALLOWED_ORIGINS=VITE_ORIGIN`.
+- Cada instância nativa de teste usa dados descartáveis novos: nunca "lembra" o que o usuário arrastou na anterior (foi o que o usuário viu como "abre na tela errada").
+
+## Decisões que NÃO se reabrem
+Haiku só testa; sem janela sem aviso; sem merge em `main`; sem `--force`; V1 só recebe a memória de janela por fast-forward LOCAL; não existe tela própria do resumo (o atalho abre a aula no Plano, expandida); R-3/R-4/R-5 estão concluídos (R-3 sem item aberto).
+
+## Como retomar
+`git status`, `git log --oneline -5`, depois perguntar ao usuário pelos 3 itens acima. Se ele responder "ok" ao item 3: começar pela primeira fatia (achados da auditoria) em fatias pequenas, cada uma com teste e redução da catraca. Arquivos locais fora dos commits: `scripts/zz-open-preview.mjs` (revisado: seguro, específico demais para ficar) e `scripts/zz-native-shots.mjs`.
