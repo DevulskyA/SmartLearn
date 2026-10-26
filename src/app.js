@@ -16,7 +16,8 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, getState } from "./performance-thresholds.js";
+import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
@@ -190,10 +191,15 @@ const navigationItems = [...document.querySelectorAll("[data-screen]")];
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
 const subjectSelect = document.querySelector("#subject-select");
-const showSubjectFormButton = document.querySelector("#show-subject-form");
-const newSubjectForm = document.querySelector("#new-subject-form");
-const newSubjectInput = document.querySelector("#new-subject-input");
 const subjectMessage = document.querySelector("#subject-message");
+// Disciplinas, Cadastro and Plano all open this same registration (name + colour): see subject-create-form.js
+const registerSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#new-subject-slot"),
+  ids: { form: "new-subject-form", input: "new-subject-input" },
+  trigger: document.querySelector("#show-subject-form"),
+  report: (text) => setSubjectMessage(text),
+  submit: createSubjectFromRegister,
+});
 const subjectList = document.querySelector("#subject-list");
 const subjectsEmpty = document.querySelector("#subjects-empty");
 const subjectManagerMessage = document.querySelector("#subject-manager-message");
@@ -279,12 +285,16 @@ const trackingFilterPeriod = document.querySelector("#tracking-filter-period");
 const subjectsCatalog = document.querySelector("#subjects-catalog");
 const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
 const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
-const subjectsCreateForm = document.querySelector("#subjects-create-form");
-const subjectsNewName = document.querySelector("#subjects-new-name");
-const subjectsNewColorPicker = document.querySelector("#subjects-new-color-picker");
-const subjectsCreateSaveBtn = document.querySelector("#subjects-create-save-btn");
-const subjectsCreateCancelBtn = document.querySelector("#subjects-create-cancel-btn");
-const subjectsCreateMessage = document.querySelector("#subjects-create-message");
+createSubjectCreateForm({
+  slot: document.querySelector("#subjects-create-slot"),
+  ids: { form: "subjects-create-form", input: "subjects-new-name", submit: "subjects-create-save-btn", cancel: "subjects-create-cancel-btn", message: "subjects-create-message" },
+  trigger: subjectsShowCreateBtn,
+  cancellable: true,
+  submit: async (name, color) => {
+    await DB.subjects.create(name, color);
+    await renderDisciplinas();
+  },
+});
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
@@ -293,9 +303,13 @@ const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
 const planSubjectSelect = document.querySelector("#plan-subject-select");
-const planShowSubjectForm = document.querySelector("#plan-show-subject-form");
-const planNewSubjectForm = document.querySelector("#plan-new-subject-form");
-const planNewSubjectInput = document.querySelector("#plan-new-subject-input");
+const planSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#plan-new-subject-slot"),
+  ids: { form: "plan-new-subject-form", input: "plan-new-subject-input" },
+  trigger: document.querySelector("#plan-show-subject-form"),
+  report: (text, isError) => setPlanFormMessage(text, isError),
+  submit: createSubjectFromPlan,
+});
 const planStudySource = document.querySelector("#plan-study-source");
 const planStudyDate = document.querySelector("#plan-study-date");
 const planStudyTitle = document.querySelector("#plan-study-title");
@@ -2413,26 +2427,6 @@ export async function renderTracking() {
   }
 }
 
-function buildColorPicker(container, selectedKey, onSelect) {
-  if (!container) return;
-  container.replaceChildren();
-  for (const key of SUBJECT_COLOR_KEYS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "color-swatch";
-    btn.dataset.colorKey = key;
-    btn.style.setProperty("--swatch-color", `var(${colorVarForKey(key)})`);
-    btn.setAttribute("aria-label", key.replace("DISC-", "").toLowerCase());
-    if (key === selectedKey) btn.classList.add("is-selected");
-    btn.addEventListener("click", () => {
-      for (const b of container.querySelectorAll(".color-swatch")) b.classList.remove("is-selected");
-      btn.classList.add("is-selected");
-      onSelect(key);
-    });
-    container.append(btn);
-  }
-}
-
 export async function renderDisciplinas() {
   if (!subjectsCatalog) return;
   const [subjects, allUnits, allEvidence] = await Promise.all([
@@ -4127,16 +4121,6 @@ function setSubjectManagerMessage(message = "") {
   subjectManagerMessage.textContent = message;
 }
 
-function setSubjectFormVisible(visible) {
-  newSubjectForm.hidden = !visible;
-  showSubjectFormButton.setAttribute("aria-expanded", String(visible));
-  setSubjectMessage();
-
-  if (visible) {
-    newSubjectInput.focus();
-  }
-}
-
 function setStudyManagerMessage(message = "") {
   studyManagerMessage.textContent = message;
 }
@@ -4148,8 +4132,9 @@ function resetRegisterState() {
   studyForm.reset();
   studyDateInput.value = getLocalDateValue();
   if (studySourceTextInput) studySourceTextInput.value = "";
-  newSubjectForm.reset();
-  setSubjectFormVisible(false);
+  registerSubjectForm.reset();
+  registerSubjectForm.hide();
+  setSubjectMessage();
   setSubjectManagerMessage();
   setStudyManagerMessage();
   studyMessage.classList.remove("is-error");
@@ -4796,48 +4781,28 @@ window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));
 });
 
-showSubjectFormButton.addEventListener("click", () => {
-  setSubjectFormVisible(newSubjectForm.hidden);
-});
-
 let pendingSubjectCreate = null;
 
-newSubjectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = newSubjectInput.value.trim();
-  const nameValidationError = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameValidationError) {
-    setSubjectMessage(nameValidationError);
-    newSubjectInput.focus();
-    return;
-  }
-
+// Cadastro's door to the one registration of a discipline. The save of a study waits for `pendingSubjectCreate` (see saving a study).
+async function createSubjectFromRegister(name, color) {
   // AC-05: preserve draft values before re-render
   const draftDate = studyDateInput.value;
   const draftContent = studyContentInput.value;
   const draftSummary = studySummaryTextarea.value;
   const draftSource = studySourceTextInput ? studySourceTextInput.value : "";
 
-  try {
-    pendingSubjectCreate = (async () => {
-      const subject = await DB.subjects.create(name);
-      await renderSubjects(subject.id);
-    })();
-    await pendingSubjectCreate;
-    newSubjectForm.reset();
-    setSubjectFormVisible(false);
+  pendingSubjectCreate = (async () => {
+    const subject = await DB.subjects.create(name, color);
+    await renderSubjects(subject.id);
+  })();
+  await pendingSubjectCreate;
 
-    // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
-    if (!studyDateInput.value) studyDateInput.value = draftDate;
-    if (!studyContentInput.value) studyContentInput.value = draftContent;
-    if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
-    if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
-  } catch (error) {
-    const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectMessage(t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.addFailed"));
-    newSubjectInput.focus();
-  }
-});
+  // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
+  if (!studyDateInput.value) studyDateInput.value = draftDate;
+  if (!studyContentInput.value) studyContentInput.value = draftContent;
+  if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
+  if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
+}
 
 subjectList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
@@ -5835,33 +5800,6 @@ statsUnitFilterPeriod?.addEventListener("change", () => {
   renderStatsByUnit().catch(console.error);
 });
 
-let newSubjectColor = "DISC-BLUE";
-
-subjectsShowCreateBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = false;
-  subjectsNewName.value = "";
-  subjectsCreateMessage.textContent = "";
-  newSubjectColor = "DISC-BLUE";
-  buildColorPicker(subjectsNewColorPicker, newSubjectColor, (k) => { newSubjectColor = k; });
-  subjectsNewName.focus();
-});
-subjectsCreateCancelBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = true;
-  subjectsCreateMessage.textContent = "";
-});
-subjectsCreateSaveBtn?.addEventListener("click", async () => {
-  const name = subjectsNewName?.value.trim() ?? "";
-  const nameErr = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameErr) { subjectsCreateMessage.textContent = nameErr; subjectsNewName?.focus(); return; }
-  try {
-    await DB.subjects.create(name, newSubjectColor);
-    subjectsCreateForm.hidden = true;
-    subjectsCreateMessage.textContent = "";
-    await renderDisciplinas();
-  } catch (error) {
-    subjectsCreateMessage.textContent = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "appRegister.subject.createFailed");
-  }
-});
 function setPlanFormVisible(visible) {
   if (!planNewUnitForm) return;
   planNewUnitForm.hidden = !visible;
@@ -5870,13 +5808,6 @@ function setPlanFormVisible(visible) {
     if (!planStudyDate.value) planStudyDate.value = getLocalDateValue();
     planStudyTitle.focus();
   }
-}
-
-function setPlanSubjectSubformVisible(visible) {
-  if (!planNewSubjectForm) return;
-  planNewSubjectForm.hidden = !visible;
-  planShowSubjectForm.setAttribute("aria-expanded", String(visible));
-  if (visible) planNewSubjectInput.focus();
 }
 
 function setPlanFormMessage(msg = "", isError = false) {
@@ -5918,34 +5849,19 @@ firstCreateBtn?.addEventListener("click", () => {
 
 planUnitCancelBtn?.addEventListener("click", () => {
   setPlanFormVisible(false);
-  setPlanSubjectSubformVisible(false);
+  planSubjectForm?.hide();
+  planSubjectForm?.reset();
   setPlanFormMessage();
-  if (planNewSubjectInput) planNewSubjectInput.value = "";
   planSaveOperation.renew();
 });
 
-planShowSubjectForm?.addEventListener("click", () => {
-  setPlanSubjectSubformVisible(planNewSubjectForm.hidden);
-});
-
-planNewSubjectForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = planNewSubjectInput.value.trim();
-  const nameError = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput.focus(); return; }
-  try {
-    const newSubject = await DB.subjects.create(name, "DISC-BLUE");
-    await renderPlan();
-    if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
-    setPlanSubjectSubformVisible(false);
-    planNewSubjectInput.value = "";
-    planStudyTitle.focus();
-  } catch (error) {
-    const msg = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "plan.subject.createFailed");
-    setPlanFormMessage(msg, true);
-    console.error("Falha ao criar disciplina no plano.", error);
-  }
-});
+// Plano's door to the one registration of a discipline: the new discipline is created now, listed and picked for the lesson being typed
+async function createSubjectFromPlan(name, color) {
+  const newSubject = await DB.subjects.create(name, color);
+  await renderPlan();
+  if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
+  planStudyTitle.focus();
+}
 
 planUnitSaveBtn?.addEventListener("click", async () => {
   setPlanFormMessage();
@@ -5960,13 +5876,11 @@ planUnitSaveBtn?.addEventListener("click", async () => {
 
   // Resolve discipline: capture new name to include in atomic save, or use selected existing ID
   let newSubjectName = null;
-  if (planNewSubjectForm && !planNewSubjectForm.hidden) {
-    const pendingName = planNewSubjectInput?.value.trim();
-    if (pendingName) {
-      const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
-      if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
-      newSubjectName = pendingName;
-    }
+  const pendingName = planSubjectForm?.pendingName();
+  if (pendingName) {
+    const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
+    if (nameError) { setPlanFormMessage(nameError, true); planSubjectForm.input.focus(); return; }
+    newSubjectName = pendingName;
   }
 
   const sourceText = planStudySource?.value.trim() ?? "";
@@ -5981,7 +5895,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      ? { newSubjectName, newSubjectColor: planSubjectForm.color, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
       : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
     // Save succeeded (or an idempotent retry returned the original result)
@@ -5991,8 +5905,8 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
-    if (planNewSubjectInput) planNewSubjectInput.value = "";
-    setPlanSubjectSubformVisible(false);
+    planSubjectForm?.reset();
+    planSubjectForm?.hide();
     setPlanFormMessage(t("plan.unit.saved"));
     try {
       await renderPlan();

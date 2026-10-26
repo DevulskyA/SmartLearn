@@ -348,3 +348,21 @@ test('R-4: after accepting, "Abrir Resumo" opens the new lesson in Plano - from 
   await expect(page.locator('#screen-plan')).toBeVisible();
   await expect(page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' }).locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
 });
+
+// R-4: the accept footer offers the same colour choice as every other door to a new discipline, and the lesson's new discipline gets it.
+test('R-4: a new discipline created while accepting a draft gets the colour chosen in the footer', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'cor-aceite.pdf', ['Farmacocinética: absorção e distribuição']);
+  const swatches = editor.locator('form.subject-create-form .color-swatch');
+  expect(await swatches.count()).toBeGreaterThan(1);
+  await swatches.nth(3).click();
+  const chosen = await swatches.nth(3).evaluate((el) => el.style.getPropertyValue('--swatch-color'));
+  await editor.locator('.source-draft-subject-input').fill('Cor Aceite');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  await page.locator('[data-screen="subjects"]').click();
+  const card = page.locator('.subject-catalog-card', { hasText: 'Cor Aceite' });
+  await expect(card).toBeVisible({ timeout: 5000 });
+  expect(await card.evaluate((el) => el.style.getPropertyValue('--subject-color'))).toBe(chosen);
+});

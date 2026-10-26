@@ -3991,7 +3991,7 @@ h1 {
 }
 
 /* Subjects screen */
-.subjects-create-form {
+.subjects-create-slot > .subject-create-form {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1rem;
@@ -4074,6 +4074,18 @@ h1 {
 }
 .color-swatch:hover { transform: scale(1.15); }
 .color-swatch.is-selected { border-color: var(--color-text); transform: scale(1.1); }
+/* inside the lesson editor a swatch is a 44px touch target; the coloured dot stays small (the transparent border is the hit area) */
+.lesson-editor .color-swatch {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  border: 9px solid transparent;
+  background-clip: padding-box;
+}
+.lesson-editor .color-swatch:hover,
+.lesson-editor .color-swatch.is-selected { transform: none; }
+.lesson-editor .color-swatch.is-selected { outline: 2px solid var(--color-text); outline-offset: -9px; }
+.lesson-editor .color-swatch:disabled { opacity: 0.4; cursor: not-allowed; }
 .small-button {
   padding: 0.3rem 0.7rem;
   border-radius: 6px;

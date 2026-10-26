@@ -14,6 +14,7 @@ import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
+import { createSubjectCreateForm } from "./subject-create-form.js";
 import {
   QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, draftState, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
@@ -245,8 +246,17 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     subjectSelect.append(opt);
   }
   subjectField.append(subjectLabel, subjectSelect);
-  const nameField = labelledField(`${uid}-subject-name`, t("editor.accept.newSubjectName"), "input", "");
-  nameField.input.classList.add("source-draft-subject-input");
+  // A new discipline is the SAME registration as in Disciplinas, Cadastro and Plano (subject-create-form.js): same fields, same colour choice, same
+  // validation. Here it is saved together with the lesson, so it has no button of its own; it is unusable once an existing discipline is picked.
+  const newSubjectSlot = document.createElement("div");
+  newSubjectSlot.className = "lesson-field";
+  const newSubject = createSubjectCreateForm({
+    slot: newSubjectSlot,
+    ids: { form: `${uid}-new-subject`, input: `${uid}-subject-name` },
+    atomic: true,
+    inputClass: "source-draft-subject-input",
+    report: (text, isError) => setMessage(acceptMessage, text, isError),
+  });
   const dateField = labelledField(`${uid}-date`, t("editor.accept.date"), "input", today);
   dateField.input.type = "date";
   dateField.input.classList.add("source-draft-date-input");
@@ -271,11 +281,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptMessage.classList.add("source-draft-result");
   const afterAccept = document.createElement("div");
   afterAccept.className = "lesson-actions";
-  footer.append(acceptTitle, acceptNote, subjectField, nameField.wrap, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
+  footer.append(acceptTitle, acceptNote, subjectField, newSubjectSlot, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
-    nameField.input.disabled = picked;
-    if (picked) nameField.input.value = "";
+    newSubject.setEnabled(!picked);
+    if (picked) newSubject.reset();
   });
 
   // Unsaved changes found from an earlier session (window closed, connection lost): offered to the student, never applied behind their back
@@ -807,13 +817,24 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     return true;
   }
 
+  // The same check as every other door to a new discipline, before anything is sent; true when the name was refused (and said so).
+  function newSubjectProblem(pickedSubjectId) {
+    if (pickedSubjectId) return false;
+    const problem = newSubject.validate();
+    if (!problem) return false;
+    setMessage(acceptMessage, problem, true); // announced in place; focus stays on the button that was pressed
+    return true;
+  }
+
   previewBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowPreview", "editor.accept.savePendingPreview")) return;
     const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
+    if (newSubjectProblem(pickedSubjectId)) return;
     previewBtn.disabled = true;
     const result = await deps.previewAcceptance(draft.id, {
       subjectId: pickedSubjectId ?? undefined,
-      newSubjectName: pickedSubjectId ? undefined : nameField.input.value,
+      newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
+      newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
       studyDate: dateField.input.value,
       expectedRevision: draft.revision,
       acknowledgeSummaryFindings: ackBox.checked,
@@ -831,10 +852,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowAccept", "editor.accept.savePendingAccept")) return;
     const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
+    if (newSubjectProblem(pickedSubjectId)) return;
     acceptBtn.disabled = true;
     const result = await deps.acceptDraft(draft.id, {
       subjectId: pickedSubjectId ?? undefined,
-      newSubjectName: pickedSubjectId ? undefined : nameField.input.value,
+      newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
+      newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
       studyDate: dateField.input.value,
       expectedRevision: draft.revision,
       acknowledgeSummaryFindings: ackBox.checked,

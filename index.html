@@ -216,15 +216,7 @@
                     <span aria-hidden="true">+</span> <span data-i18n="screens.form.newSubject">Nova disciplina</span>
                   </button>
                 </div>
-                <form class="inline-form" id="plan-new-subject-form" hidden novalidate>
-                  <div class="field-group inline-form-field">
-                    <label for="plan-new-subject-input" data-i18n="screens.form.newSubjectName">Nome da nova disciplina</label>
-                    <div class="inline-form-row">
-                      <input id="plan-new-subject-input" name="planSubjectName" type="text" maxlength="100" autocomplete="off" />
-                      <button class="primary-button" type="submit" data-i18n="screens.form.add">Adicionar</button>
-                    </div>
-                  </div>
-                </form>
+                <div class="subject-create-slot" id="plan-new-subject-slot"></div>
               </div>
               <div class="field-group form-grid-wide">
                 <label for="plan-study-source" data-i18n="screens.form.source">Fonte</label>
@@ -310,23 +302,7 @@
             </div>
             <button class="primary-button" id="subjects-show-create-btn" type="button" data-i18n="screens.subjects.new">+ Nova disciplina</button>
           </div>
-          <div class="subjects-create-form form-card" id="subjects-create-form" hidden>
-            <div class="form-grid">
-              <div class="field-group form-grid-wide">
-                <label for="subjects-new-name" data-i18n="screens.subjects.form.name">Nome da disciplina</label>
-                <input id="subjects-new-name" type="text" maxlength="100" autocomplete="off" />
-              </div>
-              <div class="field-group form-grid-wide">
-                <span class="field-label" data-i18n="screens.subjects.form.color">Cor</span>
-                <div class="color-picker" id="subjects-new-color-picker" role="radiogroup" aria-label="Cor da disciplina" data-i18n-aria-label="screens.subjects.form.colorLabel"></div>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="primary-button" id="subjects-create-save-btn" type="button" data-i18n="screens.form.save">Salvar</button>
-              <button class="small-button" id="subjects-create-cancel-btn" type="button" data-i18n="screens.form.cancel">Cancelar</button>
-              <p class="form-message" id="subjects-create-message" role="status" aria-live="polite"></p>
-            </div>
-          </div>
+          <div class="subjects-create-slot" id="subjects-create-slot"></div>
           <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
           <p class="panel-empty" id="subjects-catalog-empty" hidden data-i18n="screens.subjects.empty">Nenhuma disciplina cadastrada.</p>
         </section>
@@ -383,15 +359,7 @@
               </div>
             </form>
 
-            <form class="inline-form" id="new-subject-form" hidden novalidate>
-              <div class="field-group inline-form-field">
-                <label for="new-subject-input" data-i18n="screens.form.newSubjectName">Nome da nova disciplina</label>
-                <div class="inline-form-row">
-                  <input id="new-subject-input" name="subjectName" type="text" maxlength="100" autocomplete="off" />
-                  <button class="primary-button" type="submit" data-i18n="screens.form.add">Adicionar</button>
-                </div>
-              </div>
-            </form>
+            <div class="subject-create-slot" id="new-subject-slot"></div>
 
             <section class="study-manager" aria-labelledby="study-manager-title">
               <div class="section-heading compact-heading">
