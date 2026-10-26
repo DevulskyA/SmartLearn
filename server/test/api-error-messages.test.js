@@ -139,3 +139,18 @@ test('proposal search/scope and generation errors carry code + params with the o
     assert.deepEqual(err.msg, { code, params: {} });
   }
 });
+
+test('dynamic sentences carry their counts and ids as params: findings pending, unusable figures, stale summary/question', async () => {
+  const { refsMessage } = await import('../src/services/visual-assets.js');
+  const pending = dm('FINDINGS_UNRESOLVED', { questions: 2, summary: 0 });
+  assert.match(pending.text, /^Não dá para aceitar ainda\./);
+  assert.deepEqual({ code: pending.code, params: pending.params }, { code: 'FINDINGS_UNRESOLVED', params: { questions: 2, summary: 0 } });
+  const figures = refsMessage([{ id: 'abcdef123456', reason: 'OTHER_SOURCE' }, { id: '99999999zzzz', reason: 'MISSING' }]);
+  assert.equal(figures.code, 'FIGURES_NOT_USABLE');
+  assert.deepEqual(figures.params, { otherSource: 'abcdef12…', missing: '99999999…' });
+  assert.deepEqual(refsMessage([{ id: 'abcdef123456', reason: 'OTHER_SOURCE' }]).params, { otherSource: 'abcdef12…', missing: '—' });
+  assert.equal(dm('SUMMARY_CHANGED_SINCE_READ').text, 'O resumo foi alterado desde a última leitura. Recarregue e revise a versão atual.');
+  const err = new DraftError('VALIDATION_FAILED', figures, 'summary');
+  assert.equal(err.msg.code, 'FIGURES_NOT_USABLE');
+  assert.equal(err.field, 'summary');
+});

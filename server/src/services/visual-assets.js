@@ -228,4 +228,5 @@ export function findUnresolvedRefs(db, userId, text, { sourceId = null } = {}) {
   return problems;
 }
 
-export const refsMessage = (problems) => `O resumo aponta para figura(s) que não podem ser usadas aqui: ${problems.map((p) => `${p.id.slice(0, 8)}… (${p.reason === 'OTHER_SOURCE' ? 'vem de outra fonte' : 'não existe ou não é sua'})`).join(', ')}.`;
+const refIds = (problems, wanted) => problems.filter((p) => (p.reason === 'OTHER_SOURCE') === wanted).map((p) => `${p.id.slice(0, 8)}…`).join(', ') || '—';
+export const refsMessage = (problems) => dm('FIGURES_NOT_USABLE', { otherSource: refIds(problems, true), missing: refIds(problems, false) });

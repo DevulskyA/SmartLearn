@@ -9,7 +9,7 @@ export function registerPriorityRoutes(app, db) {
     } catch (err) {
       if (err instanceof priorities.PrioritiesError) {
         reply.status(400);
-        return { error: { code: err.code, field: err.field, message: err.message } };
+        return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
       }
       throw err;
     }

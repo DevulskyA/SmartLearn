@@ -123,10 +123,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   const plan = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
   const { proposal, dueDates, draftContent, pageTextByIndex, sourceRow, blockers } = plan;
   if (blockers.questions.length > 0 || blockers.summary > 0) {
-    const parts = [];
-    if (blockers.questions.length > 0) parts.push(`${blockers.questions.length} questão(ões) com ponto crítico ainda não aceitas ou rejeitadas por você`);
-    if (blockers.summary > 0) parts.push(`${blockers.summary} ponto(s) crítico(s) no resumo que você ainda não conferiu`);
-    throw new AcceptDraftError('FINDINGS_UNRESOLVED', `Não dá para aceitar ainda: ${parts.join('; ')}. Confira na fonte e aceite ou rejeite cada uma.`);
+    throw new AcceptDraftError('FINDINGS_UNRESOLVED', dm('FINDINGS_UNRESOLVED', { questions: blockers.questions.length, summary: blockers.summary }));
   }
 
   const run = db.transaction(() => {

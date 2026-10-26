@@ -273,4 +273,10 @@ export default {
   'api.msg.GENERATION_CANCELLED_BEFORE_CALL': 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.',
   'api.msg.GENERATION_CANCELLED_NO_DRAFT': 'A geração foi interrompida; nenhum rascunho foi salvo.',
   'api.msg.PROVIDER_UNEXPECTED_FAILURE': 'O provedor falhou de forma inesperada. Nada foi salvo.',
+  'api.msg.FINDINGS_UNRESOLVED': 'Não dá para aceitar ainda. Questões com ponto crítico ainda sem decisão sua: {questions}. Pontos críticos no resumo ainda não conferidos: {summary}. Confira na fonte e aceite ou rejeite cada um.',
+  'api.msg.FIGURES_NOT_USABLE': 'O resumo aponta para figuras que não podem ser usadas aqui. De outra fonte: {otherSource}. Inexistentes ou que não são suas: {missing}.',
+  'api.msg.SUMMARY_CHANGED_SINCE_READ': 'O resumo foi alterado desde a última leitura. Recarregue e revise a versão atual.',
+  'api.msg.QUESTION_CHANGED_SINCE_READ': 'A questão foi alterada desde a última leitura. Recarregue e revise a versão atual.',
+  'api.msg.EVIDENCE_NOT_FOUND': 'Evidência não encontrada.',
+  'api.msg.DATE_INVALID': 'Data inválida (use AAAA-MM-DD).',
 };

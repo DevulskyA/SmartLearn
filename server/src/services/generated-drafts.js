@@ -764,16 +764,16 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
   return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
 }
 
-function requireFresh(actual, expected, what) {
+function requireFresh(actual, expected, code) {
   if (expected !== undefined && expected !== null && expected !== actual) {
-    throw new DraftError('ENTITY_CONFLICT', `${what} foi alterado desde a última leitura. Recarregue e revise a versão atual.`);
+    throw new DraftError('ENTITY_CONFLICT', dm(code));
   }
 }
 
 /** Edits ONLY the summary: questions, their ids/status/versions and citations are untouched. */
 export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
-  requireFresh(current.summaryVersion, expectedVersion, 'O resumo');
+  requireFresh(current.summaryVersion, expectedVersion, 'SUMMARY_CHANGED_SINCE_READ');
   if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', dm('SUMMARY_REQUIRED'), 'summary');
   // a [[fig:UUID]] must be one of the student's own figures, and a PDF crop must come from THIS draft's source
   const refProblems = findUnresolvedRefs(db, userId, summary, { sourceId: found.proposal.source_id });
@@ -797,7 +797,7 @@ export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now 
   const index = current.questions.findIndex((q) => q.id === questionId);
   if (index < 0) throw new DraftError('NOT_FOUND', dm('QUESTION_NOT_FOUND'));
   const previous = current.questions[index];
-  requireFresh(previous.version, patch.expectedVersion, 'A questão');
+  requireFresh(previous.version, patch.expectedVersion, 'QUESTION_CHANGED_SINCE_READ');
   if (patch.status !== undefined && !QUESTION_REVIEW_STATUSES.has(patch.status)) {
     throw new DraftError('VALIDATION_FAILED', dm('QUESTION_STATE_INVALID'), 'status');
   }

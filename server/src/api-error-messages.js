@@ -1,10 +1,10 @@
-// i18n slices 2-7: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
+// i18n slices 2-8: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
 // `message` (the same sentence in Portuguese, the RESERVE) for a code it does not know, so older clients and text-only consumers
 // keep working. Deleting the reserve text is a LATER slice. Params are strings or numbers only (they travel as JSON).
-// Not in this table yet: the dynamic sentences (refsMessage, FINDINGS_UNRESOLVED, ENTITY_CONFLICT "what"), provider/ops errors, developer-facing ones.
+// Not in this table yet: provider/ops errors, developer-facing ones, the id-bearing evidence messages.
 
 const TEXT = {
   DRAFT_NOT_FOUND: () => 'Rascunho não encontrado.',
@@ -103,6 +103,12 @@ const TEXT = {
   GENERATION_CANCELLED_BEFORE_CALL: () => 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.',
   GENERATION_CANCELLED_NO_DRAFT: () => 'A geração foi interrompida; nenhum rascunho foi salvo.',
   PROVIDER_UNEXPECTED_FAILURE: () => 'O provedor falhou de forma inesperada. Nada foi salvo.',
+  FINDINGS_UNRESOLVED: ({ questions, summary }) => `Não dá para aceitar ainda. Questões com ponto crítico ainda sem decisão sua: ${questions}. Pontos críticos no resumo ainda não conferidos: ${summary}. Confira na fonte e aceite ou rejeite cada um.`,
+  FIGURES_NOT_USABLE: ({ otherSource, missing }) => `O resumo aponta para figuras que não podem ser usadas aqui. De outra fonte: ${otherSource}. Inexistentes ou que não são suas: ${missing}.`,
+  SUMMARY_CHANGED_SINCE_READ: () => 'O resumo foi alterado desde a última leitura. Recarregue e revise a versão atual.',
+  QUESTION_CHANGED_SINCE_READ: () => 'A questão foi alterada desde a última leitura. Recarregue e revise a versão atual.',
+  EVIDENCE_NOT_FOUND: () => 'Evidência não encontrada.',
+  DATE_INVALID: () => 'Data inválida (use AAAA-MM-DD).',
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));
