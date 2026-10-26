@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { findMojibake, findAsciiEllipsis, scanFiles, trackedTextFiles, readUtf8 } from '../scripts/text-integrity.mjs';
 
 // T-F4-07 (F-36): pt-BR accents must never regress into mojibake, and loading messages share one ellipsis. The bad samples are
@@ -51,6 +53,18 @@ test('the tracked code, UI, server, tests and scripts contain no mojibake', () =
   assert.ok(paths.length > 150, `expected many files, got ${paths.length}`);
   const hits = scanFiles(paths, readUtf8, findMojibake);
   assert.deepEqual(hits.map((h) => `${h.path}:${h.line}:${h.column} ${h.kind}`), []);
+});
+
+test('a NEW file that is not in git yet is listed too, so a lost byte in it is caught before the first commit', () => {
+  const rel = `server/test/zz-integrity-probe-${process.pid}.js`;
+  const abs = join(process.cwd(), rel);
+  writeFileSync(abs, 'export default 1;\n');
+  try {
+    assert.ok(trackedTextFiles().includes(rel), 'an untracked, not ignored file is part of the scan');
+  } finally {
+    rmSync(abs, { force: true });
+  }
+  assert.ok(!trackedTextFiles().includes(rel), 'and a deleted one is not');
 });
 
 test('findAsciiEllipsis flags "..." closing a message, and only that', () => {

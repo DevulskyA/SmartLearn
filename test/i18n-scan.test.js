@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { looksLikeProse, scanSource, scanAll, toMigrate, BASELINE_PATH } from '../scripts/scan-portuguese-i18n.mjs';
 
 // The scanner is the ratchet that stops new Portuguese text from landing in code instead of src/i18n/locales.
@@ -71,4 +73,26 @@ test('the baseline only lists files that exist and never hides a count that went
     assert.ok(file in byFile, `${file} is in the baseline but no longer a client file`);
     assert.ok(Number.isInteger(allowed) && allowed > 0, `${file}: baseline entries must be positive integers (delete a file once it reaches 0)`);
   }
+});
+
+test('a NEW file that is not in git yet is scanned too: fixed text in it is caught before it is ever committed', () => {
+  const rel = `src/zz-i18n-probe-${process.pid}.js`;
+  const abs = join(dirname(fileURLToPath(import.meta.url)), '..', rel);
+  writeFileSync(abs, [
+    "const el = document.createElement('button');",
+    "el.textContent = 'Texto fixo de prova';",
+    "el.setAttribute('aria-label', 'Rótulo fixo de prova');",
+    "el.title = 'Dica fixa de prova';",
+    'export default el;',
+  ].join('\n'));
+  try {
+    const { byFile } = scanAll();
+    assert.ok(rel in byFile, 'an untracked file under src/ is a client file');
+    assert.equal(byFile[rel].visible, 3, 'textContent, aria-label and title with fixed text are all found');
+    const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
+    assert.ok(toMigrate(byFile[rel]) > (baseline[rel] ?? 0), 'so the RATCHET above would fail on it');
+  } finally {
+    rmSync(abs, { force: true });
+  }
+  assert.ok(!(rel in scanAll().byFile), 'and the probe is gone');
 });

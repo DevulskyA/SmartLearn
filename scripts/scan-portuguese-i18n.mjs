@@ -12,7 +12,7 @@
 //   diagnostic  console.* and Error messages with no UI path proven here: a human-facing message that crosses to the screen is `visible`
 //
 // It is a heuristic for PROSE, not a translator: identifiers, selectors, URLs, SQL, event names and CSS classes are skipped on purpose.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,10 +145,13 @@ export function scanSource(source, file = '<memory>') {
   return findings;
 }
 
-/** Tracked client files under src/ (the catalog itself, fixtures and the vendored dev seed are not UI code). */
+/**
+ * Client files under src/ (the catalog itself, fixtures and the vendored dev seed are not UI code): tracked AND new untracked ones, so a file with
+ * fixed text is seen BEFORE it is added to git, not after. Files deleted from the working tree are skipped.
+ */
 export function clientFiles() {
-  return execFileSync('git', ['ls-files', 'src'], { cwd: root, encoding: 'utf8' }).split('\n')
-    .filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/locales/') && !f.startsWith('src/fixtures/'));
+  return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: root, encoding: 'utf8' }).split('\n')
+    .filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/locales/') && !f.startsWith('src/fixtures/') && existsSync(join(root, f)));
 }
 
 export function scanAll() {
