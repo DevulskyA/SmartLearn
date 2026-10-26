@@ -112,11 +112,11 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
     }
     for (const attemptId of ids) {
       const attempt = db.prepare('SELECT * FROM exercise_attempts WHERE user_id = ? AND id = ?').get(userId, attemptId);
-      if (!attempt) throw new EvidenceError('NOT_FOUND', `Tentativa ${attemptId} não encontrada.`, 'attemptIds');
-      if (attempt.unit_id !== unitId) throw new EvidenceError('VALIDATION_FAILED', `Tentativa ${attemptId} pertence a outra aula.`, 'attemptIds');
-      if (attempt.status !== 'SUBMITTED') throw new EvidenceError('VALIDATION_FAILED', `Tentativa ${attemptId} ainda não foi finalizada.`, 'attemptIds');
-      if (attempt.review_task_id != null) throw new EvidenceError('VALIDATION_FAILED', `Tentativa ${attemptId} já pertence a uma revisão.`, 'attemptIds');
-      if (attempt.evidence_id != null) throw new EvidenceError('VALIDATION_FAILED', `Tentativa ${attemptId} já está vinculada a outra evidência.`, 'attemptIds');
+      if (!attempt) throw new EvidenceError('NOT_FOUND', dm('ATTEMPT_ID_NOT_FOUND', { attemptId }), 'attemptIds');
+      if (attempt.unit_id !== unitId) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_OTHER_UNIT', { attemptId }), 'attemptIds');
+      if (attempt.status !== 'SUBMITTED') throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_NOT_SUBMITTED', { attemptId }), 'attemptIds');
+      if (attempt.review_task_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_REVIEW', { attemptId }), 'attemptIds');
+      if (attempt.evidence_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_OTHER_EVIDENCE', { attemptId }), 'attemptIds');
     }
   }
 

@@ -239,7 +239,7 @@ export function commitImport(db, userId, previewId, now = new Date()) {
   const rowTotal = Object.values(report.counts).reduce((a, b) => a + b, 0);
   const byteLen = Buffer.byteLength(row.normalized_json, 'utf8');
   if (rowTotal > config.importMaxRows || byteLen > config.importMaxBytes) {
-    throw new ImportError('IMPORT_TOO_LARGE', 'A importação excede o limite de capacidade configurado.', {
+    throw new ImportError('IMPORT_TOO_LARGE', dm('IMPORT_TOO_LARGE'), {
       rowTotal, maxRows: config.importMaxRows, byteLen, maxBytes: config.importMaxBytes,
     });
   }

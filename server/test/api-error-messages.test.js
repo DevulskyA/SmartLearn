@@ -154,3 +154,19 @@ test('dynamic sentences carry their counts and ids as params: findings pending, 
   assert.equal(err.msg.code, 'FIGURES_NOT_USABLE');
   assert.equal(err.field, 'summary');
 });
+
+test('provider/operation, import size and attempt-id sentences carry their params with the old text kept', async () => {
+  const { EvidenceError } = await import('../src/services/evidence.js');
+  const { ImportError } = await import('../src/services/import-error.js');
+  const unknown = new DraftError('UNKNOWN_PROVIDER', dm('PROVIDER_UNKNOWN', { provider: 'xyz' }));
+  assert.equal(unknown.message, 'Provedor de IA desconhecido: xyz.');
+  assert.deepEqual(unknown.msg, { code: 'PROVIDER_UNKNOWN', params: { provider: 'xyz' } });
+  const big = new DraftError('INPUT_TOO_LARGE', dm('PROPOSAL_INPUT_TOO_LARGE', { chars: 90000, max: 60000 }));
+  assert.match(big.message, /\(90000 de 60000 caracteres\)/);
+  const attempt = new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_REVIEW', { attemptId: 7 }), 'attemptIds');
+  assert.equal(attempt.message, 'Tentativa 7 já pertence a uma revisão.');
+  assert.deepEqual(attempt.msg, { code: 'ATTEMPT_IN_REVIEW', params: { attemptId: 7 } });
+  const tooLarge = new ImportError('IMPORT_TOO_LARGE', dm('RESTORE_TOO_LARGE'), { rowTotal: 1 });
+  assert.equal(tooLarge.message, 'A restauração excede o limite de capacidade configurado.');
+  assert.deepEqual(tooLarge.details, { rowTotal: 1 });
+});

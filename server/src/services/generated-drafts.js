@@ -70,7 +70,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
     // logged in is an explicit error raised by the provider itself (never fake/other-provider content).
     if (name === CODEX_PROVIDER_NAME) {
       if (consentGranted !== true) {
-        throw new DraftError('MISSING_CREDENTIALS', 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.');
+        throw new DraftError('MISSING_CREDENTIALS', dm('CODEX_CONSENT_MISSING'));
       }
       // One options object per selected provider: it also carries the per-draft call counters.
       const codexOptions = { ...codex, state: {} };
@@ -85,10 +85,10 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
       };
     }
     if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
-      throw new DraftError('UNKNOWN_PROVIDER', `Provedor de IA desconhecido: ${declared}.`);
+      throw new DraftError('UNKNOWN_PROVIDER', dm('PROVIDER_UNKNOWN', { provider: String(declared) }));
     }
     if (!liveAvailable) {
-      throw new DraftError('MISSING_CREDENTIALS', `O provedor ${name} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.`);
+      throw new DraftError('MISSING_CREDENTIALS', dm('PROVIDER_MISSING_SETUP', { provider: String(name) }));
     }
     return name === OPENAI_PROVIDER_NAME ? openai() : anthropic();
   }
@@ -100,7 +100,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
 function withTimeout(promise, timeoutMs, onTimeoutCode) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new DraftError(onTimeoutCode, 'Tempo limite excedido.')), timeoutMs);
+    timer = setTimeout(() => reject(new DraftError(onTimeoutCode, dm('TIMEOUT_EXCEEDED'))), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
@@ -374,7 +374,7 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
 
   // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
   if (effectiveKind(found.proposal) !== 'CONTENT') {
-    throw new DraftError('NOT_GENERATABLE', `Este trecho (${effectiveKind(found.proposal)}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
+    throw new DraftError('NOT_GENERATABLE', dm('PROPOSAL_NOT_GENERATABLE', { kind: String(effectiveKind(found.proposal)) }));
   }
   // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
   let scope;
@@ -387,7 +387,7 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
 
   const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
   if (totalChars > maxInputChars) {
-    throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
+    throw new DraftError('INPUT_TOO_LARGE', dm('PROPOSAL_INPUT_TOO_LARGE', { chars: totalChars, max: maxInputChars }));
   }
   return { found, scope };
 }

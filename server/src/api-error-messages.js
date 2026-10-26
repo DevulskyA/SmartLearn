@@ -1,10 +1,10 @@
-// i18n slices 2-8: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
+// i18n slices 2-9: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
 // `message` (the same sentence in Portuguese, the RESERVE) for a code it does not know, so older clients and text-only consumers
 // keep working. Deleting the reserve text is a LATER slice. Params are strings or numbers only (they travel as JSON).
-// Not in this table yet: provider/ops errors, developer-facing ones, the id-bearing evidence messages.
+// Not in this table: developer-facing field validations (names of API fields) and the model-facing prompts.
 
 const TEXT = {
   DRAFT_NOT_FOUND: () => 'Rascunho não encontrado.',
@@ -109,6 +109,19 @@ const TEXT = {
   QUESTION_CHANGED_SINCE_READ: () => 'A questão foi alterada desde a última leitura. Recarregue e revise a versão atual.',
   EVIDENCE_NOT_FOUND: () => 'Evidência não encontrada.',
   DATE_INVALID: () => 'Data inválida (use AAAA-MM-DD).',
+  CODEX_CONSENT_MISSING: () => 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.',
+  PROVIDER_UNKNOWN: ({ provider }) => `Provedor de IA desconhecido: ${provider}.`,
+  PROVIDER_MISSING_SETUP: ({ provider }) => `O provedor ${provider} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.`,
+  PROPOSAL_NOT_GENERATABLE: ({ kind }) => `Este trecho (${kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`,
+  PROPOSAL_INPUT_TOO_LARGE: ({ chars, max }) => `Este trecho tem texto demais para gerar um rascunho de uma vez (${chars} de ${max} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`,
+  TIMEOUT_EXCEEDED: () => 'Tempo limite excedido.',
+  IMPORT_TOO_LARGE: () => 'A importação excede o limite de capacidade configurado.',
+  RESTORE_TOO_LARGE: () => 'A restauração excede o limite de capacidade configurado.',
+  ATTEMPT_ID_NOT_FOUND: ({ attemptId }) => `Tentativa ${attemptId} não encontrada.`,
+  ATTEMPT_OTHER_UNIT: ({ attemptId }) => `Tentativa ${attemptId} pertence a outra aula.`,
+  ATTEMPT_NOT_SUBMITTED: ({ attemptId }) => `Tentativa ${attemptId} ainda não foi finalizada.`,
+  ATTEMPT_IN_REVIEW: ({ attemptId }) => `Tentativa ${attemptId} já pertence a uma revisão.`,
+  ATTEMPT_IN_OTHER_EVIDENCE: ({ attemptId }) => `Tentativa ${attemptId} já está vinculada a outra evidência.`,
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));
