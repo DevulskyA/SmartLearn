@@ -5770,13 +5770,14 @@ label.select-control:has(> .ui-select) {
 .stats-side .select-control { flex: 0 1 9rem; min-width: 0; }
 .stats-side .stats-panel-heading h2 { white-space: nowrap; }
 
-/* the study verdict reads as one quiet callout above the table, not a second heading */
-#subject-kpi-section .stats-verdict { margin: 0 0 1.1rem; padding: 0.75rem 0.9rem; border-radius: 0.7rem; background: var(--color-surface-sunken); }
-#subject-kpi-section .stats-verdict-headline { font-size: 0.95rem; }
+/* the historical trend is a compact, labelled note under the table (no box), apart from the period figures */
+#subject-kpi-section .stats-verdict { margin: 0.9rem 0 0; padding-top: 0.7rem; border-top: 1px solid var(--color-border); }
+#subject-kpi-section .stats-verdict-label { color: var(--color-muted); font-size: 0.75rem; letter-spacing: 0.02em; margin-bottom: 0.2rem; }
+#subject-kpi-section .stats-verdict-headline { font-size: 0.9rem; font-weight: 600; }
+.stats-panel-note { margin: 0.2rem 0 0; color: var(--color-muted); font-size: 0.84rem; }
 #subject-kpi-section .stats-verdict-detail,
 #subject-kpi-section .stats-verdict-attention { font-size: 0.84rem; }
 #subject-kpi-section .stats-verdict-attention { margin-top: 0.35rem; }
-#subject-kpi-section .stats-verdict-attention .text-button { min-height: 0; padding: 0; }
 
 /* Table: percentage first, band bar under it, quiet supporting columns. */
 #view-stats-subject .matrix-table th:nth-child(1) { width: 34%; }

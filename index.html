@@ -389,14 +389,6 @@
                     <h2 id="subject-kpi-title" data-i18n="screens.stats.subject.title">Desempenho por disciplina</h2>
                   </div>
                 </div>
-                <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
-                  <p class="stats-verdict-headline" id="stats-verdict-headline"></p>
-                  <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
-                  <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
-                    <span id="stats-verdict-attention-text"></span>
-                    <button type="button" class="text-button" id="stats-verdict-attention-btn" data-i18n="screens.stats.viewInPlan">Ver no Plano</button>
-                  </p>
-                </div>
                 <div class="table-scroll">
                   <table class="stats-table matrix-table">
                     <thead>
@@ -411,6 +403,15 @@
                   </table>
                 </div>
                 <p class="panel-empty" id="subject-kpi-empty" hidden data-i18n="screens.stats.subject.empty">Registre questões para ver o desempenho por disciplina.</p>
+                <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
+                  <p class="stats-verdict-label" data-i18n="screens.stats.history.label">Tendência histórica · todo o histórico, não segue o filtro de período</p>
+                  <p class="stats-verdict-headline" id="stats-verdict-headline"></p>
+                  <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
+                  <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
+                    <span id="stats-verdict-attention-text"></span>
+                    <button type="button" class="text-button" id="stats-verdict-attention-btn" data-i18n="screens.stats.viewInPlan">Ver no Plano</button>
+                  </p>
+                </div>
               </section>
 
               <aside class="stats-side" aria-label="Evolução e distribuição" data-i18n-aria-label="screens.stats.side.label">
@@ -480,7 +481,8 @@
           <section class="stats-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading">
               <div>
-                <h2 id="exercise-notes-title" data-i18n="screens.stats.exercises.title">Exercícios resolvidos</h2>
+                <h2 id="exercise-notes-title" data-i18n="screens.stats.exercises.title">Exercícios resolvidos · histórico completo</h2>
+                <p class="stats-panel-note" data-i18n="screens.stats.exercises.note">Mostra todo o histórico: o filtro de período no topo da tela não se aplica a esta lista.</p>
               </div>
             </div>
             <div class="table-scroll">
