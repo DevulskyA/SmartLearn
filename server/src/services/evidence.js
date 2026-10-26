@@ -1,10 +1,14 @@
+import { dm, splitMessage } from '../api-error-messages.js';
+
 const DIRECT_TYPES = new Set(['INITIAL_PRACTICE', 'EXTERNAL']);
 
 export class EvidenceError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -80,7 +84,7 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
   if (!DIRECT_TYPES.has(type)) {
     throw new EvidenceError('VALIDATION_FAILED', 'type deve ser INITIAL_PRACTICE ou EXTERNAL. Evidência REVIEW só é criada ao concluir uma revisão.', 'type');
   }
-  if (!findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', 'Aula não encontrada.');
+  if (!findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
   const hasQuestions = questionsCount !== undefined && questionsCount !== null;
   if (hasQuestions) {
@@ -143,7 +147,7 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
  * (practice, external, exams) are never superseded.
  */
 export function list(db, userId, { unitId, dateFrom, dateTo, includeSuperseded = false } = {}) {
-  if (unitId !== undefined && !findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', 'Aula não encontrada.');
+  if (unitId !== undefined && !findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
   const clauses = ['le.user_id = ?'];
   const params = [userId];

@@ -1,12 +1,15 @@
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { get as getSettings } from './settings.js';
 import { deriveObligations, RECOVERY } from '../../../shared/review-obligation.js';
 
 export class ReviewError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -128,7 +131,7 @@ function pausedUnitIds(db, userId) {
 
 function setPause(db, userId, unitId, action) {
   const unit = db.prepare('SELECT id FROM learning_units WHERE user_id = ? AND id = ?').get(userId, unitId);
-  if (!unit) throw new ReviewError('NOT_FOUND', 'Unidade não encontrada.');
+  if (!unit) throw new ReviewError('NOT_FOUND', dm('REVIEW_UNIT_NOT_FOUND'));
   const wasPaused = pausedUnitIds(db, userId).has(unitId);
   const changed = (action === 'PAUSE') !== wasPaused;
   if (changed) db.prepare('INSERT INTO review_unit_pauses (user_id, unit_id, action, at) VALUES (?, ?, ?, ?)').run(userId, unitId, action, new Date().toISOString());
@@ -228,7 +231,7 @@ export function list(db, userId, { unitId } = {}) {
  */
 export function complete(db, userId, reviewTaskId, { questionsCount, correctCount, operationKey } = {}, now = () => new Date()) {
   const task = db.prepare('SELECT * FROM review_tasks WHERE user_id = ? AND id = ?').get(userId, reviewTaskId);
-  if (!task) throw new ReviewError('NOT_FOUND', 'Revisão não encontrada.');
+  if (!task) throw new ReviewError('NOT_FOUND', dm('REVIEW_NOT_FOUND'));
 
   const hasQuestions = questionsCount !== undefined && questionsCount !== null;
   if (hasQuestions) {
@@ -245,7 +248,7 @@ export function complete(db, userId, reviewTaskId, { questionsCount, correctCoun
   if (check.cached) return check.result;
 
   if (task.completed_at) {
-    throw new ReviewError('ALREADY_COMPLETED', 'Esta revisão já foi concluída. Use a correção explícita para reabrir.');
+    throw new ReviewError('ALREADY_COMPLETED', dm('REVIEW_ALREADY_COMPLETED'));
   }
 
   const run = db.transaction(() => {
@@ -287,9 +290,9 @@ export function complete(db, userId, reviewTaskId, { questionsCount, correctCoun
  */
 export function reopen(db, userId, reviewTaskId) {
   const task = db.prepare('SELECT * FROM review_tasks WHERE user_id = ? AND id = ?').get(userId, reviewTaskId);
-  if (!task) throw new ReviewError('NOT_FOUND', 'Revisão não encontrada.');
+  if (!task) throw new ReviewError('NOT_FOUND', dm('REVIEW_NOT_FOUND'));
   // its own code: a client whose first reopen reply was lost must be able to tell "already reopened" from a bad request
-  if (!task.completed_at) throw new ReviewError('NOT_COMPLETED', 'Esta revisão ainda não foi concluída.');
+  if (!task.completed_at) throw new ReviewError('NOT_COMPLETED', dm('REVIEW_NOT_COMPLETED'));
 
   db.prepare('UPDATE review_tasks SET completed_at = NULL WHERE user_id = ? AND id = ?').run(userId, reviewTaskId);
   return { reviewTaskId, reopened: true };

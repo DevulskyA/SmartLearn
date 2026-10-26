@@ -1,4 +1,4 @@
-// i18n slices 2-3: the student-visible error sentences of the draft editing and acceptance paths, subjects and lessons, as a stable CODE + PARAMETERS.
+// i18n slices 2-4: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts and reviews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
@@ -32,6 +32,20 @@ const TEXT = {
   SUBJECT_NOT_EMPTY: () => 'Não é possível excluir uma disciplina com aulas cadastradas. Arquive-a em vez disso.',
   SUBJECT_REQUIRED: () => 'Informe uma disciplina para esta aula.',
   SUBJECT_INACTIVE: () => 'Selecione uma disciplina ativa.',
+  EXERCISE_NOT_FOUND: () => 'Exercício não encontrado.',
+  EXERCISE_VERSION_NOT_FOUND: () => 'Versão do exercício não encontrada.',
+  QUESTION_REQUIRED: () => 'A questão é obrigatória.',
+  COMPETENCY_NOT_FOUND: () => 'Competência não encontrada nesta aula.',
+  REVIEW_IN_UNIT_NOT_FOUND: () => 'Revisão não encontrada nesta aula.',
+  REVIEW_NOT_FOUND: () => 'Revisão não encontrada.',
+  REVIEW_UNIT_NOT_FOUND: () => 'Unidade não encontrada.',
+  ATTEMPT_NOT_FOUND: () => 'Tentativa não encontrada.',
+  EXERCISE_ARCHIVED: () => 'Exercício arquivado não pode iniciar nova tentativa.',
+  ATTEMPT_ALREADY_SUBMITTED: () => 'Esta tentativa já foi finalizada.',
+  EXERCISE_NO_HINT: () => 'Este exercício não tem dica cadastrada.',
+  EXERCISE_NO_ANSWER: () => 'Este exercício não tem resposta cadastrada.',
+  REVIEW_ALREADY_COMPLETED: () => 'Esta revisão já foi concluída. Use a correção explícita para reabrir.',
+  REVIEW_NOT_COMPLETED: () => 'Esta revisão ainda não foi concluída.',
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));

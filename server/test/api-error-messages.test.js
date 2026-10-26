@@ -67,3 +67,21 @@ test('an AcceptDraftError wrapping a LearningUnitError keeps the inner code and 
   assert.equal(plainWrapped.message, 'Nome inválido.');
   assert.equal(plainWrapped.msg, undefined);
 });
+
+test('exercise, attempt, review and evidence errors carry code + params with the old text kept; the route bodies expose msg', async () => {
+  const { ExerciseError } = await import('../src/services/exercises.js');
+  const { AttemptError } = await import('../src/services/attempts.js');
+  const { ReviewError } = await import('../src/services/reviews.js');
+  const { EvidenceError } = await import('../src/services/evidence.js');
+  const cases = [
+    [new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND')), 'Exercício não encontrado.', 'EXERCISE_NOT_FOUND'],
+    [new AttemptError('ALREADY_SUBMITTED', dm('ATTEMPT_ALREADY_SUBMITTED')), 'Esta tentativa já foi finalizada.', 'ATTEMPT_ALREADY_SUBMITTED'],
+    [new ReviewError('ALREADY_COMPLETED', dm('REVIEW_ALREADY_COMPLETED')), 'Esta revisão já foi concluída. Use a correção explícita para reabrir.', 'REVIEW_ALREADY_COMPLETED'],
+    [new EvidenceError('NOT_FOUND', dm('UNIT_NOT_FOUND'), 'unitId'), 'Aula não encontrada.', 'UNIT_NOT_FOUND'],
+  ];
+  for (const [err, text, code] of cases) {
+    assert.equal(err.message, text);
+    assert.deepEqual(err.msg, { code, params: {} });
+  }
+  assert.equal(new AttemptError('VALIDATION_FAILED', 'confidence deve ser um número entre 0 e 1, ou omitido.', 'confidence').msg, undefined);
+});
