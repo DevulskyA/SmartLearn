@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { looksLikeProse, scanSource, scanAll, toMigrate, BASELINE_PATH } from '../scripts/scan-portuguese-i18n.mjs';
+import { looksLikeProse, scanSource, scanHtml, scanAll, toMigrate, BASELINE_PATH } from '../scripts/scan-portuguese-i18n.mjs';
 
 // The scanner is the ratchet that stops new Portuguese text from landing in code instead of src/i18n/locales.
 // Fixtures are synthetic; the source strings below are written with plain ASCII or ordinary accents.
@@ -95,4 +95,20 @@ test('a NEW file that is not in git yet is scanned too: fixed text in it is caug
     rmSync(abs, { force: true });
   }
   assert.ok(!(rel in scanAll().byFile), 'and the probe is gone');
+});
+
+test('scanHtml: static text with no data-i18n is counted; text the catalog backs, brand names, scripts, styles and comments are not', () => {
+  const page = [
+    '<title>SmartLearn</title>',
+    '<h1 data-i18n="screens.today.title">Hoje</h1>',
+    '<button class="x">Salvar alterações</button>',
+    '<input placeholder="Escreva o resumo" data-i18n-placeholder="screens.form.summaryPlaceholder">',
+    '<input placeholder="Escreva o resumo">',
+    '<button aria-label="Alternar tema rápido" data-i18n-aria-label="shell.theme.toggle">T</button>',
+    '<!-- Texto de comentário que não aparece -->',
+    '<script>const a = "Texto dentro de script";</script>',
+    '<style>.a::after { content: "Texto de estilo"; }</style>',
+  ].join('\n');
+  const found = scanHtml(page, 'p.html');
+  assert.deepEqual(found.map((f) => [f.line, f.text]), [[3, 'Salvar alterações'], [5, 'placeholder="Escreva o resumo"']]);
 });
