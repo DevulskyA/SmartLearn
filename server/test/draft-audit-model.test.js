@@ -416,3 +416,33 @@ test('end to end: a contradiction whose quote is invented is discarded (no repai
     assert.equal(b.audit.repaired, true);
   } finally { cleanup(); }
 });
+
+test('guard: EVERY human edit route and the reaudit keep audit.original and audit.repairChanges of an automatic repair', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'routes@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const bad = good({ summary: GOOD_SUMMARY.replace('cerca de 125 mL/min', 'cerca de 300 mL/min') });
+    const { fetchImpl } = scriptedFetch([bad, { result: 'PASS', findings: [] }, good()]);
+    let draft = await create(db, userId, proposal.id, fetchImpl);
+    const kept = { original: draft.audit.original, repairChanges: draft.audit.repairChanges };
+    assert.ok(kept.original.summary.includes('300 mL/min'), 'the repair stored what it replaced');
+    const fields = (q) => ({ question: q.question, answer: q.answer, explanation: q.explanation, hint: q.hint, sourceSpans: q.sourceSpans });
+    const routes = [
+      ['reviseSummary', () => drafts.reviseSummary(db, userId, draft.id, { summary: `${draft.summary} Fim.` })],
+      ['reviseQuestion', () => drafts.reviseQuestion(db, userId, draft.id, draft.questions[0].id, { hint: 'Pense no balanco das pressoes.' })],
+      ['addQuestion', () => drafts.addQuestion(db, userId, draft.id, { question: 'Qual pressao se opoe a filtracao?', answer: 'A pressao oncotica e a da capsula de Bowman.', explanation: null, hint: null, sourceSpans: [{ pageIndex: 1 }] })],
+      ['reorderQuestions', () => drafts.reorderQuestions(db, userId, draft.id, draft.questions.map((q) => q.id).reverse())],
+      ['deleteQuestion', () => drafts.deleteQuestion(db, userId, draft.id, draft.questions[0].id)],
+      ['replaceDraftContent', () => drafts.replaceDraftContent(db, userId, draft.id, { summary: `${draft.summary} Mais.`, questions: draft.questions.map(fields) })],
+      ['reauditDraft', () => drafts.reauditDraft(db, userId, draft.id).draft],
+    ];
+    for (const [name, run] of routes) {
+      draft = run();
+      assert.deepEqual(draft.audit.original, kept.original, `${name} kept audit.original`);
+      assert.deepEqual(draft.audit.repairChanges, kept.repairChanges, `${name} kept audit.repairChanges`);
+      const reread = drafts.getDraft(db, userId, draft.id);
+      assert.deepEqual(reread.audit.original, kept.original, `${name}: still there when the draft is read back from the database`);
+    }
+  } finally { cleanup(); }
+});
