@@ -110,7 +110,7 @@ test('generating and accepting a draft through the real UI creates a real unit w
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
   await expect(editor.locator('.source-draft-result')).not.toHaveClass(/is-error/);
   // the header says what is true now: after the student accepts it is no longer an unchecked draft
-  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Aula aceita após sua conferência');
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Aula aceita e adicionada aos seus estudos.');
   await expect(editor).not.toContainText('aguardando sua conferência');
 
   // The unit is real: it shows up on Plano.
@@ -312,7 +312,7 @@ test('R-5: the header follows the real state - critical item pending, then waiti
   await editor.locator('.source-draft-date-input').fill('2026-04-01');
   await editor.locator('[data-action="accept-draft"]').click();
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
-  await expect(header).toHaveText('Aula aceita após sua conferência');
+  await expect(header).toHaveText('Aula aceita e adicionada aos seus estudos.');
 });
 
 // R-4: after accepting, the Resumo of the new lesson is one click away - from the editor and, later, from the trecho in Materiais.

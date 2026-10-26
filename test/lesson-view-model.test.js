@@ -181,7 +181,7 @@ test("the header state follows the REAL state of the draft: draft -> pending cri
   // resolving them (the server answers with an empty list) brings the draft back to waiting for the person
   assert.equal(draftState(open({ acceptanceBlockers: { questions: [], summary: 0 } })).key, "draft");
   // accepted: by this window, or because the server says so, whatever blockers were left over
-  assert.deepEqual(draftState(open({ acceptanceBlockers: { questions: ["q1"], summary: 1 } }), { accepted: true }), { key: "accepted", label: "Aula aceita após sua conferência", pending: 0 });
+  assert.deepEqual(draftState(open({ acceptanceBlockers: { questions: ["q1"], summary: 1 } }), { accepted: true }), { key: "accepted", label: "Aula aceita e adicionada aos seus estudos.", pending: 0 });
   assert.equal(draftState({ status: "ACCEPTED" }).key, "accepted");
   // the automatic audit result (PASS or REPAIR, repaired or not) is not a state of the lesson
   for (const audit of [{ result: "PASS", findings: [] }, { result: "REPAIR", findings: [{ severity: "MEDIUM" }], repaired: true }]) {
