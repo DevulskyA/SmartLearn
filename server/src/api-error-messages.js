@@ -1,4 +1,4 @@
-// i18n slices 2-6: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
+// i18n slices 2-7: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
@@ -89,6 +89,20 @@ const TEXT = {
   IMPORT_PREVIEW_NOT_FOUND: () => 'Prévia de importação não encontrada.',
   IMPORT_PREVIEW_EXPIRED: () => 'Prévia de importação expirada. Envie o arquivo novamente.',
   IMPORT_PREVIEW_TAMPERED: () => 'O arquivo enviado não corresponde à prévia original.',
+  TOPIC_SOURCE_NOT_EXTRACTED: () => 'A fonte precisa ser extraída com sucesso antes de buscar um assunto.',
+  TOPIC_QUERY_TOO_SHORT: () => 'Informe ao menos duas letras do assunto.',
+  SECTION_NOT_FOUND: () => 'Seção não encontrada neste documento.',
+  SECTION_NO_USABLE_TEXT: () => 'Esta seção não tem texto utilizável.',
+  PAGE_RANGE_REVERSED: () => 'A página final vem antes da inicial.',
+  PAGE_RANGE_NO_TEXT: () => 'Nenhuma página com texto neste intervalo.',
+  OFFSET_START_OUTSIDE: () => 'Posição inicial fora da página.',
+  OFFSET_END_OUTSIDE: () => 'Posição final fora da página.',
+  RANGE_NO_TEXT: () => 'O intervalo escolhido não contém texto.',
+  PROPOSAL_TITLE_EMPTY: () => 'O título não pode ser vazio.',
+  DRAFT_NO_USABLE_TEXT: () => 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.',
+  GENERATION_CANCELLED_BEFORE_CALL: () => 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.',
+  GENERATION_CANCELLED_NO_DRAFT: () => 'A geração foi interrompida; nenhum rascunho foi salvo.',
+  PROVIDER_UNEXPECTED_FAILURE: () => 'O provedor falhou de forma inesperada. Nada foi salvo.',
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));

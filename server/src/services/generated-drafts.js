@@ -370,7 +370,7 @@ function toDraftDto(row, { db, userId } = {}) {
 export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_000 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
   if (!found) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
-  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
+  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', dm('DRAFT_NO_USABLE_TEXT'));
 
   // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
   if (effectiveKind(found.proposal) !== 'CONTENT') {
@@ -497,7 +497,7 @@ export async function createDraft(db, userId, proposalId, {
   // Stopped before any request could leave: nothing was spent, so the held balance returns.
   if (hooks?.signal?.aborted) {
     closeBudget({ refund: true });
-    throw new DraftError('CANCELLED', 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.');
+    throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL'));
   }
 
   let raw;
@@ -511,7 +511,7 @@ export async function createDraft(db, userId, proposalId, {
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
     // T-F8-03: an exception the provider adapters did not shape themselves is NOT reported verbatim -- its text can carry the
     // request (credential, source text) and this message is returned to the client and stored on the job.
-    throw new DraftError('PROVIDER_ERROR', 'O provedor falhou de forma inesperada. Nada foi salvo.');
+    throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE'));
   }
 
   let validated;
@@ -548,7 +548,7 @@ export async function createDraft(db, userId, proposalId, {
 
   // A stopped job never leaves a draft behind, not even a complete one that finished too late (the call happened: it is charged).
   hooks?.onPhase?.('SAVING');
-  if (hooks?.signal?.aborted) throw new DraftError('CANCELLED', 'A geração foi interrompida; nenhum rascunho foi salvo.');
+  if (hooks?.signal?.aborted) throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT'));
 
   const nowIso = now().toISOString();
   const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };

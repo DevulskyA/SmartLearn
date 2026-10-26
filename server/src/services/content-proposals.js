@@ -218,7 +218,7 @@ function outlineAndPages(db, userId, sourceId) {
   const source = findOwnedSource(db, userId, sourceId);
   if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (source.extraction_status !== 'EXTRACTED') {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de buscar um assunto.');
+    throw new ProposalError('NOT_EXTRACTED', dm('TOPIC_SOURCE_NOT_EXTRACTED'));
   }
   const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK').map((p) => ({ pageIndex: p.pageIndex, text: p.text ?? '' }));
   const outline = db.prepare('SELECT ordinal, level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
@@ -233,7 +233,7 @@ const SECTION_EXCERPT = 160;
  */
 export function searchTopics(db, userId, sourceId, query) {
   if (typeof query !== 'string' || query.trim().length < 2) {
-    throw new ProposalError('VALIDATION_FAILED', 'Informe ao menos duas letras do assunto.', 'q');
+    throw new ProposalError('VALIDATION_FAILED', dm('TOPIC_QUERY_TOO_SHORT'), 'q');
   }
   const { pages, outline } = outlineAndPages(db, userId, sourceId);
   const pageText = new Map(pages.map((p) => [p.pageIndex, p.text]));
@@ -286,9 +286,9 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 
   if (Number.isInteger(ordinal)) {
     const entry = outline.find((e) => e.ordinal === ordinal);
-    if (!entry) throw new ProposalError('NOT_FOUND', 'Seção não encontrada neste documento.', 'ordinal');
+    if (!entry) throw new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal');
     const match = findTopicSections(pages, outline, entry.title, { limit: 50 }).find((m) => m.ordinal === ordinal);
-    if (!match) throw new ProposalError('NOT_FOUND', 'Esta seção não tem texto utilizável.', 'ordinal');
+    if (!match) throw new ProposalError('NOT_FOUND', dm('SECTION_NO_USABLE_TEXT'), 'ordinal');
     const { kind } = classifyUnit(match.title, textOfSpans(pageText, match.spans));
     const acronyms = acronymsIn(pages.map((p) => p.text));
     return insertApprovedScope(db, userId, source, { title: readableTitle(match.title, acronyms), topic: topic ?? match.title, spans: match.spans, kind });
@@ -296,21 +296,21 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 
   if (range && Number.isInteger(range.pageStart) && Number.isInteger(range.pageEnd)) {
     const { pageStart, pageEnd } = range;
-    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', 'A página final vem antes da inicial.', 'range');
+    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_REVERSED'), 'range');
     const inRange = pages.filter((p) => p.pageIndex >= pageStart && p.pageIndex <= pageEnd);
-    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', 'Nenhuma página com texto neste intervalo.', 'range');
+    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_NO_TEXT'), 'range');
     const first = inRange[0];
     const last = inRange[inRange.length - 1];
     const startOffset = range.startOffset ?? 0;
     const endOffset = range.endOffset ?? last.text.length;
-    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição inicial fora da página.', 'startOffset');
-    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição final fora da página.', 'endOffset');
+    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_START_OUTSIDE'), 'startOffset');
+    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_END_OUTSIDE'), 'endOffset');
     const spans = inRange.map((p) => ({
       pageIndex: p.pageIndex,
       start: p === first ? startOffset : 0,
       end: p === last ? endOffset : p.text.length,
     })).filter((s) => s.end > s.start);
-    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', 'O intervalo escolhido não contém texto.', 'range');
+    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('RANGE_NO_TEXT'), 'range');
     const chosenTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim() : defaultTitle(source, pageStart, pageEnd);
     const { kind } = classifyUnit(chosenTitle, textOfSpans(pageText, spans));
     return insertApprovedScope(db, userId, source, { title: chosenTitle, topic: topic ?? chosenTitle, spans, kind });
@@ -335,7 +335,7 @@ export function listProposals(db, userId, sourceId) {
  * attributable to before anything is created (AC-19/AC-21). */
 export function getProposal(db, userId, proposalId) {
   const row = findOwnedProposal(db, userId, proposalId);
-  if (!row) throw new ProposalError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!row) throw new ProposalError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   return {
     ...toSummaryDto(row),
     excerpt: proposalText(db, userId, row),
@@ -349,9 +349,9 @@ export function getProposal(db, userId, proposalId) {
  * caller can redefine after the fact (re-run chunkSource for that). */
 export function renameProposal(db, userId, proposalId, title) {
   const row = findOwnedProposal(db, userId, proposalId);
-  if (!row) throw new ProposalError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!row) throw new ProposalError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   if (typeof title !== 'string' || title.trim().length === 0) {
-    throw new ProposalError('VALIDATION_FAILED', 'O título não pode ser vazio.', 'title');
+    throw new ProposalError('VALIDATION_FAILED', dm('PROPOSAL_TITLE_EMPTY'), 'title');
   }
   const now = new Date().toISOString();
   db.prepare('UPDATE content_proposals SET title = ?, updated_at = ? WHERE user_id = ? AND id = ?').run(title.trim(), now, userId, proposalId);

@@ -126,3 +126,16 @@ test('figure, generation job and import preview errors carry code + params with 
   assert.equal(plain.msg, undefined);
   assert.deepEqual(plain.details, { issues: [1] });
 });
+
+test('proposal search/scope and generation errors carry code + params with the old text kept', async () => {
+  const { ProposalError } = await import('../src/services/content-proposals.js');
+  const cases = [
+    [new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal'), 'Seção não encontrada neste documento.', 'SECTION_NOT_FOUND'],
+    [new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE')), 'O provedor falhou de forma inesperada. Nada foi salvo.', 'PROVIDER_UNEXPECTED_FAILURE'],
+    [new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT')), 'A geração foi interrompida; nenhum rascunho foi salvo.', 'GENERATION_CANCELLED_NO_DRAFT'],
+  ];
+  for (const [err, text, code] of cases) {
+    assert.equal(err.message, text);
+    assert.deepEqual(err.msg, { code, params: {} });
+  }
+});
