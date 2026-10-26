@@ -142,7 +142,7 @@ test('SOURCE SUFFICIENCY: a page with no text in a multi-page scope, and a page 
   const empty = auditDraft(draft(), { segments: [PAGE(1, rich(60)), PAGE(2, '   '), PAGE(3, rich(60))] }).findings.find((x) => x.issue === 'SOURCE_TEXT_INSUFFICIENT');
   assert.deepEqual(empty.reasons, ['EMPTY_PAGES']);
   assert.deepEqual(empty.emptyPages, [2]);
-  const garbled = auditDraft(draft(), { segments: [PAGE(1, rich(60)), PAGE(2, `${rich(30)}${'�'.repeat(6)}${rich(30)}`)] }).findings.find((x) => x.issue === 'SOURCE_TEXT_INSUFFICIENT');
+  const garbled = auditDraft(draft(), { segments: [PAGE(1, rich(60)), PAGE(2, `${rich(30)}${'\uFFFD'.repeat(6)}${rich(30)}`)] }).findings.find((x) => x.issue === 'SOURCE_TEXT_INSUFFICIENT');
   assert.deepEqual(garbled.reasons, ['GARBLED']);
   assert.deepEqual(garbled.garbledPages, [2]);
 });
