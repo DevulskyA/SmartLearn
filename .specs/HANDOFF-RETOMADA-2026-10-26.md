@@ -42,3 +42,11 @@ Haiku só testa; sem janela sem aviso; sem merge em `main`; sem `--force`; V1 s�
 
 ## Como retomar
 `git status`, `git log --oneline -5`, depois perguntar ao usuário pelos 3 itens acima. Se ele responder "ok" ao item 3: começar pela primeira fatia (achados da auditoria) em fatias pequenas, cada uma com teste e redução da catraca. Arquivos locais fora dos commits: `scripts/zz-open-preview.mjs` (revisado: seguro, específico demais para ficar) e `scripts/zz-native-shots.mjs`.
+
+## Atualização 2026-10-26 (tarde): decisões do usuário aplicadas
+- i18n aprovada: migração gradual de textos de API visíveis ao estudante para código estável + parâmetros (texto no catálogo do cliente, texto antigo como reserva). Não migrar as 640 de uma vez; separar visíveis, logs, técnicas e prompts; cada fatia exige teste de exibição, de contrato e de compatibilidade.
+- Fatia 1 FEITA (avisos da auditoria médica): commits cc5e47d + correção seguinte (textos sem "(s)", U+FFFD escapado). Contrato: cada achado tem messages {claim, evidence, repair} com {code, params}; reserva nos campos antigos; cliente usa findingText (chave lesson.audit.CODIGO) com queda para o texto antigo. Regras audit-rules-9. Catraca do servidor segue 640 (a reserva ainda está no servidor, em server/src/ai/audit-messages.js); cai na fatia que apagar a reserva, depois de decidir o que buildRepairPrompt recebe.
+- Próximas fatias (visíveis ao estudante): mensagens de erro de rotas/serviços de draft, accept-draft, jobs, imports/backup, evidence, attempts, exams etc. Logs, técnicas e prompts ficam fora.
+- Registrado à parte, NÃO resolvido: 16 ocorrências toleradas no index.html; suporte multilíngue incompleto (só pt-BR; es/en caem em pt-BR; setLocale não ligado ao uiLocale; troca em tempo de execução não redesenha telas prontas). Não declarar i18n completa só porque a contagem do servidor caiu.
+- Regra de testes (usuário): só testes dirigidos por mudança; nada de suíte completa nem E2E completo sem pedido (orçamento semanal de tokens).
+- Provas da fatia 1: arquivos de teste da fatia 59/59 (raiz) e 168/168 (servidor) no HEAD cc5e47d; após a correção: 28/28 + 13/13 dirigidos, lint 0, production-build com CI=1 passou. O E2E completo rodou em cc5e47d: 357 ok, 1 falha só por falta de CI=1 no build (agora passa com CI=1), 2 pulados.

@@ -58,7 +58,7 @@ const SCENARIOS = [
       q({ question: 'Cópia?', answer: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão hidrostática glomerular.', explanation: 'Está na fonte, no primeiro parágrafo da página.' }),
     ],
   }, PT],
-  [{ summary: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão glomerular.', questions: [] }, [{ pageIndex: 1, text: 'x '.repeat(20000) }, { pageIndex: 2, text: '   ' }, { pageIndex: 3, text: `angiotensina ${'�'.repeat(6)}` }]],
+  [{ summary: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão glomerular.', questions: [] }, [{ pageIndex: 1, text: 'x '.repeat(20000) }, { pageIndex: 2, text: '   ' }, { pageIndex: 3, text: `angiotensina ${'\uFFFD'.repeat(6)}` }]],
   [{ summary: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão glomerular.', questions: Array.from({ length: 8 }, (_, i) => q({ question: `Pergunta ${i}?` })) }, [{ pageIndex: 1, text: 'angiotensina II contrai a arteríola eferente. ' }]],
   [{ summary: DRAFT_PT_FROM_EN, questions: [] }, EN],
 ];
@@ -109,7 +109,7 @@ test('compatibility: the reserve text is word for word what audit-rules-8 wrote'
   assert.equal(auditMessageText('EVIDENCE_SOURCE_PASSAGE', { page: 2, text: 'Trecho.' }), 'p. 2: Trecho.');
   assert.equal(auditMessageText('EVIDENCE_VOLUME_EXPECTED', { chars: 12345, min: 1, max: 5 }), 'Para o tamanho desta fonte (12.345 caracteres) o esperado é entre 1 e 5 questões.');
   assert.equal(auditMessageText('EVIDENCE_ANSWER_IN_QUESTION', { answer: 'ECA' }), 'A resposta ("ECA") já aparece no enunciado.');
-  assert.equal(auditMessageText('EVIDENCE_LOW_SOURCE_SUPPORT', { supported: 1, total: 5 }), 'Só 1 de 5 termos da resposta/explicação aparecem na(s) página(s) citada(s).');
+  assert.equal(auditMessageText('EVIDENCE_LOW_SOURCE_SUPPORT', { supported: 1, total: 5 }), 'Só 1 de 5 termos da resposta/explicação aparecem na fonte citada.');
   assert.equal(auditMessageText('EVIDENCE_NO_SOURCE_PASSAGE'), 'Nenhum trecho da fonte trata desse ponto.');
   assert.equal(auditMessageText('REPAIR_SUMMARY_UNSUPPORTED_TERM'), 'Confirme cada termo na fonte. Se for informação complementar, remova ou marque como tal; se for troca de termo, restaure o termo da fonte.');
 });

@@ -24,7 +24,7 @@ const TEXT = {
   EVIDENCE_HINT_HAS_VALUE: ({ value }) => `A dica traz o valor da resposta (${value}).`,
   EVIDENCE_EXPLANATION_CIRCULAR: () => 'A explicação só repete o que a pergunta e a resposta já dizem: não explica por quê.',
   EVIDENCE_QUESTION_TERMS_ABSENT: () => 'Nenhuma dessas palavras (nem uma forma próxima) aparece na página citada.',
-  EVIDENCE_LOW_SOURCE_SUPPORT: ({ supported, total }) => `Só ${supported} de ${total} termos da resposta/explicação aparecem na(s) página(s) citada(s).`,
+  EVIDENCE_LOW_SOURCE_SUPPORT: ({ supported, total }) => `Só ${supported} de ${total} termos da resposta/explicação aparecem na fonte citada.`,
   EVIDENCE_DUPLICATE_OF: ({ number }) => `Igual à questão ${number}.`,
   EVIDENCE_LITERAL_COPY: () => 'A resposta é um trecho literal da fonte.',
   EVIDENCE_VOLUME_EXPECTED: ({ chars, min, max }) => `Para o tamanho desta fonte (${Number(chars).toLocaleString('pt-BR')} caracteres) o esperado é entre ${min} e ${max} questões.`,
@@ -32,8 +32,8 @@ const TEXT = {
   EVIDENCE_LEXICAL_SKIPPED: () => 'A comparação palavra a palavra não vale entre idiomas e foi dispensada. Valores, unidades, páginas citadas, repetições e vazamentos continuam conferidos.',
 
   // --- claim (generatedClaim), only where it is the audit's own sentence and not the draft's text
-  CLAIM_VOLUME_COUNT: ({ count }) => `${count} questão(ões) para uma fonte desse tamanho.`,
-  CLAIM_SOURCE_TEXT_STATS: ({ chars, pages }) => `${chars} caracteres de texto em ${pages} página(s) aprovada(s).`,
+  CLAIM_VOLUME_COUNT: ({ count }) => `Questões para uma fonte desse tamanho: ${count}.`,
+  CLAIM_SOURCE_TEXT_STATS: ({ chars, pages }) => `Páginas aprovadas: ${pages} · caracteres de texto: ${chars}.`,
   CLAIM_LANGUAGES_DIFFER: () => 'A fonte e o rascunho estão em idiomas diferentes.',
 
   // --- repair (repair)
