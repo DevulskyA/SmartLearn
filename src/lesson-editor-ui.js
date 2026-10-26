@@ -16,7 +16,7 @@ import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import { createSubjectCreateForm } from "./subject-create-form.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, draftState, sourceSufficiencyNote, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
+  QUESTION_TYPE_LABELS, issueLabel, findingText, groupFindings, groupByCause, draftState, sourceSufficiencyNote, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -537,9 +537,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       for (const f of group.findings) {
         const li = document.createElement("li");
         li.append(createTextElement("p", "lesson-finding-issue", issueLabel(f.issue)));
-        if (f.generatedClaim) li.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: f.generatedClaim })));
-        if (f.sourceEvidence) li.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: f.sourceEvidence })));
-        if (f.repair && !note) li.append(createTextElement("p", "lesson-finding-repair", f.repair));
+        const [claim, evidence, repair] = ["claim", "evidence", "repair"].map((slot) => findingText(f, slot));
+        if (claim) li.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: claim })));
+        if (evidence) li.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: evidence })));
+        if (repair && !note) li.append(createTextElement("p", "lesson-finding-repair", repair));
         list.append(li);
       }
       block.append(list);
@@ -623,7 +624,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")), ...[renderOriginal()].filter(Boolean));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");
     if (skipped) {
-      reviewPanel.append(createTextElement("p", "lesson-hint lesson-cross-language", `${skipped.generatedClaim} ${skipped.sourceEvidence} ${skipped.repair}`));
+      reviewPanel.append(createTextElement("p", "lesson-hint lesson-cross-language", `${findingText(skipped, "claim")} ${findingText(skipped, "evidence")} ${findingText(skipped, "repair")}`));
     }
     const thinSource = sourceSufficiencyNote(draft);
     if (thinSource) reviewPanel.append(createTextElement("p", "lesson-hint lesson-source-thin", thinSource));

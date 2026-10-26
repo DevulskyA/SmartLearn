@@ -2,7 +2,7 @@
 // shows each as its own area. This module only decides WHAT is shown (labels, grouping, counts); lesson-editor-ui.js draws it.
 
 import { formatNumber } from "./i18n/format.js";
-import { t, tn } from "./i18n/index.js";
+import { has, t, tn } from "./i18n/index.js";
 
 // A label table whose texts are read from the catalog when a label is read (not once at import), so the active locale applies.
 function catalogLabels(makers) {
@@ -39,6 +39,22 @@ export const ISSUE_LABELS = catalogLabels({
 });
 
 export const issueLabel = (issue) => ISSUE_LABELS[issue] ?? issue;
+
+const LEGACY_TEXT_FIELD = { claim: "generatedClaim", evidence: "sourceEvidence", repair: "repair" };
+const NUMBER_PARAMS = new Set(["chars"]); // sent as plain numbers; shown the way the active locale writes them
+
+/**
+ * One of the three sentences of an audit finding ("claim" | "evidence" | "repair"). The server sends a stable code and its parameters in
+ * `finding.messages.<slot>`: when the catalog knows the code the text comes from the catalog (so it follows the interface language);
+ * otherwise (an old stored audit, a code from a newer server, a sentence that is the model's own wording) it is the text the server wrote.
+ */
+export function findingText(finding, slot) {
+  const message = finding?.messages?.[slot];
+  const key = typeof message?.code === "string" ? `lesson.audit.${message.code}` : "";
+  if (!key || !has(key)) return finding?.[LEGACY_TEXT_FIELD[slot]] ?? "";
+  const params = Object.fromEntries(Object.entries(message.params ?? {}).map(([name, value]) => [name, NUMBER_PARAMS.has(name) && Number.isFinite(value) ? formatNumber(value) : value]));
+  return t(key, params);
+}
 
 // WHY a point was raised, in the student's terms. A difference of WORDS is its own cause and is never worded as an error: a paraphrase,
 // a synonym or a faithful translation raises it too.

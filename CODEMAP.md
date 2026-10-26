@@ -41,7 +41,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
 | Rotas | `routes/*.js` | tradução HTTP e validação de entrada; regra de negócio e SQL ficam em `services/`, com exceção de 2 `UPDATE` direto em `routes/auth.js` |
 | Serviços | `services/*.js` | regras de negócio e SQL; `generated-drafts.js` e `accept-draft.js` são o coração do aceite |
 | Domínio puro | `domain/learning-event.js`, `evidence-profile.js`, `priorities.js` | sem banco, sem relógio (a data entra por parâmetro), sem veredito de domínio |
-| IA | `ai/` | `draft-prompt.js` (prompt), `*-provider.js` (transporte; mesmo contrato), `draft-schema.js` (validação), `draft-audit.js` e `risk-checks.js` (sensores determinísticos), `claim-evidence.js` (frase → trecho) |
+| IA | `ai/` | `draft-prompt.js` (prompt), `*-provider.js` (transporte; mesmo contrato), `draft-schema.js` (validação), `draft-audit.js` e `risk-checks.js` (sensores determinísticos), `audit-messages.js` (frases dos achados: código + parâmetros + texto de reserva; o cliente traduz por `lesson.audit.<CÓDIGO>`), `claim-evidence.js` (frase → trecho) |
 | PDF | `pdf/` | extração, colunas, títulos e outline; melhor esforço, nunca derruba a extração |
 | Corpus de questões | `corpus/` | `resolve-need.js` decide REUSE/DERIVE/GENERATE; ainda não ligado ao fluxo de geração |
 | Autenticação | `auth/` | sessões, CSRF, senhas, limite de taxa |

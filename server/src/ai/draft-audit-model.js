@@ -15,6 +15,8 @@
 //                 but never trigger the automatic repair: a missing passage is not proof of an error.
 // (A claim the source SUPPORTS is not a problem and is not reported.)
 
+import { msg, resolveMessages } from './audit-messages.js';
+
 const SEVERITIES = new Set(['HIGH', 'MEDIUM', 'LOW']);
 const MAX_FINDINGS = 20;
 // a quotation must be long enough to identify a passage: a single term ("angiotensina") is found on any page and proves nothing
@@ -127,7 +129,7 @@ export function parseModelAudit(raw, { questionCount, segments = [] }) {
       const quote = clip(f.evidenceQuote, 300);
       const page = pageHolding(quote, Number.isInteger(f.evidencePage) ? f.evidencePage : null, segments);
       if (page === null) { discarded += 1; continue; }
-      findings.push({ ...finding, verdict: 'CONTRADICTED', evidencePage: page, evidenceQuote: quote, sourceEvidence: `p. ${page}: ${quote}` });
+      findings.push(resolveMessages({ ...finding, verdict: 'CONTRADICTED', evidencePage: page, evidenceQuote: quote, sourceEvidence: msg('EVIDENCE_SOURCE_PASSAGE', { page, text: quote }) }));
     } else {
       // NOT_FOUND, NOT_EVALUABLE, or a reply that gave no verdict at all (nothing was established, so it is not evaluable)
       findings.push({ ...finding, verdict: f.verdict === 'NOT_FOUND' ? 'NOT_FOUND' : 'NOT_EVALUABLE', blocksRepair: false });

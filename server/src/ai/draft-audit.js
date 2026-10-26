@@ -12,6 +12,7 @@
 
 import { differentLanguages } from './language-detect.js';
 import { auditRisk } from './risk-checks.js';
+import { msg, resolveMessages } from './audit-messages.js';
 import { stripSummaryMarkup } from '../../../shared/summary-figure-refs.js';
 
 export const AUDIT_RESULT = { PASS: 'PASS', REPAIR: 'REPAIR' };
@@ -24,7 +25,7 @@ export const triggersRepair = (f) => (f.severity === 'HIGH' || f.severity === 'M
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js, draft-audit-model.js):draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-8';
+export const AUDIT_RULES_VERSION = 'audit-rules-9';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -98,7 +99,7 @@ function closestSourceSentence(claim, segments) {
       if (score > bestScore) { best = { sentence, pageIndex: seg.pageIndex }; bestScore = score; }
     }
   }
-  return best ? `p. ${best.pageIndex}: ${best.sentence.slice(0, 240)}` : 'Nenhum trecho da fonte trata desse ponto.';
+  return best ? msg('EVIDENCE_SOURCE_PASSAGE', { page: best.pageIndex, text: best.sentence.slice(0, 240) }) : msg('EVIDENCE_NO_SOURCE_PASSAGE');
 }
 
 const clip = (s, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -129,7 +130,7 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
       generatedClaim: claim,
       // compare on what the value is ABOUT (the words right before it), not on the whole sentence
       sourceEvidence: closestSourceSentence(summary.slice(Math.max(0, n.index - 60), n.index), segments),
-      repair: `O valor ${n.raw} não aparece na fonte. Use o valor que a fonte traz ou remova a afirmação.`,
+      repair: msg('REPAIR_SUMMARY_UNSUPPORTED_VALUE', { value: n.raw }),
     });
   }
 
@@ -151,8 +152,8 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
       severity: 'MEDIUM',
       scope: 'summary',
       generatedClaim: unsupportedTerms.slice(0, 5).join(', '),
-      sourceEvidence: 'Nenhuma dessas palavras (nem uma forma próxima) aparece no texto de origem enviado.',
-      repair: 'Confirme cada termo na fonte. Se for informação complementar, remova ou marque como tal; se for troca de termo, restaure o termo da fonte.',
+      sourceEvidence: msg('EVIDENCE_SUMMARY_TERMS_ABSENT'),
+      repair: msg('REPAIR_SUMMARY_UNSUPPORTED_TERM'),
     });
   }
 
@@ -180,8 +181,8 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
         severity: 'MEDIUM',
         scope: 'summary',
         generatedClaim: clip(summary, 160),
-        sourceEvidence: `Termos centrais da fonte ausentes no resumo: ${missing.map((s) => counts.get(s).shown).join(', ')}.`,
-        repair: 'Reescreva abrindo pelo conceito central da fonte; detalhes incidentais vêm depois.',
+        sourceEvidence: msg('EVIDENCE_CENTRAL_TERMS_MISSING', { terms: missing.map((s) => counts.get(s).shown).join(', ') }),
+        repair: msg('REPAIR_SUMMARY_OMITS_CENTRAL_CONCEPT'),
       });
     }
   }
@@ -195,8 +196,8 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
       severity: 'HIGH',
       scope: 'summary',
       generatedClaim: clip(summary, 160),
-      sourceEvidence: `A fonte tem ${sourceWords} palavras; o resumo tem ${summaryWords}.`,
-      repair: 'Explique o conceito central e o mecanismo que a fonte descreve, com a terminologia dela.',
+      sourceEvidence: msg('EVIDENCE_SUMMARY_TOO_THIN', { sourceWords, summaryWords }),
+      repair: msg('REPAIR_SUMMARY_TOO_THIN'),
     });
   }
   return findings;
@@ -232,25 +233,21 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
 
     // 1) Feedback must teach: "125" or "C" alone corrects nothing.
     if (answerWords + explanationWords < 4) {
-      add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, 'A resposta não traz explicação suficiente para o aluno entender por quê.',
-        'Dê a resposta e explique em 1–3 frases por que ela está certa, com base na página citada.');
+      add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, msg('EVIDENCE_ANSWER_TOO_THIN'), msg('REPAIR_ANSWER_TOO_THIN'));
     }
     // 1b) F-15: the "Por quê" belongs to EVERY question, whatever the length of its answer (a long answer is not an explanation).
     // Shown in the review as a finding; it never blocks acceptance.
     if (explanationWords === 0) {
-      add('EXPLANATION_MISSING', 'MEDIUM', q.answer, 'Esta questão não tem o "Por quê": o feedback só mostra o gabarito.',
-        'Acrescente a explicação (por que está certo) usando apenas o que a página citada diz.');
+      add('EXPLANATION_MISSING', 'MEDIUM', q.answer, msg('EVIDENCE_EXPLANATION_MISSING'), msg('REPAIR_EXPLANATION_MISSING'));
     }
 
     // 2) Answer given away by the question or by the hint.
     const core = answerCore(q.answer);
     if (core && squash(q.question).includes(core)) {
-      add('QUESTION_ANSWER_LEAKED', 'HIGH', q.question, `A resposta ("${clip(q.answer, 60)}") já aparece no enunciado.`,
-        'Reescreva o enunciado sem revelar a resposta.');
+      add('QUESTION_ANSWER_LEAKED', 'HIGH', q.question, msg('EVIDENCE_ANSWER_IN_QUESTION', { answer: clip(q.answer, 60) }), msg('REPAIR_ANSWER_LEAKED'));
     }
     if (core && q.hint && squash(q.hint).includes(core)) {
-      add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, `A dica repete a resposta ("${clip(q.answer, 60)}").`,
-        'Uma dica é uma pista parcial (categoria, direção, termo relacionado), nunca a resposta.');
+      add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, msg('EVIDENCE_ANSWER_IN_HINT', { answer: clip(q.answer, 60) }), msg('REPAIR_HINT_REVEALS_ANSWER'));
     }
 
     // 2b) A hint can also give the answer away WITHOUT repeating all of it: its value. (Numbers the question itself already
@@ -260,8 +257,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
       const hintNumbers = new Set(numbersIn(q.hint).map((n) => n.key));
       const leaked = numbersIn(q.answer).find((n) => (n.key.includes('.') || n.key.length >= 2) && hintNumbers.has(n.key) && !questionNumbers.has(n.key));
       if (leaked) {
-        add('HINT_REVEALS_VALUE', 'HIGH', q.hint, `A dica traz o valor da resposta (${leaked.raw}).`,
-          'Aponte o caminho (categoria, relação, mecanismo), sem citar o valor da resposta.');
+        add('HINT_REVEALS_VALUE', 'HIGH', q.hint, msg('EVIDENCE_HINT_HAS_VALUE', { value: leaked.raw }), msg('REPAIR_HINT_REVEALS_VALUE'));
       }
     }
 
@@ -275,8 +271,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
       const addsTerm = contentStems.some((s) => !known.has(s));
       const addsNumber = numbersIn(q.explanation).some((n) => !knownNumbers.has(n.key));
       if (contentStems.length >= 3 && !addsTerm && !addsNumber) {
-        add('EXPLANATION_ADDS_NOTHING', 'MEDIUM', q.explanation, 'A explicação só repete o que a pergunta e a resposta já dizem: não explica por quê.',
-          'Explique o mecanismo, a condição ou a confusão a evitar, usando só o que a página citada diz.');
+        add('EXPLANATION_ADDS_NOTHING', 'MEDIUM', q.explanation, msg('EVIDENCE_EXPLANATION_CIRCULAR'), msg('REPAIR_EXPLANATION_CIRCULAR'));
       }
     }
 
@@ -287,7 +282,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
       const claim = sentenceContaining(teaching, n.index);
       add('QUESTION_UNSUPPORTED_VALUE', 'HIGH', claim,
         closestSourceSentence(teaching.slice(Math.max(0, n.index - 60), n.index), cited.length > 0 ? cited : segments),
-        `O valor ${n.raw} não aparece na página citada. Use o valor da fonte, corrija a citação ou remova a afirmação.`);
+        msg('REPAIR_QUESTION_UNSUPPORTED_VALUE', { value: n.raw }));
     }
     const citedStems = sourceStemSet(cited.length > 0 ? cited : segments);
     const questionStems = new Set(tokens(q.question).map((t) => stem(t.key)));
@@ -302,8 +297,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
     }
     if (unsupported.length > 0) {
       add('QUESTION_UNSUPPORTED_TERM', 'MEDIUM', unsupported.slice(0, 5).join(', '),
-        'Nenhuma dessas palavras (nem uma forma próxima) aparece na página citada.',
-        'Confirme na fonte. Se for informação complementar, remova; se a citação estiver na página errada, corrija-a.', LEXICAL_ONLY);
+        msg('EVIDENCE_QUESTION_TERMS_ABSENT'), msg('REPAIR_QUESTION_UNSUPPORTED_TERM'), LEXICAL_ONLY);
     }
 
     // 4) Little lexical footing on the cited page at all (same language only).
@@ -314,8 +308,7 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
         const supported = contentStems.filter((s) => citedStems.has(s)).length;
         if (supported / contentStems.length < 0.4) {
           add('QUESTION_LOW_SOURCE_SUPPORT', 'MEDIUM', q.answer,
-            `Só ${supported} de ${contentStems.length} termos da resposta/explicação aparecem na(s) página(s) citada(s).`,
-            'Confira se a citação aponta para a página que sustenta a resposta e se a explicação não acrescenta fatos.', LEXICAL_ONLY);
+            msg('EVIDENCE_LOW_SOURCE_SUPPORT', { supported, total: contentStems.length }), msg('REPAIR_LOW_SOURCE_SUPPORT'), LEXICAL_ONLY);
         }
       }
     }
@@ -323,13 +316,13 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
     // 5) Duplicates, and a verbatim copy of the source (advisory: a lacuna, not a question).
     const key = squash(q.question);
     if (seenQuestions.has(key)) {
-      add('QUESTION_DUPLICATE', 'MEDIUM', q.question, `Igual à questão ${seenQuestions.get(key) + 1}.`, 'Remova ou reescreva uma das duas.');
+      add('QUESTION_DUPLICATE', 'MEDIUM', q.question, msg('EVIDENCE_DUPLICATE_OF', { number: seenQuestions.get(key) + 1 }), msg('REPAIR_DUPLICATE'));
     } else {
       seenQuestions.set(key, index);
     }
     const answerNorm = squash(q.answer);
     if (answerNorm.length >= 60 && squash(citedText).includes(answerNorm)) {
-      add('QUESTION_LITERAL_COPY', 'LOW', q.answer, 'A resposta é um trecho literal da fonte.', 'Prefira reformular para testar compreensão, não cópia.');
+      add('QUESTION_LITERAL_COPY', 'LOW', q.answer, msg('EVIDENCE_LITERAL_COPY'), msg('REPAIR_LITERAL_COPY'));
     }
   });
   return findings;
@@ -352,9 +345,9 @@ function auditQuestionVolume(count, sourceChars) {
     issue: 'QUESTION_VOLUME_OUT_OF_RANGE',
     severity: 'LOW',
     scope: 'draft',
-    generatedClaim: `${count} questão(ões) para uma fonte desse tamanho.`,
-    sourceEvidence: `Para o tamanho desta fonte (${sourceChars.toLocaleString('pt-BR')} caracteres) o esperado é entre ${min} e ${max} questões.`,
-    repair: count > max ? 'Considere remover as questões menos importantes ou repetitivas; nada foi cortado automaticamente.' : 'Considere acrescentar questões sobre os conceitos que ficaram sem pergunta.',
+    generatedClaim: msg('CLAIM_VOLUME_COUNT', { count }),
+    sourceEvidence: msg('EVIDENCE_VOLUME_EXPECTED', { chars: sourceChars, min, max }),
+    repair: msg(count > max ? 'REPAIR_VOLUME_TOO_MANY' : 'REPAIR_VOLUME_TOO_FEW'),
   };
 }
 // R-3: how much text the audit could actually SEE. A scanned or image-heavy PDF extracts little or nothing, and then "no point raised" means
@@ -375,9 +368,9 @@ function auditSourceSufficiency(segments, policy = SOURCE_SUFFICIENCY) {
     issue: "SOURCE_TEXT_INSUFFICIENT",
     severity: "LOW",
     scope: "draft",
-    generatedClaim: `${chars} caracteres de texto em ${pages} página(s) aprovada(s).`,
-    sourceEvidence: "O texto extraído da fonte é curto, tem páginas sem texto ou parece truncado ou ilegível. A conferência automática só enxerga esse texto.",
-    repair: "Se o PDF for escaneado ou depender de figuras, leia a fonte original: nenhum ponto sinalizado vale menos aqui. É um aviso, não prova de erro no rascunho.",
+    generatedClaim: msg('CLAIM_SOURCE_TEXT_STATS', { chars, pages }),
+    sourceEvidence: msg('EVIDENCE_SOURCE_TEXT_THIN'),
+    repair: msg('REPAIR_SOURCE_TEXT_ADVICE'),
     reasons, sourceChars: chars, pageCount: pages, emptyPages, garbledPages,
   };
 }
@@ -401,9 +394,9 @@ export function auditDraft(rawDraft, { segments }) {
       issue: 'LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE',
       severity: 'LOW',
       scope: 'draft',
-      generatedClaim: 'A fonte e o rascunho estão em idiomas diferentes.',
-      sourceEvidence: 'A comparação palavra a palavra não vale entre idiomas e foi dispensada. Valores, unidades, páginas citadas, repetições e vazamentos continuam conferidos.',
-      repair: 'O apoio de significado (tradução fiel, mecanismo, qualificadores como "geralmente", "pode", "apenas") depende da auditoria do modelo e da sua leitura da fonte.',
+      generatedClaim: msg('CLAIM_LANGUAGES_DIFFER'),
+      sourceEvidence: msg('EVIDENCE_LEXICAL_SKIPPED'),
+      repair: msg('REPAIR_CROSS_LANGUAGE'),
     });
   }
   // Units swapped inside one dimension and qualifiers added or lost (ai/risk-checks.js); independent of the language of the draft.
@@ -413,5 +406,5 @@ export function auditDraft(rawDraft, { segments }) {
   const sufficiency = auditSourceSufficiency(segments);
   if (sufficiency) findings.push(sufficiency);
   const blocking = findings.some(triggersRepair);
-  return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
+  return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings: findings.map(resolveMessages), auditedBy: 'DETERMINISTIC' };
 }

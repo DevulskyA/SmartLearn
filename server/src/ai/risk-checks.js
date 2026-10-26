@@ -9,6 +9,7 @@
 // Languages: the cue lists exist for en, pt and es. When either language is unknown only the unit check runs.
 
 import { detectLanguage } from './language-detect.js';
+import { msg, resolveMessages } from './audit-messages.js';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const clip = (s, n = 240) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -105,14 +106,14 @@ function auditUnits(units, text, scope) {
     if (seen.has(key)) continue;
     seen.add(key);
     const [sourceUnit, info] = sameDimension[0];
-    findings.push({
+    findings.push(resolveMessages({
       issue: 'UNIT_MISMATCH',
       severity: 'HIGH',
       scope,
       generatedClaim: clip(sentenceAt(text, q.index)),
-      sourceEvidence: `p. ${info.pageIndex}: ${clip(info.sentence)}`,
-      repair: `A fonte traz ${q.value} em ${sourceUnit}, não em ${q.unit}. Use a unidade da fonte.`,
-    });
+      sourceEvidence: msg('EVIDENCE_SOURCE_PASSAGE', { page: info.pageIndex, text: clip(info.sentence) }),
+      repair: msg('REPAIR_UNIT_MISMATCH', { value: q.value, sourceUnit, unit: q.unit }),
+    }));
   }
   return findings;
 }
@@ -207,18 +208,16 @@ function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
     const sourceWindow = windowCues(sourceItems, sourceItems.indexOf(source), sets.source, s);
     const draftWindow = windowCues(draftItems, draftItems.indexOf(draft), sets.draft, d);
     const scope = scopeOf(draft);
-    const evidence = `p. ${source.pageIndex}: ${clip(source.text)}`;
+    const evidence = msg('EVIDENCE_SOURCE_PASSAGE', { page: source.pageIndex, text: clip(source.text) });
     for (const q of s.qualifiers) {
       if (!draftWindow.qualifiers.has(q) && !(q.startsWith('HEDGE') && [...draftWindow.qualifiers].some((x) => x.startsWith('HEDGE')))) {
-        findings.push({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
-          repair: 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do rascunho não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.' });
+        findings.push(resolveMessages({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_LOST') }));
         break;
       }
     }
     for (const q of d.qualifiers) {
       if (ABSOLUTES.has(q) && !sourceWindow.qualifiers.has(q) && !(q === 'NEVER' && sourceWindow.negation.size > 0)) {
-        findings.push({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
-          repair: 'A frase do rascunho usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.' });
+        findings.push(resolveMessages({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_ADDED') }));
         break;
       }
     }
