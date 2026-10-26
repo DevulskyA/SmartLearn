@@ -41,7 +41,7 @@ function cleanText(raw, max, { required = false, field }) {
   let out = '';
   for (const ch of String(raw ?? '')) if (!/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ch) || ch === '\n') out += ch;
   out = out.trim();
-  if (required && out === '') throw new VisualAssetError('VALIDATION_FAILED', 'O texto alternativo é obrigatório: descreva o que a imagem mostra.', field);
+  if (required && out === '') throw new VisualAssetError('VALIDATION_FAILED', dm('IMAGE_ALT_REQUIRED'), field);
   if (out.length > max) throw new VisualAssetError('VALIDATION_FAILED', `Texto longo demais (máximo ${max} caracteres).`, field);
   return out;
 }
@@ -51,18 +51,18 @@ function cleanText(raw, max, { required = false, field }) {
  * in diagrams stay readable; JPEG stays JPEG at high quality. EXIF orientation is applied, all metadata (EXIF, GPS) is dropped.
  */
 export async function normalizeImage(buffer, limits = DEFAULT_LIMITS) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new VisualAssetError('VALIDATION_FAILED', 'Nenhuma imagem enviada.', 'file');
-  if (buffer.length > limits.maxUploadBytes) throw new VisualAssetError('FILE_TOO_LARGE', 'A imagem é grande demais.', 'file');
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new VisualAssetError('VALIDATION_FAILED', dm('IMAGE_NONE_SENT'), 'file');
+  if (buffer.length > limits.maxUploadBytes) throw new VisualAssetError('FILE_TOO_LARGE', dm('IMAGE_TOO_LARGE'), 'file');
   let meta;
   try {
     meta = await sharp(buffer, { limitInputPixels: limits.maxPixels, failOn: 'error' }).metadata();
   } catch {
-    throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', 'O arquivo não é uma imagem PNG, JPEG ou WebP válida.', 'file');
+    throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', dm('IMAGE_NOT_VALID'), 'file');
   }
   const format = FORMATS[meta.format];
-  if (!format) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', 'Use uma imagem PNG, JPEG ou WebP.', 'file');
-  if ((meta.pages ?? 1) > 1) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', 'Imagens animadas não são aceitas.', 'file');
-  if (!meta.width || !meta.height) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', 'Dimensões da imagem inválidas.', 'file');
+  if (!format) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', dm('IMAGE_USE_SUPPORTED'), 'file');
+  if ((meta.pages ?? 1) > 1) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', dm('IMAGE_ANIMATED'), 'file');
+  if (!meta.width || !meta.height) throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', dm('IMAGE_DIMENSIONS_INVALID'), 'file');
   try {
     let pipeline = sharp(buffer, { limitInputPixels: limits.maxPixels, failOn: 'error' }).rotate();
     pipeline = pipeline.resize({ width: limits.maxSide, height: limits.maxSide, fit: 'inside', withoutEnlargement: true });
@@ -72,7 +72,7 @@ export async function normalizeImage(buffer, limits = DEFAULT_LIMITS) {
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
     return { buffer: data, mime: format.mime, ext: format.ext, width: info.width, height: info.height };
   } catch {
-    throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', 'Não foi possível ler a imagem (arquivo corrompido).', 'file');
+    throw new VisualAssetError('UNSUPPORTED_FILE_TYPE', dm('IMAGE_UNREADABLE'), 'file');
   }
 }
 
@@ -104,14 +104,14 @@ function validateCrop(db, userId, crop) {
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
   const x = num(crop.x); const y = num(crop.y); const w = num(crop.w); const h = num(crop.h);
   if (!(x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= 1.0001 && y + h <= 1.0001)) {
-    throw new VisualAssetError('VALIDATION_FAILED', 'O retângulo do recorte precisa estar dentro da página.', 'rect');
+    throw new VisualAssetError('VALIDATION_FAILED', dm('CROP_RECT_OUTSIDE'), 'rect');
   }
-  if (![0, 90, 180, 270].includes(crop.rotation)) throw new VisualAssetError('VALIDATION_FAILED', 'Rotação inválida.', 'rotation');
-  if (!Number.isInteger(crop.sourceId)) throw new VisualAssetError('VALIDATION_FAILED', 'Fonte inválida.', 'sourceId');
+  if (![0, 90, 180, 270].includes(crop.rotation)) throw new VisualAssetError('VALIDATION_FAILED', dm('CROP_ROTATION_INVALID'), 'rotation');
+  if (!Number.isInteger(crop.sourceId)) throw new VisualAssetError('VALIDATION_FAILED', dm('CROP_SOURCE_INVALID'), 'sourceId');
   const source = db.prepare('SELECT id, checksum, page_count FROM sources WHERE user_id = ? AND id = ?').get(userId, crop.sourceId);
   if (!source) throw new VisualAssetError('NOT_FOUND', dm('SOURCE_NOT_FOUND'), 'sourceId');
   if (!Number.isInteger(crop.pageIndex) || crop.pageIndex < 1 || (source.page_count && crop.pageIndex > source.page_count)) {
-    throw new VisualAssetError('VALIDATION_FAILED', 'Página inexistente na fonte.', 'pageIndex');
+    throw new VisualAssetError('VALIDATION_FAILED', dm('CROP_PAGE_MISSING'), 'pageIndex');
   }
   return { sourceId: source.id, pageIndex: crop.pageIndex, x, y, w, h, rotation: crop.rotation, checksum: source.checksum };
 }
@@ -134,7 +134,7 @@ export async function create(db, userId, input, { mediaDir, limits = DEFAULT_LIM
 
   const image = await normalizeImage(input.buffer, limits);
   const { total } = db.prepare('SELECT COALESCE(SUM(byte_size), 0) AS total FROM visual_assets WHERE user_id = ?').get(userId);
-  if (total + image.buffer.length > limits.quotaBytes) throw new VisualAssetError('QUOTA_EXCEEDED', 'Limite de armazenamento de imagens atingido.');
+  if (total + image.buffer.length > limits.quotaBytes) throw new VisualAssetError('QUOTA_EXCEEDED', dm('IMAGE_QUOTA_EXCEEDED'));
 
   const id = randomUUID();
   const filename = `${randomBytes(16).toString('hex')}.${image.ext}`; // the on-disk name is never derived from anything the client sent
@@ -164,25 +164,25 @@ export async function create(db, userId, input, { mediaDir, limits = DEFAULT_LIM
 /** Metadata for the owner; anyone else (or an unknown id) gets NOT_FOUND, never a hint that the id exists. */
 export function get(db, userId, id) {
   const row = rowOf(db, userId, id);
-  if (!row) throw new VisualAssetError('NOT_FOUND', 'Figura não encontrada.');
+  if (!row) throw new VisualAssetError('NOT_FOUND', dm('FIGURE_NOT_FOUND'));
   return toDto(row);
 }
 
 /** The stored bytes, re-checked against the recorded hash before they are served. */
 export function readFile(db, userId, id, mediaDir) {
   const row = rowOf(db, userId, id);
-  if (!row) throw new VisualAssetError('NOT_FOUND', 'Figura não encontrada.');
+  if (!row) throw new VisualAssetError('NOT_FOUND', dm('FIGURE_NOT_FOUND'));
   const path = join(mediaDir, row.filename);
-  if (!existsSync(path)) throw new VisualAssetError('ASSET_FILE_MISSING', 'O arquivo da figura não está disponível.');
+  if (!existsSync(path)) throw new VisualAssetError('ASSET_FILE_MISSING', dm('FIGURE_FILE_MISSING'));
   const bytes = readFileSync(path);
-  if (bytes.length !== row.byte_size || sha256(bytes) !== row.sha256) throw new VisualAssetError('ASSET_INTEGRITY_FAILED', 'O arquivo da figura não confere com o registro.');
+  if (bytes.length !== row.byte_size || sha256(bytes) !== row.sha256) throw new VisualAssetError('ASSET_INTEGRITY_FAILED', dm('FIGURE_INTEGRITY_FAILED'));
   return { mime: row.mime, bytes };
 }
 
 /** Edits the texts only (caption, alternative text, detailed description); the image and its provenance are immutable. */
 export function updateTexts(db, userId, id, patch, now = () => new Date()) {
   const row = rowOf(db, userId, id);
-  if (!row) throw new VisualAssetError('NOT_FOUND', 'Figura não encontrada.');
+  if (!row) throw new VisualAssetError('NOT_FOUND', dm('FIGURE_NOT_FOUND'));
   const alt = patch.alt !== undefined ? cleanText(patch.alt, MAX_ALT, { required: true, field: 'alt' }) : row.alt_text;
   const caption = patch.caption !== undefined ? cleanText(patch.caption, MAX_CAPTION, { field: 'caption' }) : row.caption;
   const description = patch.description !== undefined ? (cleanText(patch.description, MAX_DESCRIPTION, { field: 'description' }) || null) : row.description;
@@ -203,10 +203,10 @@ export function referencesOf(db, userId, id) {
 /** Deletes an asset nothing refers to; a referenced one is refused (ASSET_IN_USE) and left untouched. */
 export function remove(db, userId, id, mediaDir) {
   const row = rowOf(db, userId, id);
-  if (!row) throw new VisualAssetError('NOT_FOUND', 'Figura não encontrada.');
+  if (!row) throw new VisualAssetError('NOT_FOUND', dm('FIGURE_NOT_FOUND'));
   const refs = referencesOf(db, userId, row.id);
   if (refs.length > 0) {
-    const err = new VisualAssetError('ASSET_IN_USE', 'Esta figura ainda aparece em um resumo. Remova-a do texto antes de excluí-la.');
+    const err = new VisualAssetError('ASSET_IN_USE', dm('FIGURE_IN_USE'));
     err.references = refs;
     throw err;
   }

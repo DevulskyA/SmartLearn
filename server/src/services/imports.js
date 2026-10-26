@@ -3,6 +3,7 @@
 // The actual commit (T27, not built yet) is a separate step this module
 // does not perform.
 import { createHash } from 'node:crypto';
+import { dm } from '../api-error-messages.js';
 import { normalizeLegacyExport, ImportNormalizationError } from '../../../shared/import-normalization.js';
 import { nameKey } from '../../../shared/text-validation.js';
 import { config } from '../config.js';
@@ -152,9 +153,9 @@ function persistPreview(db, userId, rawSource, sourceVersion, normalized, report
  * foreign-owned id — existence is never confirmed to a non-owner. */
 export function getPreview(db, userId, id, now = new Date()) {
   const row = findOwned(db, userId, id);
-  if (!row) throw new ImportError('NOT_FOUND', 'Prévia de importação não encontrada.');
+  if (!row) throw new ImportError('NOT_FOUND', dm('IMPORT_PREVIEW_NOT_FOUND'));
   if (new Date(row.expires_at).getTime() < now.getTime()) {
-    throw new ImportError('PREVIEW_EXPIRED', 'Prévia de importação expirada. Envie o arquivo novamente.');
+    throw new ImportError('PREVIEW_EXPIRED', dm('IMPORT_PREVIEW_EXPIRED'));
   }
   return toDto(row);
 }
@@ -165,12 +166,12 @@ export function getPreview(db, userId, id, now = new Date()) {
  * against this task's own acceptance criteria (stale/tampered rejection). */
 export function verifyPreview(db, userId, id, claimedRawSource, now = new Date()) {
   const row = findOwned(db, userId, id);
-  if (!row) throw new ImportError('NOT_FOUND', 'Prévia de importação não encontrada.');
+  if (!row) throw new ImportError('NOT_FOUND', dm('IMPORT_PREVIEW_NOT_FOUND'));
   if (new Date(row.expires_at).getTime() < now.getTime()) {
-    throw new ImportError('PREVIEW_EXPIRED', 'Prévia de importação expirada. Envie o arquivo novamente.');
+    throw new ImportError('PREVIEW_EXPIRED', dm('IMPORT_PREVIEW_EXPIRED'));
   }
   if (sourceChecksum(claimedRawSource) !== row.source_checksum) {
-    throw new ImportError('PREVIEW_TAMPERED', 'O arquivo enviado não corresponde à prévia original.');
+    throw new ImportError('PREVIEW_TAMPERED', dm('IMPORT_PREVIEW_TAMPERED'));
   }
   return toDto(row);
 }
@@ -209,7 +210,7 @@ function offsetDaysBetween(studyDate, dueDate) {
  */
 export function commitImport(db, userId, previewId, now = new Date()) {
   const row = findOwned(db, userId, previewId);
-  if (!row) throw new ImportError('NOT_FOUND', 'Prévia de importação não encontrada.');
+  if (!row) throw new ImportError('NOT_FOUND', dm('IMPORT_PREVIEW_NOT_FOUND'));
 
   // Independent-review fix: the cached-result short-circuit must be
   // checked BEFORE expiry, not after — expires_at is set once at preview
@@ -222,7 +223,7 @@ export function commitImport(db, userId, previewId, now = new Date()) {
     return JSON.parse(row.commit_result_json);
   }
   if (new Date(row.expires_at).getTime() < now.getTime()) {
-    throw new ImportError('PREVIEW_EXPIRED', 'Prévia de importação expirada. Envie o arquivo novamente.');
+    throw new ImportError('PREVIEW_EXPIRED', dm('IMPORT_PREVIEW_EXPIRED'));
   }
 
   const report = JSON.parse(row.report_json);

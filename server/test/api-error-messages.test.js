@@ -108,3 +108,21 @@ test('exam, source, proposal and visual-asset errors carry code + params with th
   }
   assert.equal(new ProposalError('VALIDATION_FAILED', 'Posição final fora da página.', 'endOffset').msg, undefined);
 });
+
+test('figure, generation job and import preview errors carry code + params with the old text kept', async () => {
+  const { VisualAssetError } = await import('../src/services/visual-assets.js');
+  const { JobError } = await import('../src/services/generation-jobs.js');
+  const { ImportError } = await import('../src/services/import-error.js');
+  const cases = [
+    [new VisualAssetError('NOT_FOUND', dm('FIGURE_NOT_FOUND')), 'Figura não encontrada.', 'FIGURE_NOT_FOUND'],
+    [new JobError('NOT_FOUND', dm('JOB_NOT_FOUND')), 'Geração não encontrada.', 'JOB_NOT_FOUND'],
+    [new ImportError('PREVIEW_EXPIRED', dm('IMPORT_PREVIEW_EXPIRED')), 'Prévia de importação expirada. Envie o arquivo novamente.', 'IMPORT_PREVIEW_EXPIRED'],
+  ];
+  for (const [err, text, code] of cases) {
+    assert.equal(err.message, text);
+    assert.deepEqual(err.msg, { code, params: {} });
+  }
+  const plain = new ImportError('INVALID_SOURCE', 'Arquivo inválido.', { issues: [1] });
+  assert.equal(plain.msg, undefined);
+  assert.deepEqual(plain.details, { issues: [1] });
+});

@@ -10,7 +10,7 @@ function handleError(err, reply) {
       INVALID_TRANSITION: 409, MISSING_CREDENTIALS: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, field: err.field, message: err.message } };
+    return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
   }
   throw err;
 }

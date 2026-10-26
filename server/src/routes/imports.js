@@ -14,7 +14,7 @@ function handleError(err, reply) {
       IMPORT_INTEGRITY_ERROR: 500,
     };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, message: err.message, details: err.details } };
+    return { error: { code: err.code, message: err.message, msg: err.msg, details: err.details } };
   }
   throw err; // let the domain envelope's error handler classify unexpected errors
 }

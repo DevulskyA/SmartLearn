@@ -1,4 +1,4 @@
-// i18n slices 2-5: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams and sources, as a stable CODE + PARAMETERS.
+// i18n slices 2-6: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams, sources, figures, generation jobs and import previews, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
@@ -65,6 +65,30 @@ const TEXT = {
   SOURCE_QUOTA_EXCEEDED: () => 'Cota de armazenamento de fontes excedida.',
   PROPOSAL_SOURCE_NOT_EXTRACTED: () => 'A fonte precisa ser extraída com sucesso antes de gerar propostas.',
   PROPOSAL_NO_USABLE_PAGE: () => 'A fonte não tem nenhuma página com texto utilizável.',
+  IMAGE_ALT_REQUIRED: () => 'O texto alternativo é obrigatório: descreva o que a imagem mostra.',
+  IMAGE_NONE_SENT: () => 'Nenhuma imagem enviada.',
+  IMAGE_TOO_LARGE: () => 'A imagem é grande demais.',
+  IMAGE_NOT_VALID: () => 'O arquivo não é uma imagem PNG, JPEG ou WebP válida.',
+  IMAGE_USE_SUPPORTED: () => 'Use uma imagem PNG, JPEG ou WebP.',
+  IMAGE_ANIMATED: () => 'Imagens animadas não são aceitas.',
+  IMAGE_DIMENSIONS_INVALID: () => 'Dimensões da imagem inválidas.',
+  IMAGE_UNREADABLE: () => 'Não foi possível ler a imagem (arquivo corrompido).',
+  CROP_RECT_OUTSIDE: () => 'O retângulo do recorte precisa estar dentro da página.',
+  CROP_ROTATION_INVALID: () => 'Rotação inválida.',
+  CROP_SOURCE_INVALID: () => 'Fonte inválida.',
+  CROP_PAGE_MISSING: () => 'Página inexistente na fonte.',
+  IMAGE_QUOTA_EXCEEDED: () => 'Limite de armazenamento de imagens atingido.',
+  FIGURE_NOT_FOUND: () => 'Figura não encontrada.',
+  FIGURE_FILE_MISSING: () => 'O arquivo da figura não está disponível.',
+  FIGURE_INTEGRITY_FAILED: () => 'O arquivo da figura não confere com o registro.',
+  FIGURE_IN_USE: () => 'Esta figura ainda aparece em um resumo. Remova-a do texto antes de excluí-la.',
+  JOB_NOT_FOUND: () => 'Geração não encontrada.',
+  JOB_SCOPE_CHANGED_PROPOSAL: () => 'O trecho aprovado mudou desde que esta geração foi criada. Crie uma nova.',
+  JOB_SCOPE_CHANGED_TEXT: () => 'O texto do trecho aprovado mudou desde que esta geração foi criada. Crie uma nova.',
+  JOB_STATE_CHANGED: () => 'A geração mudou de estado ao mesmo tempo.',
+  IMPORT_PREVIEW_NOT_FOUND: () => 'Prévia de importação não encontrada.',
+  IMPORT_PREVIEW_EXPIRED: () => 'Prévia de importação expirada. Envie o arquivo novamente.',
+  IMPORT_PREVIEW_TAMPERED: () => 'O arquivo enviado não corresponde à prévia original.',
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));
