@@ -314,3 +314,30 @@ test('R-5: the header follows the real state - critical item pending, then waiti
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
   await expect(header).toHaveText('Aula aceita após sua conferência');
 });
+
+// R-4: after accepting, the Resumo of the new lesson is one click away - from the editor and, later, from the trecho in Materiais.
+// Before, the trecho only said "Aula criada" and the student had to look for the lesson in Plano.
+test('R-4: after accepting, "Abrir Resumo" opens the new lesson in Plano - from the editor and from the trecho', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'atalho-resumo.pdf', ['Farmacocinética: absorção e distribuição']);
+  await editor.locator('.source-draft-subject-input').fill('Atalho Resumo');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await expect(editor.locator('[data-action="open-summary"]')).toHaveCount(0); // nothing to open before the lesson exists
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  await editor.locator('[data-action="open-summary"]').click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  const row = page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' });
+  await expect(row.locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
+  await expect(row.locator('.plan-summary-section')).toBeVisible();
+
+  // later, from Materiais: the trecho that became a lesson links to it instead of ending at "Aula criada"
+  await page.locator('[data-screen="materials"]').click();
+  // Materiais still has the accepted lesson's editor open; leaving it reloads the list, which now tells the truth
+  await page.locator('[data-action="lesson-back"]').click();
+  const link = page.locator('.source-proposal-item [data-action="open-summary"]').first();
+  await expect(link).toBeVisible({ timeout: 10000 });
+  await link.click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  await expect(page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' }).locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
+});

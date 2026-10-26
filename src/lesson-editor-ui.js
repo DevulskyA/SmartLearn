@@ -855,7 +855,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }));
     const study = button("primary-button", t("editor.accept.studyNow"), "study-now");
     study.addEventListener("click", () => deps.startStudyNow(result.acceptance.unit, result.acceptance.subject?.name));
-    afterAccept.replaceChildren(study);
+    const summary = deps.openSummary ? button("secondary-button", t("editor.accept.openSummary"), "open-summary") : null;
+    summary?.addEventListener("click", () => deps.openSummary(result.acceptance.unit.id));
+    afterAccept.replaceChildren(...[study, summary].filter(Boolean));
     study.focus();
     await deps.refreshAfterAccept();
   });

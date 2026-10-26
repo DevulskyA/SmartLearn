@@ -50,6 +50,7 @@ export default {
   // Buttons and hints on a trecho
   'materials.action.showProgress': 'Ver andamento',
   'materials.action.retry': 'Tentar de novo',
+  'materials.action.openSummary': 'Abrir Resumo',
   'materials.action.openDraft': 'Abrir rascunho',
   'materials.action.generate': 'Gerar rascunho com IA',
   'materials.proposal.fallbackTitle': 'Trecho',

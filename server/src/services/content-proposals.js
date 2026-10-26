@@ -61,15 +61,19 @@ function proposalChars(db, userId, row) {
   `).get(userId, row.source_id, row.page_start, row.page_end).n;
 }
 
-/** The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again. */
+/**
+ * The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again.
+ * `acceptedUnitId` is the lesson an ACCEPTED draft became, and only while that lesson still exists (null otherwise), so a link to it is trustworthy.
+ */
 function latestDraftsByProposal(db, userId, sourceId) {
   const rows = db.prepare(`
-    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision
+    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision, u.id AS acceptedUnitId
     FROM generated_drafts d
+    LEFT JOIN learning_units u ON u.user_id = d.user_id AND u.id = d.accepted_unit_id
     WHERE d.user_id = ? AND d.proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
     ORDER BY d.id ASC
   `).all(userId, userId, sourceId);
-  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision }]));
+  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision, acceptedUnitId: r.acceptedUnitId ?? null }]));
 }
 
 function toSummaryDto(row, latestDraft = null) {

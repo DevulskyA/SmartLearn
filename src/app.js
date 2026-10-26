@@ -1609,6 +1609,12 @@ async function loadReinforcementByUnit() {
 // Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
 let pendingPlanFocusUnitId = null;
 
+/** Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. */
+function openLessonInPlan(unitId) {
+  pendingPlanFocusUnitId = unitId;
+  showScreen("plan", { focus: true });
+}
+
 // Plano can be refreshed from several independent actions (navigation, exam finalization,
 // study completion, subject edits). Only the newest async render may publish DOM.
 let planRenderSeq = 0;
@@ -3186,6 +3192,7 @@ configureMaterialsUI({
   listActiveSubjects: () => DB.subjects.getActive(),
   getLocalDateValue,
   startStudyNow,
+  openSummary: openLessonInPlan,
   refreshAfterAccept: () => Promise.all([renderSubjects(), renderStudies(), renderToday()]),
 });
 

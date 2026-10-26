@@ -48,6 +48,7 @@ function proposedText(count, note) {
 //   listActiveSubjects()  -> Promise<subject[]>   disciplines offered when accepting a draft
 //   getLocalDateValue()   -> "YYYY-MM-DD"         default date of the lesson
 //   startStudyNow(unit, subjectName)               "Estudar agora" right after an accept
+//   openSummary(unitId)                            "Abrir Resumo": Plano with that lesson open
 //   refreshAfterAccept()  -> Promise               refresh Disciplinas, Plano and Hoje once a unit exists
 let deps = null;
 export function configureMaterialsUI(next) {
@@ -123,6 +124,7 @@ async function openEditor(draft, title) {
       getDraft: DraftReviewUI.getDraft,
       onBack: showBrowse,
       startStudyNow: (unit, subjectName) => deps.startStudyNow(unit, subjectName),
+      openSummary: (unitId) => deps.openSummary(unitId),
       refreshAfterAccept: () => deps.refreshAfterAccept(),
     },
   });
@@ -447,6 +449,12 @@ function renderActionSlot(li, proposal) {
     parts.push(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
   } else if (proposal.latestDraft?.status === "ACCEPTED") {
     parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.lessonCreated")));
+    // the lesson exists: its Resumo is one click away (only offered while the server says the lesson is still there)
+    if (proposal.latestDraft.acceptedUnitId != null && deps.openSummary) {
+      const open = actionButton(t("materials.action.openSummary"), "open-summary", rangeId);
+      open.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
+      parts.push(open);
+    }
   } else if (status?.kind === "generating") {
     parts.push(statusLine(status));
     if (status.stalled) parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
@@ -798,6 +806,12 @@ async function onIndexClick(event) {
       saveBtn.disabled = false;
       saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
     }
+    return;
+  }
+
+  const summaryBtn = event.target.closest('[data-action="open-summary"]');
+  if (summaryBtn) {
+    deps.openSummary(Number(summaryBtn.dataset.unitId));
     return;
   }
 
