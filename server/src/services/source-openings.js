@@ -1,10 +1,14 @@
+import { dm, splitMessage } from '../api-error-messages.js';
+
 const CONTEXTS = new Set(['STUDY', 'REVIEW', 'EDITOR', 'PLAN', 'OTHER']);
 
 export class SourceOpeningError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -17,7 +21,7 @@ export function record(db, userId, { sourceId, pageIndex, context, operationKey 
   if (typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 100) throw new SourceOpeningError('VALIDATION_FAILED', 'operationKey é obrigatório.', 'operationKey');
   if (!CONTEXTS.has(context)) throw new SourceOpeningError('VALIDATION_FAILED', 'context não é reconhecido.', 'context');
   const source = db.prepare('SELECT id, page_count FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
-  if (!source) throw new SourceOpeningError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new SourceOpeningError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (pageIndex !== undefined && pageIndex !== null) {
     if (!Number.isInteger(pageIndex) || pageIndex < 1 || (source.page_count && pageIndex > source.page_count)) {
       throw new SourceOpeningError('VALIDATION_FAILED', 'pageIndex deve ser uma página do documento.', 'pageIndex');

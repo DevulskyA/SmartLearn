@@ -14,7 +14,7 @@ const STATUS = {
 function handleError(err, reply) {
   if (err instanceof assets.VisualAssetError) {
     reply.status(STATUS[err.code] ?? 400);
-    return { error: { code: err.code, field: err.field, message: err.message, ...(err.references ? { references: err.references } : {}) } };
+    return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg, ...(err.references ? { references: err.references } : {}) } };
   }
   throw err;
 }

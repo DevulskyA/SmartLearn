@@ -3,6 +3,7 @@
 // RE-ENCODED with sharp (so what is stored is a clean raster image, never the uploaded bytes), kept in a private media directory, and
 // written file-first/row-second so no accepted content can point at a file that was never written.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -10,9 +11,11 @@ import { UUID_PATTERN, listFigureRefs } from '../../../shared/summary-figure-ref
 
 export class VisualAssetError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -106,7 +109,7 @@ function validateCrop(db, userId, crop) {
   if (![0, 90, 180, 270].includes(crop.rotation)) throw new VisualAssetError('VALIDATION_FAILED', 'Rotação inválida.', 'rotation');
   if (!Number.isInteger(crop.sourceId)) throw new VisualAssetError('VALIDATION_FAILED', 'Fonte inválida.', 'sourceId');
   const source = db.prepare('SELECT id, checksum, page_count FROM sources WHERE user_id = ? AND id = ?').get(userId, crop.sourceId);
-  if (!source) throw new VisualAssetError('NOT_FOUND', 'Fonte não encontrada.', 'sourceId');
+  if (!source) throw new VisualAssetError('NOT_FOUND', dm('SOURCE_NOT_FOUND'), 'sourceId');
   if (!Number.isInteger(crop.pageIndex) || crop.pageIndex < 1 || (source.page_count && crop.pageIndex > source.page_count)) {
     throw new VisualAssetError('VALIDATION_FAILED', 'Página inexistente na fonte.', 'pageIndex');
   }

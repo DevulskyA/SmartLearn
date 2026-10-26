@@ -85,3 +85,26 @@ test('exercise, attempt, review and evidence errors carry code + params with the
   }
   assert.equal(new AttemptError('VALIDATION_FAILED', 'confidence deve ser um número entre 0 e 1, ou omitido.', 'confidence').msg, undefined);
 });
+
+test('exam, source, proposal and visual-asset errors carry code + params with the old text kept', async () => {
+  const { ExamError } = await import('../src/services/exams.js');
+  const { SourceError } = await import('../src/services/source-storage.js');
+  const { SourceExtractionError } = await import('../src/services/source-extraction.js');
+  const { SourceOpeningError } = await import('../src/services/source-openings.js');
+  const { ProposalError } = await import('../src/services/content-proposals.js');
+  const { VisualAssetError } = await import('../src/services/visual-assets.js');
+  const cases = [
+    [new ExamError('INVALID_STATE', dm('EXAM_ALREADY_SUBMITTED')), 'A prova já foi submetida: as respostas não podem mais ser alteradas.', 'EXAM_ALREADY_SUBMITTED'],
+    [new SourceError('NOT_FOUND', dm('SOURCE_NOT_FOUND')), 'Fonte não encontrada.', 'SOURCE_NOT_FOUND'],
+    [new SourceError('ENCRYPTED_FILE_REJECTED', dm('SOURCE_ENCRYPTED'), 'file'), 'PDFs criptografados não são suportados.', 'SOURCE_ENCRYPTED'],
+    [new SourceExtractionError('NOT_FOUND', dm('SOURCE_NOT_FOUND')), 'Fonte não encontrada.', 'SOURCE_NOT_FOUND'],
+    [new SourceOpeningError('NOT_FOUND', dm('SOURCE_NOT_FOUND')), 'Fonte não encontrada.', 'SOURCE_NOT_FOUND'],
+    [new ProposalError('NOT_EXTRACTED', dm('PROPOSAL_NO_USABLE_PAGE')), 'A fonte não tem nenhuma página com texto utilizável.', 'PROPOSAL_NO_USABLE_PAGE'],
+    [new VisualAssetError('NOT_FOUND', dm('SOURCE_NOT_FOUND'), 'sourceId'), 'Fonte não encontrada.', 'SOURCE_NOT_FOUND'],
+  ];
+  for (const [err, text, code] of cases) {
+    assert.equal(err.message, text);
+    assert.deepEqual(err.msg, { code, params: {} });
+  }
+  assert.equal(new ProposalError('VALIDATION_FAILED', 'Posição final fora da página.', 'endOffset').msg, undefined);
+});

@@ -1,4 +1,4 @@
-// i18n slices 2-4: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts and reviews, as a stable CODE + PARAMETERS.
+// i18n slices 2-5: the student-visible error sentences of the draft editing and acceptance paths, subjects, lessons, exercises, attempts, reviews, exams and sources, as a stable CODE + PARAMETERS.
 //
 // An API error stays {code, field, message}; when its sentence is one of the table below it also carries `msg: { code, params }`.
 // The client turns `msg.code` into the student's language with the catalog key `api.msg.<CODE>` (src/api-client.js) and uses
@@ -46,6 +46,25 @@ const TEXT = {
   EXERCISE_NO_ANSWER: () => 'Este exercício não tem resposta cadastrada.',
   REVIEW_ALREADY_COMPLETED: () => 'Esta revisão já foi concluída. Use a correção explícita para reabrir.',
   REVIEW_NOT_COMPLETED: () => 'Esta revisão ainda não foi concluída.',
+  EXAM_NOT_FOUND: () => 'Prova não encontrada.',
+  EXAM_UNIT_NO_QUESTIONS: () => 'Esta aula ainda não tem exercícios para uma prova.',
+  EXAM_SUBJECT_NO_QUESTIONS: () => 'Esta disciplina ainda não tem exercícios para uma prova.',
+  EXAM_ALREADY_SUBMITTED: () => 'A prova já foi submetida: as respostas não podem mais ser alteradas.',
+  EXAM_ITEM_NOT_FOUND: () => 'Questão da prova não encontrada.',
+  EXAM_SUBMIT_BEFORE_CORRECT: () => 'Submeta a prova antes de corrigir.',
+  EXAM_CORRECTION_DONE: () => 'A correção desta prova já foi concluída.',
+  EXAM_SUBMIT_BEFORE_FINISH: () => 'Submeta a prova antes de concluir a correção.',
+  SOURCE_NOT_FOUND: () => 'Fonte não encontrada.',
+  SOURCE_FILE_MISSING: () => 'O arquivo original desta fonte não foi encontrado no armazenamento.',
+  SOURCE_FILE_MISSING_NOTHING_CHANGED: () => 'O arquivo original desta fonte não foi encontrado no armazenamento. Nada foi extraído nem alterado.',
+  SOURCE_INTEGRITY_FAILED: () => 'O arquivo armazenado desta fonte não confere mais com o que foi enviado.',
+  SOURCE_FILE_EMPTY: () => 'Arquivo vazio ou inválido.',
+  SOURCE_NOT_PDF_TYPE: () => 'Apenas arquivos PDF são aceitos.',
+  SOURCE_NOT_VALID_PDF: () => 'O conteúdo do arquivo não é um PDF válido.',
+  SOURCE_ENCRYPTED: () => 'PDFs criptografados não são suportados.',
+  SOURCE_QUOTA_EXCEEDED: () => 'Cota de armazenamento de fontes excedida.',
+  PROPOSAL_SOURCE_NOT_EXTRACTED: () => 'A fonte precisa ser extraída com sucesso antes de gerar propostas.',
+  PROPOSAL_NO_USABLE_PAGE: () => 'A fonte não tem nenhuma página com texto utilizável.',
 };
 
 export const API_ERROR_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));

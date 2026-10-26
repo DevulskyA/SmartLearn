@@ -16,7 +16,7 @@ function handleError(err, reply) {
       SOURCE_FILE_MISSING: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, field: err.field, message: err.message } };
+    return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
   }
   throw err;
 }
@@ -51,7 +51,7 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
     } catch (err) {
       if (err instanceof sourceOpenings.SourceOpeningError) {
         reply.status(err.code === 'NOT_FOUND' ? 404 : 400);
-        return { error: { code: err.code, field: err.field, message: err.message } };
+        return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
       }
       throw err;
     }

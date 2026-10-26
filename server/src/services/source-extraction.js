@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { sha256Hex } from './source-storage.js';
@@ -8,9 +9,11 @@ const WORKER_PATH = fileURLToPath(new URL('../pdf/extract-worker.js', import.met
 
 export class SourceExtractionError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -76,7 +79,7 @@ function runWorker(filePath, data, { deadlineMs, memoryLimitMb }) {
  */
 export async function extractSource(db, userId, sourceId, { sourcesDir, deadlineMs = 30_000, memoryLimitMb = 256 }, now = () => new Date()) {
   const source = findOwnedSource(db, userId, sourceId);
-  if (!source) throw new SourceExtractionError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new SourceExtractionError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
 
   // SPRINT 03 (source file identity): the checksum/size recorded at upload IS the identity of this source.
   // Content is only derived from bytes that still match it. The verified bytes themselves go to the worker
@@ -87,7 +90,7 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
   try {
     verifiedBytes = readFileSync(filePath);
   } catch {
-    throw new SourceExtractionError('SOURCE_FILE_MISSING', 'O arquivo original desta fonte não foi encontrado no armazenamento. Nada foi extraído nem alterado.');
+    throw new SourceExtractionError('SOURCE_FILE_MISSING', dm('SOURCE_FILE_MISSING_NOTHING_CHANGED'));
   }
   if (verifiedBytes.length !== source.byte_size || sha256Hex(verifiedBytes) !== source.checksum) {
     throw new SourceExtractionError('SOURCE_INTEGRITY_FAILED', 'O arquivo armazenado desta fonte não confere mais com o que foi enviado (tamanho/checksum). Nada foi extraído nem alterado; restaure o arquivo original ou envie o PDF novamente.');
@@ -142,7 +145,7 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
 }
 
 export function listPages(db, userId, sourceId) {
-  if (!findOwnedSource(db, userId, sourceId)) throw new SourceExtractionError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!findOwnedSource(db, userId, sourceId)) throw new SourceExtractionError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   return db.prepare('SELECT page_index, text, page_status FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
     .all(userId, sourceId)
     .map((row) => ({ pageIndex: row.page_index, text: row.text, pageStatus: row.page_status }));

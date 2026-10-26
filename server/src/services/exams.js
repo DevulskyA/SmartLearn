@@ -1,4 +1,5 @@
 import { citationsForVersion } from './exercises.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import * as attemptsService from './attempts.js';
 import * as evidenceService from './evidence.js';
 import { get as getSettings } from './settings.js';
@@ -16,9 +17,11 @@ import { localDateString } from './reviews.js';
 
 export class ExamError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -40,7 +43,7 @@ function examTitle(db, userId, exam, unit) {
 
 function findOwnedExam(db, userId, examId) {
   const exam = db.prepare('SELECT * FROM exams WHERE user_id = ? AND id = ?').get(userId, examId);
-  if (!exam) throw new ExamError('NOT_FOUND', 'Prova não encontrada.');
+  if (!exam) throw new ExamError('NOT_FOUND', dm('EXAM_NOT_FOUND'));
   return exam;
 }
 
@@ -130,7 +133,7 @@ export function get(db, userId, examId) {
  */
 export function start(db, userId, { unitId }, now = () => new Date()) {
   const unit = findOwnedUnit(db, userId, unitId);
-  if (!unit) throw new ExamError('NOT_FOUND', 'Aula não encontrada.');
+  if (!unit) throw new ExamError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
   // An exam that is still open — being taken (IN_PROGRESS) or waiting for its correction (SUBMITTED) — is
   // RESUMED, never duplicated: leaving or reloading loses neither the answers nor the correction so far.
@@ -141,7 +144,7 @@ export function start(db, userId, { unitId }, now = () => new Date()) {
   const versions = exercises
     .map((e) => ({ exerciseId: e.id, version: db.prepare('SELECT id FROM exercise_versions WHERE user_id = ? AND exercise_id = ? ORDER BY id DESC LIMIT 1').get(userId, e.id) }))
     .filter((e) => e.version);
-  if (versions.length === 0) throw new ExamError('NO_QUESTIONS', 'Esta aula ainda não tem exercícios para uma prova.');
+  if (versions.length === 0) throw new ExamError('NO_QUESTIONS', dm('EXAM_UNIT_NO_QUESTIONS'));
 
   const nowIso = now().toISOString();
   const run = db.transaction(() => {
@@ -165,7 +168,7 @@ export const SUBJECT_EXAM_MAX_QUESTIONS = 20;
  */
 export function startSubject(db, userId, { subjectId }, now = () => new Date()) {
   const subject = findOwnedSubject(db, userId, subjectId);
-  if (!subject) throw new ExamError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new ExamError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
 
   const existing = db.prepare("SELECT id FROM exams WHERE user_id = ? AND subject_id = ? AND status IN ('IN_PROGRESS','SUBMITTED') ORDER BY id DESC LIMIT 1").get(userId, subjectId);
   if (existing) return { exam: get(db, userId, existing.id), resumed: true };
@@ -178,7 +181,7 @@ export function startSubject(db, userId, { subjectId }, now = () => new Date()) 
     WHERE ex.user_id = ? AND u.subject_id = ? AND ex.archived_at IS NULL
     ORDER BY ex.unit_id, ex.order_index, ex.id
   `).all(userId, subjectId).filter((c) => c.version_id != null);
-  if (candidates.length === 0) throw new ExamError('NO_QUESTIONS', 'Esta disciplina ainda não tem exercícios para uma prova.');
+  if (candidates.length === 0) throw new ExamError('NO_QUESTIONS', dm('EXAM_SUBJECT_NO_QUESTIONS'));
 
   const weak = new Set(Object.values(attemptsService.reinforcementByUnit(db, userId)).flat());
   const chosen = candidates.filter((c) => weak.has(c.exercise_id)).slice(0, SUBJECT_EXAM_MAX_QUESTIONS);
@@ -210,11 +213,11 @@ export function startSubject(db, userId, { subjectId }, now = () => new Date()) 
 /** Saves what the student typed for one item. Only while the exam is IN_PROGRESS; answers are locked afterwards. */
 export function saveAnswer(db, userId, examId, itemId, { answer } = {}) {
   const exam = findOwnedExam(db, userId, examId);
-  if (exam.status !== 'IN_PROGRESS') throw new ExamError('INVALID_STATE', 'A prova já foi submetida: as respostas não podem mais ser alteradas.');
+  if (exam.status !== 'IN_PROGRESS') throw new ExamError('INVALID_STATE', dm('EXAM_ALREADY_SUBMITTED'));
   if (typeof answer !== 'string') throw new ExamError('VALIDATION_FAILED', 'answer deve ser um texto.', 'answer');
   if (answer.length > MAX_ANSWER_LENGTH) throw new ExamError('VALIDATION_FAILED', `answer excede o máximo de ${MAX_ANSWER_LENGTH} caracteres.`, 'answer');
   const item = db.prepare('SELECT id FROM exam_items WHERE user_id = ? AND exam_id = ? AND id = ?').get(userId, examId, itemId);
-  if (!item) throw new ExamError('NOT_FOUND', 'Questão da prova não encontrada.');
+  if (!item) throw new ExamError('NOT_FOUND', dm('EXAM_ITEM_NOT_FOUND'));
   db.prepare('UPDATE exam_items SET student_answer = ? WHERE user_id = ? AND id = ?').run(answer.trim() === '' ? null : answer, userId, itemId);
   return { saved: true, answeredCount: db.prepare("SELECT COUNT(*) AS n FROM exam_items WHERE user_id = ? AND exam_id = ? AND student_answer IS NOT NULL AND TRIM(student_answer) <> ''").get(userId, examId).n };
 }
@@ -226,11 +229,11 @@ export function saveAnswer(db, userId, examId, itemId, { answer } = {}) {
  */
 export function judge(db, userId, examId, itemId, { outcome } = {}) {
   const exam = findOwnedExam(db, userId, examId);
-  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', 'Submeta a prova antes de corrigir.');
-  if (exam.status === 'CORRECTED') throw new ExamError('INVALID_STATE', 'A correção desta prova já foi concluída.');
+  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', dm('EXAM_SUBMIT_BEFORE_CORRECT'));
+  if (exam.status === 'CORRECTED') throw new ExamError('INVALID_STATE', dm('EXAM_CORRECTION_DONE'));
   if (outcome !== 'CORRECT' && outcome !== 'INCORRECT') throw new ExamError('VALIDATION_FAILED', 'outcome deve ser CORRECT ou INCORRECT.', 'outcome');
   const item = db.prepare('SELECT id FROM exam_items WHERE user_id = ? AND exam_id = ? AND id = ?').get(userId, examId, itemId);
-  if (!item) throw new ExamError('NOT_FOUND', 'Questão da prova não encontrada.');
+  if (!item) throw new ExamError('NOT_FOUND', dm('EXAM_ITEM_NOT_FOUND'));
   db.prepare('UPDATE exam_items SET outcome = ? WHERE user_id = ? AND id = ?').run(outcome, userId, itemId);
   return get(db, userId, examId);
 }
@@ -246,7 +249,7 @@ export function judge(db, userId, examId, itemId, { outcome } = {}) {
 export function finalize(db, userId, examId, { evidenceDate } = {}, now = () => new Date()) {
   const exam = findOwnedExam(db, userId, examId);
   if (exam.status === 'CORRECTED') return get(db, userId, examId);
-  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', 'Submeta a prova antes de concluir a correção.');
+  if (exam.status === 'IN_PROGRESS') throw new ExamError('INVALID_STATE', dm('EXAM_SUBMIT_BEFORE_FINISH'));
   const rows = itemRows(db, userId, examId);
   const pending = rows.filter((r) => r.outcome == null).length;
   if (pending > 0) throw new ExamError('INCOMPLETE', `Falta corrigir ${pending} ${pending === 1 ? 'questão' : 'questões'} antes de concluir.`);

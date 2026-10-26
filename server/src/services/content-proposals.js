@@ -1,4 +1,5 @@
 import { listPages } from './source-extraction.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
 import { planSectionUnits, findTopicSections, textOfSpans } from './section-spans.js';
 import { classifyUnit, effectiveKind } from './unit-kind.js';
@@ -7,9 +8,11 @@ import { activeJobOfProposals } from './generation-jobs.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -107,16 +110,16 @@ function toSummaryDto(row, latestDraft = null) {
  */
 export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, discardDrafts = false, minCharsPerDetectedUnit = DEFAULT_MIN_CHARS_PER_DETECTED_UNIT } = {}) {
   const source = findOwnedSource(db, userId, sourceId);
-  if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (source.extraction_status !== 'EXTRACTED') {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de gerar propostas.');
+    throw new ProposalError('NOT_EXTRACTED', dm('PROPOSAL_SOURCE_NOT_EXTRACTED'));
   }
 
   // Only pages with usable text become proposals. An EMPTY/FAILED page keeps its diagnosis in source_pages
   // (and stays visible to the student) but is never study material or model input.
   const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK');
   if (pages.length === 0) {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte não tem nenhuma página com texto utilizável.');
+    throw new ProposalError('NOT_EXTRACTED', dm('PROPOSAL_NO_USABLE_PAGE'));
   }
 
   // P1_PRODUCT B (found during PRODUCT-REAL-01): re-chunking a source
@@ -213,7 +216,7 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
 
 function outlineAndPages(db, userId, sourceId) {
   const source = findOwnedSource(db, userId, sourceId);
-  if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (source.extraction_status !== 'EXTRACTED') {
     throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de buscar um assunto.');
   }
@@ -317,7 +320,7 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 }
 
 export function listProposals(db, userId, sourceId) {
-  if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   const rows = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? ORDER BY chunk_index').all(userId, sourceId);
   const drafts = latestDraftsByProposal(db, userId, sourceId);
   return rows.map((row) => ({
