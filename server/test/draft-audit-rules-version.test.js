@@ -20,7 +20,7 @@ const UPLOAD_DEFAULTS = { maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1
 // T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js + risk-checks.js + draft-audit-model.js (the model auditor's prompt and the rule that decides which of its findings may repair). Changing either changes this hash; when it does, bump
 // AUDIT_RULES_VERSION (draft-audit.js) and record the new pair here. A rule changed without a new version fails below.
 const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js', '../src/ai/risk-checks.js', '../src/ai/draft-audit-model.js'];
-const PINNED = { version: 'audit-rules-7', hash: '4d2a078225424f88d98709afae27c7788610c9519aca55eaf389a7f9fdaa3a0d' };
+const PINNED = { version: 'audit-rules-8', hash: '686c0ba1dcb61ff45a8e84ca7306b1fa02e7c03ece8da4d36408d5562d53afb3' };
 const rulesHash = () => createHash('sha256').update(RULES_FILES.map((f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')).join('\n--\n')).digest('hex');
 
 test('the audit rule set cannot change without a new AUDIT_RULES_VERSION', () => {

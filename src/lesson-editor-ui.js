@@ -16,7 +16,7 @@ import { createSourceDetails, formatPageList } from "./source-details-ui.js";
 import { enhanceSelect } from "./select-ui.js";
 import { createSubjectCreateForm } from "./subject-create-form.js";
 import {
-  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, draftState, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
+  QUESTION_TYPE_LABELS, issueLabel, groupFindings, groupByCause, draftState, sourceSufficiencyNote, questionState, reviewOverview, keptQuestionCount, sourceLine, groundingLine,
 } from "./lesson-view-model.js";
 
 // The label is read when used (not once at import), so the active locale applies.
@@ -625,6 +625,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (skipped) {
       reviewPanel.append(createTextElement("p", "lesson-hint lesson-cross-language", `${skipped.generatedClaim} ${skipped.sourceEvidence} ${skipped.repair}`));
     }
+    const thinSource = sourceSufficiencyNote(draft);
+    if (thinSource) reviewPanel.append(createTextElement("p", "lesson-hint lesson-source-thin", thinSource));
     if (overview.total === 0) {
       reviewPanel.append(createTextElement("p", "lesson-review-clear", t("editor.review.clear")));
       return;

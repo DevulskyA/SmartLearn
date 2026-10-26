@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { draftState, groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
+import { sourceSufficiencyNote, draftState, groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -189,4 +189,21 @@ test("the header state follows the REAL state of the draft: draft -> pending cri
   }
   // no draft state claims the content was verified
   for (const d of [open(), open({ acceptanceBlockers: { questions: ["q"], summary: 0 } })]) assert.doesNotMatch(draftState(d).label, /verificad|validad|aprovad/i);
+});
+
+test("the thin-source notice names what the check could not see, in the catalog's words, and says it is not proof of error", () => {
+  const draftWith = (finding) => ({ audit: { findings: finding ? [finding] : [] } });
+  assert.equal(sourceSufficiencyNote(draftWith(null)), "");
+  assert.equal(sourceSufficiencyNote({}), "");
+  assert.equal(sourceSufficiencyNote(draftWith({ issue: "QUESTION_DUPLICATE" })), "");
+  const thin = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["THIN"], sourceChars: 440, pageCount: 3, emptyPages: [], garbledPages: [] }));
+  assert.match(thin, /^O texto extraído desta fonte tem 440 caracteres em 3 páginas\./);
+  assert.match(thin, /É um aviso, não prova de erro\.$/);
+  assert.doesNotMatch(thin, /Sem texto nas páginas|cortada ou ilegível/);
+  const one = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["EMPTY_PAGES"], sourceChars: 900, pageCount: 1, emptyPages: [1], garbledPages: [] }));
+  assert.match(one, /em 1 página\./);
+  assert.match(one, /Sem texto nas páginas 1:/);
+  const both = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["EMPTY_PAGES", "GARBLED"], sourceChars: 5000, pageCount: 4, emptyPages: [2], garbledPages: [3, 4] }));
+  assert.match(both, /Sem texto nas páginas 2:/);
+  assert.match(both, /cortada ou ilegível nas páginas 3, 4\./);
 });

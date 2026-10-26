@@ -24,7 +24,7 @@ export const triggersRepair = (f) => (f.severity === 'HIGH' || f.severity === 'M
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js, draft-audit-model.js):draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-7';
+export const AUDIT_RULES_VERSION = 'audit-rules-8';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -357,6 +357,31 @@ function auditQuestionVolume(count, sourceChars) {
     repair: count > max ? 'Considere remover as questões menos importantes ou repetitivas; nada foi cortado automaticamente.' : 'Considere acrescentar questões sobre os conceitos que ficaram sem pergunta.',
   };
 }
+// R-3: how much text the audit could actually SEE. A scanned or image-heavy PDF extracts little or nothing, and then "no point raised" means
+// very little. The reviewer is told so: an advisory (LOW) that never blocks, never triggers a repair and never says the draft is wrong.
+export const SOURCE_SUFFICIENCY = Object.freeze({ minCharsPerPage: 250, emptyPageLetters: 10, garbledReplacementChars: 5 });
+const lettersIn = (text) => (String(text).match(/\p{L}/gu) ?? []).length;
+function auditSourceSufficiency(segments, policy = SOURCE_SUFFICIENCY) {
+  const pages = segments.length;
+  if (pages === 0) return null;
+  const chars = segments.reduce((n, seg) => n + String(seg.text).trim().length, 0);
+  const emptyPages = segments.filter((seg) => lettersIn(seg.text) < policy.emptyPageLetters).map((seg) => seg.pageIndex);
+  // the replacement character is what a broken extraction leaves behind. A low share of letters is NOT used: tables and formulas are mostly digits
+  const garbledPages = segments.filter((seg) => (String(seg.text).match(/\uFFFD/g) ?? []).length >= policy.garbledReplacementChars).map((seg) => seg.pageIndex);
+  const thin = pages >= 2 && chars / pages < policy.minCharsPerPage;
+  const reasons = [...(thin ? ["THIN"] : []), ...(emptyPages.length > 0 ? ["EMPTY_PAGES"] : []), ...(garbledPages.length > 0 ? ["GARBLED"] : [])];
+  if (reasons.length === 0) return null;
+  return {
+    issue: "SOURCE_TEXT_INSUFFICIENT",
+    severity: "LOW",
+    scope: "draft",
+    generatedClaim: `${chars} caracteres de texto em ${pages} página(s) aprovada(s).`,
+    sourceEvidence: "O texto extraído da fonte é curto, tem páginas sem texto ou parece truncado ou ilegível. A conferência automática só enxerga esse texto.",
+    repair: "Se o PDF for escaneado ou depender de figuras, leia a fonte original: nenhum ponto sinalizado vale menos aqui. É um aviso, não prova de erro no rascunho.",
+    reasons, sourceChars: chars, pageCount: pages, emptyPages, garbledPages,
+  };
+}
+
 /**
  * @param {{summary:string, questions:object[]}} draft an already schema-validated draft
  * @param {{segments:{pageIndex:number,text:string}[]}} context the exact source pages sent to the provider
@@ -385,6 +410,8 @@ export function auditDraft(rawDraft, { segments }) {
   findings.push(...auditRisk(draft, { segments }));
   const volume = auditQuestionVolume((draft.questions ?? []).length, sourceText.length);
   if (volume) findings.push(volume);
+  const sufficiency = auditSourceSufficiency(segments);
+  if (sufficiency) findings.push(sufficiency);
   const blocking = findings.some(triggersRepair);
   return { result: blocking ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS, findings, auditedBy: 'DETERMINISTIC' };
 }

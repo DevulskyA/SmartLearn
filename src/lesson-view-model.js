@@ -118,6 +118,21 @@ export function draftState(draft, { accepted = false } = {}) {
   return { key: "draft", label: t("editor.eyebrow"), pending: 0 };
 }
 
+/**
+ * The notice above the review when the text the automatic check could read is thin: little text for the pages, pages with no text, or text
+ * that looks cut or unreadable. It is a warning about what the check could SEE, never a statement that the draft is wrong; "" when there is none.
+ */
+export function sourceSufficiencyNote(draft) {
+  const finding = (draft?.audit?.findings ?? []).find((f) => f.issue === "SOURCE_TEXT_INSUFFICIENT");
+  if (!finding) return "";
+  const reasons = finding.reasons ?? [];
+  const parts = [tn("editor.review.sourceThin.base", finding.pageCount ?? 0, { chars: formatNumber(finding.sourceChars ?? 0) })];
+  if (reasons.includes("EMPTY_PAGES") && finding.emptyPages?.length > 0) parts.push(t("editor.review.sourceThin.empty", { pages: finding.emptyPages.join(", ") }));
+  if (reasons.includes("GARBLED") && finding.garbledPages?.length > 0) parts.push(t("editor.review.sourceThin.garbled", { pages: finding.garbledPages.join(", ") }));
+  parts.push(t("editor.review.sourceThin.advice"));
+  return parts.join(" ");
+}
+
 /** The review state a question shows in the list: a symbol (decorative), a word (always present) and how many findings it has. */
 export function questionState(question, findingCount = 0) {
   if (question.status === "REJECTED") return { key: "rejected", symbol: "✕", label: t("lesson.questionState.rejected"), count: 0 };
