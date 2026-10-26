@@ -72,6 +72,16 @@ pub fn clamp_to_monitor(state: WindowState, monitors: &[MonitorRect]) -> WindowS
     WindowState { x, y, width, height, maximized: state.maximized }
 }
 
+/// The size of a window that has nothing to restore (first run, or the monitor it was on is gone): the comfortable page size (logical 1280x820,
+/// scaled to the display) but never bigger than 95% of the monitor it opens on.
+pub fn first_run_size(monitor_width: u32, monitor_height: u32, scale: f64) -> (u32, u32) {
+    let want_w = (1280.0 * scale).round() as u32;
+    let want_h = (820.0 * scale).round() as u32;
+    let max_w = (f64::from(monitor_width) * 0.95) as u32;
+    let max_h = (f64::from(monitor_height) * 0.95) as u32;
+    (want_w.min(max_w).max(MIN_SIZE), want_h.min(max_h).max(MIN_SIZE))
+}
+
 /// Throttle for the stream of Moved/Resized events while a window is dragged: at most one disk write per SAVE_EVERY; the close always saves.
 pub struct Throttle {
     last: Option<Instant>,
@@ -121,6 +131,17 @@ mod tests {
     #[test]
     fn a_monitor_above_with_negative_coordinates_works() {
         assert!(is_visible_on(&state(300, -900), &[LEFT, ABOVE]));
+    }
+
+    #[test]
+    fn two_monitors_yesterday_one_today_starts_from_scratch_on_the_connected_one() {
+        // saved on the second monitor, which is not plugged in any more: the saved state is ignored (so the window opens fresh, centred)
+        let saved = state(2200, 100);
+        assert!(!is_visible_on(&saved, &[LEFT]));
+        // and the fresh window is the comfortable size, shrunk to a small laptop screen
+        assert_eq!(first_run_size(1920, 1080, 1.0), (1280, 820));
+        assert_eq!(first_run_size(1366, 768, 1.0), (1280, 729));
+        assert_eq!(first_run_size(1920, 1080, 1.5), (1824, 1026));
     }
 
     #[test]

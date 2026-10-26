@@ -468,6 +468,15 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
             let _ = window.maximize();
         }
     }
+    if last.is_none() {
+        // nothing usable saved (first run, or the monitor it was on is gone): start from scratch, centred on a connected monitor, never bigger than it
+        let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let (width, height) = window_state::first_run_size(monitor.size().width, monitor.size().height, window.scale_factor().unwrap_or(1.0));
+            let _ = window.set_size(tauri::PhysicalSize::new(width, height));
+        }
+        let _ = window.center();
+    }
     let _ = window.show();
 
     let shared = std::sync::Mutex::new((last.take(), window_state::Throttle::new()));
@@ -571,7 +580,9 @@ pub fn run() {
 
             let window = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
                 .title(window_title(std::env::var("SMARTLEARN_WINDOW_TITLE").ok().as_deref()))
-                .inner_size(800.0, 600.0)
+                // first run only (no saved window yet): a comfortable page, centred; every later start restores the last place and size
+                .inner_size(1280.0, 820.0)
+                .center()
                 .resizable(true)
                 .initialization_script(init_script)
                 .visible(false) // shown only after the remembered position is applied: no flash on the wrong monitor
