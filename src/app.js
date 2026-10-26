@@ -2824,6 +2824,17 @@ function showUnitDetail(r) {
     sparkEl.classList.add("unit-detail-spark");
     unitDetailBody.append(sparkEl);
   }
+
+  // The weak spot is the lesson the row is about (the row comes from that lesson): one click opens it in Plano, with its Resumo and "Estudar agora"
+  if (r.unitId != null) {
+    const study = document.createElement("button");
+    study.type = "button";
+    study.className = "secondary-button unit-detail-study";
+    study.dataset.action = "study-unit";
+    study.textContent = t("statsView.unit.study");
+    study.addEventListener("click", () => openLessonInPlan(r.unitId));
+    unitDetailBody.append(study);
+  }
 }
 
 function renderEvolutionSvg(evidence, units, subjects) {

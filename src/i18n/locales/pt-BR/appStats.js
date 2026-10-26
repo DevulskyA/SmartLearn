@@ -46,5 +46,6 @@ export default {
   'statsView.unit.score': '{percent}% · {questions} questões',
   'statsView.unit.noEvidence': 'Sem evidência registrada',
   'statsView.unit.lastPractice': 'Última prática: {date}',
+  'statsView.unit.study': 'Estudar conteúdo',
   // end of keys
 };
