@@ -16,6 +16,8 @@ Distinguir obrigatoriamente:
 
 Não declarar o projeto concluído por terminar a auditoria, um teste, uma branch ou uma sessão. Se restarem somente gates humanos legítimos, o resultado correto é WITH_HUMAN_GATES com um único pacote de decisões, jamais uma falsa aprovação.
 
+Não confundir os M0–M10 deste RUNBOOK com os marcos M0–M3 oficiais do PROGRAM.md. A precedência canônica de primeiro uso humano permanece: antes dela, avançar livremente apenas em provas mecânicas já autorizadas, correções P0/P1 e preparação analítica independente; não implementar funcionalidades posteriores cujo gate de produto segue pendente. Esta ordem geral de conclusão não revoga decisões específicas de escopo. Uma sessão extensa não é execução ilimitada: não iniciar chamadas pagas não autorizadas, processos duplicados ou agendas sem controle de pausa/uso.
+
 ## 1. Reconciliação inicial obrigatória
 
 Antes de qualquer comando mutável: git worktree list, git status, git branch -vv, git log --all, git remote e merge-base. Encontrar trabalho local não publicado e o SHA do candidato mais recente. Não confiar em handoff, chat, relatório ou esta lista acima do repositório real.
