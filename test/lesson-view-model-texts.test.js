@@ -35,6 +35,11 @@ test("issue labels", () => {
     QUESTION_DUPLICATE: "Questão repetida",
     QUESTION_VOLUME_OUT_OF_RANGE: "Quantidade de questões fora do esperado",
     QUESTION_LITERAL_COPY: "Resposta copiada da fonte",
+    UNIT_MISMATCH: "Unidade diferente da fonte",
+    QUALIFIER_LOST: "Restrição da fonte perdida",
+    QUALIFIER_ADDED: "Termo absoluto que a fonte não usa",
+    NEGATION_LOST: "Negação da fonte perdida",
+    NEGATION_ADDED: "Negação que a fonte não traz",
   });
   assert.equal(issueLabel("QUESTION_LITERAL_COPY"), "Resposta copiada da fonte");
   assert.equal(issueLabel("NEW_ONE"), "NEW_ONE");
