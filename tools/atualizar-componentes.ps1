@@ -13,8 +13,7 @@ function Get-ExistingRoots {
         (Join-Path $env:USERPROFILE '.agents\skills'),
         (Join-Path $env:USERPROFILE '.codex\skills'),
         (Join-Path $env:USERPROFILE '.claude\plugins\marketplaces'),
-        (Join-Path $env:USERPROFILE '.codex\vendor_imports\skills'),
-        (Join-Path $PSScriptRoot '..')
+        (Join-Path $env:USERPROFILE '.codex\vendor_imports\skills')
     )
 
     $roots = if ($SearchRoot) { $SearchRoot } else { $defaults }
@@ -35,13 +34,25 @@ function Find-GitRoot([string]$Path) {
     return $null
 }
 
-function Get-Inventory([string[]]$Roots) {
+function Test-ProtectedRepository([string]$Path, [string[]]$ProtectedRoots) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $normalized = ($Path -replace '/', '\').TrimEnd('\')
+    foreach ($protected in $ProtectedRoots) {
+        if ($normalized -ieq ($protected -replace '/', '\').TrimEnd('\')) { return $true }
+    }
+    if ($normalized -match '(?i)(^|\\)SmartLearn(\\|$)') { return $true }
+    $remote = (& git -C $Path remote get-url origin 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $remote -match '(?i)(github\.com[/:])DevulskyA([/:])') { return $true }
+    return $false
+}
+
+function Get-Inventory([string[]]$Roots, [string[]]$ProtectedRoots) {
     $repos = @{}
     $skills = @{}
 
     foreach ($root in $Roots) {
         $gitRoot = Find-GitRoot $root
-        if ($gitRoot) { $repos[$gitRoot] = $gitRoot }
+        if ($gitRoot -and -not (Test-ProtectedRepository $gitRoot $ProtectedRoots)) { $repos[$gitRoot] = $gitRoot }
 
         $dirs = @()
         try {
@@ -53,7 +64,7 @@ function Get-Inventory([string[]]$Roots) {
         foreach ($dir in $paths) {
             if (Test-Path -LiteralPath (Join-Path $dir '.git')) {
                 $resolvedDir = ((Resolve-Path -LiteralPath $dir).Path -replace '/', '\')
-                $repos[$resolvedDir] = $resolvedDir
+                if (-not (Test-ProtectedRepository $resolvedDir $ProtectedRoots)) { $repos[$resolvedDir] = $resolvedDir }
             }
             $skillFile = Join-Path $dir 'SKILL.md'
             if (Test-Path -LiteralPath $skillFile -PathType Leaf) {
@@ -61,7 +72,7 @@ function Get-Inventory([string[]]$Roots) {
                 $skills[$skillPath] = [pscustomobject]@{
                     Name = Split-Path $skillPath -Leaf
                     Path = $skillPath
-                    Repo = Find-GitRoot $skillPath
+                    Repo = if (Test-ProtectedRepository (Find-GitRoot $skillPath) $ProtectedRoots) { $null } else { Find-GitRoot $skillPath }
                 }
             }
         }
@@ -74,7 +85,7 @@ function Get-Inventory([string[]]$Roots) {
 }
 
 function Show-Inventory($Inventory) {
-    Write-Host "`nRepositórios Git encontrados: $($Inventory.Repositories.Count)" -ForegroundColor Cyan
+    Write-Host "`nRepositórios externos atualizáveis: $($Inventory.Repositories.Count)" -ForegroundColor Cyan
     foreach ($repo in $Inventory.Repositories) { Write-Host "  - $repo" }
 
     $unmatchedSkills = @($Inventory.Skills | Where-Object { -not $_.Repo })
@@ -134,10 +145,14 @@ function Invoke-SelfTest {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git não está disponível no PATH.' }
     $sample = @([pscustomobject]@{ Path = 'sample' }, [pscustomobject]@{ Path = 'other' })
     if ((@($sample | Sort-Object Path -Unique)).Count -ne 2) { throw 'Falha no self-test de seleção.' }
+    $currentRepo = Find-GitRoot (Join-Path $PSScriptRoot '..')
+    if (-not (Test-ProtectedRepository $currentRepo @($currentRepo))) { throw 'O workspace do SmartLearn não está protegido.' }
+    if (-not (Test-ProtectedRepository 'C:\Projetos\SmartLearn' @())) { throw 'O projeto SmartLearn fora deste worktree não está protegido.' }
+    if (-not (Test-ProtectedRepository 'C:\Projetos\SmartLearn\.claude\worktrees\qualquer' @())) { throw 'Os worktrees do SmartLearn não estão protegidos.' }
     Write-Host 'SELF-TEST OK'
 }
 
-function Show-Gui($Inventory, [string[]]$Roots) {
+function Show-Gui($Inventory, [string[]]$Roots, [string[]]$ProtectedRoots) {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -157,7 +172,7 @@ function Show-Gui($Inventory, [string[]]$Roots) {
     $form.Controls.Add($title)
 
     $subtitle = New-Object System.Windows.Forms.Label
-    $subtitle.Text = 'Selecione componentes atualizáveis. Nada é alterado sem um comando explícito.'
+    $subtitle.Text = 'Somente componentes externos são atualizados. O SmartLearn e seus worktrees ficam protegidos.'
     $subtitle.Location = New-Object System.Drawing.Point(26, 55)
     $subtitle.AutoSize = $true
     $form.Controls.Add($subtitle)
@@ -220,7 +235,7 @@ function Show-Gui($Inventory, [string[]]$Roots) {
     $form.Controls.Add($updateSkills)
 
     $updateAll = New-Object System.Windows.Forms.Button
-    $updateAll.Text = 'Atualizar todos os repositórios'
+    $updateAll.Text = 'Atualizar todos os externos'
     $updateAll.Location = New-Object System.Drawing.Point(465, 640)
     $updateAll.Size = New-Object System.Drawing.Size(205, 30)
     $updateAll.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -268,7 +283,7 @@ function Show-Gui($Inventory, [string[]]$Roots) {
         $result.Text = $messages -join "`r`n"
     }).GetNewClosure())
     $refresh.Add_Click(({
-        $viewState.Inventory = Get-Inventory $Roots
+        $viewState.Inventory = Get-Inventory $Roots $ProtectedRoots
         & $refreshView
     }).GetNewClosure())
 
@@ -276,19 +291,20 @@ function Show-Gui($Inventory, [string[]]$Roots) {
 }
 
 $roots = Get-ExistingRoots
+$protectedRoots = @((Find-GitRoot (Join-Path $PSScriptRoot '..')))
 if ($SelfTest) { Invoke-SelfTest; exit 0 }
-$inventory = Get-Inventory $roots
+$inventory = Get-Inventory $roots $protectedRoots
 if ($InventoryOnly) { Show-Inventory $inventory; exit 0 }
 
 if (-not $Console) {
-    try { Show-Gui $inventory $roots; exit 0 }
+    try { Show-Gui $inventory $roots $protectedRoots; exit 0 }
     catch { Write-Warning "Interface gráfica indisponível: $($_.Exception.Message). Usando o modo console." }
 }
 
 $running = $true
 do {
     Write-Host "`n=== Atualizador de componentes ===" -ForegroundColor Green
-    Write-Host '[1] Atualizar repositórios Git'
+    Write-Host '[1] Atualizar repositórios externos'
     Write-Host '[2] Atualizar skills (uma a uma ou todas)'
     Write-Host '[3] Atualizar tudo que for atualizável'
     Write-Host '[4] Mostrar inventário'
@@ -298,7 +314,7 @@ do {
         '1' { Update-SelectedRepositories (Select-Items $inventory.Repositories 'Repositórios') | ForEach-Object { Write-Host $_ } }
         '2' { Update-SelectedSkills (Select-Items @($inventory.Skills | Where-Object Repo) 'Skills atualizáveis') | ForEach-Object { Write-Host $_ } }
         '3' {
-            $confirm = (Read-Host "Atualizar $($inventory.Repositories.Count) repositórios? Digite SIM para confirmar").Trim()
+            $confirm = (Read-Host "Atualizar $($inventory.Repositories.Count) repositórios externos? Digite SIM para confirmar").Trim()
             if ($confirm -ceq 'SIM') { Update-SelectedRepositories $inventory.Repositories | ForEach-Object { Write-Host $_ } }
             else { Write-Host 'Atualização em lote cancelada.' }
         }
