@@ -40,3 +40,11 @@ Nenhuma integra limpo. Integrar exige resolução manual e nova regressão; deci
 
 ## VEREDITO: **PRONTA PARA VALIDAÇÃO HUMANA** (com ressalvas)
 Sustentado por: nenhuma falha bloqueante reproduzida; jornada, aprendizagem, acessibilidade e responsividade verdes no candidato; lacunas de integridade médica encontradas na auditoria foram corrigidas. **Não** é aprovação médica nem humana: testes automatizados não substituem validação de conteúdo clínico nem a jornada nativa. Vira NECESSITA CORREÇÕES se a validação humana reprovar conteúdo, ou BLOQUEADA se a jornada nativa falhar neste SHA.
+
+## Decisões tomadas por delegação do usuário ("tomando as melhores decisões por mim", 2026-10-27)
+| Item | Decisão | Motivo |
+|---|---|---|
+| Integrar `v1-window-memory-product` (`ecc2f32`) e `stats-aaa-6405e1` (`38278f5`) | **Não integrar** | Conflitos reais (4 arquivos cada, incluindo `src/app.js` e Rust); integração é merge de trabalho alheio, proibida pela missão, e exigiria nova regressão. Ordem sugerida ao dono: primeiro window-memory (isolado em Rust/scripts), depois stats-aaa resolvendo `app.js`/`appStats.js`. |
+| Push de `claude/smartlearn-v1-complete` (129 commits à frente do remoto) | **Não fazer** | É a linha de release, não o candidato auditado; publicá-la sugeriria que foi auditada. Decisão de lançamento do dono. |
+| Push de `claude/smartlearn-figure-width` (avanço puro, 11 commits) | **Tentado e bloqueado** pelo classificador de permissões da sessão | Para liberar: regra de permissão `git push` no settings do Bash, ou rodar `git push origin claude/smartlearn-figure-width` no terminal. Os mesmos commits já estão publicados como ancestrais de `claude/audit-v2-5cf864f`. |
+| Jornada nativa descartável em `4f6723a` | **Tentada e bloqueada** pela salvaguarda do projeto `SMARTLEARN_WRONG_WORKTREE` (build DEV só em `claude/smartlearn-v1-complete`) | Não burlada. Para fechar: trazer o candidato para um checkout em `v1-complete` (decisão de integração do dono) e rodar `npm run build`, `npm run package:standalone`, `cargo build` e `node scripts/desktop-study-journey.mjs`. |
