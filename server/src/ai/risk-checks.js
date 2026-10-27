@@ -137,6 +137,8 @@ const CUES = {
 // strengthening a claim is what a reader cannot spot: these are the cues a draft must not add
 const ABSOLUTES = new Set(['ONLY', 'ALWAYS', 'NEVER']);
 const NEVER_CUES = new Set(['never', 'nunca', 'jamais', 'jamas']);
+// negation-like verbs and adjectives: they have faithful non-negated paraphrases, so they never prove a flipped negation
+const WEAK_NEGATION = new Set(['prevents', 'prevent', 'fails', 'lack', 'lacks', 'impermeable', 'falha', 'falta', 'impede', 'impedem', 'impedindo', 'impermeavel', 'evita', 'bloqueia', 'impide', 'impiden', 'bloquea']);
 
 function cueSets(lang) {
   return {
@@ -222,11 +224,15 @@ function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
         break;
       }
     }
-    // a flipped negation reverses the claim (a contraindication that reads as an indication): HIGH both ways
-    if (s.negation.length > 0 && draftWindow.negation.size === 0) {
-      findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
-    } else if (d.negation.some((w) => !NEVER_CUES.has(w)) && sourceWindow.negation.size === 0) { // "never" is QUALIFIER_ADDED's
-      findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
+    // A flipped negation reverses the claim (a contraindication that reads as an indication). Judged on the paired sentence itself,
+    // so a negation in a neighbouring sentence cannot hide a loss. Only explicit negators count: verbs like "bloqueia"/"evita"
+    // have legitimate paraphrases ("inibe"). It is a word-level signal (it cannot tell which claim the negator applies to), so
+    // it is shown for the human to check and never starts an automatic repair on its own.
+    const strongSource = s.negation.filter((w) => !WEAK_NEGATION.has(w));
+    if (strongSource.length > 0 && d.negation.length === 0) {
+      findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
+    } else if (s.negation.length === 0 && d.negation.some((w) => !WEAK_NEGATION.has(w) && !NEVER_CUES.has(w))) { // "never" is QUALIFIER_ADDED's
+      findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
     }
   }
   return findings;

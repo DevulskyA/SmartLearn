@@ -184,7 +184,7 @@ test('HTTP: a draft over the real API returns code + params AND the old text; an
     assert.equal(value.repair, 'O valor 777 não aparece na fonte. Use o valor que a fonte traz ou remova a afirmação.');
     assert.equal(value.sourceEvidence, 'p. 1: pagina de teste');
     assert.equal(value.generatedClaim, 'Resumo de teste com a dose de 777 mg para o paciente.');
-    assert.equal(fetched.audit.rulesVersion, 'audit-rules-10');
+    assert.equal(fetched.audit.rulesVersion, 'audit-rules-11');
 
     // an audit written before this slice has no `messages`: it is returned as it was, and the text is all a client has
     const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);

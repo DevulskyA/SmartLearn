@@ -45,6 +45,11 @@ export default {
   'lesson.issue.questionDuplicate': 'Questão repetida',
   'lesson.issue.questionVolumeOutOfRange': 'Quantidade de questões fora do esperado',
   'lesson.issue.questionLiteralCopy': 'Resposta copiada da fonte',
+  'lesson.issue.unitMismatch': 'Unidade diferente da fonte',
+  'lesson.issue.qualifierLost': 'Restrição da fonte perdida',
+  'lesson.issue.qualifierAdded': 'Termo absoluto que a fonte não usa',
+  'lesson.issue.negationLost': 'Negação da fonte perdida',
+  'lesson.issue.negationAdded': 'Negação que a fonte não traz',
 
   // Sentences of an audit finding, by the code the server sends in finding.messages.<claim|evidence|repair> (lesson-view-model.js findingText).
   // {chars} arrives as a number and is formatted for the active locale before it is filled in.

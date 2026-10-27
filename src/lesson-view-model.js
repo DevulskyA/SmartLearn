@@ -36,6 +36,11 @@ export const ISSUE_LABELS = catalogLabels({
   QUESTION_DUPLICATE: () => t("lesson.issue.questionDuplicate"),
   QUESTION_VOLUME_OUT_OF_RANGE: () => t("lesson.issue.questionVolumeOutOfRange"),
   QUESTION_LITERAL_COPY: () => t("lesson.issue.questionLiteralCopy"),
+  UNIT_MISMATCH: () => t("lesson.issue.unitMismatch"),
+  QUALIFIER_LOST: () => t("lesson.issue.qualifierLost"),
+  QUALIFIER_ADDED: () => t("lesson.issue.qualifierAdded"),
+  NEGATION_LOST: () => t("lesson.issue.negationLost"),
+  NEGATION_ADDED: () => t("lesson.issue.negationAdded"),
 });
 
 export const issueLabel = (issue) => ISSUE_LABELS[issue] ?? issue;

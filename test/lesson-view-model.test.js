@@ -207,3 +207,10 @@ test("the thin-source notice names what the check could not see, in the catalog'
   assert.match(both, /Sem texto nas páginas 2:/);
   assert.match(both, /cortada ou ilegível nas páginas 3, 4\./);
 });
+
+test("every deterministic finding code the student can meet has a plain-language title, never the raw code", () => {
+  for (const code of ["UNIT_MISMATCH", "QUALIFIER_LOST", "QUALIFIER_ADDED", "NEGATION_LOST", "NEGATION_ADDED"]) {
+    assert.notEqual(issueLabel(code), code, code);
+    assert.match(issueLabel(code), /^[A-ZÀ-Ú][^_]+$/u, code);
+  }
+});

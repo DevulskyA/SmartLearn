@@ -97,7 +97,25 @@ test('NEGATION_LOST / NEGATION_ADDED: a contraindication that reads as an indica
   const added = run('', 'não ');
   assert.deepEqual(issues(added), ['NEGATION_ADDED']);
   assert.equal(added[0].severity, 'HIGH');
-  assert.equal(auditDraft({ summary: sentence(''), questions: [] }, { segments: [segment(sentence('não '))] }).result, 'REPAIR');
+  // a word-level signal: shown (HIGH, so the student must decide) but it never starts an automatic repair by itself
+  const audit = auditDraft({ summary: sentence(''), questions: [] }, { segments: [segment(sentence('não '))] });
+  assert.ok(audit.findings.some((f) => f.issue === 'NEGATION_LOST' && f.severity === 'HIGH' && f.blocksRepair === false));
+  assert.equal(audit.result, 'PASS');
+});
+
+test('NEGATION_LOST is judged on the sentence itself: another negation in a neighbouring sentence does not hide it', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const s = (neg) => `A metformina ${neg}reduz a produção hepática de glicose quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  const neighbour = ' O fármaco não é metabolizado pelo fígado e não é eliminado na bile, conforme descrito na página do texto de origem para os estudantes.';
+  const found = auditRisk({ summary: s('') + neighbour, questions: [] }, { segments: [segment(s('não '))] });
+  assert.ok(issues(found).includes('NEGATION_LOST'));
+});
+
+test('negation-like verbs have legitimate paraphrases: "bloqueia" -> "inibe" and "evita" -> "previne" are not a flipped negation', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const s = (verb) => `O fármaco ${verb} a produção hepática de glicose quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  assert.deepEqual(issues(auditRisk({ summary: s('inibe'), questions: [] }, { segments: [segment(s('bloqueia'))] })), []);
+  assert.deepEqual(issues(auditRisk({ summary: s('previne'), questions: [] }, { segments: [segment(s('evita'))] })), []);
 });
 
 test('the checks run inside auditDraft, so the reviewer, the repair step and "Reauditar" all see them', () => {
