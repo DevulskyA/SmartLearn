@@ -2,7 +2,7 @@
 // shows each as its own area. This module only decides WHAT is shown (labels, grouping, counts); lesson-editor-ui.js draws it.
 
 import { formatNumber } from "./i18n/format.js";
-import { t } from "./i18n/index.js";
+import { has, t, tn } from "./i18n/index.js";
 
 // A label table whose texts are read from the catalog when a label is read (not once at import), so the active locale applies.
 function catalogLabels(makers) {
@@ -36,9 +36,63 @@ export const ISSUE_LABELS = catalogLabels({
   QUESTION_DUPLICATE: () => t("lesson.issue.questionDuplicate"),
   QUESTION_VOLUME_OUT_OF_RANGE: () => t("lesson.issue.questionVolumeOutOfRange"),
   QUESTION_LITERAL_COPY: () => t("lesson.issue.questionLiteralCopy"),
+  UNIT_MISMATCH: () => t("lesson.issue.unitMismatch"),
+  QUALIFIER_LOST: () => t("lesson.issue.qualifierLost"),
+  QUALIFIER_ADDED: () => t("lesson.issue.qualifierAdded"),
+  NEGATION_LOST: () => t("lesson.issue.negationLost"),
+  NEGATION_ADDED: () => t("lesson.issue.negationAdded"),
 });
 
 export const issueLabel = (issue) => ISSUE_LABELS[issue] ?? issue;
+
+const LEGACY_TEXT_FIELD = { claim: "generatedClaim", evidence: "sourceEvidence", repair: "repair" };
+const NUMBER_PARAMS = new Set(["chars"]); // sent as plain numbers; shown the way the active locale writes them
+
+/**
+ * One of the three sentences of an audit finding ("claim" | "evidence" | "repair"). The server sends a stable code and its parameters in
+ * `finding.messages.<slot>`: when the catalog knows the code the text comes from the catalog (so it follows the interface language);
+ * otherwise (an old stored audit, a code from a newer server, a sentence that is the model's own wording) it is the text the server wrote.
+ */
+export function findingText(finding, slot) {
+  const message = finding?.messages?.[slot];
+  const key = typeof message?.code === "string" ? `lesson.audit.${message.code}` : "";
+  if (!key || !has(key)) return finding?.[LEGACY_TEXT_FIELD[slot]] ?? "";
+  const params = Object.fromEntries(Object.entries(message.params ?? {}).map(([name, value]) => [name, NUMBER_PARAMS.has(name) && Number.isFinite(value) ? formatNumber(value) : value]));
+  return t(key, params);
+}
+
+// WHY a point was raised, in the student's terms. A difference of WORDS is its own cause and is never worded as an error: a paraphrase,
+// a synonym or a faithful translation raises it too.
+const WORDING_ISSUES = new Set(["SUMMARY_UNSUPPORTED_TERM", "SUMMARY_OMITS_CENTRAL_CONCEPT", "QUESTION_UNSUPPORTED_TERM", "QUESTION_LOW_SOURCE_SUPPORT"]);
+const TEACHING_ISSUES = new Set([
+  "SUMMARY_TOO_THIN", "QUESTION_ANSWER_TOO_THIN", "EXPLANATION_MISSING", "EXPLANATION_ADDS_NOTHING", "QUESTION_ANSWER_LEAKED",
+  "HINT_REVEALS_ANSWER", "HINT_REVEALS_VALUE", "QUESTION_DUPLICATE", "QUESTION_VOLUME_OUT_OF_RANGE", "QUESTION_LITERAL_COPY",
+]);
+const CONTRADICTION_ISSUES = new Set(["UNIT_MISMATCH", "QUALIFIER_LOST", "QUALIFIER_ADDED", "NEGATION_LOST", "NEGATION_ADDED"]);
+const CAUSE_ORDER = ["contradiction", "unsupported", "wording", "notEvaluable", "teaching"];
+const CAUSE_LABELS = catalogLabels({
+  contradiction: () => t("lesson.cause.contradiction"),
+  unsupported: () => t("lesson.cause.unsupported"),
+  wording: () => t("lesson.cause.wording"),
+  notEvaluable: () => t("lesson.cause.notEvaluable"),
+  teaching: () => t("lesson.cause.teaching"),
+});
+
+export function findingCause(finding) {
+  if (finding.verdict === "CONTRADICTED" || CONTRADICTION_ISSUES.has(finding.issue) || /CONTRADICT/.test(finding.issue ?? "")) return "contradiction";
+  if (finding.verdict === "NOT_EVALUABLE") return "notEvaluable";
+  if (finding.verdict === "NOT_FOUND") return "unsupported";
+  if (WORDING_ISSUES.has(finding.issue)) return "wording";
+  if (TEACHING_ISSUES.has(finding.issue)) return "teaching";
+  return "unsupported";
+}
+
+/** Findings grouped by cause, most serious cause first; empty causes are left out: [{ cause, label, findings }]. */
+export function groupByCause(findings) {
+  const buckets = new Map(CAUSE_ORDER.map((cause) => [cause, []]));
+  for (const finding of findings) buckets.get(findingCause(finding)).push(finding);
+  return CAUSE_ORDER.filter((cause) => buckets.get(cause).length > 0).map((cause) => ({ cause, label: CAUSE_LABELS[cause], findings: buckets.get(cause) }));
+}
 
 const isActionable = (finding) => finding.severity !== "LOW";
 
@@ -56,6 +110,48 @@ export function groupFindings(draft) {
     } else other.push(finding);
   }
   return { summary, byQuestion, other };
+}
+
+/**
+ * The one sentence above the summary about how many of its sentences point at a real passage of the source. When NOT ONE sentence is
+ * linked (e.g. a draft generated before sentence-level quotes existed) a bare "confirmado em 0 de N" reads like a failed check; it says
+ * plainly that nothing was checked automatically instead.
+ */
+export function groundingLine(g) {
+  if (!g || g.total === 0) return "";
+  if (g.supported === 0 && g.orphaned === 0 && g.sentences.every((sentence) => sentence.status === "NOT_LINKED")) return t("editor.grounding.none", { total: g.total });
+  if (g.orphaned > 0) return t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned });
+  return t("editor.grounding.line", { supported: g.supported, total: g.total });
+}
+
+/**
+ * What the header says about the lesson, read from the REAL state the server reports and never from the automatic check:
+ *   accepted  a person accepted it (this window, or the server says ACCEPTED);
+ *   pending   still a draft and critical points (HIGH findings, see acceptanceBlockers) wait for the person's explicit decision;
+ *   draft     AI output that no person has accepted yet.
+ * The automatic check only shows where to look; it is not a medical validation, so it never moves the lesson to a "verified" state.
+ */
+export function draftState(draft, { accepted = false } = {}) {
+  if (accepted || draft?.status === "ACCEPTED") return { key: "accepted", label: t("editor.eyebrow.accepted"), pending: 0 };
+  const blockers = draft?.acceptanceBlockers ?? {};
+  const pending = (blockers.questions?.length ?? 0) + ((blockers.summary ?? 0) > 0 ? 1 : 0);
+  if (pending > 0) return { key: "pending", label: tn("editor.eyebrow.pending", pending), pending };
+  return { key: "draft", label: t("editor.eyebrow"), pending: 0 };
+}
+
+/**
+ * The notice above the review when the text the automatic check could read is thin: little text for the pages, pages with no text, or text
+ * that looks cut or unreadable. It is a warning about what the check could SEE, never a statement that the draft is wrong; "" when there is none.
+ */
+export function sourceSufficiencyNote(draft) {
+  const finding = (draft?.audit?.findings ?? []).find((f) => f.issue === "SOURCE_TEXT_INSUFFICIENT");
+  if (!finding) return "";
+  const reasons = finding.reasons ?? [];
+  const parts = [tn("editor.review.sourceThin.base", finding.pageCount ?? 0, { chars: formatNumber(finding.sourceChars ?? 0) })];
+  if (reasons.includes("EMPTY_PAGES") && finding.emptyPages?.length > 0) parts.push(t("editor.review.sourceThin.empty", { pages: finding.emptyPages.join(", ") }));
+  if (reasons.includes("GARBLED") && finding.garbledPages?.length > 0) parts.push(t("editor.review.sourceThin.garbled", { pages: finding.garbledPages.join(", ") }));
+  parts.push(t("editor.review.sourceThin.advice"));
+  return parts.join(" ");
 }
 
 /** The review state a question shows in the list: a symbol (decorative), a word (always present) and how many findings it has. */
@@ -103,23 +199,6 @@ export function elapsedLabel(ms) {
   return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`;
 }
 
-/** Splits a summary into display blocks: a line starting with "#" is a heading, other consecutive lines form a paragraph. */
-export function summaryBlocks(text) {
-  const blocks = [];
-  for (const raw of String(text ?? "").split(/\n{2,}/)) {
-    const chunk = raw.trim();
-    if (!chunk) continue;
-    const heading = /^(#{1,3})\s+(.+)$/.exec(chunk.split("\n")[0]);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2].trim() });
-      const rest = chunk.split("\n").slice(1).join("\n").trim();
-      if (rest) blocks.push({ type: "paragraph", text: rest });
-    } else {
-      blocks.push({ type: "paragraph", text: chunk });
-    }
-  }
-  return blocks;
-}
 
 /** The text a "copy" of one part must contain — never labels, badges, buttons or findings. */
 export function copyTextOf(draft, part) {

@@ -86,6 +86,38 @@ test('same language works the same way (pt source, pt draft)', () => {
   assert.deepEqual(issues(auditRisk(lost, { segments: [source] })), ['QUALIFIER_LOST']);
 });
 
+test('NEGATION_LOST / NEGATION_ADDED: a contraindication that reads as an indication (and the reverse) is HIGH; the faithful draft is clean', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const sentence = (neg) => `A metformina ${neg}deve ser iniciada quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  const run = (src, dst) => auditRisk({ summary: sentence(dst), questions: [] }, { segments: [segment(sentence(src))] });
+  assert.deepEqual(issues(run('não ', 'não ')), [], 'faithful: zero findings');
+  const lost = run('não ', '');
+  assert.deepEqual(issues(lost), ['NEGATION_LOST']);
+  assert.equal(lost[0].severity, 'HIGH');
+  const added = run('', 'não ');
+  assert.deepEqual(issues(added), ['NEGATION_ADDED']);
+  assert.equal(added[0].severity, 'HIGH');
+  // a word-level signal: shown (HIGH, so the student must decide) but it never starts an automatic repair by itself
+  const audit = auditDraft({ summary: sentence(''), questions: [] }, { segments: [segment(sentence('não '))] });
+  assert.ok(audit.findings.some((f) => f.issue === 'NEGATION_LOST' && f.severity === 'HIGH' && f.blocksRepair === false));
+  assert.equal(audit.result, 'PASS');
+});
+
+test('NEGATION_LOST is judged on the sentence itself: another negation in a neighbouring sentence does not hide it', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const s = (neg) => `A metformina ${neg}reduz a produção hepática de glicose quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  const neighbour = ' O fármaco não é metabolizado pelo fígado e não é eliminado na bile, conforme descrito na página do texto de origem para os estudantes.';
+  const found = auditRisk({ summary: s('') + neighbour, questions: [] }, { segments: [segment(s('não '))] });
+  assert.ok(issues(found).includes('NEGATION_LOST'));
+});
+
+test('negation-like verbs have legitimate paraphrases: "bloqueia" -> "inibe" and "evita" -> "previne" are not a flipped negation', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const s = (verb) => `O fármaco ${verb} a produção hepática de glicose quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  assert.deepEqual(issues(auditRisk({ summary: s('inibe'), questions: [] }, { segments: [segment(s('bloqueia'))] })), []);
+  assert.deepEqual(issues(auditRisk({ summary: s('previne'), questions: [] }, { segments: [segment(s('evita'))] })), []);
+});
+
 test('the checks run inside auditDraft, so the reviewer, the repair step and "Reauditar" all see them', () => {
   const swapped = DRAFT_BASE.map((s) => s.replace('5 mg', '5 g'));
   const audit = auditDraft(draftOf(swapped), { segments: [SOURCE_EN] });

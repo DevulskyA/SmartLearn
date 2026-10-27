@@ -17,14 +17,18 @@ import {
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
 import { effectiveKind } from './unit-kind.js';
-import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION } from '../ai/draft-audit.js';
+import { carry, dm, splitMessage } from '../api-error-messages.js';
+import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
+import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -66,7 +70,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
     // logged in is an explicit error raised by the provider itself (never fake/other-provider content).
     if (name === CODEX_PROVIDER_NAME) {
       if (consentGranted !== true) {
-        throw new DraftError('MISSING_CREDENTIALS', 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.');
+        throw new DraftError('MISSING_CREDENTIALS', dm('CODEX_CONSENT_MISSING'));
       }
       // One options object per selected provider: it also carries the per-draft call counters.
       const codexOptions = { ...codex, state: {} };
@@ -81,10 +85,10 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
       };
     }
     if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
-      throw new DraftError('UNKNOWN_PROVIDER', `Provedor de IA desconhecido: ${declared}.`);
+      throw new DraftError('UNKNOWN_PROVIDER', dm('PROVIDER_UNKNOWN', { provider: String(declared) }));
     }
     if (!liveAvailable) {
-      throw new DraftError('MISSING_CREDENTIALS', `O provedor ${name} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.`);
+      throw new DraftError('MISSING_CREDENTIALS', dm('PROVIDER_MISSING_SETUP', { provider: String(name) }));
     }
     return name === OPENAI_PROVIDER_NAME ? openai() : anthropic();
   }
@@ -96,12 +100,23 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
 function withTimeout(promise, timeoutMs, onTimeoutCode) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new DraftError(onTimeoutCode, 'Tempo limite excedido.')), timeoutMs);
+    timer = setTimeout(() => reject(new DraftError(onTimeoutCode, dm('TIMEOUT_EXCEEDED'))), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-const isBlocking = (f) => f.severity === 'HIGH' || f.severity === 'MEDIUM';
+const isBlocking = triggersRepair;
+/** Which parts of the draft a repair rewrote: 'summary' and/or 'question:<index>' (the position in the list). */
+function repairedScopes(before, after) {
+  const scopes = before.summary === after.summary ? [] : ['summary'];
+  for (let i = 0; i < Math.max(before.questions.length, after.questions.length); i += 1) {
+    const [b, a] = [before.questions[i], after.questions[i]];
+    if (!b || !a || questionText(b) !== questionText(a)) scopes.push(`question:${i}`);
+  }
+  return scopes;
+}
+// LOW findings are advisories (e.g. the cross-language notice): the review list does not show them as points, so no count reported to the student includes them.
+const isActionable = (f) => f.severity !== 'LOW';
 const withSource = (findings, source) => findings.map((f) => ({ ...f, source }));
 
 /**
@@ -135,6 +150,7 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
   let repaired = false;
   let repairRejected = false;
   let addressed = [];
+  let kept = null;
   const blocking = findings.filter(isBlocking);
   if (provider.live && provider.repair && blocking.length > 0) {
     try {
@@ -144,6 +160,8 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
       // provider-owned metadata is not the model's to rewrite
       const revalidated = validateDraft({ ...rawRepair, modelVersion: draft.modelVersion, promptVersion: draft.promptVersion }, { segments });
       addressed = blocking.map((f) => ({ issue: f.issue, scope: f.scope }));
+      // the repair replaces the text the reviewer would have read: keep the original and say what changed, so nothing is lost silently
+      kept = { original: { summary: draft.summary, questions: draft.questions }, repairChanges: repairedScopes(draft, revalidated) };
       draft = revalidated;
       repaired = true;
       // the model's own findings were about the text that no longer exists; re-screen what is there now
@@ -161,6 +179,7 @@ async function auditAndRepair(provider, validated, segments, { promptVersion, ti
     repaired,
     repairRejected,
     addressed,
+    ...kept,
   };
   return { draft, audit };
 }
@@ -202,7 +221,7 @@ function citedPagesFor(db, userId, row, draft) {
   return db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ? ORDER BY page_index')
     .all(userId, proposal.source_id)
     .filter((p) => cited.has(p.page_index))
-    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP) }));
+    .map((p) => ({ pageIndex: p.page_index, text: p.text.slice(0, CITED_PAGE_TEXT_CAP), sourceId: proposal.source_id }));
 }
 
 /**
@@ -350,12 +369,12 @@ function toDraftDto(row, { db, userId } = {}) {
  */
 export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_000 } = {}) {
   const found = findOwnedProposalWithSegments(db, userId, proposalId);
-  if (!found) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
-  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', 'Nenhuma página deste trecho tem texto utilizável (vazia ou ilegível na extração), então não há o que gerar. Nada foi enviado ao modelo.');
+  if (!found) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
+  if (found.segments.length === 0) throw new DraftError('NO_USABLE_TEXT', dm('DRAFT_NO_USABLE_TEXT'));
 
   // Editorial pages (copyright, dedication, answer key...) are indexed but never offered to the model.
   if (effectiveKind(found.proposal) !== 'CONTENT') {
-    throw new DraftError('NOT_GENERATABLE', `Este trecho (${effectiveKind(found.proposal)}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`);
+    throw new DraftError('NOT_GENERATABLE', dm('PROPOSAL_NOT_GENERATABLE', { kind: String(effectiveKind(found.proposal)) }));
   }
   // payload ⊆ approved scope, proven from the stored pages BEFORE any provider is called.
   let scope;
@@ -368,7 +387,7 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
 
   const totalChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
   if (totalChars > maxInputChars) {
-    throw new DraftError('INPUT_TOO_LARGE', `Este trecho tem texto demais para gerar um rascunho de uma vez (${totalChars} de ${maxInputChars} caracteres). Isso só acontece com uma única página muito densa: use um material com menos texto por página ou envie-o de novo em partes.`);
+    throw new DraftError('INPUT_TOO_LARGE', dm('PROPOSAL_INPUT_TOO_LARGE', { chars: totalChars, max: maxInputChars }));
   }
   return { found, scope };
 }
@@ -453,7 +472,7 @@ export async function createDraft(db, userId, proposalId, {
       reservation = reserve(db, userId, { proposalId, estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }), limits: budgetLimits, now });
       hooks?.onReservation?.(reservation);
     } catch (err) {
-      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', err.message);
+      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
       throw err;
     }
   }
@@ -478,7 +497,7 @@ export async function createDraft(db, userId, proposalId, {
   // Stopped before any request could leave: nothing was spent, so the held balance returns.
   if (hooks?.signal?.aborted) {
     closeBudget({ refund: true });
-    throw new DraftError('CANCELLED', 'A geração foi interrompida antes da chamada ao provedor. Nada foi enviado.');
+    throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL'));
   }
 
   let raw;
@@ -492,7 +511,7 @@ export async function createDraft(db, userId, proposalId, {
     if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
     // T-F8-03: an exception the provider adapters did not shape themselves is NOT reported verbatim -- its text can carry the
     // request (credential, source text) and this message is returned to the client and stored on the job.
-    throw new DraftError('PROVIDER_ERROR', 'O provedor falhou de forma inesperada. Nada foi salvo.');
+    throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE'));
   }
 
   let validated;
@@ -529,7 +548,7 @@ export async function createDraft(db, userId, proposalId, {
 
   // A stopped job never leaves a draft behind, not even a complete one that finished too late (the call happened: it is charged).
   hooks?.onPhase?.('SAVING');
-  if (hooks?.signal?.aborted) throw new DraftError('CANCELLED', 'A geração foi interrompida; nenhum rascunho foi salvo.');
+  if (hooks?.signal?.aborted) throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT'));
 
   const nowIso = now().toISOString();
   const generatedBy = { provider: provider.name, modelVersion: validated.modelVersion, promptVersion: validated.promptVersion };
@@ -576,7 +595,7 @@ export async function createDraft(db, userId, proposalId, {
  */
 function reusableDraftRow(db, userId, proposalId) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
-  if (!proposal) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!proposal) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   const rows = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId);
   for (const row of rows) {
     if (row.status === 'ACCEPTED') return row;
@@ -611,13 +630,13 @@ export function generationState(db, userId, proposalId) {
 // (guard test: draft-whole-list-replace). Product edits go through reviseSummary / reviseQuestion by id.
 export function replaceDraftContent(db, userId, draftId, { summary, questions } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
-  if (!draftRow) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (!draftRow) throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
   if (draftRow.status !== 'DRAFT') {
-    throw new DraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser editado.`);
+    throw new DraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_EDITABLE', { status: draftRow.status }));
   }
 
   const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
-  if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+  if (!found) throw new DraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
 
   const current = normalizeContent(JSON.parse(draftRow.draft_json), generatorOf(draftRow));
   const candidate = {
@@ -635,7 +654,7 @@ export function replaceDraftContent(db, userId, draftId, { summary, questions } 
   // A different count cannot be matched to the old questions, so their review status would be lost: a REJECTED question would
   // silently come back as PROPOSED. Refuse and point to the per-question edits instead.
   if (validated.questions.length !== current.questions.length && current.questions.some((q) => q.status === 'REJECTED')) {
-    throw new DraftError('ENTITY_CONFLICT', 'Há questões rejeitadas: altere a lista por questão (editar ou excluir), não substituindo todas de uma vez.');
+    throw new DraftError('ENTITY_CONFLICT', dm('REJECTED_QUESTIONS_REPLACE'));
   }
   const nextQuestions = validated.questions.length === current.questions.length
     ? validated.questions.map((q, i) => mergeIdentity(current.questions[i], q, now().toISOString()))
@@ -668,7 +687,9 @@ function mergeIdentity(previous, validatedQuestion, nowIso) {
   return {
     ...validatedQuestion,
     id: previous?.id,
-    status: previous?.status ?? 'PROPOSED',
+    // The review status belongs to the content that was reviewed: an ACCEPTED question whose text changed is no longer the one that was accepted and goes back to
+    // PROPOSED (the reviewer accepts it again, deliberately). REJECTED stays REJECTED; a status given explicitly with the edit (reviseQuestion) overrides this.
+    status: changed && previous?.status === 'ACCEPTED' ? 'PROPOSED' : (previous?.status ?? 'PROPOSED'),
     version: (previous?.version ?? 1) + (changed ? 1 : 0),
     // Provenance moves only when the TEXT moved: a status change or a no-op edit keeps it. Who generated it is never erased.
     origin: changed && origin === 'GENERATED' ? 'HUMAN_EDITED' : origin,
@@ -680,10 +701,10 @@ function mergeIdentity(previous, validatedQuestion, nowIso) {
 
 function loadEditable(db, userId, draftId) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
-  if (!draftRow) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
-  if (draftRow.status !== 'DRAFT') throw new DraftError('INVALID_STATE', `Rascunho no estado ${draftRow.status} não pode ser editado.`);
+  if (!draftRow) throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  if (draftRow.status !== 'DRAFT') throw new DraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_EDITABLE', { status: draftRow.status }));
   const found = findOwnedProposalWithSegments(db, userId, draftRow.proposal_id);
-  if (!found) throw new DraftError('NOT_FOUND', 'Proposta de origem não encontrada.');
+  if (!found) throw new DraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
   return { draftRow, found, current: normalizeContent(JSON.parse(draftRow.draft_json), generatorOf(draftRow)) };
 }
 
@@ -721,6 +742,8 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     repaired: false,
     repairRejected: false,
     addressed: [],
+    // the pre-repair text and what the repair rewrote stay with the draft after a human edit
+    ...(current.audit?.original ? { original: current.audit.original, repairChanges: current.audit.repairChanges } : {}),
     editedByHuman: true,
     rulesVersion: AUDIT_RULES_VERSION,
     auditedAt: now().toISOString(),
@@ -741,17 +764,20 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
   return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
 }
 
-function requireFresh(actual, expected, what) {
+function requireFresh(actual, expected, code) {
   if (expected !== undefined && expected !== null && expected !== actual) {
-    throw new DraftError('ENTITY_CONFLICT', `${what} foi alterado desde a última leitura. Recarregue e revise a versão atual.`);
+    throw new DraftError('ENTITY_CONFLICT', dm(code));
   }
 }
 
 /** Edits ONLY the summary: questions, their ids/status/versions and citations are untouched. */
 export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
-  requireFresh(current.summaryVersion, expectedVersion, 'O resumo');
-  if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', 'Informe o texto do resumo.', 'summary');
+  requireFresh(current.summaryVersion, expectedVersion, 'SUMMARY_CHANGED_SINCE_READ');
+  if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', dm('SUMMARY_REQUIRED'), 'summary');
+  // a [[fig:UUID]] must be one of the student's own figures, and a PDF crop must come from THIS draft's source
+  const refProblems = findUnresolvedRefs(db, userId, summary, { sourceId: found.proposal.source_id });
+  if (refProblems.length > 0) throw new DraftError('VALIDATION_FAILED', refsMessage(refProblems), 'summary');
   const validated = validateOrThrow({
     summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions.map(editableQuestion),
     modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
@@ -769,11 +795,11 @@ export function reviseSummary(db, userId, draftId, { summary, expectedVersion } 
 export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
   const index = current.questions.findIndex((q) => q.id === questionId);
-  if (index < 0) throw new DraftError('NOT_FOUND', 'Questão não encontrada.');
+  if (index < 0) throw new DraftError('NOT_FOUND', dm('QUESTION_NOT_FOUND'));
   const previous = current.questions[index];
-  requireFresh(previous.version, patch.expectedVersion, 'A questão');
+  requireFresh(previous.version, patch.expectedVersion, 'QUESTION_CHANGED_SINCE_READ');
   if (patch.status !== undefined && !QUESTION_REVIEW_STATUSES.has(patch.status)) {
-    throw new DraftError('VALIDATION_FAILED', 'Estado de questão inválido.', 'status');
+    throw new DraftError('VALIDATION_FAILED', dm('QUESTION_STATE_INVALID'), 'status');
   }
   const edited = editableQuestion(previous);
   for (const key of EDITABLE_FIELDS) if (patch[key] !== undefined) edited[key] = patch[key];
@@ -782,7 +808,7 @@ export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now 
     modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
   }, found.segments);
   if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
-    throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
+    throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'sourceSpans');
   }
   const merged = mergeIdentity(previous, validated.questions[0], now().toISOString());
   if (patch.status !== undefined) merged.status = patch.status;
@@ -796,8 +822,8 @@ export function reviseQuestion(db, userId, draftId, questionId, patch = {}, now 
 export function deleteQuestion(db, userId, draftId, questionId, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
   const index = current.questions.findIndex((q) => q.id === questionId);
-  if (index < 0) throw new DraftError('NOT_FOUND', 'Questão não encontrada.');
-  if (current.questions.length === 1) throw new DraftError('INVALID_STATE', 'A aula precisa manter ao menos uma questão.');
+  if (index < 0) throw new DraftError('NOT_FOUND', dm('QUESTION_NOT_FOUND'));
+  if (current.questions.length === 1) throw new DraftError('INVALID_STATE', dm('LAST_QUESTION_REQUIRED'));
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,
     questions: current.questions.filter((_, i) => i !== index), summaryVersion: current.summaryVersion,
@@ -816,7 +842,7 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
     modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
   }, found.segments);
   if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
-    throw new DraftError('INVALID_DRAFT', 'A citação da questão aponta para uma página fora do trecho da fonte.', 'sourceSpans');
+    throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'sourceSpans');
   }
   const added = { ...validated.questions[0], id: `q${current.questionSeq + 1}`, status: 'PROPOSED', version: 1, origin: 'HUMAN_ADDED', generatedBy: null, editedAt: null };
   return persistEdit(db, userId, draftId, draftRow, found, current, {
@@ -833,12 +859,12 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
 export function reorderQuestions(db, userId, draftId, order, { expectedRevision } = {}, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
   if (expectedRevision !== undefined && expectedRevision !== null && expectedRevision !== draftRow.revision) {
-    throw new DraftError('REVISION_CONFLICT', 'O rascunho foi alterado desde a última leitura. Recarregue e reordene de novo.');
+    throw new DraftError('REVISION_CONFLICT', dm('DRAFT_CHANGED_REORDER'));
   }
   const currentIds = current.questions.map((q) => q.id);
   const valid = Array.isArray(order) && order.length === currentIds.length && new Set(order).size === order.length
     && order.every((id) => typeof id === 'string' && currentIds.includes(id));
-  if (!valid) throw new DraftError('VALIDATION_FAILED', 'A ordem deve listar exatamente as questões atuais, cada uma uma vez.', 'order');
+  if (!valid) throw new DraftError('VALIDATION_FAILED', dm('ORDER_INVALID'), 'order');
   const byId = new Map(current.questions.map((q) => [q.id, q]));
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,
@@ -852,7 +878,7 @@ const findingKey = (f) => `${f.issue}|${f.scope}|${f.generatedClaim ?? ''}`;
  * T-F2-03: the explicit "Reauditar". Deterministic rules only (no model, no network). Writes ONLY `audit` (new findings, rulesVersion,
  * auditedAt) in the draft JSON: summary, questions, their versions and the draft revision are untouched. Findings an earlier MODEL audit
  * raised about this very text are kept (they are not the deterministic rules' to judge); after a human edit they were already dropped.
- * Returns the draft and how many deterministic findings appeared/disappeared.
+ * Returns the draft and how many deterministic ACTIONABLE (non-LOW) findings appeared/disappeared, matching what the review list shows.
  */
 export function reauditDraft(db, userId, draftId, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
@@ -861,8 +887,8 @@ export function reauditDraft(db, userId, draftId, now = () => new Date()) {
   const deterministic = withSource(rescreen.findings, 'DETERMINISTIC');
   const keptModel = previous && !previous.editedByHuman ? (previous.findings ?? []).filter((f) => f.source === 'MODEL') : [];
   const findings = [...deterministic, ...keptModel];
-  const before = new Map((previous?.findings ?? []).filter((f) => f.source !== 'MODEL').map((f) => [findingKey(f), f]));
-  const after = new Map(deterministic.map((f) => [findingKey(f), f]));
+  const before = new Map((previous?.findings ?? []).filter((f) => f.source !== 'MODEL' && isActionable(f)).map((f) => [findingKey(f), f]));
+  const after = new Map(deterministic.filter(isActionable).map((f) => [findingKey(f), f]));
   const added = [...after.keys()].filter((k) => !before.has(k)).length;
   const removed = [...before.keys()].filter((k) => !after.has(k)).length;
   const audit = {
@@ -881,12 +907,12 @@ export function reauditDraft(db, userId, draftId, now = () => new Date()) {
 
 export function getDraft(db, userId, draftId) {
   const row = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
-  if (!row) throw new DraftError('NOT_FOUND', 'Rascunho não encontrado.');
+  if (!row) throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
   return toDraftDto(row, { db, userId });
 }
 
 export function listDrafts(db, userId, proposalId) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
-  if (!proposal) throw new DraftError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!proposal) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId).map((row) => toDraftDto(row, { db, userId }));
 }

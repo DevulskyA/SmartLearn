@@ -102,11 +102,14 @@ export const AUDIT_JSON_SCHEMA = Object.freeze({
           issue: { type: 'string' },
           severity: { type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] },
           scope: { type: 'string' },
+          verdict: { type: 'string', enum: ['CONTRADICTED', 'NOT_FOUND', 'NOT_EVALUABLE'] },
           generatedClaim: { type: 'string' },
+          evidencePage: nullable('integer'),
+          evidenceQuote: { type: 'string' },
           sourceEvidence: { type: 'string' },
           repair: { type: 'string' },
         },
-        required: ['issue', 'severity', 'scope', 'generatedClaim', 'sourceEvidence', 'repair'],
+        required: ['issue', 'severity', 'scope', 'verdict', 'generatedClaim', 'evidencePage', 'evidenceQuote', 'sourceEvidence', 'repair'],
         additionalProperties: false,
       },
     },
@@ -333,7 +336,7 @@ export async function generateDraft({ segments, promptVersion, generationLocale,
 
 export async function auditDraftWithModel({ draft, segments, signal, onProcess, onActivity }, options = {}) {
   const raw = await callCodex(buildAuditPrompt(draft, segments), AUDIT_JSON_SCHEMA, 'audit', options, { signal, onProcess, onActivity });
-  return parseModelAudit(raw, { questionCount: draft.questions.length });
+  return parseModelAudit(raw, { questionCount: draft.questions.length, segments });
 }
 
 export function repairDraftWithModel({ draft, findings, segments, promptVersion, signal, onProcess, onActivity }, options = {}) {

@@ -1,11 +1,14 @@
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { normalizeLearningEvent, LearningEventError, ASSISTANCE_LEVELS } from '../domain/learning-event.js';
 
 export class AttemptError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -59,12 +62,12 @@ function attemptDto(row) {
  */
 export function start(db, userId, { exerciseId, competencyId = null, reviewTaskId = null }, now = () => new Date()) {
   const found = findOwnedExerciseWithVersion(db, userId, exerciseId);
-  if (!found || !found.version) throw new AttemptError('NOT_FOUND', 'Exercício não encontrado.');
-  if (found.exercise.archived_at) throw new AttemptError('VALIDATION_FAILED', 'Exercício arquivado não pode iniciar nova tentativa.');
+  if (!found || !found.version) throw new AttemptError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
+  if (found.exercise.archived_at) throw new AttemptError('VALIDATION_FAILED', dm('EXERCISE_ARCHIVED'));
 
   if (competencyId !== null) {
     const owned = db.prepare('SELECT id FROM competencies WHERE user_id = ? AND id = ? AND unit_id = ?').get(userId, competencyId, found.exercise.unit_id);
-    if (!owned) throw new AttemptError('NOT_FOUND', 'Competência não encontrada nesta aula.');
+    if (!owned) throw new AttemptError('NOT_FOUND', dm('COMPETENCY_NOT_FOUND'));
   }
   if (reviewTaskId !== null) {
     // Same-unit invariant enforced here at the service layer (010's
@@ -72,7 +75,7 @@ export function start(db, userId, { exerciseId, competencyId = null, reviewTaskI
     // this exercise would make T31's reconciliation nonsensical (an
     // attempt "during" a review of unrelated content).
     const owned = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND id = ? AND unit_id = ?').get(userId, reviewTaskId, found.exercise.unit_id);
-    if (!owned) throw new AttemptError('NOT_FOUND', 'Revisão não encontrada nesta aula.');
+    if (!owned) throw new AttemptError('NOT_FOUND', dm('REVIEW_IN_UNIT_NOT_FOUND'));
   }
 
   const nowIso = now().toISOString();
@@ -91,8 +94,8 @@ export function start(db, userId, { exerciseId, competencyId = null, reviewTaskI
 
 function requireOpenAttempt(db, userId, attemptId) {
   const attempt = findOwnedAttempt(db, userId, attemptId);
-  if (!attempt) throw new AttemptError('NOT_FOUND', 'Tentativa não encontrada.');
-  if (attempt.status !== 'STARTED') throw new AttemptError('ALREADY_SUBMITTED', 'Esta tentativa já foi finalizada.');
+  if (!attempt) throw new AttemptError('NOT_FOUND', dm('ATTEMPT_NOT_FOUND'));
+  if (attempt.status !== 'STARTED') throw new AttemptError('ALREADY_SUBMITTED', dm('ATTEMPT_ALREADY_SUBMITTED'));
   return attempt;
 }
 
@@ -112,7 +115,7 @@ function bumpAssistance(db, userId, attemptId, level, now) {
 export function useHint(db, userId, attemptId, now = () => new Date()) {
   const attempt = requireOpenAttempt(db, userId, attemptId);
   const version = db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? AND id = ?').get(userId, attempt.exercise_version_id);
-  if (!version.hint) throw new AttemptError('VALIDATION_FAILED', 'Este exercício não tem dica cadastrada.');
+  if (!version.hint) throw new AttemptError('VALIDATION_FAILED', dm('EXERCISE_NO_HINT'));
   bumpAssistance(db, userId, attemptId, 'HINT', now);
   return { attemptId, hint: version.hint };
 }
@@ -124,7 +127,7 @@ export function useHint(db, userId, attemptId, now = () => new Date()) {
 export function revealSolution(db, userId, attemptId, now = () => new Date()) {
   const attempt = requireOpenAttempt(db, userId, attemptId);
   const version = db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? AND id = ?').get(userId, attempt.exercise_version_id);
-  if (!version.answer) throw new AttemptError('VALIDATION_FAILED', 'Este exercício não tem resposta cadastrada.');
+  if (!version.answer) throw new AttemptError('VALIDATION_FAILED', dm('EXERCISE_NO_ANSWER'));
   bumpAssistance(db, userId, attemptId, 'SOLUTION', now);
   return { attemptId, answer: version.answer };
 }
@@ -142,14 +145,14 @@ export function revealSolution(db, userId, attemptId, now = () => new Date()) {
  */
 export function submit(db, userId, attemptId, { outcome = 'UNKNOWN', assessmentMethod, confidence = null, operationKey } = {}, now = () => new Date()) {
   const attempt = findOwnedAttempt(db, userId, attemptId);
-  if (!attempt) throw new AttemptError('NOT_FOUND', 'Tentativa não encontrada.');
+  if (!attempt) throw new AttemptError('NOT_FOUND', dm('ATTEMPT_NOT_FOUND'));
 
   const idempotencyPayload = { attemptId, outcome, assessmentMethod, confidence };
   const check = checkIdempotency(db, { userId, operation: 'submit-attempt', operationKey, payload: idempotencyPayload });
   if (check.cached) return check.result;
 
   if (attempt.status !== 'STARTED') {
-    throw new AttemptError('ALREADY_SUBMITTED', 'Esta tentativa já foi finalizada.');
+    throw new AttemptError('ALREADY_SUBMITTED', dm('ATTEMPT_ALREADY_SUBMITTED'));
   }
   if (confidence !== null && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
     throw new AttemptError('VALIDATION_FAILED', 'confidence deve ser um número entre 0 e 1, ou omitido.', 'confidence');
@@ -216,7 +219,7 @@ export function submit(db, userId, attemptId, { outcome = 'UNKNOWN', assessmentM
 
 export function getById(db, userId, attemptId) {
   const attempt = findOwnedAttempt(db, userId, attemptId);
-  if (!attempt) throw new AttemptError('NOT_FOUND', 'Tentativa não encontrada.');
+  if (!attempt) throw new AttemptError('NOT_FOUND', dm('ATTEMPT_NOT_FOUND'));
   return attemptDto(attempt);
 }
 
@@ -230,7 +233,7 @@ export function getById(db, userId, attemptId) {
  */
 export function listForReviewTask(db, userId, reviewTaskId) {
   const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND id = ?').get(userId, reviewTaskId);
-  if (!task) throw new AttemptError('NOT_FOUND', 'Revisão não encontrada.');
+  if (!task) throw new AttemptError('NOT_FOUND', dm('REVIEW_NOT_FOUND'));
   const rows = db.prepare(`
     SELECT a.id AS attempt_id, v.exercise_id, a.max_assistance, a.submitted_at,
       (SELECT e.outcome FROM learning_events e

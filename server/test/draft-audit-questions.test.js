@@ -102,7 +102,8 @@ test('duplicate questions are flagged on the second; a verbatim copy of the sour
 
 test('findings of a question are scoped to that question (index) and never touch the summary scope', () => {
   const r = audit(Q(), Q({ answer: '99', explanation: null }));
-  assert.ok(r.findings.every((f) => f.scope === 'summary' || /^question:\d+$/.test(f.scope)));
+  // an advisory about the draft as a whole (volume, thin source) has its own scope and is LOW: everything that can block belongs to a part
+  assert.ok(r.findings.every((f) => f.scope === 'summary' || /^question:\d+$/.test(f.scope) || (f.scope === 'draft' && f.severity === 'LOW')));
   assert.deepEqual(issues(r, 0), []);
   assert.ok(issues(r, 1).length > 0);
 });

@@ -81,7 +81,7 @@ async function openFirstDraft(page, name, pages) {
 test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
   const editor = await openFirstDraft(page, 'farmaco.pdf', ['Farmacocinética: absorção e distribuição']);
   await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
-  await expect(editor).toContainText('não verificado');
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
 
   // The drafted answer is attributable to the exact real source text.
   await editor.getByRole('tab', { name: /Questões/ }).click();
@@ -109,6 +109,9 @@ test('generating and accepting a draft through the real UI creates a real unit w
 
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
   await expect(editor.locator('.source-draft-result')).not.toHaveClass(/is-error/);
+  // the header says what is true now: after the student accepts it is no longer an unchecked draft
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Aula aceita e adicionada aos seus estudos.');
+  await expect(editor).not.toContainText('aguardando sua conferência');
 
   // The unit is real: it shows up on Plano.
   await page.locator('[data-screen="plan"]').click();
@@ -282,4 +285,84 @@ test('a correction the server rejects (empty answer) is reported in place and th
   await expect(editor.locator('.lesson-qeditor .lesson-message')).toHaveClass(/is-error/, { timeout: 10000 });
   await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toHaveText('');
   expect(await editor.getAttribute('data-revision')).toBe(revisionBefore);
+});
+
+// R-5: the header is the REAL state of the draft, never a fixed text and never the automatic check. The first answer for the draft is
+// altered to report one critical item waiting (the fake provider cannot produce a HIGH finding); every answer after that is the real
+// server's, so the move to "waiting for you" and then to "accepted" is the product's own.
+test('R-5: the header follows the real state - critical item pending, then waiting for the student, then accepted', async ({ page }) => {
+  let injected = false;
+  await page.route(/\/v1\/drafts\/\d+$/, async (route) => {
+    if (route.request().method() !== 'GET' || injected) return route.fallback();
+    injected = true;
+    const response = await route.fetch();
+    const body = await response.json();
+    body.draft.acceptanceBlockers = { questions: [body.draft.questions[0].id], summary: 0 };
+    return route.fulfill({ response, json: body });
+  });
+  const editor = await openFirstDraft(page, 'estado-r5.pdf', ['Farmacocinética: absorção e distribuição']);
+  const header = editor.locator('.lesson-head .eyebrow');
+  await expect(header).toHaveText('Rascunho gerado por IA — conferência pendente: 1 item crítico');
+
+  await editor.getByRole('tab', { name: /Questões/ }).click();
+  await editor.locator('[data-action="accept-question"]').click();
+  await expect(header).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
+
+  await editor.locator('.source-draft-subject-input').fill('Estado R5');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+  await expect(header).toHaveText('Aula aceita e adicionada aos seus estudos.');
+});
+
+// R-4: after accepting, the Resumo of the new lesson is one click away - from the editor and, later, from the trecho in Materiais.
+// Before, the trecho only said "Aula criada" and the student had to look for the lesson in Plano.
+test('R-4: after accepting, "Abrir Resumo" opens the new lesson in Plano - from the editor and from the trecho', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'atalho-resumo.pdf', ['Farmacocinética: absorção e distribuição']);
+  await editor.locator('.source-draft-subject-input').fill('Atalho Resumo');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await expect(editor.locator('[data-action="open-summary"]')).toHaveCount(0); // nothing to open before the lesson exists
+  const [accepted] = await Promise.all([
+    page.waitForResponse((r) => /\/v1\/drafts\/\d+\/accept$/.test(r.url()) && r.request().method() === 'POST'),
+    editor.locator('[data-action="accept-draft"]').click(),
+  ]);
+  const newUnitId = (await accepted.json()).acceptance.unit.id; // the lesson that was JUST created
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  await editor.locator('[data-action="open-summary"]').click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  // exactly that lesson is open, and no other
+  await expect(page.locator('#screen-plan .plan-row[data-unit-id="' + newUnitId + '"] .plan-row-detail')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#screen-plan .plan-row-detail:visible')).toHaveCount(1);
+  const row = page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' });
+  await expect(row.locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
+  await expect(row.locator('.plan-summary-section')).toBeVisible();
+
+  // later, from Materiais: the trecho that became a lesson links to it instead of ending at "Aula criada"
+  await page.locator('[data-screen="materials"]').click();
+  // Materiais still has the accepted lesson's editor open; leaving it reloads the list, which now tells the truth
+  await page.locator('[data-action="lesson-back"]').click();
+  const link = page.locator('.source-proposal-item [data-action="open-summary"]').first();
+  await expect(link).toBeVisible({ timeout: 10000 });
+  await link.click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  await expect(page.locator('#screen-plan .plan-row', { hasText: 'Atalho Resumo' }).locator('.plan-row-detail')).toBeVisible({ timeout: 5000 });
+});
+
+// R-4: the accept footer offers the same colour choice as every other door to a new discipline, and the lesson's new discipline gets it.
+test('R-4: a new discipline created while accepting a draft gets the colour chosen in the footer', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'cor-aceite.pdf', ['Farmacocinética: absorção e distribuição']);
+  const swatches = editor.locator('form.subject-create-form .color-swatch');
+  expect(await swatches.count()).toBeGreaterThan(1);
+  await swatches.nth(3).click();
+  const chosen = await swatches.nth(3).evaluate((el) => el.style.getPropertyValue('--swatch-color'));
+  await editor.locator('.source-draft-subject-input').fill('Cor Aceite');
+  await editor.locator('.source-draft-date-input').fill('2026-04-01');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  await page.locator('[data-screen="subjects"]').click();
+  const card = page.locator('.subject-catalog-card', { hasText: 'Cor Aceite' });
+  await expect(card).toBeVisible({ timeout: 5000 });
+  expect(await card.evaluate((el) => el.style.getPropertyValue('--subject-color'))).toBe(chosen);
 });

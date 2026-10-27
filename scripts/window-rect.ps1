@@ -9,6 +9,7 @@ public static class SlRect {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
 }
 '@
 
@@ -23,8 +24,8 @@ while ((Get-Date) -lt $deadline) {
 }
 if ($handle -eq [IntPtr]::Zero) { Write-Output '{"rect":null,"reason":"no window"}'; exit 0 }
 
-# SWP_NOZORDER 0x4 | SWP_NOACTIVATE 0x10
-if ($X -ne [int]::MinValue) { [void][SlRect]::SetWindowPos($handle, [IntPtr]::Zero, $X, $Y, $W, $H, 0x14) }
+# SWP_NOZORDER 0x4 | SWP_NOACTIVATE 0x10; SW_SHOWNOACTIVATE 4 un-maximizes first (a maximized window stays maximized when only moved)
+if ($X -ne [int]::MinValue) { [void][SlRect]::ShowWindow($handle, 4); [void][SlRect]::SetWindowPos($handle, [IntPtr]::Zero, $X, $Y, $W, $H, 0x14) }
 $r = New-Object SlRect+RECT
 [void][SlRect]::GetWindowRect($handle, [ref]$r)
 Write-Output ('{{"rect":[{0},{1},{2},{3}]}}' -f $r.Left, $r.Top, $r.Right, $r.Bottom)

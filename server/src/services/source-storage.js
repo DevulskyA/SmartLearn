@@ -1,12 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dm, splitMessage } from '../api-error-messages.js';
+import { mkdirSync, writeFileSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
+import { join, basename } from 'node:path';
 
 export class SourceError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -105,19 +108,19 @@ function toDto(row) {
  */
 export function acceptUpload(db, userId, { buffer, originalName, contentType, sourcesDir, maxBytes, quotaBytes }, now = () => new Date()) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    throw new SourceError('VALIDATION_FAILED', 'Arquivo vazio ou inválido.', 'file');
+    throw new SourceError('VALIDATION_FAILED', dm('SOURCE_FILE_EMPTY'), 'file');
   }
   if (buffer.length > maxBytes) {
-    throw new SourceError('FILE_TOO_LARGE', 'Arquivo excede o limite de ' + maxBytes + ' bytes.', 'file');
+    throw new SourceError('FILE_TOO_LARGE', dm('SOURCE_FILE_TOO_LARGE', { bytes: maxBytes }), 'file');
   }
   if (contentType !== 'application/pdf') {
-    throw new SourceError('UNSUPPORTED_FILE_TYPE', 'Apenas arquivos PDF são aceitos.', 'contentType');
+    throw new SourceError('UNSUPPORTED_FILE_TYPE', dm('SOURCE_NOT_PDF_TYPE'), 'contentType');
   }
   if (!looksLikePdf(buffer)) {
-    throw new SourceError('UNSUPPORTED_FILE_TYPE', 'O conteúdo do arquivo não é um PDF válido.', 'file');
+    throw new SourceError('UNSUPPORTED_FILE_TYPE', dm('SOURCE_NOT_VALID_PDF'), 'file');
   }
   if (looksEncrypted(buffer)) {
-    throw new SourceError('ENCRYPTED_FILE_REJECTED', 'PDFs criptografados não são suportados.', 'file');
+    throw new SourceError('ENCRYPTED_FILE_REJECTED', dm('SOURCE_ENCRYPTED'), 'file');
   }
 
   const checksum = sha256Hex(buffer);
@@ -126,7 +129,7 @@ export function acceptUpload(db, userId, { buffer, originalName, contentType, so
 
   const usage = currentQuotaUsage(db, userId);
   if (usage + buffer.length > quotaBytes) {
-    throw new SourceError('QUOTA_EXCEEDED', 'Cota de armazenamento de fontes excedida.', 'file');
+    throw new SourceError('QUOTA_EXCEEDED', dm('SOURCE_QUOTA_EXCEEDED'), 'file');
   }
 
   ensureSourcesDir(sourcesDir);
@@ -158,8 +161,29 @@ export function list(db, userId) {
   return db.prepare('SELECT * FROM sources WHERE user_id = ? ORDER BY id DESC').all(userId).map(toDto);
 }
 
+/**
+ * The original PDF of one of the user's own sources, so the student can go back to the material. Read-only. The bytes are
+ * returned only while they still match the size/checksum recorded at upload (same identity rule as extraction): a missing or
+ * altered file is refused, never served.
+ */
+export function readVerifiedFile(db, userId, id, sourcesDir) {
+  const row = db.prepare('SELECT * FROM sources WHERE user_id = ? AND id = ?').get(userId, id);
+  if (!row) throw new SourceError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
+  if (basename(row.filename) !== row.filename) throw new SourceError('SOURCE_FILE_MISSING', dm('SOURCE_FILE_MISSING'));
+  let bytes;
+  try {
+    bytes = readFileSync(join(sourcesDir, row.filename));
+  } catch {
+    throw new SourceError('SOURCE_FILE_MISSING', dm('SOURCE_FILE_MISSING'));
+  }
+  if (bytes.length !== row.byte_size || sha256Hex(bytes) !== row.checksum) {
+    throw new SourceError('SOURCE_INTEGRITY_FAILED', dm('SOURCE_INTEGRITY_FAILED'));
+  }
+  return { bytes, originalName: row.original_name };
+}
+
 export function getById(db, userId, id) {
   const row = db.prepare('SELECT * FROM sources WHERE user_id = ? AND id = ?').get(userId, id);
-  if (!row) throw new SourceError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!row) throw new SourceError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   return toDto(row);
 }

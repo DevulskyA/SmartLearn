@@ -172,6 +172,9 @@ test('accepting a draft does not depend on origin: GENERATED, HUMAN_EDITED, HUMA
     const rejected = drafts.reviseQuestion(db, userId, draftId, current.questions[0].id, { status: 'REJECTED' });
     const result = acceptDraft(db, userId, draftId, { newSubjectName: 'Fisiologia', studyDate: '2026-10-03', expectedRevision: rejected.revision });
     assert.equal(result.exerciseCount, rejected.questions.length - 1);
+    const labels = db.prepare(`SELECT v.question, v.provenance FROM exercise_versions v JOIN exercises e ON e.id = v.exercise_id WHERE e.unit_id = ?`).all(result.unit.id);
+    assert.equal(labels.find((l) => l.question === 'Pergunta nova?').provenance, 'MANUAL', 'a human-written question is not labelled AI');
+    assert.ok(labels.filter((l) => l.question !== 'Pergunta nova?').every((l) => l.provenance === 'AI_GENERATED'), 'generated and human-edited AI text stay AI_GENERATED');
   } finally { cleanup(); }
 });
 

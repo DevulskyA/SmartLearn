@@ -1,4 +1,5 @@
 import { listPages } from './source-extraction.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { planUnits, readableTitle, acronymsIn } from './outline-units.js';
 import { planSectionUnits, findTopicSections, textOfSpans } from './section-spans.js';
 import { classifyUnit, effectiveKind } from './unit-kind.js';
@@ -7,9 +8,11 @@ import { activeJobOfProposals } from './generation-jobs.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -61,15 +64,19 @@ function proposalChars(db, userId, row) {
   `).get(userId, row.source_id, row.page_start, row.page_end).n;
 }
 
-/** The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again. */
+/**
+ * The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again.
+ * `acceptedUnitId` is the lesson an ACCEPTED draft became, and only while that lesson still exists (null otherwise), so a link to it is trustworthy.
+ */
 function latestDraftsByProposal(db, userId, sourceId) {
   const rows = db.prepare(`
-    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision
+    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision, u.id AS acceptedUnitId
     FROM generated_drafts d
+    LEFT JOIN learning_units u ON u.user_id = d.user_id AND u.id = d.accepted_unit_id
     WHERE d.user_id = ? AND d.proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
     ORDER BY d.id ASC
   `).all(userId, userId, sourceId);
-  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision }]));
+  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision, acceptedUnitId: r.acceptedUnitId ?? null }]));
 }
 
 function toSummaryDto(row, latestDraft = null) {
@@ -103,16 +110,16 @@ function toSummaryDto(row, latestDraft = null) {
  */
 export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_MAX_PAGES_PER_CHUNK, maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, discardDrafts = false, minCharsPerDetectedUnit = DEFAULT_MIN_CHARS_PER_DETECTED_UNIT } = {}) {
   const source = findOwnedSource(db, userId, sourceId);
-  if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (source.extraction_status !== 'EXTRACTED') {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de gerar propostas.');
+    throw new ProposalError('NOT_EXTRACTED', dm('PROPOSAL_SOURCE_NOT_EXTRACTED'));
   }
 
   // Only pages with usable text become proposals. An EMPTY/FAILED page keeps its diagnosis in source_pages
   // (and stays visible to the student) but is never study material or model input.
   const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK');
   if (pages.length === 0) {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte não tem nenhuma página com texto utilizável.');
+    throw new ProposalError('NOT_EXTRACTED', dm('PROPOSAL_NO_USABLE_PAGE'));
   }
 
   // P1_PRODUCT B (found during PRODUCT-REAL-01): re-chunking a source
@@ -209,9 +216,9 @@ export function chunkSource(db, userId, sourceId, { maxPagesPerChunk = DEFAULT_M
 
 function outlineAndPages(db, userId, sourceId) {
   const source = findOwnedSource(db, userId, sourceId);
-  if (!source) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   if (source.extraction_status !== 'EXTRACTED') {
-    throw new ProposalError('NOT_EXTRACTED', 'A fonte precisa ser extraída com sucesso antes de buscar um assunto.');
+    throw new ProposalError('NOT_EXTRACTED', dm('TOPIC_SOURCE_NOT_EXTRACTED'));
   }
   const pages = listPages(db, userId, sourceId).filter((p) => p.pageStatus === 'OK').map((p) => ({ pageIndex: p.pageIndex, text: p.text ?? '' }));
   const outline = db.prepare('SELECT ordinal, level, title, page_index AS pageIndex, detected FROM source_outline WHERE user_id = ? AND source_id = ? ORDER BY ordinal').all(userId, sourceId);
@@ -226,7 +233,7 @@ const SECTION_EXCERPT = 160;
  */
 export function searchTopics(db, userId, sourceId, query) {
   if (typeof query !== 'string' || query.trim().length < 2) {
-    throw new ProposalError('VALIDATION_FAILED', 'Informe ao menos duas letras do assunto.', 'q');
+    throw new ProposalError('VALIDATION_FAILED', dm('TOPIC_QUERY_TOO_SHORT'), 'q');
   }
   const { pages, outline } = outlineAndPages(db, userId, sourceId);
   const pageText = new Map(pages.map((p) => [p.pageIndex, p.text]));
@@ -279,9 +286,9 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 
   if (Number.isInteger(ordinal)) {
     const entry = outline.find((e) => e.ordinal === ordinal);
-    if (!entry) throw new ProposalError('NOT_FOUND', 'Seção não encontrada neste documento.', 'ordinal');
+    if (!entry) throw new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal');
     const match = findTopicSections(pages, outline, entry.title, { limit: 50 }).find((m) => m.ordinal === ordinal);
-    if (!match) throw new ProposalError('NOT_FOUND', 'Esta seção não tem texto utilizável.', 'ordinal');
+    if (!match) throw new ProposalError('NOT_FOUND', dm('SECTION_NO_USABLE_TEXT'), 'ordinal');
     const { kind } = classifyUnit(match.title, textOfSpans(pageText, match.spans));
     const acronyms = acronymsIn(pages.map((p) => p.text));
     return insertApprovedScope(db, userId, source, { title: readableTitle(match.title, acronyms), topic: topic ?? match.title, spans: match.spans, kind });
@@ -289,21 +296,21 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 
   if (range && Number.isInteger(range.pageStart) && Number.isInteger(range.pageEnd)) {
     const { pageStart, pageEnd } = range;
-    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', 'A página final vem antes da inicial.', 'range');
+    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_REVERSED'), 'range');
     const inRange = pages.filter((p) => p.pageIndex >= pageStart && p.pageIndex <= pageEnd);
-    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', 'Nenhuma página com texto neste intervalo.', 'range');
+    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_NO_TEXT'), 'range');
     const first = inRange[0];
     const last = inRange[inRange.length - 1];
     const startOffset = range.startOffset ?? 0;
     const endOffset = range.endOffset ?? last.text.length;
-    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição inicial fora da página.', 'startOffset');
-    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', 'Posição final fora da página.', 'endOffset');
+    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_START_OUTSIDE'), 'startOffset');
+    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_END_OUTSIDE'), 'endOffset');
     const spans = inRange.map((p) => ({
       pageIndex: p.pageIndex,
       start: p === first ? startOffset : 0,
       end: p === last ? endOffset : p.text.length,
     })).filter((s) => s.end > s.start);
-    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', 'O intervalo escolhido não contém texto.', 'range');
+    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('RANGE_NO_TEXT'), 'range');
     const chosenTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim() : defaultTitle(source, pageStart, pageEnd);
     const { kind } = classifyUnit(chosenTitle, textOfSpans(pageText, spans));
     return insertApprovedScope(db, userId, source, { title: chosenTitle, topic: topic ?? chosenTitle, spans, kind });
@@ -313,7 +320,7 @@ export function approveScope(db, userId, sourceId, { ordinal, range, title, topi
 }
 
 export function listProposals(db, userId, sourceId) {
-  if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', 'Fonte não encontrada.');
+  if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   const rows = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? ORDER BY chunk_index').all(userId, sourceId);
   const drafts = latestDraftsByProposal(db, userId, sourceId);
   return rows.map((row) => ({
@@ -328,7 +335,7 @@ export function listProposals(db, userId, sourceId) {
  * attributable to before anything is created (AC-19/AC-21). */
 export function getProposal(db, userId, proposalId) {
   const row = findOwnedProposal(db, userId, proposalId);
-  if (!row) throw new ProposalError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!row) throw new ProposalError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   return {
     ...toSummaryDto(row),
     excerpt: proposalText(db, userId, row),
@@ -342,9 +349,9 @@ export function getProposal(db, userId, proposalId) {
  * caller can redefine after the fact (re-run chunkSource for that). */
 export function renameProposal(db, userId, proposalId, title) {
   const row = findOwnedProposal(db, userId, proposalId);
-  if (!row) throw new ProposalError('NOT_FOUND', 'Proposta não encontrada.');
+  if (!row) throw new ProposalError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
   if (typeof title !== 'string' || title.trim().length === 0) {
-    throw new ProposalError('VALIDATION_FAILED', 'O título não pode ser vazio.', 'title');
+    throw new ProposalError('VALIDATION_FAILED', dm('PROPOSAL_TITLE_EMPTY'), 'title');
   }
   const now = new Date().toISOString();
   db.prepare('UPDATE content_proposals SET title = ?, updated_at = ? WHERE user_id = ? AND id = ?').run(title.trim(), now, userId, proposalId);

@@ -14,6 +14,12 @@ export function formatNumber(value, options) {
   return new Intl.NumberFormat(getLocale(), options).format(value);
 }
 
+/** A decimal with exactly `digits` fraction digits in the active locale ("85,5" in pt-BR); `{ trim: true }` drops a trailing zero fraction ("85"). */
+export function formatDecimal(value, digits = 1, { trim = false } = {}) {
+  // Round exactly as toFixed always did (Intl alone breaks ties differently: 0.15 -> "0,2" against toFixed's "0,1"), then only localize.
+  return formatNumber(Number(Number(value).toFixed(digits)), { minimumFractionDigits: trim ? 0 : digits, maximumFractionDigits: digits });
+}
+
 /** Ordering for DISPLAY (lists the student reads): follows the active locale. */
 export function compareText(a, b, options) {
   return String(a).localeCompare(String(b), getLocale(), options);

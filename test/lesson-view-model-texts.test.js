@@ -22,7 +22,7 @@ test("question type labels", () => {
 test("issue labels", () => {
   assert.deepEqual({ ...ISSUE_LABELS }, {
     SUMMARY_UNSUPPORTED_VALUE: "Valor que a fonte não traz",
-    SUMMARY_UNSUPPORTED_TERM: "Termo que não aparece na fonte",
+    SUMMARY_UNSUPPORTED_TERM: "Palavra que a fonte não repete",
     SUMMARY_OMITS_CENTRAL_CONCEPT: "Pode omitir um conceito central",
     SUMMARY_TOO_THIN: "Resumo curto demais para a fonte",
     QUESTION_ANSWER_TOO_THIN: "Resposta sem explicação suficiente",
@@ -30,8 +30,8 @@ test("issue labels", () => {
     QUESTION_ANSWER_LEAKED: "O enunciado já dá a resposta",
     HINT_REVEALS_ANSWER: "A dica entrega a resposta",
     QUESTION_UNSUPPORTED_VALUE: "Valor que a página citada não traz",
-    QUESTION_UNSUPPORTED_TERM: "Termo que não aparece na página citada",
-    QUESTION_LOW_SOURCE_SUPPORT: "Pouco apoio na página citada",
+    QUESTION_UNSUPPORTED_TERM: "Palavra que a página citada não repete",
+    QUESTION_LOW_SOURCE_SUPPORT: "Poucas palavras em comum com a página citada",
     QUESTION_DUPLICATE: "Questão repetida",
     QUESTION_VOLUME_OUT_OF_RANGE: "Quantidade de questões fora do esperado",
     QUESTION_LITERAL_COPY: "Resposta copiada da fonte",

@@ -119,6 +119,32 @@ The agent decides alone: reversible implementation, local refactor, test strateg
 Escalate ONLY: a real product decision · money, paid usage or budget · human data or a destructive action · irreversible or very costly to undo · push/merge/deploy/release/production · a deliberate change of requirement or acceptance criterion · an authority conflict the evidence cannot resolve.
 A HUMAN_GATE never paralyzes the project: record it, continue independent work, group decisions for the user.
 
+### 10b. Autonomy, initiative and real blockers (permanent, added 2026-10-19 on the user's order)
+
+Difficulty is not a blocker; a partial blocker is not a global stop. The agent keeps looking for the next useful, authorized, verifiable advance.
+- Before declaring an impediment, name the exact action that is blocked, why, the evidence, and which independent activities remain possible.
+- While waiting for CI, a tool, a process or a decision, advance authorized work that does not depend on it; prepare and verify the next steps in advance when that removes later work.
+- Ordinary technical problems are the agent's: investigate, reproduce, fix, test, without handing implementation micro-decisions to the user. If an approach fails, diagnose the cause and try another that is technically justified; never repeat an identical attempt or abandon the task over an early difficulty.
+- Before saying "there is no work", reconcile the queue with the program's goal and look for any useful authorized delivery still open. Never invent tasks, refactors, audits or tests just to look busy.
+- Long waits get a diagnosis proportional to the evidence. Elapsed time alone does not authorize cancelling or restarting a process that may still be working.
+- No repetitive "no change" reports: communicate a conclusion, a failure, a NEW blocker, a needed decision or a material advance. With nothing new, keep the existing monitoring without spending human attention (this also governs the `/loop` ticks).
+- Ask for human intervention only for an undelegated product decision, a missing authorization, material risk, or a technical impediment proven unsolvable inside the scope.
+- Autonomy never bypasses a security limit, an explicit authorization or a condition set by the user (rule 13).
+A blocker is declared ONLY when no useful, safe, authorized action can advance. Then report: `BLOCKER` (concrete evidence) · `NEXT` (the condition needed to resume) · `INDEPENDENT_WORK` (done, or none).
+
+**Operational contract (added 2026-10-19; performance is judged by verifiable results, not by justifications, reports or amount of activity):**
+| Situation | The agent does |
+|---|---|
+| Authorized and executable task | ACT before reporting. |
+| Completed task | Show the result AND the evidence (SHA, diff, command and its output). |
+| Blocker | Prove the impediment and check that no independent authorized work remains (format above). |
+| Informational question | Answer it with NO side effects: no execution, no stopping of processes, no new work. |
+| `/loop` tick with no material change | Stay silent: verify and work, do not report. |
+Never invent work, parameters, thresholds or learning states; every statement matches observed data. Never go beyond an authorization.
+- **Authority:** a recommendation (from ChatGPT, from the agent, any proposal) is never a human decision; only a decision the user actually approved has that authority. Do not record a proposal as "the user's decision".
+- **Acceptance rule:** "accepted", "understood", "will do later" and "waiting for the next opportunity" are NOT deliveries. When an execution was requested, it may be declared done only with a verifiable result; otherwise report the concrete impediment and its evidence.
+- A requested edit that was explicitly authorized is not asked for again.
+
 ### 11. WIP and commits
 
 `ACTIVE_OUTCOMES=1` by default (auxiliary work inside it is fine); do not open feature + refactor + audit + cleanup + tooling as five formal streams. Commits stay causally coherent, but "one commit = one causal unit" is not a microtask per commit: a small outcome may be one commit, a larger one a few safe internal commits. Status closes only when the whole outcome is proven; no artificial commits for bureaucracy.

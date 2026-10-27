@@ -397,8 +397,14 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
 
   warnings.push({
     code: 'MATERIALS_NOT_RESTORED',
-    message: 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
+    message: 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos, imagens dos resumos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
   });
+  if (Array.isArray(raw.notices) && raw.notices.some((n) => n?.code === 'MEDIA_NOT_INCLUDED')) {
+    warnings.push({
+      code: 'MEDIA_NOT_INCLUDED',
+      message: 'Este arquivo foi exportado sem as imagens dos resumos: no lugar de cada figura há uma frase descritiva. Para recuperar as imagens use o backup operacional.',
+    });
+  }
 
   return {
     exportVersion: raw.exportVersion,

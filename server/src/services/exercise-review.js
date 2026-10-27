@@ -1,3 +1,5 @@
+import { dm, splitMessage } from '../api-error-messages.js';
+
 // Read-only join between one learning_evidence row and the item-level
 // attempts behind it, for a "what did I actually answer" review screen.
 //
@@ -20,8 +22,10 @@
 // evidence-profile.js's fuller effectiveEvents() reconciliation.
 export class ExerciseReviewError extends Error {
   constructor(code, message) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -93,7 +97,7 @@ function toAttemptDetailDto(row) {
  */
 export function getAttemptDetails(db, userId, evidenceId) {
   const evidence = findOwnedEvidence(db, userId, evidenceId);
-  if (!evidence) throw new ExerciseReviewError('NOT_FOUND', 'Evidência não encontrada.');
+  if (!evidence) throw new ExerciseReviewError('NOT_FOUND', dm('EVIDENCE_NOT_FOUND'));
 
   let rows = [];
   let source = 'NONE';

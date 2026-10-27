@@ -90,6 +90,14 @@ test('the draft opens as a lesson editor with four separate areas; the rest of t
   await editor.getByRole('tab', { name: /Fonte/ }).click();
   await expect(editor.locator('[data-panel="source"]')).toContainText('aula.pdf');
   await expect(editor.locator('[data-panel="source"]')).toContainText('exatamente a fonte aprovada');
+  // the excerpts are cut at 1.500 characters: the reviewer can open the ORIGINAL PDF at each cited page
+  const original = editor.locator('[data-panel="source"] .study-now-source-open').first();
+  await expect(original).toHaveAttribute('href', /\/v1\/sources\/\d+\/file#page=\d+$/);
+  const pdfHead = await page.evaluate(async (href) => {
+    const res = await fetch(href.split('#')[0], { credentials: 'include' });
+    return { status: res.status, head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+  }, await original.getAttribute('href'));
+  expect(pdfHead).toEqual({ status: 200, head: '%PDF-' });
   await editor.getByRole('tab', { name: /Revisão/ }).click();
   await expect(editor.locator('[data-panel="review"]')).toBeVisible();
 });
@@ -212,13 +220,17 @@ test('PREVIEW refuses what accepting refuses, with the server message and no pan
   await expect(editor.locator('.source-draft-result')).toHaveClass(/is-error/);
 });
 
-test('unsaved typing is never lost silently: accepting asks to save first', async ({ page }) => {
+test('unsaved typing is never lost silently, and saving is never accepting: the click saves it and STOPS; accepting is a second, deliberate click', async ({ page }) => {
   await openLesson(page);
   const editor = page.locator('.lesson-editor');
   await editor.locator('.lesson-summary-input').fill('Resumo alterado e ainda não salvo');
   await editor.locator('.source-draft-subject-input').fill('Fisiologia');
   await editor.locator('[data-action="accept-draft"]').click();
-  await expect(editor.locator('.source-draft-result')).toContainText('Salve as alterações pendentes');
+  await expect(editor.locator('.source-draft-result')).toContainText('Salvamos suas alterações agora');
+  await expect(editor.locator('.source-draft-result')).not.toContainText('Aula criada');
+  await expect(editor.locator('[data-action="save-summary"]')).toBeDisabled(); // it was saved by that click (nothing pending any more)
+  await editor.locator('[data-action="accept-draft"]').click(); // the second click is the acceptance
+  await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 15000 });
 });
 
 test('COPY: the editable fields hold only pedagogical content, and the new-discipline control appears once', async ({ page }) => {
@@ -370,7 +382,7 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
       if (content.audit) {
         delete content.audit.rulesVersion;
         delete content.audit.auditedAt;
-        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+        content.audit.findings = [{ issue: 'REGRA_ANTIGA', severity: 'MEDIUM', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
       }
       db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), row.id);
     }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildPriorities, PRIORITIES_POLICY_VERSION, RECENT_WINDOW_DAYS, MIN_SAMPLE_QUESTIONS, WEAK_BELOW_PCT,
 } from '../src/domain/priorities.js';
-import { THRESHOLDS } from '../../src/performance-thresholds.js';
+import { THRESHOLDS, MIN_SAMPLE_QUESTIONS as CLIENT_MIN_SAMPLE } from '../../src/performance-thresholds.js';
 
 const TODAY = '2026-09-19';
 
@@ -22,6 +22,7 @@ test('policy constants are pinned and the weak threshold matches the client ADEQ
   assert.equal(RECENT_WINDOW_DAYS, 30);
   assert.equal(MIN_SAMPLE_QUESTIONS, 10);
   assert.equal(WEAK_BELOW_PCT, THRESHOLDS.ADEQUATE);
+  assert.equal(CLIENT_MIN_SAMPLE, MIN_SAMPLE_QUESTIONS);
 });
 
 test('invalid or missing today throws instead of silently reading the clock', () => {

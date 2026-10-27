@@ -27,7 +27,6 @@ export default {
   'appRegister.subject.createFailed': 'Erro ao criar disciplina.',
   'appRegister.subject.nameTaken': 'Já existe uma disciplina com esse nome.',
   'appRegister.subject.exists': 'Essa disciplina já está cadastrada.',
-  'appRegister.subject.addFailed': 'Não foi possível adicionar a disciplina. Tente novamente.',
   'appRegister.subject.nameRequired': 'Informe o nome da disciplina.',
   'appRegister.subject.renameFailed': 'Não foi possível renomear a disciplina.',
   'appRegister.subject.deleteConfirm': 'Confirma a exclusão de "{name}"? Esta ação não pode ser desfeita.',

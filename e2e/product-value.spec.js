@@ -129,9 +129,9 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   await studyNowBtn.click();
   await expect(page.locator('#screen-study-now')).toBeVisible({ timeout: 5000 });
 
-  // 9. Resumo Mestre is shown (the fake provider always produces a
-  // non-empty summary from the real source text).
-  await expect(page.locator('#study-now-summary-card')).toBeVisible();
+  // 9. Resumo Mestre is prepared (the fake provider always produces a non-empty summary from the real source text) but is NOT on the
+  // screen while the questions are: it holds the answers. It comes back with the result (checked after the pass below).
+  await expect(page.locator('#study-now-summary-card')).toBeHidden();
   await expect(page.locator('#study-now-summary-body')).not.toHaveText('');
 
   // 10-11. Exercises presented one at a time; answer all (mixed outcome,

@@ -1,10 +1,14 @@
+import { dm, splitMessage } from '../api-error-messages.js';
+
 const PROVENANCE_VALUES = new Set(['MANUAL', 'SOURCE', 'AI_GENERATED']);
 
 export class ExerciseError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -75,7 +79,7 @@ function versionToDto(row) {
 
 function validateQuestionAndProvenance({ question, provenance }) {
   if (typeof question !== 'string' || question.trim().length === 0) {
-    throw new ExerciseError('VALIDATION_FAILED', 'A questão é obrigatória.', 'question');
+    throw new ExerciseError('VALIDATION_FAILED', dm('QUESTION_REQUIRED'), 'question');
   }
   if (!PROVENANCE_VALUES.has(provenance)) {
     throw new ExerciseError('VALIDATION_FAILED', 'provenance deve ser MANUAL, SOURCE ou AI_GENERATED.', 'provenance');
@@ -91,7 +95,7 @@ function nextOrderIndex(db, userId, unitId) {
  * items are excluded by default (still readable individually by id — see
  * getById — since a past attempt may still need to resolve them). */
 export function list(db, userId, unitId, { includeArchived = false } = {}) {
-  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', 'Aula não encontrada.');
+  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   const rows = db.prepare(`
     SELECT * FROM exercises WHERE user_id = ? AND unit_id = ? ${includeArchived ? '' : 'AND archived_at IS NULL'}
     ORDER BY order_index, id
@@ -104,14 +108,14 @@ export function list(db, userId, unitId, { includeArchived = false } = {}) {
 
 export function getById(db, userId, id) {
   const exercise = findOwnedExercise(db, userId, id);
-  if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
+  if (!exercise) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   const version = latestVersionRow(db, userId, id);
   return toDto(exercise, version, version ? citationsForVersion(db, userId, version.id) : []);
 }
 
 /** Creates an exercise and its first immutable version in one transaction. */
 export function create(db, userId, { unitId, question, answer, explanation, hint, provenance }) {
-  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', 'Aula não encontrada.');
+  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   validateQuestionAndProvenance({ question, provenance });
 
   const run = db.transaction(() => {
@@ -146,7 +150,7 @@ export function create(db, userId, { unitId, question, answer, explanation, hint
  */
 export function edit(db, userId, exerciseId, { question, answer, explanation, hint, provenance } = {}) {
   const exercise = findOwnedExercise(db, userId, exerciseId);
-  if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
+  if (!exercise) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   const current = latestVersionRow(db, userId, exerciseId);
 
   const nextQuestion = question !== undefined ? question : current.question;
@@ -174,13 +178,13 @@ export function edit(db, userId, exerciseId, { question, answer, explanation, hi
  * reference must keep resolving to. */
 export function getVersion(db, userId, versionId) {
   const row = db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? AND id = ?').get(userId, versionId);
-  if (!row) throw new ExerciseError('NOT_FOUND', 'Versão do exercício não encontrada.');
+  if (!row) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_VERSION_NOT_FOUND'));
   return versionToDto(row);
 }
 
 export function archive(db, userId, id) {
   const exercise = findOwnedExercise(db, userId, id);
-  if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
+  if (!exercise) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   const now = new Date().toISOString();
   db.prepare('UPDATE exercises SET archived_at = ?, updated_at = ? WHERE user_id = ? AND id = ?').run(now, now, userId, id);
   return getById(db, userId, id);
@@ -188,7 +192,7 @@ export function archive(db, userId, id) {
 
 export function reactivate(db, userId, id) {
   const exercise = findOwnedExercise(db, userId, id);
-  if (!exercise) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
+  if (!exercise) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   const now = new Date().toISOString();
   db.prepare('UPDATE exercises SET archived_at = NULL, updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, id);
   return getById(db, userId, id);
@@ -197,10 +201,10 @@ export function reactivate(db, userId, id) {
 /** Deterministic reorder scoped to one unit — a foreign-owned or
  * cross-unit id in the list fails the whole call without effect. */
 export function reorder(db, userId, unitId, orderedIds) {
-  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', 'Aula não encontrada.');
+  if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   const owned = new Set(db.prepare('SELECT id FROM exercises WHERE user_id = ? AND unit_id = ?').all(userId, unitId).map(r => r.id));
   for (const id of orderedIds) {
-    if (!owned.has(id)) throw new ExerciseError('NOT_FOUND', 'Exercício não encontrado.');
+    if (!owned.has(id)) throw new ExerciseError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   }
   const now = new Date().toISOString();
   const update = db.prepare('UPDATE exercises SET order_index = ?, updated_at = ? WHERE user_id = ? AND id = ?');

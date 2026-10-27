@@ -7,7 +7,8 @@
 //      ASCII dots, so every "Enviando…", "Salvando…", "Carregando…" looks and is read the same way.
 // The patterns are written with \u escapes: this file must not itself contain a corrupted literal, or the scan below would flag it.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 // cp1252 shows bytes 0x80-0x9F as these characters (instead of C1 controls), which is what a mis-decoded UTF-8 continuation byte becomes.
 const CP1252_HIGH = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
@@ -45,10 +46,13 @@ export function findAsciiEllipsis(text) {
 
 const TEXT_EXT = /\.(js|mjs|cjs|html|css|json|rs|toml|yml|yaml)$/;
 
-/** Tracked source files whose text can reach a student or a log: the app, the server, shared code, tests and scripts. */
+/**
+ * Source files whose text can reach a student or a log: the app, the server, shared code, tests and scripts. Tracked AND new untracked ones
+ * (not ignored), so a file with a lost byte is seen BEFORE it is committed; files deleted from the working tree are skipped.
+ */
 export function trackedTextFiles(root = process.cwd()) {
-  const out = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  return out.split('\0').filter((f) => f && TEXT_EXT.test(f) && !/(^|\/)(package-lock\.json|node_modules\/|dist\/|test-results\/)/.test(f));
+  const out = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return out.split('\0').filter((f) => f && TEXT_EXT.test(f) && !/(^|\/)(package-lock\.json|node_modules\/|dist\/|test-results\/)/.test(f) && existsSync(join(root, f)));
 }
 
 /** Applies `finder` to every { path, text }: [{ path, ...hit }]. Reading is injected so a test can scan a file that exists only in memory. */

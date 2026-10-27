@@ -1,9 +1,12 @@
 import { validateNamingField, normalizeEntityName, nameKey } from '../../../shared/text-validation.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 
 export class SubjectError extends Error {
   constructor(code, message) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -42,9 +45,7 @@ export function create(db, userId, { name, color = 'DISC-BLUE' }) {
   if (existing) {
     // An archived homonym is an explicit conflict, never a silent
     // reactivation — the caller must reactivate() the existing row.
-    throw new SubjectError('SUBJECT_CONFLICT', existing.is_active
-      ? 'Já existe uma disciplina com esse nome.'
-      : 'Já existe uma disciplina arquivada com esse nome. Reative-a em vez de criar uma nova.');
+    throw new SubjectError('SUBJECT_CONFLICT', dm(existing.is_active ? 'SUBJECT_NAME_CONFLICT' : 'SUBJECT_ARCHIVED_NAME_CONFLICT'));
   }
 
   const now = new Date().toISOString();
@@ -59,7 +60,7 @@ export function create(db, userId, { name, color = 'DISC-BLUE' }) {
 
 export function rename(db, userId, id, newName) {
   const subject = findOwned(db, userId, id);
-  if (!subject) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
 
   const error = validateNamingField(newName, 'o nome da disciplina');
   if (error) throw new SubjectError('VALIDATION_FAILED', error);
@@ -67,7 +68,7 @@ export function rename(db, userId, id, newName) {
   const normalized = normalizeEntityName(newName);
   const key = nameKey(newName);
   const conflict = db.prepare('SELECT id FROM subjects WHERE user_id = ? AND LOWER(name) = ? AND id != ?').get(userId, key, id);
-  if (conflict) throw new SubjectError('SUBJECT_CONFLICT', 'Já existe uma disciplina com esse nome.');
+  if (conflict) throw new SubjectError('SUBJECT_CONFLICT', dm('SUBJECT_NAME_CONFLICT'));
 
   const now = new Date().toISOString();
   db.prepare('UPDATE subjects SET name = ?, updated_at = ? WHERE user_id = ? AND id = ?').run(normalized, now, userId, id);
@@ -76,7 +77,7 @@ export function rename(db, userId, id, newName) {
 
 export function setColor(db, userId, id, color) {
   const subject = findOwned(db, userId, id);
-  if (!subject) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
   const now = new Date().toISOString();
   db.prepare('UPDATE subjects SET color = ?, updated_at = ? WHERE user_id = ? AND id = ?').run(color, now, userId, id);
   return toDto(findOwned(db, userId, id));
@@ -84,7 +85,7 @@ export function setColor(db, userId, id, color) {
 
 export function archive(db, userId, id) {
   const subject = findOwned(db, userId, id);
-  if (!subject) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
   const now = new Date().toISOString();
   db.prepare('UPDATE subjects SET is_active = 0, updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, id);
   return toDto(findOwned(db, userId, id));
@@ -92,13 +93,13 @@ export function archive(db, userId, id) {
 
 export function reactivate(db, userId, id) {
   const subject = findOwned(db, userId, id);
-  if (!subject) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
   // Reactivating must not silently create a duplicate of an already-active
   // subject with the same name (e.g. user archived "X", created a new "X",
   // then tries to reactivate the old one).
   const key = nameKey(subject.name);
   const conflict = db.prepare('SELECT id FROM subjects WHERE user_id = ? AND LOWER(name) = ? AND id != ? AND is_active = 1').get(userId, key, id);
-  if (conflict) throw new SubjectError('SUBJECT_CONFLICT', 'Já existe uma disciplina ativa com esse nome.');
+  if (conflict) throw new SubjectError('SUBJECT_CONFLICT', dm('SUBJECT_ACTIVE_NAME_CONFLICT'));
 
   const now = new Date().toISOString();
   db.prepare('UPDATE subjects SET is_active = 1, updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, id);
@@ -108,7 +109,7 @@ export function reactivate(db, userId, id) {
 export function reorder(db, userId, orderedIds) {
   const owned = new Set(db.prepare('SELECT id FROM subjects WHERE user_id = ?').all(userId).map(r => r.id));
   for (const id of orderedIds) {
-    if (!owned.has(id)) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+    if (!owned.has(id)) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
   }
   const now = new Date().toISOString();
   const update = db.prepare('UPDATE subjects SET sort_order = ?, updated_at = ? WHERE user_id = ? AND id = ?');
@@ -120,10 +121,10 @@ export function reorder(db, userId, orderedIds) {
 
 export function deleteEmpty(db, userId, id) {
   const subject = findOwned(db, userId, id);
-  if (!subject) throw new SubjectError('NOT_FOUND', 'Disciplina não encontrada.');
+  if (!subject) throw new SubjectError('NOT_FOUND', dm('SUBJECT_NOT_FOUND'));
   const { n } = db.prepare('SELECT COUNT(*) as n FROM learning_units WHERE user_id = ? AND subject_id = ?').get(userId, id);
   if (n > 0) {
-    throw new SubjectError('SUBJECT_NOT_EMPTY', 'Não é possível excluir uma disciplina com aulas cadastradas. Arquive-a em vez disso.');
+    throw new SubjectError('SUBJECT_NOT_EMPTY', dm('SUBJECT_NOT_EMPTY'));
   }
   db.prepare('DELETE FROM subjects WHERE user_id = ? AND id = ?').run(userId, id);
 }

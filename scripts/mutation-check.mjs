@@ -35,8 +35,15 @@ export const MUTATIONS = [
     id: 'M1b', area: 'identidade de questão (mergeIdentity)',
     why: 'mergeIdentity descartaria o estado de revisão: uma questão REJECTED voltaria como PROPOSED ao ser editada',
     file: 'server/src/services/generated-drafts.js',
-    find: "status: previous?.status ?? 'PROPOSED',", replace: "status: 'PROPOSED',",
+    find: "status: changed && previous?.status === 'ACCEPTED' ? 'PROPOSED' : (previous?.status ?? 'PROPOSED'),", replace: "status: 'PROPOSED',",
     cwd: 'server', tests: ['test/lesson-granular-edit.test.js', 'test/ai-drafts.test.js'],
+  },
+  {
+    id: 'M1c', area: 'identidade de questão (mergeIdentity)',
+    why: 'um texto alterado de uma questão ACEITA a manteria aceita: o aceite passaria a valer para um texto que ninguém revisou',
+    file: 'server/src/services/generated-drafts.js',
+    find: "changed && previous?.status === 'ACCEPTED' ? 'PROPOSED' : (previous?.status ?? 'PROPOSED')", replace: "(previous?.status ?? 'PROPOSED')",
+    cwd: 'server', tests: ['test/lesson-granular-edit.test.js'],
   },
   {
     id: 'M2', area: 'sessão (devPersistent)',

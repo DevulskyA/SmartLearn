@@ -17,10 +17,10 @@ import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 const UPLOAD_DEFAULTS = { maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1024 };
 
-// T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js + risk-checks.js. Changing either changes this hash; when it does, bump
+// T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js + risk-checks.js + draft-audit-model.js (the model auditor's prompt and the rule that decides which of its findings may repair). Changing either changes this hash; when it does, bump
 // AUDIT_RULES_VERSION (draft-audit.js) and record the new pair here. A rule changed without a new version fails below.
-const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js', '../src/ai/risk-checks.js'];
-const PINNED = { version: 'audit-rules-4', hash: '9b2777fd0fed7506704bc78ff03ef3b271307c8bbc60e42b28c0c142480800a3' };
+const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js', '../src/ai/risk-checks.js', '../src/ai/draft-audit-model.js'];
+const PINNED = { version: 'audit-rules-11', hash: '40a4d9a82082e6ef293e2633afc9f93438fc4623462ffe54d121730fc1e840a5' };
 const rulesHash = () => createHash('sha256').update(RULES_FILES.map((f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')).join('\n--\n')).digest('hex');
 
 test('the audit rule set cannot change without a new AUDIT_RULES_VERSION', () => {
@@ -55,7 +55,7 @@ async function draftWithOldAudit(db, sourcesDir) {
   const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(generated.id);
   const json = JSON.parse(row.draft_json);
   delete json.audit.rulesVersion; delete json.audit.auditedAt;
-  json.audit.findings = [{ issue: 'OLD_RULE_THAT_NO_LONGER_EXISTS', severity: 'LOW', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
+  json.audit.findings = [{ issue: 'OLD_RULE_THAT_NO_LONGER_EXISTS', severity: 'MEDIUM', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'z', source: 'DETERMINISTIC' }];
   db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(json), generated.id);
   return { userId, draftId: generated.id, withQ };
 }
@@ -112,6 +112,22 @@ test('reaudit changes ONLY audit: content, versions and revision are byte-identi
     // idempotent: a second run changes no findings
     const again = drafts.reauditDraft(db, userId, draftId);
     assert.deepEqual([again.reaudit.added, again.reaudit.removed], [0, 0]);
+  } finally { cleanup(); }
+});
+
+test('reaudit counts only actionable findings: a LOW advisory is neither a point removed nor a point before (the review list never showed it)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const { userId, draftId } = await draftWithOldAudit(db, sourcesDir);
+    const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);
+    const json = JSON.parse(row.draft_json);
+    json.audit.findings = [{ ...json.audit.findings[0], issue: 'LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE', severity: 'LOW', scope: 'draft' }];
+    db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(json), draftId);
+    const out = drafts.reauditDraft(db, userId, draftId);
+    assert.equal(out.reaudit.before, 0, 'the LOW advisory was not counted as an existing point');
+    assert.equal(out.reaudit.removed, 0, 'and its disappearance is not "a point removed"');
+    assert.equal(out.reaudit.added, out.reaudit.after, 'every actionable finding of the fresh audit is new relative to an empty before');
+    assert.equal(out.reaudit.after, out.draft.audit.findings.filter((f) => f.severity !== 'LOW').length);
   } finally { cleanup(); }
 });
 

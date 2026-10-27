@@ -1,4 +1,5 @@
 import { buildPriorities } from '../domain/priorities.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { get as getSettings } from './settings.js';
 import { localDateString, list as listReviews } from './reviews.js';
 import { list as listUnits } from './learning-units.js';
@@ -8,9 +9,11 @@ import { reinforcementByUnit } from './attempts.js';
 
 export class PrioritiesError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -23,7 +26,7 @@ export class PrioritiesError extends Error {
  */
 export function get(db, userId, { date } = {}) {
   if (date !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00.000Z`)))) {
-    throw new PrioritiesError('VALIDATION_FAILED', 'Data inválida (use AAAA-MM-DD).', 'date');
+    throw new PrioritiesError('VALIDATION_FAILED', dm('DATE_INVALID'), 'date');
   }
   const today = date ?? localDateString(new Date(), getSettings(db, userId).timezone);
   const subjects = new Map(listSubjects(db, userId).map((s) => [s.id, s]));

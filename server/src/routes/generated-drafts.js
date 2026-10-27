@@ -2,7 +2,7 @@ import * as drafts from '../services/generated-drafts.js';
 import { acceptDraft, previewAcceptance, AcceptDraftError } from '../services/accept-draft.js';
 import { config } from '../config.js';
 
-function handleError(err, reply) {
+export function handleError(err, reply) {
   if (err instanceof drafts.DraftError || err instanceof AcceptDraftError) {
     const statusByCode = {
       NOT_FOUND: 404,
@@ -28,7 +28,7 @@ function handleError(err, reply) {
       FINDINGS_UNRESOLVED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
-    return { error: { code: err.code, field: err.field, message: err.message } };
+    return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
   }
   throw err;
 }

@@ -9,6 +9,7 @@
 // Languages: the cue lists exist for en, pt and es. When either language is unknown only the unit check runs.
 
 import { detectLanguage } from './language-detect.js';
+import { msg, resolveMessages } from './audit-messages.js';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const clip = (s, n = 240) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -105,14 +106,14 @@ function auditUnits(units, text, scope) {
     if (seen.has(key)) continue;
     seen.add(key);
     const [sourceUnit, info] = sameDimension[0];
-    findings.push({
+    findings.push(resolveMessages({
       issue: 'UNIT_MISMATCH',
       severity: 'HIGH',
       scope,
       generatedClaim: clip(sentenceAt(text, q.index)),
-      sourceEvidence: `p. ${info.pageIndex}: ${clip(info.sentence)}`,
-      repair: `A fonte traz ${q.value} em ${sourceUnit}, não em ${q.unit}. Use a unidade da fonte.`,
-    });
+      sourceEvidence: msg('EVIDENCE_SOURCE_PASSAGE', { page: info.pageIndex, text: clip(info.sentence) }),
+      repair: msg('REPAIR_UNIT_MISMATCH', { value: q.value, sourceUnit, unit: q.unit }),
+    }));
   }
   return findings;
 }
@@ -135,6 +136,9 @@ const CUES = {
 };
 // strengthening a claim is what a reader cannot spot: these are the cues a draft must not add
 const ABSOLUTES = new Set(['ONLY', 'ALWAYS', 'NEVER']);
+const NEVER_CUES = new Set(['never', 'nunca', 'jamais', 'jamas']);
+// negation-like verbs and adjectives: they have faithful non-negated paraphrases, so they never prove a flipped negation
+const WEAK_NEGATION = new Set(['prevents', 'prevent', 'fails', 'lack', 'lacks', 'impermeable', 'falha', 'falta', 'impede', 'impedem', 'impedindo', 'impermeavel', 'evita', 'bloqueia', 'impide', 'impiden', 'bloquea']);
 
 function cueSets(lang) {
   return {
@@ -207,20 +211,28 @@ function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
     const sourceWindow = windowCues(sourceItems, sourceItems.indexOf(source), sets.source, s);
     const draftWindow = windowCues(draftItems, draftItems.indexOf(draft), sets.draft, d);
     const scope = scopeOf(draft);
-    const evidence = `p. ${source.pageIndex}: ${clip(source.text)}`;
+    const evidence = msg('EVIDENCE_SOURCE_PASSAGE', { page: source.pageIndex, text: clip(source.text) });
     for (const q of s.qualifiers) {
       if (!draftWindow.qualifiers.has(q) && !(q.startsWith('HEDGE') && [...draftWindow.qualifiers].some((x) => x.startsWith('HEDGE')))) {
-        findings.push({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
-          repair: 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do rascunho não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.' });
+        findings.push(resolveMessages({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_LOST') }));
         break;
       }
     }
     for (const q of d.qualifiers) {
       if (ABSOLUTES.has(q) && !sourceWindow.qualifiers.has(q) && !(q === 'NEVER' && sourceWindow.negation.size > 0)) {
-        findings.push({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence,
-          repair: 'A frase do rascunho usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.' });
+        findings.push(resolveMessages({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_ADDED') }));
         break;
       }
+    }
+    // A flipped negation reverses the claim (a contraindication that reads as an indication). Judged on the paired sentence itself,
+    // so a negation in a neighbouring sentence cannot hide a loss. Only explicit negators count: verbs like "bloqueia"/"evita"
+    // have legitimate paraphrases ("inibe"). It is a word-level signal (it cannot tell which claim the negator applies to), so
+    // it is shown for the human to check and never starts an automatic repair on its own.
+    const strongSource = s.negation.filter((w) => !WEAK_NEGATION.has(w));
+    if (strongSource.length > 0 && d.negation.length === 0) {
+      findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
+    } else if (s.negation.length === 0 && d.negation.some((w) => !WEAK_NEGATION.has(w) && !NEVER_CUES.has(w))) { // "never" is QUALIFIER_ADDED's
+      findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
     }
   }
   return findings;

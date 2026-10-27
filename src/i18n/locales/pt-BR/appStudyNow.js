@@ -31,6 +31,7 @@ export default {
   'appStudyNow.error.correctAnswer': 'Resposta correta',
   'appStudyNow.hint': 'Dica: {text}',
   'appStudyNow.citation': 'Trecho do material · {source}, página {page}',
+  'appStudyNow.openOriginal': 'Abrir o PDF original, página {page}',
   'appStudyNow.judgeFailed': 'Não foi possível registrar sua resposta. Verifique a conexão e toque de novo no mesmo botão.',
   'appStudyNow.saving': 'Registrando sua resposta…',
   'appStudyNow.loadFailed': 'Não foi possível carregar as questões desta aula. Verifique a conexão e abra a aula de novo.',

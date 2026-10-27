@@ -75,7 +75,7 @@ const goodDraft = (overrides = {}) => ({
   ...overrides,
 });
 const PASS_AUDIT = { result: 'PASS', findings: [] };
-const REPAIR_AUDIT = { result: 'REPAIR', findings: [{ issue: 'Afirmação sem suporte', severity: 'HIGH', scope: 'summary', generatedClaim: 'x', sourceEvidence: 'y', repair: 'remover' }] };
+const REPAIR_AUDIT = { result: 'REPAIR', findings: [{ issue: 'Afirmação sem suporte', severity: 'HIGH', scope: 'summary', verdict: 'CONTRADICTED', generatedClaim: 'x', evidencePage: 1, evidenceQuote: 'Fisiologia renal: a filtração', sourceEvidence: 'y', repair: 'remover' }] };
 
 function fakeCodex(config = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'sl-fake-codex-'));

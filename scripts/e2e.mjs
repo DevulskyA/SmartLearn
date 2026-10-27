@@ -8,6 +8,7 @@ import { openSync, writeSync, closeSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SUITE_WORKERS } from '../e2e/support/suites.js';
 
 // the e2e specs use server/stub ports 13950..13998 (offset 0)
 export const SPEC_PORT_MIN = 13950;
@@ -79,7 +80,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const env = { ...process.env };
   const i = args.indexOf('--suite');
   if (i >= 0) { env.E2E_SUITE = args[i + 1]; args.splice(i, 2); }
-  const workers = Number(env.E2E_WORKERS || 2);
+  // a narrow suite can use more workers than the full run: the full run stays at 2 (stable under load), the area suites are measured to be faster with more
+  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 2);
   env.E2E_WORKERS = String(workers);
   const { offset, vitePort, release } = await pickRunPorts({ workers });
   env.E2E_PORT_OFFSET = String(offset);

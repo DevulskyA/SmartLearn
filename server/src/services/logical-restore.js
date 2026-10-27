@@ -9,6 +9,7 @@
 // cached result on repeat) is the same as the legacy import's, in imports.js;
 // this module only knows how to validate, check emptiness, and write rows.
 import { normalizeLogicalExport, LOGICAL_SETS } from '../../../shared/logical-import.js';
+import { dm } from '../api-error-messages.js';
 import { ImportNormalizationError } from '../../../shared/import-normalization.js';
 import { REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { config } from '../config.js';
@@ -25,7 +26,7 @@ const OWNED_DATA_TABLES = [
   'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions',
   'learning_evidence', 'exercise_attempts', 'learning_events', 'exams', 'exam_items',
   'exam_evidence', 'competencies', 'sources', 'source_pages', 'source_outline',
-  'content_proposals', 'generated_drafts', 'exercise_source_citations', 'unit_summary_citations',
+  'content_proposals', 'generated_drafts', 'exercise_source_citations', 'unit_summary_citations', 'visual_assets',
 ];
 
 function currentSchemaVersion(db) {
@@ -56,7 +57,7 @@ export function assertWithinImportCapacity(counts, normalizedJson) {
   const rowTotal = Object.values(counts).reduce((a, b) => a + b, 0);
   const byteLen = Buffer.byteLength(normalizedJson, 'utf8');
   if (rowTotal > config.importMaxRows || byteLen > config.importMaxBytes) {
-    throw new ImportError('IMPORT_TOO_LARGE', 'A restauração excede o limite de capacidade configurado.', {
+    throw new ImportError('IMPORT_TOO_LARGE', dm('RESTORE_TOO_LARGE'), {
       rowTotal, maxRows: config.importMaxRows, byteLen, maxBytes: config.importMaxBytes,
     });
   }

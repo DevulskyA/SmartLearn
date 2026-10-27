@@ -91,7 +91,7 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
 
   const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
-  await expect(draftPanel).toContainText('não verificado');
+  await expect(draftPanel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
   await draftPanel.getByRole('tab', { name: /Questões/ }).click();
   expect(await draftPanel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(5);
   await draftPanel.getByRole('tab', { name: /Revisão/ }).click();

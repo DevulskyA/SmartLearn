@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupFindings, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, summaryBlocks, copyTextOf, issueLabel } from "../src/lesson-view-model.js";
+import { sourceSufficiencyNote, draftState, groupFindings, groupByCause, findingCause, questionState, reviewOverview, keptQuestionCount, sourceLine, elapsedLabel, copyTextOf, issueLabel, groundingLine } from "../src/lesson-view-model.js";
 
 const draft = {
   summary: "Primeiro parágrafo.\n\nSegundo parágrafo.",
@@ -60,21 +60,11 @@ test("elapsed time reads mm:ss and h:mm:ss", () => {
   assert.equal(elapsedLabel(-5), "00:00");
 });
 
-test("summary blocks keep headings and paragraphs apart", () => {
-  const blocks = summaryBlocks("## Ideia central\nA filtração é...\n\nSegundo parágrafo\ncontinua aqui.");
-  assert.deepEqual(blocks, [
-    { type: "heading", level: 2, text: "Ideia central" },
-    { type: "paragraph", text: "A filtração é..." },
-    { type: "paragraph", text: "Segundo parágrafo\ncontinua aqui." },
-  ]);
-  assert.deepEqual(summaryBlocks(""), []);
-});
-
 test("COPY: copying the summary returns only the summary; copying a question only its own content", () => {
   assert.equal(copyTextOf(draft, "summary"), draft.summary);
   assert.equal(copyTextOf(draft, "q1"), "P1?\n\nR1\n\nE1");
   assert.equal(copyTextOf(draft, "q2"), "P2?\n\nR2");
-  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar rascunho|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece/;
+  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar rascunho|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece|Poucas palavras em comum|Palavra que a fonte não repete|Palavra que a página citada não repete/;
   for (const part of ["summary", "q1", "q2", "q3", "q4"]) assert.doesNotMatch(copyTextOf(draft, part), UI_WORDS);
   assert.equal(copyTextOf(draft, "nope"), "");
 });
@@ -143,4 +133,84 @@ test("jobListStatus: active = Gerando (with the phase), STALLED stays Gerando bu
   assert.match(jobListStatus(job({ state: "FAILED", errorCode: "TIMEOUT" })).label, /^Falhou/);
   assert.equal(jobListStatus(job({ state: "CANCELLED" })), null);
   assert.equal(jobListStatus(undefined), null);
+});
+
+test("groundingLine: a summary with NO linked sentence says nothing was checked instead of a bare '0 de N confirmadas'", () => {
+  const unlinked = (n) => ({ total: n, supported: 0, orphaned: 0, sentences: Array.from({ length: n }, () => ({ status: "NOT_LINKED" })) });
+  assert.match(groundingLine(unlinked(55)), /Nenhuma das 55 frases do resumo tem trecho da fonte vinculado/);
+  assert.match(groundingLine(unlinked(55)), /confira o resumo na fonte/);
+  const some = { total: 4, supported: 1, orphaned: 0, sentences: [{ status: "SOURCE_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }] };
+  assert.equal(groundingLine(some), "Trecho da fonte confirmado em 1 de 4 frases do resumo.");
+  const stale = { total: 4, supported: 0, orphaned: 2, sentences: [{ status: "NOT_LINKED" }] };
+  assert.match(groundingLine(stale), /confirmado em 0 de 4 frases do resumo\. 2 apontamentos antigos/);
+  assert.equal(groundingLine({ total: 0, supported: 0, orphaned: 0, sentences: [] }), "");
+});
+
+test("findings are grouped by WHY they were raised, most serious cause first; a difference of words is its own cause, never a contradiction", () => {
+  const f = (issue, extra = {}) => ({ issue, severity: "MEDIUM", ...extra });
+  const groups = groupByCause([
+    f("QUESTION_DUPLICATE"),
+    f("SUMMARY_UNSUPPORTED_TERM", { blocksRepair: false }),
+    f("SUMMARY_UNSUPPORTED_VALUE", { severity: "HIGH" }),
+    f("CLAIM_X", { verdict: "CONTRADICTED", severity: "HIGH" }),
+    f("QUALIFIER_LOST"),
+    f("CLAIM_Y", { verdict: "NOT_EVALUABLE", blocksRepair: false }),
+    f("QUESTION_LOW_SOURCE_SUPPORT", { blocksRepair: false }),
+  ]);
+  assert.deepEqual(groups.map((g) => [g.cause, g.label, g.findings.map((x) => x.issue)]), [
+    ["contradiction", "A fonte diz outra coisa", ["CLAIM_X", "QUALIFIER_LOST"]],
+    ["unsupported", "A fonte não traz esse ponto", ["SUMMARY_UNSUPPORTED_VALUE"]],
+    ["wording", "Só uma diferença de palavras", ["SUMMARY_UNSUPPORTED_TERM", "QUESTION_LOW_SOURCE_SUPPORT"]],
+    ["notEvaluable", "Não deu para avaliar", ["CLAIM_Y"]],
+    ["teaching", "Como a questão ensina", ["QUESTION_DUPLICATE"]],
+  ]);
+  assert.deepEqual(groupByCause([]), []);
+  assert.equal(findingCause({ issue: "ANSWER_CONTRADICTS_SOURCE" }), "contradiction", "an older model finding without a verdict still reads as a contradiction by its name");
+  assert.equal(findingCause({ issue: "SOMETHING_NEW" }), "unsupported", "an unknown issue is never filed under 'only words'");
+});
+
+test("the header state follows the REAL state of the draft: draft -> pending critical items -> accepted; the automatic check never changes it", () => {
+  const open = (extra = {}) => ({ status: "DRAFT", acceptanceBlockers: { questions: [], summary: 0 }, ...extra });
+  assert.deepEqual(draftState(open()), { key: "draft", label: "Rascunho gerado por IA — aguardando sua conferência", pending: 0 });
+  assert.equal(draftState({ status: "DRAFT" }).key, "draft", "a draft without the blockers field is still just a draft");
+  // critical points waiting for the person: one question, then the summary and two questions
+  const one = draftState(open({ acceptanceBlockers: { questions: ["q2"], summary: 0 } }));
+  assert.deepEqual(one, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 1 item crítico", pending: 1 });
+  const many = draftState(open({ acceptanceBlockers: { questions: ["q1", "q2"], summary: 3 } }));
+  assert.deepEqual(many, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 3 itens críticos", pending: 3 });
+  // resolving them (the server answers with an empty list) brings the draft back to waiting for the person
+  assert.equal(draftState(open({ acceptanceBlockers: { questions: [], summary: 0 } })).key, "draft");
+  // accepted: by this window, or because the server says so, whatever blockers were left over
+  assert.deepEqual(draftState(open({ acceptanceBlockers: { questions: ["q1"], summary: 1 } }), { accepted: true }), { key: "accepted", label: "Aula aceita e adicionada aos seus estudos.", pending: 0 });
+  assert.equal(draftState({ status: "ACCEPTED" }).key, "accepted");
+  // the automatic audit result (PASS or REPAIR, repaired or not) is not a state of the lesson
+  for (const audit of [{ result: "PASS", findings: [] }, { result: "REPAIR", findings: [{ severity: "MEDIUM" }], repaired: true }]) {
+    assert.equal(draftState(open({ audit })).key, "draft");
+  }
+  // no draft state claims the content was verified
+  for (const d of [open(), open({ acceptanceBlockers: { questions: ["q"], summary: 0 } })]) assert.doesNotMatch(draftState(d).label, /verificad|validad|aprovad/i);
+});
+
+test("the thin-source notice names what the check could not see, in the catalog's words, and says it is not proof of error", () => {
+  const draftWith = (finding) => ({ audit: { findings: finding ? [finding] : [] } });
+  assert.equal(sourceSufficiencyNote(draftWith(null)), "");
+  assert.equal(sourceSufficiencyNote({}), "");
+  assert.equal(sourceSufficiencyNote(draftWith({ issue: "QUESTION_DUPLICATE" })), "");
+  const thin = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["THIN"], sourceChars: 440, pageCount: 3, emptyPages: [], garbledPages: [] }));
+  assert.match(thin, /^O texto extraído desta fonte tem 440 caracteres em 3 páginas\./);
+  assert.match(thin, /É um aviso, não prova de erro\.$/);
+  assert.doesNotMatch(thin, /Sem texto nas páginas|cortada ou ilegível/);
+  const one = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["EMPTY_PAGES"], sourceChars: 900, pageCount: 1, emptyPages: [1], garbledPages: [] }));
+  assert.match(one, /em 1 página\./);
+  assert.match(one, /Sem texto nas páginas 1:/);
+  const both = sourceSufficiencyNote(draftWith({ issue: "SOURCE_TEXT_INSUFFICIENT", reasons: ["EMPTY_PAGES", "GARBLED"], sourceChars: 5000, pageCount: 4, emptyPages: [2], garbledPages: [3, 4] }));
+  assert.match(both, /Sem texto nas páginas 2:/);
+  assert.match(both, /cortada ou ilegível nas páginas 3, 4\./);
+});
+
+test("every deterministic finding code the student can meet has a plain-language title, never the raw code", () => {
+  for (const code of ["UNIT_MISMATCH", "QUALIFIER_LOST", "QUALIFIER_ADDED", "NEGATION_LOST", "NEGATION_ADDED"]) {
+    assert.notEqual(issueLabel(code), code, code);
+    assert.match(issueLabel(code), /^[A-ZÀ-Ú][^_]+$/u, code);
+  }
 });

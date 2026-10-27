@@ -15,15 +15,18 @@
 // The contract fixed at creation (owner, proposal, scope digest, languages, provider, estimate) is immutable in the database:
 // a job never runs on a wider scope than the one that was validated and priced (INV-13).
 import { detectSourceLanguage } from '../ai/language-contract.js';
+import { dm, splitMessage } from '../api-error-messages.js';
 import { estimateCostUnits } from './generation-budget.js';
 import { prepareGeneration, segmentsDigest, DraftError } from './generated-drafts.js';
 import { ensureGenerationLocale } from './settings.js';
 
 export class JobError extends Error {
   constructor(code, message, field) {
-    super(message);
+    const { text, msg } = splitMessage(message);
+    super(text);
     this.code = code;
     if (field) this.field = field;
+    if (msg) this.msg = msg;
   }
 }
 
@@ -114,7 +117,7 @@ export function createJob(db, userId, proposalId, { provider, regenerate = false
 
 export function getJob(db, userId, jobId) {
   const row = db.prepare('SELECT * FROM generation_jobs WHERE user_id = ? AND id = ?').get(userId, jobId);
-  if (!row) throw new JobError('NOT_FOUND', 'Geração não encontrada.');
+  if (!row) throw new JobError('NOT_FOUND', dm('JOB_NOT_FOUND'));
   return toDto(row);
 }
 
@@ -136,7 +139,7 @@ export function transitionJob(db, jobId, to, { phase, errorCode, errorMessage, d
   if (phase !== undefined && !JOB_PHASES.includes(phase)) throw new JobError('VALIDATION_FAILED', `Fase desconhecida: ${phase}.`, 'phase');
   const run = db.transaction(() => {
     const row = db.prepare('SELECT * FROM generation_jobs WHERE id = ?').get(jobId);
-    if (!row) throw new JobError('NOT_FOUND', 'Geração não encontrada.');
+    if (!row) throw new JobError('NOT_FOUND', dm('JOB_NOT_FOUND'));
     if (!TRANSITIONS[row.state].includes(to)) throw new JobError('INVALID_TRANSITION', `Uma geração ${row.state} não pode passar a ${to}.`, 'state');
     if (to === 'FAILED' && !errorCode) throw new JobError('VALIDATION_FAILED', 'Uma falha precisa do código do erro.', 'errorCode');
     if (to === 'SUCCEEDED' && !Number.isInteger(draftId)) throw new JobError('VALIDATION_FAILED', 'Uma geração concluída precisa do rascunho gerado.', 'draftId');
@@ -160,7 +163,7 @@ export function transitionJob(db, jobId, to, { phase, errorCode, errorMessage, d
       to, at,
       jobId, row.state,
     );
-    if (result.changes !== 1) throw new JobError('INVALID_TRANSITION', 'A geração mudou de estado ao mesmo tempo.', 'state');
+    if (result.changes !== 1) throw new JobError('INVALID_TRANSITION', dm('JOB_STATE_CHANGED'), 'state');
     return toDto(db.prepare('SELECT * FROM generation_jobs WHERE id = ?').get(jobId));
   });
   return run.immediate();
@@ -203,16 +206,16 @@ export function activeJobOfProposals(db, userId, proposalIds) {
  */
 export function assertJobScopeIntact(db, userId, jobId) {
   const row = db.prepare('SELECT * FROM generation_jobs WHERE user_id = ? AND id = ?').get(userId, jobId);
-  if (!row) throw new JobError('NOT_FOUND', 'Geração não encontrada.');
+  if (!row) throw new JobError('NOT_FOUND', dm('JOB_NOT_FOUND'));
   let prepared;
   try {
     prepared = prepareGeneration(db, userId, row.proposal_id, { maxInputChars: Number.MAX_SAFE_INTEGER });
   } catch (err) {
-    if (err instanceof DraftError) throw new JobError('SCOPE_CHANGED', 'O trecho aprovado mudou desde que esta geração foi criada. Crie uma nova.');
+    if (err instanceof DraftError) throw new JobError('SCOPE_CHANGED', dm('JOB_SCOPE_CHANGED_PROPOSAL'));
     throw err;
   }
   if (segmentsDigest(prepared.found.segments) !== row.scope_digest) {
-    throw new JobError('SCOPE_CHANGED', 'O texto do trecho aprovado mudou desde que esta geração foi criada. Crie uma nova.');
+    throw new JobError('SCOPE_CHANGED', dm('JOB_SCOPE_CHANGED_TEXT'));
   }
 }
 

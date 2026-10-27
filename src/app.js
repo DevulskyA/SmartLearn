@@ -1,7 +1,7 @@
 ﻿import "./styles.css";
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
-import { NetworkError } from "./api-client.js";
+import { NetworkError, apiRequest } from "./api-client.js";
 import { Stats, formatAverageScore } from "./stats.js";
 import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
@@ -16,9 +16,11 @@ import {
   getStoredThemePreference,
   resolveThemePreference,
 } from "./theme.js";
-import { colorVarForKey, performanceColor, SUBJECT_COLOR_KEYS, getState } from "./performance-thresholds.js";
+import { colorVarForKey, performanceColor, getState } from "./performance-thresholds.js";
+import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
+import { findLesson } from "./lesson-link.js";
 import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
-import { formatDate as formatIntlDate } from "./i18n/format.js";
+import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
@@ -26,10 +28,14 @@ import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
 import * as AuthUI from "./auth-ui.js";
 import * as MigrationUI from "./migration-ui.js";
-import { formatPageList, createSourceDetails, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experimental-obligations-ui.js";
+
+import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { renderSummary } from "./summary-render.js";
+import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
 import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
@@ -185,10 +191,15 @@ const navigationItems = [...document.querySelectorAll("[data-screen]")];
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
 const subjectSelect = document.querySelector("#subject-select");
-const showSubjectFormButton = document.querySelector("#show-subject-form");
-const newSubjectForm = document.querySelector("#new-subject-form");
-const newSubjectInput = document.querySelector("#new-subject-input");
 const subjectMessage = document.querySelector("#subject-message");
+// Disciplinas, Cadastro and Plano all open this same registration (name + colour): see subject-create-form.js
+const registerSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#new-subject-slot"),
+  ids: { form: "new-subject-form", input: "new-subject-input" },
+  trigger: document.querySelector("#show-subject-form"),
+  report: (text) => setSubjectMessage(text),
+  submit: createSubjectFromRegister,
+});
 const subjectList = document.querySelector("#subject-list");
 const subjectsEmpty = document.querySelector("#subjects-empty");
 const subjectManagerMessage = document.querySelector("#subject-manager-message");
@@ -274,12 +285,16 @@ const trackingFilterPeriod = document.querySelector("#tracking-filter-period");
 const subjectsCatalog = document.querySelector("#subjects-catalog");
 const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
 const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
-const subjectsCreateForm = document.querySelector("#subjects-create-form");
-const subjectsNewName = document.querySelector("#subjects-new-name");
-const subjectsNewColorPicker = document.querySelector("#subjects-new-color-picker");
-const subjectsCreateSaveBtn = document.querySelector("#subjects-create-save-btn");
-const subjectsCreateCancelBtn = document.querySelector("#subjects-create-cancel-btn");
-const subjectsCreateMessage = document.querySelector("#subjects-create-message");
+createSubjectCreateForm({
+  slot: document.querySelector("#subjects-create-slot"),
+  ids: { form: "subjects-create-form", input: "subjects-new-name", submit: "subjects-create-save-btn", cancel: "subjects-create-cancel-btn", message: "subjects-create-message" },
+  trigger: subjectsShowCreateBtn,
+  cancellable: true,
+  submit: async (name, color) => {
+    await DB.subjects.create(name, color);
+    await renderDisciplinas();
+  },
+});
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
@@ -288,9 +303,13 @@ const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
 const planSubjectSelect = document.querySelector("#plan-subject-select");
-const planShowSubjectForm = document.querySelector("#plan-show-subject-form");
-const planNewSubjectForm = document.querySelector("#plan-new-subject-form");
-const planNewSubjectInput = document.querySelector("#plan-new-subject-input");
+const planSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#plan-new-subject-slot"),
+  ids: { form: "plan-new-subject-form", input: "plan-new-subject-input" },
+  trigger: document.querySelector("#plan-show-subject-form"),
+  report: (text, isError) => setPlanFormMessage(text, isError),
+  submit: createSubjectFromPlan,
+});
 const planStudySource = document.querySelector("#plan-study-source");
 const planStudyDate = document.querySelector("#plan-study-date");
 const planStudyTitle = document.querySelector("#plan-study-title");
@@ -324,6 +343,11 @@ const studyNowHintText = document.querySelector("#study-now-hint-text");
 const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
 const studyNowAnswerText = document.querySelector("#study-now-answer-text");
 const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
+// The cited source page(s) for the current question, revealed together with the answer.
+const studyNowSourceBox = document.createElement("div");
+studyNowSourceBox.className = "study-now-source-box";
+studyNowSourceBox.hidden = true;
+studyNowExplanationText?.after(studyNowSourceBox);
 const studyNowJudgment = document.querySelector("#study-now-judgment");
 const studyNowMessage = document.querySelector("#study-now-message");
 const studyNowResume = document.querySelector("#study-now-resume");
@@ -389,7 +413,7 @@ function formatPerformanceScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   const rounded = Math.round(number * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${formatDecimal(rounded)}%`;
 }
 
 const PERFORMANCE_BAND_CLASS = {
@@ -595,7 +619,7 @@ function createScoreInput(task, field, label) {
 }
 
 function formatReviewScore(value) {
-  return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+  return value == null ? "—" : `${formatDecimal(Number(value))}%`;
 }
 
 // Several overdue stages of the same unit as ONE card (native <details>, so
@@ -859,7 +883,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   summarySection.className = "review-row-summary";
 
   const summaryHasBody = Boolean(unit?.summaryBody);
-  const summaryDisplay = createTextElement("p", "review-summary-text", unit?.summaryBody ?? "");
+  const summaryDisplay = renderSummary(createTextElement("div", "review-summary-text", ""), unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
   summaryDisplay.hidden = !summaryHasBody;
 
@@ -898,7 +922,8 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   summaryMessage.setAttribute("role", "status");
   summaryMessage.setAttribute("aria-live", "polite");
 
-  summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
+  const hojeAuthoring = createSummaryAuthoring(summaryTextarea);
+  summaryEditArea.append(hojeAuthoring.bar, summaryTextarea, hojeAuthoring.preview, saveSummaryButton, summaryMessage);
   summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
@@ -966,6 +991,14 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      // Back to the material: the cited source page, shown with the answer (CSS hides it while the answer is hidden).
+      const sourceBlocks = citationDetails(exercise.citations);
+      if (sourceBlocks.length) {
+        const sourceBox = document.createElement("div");
+        sourceBox.className = "review-exercise-source";
+        sourceBox.append(...sourceBlocks);
+        answerEl.after(sourceBox);
+      }
       // Retention cue from the longitudinal ledger: the last time this item was
       // answered it was wrong and no correct answer has followed.
       if (priorWrong.has(exercise.id) && !judgmentByExercise.has(exercise.id)) {
@@ -1018,7 +1051,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     if (answered === total) {
       const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
       for (const el of row.querySelectorAll("[data-score-for]")) {
-        el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+        el.textContent = `${formatDecimal(scorePercent)}%`;
         el.classList.remove("is-empty");
       }
       restoredSection.dataset.allAnswered = "true";
@@ -1211,8 +1244,25 @@ async function renderWeakPractice(today) {
 // Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
 // that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
 let todayRenderSeq = 0;
+// EXPERIMENTAL return-to-source record: the app tells the server only that the original was opened (remote mode; best effort).
+if (REMOTE_MODE) setSourceOpeningRecorder((opening) => apiRequest("/v1/source-openings", { method: "POST", body: opening }));
+
+// EXPERIMENTAL panel on Hoje (see experimental-obligations-ui.js): only when the student turned the switch on in Configurações.
+function refreshExperimentPanel() {
+  const host = document.querySelector("#experiment-host");
+  if (!host) return;
+  if (isExperimentOn()) void renderObligationsPanel(host);
+  else host.replaceChildren();
+}
+const experimentSwitch = document.querySelector("#experiment-switch");
+if (experimentSwitch) {
+  experimentSwitch.checked = isExperimentOn();
+  experimentSwitch.addEventListener("change", () => { setExperiment(experimentSwitch.checked); refreshExperimentPanel(); });
+}
+
 export async function renderToday() {
   const renderId = ++todayRenderSeq;
+  refreshExperimentPanel();
   const existingOfflineBanner = document.querySelector("#offline-banner");
   // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
   // nothing about a loopback backend's reachability — Desktop must not
@@ -1574,6 +1624,19 @@ async function loadReinforcementByUnit() {
 // Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
 let pendingPlanFocusUnitId = null;
 
+/**
+ * Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. It goes only where the lesson
+ * still exists; otherwise it opens nothing and answers false, so the caller says so instead of leaving a dead button.
+ */
+async function openLessonInPlan(unitId) {
+  const units = await DB.learningUnits.getAll().catch(() => []);
+  const lesson = findLesson(units, unitId);
+  if (!lesson) return false;
+  pendingPlanFocusUnitId = lesson.id;
+  showScreen("plan", { focus: true });
+  return true;
+}
+
 // Plano can be refreshed from several independent actions (navigation, exam finalization,
 // study completion, subject edits). Only the newest async render may publish DOM.
 let planRenderSeq = 0;
@@ -1772,9 +1835,7 @@ export async function renderPlan() {
         const summaryDisplayWrap = document.createElement("div");
         summaryDisplayWrap.className = "plan-summary-display-wrap";
 
-        const summaryText = document.createElement("p");
-        summaryText.className = "plan-summary-body";
-        summaryText.textContent = currentSummary;
+        const summaryText = renderSummary(createTextElement("div", "plan-summary-body", ""), currentSummary);
         summaryText.hidden = !currentSummary;
 
         const summaryPlaceholder = document.createElement("p");
@@ -1814,6 +1875,7 @@ export async function renderPlan() {
 
         editSummaryBtn.addEventListener("click", () => {
           summaryTextarea.value = currentSummary;
+          planAuthoring.reloadVisual?.();
           summaryDisplayWrap.hidden = true;
           editSummaryBtn.hidden = true;
           summaryEditArea.hidden = false;
@@ -1825,12 +1887,13 @@ export async function renderPlan() {
           summaryEditArea.hidden = true;
         });
         saveSummaryBtn.addEventListener("click", async () => {
+          planAuthoring.flushVisual?.();
           const newBody = summaryTextarea.value.trim() || null;
           summaryMsg.textContent = t("shell.saving");
           try {
             await DB.learningUnits.update(unit.id, { summaryBody: newBody });
             currentSummary = newBody ?? "";
-            summaryText.textContent = currentSummary;
+            renderSummary(summaryText, currentSummary);
             summaryText.hidden = !currentSummary;
             summaryPlaceholder.hidden = !!currentSummary;
             editSummaryBtn.textContent = currentSummary ? t("plan.detail.summary.edit") : t("plan.detail.summary.add");
@@ -1845,6 +1908,11 @@ export async function renderPlan() {
         });
 
         summaryDisplayWrap.append(summaryText, summaryPlaceholder);
+        const planAuthoring = createSummaryAuthoring(summaryTextarea, { visual: true });
+        summaryEditArea.prepend(planAuthoring.modeSwitch);
+        summaryEditArea.prepend(planAuthoring.bar);
+        summaryTextarea.after(planAuthoring.preview);
+        summaryTextarea.after(planAuthoring.visualHost);
         summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
         detail.append(summarySection);
 
@@ -2121,7 +2189,7 @@ export async function renderStatsBySubject() {
     identityCell.append(chip);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2359,26 +2427,6 @@ export async function renderTracking() {
   }
 }
 
-function buildColorPicker(container, selectedKey, onSelect) {
-  if (!container) return;
-  container.replaceChildren();
-  for (const key of SUBJECT_COLOR_KEYS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "color-swatch";
-    btn.dataset.colorKey = key;
-    btn.style.setProperty("--swatch-color", `var(${colorVarForKey(key)})`);
-    btn.setAttribute("aria-label", key.replace("DISC-", "").toLowerCase());
-    if (key === selectedKey) btn.classList.add("is-selected");
-    btn.addEventListener("click", () => {
-      for (const b of container.querySelectorAll(".color-swatch")) b.classList.remove("is-selected");
-      btn.classList.add("is-selected");
-      onSelect(key);
-    });
-    container.append(btn);
-  }
-}
-
 export async function renderDisciplinas() {
   if (!subjectsCatalog) return;
   const [subjects, allUnits, allEvidence] = await Promise.all([
@@ -2582,7 +2630,7 @@ let selectedUnitSubjectId = null;
 
 function formatContentContextMeta(row) {
   if (!row || row.totalQuestions <= 0) return t("statsView.context.noEvidence");
-  const pct = row.weightedAccuracy.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  const pct = formatDecimal(row.weightedAccuracy, 1, { trim: true });
   return t("statsView.context.meta", { percent: pct, questions: row.totalQuestions });
 }
 
@@ -2695,7 +2743,7 @@ export async function renderStatsByUnit() {
     identityCell.append(chip, title);
 
     const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%` : t("statsView.noEvidence");
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
     const perfBar = createComparisonBar(
       hasEvidence ? r.weightedAccuracy : 100,
       performanceColor(r.weightedAccuracy, r.totalQuestions),
@@ -2759,7 +2807,7 @@ function showUnitDetail(r) {
   const score = document.createElement("div");
   score.className = "unit-detail-score";
   score.textContent = r.weightedAccuracy != null
-    ? t("statsView.unit.score", { percent: r.weightedAccuracy.toFixed(1).replace(".", ","), questions: r.totalQuestions })
+    ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
     : t("statsView.unit.noEvidence");
 
   const trend = createTrendBadge(r.trend.direction);
@@ -2777,6 +2825,21 @@ function showUnitDetail(r) {
   if (sparkEl) {
     sparkEl.classList.add("unit-detail-spark");
     unitDetailBody.append(sparkEl);
+  }
+
+  // The weak spot is the lesson the row is about (the row comes from that lesson): one click opens it in Plano, with its Resumo and "Estudar agora"
+  if (r.unitId != null) {
+    const study = document.createElement("button");
+    study.type = "button";
+    study.className = "secondary-button unit-detail-study";
+    study.dataset.action = "study-unit";
+    study.textContent = t("statsView.unit.study");
+    const gone = createTextElement("p", "form-message is-error", "");
+    gone.setAttribute("role", "status");
+    study.addEventListener("click", async () => {
+      gone.textContent = (await openLessonInPlan(r.unitId)) ? "" : t("plan.openLesson.missing");
+    });
+    unitDetailBody.append(study, gone);
   }
 }
 
@@ -3146,6 +3209,7 @@ configureMaterialsUI({
   listActiveSubjects: () => DB.subjects.getActive(),
   getLocalDateValue,
   startStudyNow,
+  openSummary: openLessonInPlan,
   refreshAfterAccept: () => Promise.all([renderSubjects(), renderStudies(), renderToday()]),
 });
 
@@ -3192,13 +3256,17 @@ const STUDY_PROVENANCE_KEY = {
   AI_GENERATED: "appStudyNow.origin.ai",
 };
 
+// The summary contains the very answers being retrieved: while questions are on the screen it stays out of sight, and returns with the result.
+// (Set to false to show it above the questions again, as before.)
+const STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING = true;
+
 async function startStudyNow(unit, subjectName) {
   if (!unit) return;
   studyNowSubjectEl.textContent = subjectName ?? "";
   studyNowTitleEl.textContent = unit.title ?? "";
   if (unit.summaryBody) {
-    studyNowSummaryCard.hidden = false;
-    studyNowSummaryBody.textContent = unit.summaryBody;
+    studyNowSummaryCard.hidden = STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING;
+    renderSummary(studyNowSummaryBody, unit.summaryBody);
     studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
     appendSummarySources(studyNowSummaryCard, unit.id);
   } else {
@@ -3224,6 +3292,8 @@ async function startStudyNow(unit, subjectName) {
     studyNowNoExercises.hidden = false;
     return;
   }
+  // a lesson with no questions has nothing to hide the summary from: reading is all this screen can do for it
+  if (studyNowState.exercises.length === 0 && unit.summaryBody) studyNowSummaryCard.hidden = false;
   const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
   if (snapshot) {
     // Interrupted earlier: offer to continue instead of silently repeating what was already answered.
@@ -3347,6 +3417,8 @@ function renderStudyNowQuestion() {
   studyNowAnswerText.hidden = true;
   studyNowExplanationText.textContent = exercise.explanationText ? t("appStudyNow.why", { text: exercise.explanationText }) : "";
   studyNowExplanationText.hidden = true;
+  studyNowSourceBox.replaceChildren(...citationDetails(exercise.citations));
+  studyNowSourceBox.hidden = true;
   if (exercise.hintText) {
     // Honest reuse, not invention: shown unconditionally exactly like the
     // Hoje review UI already does (a hint the learner can already see is
@@ -3399,7 +3471,7 @@ async function finishStudyNowSession() {
     studyNowResultNote.hidden = false;
     studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
   } else {
-    const pct = answeredCount > 0 ? ((correctCount / answeredCount) * 100).toFixed(1).replace(".", ",") : "0,0";
+    const pct = answeredCount > 0 ? formatDecimal((correctCount / answeredCount) * 100) : formatDecimal(0);
     studyNowResultTitle.textContent = t("appStudyNow.result");
     studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
   }
@@ -3480,15 +3552,7 @@ function createStudyErrorItem(exercise) {
   // The only explanation the product really holds: the exact source page the
   // question was drafted from (frozen at acceptance). Shown as evidence, not
   // paraphrased -- and absent (nothing invented) for manual exercises.
-  for (const citation of exercise.citations ?? []) {
-    if (!citation.pageText) continue;
-    const details = document.createElement("details");
-    details.className = "study-now-source";
-    const summary = document.createElement("summary");
-    summary.textContent = t("appStudyNow.citation", { source: citation.sourceName, page: citation.pageIndex });
-    details.append(summary, createTextElement("p", "study-now-source-text", citation.pageText));
-    li.append(details);
-  }
+  li.append(...citationDetails(exercise.citations));
   return li;
 }
 
@@ -3746,7 +3810,7 @@ function renderExamSubmitted({ focusHeading = true } = {}) {
   examEls.submittedText.textContent = t(judged < exam.items.length ? "appExam.submitted.pending" : "appExam.submitted.complete", { answered, total: exam.items.length, judged });
 
   if (exam.score) {
-    const pct = exam.score.percent.toFixed(1).replace(".", ",");
+    const pct = formatDecimal(exam.score.percent);
     examEls.resultScore.textContent = t("appExam.score", { correct: exam.score.correct, total: exam.score.total, percent: pct });
     examEls.resultScore.hidden = false;
     examEls.counts.textContent = t("appExam.counts", { correct: exam.score.correct, wrong: exam.score.total - exam.score.correct });
@@ -3898,6 +3962,7 @@ studyNowRevealBtn?.addEventListener("click", async () => {
 
   studyNowAnswerText.hidden = false;
   studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
+  studyNowSourceBox.hidden = studyNowSourceBox.children.length === 0;
   studyNowJudgment.hidden = false;
   studyNowRevealBtn.hidden = true;
   // The focused button just disappeared: keep keyboard users in the flow.
@@ -4056,16 +4121,6 @@ function setSubjectManagerMessage(message = "") {
   subjectManagerMessage.textContent = message;
 }
 
-function setSubjectFormVisible(visible) {
-  newSubjectForm.hidden = !visible;
-  showSubjectFormButton.setAttribute("aria-expanded", String(visible));
-  setSubjectMessage();
-
-  if (visible) {
-    newSubjectInput.focus();
-  }
-}
-
 function setStudyManagerMessage(message = "") {
   studyManagerMessage.textContent = message;
 }
@@ -4077,8 +4132,9 @@ function resetRegisterState() {
   studyForm.reset();
   studyDateInput.value = getLocalDateValue();
   if (studySourceTextInput) studySourceTextInput.value = "";
-  newSubjectForm.reset();
-  setSubjectFormVisible(false);
+  registerSubjectForm.reset();
+  registerSubjectForm.hide();
+  setSubjectMessage();
   setSubjectManagerMessage();
   setStudyManagerMessage();
   studyMessage.classList.remove("is-error");
@@ -4725,48 +4781,28 @@ window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));
 });
 
-showSubjectFormButton.addEventListener("click", () => {
-  setSubjectFormVisible(newSubjectForm.hidden);
-});
-
 let pendingSubjectCreate = null;
 
-newSubjectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = newSubjectInput.value.trim();
-  const nameValidationError = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameValidationError) {
-    setSubjectMessage(nameValidationError);
-    newSubjectInput.focus();
-    return;
-  }
-
+// Cadastro's door to the one registration of a discipline. The save of a study waits for `pendingSubjectCreate` (see saving a study).
+async function createSubjectFromRegister(name, color) {
   // AC-05: preserve draft values before re-render
   const draftDate = studyDateInput.value;
   const draftContent = studyContentInput.value;
   const draftSummary = studySummaryTextarea.value;
   const draftSource = studySourceTextInput ? studySourceTextInput.value : "";
 
-  try {
-    pendingSubjectCreate = (async () => {
-      const subject = await DB.subjects.create(name);
-      await renderSubjects(subject.id);
-    })();
-    await pendingSubjectCreate;
-    newSubjectForm.reset();
-    setSubjectFormVisible(false);
+  pendingSubjectCreate = (async () => {
+    const subject = await DB.subjects.create(name, color);
+    await renderSubjects(subject.id);
+  })();
+  await pendingSubjectCreate;
 
-    // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
-    if (!studyDateInput.value) studyDateInput.value = draftDate;
-    if (!studyContentInput.value) studyContentInput.value = draftContent;
-    if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
-    if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
-  } catch (error) {
-    const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectMessage(t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.addFailed"));
-    newSubjectInput.focus();
-  }
-});
+  // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
+  if (!studyDateInput.value) studyDateInput.value = draftDate;
+  if (!studyContentInput.value) studyContentInput.value = draftContent;
+  if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
+  if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
+}
 
 subjectList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
@@ -5055,7 +5091,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (aInput) aInput.value = "";
     if (msgEl) {
       msgEl.classList.remove("is-error");
-      const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
+      const pct = formatDecimal((correctCount / questionsCount) * 100);
       msgEl.textContent = t("appReview.external.recorded", { questions: questionsCount, correct: correctCount, percent: pct });
     }
   } catch (error) {
@@ -5206,7 +5242,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   if (answered === total && row) {
     const scorePercent = total > 0 ? (correct / total) * 100 : 0;
     for (const el of row.querySelectorAll("[data-score-for]")) {
-      el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+      el.textContent = `${formatDecimal(scorePercent)}%`;
       el.classList.remove("is-empty");
     }
     section.dataset.allAnswered = "true";
@@ -5277,7 +5313,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? "";
+      renderSummary(displayEl, updated.summaryBody ?? "");
       displayEl.hidden = !updated.summaryBody;
       if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
@@ -5450,9 +5486,7 @@ dailySummaryBtn?.addEventListener("click", async () => {
     const title = document.createElement("p");
     title.className = "daily-summary-title";
     title.textContent = record.title;
-    const body = document.createElement("p");
-    body.className = "daily-summary-body";
-    body.textContent = record.summaryBody ?? record.title;
+    const body = renderSummary(createTextElement("div", "daily-summary-body", ""), record.summaryBody ?? record.title);
     item.append(title, body);
     dailySummaryList.append(item);
   }
@@ -5501,7 +5535,7 @@ function getScoreState(card) {
 
 function updateScoreDisplay(card) {
   const { values } = getScoreState(card);
-  const text = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  const text = values.scorePercent == null ? "—" : `${formatDecimal(values.scorePercent)}%`;
   for (const element of card.querySelectorAll("[data-score-for]")) {
     element.textContent = text;
     element.classList.toggle("is-empty", values.scorePercent == null);
@@ -5766,33 +5800,6 @@ statsUnitFilterPeriod?.addEventListener("change", () => {
   renderStatsByUnit().catch(console.error);
 });
 
-let newSubjectColor = "DISC-BLUE";
-
-subjectsShowCreateBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = false;
-  subjectsNewName.value = "";
-  subjectsCreateMessage.textContent = "";
-  newSubjectColor = "DISC-BLUE";
-  buildColorPicker(subjectsNewColorPicker, newSubjectColor, (k) => { newSubjectColor = k; });
-  subjectsNewName.focus();
-});
-subjectsCreateCancelBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = true;
-  subjectsCreateMessage.textContent = "";
-});
-subjectsCreateSaveBtn?.addEventListener("click", async () => {
-  const name = subjectsNewName?.value.trim() ?? "";
-  const nameErr = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameErr) { subjectsCreateMessage.textContent = nameErr; subjectsNewName?.focus(); return; }
-  try {
-    await DB.subjects.create(name, newSubjectColor);
-    subjectsCreateForm.hidden = true;
-    subjectsCreateMessage.textContent = "";
-    await renderDisciplinas();
-  } catch (error) {
-    subjectsCreateMessage.textContent = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "appRegister.subject.createFailed");
-  }
-});
 function setPlanFormVisible(visible) {
   if (!planNewUnitForm) return;
   planNewUnitForm.hidden = !visible;
@@ -5801,13 +5808,6 @@ function setPlanFormVisible(visible) {
     if (!planStudyDate.value) planStudyDate.value = getLocalDateValue();
     planStudyTitle.focus();
   }
-}
-
-function setPlanSubjectSubformVisible(visible) {
-  if (!planNewSubjectForm) return;
-  planNewSubjectForm.hidden = !visible;
-  planShowSubjectForm.setAttribute("aria-expanded", String(visible));
-  if (visible) planNewSubjectInput.focus();
 }
 
 function setPlanFormMessage(msg = "", isError = false) {
@@ -5849,34 +5849,19 @@ firstCreateBtn?.addEventListener("click", () => {
 
 planUnitCancelBtn?.addEventListener("click", () => {
   setPlanFormVisible(false);
-  setPlanSubjectSubformVisible(false);
+  planSubjectForm?.hide();
+  planSubjectForm?.reset();
   setPlanFormMessage();
-  if (planNewSubjectInput) planNewSubjectInput.value = "";
   planSaveOperation.renew();
 });
 
-planShowSubjectForm?.addEventListener("click", () => {
-  setPlanSubjectSubformVisible(planNewSubjectForm.hidden);
-});
-
-planNewSubjectForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = planNewSubjectInput.value.trim();
-  const nameError = validateNamingField(name, t("shell.field.subjectName"));
-  if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput.focus(); return; }
-  try {
-    const newSubject = await DB.subjects.create(name, "DISC-BLUE");
-    await renderPlan();
-    if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
-    setPlanSubjectSubformVisible(false);
-    planNewSubjectInput.value = "";
-    planStudyTitle.focus();
-  } catch (error) {
-    const msg = t(String(error?.message ?? '').toLowerCase().includes('unique') ? "appRegister.subject.nameTaken" : "plan.subject.createFailed");
-    setPlanFormMessage(msg, true);
-    console.error("Falha ao criar disciplina no plano.", error);
-  }
-});
+// Plano's door to the one registration of a discipline: the new discipline is created now, listed and picked for the lesson being typed
+async function createSubjectFromPlan(name, color) {
+  const newSubject = await DB.subjects.create(name, color);
+  await renderPlan();
+  if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
+  planStudyTitle.focus();
+}
 
 planUnitSaveBtn?.addEventListener("click", async () => {
   setPlanFormMessage();
@@ -5891,13 +5876,11 @@ planUnitSaveBtn?.addEventListener("click", async () => {
 
   // Resolve discipline: capture new name to include in atomic save, or use selected existing ID
   let newSubjectName = null;
-  if (planNewSubjectForm && !planNewSubjectForm.hidden) {
-    const pendingName = planNewSubjectInput?.value.trim();
-    if (pendingName) {
-      const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
-      if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
-      newSubjectName = pendingName;
-    }
+  const pendingName = planSubjectForm?.pendingName();
+  if (pendingName) {
+    const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
+    if (nameError) { setPlanFormMessage(nameError, true); planSubjectForm.input.focus(); return; }
+    newSubjectName = pendingName;
   }
 
   const sourceText = planStudySource?.value.trim() ?? "";
@@ -5912,7 +5895,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      ? { newSubjectName, newSubjectColor: planSubjectForm.color, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
       : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
     // Save succeeded (or an idempotent retry returned the original result)
@@ -5922,8 +5905,8 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
-    if (planNewSubjectInput) planNewSubjectInput.value = "";
-    setPlanSubjectSubformVisible(false);
+    planSubjectForm?.reset();
+    planSubjectForm?.hide();
     setPlanFormMessage(t("plan.unit.saved"));
     try {
       await renderPlan();

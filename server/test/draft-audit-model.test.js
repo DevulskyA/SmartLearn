@@ -11,7 +11,8 @@ import { extractSource } from '../src/services/source-extraction.js';
 import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
-import { parseModelAudit } from '../src/ai/draft-audit-model.js';
+import { parseModelAudit, buildAuditPrompt, buildRepairPrompt } from '../src/ai/draft-audit-model.js';
+import { acceptDraft } from '../src/services/accept-draft.js';
 
 // CONTENT-QUALITY CQ-2/CQ-3: the production-time gate around a LIVE provider, driven by a scripted
 // fetch (no network, no key). 1 generation -> deterministic screen + 1 independent model audit ->
@@ -142,6 +143,41 @@ test('an invented value is caught, ONE targeted repair fixes it, and the repaire
   } finally { cleanup(); }
 });
 
+test('the repair keeps the ORIGINAL text and says which parts it rewrote; a human edit afterwards keeps them too', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'keep@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const bad = good({ summary: GOOD_SUMMARY.replace('cerca de 125 mL/min', 'cerca de 300 mL/min') });
+    const { fetchImpl } = scriptedFetch([bad, { result: 'PASS', findings: [] }, good()]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(draft.audit.repaired, true);
+    assert.ok(draft.audit.original.summary.includes('300 mL/min'), 'the text the model wrote before the repair is kept');
+    assert.ok(!draft.summary.includes('300'), 'while the draft itself carries the repaired text');
+    assert.deepEqual(draft.audit.repairChanges, ['summary'], 'only the summary was rewritten, not the question');
+    const edited = drafts.replaceDraftContent(db, userId, draft.id, { summary: `${draft.summary} Fim.`, questions: draft.questions.map((q) => ({ question: q.question, answer: q.answer, explanation: q.explanation, hint: q.hint, sourceSpans: q.sourceSpans })) });
+    assert.ok(edited.audit.original.summary.includes('300 mL/min'));
+    assert.deepEqual(edited.audit.repairChanges, ['summary']);
+  } finally { cleanup(); }
+});
+
+test('a draft whose only findings are word-level signals is NOT sent to repair: 2 calls, text untouched, no original stored', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'lex@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const paraphrase = good({ summary: `${GOOD_SUMMARY} A furosemida nao esta na fonte.` });
+    const { fetchImpl, calls } = scriptedFetch([paraphrase, { result: 'PASS', findings: [] }]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(calls.length, 2, 'generation + audit, no repair call');
+    assert.ok(draft.audit.findings.some((f) => f.issue === 'SUMMARY_UNSUPPORTED_TERM'), 'the signal is still shown to the reviewer');
+    assert.equal(draft.audit.result, 'PASS');
+    assert.equal(draft.audit.repaired, false);
+    assert.equal(draft.audit.original, undefined);
+    assert.ok(draft.summary.includes('furosemida'), 'the model text is not overwritten');
+  } finally { cleanup(); }
+});
+
 test('a semantic contradiction the deterministic screen cannot see is caught by the model audit and repaired', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
@@ -149,7 +185,7 @@ test('a semantic contradiction the deterministic screen cannot see is caught by 
     const proposal = await makeProposal(db, userId, sourcesDir);
     const wrongQ = { question: 'O que a angiotensina II faz na arteriola eferente?', answer: 'Dilata a arteriola eferente, reduzindo a taxa de filtracao glomerular, segundo a pagina.', hint: null, sourceSpans: [{ pageIndex: 2 }] };
     const rightQ = { ...wrongQ, answer: 'Contrai a arteriola eferente, o que mantem a pressao hidrostatica glomerular e sustenta a taxa de filtracao glomerular.' };
-    const modelFinding = { issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'question:1', generatedClaim: 'Dilata a arteriola eferente', sourceEvidence: 'A angiotensina II contrai preferencialmente a arteriola eferente.', repair: 'A angiotensina II contrai a arteriola eferente.' };
+    const modelFinding = { issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'question:1', verdict: 'CONTRADICTED', evidencePage: 2, evidenceQuote: 'A angiotensina II contrai preferencialmente a arteriola eferente', generatedClaim: 'Dilata a arteriola eferente', sourceEvidence: 'A angiotensina II contrai preferencialmente a arteriola eferente.', repair: 'A angiotensina II contrai a arteriola eferente.' };
     const { fetchImpl } = scriptedFetch([
       good({ questions: [GOOD_Q, wrongQ] }),
       { result: 'REPAIR', findings: [modelFinding] },
@@ -278,9 +314,145 @@ test('parseModelAudit: drops unknown scopes and out-of-range questions, clamps s
       'garbage',
     ],
   };
-  const { findings, malformed } = parseModelAudit(raw, { questionCount: 2 });
+  const { findings, malformed } = parseModelAudit(raw, { questionCount: 2, segments: PAGES.map((text, i) => ({ pageIndex: i + 1, text })) });
   assert.equal(malformed, false);
   assert.deepEqual(findings.map((f) => [f.issue, f.severity, f.source]), [['OK_ONE', 'HIGH', 'MODEL'], ['BAD_SEVERITY', 'MEDIUM', 'MODEL']]);
   assert.equal(parseModelAudit({ result: 'PASS' }, { questionCount: 1 }).malformed, true);
   assert.equal(parseModelAudit(null, { questionCount: 1 }).malformed, true);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R-3 step 3: a verdict per claim, with evidence that can be located; only a located contradiction may trigger the repair
+// ---------------------------------------------------------------------------------------------------------------------
+
+const SEGMENTS = PAGES.map((text, i) => ({ pageIndex: i + 1, text }));
+const QUOTE_P2 = 'A angiotensina II contrai preferencialmente a arteriola eferente';
+const finding = (o = {}) => ({ issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'summary', verdict: 'CONTRADICTED', generatedClaim: 'c', evidencePage: 2, evidenceQuote: QUOTE_P2, sourceEvidence: 'prose of the model', repair: 'r', ...o });
+const parse = (findings, segments = SEGMENTS) => parseModelAudit({ result: 'REPAIR', findings }, { questionCount: 1, segments });
+
+test('parseModelAudit: a CONTRADICTED finding is kept only with a quote found on a page that was sent, and shows that quote as its evidence', () => {
+  const { findings, discarded } = parse([finding()]);
+  assert.equal(discarded, 0);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, 'CONTRADICTED');
+  assert.equal(findings[0].evidencePage, 2);
+  assert.equal(findings[0].sourceEvidence, `p. 2: ${QUOTE_P2}`, "the evidence shown is the located quote, not the model's own prose");
+  assert.equal(findings[0].blocksRepair, undefined, 'a located contradiction may trigger the repair');
+  // case, accents and punctuation are not part of a quotation
+  assert.equal(parse([finding({ evidenceQuote: 'a ANGIOTENSINA ii, contrai preferencialmente a arteríola eferente.' })]).findings.length, 1);
+});
+
+test('parseModelAudit: a CONTRADICTED finding with a quote that is nowhere in the pages (invented, too short, or no pages sent) is discarded and counted', () => {
+  const out = parse([
+    finding({ evidenceQuote: 'A angiotensina II dilata a arteriola eferente' }),
+    finding({ evidenceQuote: 'angiotensina' }),
+    finding({ evidenceQuote: '' }),
+  ]);
+  assert.deepEqual(out.findings, []);
+  assert.equal(out.discarded, 3);
+  assert.deepEqual(parse([finding()], []).findings, [], 'with no pages to check against nothing can be proven, so nothing survives');
+});
+
+test('parseModelAudit: a quote that is on another page than the one the model named is accepted with the REAL page', () => {
+  const { findings } = parse([finding({ evidencePage: 1 })]);
+  assert.equal(findings[0].evidencePage, 2);
+  assert.match(findings[0].sourceEvidence, /^p\. 2: /);
+});
+
+test('parseModelAudit: NOT_FOUND, NOT_EVALUABLE and a reply with no verdict stay visible with their severity but can never trigger the repair; SUPPORTED is not a problem', () => {
+  const { findings } = parse([
+    finding({ verdict: 'NOT_FOUND', evidencePage: null, evidenceQuote: '' }),
+    finding({ verdict: 'NOT_EVALUABLE', severity: 'MEDIUM', evidencePage: null, evidenceQuote: '' }),
+    finding({ verdict: undefined }),
+    finding({ verdict: 'SUPPORTED' }),
+  ]);
+  assert.deepEqual(findings.map((f) => [f.verdict, f.severity, f.blocksRepair]), [['NOT_FOUND', 'HIGH', false], ['NOT_EVALUABLE', 'MEDIUM', false], ['NOT_EVALUABLE', 'HIGH', false]]);
+});
+
+test('prompts: the auditor judges meaning and asks for verbatim evidence; the repair no longer bans every term the source does not repeat', () => {
+  const audit = buildAuditPrompt({ summary: 's', questions: [] }, SEGMENTS);
+  assert.match(audit, /Judge MEANING, never wording/);
+  assert.match(audit, /paraphrase, a synonym or a faithful translation is NOT a problem/);
+  assert.match(audit, /VERBATIM excerpt/);
+  assert.match(audit, /CONTRADICTED[\s\S]*NOT_FOUND[\s\S]*NOT_EVALUABLE/);
+  const repair = buildRepairPrompt({ summary: 's', summarySourceSpans: [], questions: [], modelVersion: 'm', promptVersion: '10' }, [], SEGMENTS, '10');
+  assert.doesNotMatch(repair, /value or term the source does not contain/);
+  assert.match(repair, /never introduce a fact, mechanism, causal relation, value or condition/);
+  assert.match(repair, /Paraphrases, synonyms and faithful translations are allowed/);
+});
+
+test('end to end: a HIGH claim the model could only call NOT_FOUND is shown to the reviewer but costs no repair and rewrites nothing', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'nf@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const notFound = finding({ issue: 'CLAIM_NOT_IN_SOURCE', verdict: 'NOT_FOUND', evidencePage: null, evidenceQuote: '' });
+    const { fetchImpl, calls } = scriptedFetch([good(), { result: 'REPAIR', findings: [notFound] }]);
+    const draft = await create(db, userId, proposal.id, fetchImpl);
+    assert.equal(calls.length, 2, 'generation + audit, no repair call');
+    assert.equal(draft.audit.repaired, false);
+    assert.equal(draft.summary, GOOD_SUMMARY, 'the model text is untouched');
+    const shown = draft.audit.findings.find((f) => f.issue === 'CLAIM_NOT_IN_SOURCE');
+    assert.equal(shown.severity, 'HIGH', 'the human gate on HIGH findings still applies');
+    assert.equal(draft.audit.result, 'PASS');
+  } finally { cleanup(); }
+});
+
+test('end to end: a contradiction whose quote is invented is discarded (no repair, no finding); one whose quote is real triggers exactly one repair', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'inv@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const invented = finding({ issue: 'INVENTED_QUOTE', evidenceQuote: 'A angiotensina II dilata a arteriola eferente' });
+    const first = scriptedFetch([good(), { result: 'REPAIR', findings: [invented] }]);
+    const a = await create(db, userId, proposal.id, first.fetchImpl);
+    assert.equal(first.calls.length, 2);
+    assert.ok(!a.audit.findings.some((f) => f.issue === 'INVENTED_QUOTE'));
+    const secondUser = makeUser(db, 'real@example.com');
+    const secondProposal = await makeProposal(db, secondUser, sourcesDir);
+    const second = scriptedFetch([good(), { result: 'REPAIR', findings: [finding({ issue: 'REAL_QUOTE' })] }, good()]);
+    const b = await create(db, secondUser, secondProposal.id, second.fetchImpl);
+    assert.equal(second.calls.length, 3);
+    assert.match(second.calls[2], /REAL_QUOTE/);
+    assert.equal(b.audit.repaired, true);
+  } finally { cleanup(); }
+});
+
+test('guard: EVERY human edit route and the reaudit keep audit.original and audit.repairChanges of an automatic repair', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'routes@example.com');
+    const proposal = await makeProposal(db, userId, sourcesDir);
+    const bad = good({ summary: GOOD_SUMMARY.replace('cerca de 125 mL/min', 'cerca de 300 mL/min') });
+    const { fetchImpl } = scriptedFetch([bad, { result: 'PASS', findings: [] }, good()]);
+    let draft = await create(db, userId, proposal.id, fetchImpl);
+    const kept = { original: draft.audit.original, repairChanges: draft.audit.repairChanges };
+    assert.ok(kept.original.summary.includes('300 mL/min'), 'the repair stored what it replaced');
+    const fields = (q) => ({ question: q.question, answer: q.answer, explanation: q.explanation, hint: q.hint, sourceSpans: q.sourceSpans });
+    const routes = [
+      ['reviseSummary', () => drafts.reviseSummary(db, userId, draft.id, { summary: `${draft.summary} Fim.` })],
+      ['reviseQuestion', () => drafts.reviseQuestion(db, userId, draft.id, draft.questions[0].id, { hint: 'Pense no balanco das pressoes.' })],
+      ['acceptQuestion', () => drafts.reviseQuestion(db, userId, draft.id, draft.questions[0].id, { status: 'ACCEPTED' })],
+      ['addQuestion', () => drafts.addQuestion(db, userId, draft.id, { question: 'Qual pressao se opoe a filtracao?', answer: 'A pressao oncotica e a da capsula de Bowman.', explanation: null, hint: null, sourceSpans: [{ pageIndex: 1 }] })],
+      ['reorderQuestions', () => drafts.reorderQuestions(db, userId, draft.id, draft.questions.map((q) => q.id).reverse())],
+      ['deleteQuestion', () => drafts.deleteQuestion(db, userId, draft.id, draft.questions[0].id)],
+      ['replaceDraftContent', () => drafts.replaceDraftContent(db, userId, draft.id, { summary: `${draft.summary} Mais.`, questions: draft.questions.map(fields) })],
+      ['reauditDraft', () => drafts.reauditDraft(db, userId, draft.id).draft],
+    ];
+    for (const [name, run] of routes) {
+      draft = run();
+      assert.deepEqual(draft.audit.original, kept.original, `${name} kept audit.original`);
+      assert.deepEqual(draft.audit.repairChanges, kept.repairChanges, `${name} kept audit.repairChanges`);
+      const reread = drafts.getDraft(db, userId, draft.id);
+      assert.deepEqual(reread.audit.original, kept.original, `${name}: still there when the draft is read back from the database`);
+    }
+    // accepting the lesson changes its status, never the history kept with the draft
+    acceptDraft(db, userId, draft.id, { newSubjectName: "Farmacologia", studyDate: "2026-03-01", expectedRevision: draft.revision });
+    const accepted = drafts.getDraft(db, userId, draft.id);
+    assert.equal(accepted.status, "ACCEPTED");
+    assert.deepEqual(accepted.audit.original, kept.original, "accepting kept audit.original");
+    assert.deepEqual(accepted.audit.repairChanges, kept.repairChanges, "accepting kept audit.repairChanges");
+    const stored = JSON.parse(db.prepare("SELECT draft_json FROM generated_drafts WHERE id = ?").get(draft.id).draft_json);
+    assert.deepEqual(stored.audit.original, kept.original, "the stored row still has it");
+  } finally { cleanup(); }
 });
