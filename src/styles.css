@@ -4373,6 +4373,19 @@ h1 {
   }
 }
 
+/* an 800 px window: the four tabs stay on one row */
+@media (max-width: 900px) and (min-width: 561px) {
+  .lesson-tab {
+    padding-inline: 0.75rem;
+  }
+}
+
+.lesson-summary-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 0.5rem;
+}
+
 .lesson-tab {
   appearance: none;
   background: transparent;

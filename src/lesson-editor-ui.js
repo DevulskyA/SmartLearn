@@ -159,7 +159,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryToggle = button("secondary-button", t("editor.summary.read"), "toggle-summary-read");
   summaryToggle.setAttribute("aria-pressed", "false");
   const summaryIndicator = createSaveIndicator();
-  summaryActions.append(summarySave, document.createTextNode(" "), summaryToggle, document.createTextNode(" "), summaryDirty, document.createTextNode(" "), summaryIndicator.element);
+  summaryActions.append(summarySave, document.createTextNode(" "), summaryDirty, document.createTextNode(" "), summaryIndicator.element);
   const summaryMessage = statusMessage();
   // Reading view: the same text laid out as headings and paragraphs (a "## " line is a section title). Display only.
   const summaryRead = document.createElement("div");
@@ -170,7 +170,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   summaryField.wrap.insertBefore(summaryAuthoring.bar, summaryField.input);
   summaryField.input.after(summaryAuthoring.visualHost);
   summaryField.wrap.append(summaryAuthoring.preview);
-  summaryPanel.append(summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
+  // the way into editing (and back to the lesson) sits above the text, where the student is looking, not below a long page
+  const summaryTop = document.createElement("div");
+  summaryTop.className = "lesson-summary-top";
+  summaryTop.append(summaryToggle);
+  summaryPanel.append(summaryTop, summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
 
   // ---- QUESTIONS panel -------------------------------------------------------------------------------------------------
   const questionsPanel = panels.get("questions");
@@ -366,6 +370,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (!summaryRead.hidden) renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary); // a repair or a recovered copy changes what is read
     const dirty = summaryBuffer !== null && summaryBuffer !== draft.summary;
     summarySave.disabled = !dirty;
+    syncSummaryChrome();
     summaryDirty.textContent = dirty ? t("editor.dirty") : "";
   }
 
@@ -786,6 +791,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     summaryField.wrap.hidden = reading;
     summaryToggle.textContent = reading ? t("editor.summary.edit") : t("editor.summary.read");
     summaryToggle.setAttribute("aria-pressed", String(reading));
+    syncSummaryChrome();
+  }
+  // while the lesson is being read, the writing hint and "Salvar resumo" stay out of the way (unsaved text keeps its button)
+  function syncSummaryChrome() {
+    const quiet = !summaryRead.hidden && summaryBuffer === null;
+    summaryHint.hidden = quiet;
+    summarySave.hidden = quiet;
   }
   summaryToggle.addEventListener("click", () => setSummaryReading(summaryRead.hidden));
 
