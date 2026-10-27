@@ -41,7 +41,7 @@ export default {
 
   // Summary
   'editor.summary.label': 'Resumo Mestre',
-  'editor.summary.hint': 'Só o texto do resumo fica aqui. Salvar o resumo não altera nenhuma questão. Use uma linha começando com ## para criar um título de seção.',
+  'editor.summary.hint': 'Editar o resumo não altera as questões. Use o modo Visual para formatar títulos, fórmulas, tabelas e imagens.',
   'editor.summary.save': 'Salvar resumo',
   'editor.summary.read': 'Ler como aula',
   'editor.summary.edit': 'Voltar a editar',
