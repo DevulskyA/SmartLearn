@@ -165,7 +165,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     const insertExercise = db.prepare('INSERT INTO exercises (user_id, unit_id, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
     const insertVersion = db.prepare(`
       INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at, question_type)
-      VALUES (?, ?, ?, ?, ?, ?, 'AI_GENERATED', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertCitation = db.prepare(`
       INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at, page_text_snapshot, parser_version_snapshot)
@@ -174,7 +174,9 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
 
     draftContent.questions.forEach((question, index) => {
       const exerciseResult = insertExercise.run(userId, unit.id, index, nowIso, nowIso);
-      const versionResult = insertVersion.run(userId, exerciseResult.lastInsertRowid, question.question, question.answer, question.explanation ?? null, question.hint ?? null, nowIso, question.questionType ?? null);
+      const versionResult = insertVersion.run(userId, exerciseResult.lastInsertRowid, question.question, question.answer, question.explanation ?? null, question.hint ?? null,
+        // a question the student wrote is theirs, never labelled as AI; AI text the student edited stays AI-derived
+        question.origin === 'HUMAN_ADDED' ? 'MANUAL' : 'AI_GENERATED', nowIso, question.questionType ?? null);
       for (const span of question.sourceSpans) {
         insertCitation.run(
           userId, versionResult.lastInsertRowid, proposal.source_id, span.pageIndex, nowIso,
