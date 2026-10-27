@@ -109,7 +109,7 @@ const TEXT = {
   QUESTION_CHANGED_SINCE_READ: () => 'A questão foi alterada desde a última leitura. Recarregue e revise a versão atual.',
   EVIDENCE_NOT_FOUND: () => 'Evidência não encontrada.',
   DATE_INVALID: () => 'Data inválida (use AAAA-MM-DD).',
-  CODEX_CONSENT_MISSING: () => 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.',
+  CODEX_CONSENT_MISSING: () => 'O provedor CODEX está configurado, mas falta o consentimento explícito de IA no servidor. Nenhum conteúdo substituto foi gerado.',
   PROVIDER_UNKNOWN: ({ provider }) => `Provedor de IA desconhecido: ${provider}.`,
   PROVIDER_MISSING_SETUP: ({ provider }) => `O provedor ${provider} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.`,
   PROPOSAL_NOT_GENERATABLE: ({ kind }) => `Este trecho (${kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.`,

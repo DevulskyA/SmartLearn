@@ -279,7 +279,7 @@ export default {
   'api.msg.QUESTION_CHANGED_SINCE_READ': 'A questão foi alterada desde a última leitura. Recarregue e revise a versão atual.',
   'api.msg.EVIDENCE_NOT_FOUND': 'Evidência não encontrada.',
   'api.msg.DATE_INVALID': 'Data inválida (use AAAA-MM-DD).',
-  'api.msg.CODEX_CONSENT_MISSING': 'O provedor CODEX está configurado, mas falta o consentimento explícito (SMARTLEARN_AI_CONSENT=true). Nenhum conteúdo substituto foi gerado.',
+  'api.msg.CODEX_CONSENT_MISSING': 'O provedor CODEX está configurado, mas falta o consentimento explícito de IA no servidor. Nenhum conteúdo substituto foi gerado.',
   'api.msg.PROVIDER_UNKNOWN': 'Provedor de IA desconhecido: {provider}.',
   'api.msg.PROVIDER_MISSING_SETUP': 'O provedor {provider} está configurado, mas faltam credencial, modelo, consentimento ou teto de orçamento. Nenhum conteúdo substituto foi gerado.',
   'api.msg.PROPOSAL_NOT_GENERATABLE': 'Este trecho ({kind}) não é conteúdo de estudo e não gera rascunho. Nada foi enviado ao modelo.',
