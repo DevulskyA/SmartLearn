@@ -58,6 +58,8 @@ const TEXT = {
   REPAIR_CROSS_LANGUAGE: () => 'O apoio de significado (tradução fiel, mecanismo, qualificadores como "geralmente", "pode", "apenas") depende da auditoria do modelo e da sua leitura da fonte.',
   REPAIR_UNIT_MISMATCH: ({ value, sourceUnit, unit }) => `A fonte traz ${value} em ${sourceUnit}, não em ${unit}. Use a unidade da fonte.`,
   REPAIR_QUALIFIER_LOST: () => 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do rascunho não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.',
+  REPAIR_NEGATION_LOST: () => 'A fonte nega esta afirmação (por exemplo "não", "sem", "ausência de") e a frase do rascunho não traz a negação. Sem ela o sentido pode ficar invertido: confira na fonte.',
+  REPAIR_NEGATION_ADDED: () => 'A frase do rascunho nega algo ("não", "sem", "ausência de") que o trecho correspondente da fonte não nega. Sem a negação na fonte o sentido pode estar invertido: confira.',
   REPAIR_QUALIFIER_ADDED: () => 'A frase do rascunho usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.',
 };
 

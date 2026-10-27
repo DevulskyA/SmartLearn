@@ -136,6 +136,7 @@ const CUES = {
 };
 // strengthening a claim is what a reader cannot spot: these are the cues a draft must not add
 const ABSOLUTES = new Set(['ONLY', 'ALWAYS', 'NEVER']);
+const NEVER_CUES = new Set(['never', 'nunca', 'jamais', 'jamas']);
 
 function cueSets(lang) {
   return {
@@ -220,6 +221,12 @@ function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
         findings.push(resolveMessages({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_ADDED') }));
         break;
       }
+    }
+    // a flipped negation reverses the claim (a contraindication that reads as an indication): HIGH both ways
+    if (s.negation.length > 0 && draftWindow.negation.size === 0) {
+      findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
+    } else if (d.negation.some((w) => !NEVER_CUES.has(w)) && sourceWindow.negation.size === 0) { // "never" is QUALIFIER_ADDED's
+      findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
     }
   }
   return findings;

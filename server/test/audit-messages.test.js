@@ -61,6 +61,11 @@ const SCENARIOS = [
   [{ summary: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão glomerular.', questions: [] }, [{ pageIndex: 1, text: 'x '.repeat(20000) }, { pageIndex: 2, text: '   ' }, { pageIndex: 3, text: `angiotensina ${'\uFFFD'.repeat(6)}` }]],
   [{ summary: 'A angiotensina II contrai a arteríola eferente e aumenta a pressão glomerular.', questions: Array.from({ length: 8 }, (_, i) => q({ question: `Pergunta ${i}?` })) }, [{ pageIndex: 1, text: 'angiotensina II contrai a arteríola eferente. ' }]],
   [{ summary: DRAFT_PT_FROM_EN, questions: [] }, EN],
+  // a negation lost, and one invented (same sentence, same anchors)
+  ...[['não ', ''], ['', 'não ']].map(([src, dst]) => {
+    const sentence = (neg) => `A metformina ${neg}deve ser iniciada quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave, e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.`;
+    return [{ summary: sentence(dst), questions: [] }, [{ pageIndex: 1, text: sentence(src) }]];
+  }),
 ];
 const allFindings = () => SCENARIOS.flatMap(([draft, segments]) => auditDraft(structuredClone(draft), { segments }).findings);
 
@@ -179,7 +184,7 @@ test('HTTP: a draft over the real API returns code + params AND the old text; an
     assert.equal(value.repair, 'O valor 777 não aparece na fonte. Use o valor que a fonte traz ou remova a afirmação.');
     assert.equal(value.sourceEvidence, 'p. 1: pagina de teste');
     assert.equal(value.generatedClaim, 'Resumo de teste com a dose de 777 mg para o paciente.');
-    assert.equal(fetched.audit.rulesVersion, 'audit-rules-9');
+    assert.equal(fetched.audit.rulesVersion, 'audit-rules-10');
 
     // an audit written before this slice has no `messages`: it is returned as it was, and the text is all a client has
     const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);

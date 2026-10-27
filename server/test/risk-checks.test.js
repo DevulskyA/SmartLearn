@@ -86,6 +86,20 @@ test('same language works the same way (pt source, pt draft)', () => {
   assert.deepEqual(issues(auditRisk(lost, { segments: [source] })), ['QUALIFIER_LOST']);
 });
 
+test('NEGATION_LOST / NEGATION_ADDED: a contraindication that reads as an indication (and the reverse) is HIGH; the faithful draft is clean', () => {
+  const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
+  const sentence = (neg) => `A metformina ${neg}deve ser iniciada quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
+  const run = (src, dst) => auditRisk({ summary: sentence(dst), questions: [] }, { segments: [segment(sentence(src))] });
+  assert.deepEqual(issues(run('não ', 'não ')), [], 'faithful: zero findings');
+  const lost = run('não ', '');
+  assert.deepEqual(issues(lost), ['NEGATION_LOST']);
+  assert.equal(lost[0].severity, 'HIGH');
+  const added = run('', 'não ');
+  assert.deepEqual(issues(added), ['NEGATION_ADDED']);
+  assert.equal(added[0].severity, 'HIGH');
+  assert.equal(auditDraft({ summary: sentence(''), questions: [] }, { segments: [segment(sentence('não '))] }).result, 'REPAIR');
+});
+
 test('the checks run inside auditDraft, so the reviewer, the repair step and "Reauditar" all see them', () => {
   const swapped = DRAFT_BASE.map((s) => s.replace('5 mg', '5 g'));
   const audit = auditDraft(draftOf(swapped), { segments: [SOURCE_EN] });
