@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // The Resumo Mestre as a word processor: the student opens a formatted page (visual editor by default) and edits text, tables, formulas and
 // figures directly, never Markdown, LaTeX or identifiers. The textarea stays the stored text; the fidelity of the conversion is proven in
@@ -59,6 +60,7 @@ async function openDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
@@ -71,6 +73,7 @@ async function reopenDraft(page, editor) {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 }
 
 async function saveSummary(editor) {

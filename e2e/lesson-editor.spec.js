@@ -8,6 +8,7 @@ import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // LESSON EDITOR (VALID-4 defect register): a draft is SUMMARY + QUESTIONS[] + SOURCE + REVIEW, each its own area, each saved on
 // its own, and the rest of the book is never a vertical continuation of the lesson being edited. Real server, FAKE provider:
@@ -70,6 +71,7 @@ async function openLesson(page, name = 'aula.pdf') {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 }
 
 test('the draft opens as a lesson editor with four separate areas; the rest of the book is not part of it', async ({ page }) => {
@@ -267,6 +269,7 @@ test('topic search finds a section by its heading and generates ONLY that sectio
   await expect(hit).toContainText('PDF páginas 2–3');
   await hit.locator('[data-action="generate-topic"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await page.locator('.lesson-editor').getByRole('tab', { name: /Fonte/ }).click();
   await expect(page.locator('.lesson-editor [data-panel="source"]')).toContainText('PDF páginas 2–3');
   await expect(page.locator('.lesson-editor [data-panel="source"]')).toContainText('exatamente a fonte aprovada');
@@ -295,6 +298,7 @@ test('a processed document is reopened from "Documentos já enviados" without se
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
 });
 
@@ -326,6 +330,7 @@ test('RELOAD: a saved question and a saved summary survive a full page reload; u
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await expect(editor.locator('.lesson-summary-input')).toHaveValue('Resumo persistido após recarga');
   await editor.getByRole('tab', { name: /Questões/ }).click();
   const after = await answers();
@@ -342,6 +347,7 @@ test('a draft in progress is listed under "Rascunhos em andamento", outside the 
   await expect(page.locator('#sources-index').locator('#sources-drafts')).toHaveCount(0);
   await box.getByRole('button', { name: /Abrir rascunho/ }).click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
 });
 
@@ -363,6 +369,7 @@ test('a legacy draft (no stored scope) still names its document and pages in the
   await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await editor.getByRole('tab', { name: /Fonte/ }).click();
   const panel = editor.locator('[data-panel="source"]');
   await expect(panel).toContainText('antes de o escopo da fonte');
@@ -395,6 +402,7 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
   await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await editor.getByRole('tab', { name: /Revisão/ }).click();
   const review = editor.locator('[data-panel="review"]');
   await expect(review).toContainText('Auditoria com regras antigas');
@@ -450,6 +458,7 @@ test('a critical finding stops the acceptance until the reviewer resolves it: qu
   await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await editor.locator('.source-draft-subject-input').fill('Fisiologia');
 
   // the question with a critical point is still undecided: refused, nothing created

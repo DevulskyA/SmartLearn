@@ -44,7 +44,7 @@ export default {
   'editor.summary.hint': 'Editar o resumo não altera as questões. Use o modo Visual para formatar títulos, fórmulas, tabelas e imagens.',
   'editor.summary.save': 'Salvar resumo',
   'editor.summary.read': 'Ler como aula',
-  'editor.summary.edit': 'Voltar a editar',
+  'editor.summary.edit': 'Editar resumo',
   'editor.summary.saved': 'Resumo salvo. As questões não foram alteradas.',
   'editor.summary.saveFailed': 'Não foi possível salvar o resumo.',
   'editor.summary.source.one': 'Fonte do resumo · página {pages}',

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // T38: proves the real draft-review UI (src/draft-review-ui.js, wired into
 // the same "Fontes" card as T36) drives the full T34-T38 pipeline end to
@@ -75,6 +76,7 @@ async function openFirstDraft(page, name, pages) {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return page.locator('.lesson-editor');
 }
 

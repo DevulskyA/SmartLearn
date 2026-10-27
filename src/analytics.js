@@ -187,12 +187,23 @@ export function verdictText(v) {
   return { headline, detail: t('analytics.verdict.detail.subjects', { parts: parts.join(' · ') }) };
 }
 
+function periodCutoff(periodValue, today) {
+  return subtractDays(today, periodValue === 'last-30' ? 30 : periodValue === 'last-90' ? 90 : 365);
+}
+
+// The evidence a period filter keeps. Matrices are computed from THIS, so the totals and percentages of a row describe the chosen period
+// (filtering only the rows would label all-time numbers with a recent period).
+export function evidenceInPeriod(evidence, periodValue, today) {
+  if (!periodValue) return evidence;
+  const cutoff = periodCutoff(periodValue, today);
+  return evidence.filter((e) => e.evidenceDate != null && e.evidenceDate >= cutoff);
+}
+
 // Rows without a lastEvidence date are excluded by a period filter (there's
 // nothing recent to include), never shown as if they matched.
 export function filterByPeriod(results, periodValue, today) {
   if (!periodValue) return results;
-  const days = periodValue === 'last-30' ? 30 : periodValue === 'last-90' ? 90 : 365;
-  const cutoff = subtractDays(today, days);
+  const cutoff = periodCutoff(periodValue, today);
   return results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
 }
 

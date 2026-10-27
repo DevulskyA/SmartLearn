@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // Scientific summary (delivery A) through the lesson editor and every other screen that shows the Resumo Mestre: the draft summary with
 // formulas is saved, survives a reload, is accepted into a lesson, and is drawn in the Plano, in Estudar agora and in Hoje.
@@ -56,6 +57,7 @@ async function openDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
@@ -87,6 +89,7 @@ test('lesson editor: a formula inserted through the dialog is saved, survives a 
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await expect(editor.locator('.lesson-summary-input')).toHaveValue(typed);
 
   await editor.locator('[data-action="toggle-summary-read"]').click();

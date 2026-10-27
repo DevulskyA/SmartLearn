@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // T-F4-05 (R-06 AC-06.2, F-35): the lesson editor with the KEYBOARD alone and with a screen reader's contract: the tabs follow the
 // tab pattern (arrows / Home / End, one tab stop), saving / accepting / rejecting keeps the focus somewhere meaningful (never on
@@ -63,6 +64,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 });
 
 const focusIsOnPage = (page) => page.evaluate(() => document.activeElement !== document.body && document.activeElement !== null);

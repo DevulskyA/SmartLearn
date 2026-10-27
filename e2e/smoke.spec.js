@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // SMOKE: the shortest honest answer to "does the main thing still work?". ONE server, ONE browser page, ONE sign-in and ONE draft shared by
 // short steps that follow each other (the way a student uses it), instead of every check paying for its own sign-in + upload + generation.
@@ -74,7 +75,9 @@ test('2. a PDF becomes a draft and the lesson editor opens on the Resumo', async
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(editor()).toBeVisible({ timeout: 10000 });
-  await expect(input()).toBeVisible(); // the text editor is the default
+  await expect(editor().locator('.lesson-summary-read')).toBeVisible(); // the lesson opens as a page to read, not as a form
+  await startEditingSummary(page);
+  await expect(input()).toBeVisible();
 });
 
 test('3. a summary with a formula, a list and a table is saved from the text editor', async () => {
@@ -149,6 +152,7 @@ test('8. after a reload and reopening, the very same text comes back in both edi
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor()).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   await expect(surface().locator('figure.summary-figure img')).toHaveAttribute('alt', 'Esquema da barreira'); // the visual mode is remembered
   await editor().locator('.summary-mode-btn[data-mode="text"]').click();
   await expect(input()).toHaveValue(saved);

@@ -8,6 +8,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
 import AxeBuilder from '@axe-core/playwright';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // The visual editor of the Resumo Mestre (Tiptap / ProseMirror) inside the lesson editor's Resumo tab. The textarea stays the source of
 // truth: what is proven here is that the visual path opens, edits, saves, reloads and reopens the SAME text, that an untouched summary is
@@ -64,6 +65,7 @@ async function openDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
@@ -76,6 +78,7 @@ async function reopenDraft(page, editor) {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 }
 
 async function saveSummary(editor) {

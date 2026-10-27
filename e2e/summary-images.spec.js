@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // Delivery B: private images in the Resumo Mestre. Insert from a file and from the clipboard through the details dialog (description is
 // required), see it in the preview and in every screen, enlarge and edit its texts, refuse hostile files, keep it owner-only, keep it
@@ -230,6 +231,7 @@ test('lesson editor: an image inserted in the draft survives the save and the ac
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 
   const input = editor.locator('.lesson-summary-input');
   await input.fill('Resumo com figura.');

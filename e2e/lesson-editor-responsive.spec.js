@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // T-F4-04 (R-06 AC-06.2, F-34): the lesson editor in narrow windows. At 360x800 (phone) and 768x1024 (tablet) the page never scrolls
 // sideways, every control the student must press is a 44px target, and the whole job (read the summary, edit and save it, pick
@@ -63,6 +64,7 @@ async function openLesson(page) {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 }
 
 const overflow = (page) => page.evaluate(() => {

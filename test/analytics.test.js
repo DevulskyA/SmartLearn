@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Analytics, filterByPeriod, sortMatrixRows } from "../src/analytics.js";
+import { Analytics, filterByPeriod, evidenceInPeriod, sortMatrixRows } from "../src/analytics.js";
 
 // --- bySubject window boundary tests (P1-4) ---
 
@@ -228,4 +228,15 @@ test("sortMatrixRows: never mutates the input array (returns a new sorted copy)"
   const original = [...rows];
   sortMatrixRows(rows, { key: "performance", dir: "asc" });
   assert.deepEqual(rows, original, "original array order must be untouched");
+});
+
+test("evidenceInPeriod keeps only evidence inside the window, so a row's totals describe the period (today-30 inclusive, today-31 out, undated out)", () => {
+  const today = "2026-09-04";
+  const ev = [
+    { evidenceDate: "2026-08-05", questionsCount: 10 }, // today-30
+    { evidenceDate: "2026-08-04", questionsCount: 10 }, // today-31
+    { evidenceDate: null, questionsCount: 10 },
+  ];
+  assert.equal(evidenceInPeriod(ev, "last-30", today).length, 1);
+  assert.equal(evidenceInPeriod(ev, "", today), ev);
 });

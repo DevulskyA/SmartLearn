@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // A figure occurrence can be moved and resized in the summary (Tiptap's own drag and ResizableNodeView on the existing Figure node). The width lives in the
 // marker, [[fig:UUID|w=N]]; legacy markers are untouched. What is proven here is what the student sees: one copy after a move, the proportion kept,
@@ -60,6 +61,7 @@ async function openDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
@@ -72,6 +74,7 @@ async function reopenDraft(page, editor) {
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
 }
 
 async function saveSummary(editor) {

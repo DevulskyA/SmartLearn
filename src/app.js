@@ -19,7 +19,7 @@ import {
 import { colorVarForKey, performanceColor, getState } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
-import { Analytics, subtractDays, filterByPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
+import { Analytics, subtractDays, filterByPeriod, evidenceInPeriod, sortMatrixRows, verdictText, monthlyAccuracySeries } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { applyStaticTexts } from "./i18n/dom.js";
@@ -2153,9 +2153,9 @@ export async function renderStatsBySubject() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.bySubject(evidence, units, subjects, today);
-  await renderStudyVerdict(results, Analytics.byUnit(evidence, units, subjects));
-  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  const period = statsUnitFilterPeriod?.value ?? "";
+  await renderStudyVerdict(Analytics.bySubject(evidence, units, subjects, today), Analytics.byUnit(evidence, units, subjects));
+  let results = filterByPeriod(Analytics.bySubject(evidenceInPeriod(evidence, period, today), units, subjects, today), period, today);
   results = sortMatrixRows(results, subjectSortState);
   wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
   updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
@@ -2683,7 +2683,8 @@ export async function renderStatsByUnit() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.byUnit(evidence, units, subjects);
+  const period = statsUnitFilterPeriod?.value ?? "";
+  let results = Analytics.byUnit(evidenceInPeriod(evidence, period, today), units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
   // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
@@ -2701,7 +2702,7 @@ export async function renderStatsByUnit() {
 
   // Apply filters (AC-EST2-04)
   if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
-  results = filterByPeriod(results, statsUnitFilterPeriod?.value ?? "", today);
+  results = filterByPeriod(results, period, today);
 
   // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
   results = sortMatrixRows(results, unitSortState);

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // A11Y-1: an automated accessibility audit (axe-core, WCAG 2.0/2.1 A + AA) of every main screen, on the REAL
 // server and UI, at phone and desktop width. It fails on any critical or serious violation; the few findings
@@ -166,6 +167,7 @@ for (const { theme, width, height } of EDITOR_CASES) {
     await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
     const editor = page.locator('.lesson-editor');
     await expect(editor).toBeVisible({ timeout: 10000 });
+    await startEditingSummary(page);
     const found = [];
     const audit = async (where) => {
       const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();

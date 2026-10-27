@@ -363,6 +363,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       ), summaryHint);
     }
     renderGrounding();
+    if (!summaryRead.hidden) renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary); // a repair or a recovered copy changes what is read
     const dirty = summaryBuffer !== null && summaryBuffer !== draft.summary;
     summarySave.disabled = !dirty;
     summaryDirty.textContent = dirty ? t("editor.dirty") : "";
@@ -767,6 +768,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (!goto) return;
     if (goto.dataset.target === "summary") {
       showTab("summary", { focus: false });
+      if (summaryField.wrap.hidden) setSummaryReading(false);
       summaryAuthoring.focusSummary();
     } else {
       selectedId = goto.dataset.target;
@@ -777,16 +779,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
   });
 
-  summaryToggle.addEventListener("click", () => {
-    const reading = summaryRead.hidden;
-    if (reading) {
-      renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary);
-    }
+  // The summary opens as the formatted lesson; the editing tools appear when the student asks for them (PRODUCT.md, "Reading first").
+  function setSummaryReading(reading) {
+    if (reading) renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary);
     summaryRead.hidden = !reading;
     summaryField.wrap.hidden = reading;
     summaryToggle.textContent = reading ? t("editor.summary.edit") : t("editor.summary.read");
     summaryToggle.setAttribute("aria-pressed", String(reading));
-  });
+  }
+  summaryToggle.addEventListener("click", () => setSummaryReading(summaryRead.hidden));
 
   summaryField.input.addEventListener("input", () => {
     summaryBuffer = summaryField.input.value;
@@ -1047,6 +1048,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         summaryBuffer = stored.summary.text;
         summaryField.input.value = summaryBuffer;
         summaryAuthoring.reloadVisual();
+        if (summaryField.wrap.hidden) setSummaryReading(false);
         recovery.writeSummary(summaryBuffer, draft.summaryVersion); // from now on based on the version on screen
         autosaver.touch("summary");
         renderSummary();
@@ -1073,6 +1075,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   window.addEventListener("online", onOnline);
 
   renderAll();
+  if (draft.summary.trim()) setSummaryReading(true); // nothing to read in an empty summary: it opens ready to write
   enhanceSelect(subjectSelect);
   offerRecovery().catch(() => { /* no copy to offer */ });
   recovery.ready.then(() => { if (!recovery.available) setMessage(summaryMessage, t("editor.autosave.noCopy"), true); });

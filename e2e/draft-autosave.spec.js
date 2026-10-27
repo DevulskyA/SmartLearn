@@ -8,6 +8,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
 import { startForwarder } from './support/forwarder.js';
+import { startEditingSummary } from './support/summary-editing.js';
 
 // Autosave of the lesson draft (summary and each question): 2.5 s without typing, a recoverable local copy written at every keystroke, no old
 // answer over new text, no blind retry after a conflict, recovery after a lost connection or a window closed in the middle, and saving is
@@ -60,6 +61,7 @@ async function openDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
@@ -72,6 +74,7 @@ async function reopenDraft(page) {
   await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
+  await startEditingSummary(page);
   return editor;
 }
 
