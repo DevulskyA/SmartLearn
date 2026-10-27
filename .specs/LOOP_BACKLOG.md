@@ -163,3 +163,12 @@ CANDIDATOS por (esforço poupado / risco), cada um reversível por um botão ou 
 6. Remover as portas duplicadas de criar disciplina (manter Disciplinas; as outras apontam para ela). Maior ganho de arquitetura, risco médio (specs do Plano dependem da criação inline): por último.
 7. Busca de tópico: Enter em "Gerar" como caminho principal e Índice recolhido quando houver resultado.
 8. (Não recomendado sem decisão) marcar "Revisão feita" sozinho ao julgar todas: muda a semântica de conclusão e o teste do passo 20.
+
+## V3 — revisão sistêmica da interface (2026-10-27, commit 83a3b67)
+Inventário: 11 painéis (Hoje, Plano, Acompanhar, Disciplinas, Cadastro, Estatísticas, Configurações, Materiais, Prova, Estudar agora, Conta); editor de rascunho dentro de Materiais.
+FEITO: (a) Resumo Mestre do editor abre lendo (formatado); "Editar resumo" revela a barra; vazio abre em edição; recuperação/ir-ao-achado entram em edição. (b) Estatísticas: filtro de período agora recalcula totais e % das linhas (Por disciplina / Por conteúdo) dentro do período; veredito, trendência e cartões do topo seguem globais de propósito.
+PENDENTE (por família):
+- Editor/Resumo: o botão "Editar resumo" fica abaixo da dica (fora da tela em 800×600): subir para o cabeçalho da aba. Resumo aceito no Plano: conferir o mesmo padrão ler-primeiro.
+- Estatísticas: rotular o filtro como escopo da tabela (cartões do topo ficam globais) ou aplicá-lo também a eles (decisão de produto).
+- Navegação: 8 entradas Desktop; avaliar agrupar (Cadastro/Disciplinas/Configurações) com captura e teste de uso antes de mexer.
+- Demais famílias (Hoje, Plano, Praticar/Prova, Acompanhar, Conta): passada com Impeccable + axe, uma família por vez.
