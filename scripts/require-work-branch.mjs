@@ -21,7 +21,7 @@ const WORK_BRANCH = 'claude/smartlearn-v1-complete';
 // follow). Check the specific flag first, fall back to the generic one, and
 // log the run context when we skip so a CI log makes the decision obvious.
 const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
-const isCi = isGithubActions || Boolean(process.env.CI);
+const isCi = isGithubActions || ['true', '1'].includes(String(process.env.CI ?? '').trim().toLowerCase());
 if (isCi) {
   if (isGithubActions) {
     console.log('SMARTLEARN_CI=github-actions');
