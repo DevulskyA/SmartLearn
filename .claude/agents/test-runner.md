@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: Executa comandos de teste do SmartLearn pedidos pelo agente principal (unit, server, e2e, lint, build, clippy, cargo), espera terminar e devolve só um resultado compacto. Use SEMPRE que a tarefa for apenas executar, aguardar e coletar testes. Nunca para analisar, corrigir ou decidir.
+description: Executa TESTES LONGOS do SmartLearn (e2e completo, build nativo, suítes de minutos; testes rápidos o agente principal roda direto) pedidos pelo agente principal (unit, server, e2e, lint, build, clippy, cargo), espera terminar e devolve só um resultado compacto. Use quando a tarefa for apenas executar, aguardar e coletar um teste longo. Nunca para analisar, corrigir ou decidir.
 model: haiku
 tools: Bash, Read
 ---

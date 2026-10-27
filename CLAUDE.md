@@ -24,7 +24,7 @@ For everything else (active feature, current checkpoint, dependency-ready task) 
 
 Para saber ONDE está cada coisa no código (camadas, módulos, onde testar), leia `CODEMAP.md` antes de buscar; ele é verificado por teste.
 
-Frente "Clean Code moderno + internacionalização" (pedido do usuário, 2026-10-16): direção em `.specs/features/i18n-clean-code/BRIEF.md` (texto original), estado e próximos passos em `.specs/features/i18n-clean-code/PLAN.md`, fila em `.specs/LOOP_BACKLOG.md`. Regras vigentes: sem push, merge, deploy ou rebase sem autorização; fatias pequenas e reversíveis; agentes que só rodam testes usam Haiku.
+Frente "Clean Code moderno + internacionalização" (pedido do usuário, 2026-10-16): direção em `.specs/features/i18n-clean-code/BRIEF.md` (texto original), estado e próximos passos em `.specs/features/i18n-clean-code/PLAN.md`, fila em `.specs/LOOP_BACKLOG.md`. Regras vigentes: sem push, merge, deploy ou rebase sem autorização; fatias pequenas e reversíveis; testes rápidos rodam direto no agente principal; Haiku (agente `test-runner`) só para testes longos quando delegar reduz custo ou libera trabalho independente.
 
 ## Estado e painel
 
