@@ -100,6 +100,42 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 
     expect(found).toEqual([]);
   });
 
+  test(`${label}: text editor insertion controls are distinct, reachable and spaced`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openLesson(page);
+    const editor = page.locator('.lesson-editor');
+    await editor.locator('.summary-mode-btn[data-mode="text"]').click();
+    await expect(editor.locator('.summary-toolbar')).toBeVisible();
+    const controls = editor.locator('.summary-toolbar-btn');
+    await expect(controls).toHaveCount(4);
+    const geometry = await controls.evaluateAll((buttons) => {
+      const boxes = buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: box.width, height: box.height };
+      });
+      return { boxes, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth };
+    });
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+    for (const box of geometry.boxes) {
+      expect(box.width).toBeGreaterThanOrEqual(43.5);
+      expect(box.height).toBeGreaterThanOrEqual(43.5);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(viewport.width + 0.5);
+    }
+    for (let i = 1; i < geometry.boxes.length; i += 1) {
+      const previous = geometry.boxes[i - 1];
+      const next = geometry.boxes[i];
+      if (Math.abs(next.y - previous.y) < 2) {
+        expect(next.x - previous.right, 'adjacent toolbar controls need visible separation').toBeGreaterThanOrEqual(6);
+      } else {
+        expect(next.y - previous.bottom, 'wrapped toolbar rows need visible separation').toBeGreaterThanOrEqual(5);
+      }
+    }
+    await expect(editor.locator('.summary-mode-btn[data-mode="text"]')).toHaveAttribute('aria-pressed', 'true');
+    await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
+    await expect(editor.locator('.summary-visual-content')).toBeVisible();
+  });
+
   test(`${label}: the whole job is possible: summary, question, source, review, back`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await openLesson(page);
