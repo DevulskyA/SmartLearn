@@ -215,13 +215,19 @@ test("volumeBarWidth: com maxVolume zero (nenhuma disciplina praticada) não div
   assert.equal(volumeBarWidth(0, 0), 0);
 });
 
-test("performanceColor não muda com o volume: 20% com 200 questões é igual a 20% com 5 questões", () => {
-  assert.equal(performanceColor(20, 200), performanceColor(20, 5));
+test("performanceColor não muda com o volume (a partir do mínimo de amostra): 20% com 200 questões é igual a 20% com 10", () => {
+  assert.equal(performanceColor(20, 200), performanceColor(20, 10));
 });
 
-test("performanceColor não muda com o volume: 60% é amarelo puro com 1, 100 ou 100000 questões", () => {
+test("performanceColor: amostra abaixo do mínimo é neutra (1 erro em 1 questão não é 'vermelho'); no mínimo já tem cor", () => {
+  assert.equal(performanceColor(0, 1), PERFORMANCE_COLOR_NEUTRAL);
+  assert.equal(performanceColor(100, 9), PERFORMANCE_COLOR_NEUTRAL);
+  assert.equal(performanceColor(0, 10), 'rgb(220, 38, 38)');
+});
+
+test("performanceColor não muda com o volume: 60% é amarelo puro com 10, 100 ou 100000 questões", () => {
   const expected = performanceColor(60, 100);
-  assert.equal(performanceColor(60, 1), expected);
+  assert.equal(performanceColor(60, 10), expected);
   assert.equal(performanceColor(60, 100000), expected);
 });
 
@@ -287,5 +293,5 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
   // diferentes, cor idêntica. performanceColor nem recebe correctCount, e
   // volumeBarWidth nem recebe accuracy — a independência é estrutural, não
   // só observada neste fixture.
-  assert.equal(performanceColor(60, 80), performanceColor(60, 5));
+  assert.equal(performanceColor(60, 80), performanceColor(60, 10));
 });

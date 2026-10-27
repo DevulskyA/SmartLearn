@@ -9,6 +9,10 @@ export const THRESHOLDS = {
 
 export const TREND_DELTA_MIN = 0.03;
 
+// Fewer questions than this is "not enough evidence", never "difficulty": the colour stays neutral, as it already does
+// with no evidence. Same value as the server's MIN_SAMPLE_QUESTIONS and the trend minimum (a test pins the equality).
+export const MIN_SAMPLE_QUESTIONS = 10;
+
 // VERDICT-1 (human-approved): the aggregate "Meu estudo está funcionando?" headline says "Resultado misto" only
 // when BOTH improving and worsening subjects each hold at least this share of the compared question volume.
 export const VERDICT_MIXED_VOLUME_SHARE_MIN = 0.25;
@@ -70,7 +74,7 @@ function lerp(a, b, t) {
 }
 
 export function performanceColor(weightedAccuracy, totalQuestions) {
-  if (totalQuestions == null || totalQuestions === 0) return PERFORMANCE_COLOR_NEUTRAL;
+  if (totalQuestions == null || totalQuestions < MIN_SAMPLE_QUESTIONS) return PERFORMANCE_COLOR_NEUTRAL;
   const pct = Number(weightedAccuracy);
   if (!Number.isFinite(pct)) return PERFORMANCE_COLOR_NEUTRAL;
   const clamped = Math.min(100, Math.max(0, pct));
