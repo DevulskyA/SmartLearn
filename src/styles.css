@@ -2789,8 +2789,7 @@ h1 {
 }
 
 .review-score-pill.is-empty {
-  color: var(--color-muted);
-  font-weight: 600;
+  display: none;
 }
 
 .review-row-primary {

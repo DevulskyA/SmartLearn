@@ -1446,7 +1446,8 @@ export async function renderToday() {
     if (pendingToday.length > 0) parts.push(t("today.load.today", { count: pendingToday.length }));
     if (tomorrowReviews.length > 0) parts.push(t("today.load.tomorrow", { count: tomorrowReviews.length }));
     if (completedToday.length > 0) parts.push(tn("today.load.done", completedToday.length));
-    todayLoadSummary.hidden = parts.length === 0;
+    // one figure only repeats the banner and the "Para hoje" count below
+    todayLoadSummary.hidden = parts.length < 2;
     todayLoadSummary.textContent = parts.join(" · ");
   }
 
