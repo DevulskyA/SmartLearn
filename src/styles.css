@@ -4374,7 +4374,7 @@ h1 {
 
 /* an 800 px window: the four tabs stay on one row */
 @media (max-width: 900px) and (min-width: 561px) {
-  .lesson-tab {
+  .lesson-tabs .lesson-tab {
     padding-inline: 0.75rem;
   }
 }
