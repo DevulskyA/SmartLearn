@@ -108,7 +108,7 @@ export default {
   'screens.stats.exercises.title': 'Exercícios resolvidos',
   'screens.stats.exercises.score': 'Nota %',
   'screens.stats.exercises.empty': 'Registre exercícios concluídos para ver a lista.',
-  'screens.settings.eyebrow': 'Dados locais',
+  'screens.settings.eyebrow': 'Preferências',
   'screens.settings.title': 'Configurações',
   'screens.settings.appearance.eyebrow': 'Aparência',
   'screens.settings.appearance.title': 'Tema',
