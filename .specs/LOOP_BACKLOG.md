@@ -175,3 +175,4 @@ PENDENTE (por família):
 V3 continuação (2026-10-27, commits 08d34f4, d3c127d, ec26788): "Editar resumo" subiu para o topo da aula, dica e Salvar somem enquanto lê, abas do editor em 800px (a aba Revisão ainda quebra de linha neste tamanho: verificar). Hoje: barra "N hoje" só aparece com 2+ números; "—" de nota vazia escondido. Conta: Sair separado do formulário. Navegação: Disciplinas ganhou ícone próprio (livro; antes igual a Conta).
 Prova: E2E direcionados passaram (offline, hoje-*, today-primary-action, keyboard-today, priorities-hoje, auth, mobile-nav, subjects-catalog, accessibility). Captura nativa dessas três mudanças NÃO feita (exige rebuild DEV).
 Verificados nas capturas e sem achado novo: Plano, Acompanhar, Configurações, Materiais. Estatísticas: não mexer sem perguntar ao usuário.
+DECISAO DO USUARIO (2026-10-27): manter o filtro de periodo de Estatisticas (83a3b67). Nao reverter; Estatisticas segue intocada sem perguntar antes.
