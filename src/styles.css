@@ -5703,3 +5703,9 @@ h1 {
 .lesson-actions > .save-indicator {
   margin-inline-start: auto;
 }
+
+#account-logged-in-view .settings-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
