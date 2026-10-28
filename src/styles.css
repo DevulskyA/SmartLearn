@@ -2495,6 +2495,13 @@ h1 {
   background: var(--color-surface);
   transition: border-color 140ms ease;
 }
+/* the label that wraps the shared select primitive (select-ui.js) already holds a bordered trigger: no second frame around it */
+label.select-control:has(> .ui-select) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
 .select-control:hover { border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-border)); }
 .select-control:focus-within { border-color: var(--color-primary); }
 .select-control select {
