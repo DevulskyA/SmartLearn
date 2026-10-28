@@ -487,8 +487,9 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
         let file = file.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_millis(250));
-            let pending = shared.lock().unwrap().1.take_pending();
-            if let Some(state) = pending {
+            // the lock is held while writing: a close that saves the final state at the same instant can never be overwritten by an older one
+            let mut guard = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(state) = guard.1.take_pending() {
                 window_state::save(&file, &state);
             }
         });
