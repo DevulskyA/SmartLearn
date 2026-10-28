@@ -5737,3 +5737,9 @@ label.select-control:has(> .ui-select) {
 #account-password-form .field-group + .field-group {
   margin-top: 1rem;
 }
+
+/* Materiais holds the reader and the editor of a lesson: as wide as the other work screens, not the narrow settings column */
+#sources-card,
+#sources-editor-view {
+  width: min(100%, 68rem);
+}
