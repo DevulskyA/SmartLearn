@@ -172,3 +172,6 @@ PENDENTE (por família):
 - Estatísticas: rotular o filtro como escopo da tabela (cartões do topo ficam globais) ou aplicá-lo também a eles (decisão de produto).
 - Navegação: 8 entradas Desktop; avaliar agrupar (Cadastro/Disciplinas/Configurações) com captura e teste de uso antes de mexer.
 - Demais famílias (Hoje, Plano, Praticar/Prova, Acompanhar, Conta): passada com Impeccable + axe, uma família por vez.
+V3 continuação (2026-10-27, commits 08d34f4, d3c127d, ec26788): "Editar resumo" subiu para o topo da aula, dica e Salvar somem enquanto lê, abas do editor em 800px (a aba Revisão ainda quebra de linha neste tamanho: verificar). Hoje: barra "N hoje" só aparece com 2+ números; "—" de nota vazia escondido. Conta: Sair separado do formulário. Navegação: Disciplinas ganhou ícone próprio (livro; antes igual a Conta).
+Prova: E2E direcionados passaram (offline, hoje-*, today-primary-action, keyboard-today, priorities-hoje, auth, mobile-nav, subjects-catalog, accessibility). Captura nativa dessas três mudanças NÃO feita (exige rebuild DEV).
+Verificados nas capturas e sem achado novo: Plano, Acompanhar, Configurações, Materiais. Estatísticas: não mexer sem perguntar ao usuário.
