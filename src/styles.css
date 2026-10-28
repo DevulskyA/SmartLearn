@@ -5749,3 +5749,9 @@ label.select-control:has(> .ui-select) {
 #sources-editor-view {
   width: min(100%, 68rem);
 }
+
+/* a two-field form does not need the wide work column: same width as Configuracoes */
+#account-logged-in-view,
+#account-logged-out-view {
+  width: min(100%, 42rem);
+}
