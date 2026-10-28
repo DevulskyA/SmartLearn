@@ -103,6 +103,33 @@ impl Throttle {
     }
 }
 
+/// Decides what is written now and what is held back. The throttle alone drops the LAST move of a drag, so a process killed right
+/// after it (console closed, launcher relaunch, shutdown) would reopen at a mid-drag spot, maybe on the wrong monitor: the held-back
+/// state is kept and a flusher writes it with `take_pending`.
+pub struct Saver {
+    throttle: Throttle,
+    pending: Option<WindowState>,
+}
+
+impl Saver {
+    pub fn new() -> Self {
+        Self { throttle: Throttle::new(), pending: None }
+    }
+    /// Returns the state to write right now, or None when it was held back (it stays pending).
+    pub fn record(&mut self, next: WindowState, closing: bool) -> Option<WindowState> {
+        if closing || self.throttle.due() {
+            self.pending = None;
+            Some(next)
+        } else {
+            self.pending = Some(next);
+            None
+        }
+    }
+    pub fn take_pending(&mut self) -> Option<WindowState> {
+        self.pending.take()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +200,29 @@ mod tests {
         let mut t = Throttle::new();
         assert!(t.due());
         assert!(!t.due());
+    }
+
+    #[test]
+    fn the_last_move_of_a_drag_is_never_lost_even_if_the_throttle_held_it_back() {
+        // regression: dragging to another monitor and killing the app right away reopened at a mid-drag position
+        let mut saver = Saver::new();
+        let mut written = Vec::new();
+        for step in 0..25 {
+            if let Some(s) = saver.record(state(-100 * step, 80), false) {
+                written.push(s);
+            }
+        }
+        assert_eq!(written, vec![state(0, 80)], "only the first move is written at once");
+        assert_eq!(saver.take_pending(), Some(state(-2400, 80)), "the final position is waiting for the flusher");
+        assert_eq!(saver.take_pending(), None, "and is written only once");
+    }
+
+    #[test]
+    fn closing_writes_at_once_and_clears_whatever_was_pending() {
+        let mut saver = Saver::new();
+        saver.record(state(0, 0), false);
+        saver.record(state(-500, 10), false);
+        assert_eq!(saver.record(state(-1300, 80), true), Some(state(-1300, 80)));
+        assert_eq!(saver.take_pending(), None, "the close already wrote the final state");
     }
 }

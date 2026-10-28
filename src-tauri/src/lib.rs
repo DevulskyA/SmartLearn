@@ -479,7 +479,20 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
     }
     let _ = window.show();
 
-    let shared = std::sync::Mutex::new((last.take(), window_state::Throttle::new()));
+    // (last known state, what the throttle held back). A flusher thread writes the held-back state within 250 ms, so a process killed
+    // right after a drag still reopens where the window was left (see window_state::Saver).
+    let shared = std::sync::Arc::new(std::sync::Mutex::new((last.take(), window_state::Saver::new())));
+    {
+        let shared = std::sync::Arc::clone(&shared);
+        let file = file.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let pending = shared.lock().unwrap().1.take_pending();
+            if let Some(state) = pending {
+                window_state::save(&file, &state);
+            }
+        });
+    }
     let watched = window.clone();
     window.on_window_event(move |event| {
         let closing = matches!(event, tauri::WindowEvent::CloseRequested { .. });
@@ -492,7 +505,7 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
         let (Ok(pos), Ok(size)) = (watched.outer_position(), watched.inner_size()) else { return };
         let maximized = watched.is_maximized().unwrap_or(false);
         let mut guard = shared.lock().unwrap();
-        let (previous, throttle) = &mut *guard;
+        let (previous, saver) = &mut *guard;
         let next = if maximized {
             let base = previous.unwrap_or(window_state::WindowState { x: pos.x, y: pos.y, width: 1000, height: 700, maximized: true });
             window_state::WindowState { x: pos.x + 40, y: pos.y + 40, width: base.width, height: base.height, maximized: true }
@@ -500,8 +513,8 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
             window_state::WindowState { x: pos.x, y: pos.y, width: size.width, height: size.height, maximized: false }
         };
         *previous = Some(next);
-        if closing || throttle.due() {
-            window_state::save(&file, &next);
+        if let Some(now) = saver.record(next, closing) {
+            window_state::save(&file, &now);
         }
     });
 }
