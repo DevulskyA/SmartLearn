@@ -5716,3 +5716,11 @@ label.select-control:has(> .ui-select) {
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
 }
+
+.settings-card + .settings-card {
+  margin-top: 1rem;
+}
+
+#account-password-form .field-group + .field-group {
+  margin-top: 1rem;
+}
