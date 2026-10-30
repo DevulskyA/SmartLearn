@@ -123,3 +123,14 @@ Ease-out-quint (`cubic-bezier(0.22, 1, 0.36, 1)`), 140-200ms. Animate opacity an
 
 ## Bans
 No side-stripe accent borders for review/urgency status (see "Status, not stripes" — the subject-identity stripe in "Subject identity" is the sole, explicit exception), no gradient text, no decorative glass, no identical-card metric grids, no em dashes in UI copy.
+
+
+## Interface unification, 30 Oct 2026
+
+- Desktop navigation keeps the current sections and their internal IDs. On narrow screens, Hoje, Materiais (when available), Plano and Estatísticas remain first-level; Acompanhar, Disciplinas, Configurações and Conta live in an accessible **Mais** menu. No user destination is removed.
+- Disciplinas is a low-frequency administrative destination. The Plano offers a quiet **Gerenciar disciplinas** shortcut next to result metadata rather than competing with filters. Inline discipline registration remains available in lesson creation.
+- Plano and Acompanhamento share a control height of 2.75rem, neutral surface/border, radii and focus behavior. Search filters title, source and discipline name (case/accent insensitive), preserves ordering and displays the result count. A zero-result state offers a reset action.
+- Outside protected Estatísticas, discipline chips use a neutral surface plus the discipline-colored **left stripe**. Review urgency/status uses separate semantic color tokens. Archived cards remain legible at full text opacity.
+- Configurações theme picker follows a proper keyboard radio group model: Tab focuses the checked option, arrow keys change the checked option, Home/End jump to endpoints.
+- Estatísticas (ADR-0001 protected) retains its approved composition and the distinct select versus context-switcher semantics. Avoid redesigning its matrix and charts without an explicit new approval.
+- Validation priorities: search and reset, secondary navigation by mouse/keyboard, saved theme preference, 360–1440px reflow, dark palette, preservation of statistics tests and data semantics.

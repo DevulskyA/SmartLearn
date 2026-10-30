@@ -188,6 +188,8 @@ function forgetSelection(key) {
   }
 }
 const navigationItems = [...document.querySelectorAll("[data-screen]")];
+const mobileMoreToggle = document.querySelector("#mobile-more-toggle");
+const mobileMoreMenu = document.querySelector("#mobile-more-menu");
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
 const subjectSelect = document.querySelector("#subject-select");
@@ -297,6 +299,10 @@ createSubjectCreateForm({
 });
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
+const planSearch = document.querySelector("#plan-search");
+const planResultCount = document.querySelector("#plan-result-count");
+const planManageSubjectsBtn = document.querySelector("#plan-manage-subjects-btn");
+const planClearFiltersBtn = document.querySelector("#plan-clear-filters");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
 const planSort = document.querySelector("#plan-sort");
@@ -1641,6 +1647,10 @@ async function openLessonInPlan(unitId) {
 // study completion, subject edits). Only the newest async render may publish DOM.
 let planRenderSeq = 0;
 
+function normalizePlanQuery(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+}
+
 export async function renderPlan() {
   if (!planList) return;
   const renderId = ++planRenderSeq;
@@ -1721,6 +1731,7 @@ export async function renderPlan() {
   // earlier visit would hide its row and nothing would open, so such a filter is cleared first.
   if (pendingPlanFocusUnitId != null) {
     const focusUnit = learningUnits.find((unit) => unit.id === pendingPlanFocusUnitId);
+    if (focusUnit && planSearch) planSearch.value = "";
     if (focusUnit) {
       const hiddenBySubject = Boolean(planFilterSubject?.value) && planFilterSubject.value !== String(focusUnit.subjectId);
       const hiddenByState = Boolean(planFilterState?.value)
@@ -1739,17 +1750,28 @@ export async function renderPlan() {
   // Apply filters
   const subjectFilter = planFilterSubject?.value ?? "";
   const stateFilter = planFilterState?.value ?? "";
+  const searchFilter = normalizePlanQuery(planSearch?.value?.trim());
   const filtered = sorted.filter((unit) => {
     if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
     if (stateFilter && getTrackingState(unit.id, allTasks, allEvidence, today) !== stateFilter) return false;
+    if (searchFilter && !normalizePlanQuery([unit.title, unit.sourceText, subjectsById.get(unit.subjectId)?.name].join(" ")).includes(searchFilter)) return false;
     return true;
   });
+  const hasActiveFilters = Boolean(subjectFilter || stateFilter || searchFilter);
+  if (planResultCount) {
+    planResultCount.textContent = learningUnits.length
+      ? t(filtered.length === 1 ? "screens.plan.results.one" : "screens.plan.results.other", { shown: filtered.length, total: learningUnits.length })
+      : "";
+  }
+  if (planClearFiltersBtn) planClearFiltersBtn.hidden = !hasActiveFilters || filtered.length > 0;
 
   planEmpty.hidden = filtered.length > 0;
   // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
-  planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
-    ? t("plan.empty.withMaterials")
-    : t("plan.empty");
+  planEmpty.textContent = learningUnits.length > 0 && hasActiveFilters
+    ? t("screens.plan.emptyFiltered")
+    : (learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
+      ? t("plan.empty.withMaterials")
+      : t("plan.empty"));
   planList.replaceChildren();
 
   for (const unit of filtered) {
@@ -4595,6 +4617,14 @@ const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", 
 // A real fix (surfacing exercise management from Plano/Hoje instead of
 // this legacy screen) is future UI work, not a T22 redirect decision.
 
+function closeMobileMore({ restoreFocus = false } = {}) {
+  const wasOpen = Boolean(mobileMoreMenu?.classList.contains("is-open"));
+  mobileMoreMenu?.classList.remove("is-open");
+  mobileMoreToggle?.classList.remove("is-open");
+  mobileMoreToggle?.setAttribute("aria-expanded", "false");
+  if (restoreFocus && wasOpen) mobileMoreToggle?.focus();
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
@@ -4644,6 +4674,9 @@ export function showScreen(screenId, { focus = false } = {}) {
     item.classList.toggle("is-active", isActive);
     item.setAttribute("aria-current", isActive ? "page" : "false");
   }
+  const moreIsCurrent = Boolean(mobileMoreMenu?.querySelector(`[data-screen="${nextScreen}"]`));
+  mobileMoreToggle?.classList.toggle("is-active", moreIsCurrent);
+  mobileMoreToggle?.setAttribute("aria-current", moreIsCurrent ? "page" : "false");
 
   if (window.location.hash !== `#${nextScreen}`) {
     window.history.replaceState(null, "", `#${nextScreen}`);
@@ -4707,6 +4740,7 @@ function renderThemePicker(preference = currentThemePreference) {
     button.setAttribute("role", "radio");
     button.dataset.themeOption = option.id;
     button.setAttribute("aria-checked", "false");
+    button.tabIndex = -1;
 
     const label = document.createElement("span");
     label.className = "theme-option-label";
@@ -4731,6 +4765,7 @@ function syncThemePicker(preference) {
     const isActive = button.dataset.themeOption === preference;
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-checked", isActive ? "true" : "false");
+    button.tabIndex = isActive ? 0 : -1;
   }
 }
 
@@ -4758,6 +4793,20 @@ themePicker?.addEventListener("click", (event) => {
   if (!button) return;
   setThemePreference(button.dataset.themeOption);
 });
+themePicker?.addEventListener("keydown", (event) => {
+  const choices = [...themePicker.querySelectorAll("[data-theme-option]")];
+  const index = choices.indexOf(document.activeElement);
+  if (index < 0) return;
+  let nextIndex;
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % choices.length;
+  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (index - 1 + choices.length) % choices.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = choices.length - 1;
+  else return;
+  event.preventDefault();
+  choices[nextIndex].focus();
+  setThemePreference(choices[nextIndex].dataset.themeOption);
+});
 
 // No modo automático, acompanha mudanças de tema do sistema em tempo real.
 prefersDarkScheme.addEventListener("change", () => {
@@ -4773,9 +4822,28 @@ syncThemePicker(currentThemePreference);
 
 for (const item of navigationItems) {
   item.addEventListener("click", () => {
+    closeMobileMore();
     showScreen(item.dataset.screen, { focus: true });
   });
 }
+mobileMoreToggle?.addEventListener("click", () => {
+  const open = !mobileMoreMenu.classList.contains("is-open");
+  mobileMoreMenu.classList.toggle("is-open", open);
+  mobileMoreToggle.classList.toggle("is-open", open);
+  mobileMoreToggle.setAttribute("aria-expanded", String(open));
+  if (open) mobileMoreMenu.querySelector(".nav-item:not([hidden])")?.focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && mobileMoreMenu?.classList.contains("is-open")) {
+    event.preventDefault();
+    closeMobileMore({ restoreFocus: true });
+  }
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!mobileMoreMenu?.classList.contains("is-open")) return;
+  if (!mobileMoreMenu.contains(event.target) && !mobileMoreToggle?.contains(event.target)) closeMobileMore();
+});
+window.matchMedia("(max-width: 47.99rem)").addEventListener("change", () => closeMobileMore());
 
 window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));
@@ -5773,6 +5841,20 @@ evolutionFilterPeriod?.addEventListener("change", async () => {
   const ok = renderEvolutionSvg(ev, units, subjs);
   chartEmpty.hidden = ok;
 });
+
+let planSearchTimer;
+planSearch?.addEventListener("input", () => {
+  clearTimeout(planSearchTimer);
+  if (databaseAvailable) planSearchTimer = setTimeout(() => renderPlan().catch(console.error), 160);
+});
+planClearFiltersBtn?.addEventListener("click", () => {
+  if (planSearch) planSearch.value = "";
+  if (planFilterSubject) { planFilterSubject.value = ""; syncSelect(planFilterSubject); }
+  if (planFilterState) { planFilterState.value = ""; syncSelect(planFilterState); }
+  if (databaseAvailable) renderPlan().catch(console.error);
+  planSearch?.focus();
+});
+planManageSubjectsBtn?.addEventListener("click", () => showScreen("subjects", { focus: true }));
 
 planFilterSubject?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
