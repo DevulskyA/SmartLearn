@@ -4626,6 +4626,7 @@ function closeMobileMore({ restoreFocus = false } = {}) {
 }
 
 export function showScreen(screenId, { focus = false } = {}) {
+  closeMobileMore();
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
   // Remote mode: a data screen with no authenticated session is a login
@@ -4844,6 +4845,10 @@ document.addEventListener("pointerdown", (event) => {
   if (!mobileMoreMenu.contains(event.target) && !mobileMoreToggle?.contains(event.target)) closeMobileMore();
 });
 window.matchMedia("(max-width: 47.99rem)").addEventListener("change", () => closeMobileMore());
+document.addEventListener("focusin", (event) => {
+  if (!mobileMoreMenu?.classList.contains("is-open")) return;
+  if (!mobileMoreMenu.contains(event.target) && !mobileMoreToggle?.contains(event.target)) closeMobileMore();
+});
 
 window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));
