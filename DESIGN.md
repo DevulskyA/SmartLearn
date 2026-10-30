@@ -127,7 +127,7 @@ No side-stripe accent borders for review/urgency status (see "Status, not stripe
 
 ## Interface unification, 30 Oct 2026
 
-- Desktop navigation keeps the current sections and their internal IDs. On narrow screens, Hoje, Materiais (when available), Plano and Estatísticas remain first-level; Acompanhar, Disciplinas, Configurações and Conta live in an accessible **Mais** menu. No user destination is removed.
+- Desktop navigation keeps the current sections and their internal IDs, with a visual divider separating lower-frequency destinations. On narrow screens, Hoje, Materiais (when available), Plano and Estatísticas remain first-level; Acompanhar, Disciplinas, Configurações and Conta live in an accessible **Mais** menu. No user destination is removed.
 - Disciplinas is a low-frequency administrative destination. The Plano offers a quiet **Gerenciar disciplinas** shortcut next to result metadata rather than competing with filters. Inline discipline registration remains available in lesson creation.
 - Plano and Acompanhamento share a control height of 2.75rem, neutral surface/border, radii and focus behavior. Search filters title, source and discipline name (case/accent insensitive), preserves ordering and displays the result count. A zero-result state offers a reset action.
 - Outside protected Estatísticas, discipline chips use a neutral surface plus the discipline-colored **left stripe**. Review urgency/status uses separate semantic color tokens. Archived cards remain legible at full text opacity.

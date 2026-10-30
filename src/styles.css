@@ -5683,7 +5683,14 @@ h1 {
 
 /* UI UNIFICATION 2026-10-30: accessible navigation, operational controls,
    subject identity and calmer surfaces. Statistics' protected layout stays intact. */
-.mobile-more-menu { display: contents; }
+.mobile-more-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
 .mobile-more-toggle { display: none; }
 
 /* Cohesive subject identity outside the approved Statistics composition. */

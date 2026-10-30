@@ -73,3 +73,13 @@ for (const width of [360, 375, 390]) {
     }
   });
 }
+
+test('Desktop sidebar separates administrative destinations without hiding them', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('#mobile-more-toggle')).toBeHidden();
+  await expect(page.locator('#mobile-more-menu [data-screen="subjects"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu [data-screen="settings"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu [data-screen="account"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu')).toHaveCSS('border-top-style', 'solid');
+});
