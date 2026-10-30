@@ -43,7 +43,15 @@ export async function signInRegistered(page, { email, password, summaryMode = 't
   await page.waitForLoadState('networkidle');
   const response = await registration;
   expect(response.ok(), `registering ${email} over HTTP failed with ${response.status()}: ${await response.text()}`).toBeTruthy();
-  await page.locator('[data-screen="account"]').click();
+  // On phone widths, Conta is a secondary destination inside the Mais
+  // popover. Exercise the real UI path rather than trying to click a
+  // deliberately hidden button (which times out under Playwright).
+  const accountNavigation = page.locator('[data-screen="account"]');
+  if (!(await accountNavigation.isVisible())) {
+    const more = page.locator('#mobile-more-toggle');
+    if (await more.isVisible()) await more.click();
+  }
+  await accountNavigation.click();
   await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
