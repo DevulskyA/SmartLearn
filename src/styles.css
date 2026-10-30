@@ -21,6 +21,14 @@
   --status-done-fill: oklch(0.945 0.05 158);
   --shadow-card: 0 1px 2px oklch(0.35 0.03 80 / 0.06), 0 10px 28px oklch(0.35 0.03 80 / 0.08);
   --radius-md: 0.75rem;
+  --radius-control: 0.7rem;
+  --radius-panel: 1rem;
+  --control-height: 2.75rem;
+  --color-surface-alt: var(--color-surface-sunken);
+  --color-danger: var(--status-overdue-text);
+  --color-warning: var(--status-overdue-text);
+  --color-accent: var(--color-primary);
+  --color-focus: var(--color-primary);
   --header-height: 4.5rem;
   --nav-width: 16rem;
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -913,10 +921,10 @@ h1 {
 }
 
 .small-button {
-  min-height: 2.5rem;
-  padding: 0.45rem 0.65rem;
+  min-height: var(--control-height);
+  padding: 0.45rem 0.75rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.55rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 0.85rem;
@@ -1551,10 +1559,10 @@ h1 {
 .field-group select,
 .field-group textarea {
   width: 100%;
-  min-height: 2.9rem;
+  min-height: var(--control-height);
   padding: 0.68rem 0.8rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.65rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
 }
@@ -3464,8 +3472,8 @@ h1 {
   padding: 0;
   width: min(60rem, 96vw);
   height: min(52rem, 92vh);
-  background: var(--surface);
-  color: var(--text);
+  background: var(--color-surface);
+  color: var(--color-text);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 .original-pdf-dialog[open] {
@@ -3502,8 +3510,8 @@ h1 {
   border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: min(90vw, 28rem);
-  background: var(--surface);
-  color: var(--text);
+  background: var(--color-surface);
+  color: var(--color-text);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 #confirm-dialog::backdrop {
@@ -3975,21 +3983,10 @@ h1 {
   margin-top: 0.5rem;
 }
 .tracking-state-badge[data-state="SEM_EVIDENCIA"] { background: var(--color-surface-sunken); color: var(--color-muted); }
-.tracking-state-badge[data-state="EM_ESTUDO"] { background: #dbeafe; color: #1e40af; }
-.tracking-state-badge[data-state="EM_REVISAO"] { background: #fef9c3; color: #92400e; }
-.tracking-state-badge[data-state="ATRASADO"] { background: #fee2e2; color: #991b1b; }
-.tracking-state-badge[data-state="EM_DIA"] { background: #dcfce7; color: #166534; }
-
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_ESTUDO"] { background: #1e3a5f; color: #93c5fd; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="ATRASADO"] { background: #450a0a; color: #fca5a5; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_DIA"] { background: #052e16; color: #86efac; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_ESTUDO"] { background: #1e3a5f; color: #93c5fd; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="ATRASADO"] { background: #450a0a; color: #fca5a5; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_DIA"] { background: #052e16; color: #86efac; }
-}
+.tracking-state-badge[data-state="EM_ESTUDO"] { background: var(--color-primary-soft); color: var(--color-primary); }
+.tracking-state-badge[data-state="EM_REVISAO"] { background: var(--color-primary-soft); color: var(--color-primary); }
+.tracking-state-badge[data-state="ATRASADO"] { background: var(--status-overdue-fill); color: var(--status-overdue-text); }
+.tracking-state-badge[data-state="EM_DIA"] { background: var(--status-done-fill); color: var(--status-done-text); }
 
 /* Subjects screen */
 .subjects-create-slot > .subject-create-form {
@@ -4004,14 +4001,14 @@ h1 {
 }
 .subject-catalog-card {
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--subject-color, var(--color-border));
+  border-left: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
   background: var(--color-surface);
 }
 .subject-catalog-card.is-archived {
-  opacity: 0.6;
+  background: var(--color-surface-sunken);
 }
 .subject-catalog-chip-row {
   display: flex;
@@ -4064,17 +4061,18 @@ h1 {
   flex-wrap: wrap;
 }
 .color-swatch {
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--swatch-color);
-  border: 2px solid transparent;
+  background-clip: padding-box;
+  border: 8px solid transparent;
   cursor: pointer;
   transition: transform 0.1s, border-color 0.1s;
   padding: 0;
 }
 .color-swatch:hover { transform: scale(1.15); }
-.color-swatch.is-selected { border-color: var(--color-text); transform: scale(1.1); }
+.color-swatch.is-selected { outline: 2px solid var(--color-text); outline-offset: -8px; transform: none; }
 /* inside the lesson editor a swatch is a 44px touch target; the coloured dot stays small (the transparent border is the hit area) */
 .lesson-editor .color-swatch {
   box-sizing: border-box;
@@ -4087,18 +4085,8 @@ h1 {
 .lesson-editor .color-swatch.is-selected { transform: none; }
 .lesson-editor .color-swatch.is-selected { outline: 2px solid var(--color-text); outline-offset: -9px; }
 .lesson-editor .color-swatch:disabled { opacity: 0.4; cursor: not-allowed; }
-.small-button {
-  padding: 0.3rem 0.7rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.small-button:hover { background: var(--color-surface-alt); }
-.small-button.is-primary { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
-.small-button.is-danger { color: var(--color-danger, #dc2626); border-color: var(--color-danger, #dc2626); }
+.small-button:hover { background: var(--color-surface-alt); border-color: var(--color-primary); }
+.small-button.is-danger { border-color: var(--status-overdue-text); }
 
 /* Phone width: the status pills ("Atrasada 20 dias", "1 para reforçar") drop under the title, so the title and
    the date get the card width instead of a ~100px sliver (the date used to break over three lines). */
@@ -5690,4 +5678,182 @@ h1 {
 
 .lesson-actions > .save-indicator {
   margin-inline-start: auto;
+}
+
+
+/* Keyboard focus must remain visible on all supported themes. */
+.app-nav .nav-item:focus-visible,
+.theme-toggle:focus-visible,
+.theme-option:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.small-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* UI UNIFICATION 2026-10-30: accessible navigation, operational controls,
+   subject identity and calmer surfaces. Statistics' protected layout stays intact. */
+.mobile-more-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+.mobile-more-toggle { display: none; }
+
+/* Cohesive subject identity outside the approved Statistics composition. */
+.screen:not(#screen-stats) .subject-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.3rem 0.65rem 0.3rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-transform: none;
+}
+.screen:not(#screen-stats) .subject-chip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0.25rem;
+  height: auto;
+  border-radius: 0;
+  background: var(--subject-color, var(--disc-color-disc-blue));
+}
+
+/* Shared control rhythm for Plano and Acompanhamento. */
+.plan-filters,
+.tracking-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+.plan-filters .ui-select,
+.tracking-filters .ui-select { flex: 0 1 auto; min-width: 10rem; }
+.plan-filters .ui-select-trigger,
+.tracking-filters .ui-select-trigger {
+  min-width: 10rem;
+  min-height: var(--control-height);
+  border-radius: var(--radius-control);
+  padding-inline: 0.8rem;
+  font-size: 0.88rem;
+}
+.plan-search { display: flex; flex: 1 1 17rem; min-width: min(100%, 13rem); }
+.plan-search input {
+  width: 100%;
+  min-height: var(--control-height);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.8rem;
+}
+.plan-search input::placeholder { color: var(--color-muted); }
+.plan-search input:focus-visible {
+  border-color: var(--color-primary);
+  outline: 3px solid var(--color-primary-soft);
+  outline-offset: 1px;
+}
+.plan-filter-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 0 0 1rem;
+}
+.plan-result-count {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.plan-admin-link {
+  margin: 0;
+  padding: 0;
+  min-height: 2rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+.plan-admin-link:hover { color: var(--color-primary); text-decoration: underline; }
+.plan-clear-filters { margin: 0.5rem 0 1rem; min-height: var(--control-height); }
+
+@media (max-width: 47.99rem) {
+  .app-nav .mobile-more-menu {
+    display: none;
+    position: fixed;
+    bottom: calc(4.75rem + var(--safe-area-bottom) + 0.55rem);
+    right: 0.75rem;
+    left: auto;
+    z-index: 4;
+    width: min(18rem, calc(100vw - 1.5rem));
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .app-nav .mobile-more-menu.is-open {
+    display: grid;
+    gap: 0.15rem;
+  }
+  .app-nav .mobile-more-menu .nav-item {
+    min-height: 3rem;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-control);
+    font-size: 0.9rem;
+    text-align: left;
+  }
+  .app-nav .mobile-more-menu .nav-item span { width: auto; }
+  .app-nav .mobile-more-menu .nav-item .nav-long {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+  .app-nav .mobile-more-menu .nav-item .nav-short { display: none; }
+  .app-nav .mobile-more-toggle { display: flex; }
+  .app-nav > .nav-item { font-size: 0.75rem; }
+  .app-nav .mobile-more-toggle.is-open {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+  }
+  .plan-filters .plan-search { flex-basis: 100%; }
+  .plan-filters .ui-select,
+  .tracking-filters .ui-select { flex: 1 1 min(100%, 11rem); }
+  .plan-filters .ui-select-trigger,
+  .tracking-filters .ui-select-trigger { width: 100%; }
+}
+
+/* Compact desktop windows (the product explicitly supports 800×600). */
+@media (min-width: 48rem) and (max-height: 720px) {
+  .app-nav {
+    overflow-y: auto;
+    min-height: 0;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+  }
+  .app-nav .nav-item { min-height: 2.75rem; padding: 0.55rem 0.75rem; }
+  .app-nav .mobile-more-menu { margin-top: 0.45rem; padding-top: 0.45rem; gap: 0.2rem; }
 }

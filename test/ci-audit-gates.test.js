@@ -31,8 +31,13 @@ test('the audit gates are blocking: no continue-on-error, no `|| true`, no `exit
   }
 });
 
-test('the audits run on the locked dependency tree (after `npm ci`), before the tests they protect', () => {
-  const index = (needle) => ci.indexOf(needle);
-  assert.ok(index('run: npm ci') >= 0 && index('run: npm ci') < index('run: npm audit --omit=dev'));
-  assert.ok(index('run: npm audit --omit=dev') < index('run: npm test'));
+test('security is an independent, blocking job using npm ci before both audits', () => {
+  const security = ci.split('\n  security:\n')[1]?.split('\n  rust:\n')[0];
+  assert.ok(security, 'CI contains a dedicated security job');
+  assert.match(security, /run: npm ci/);
+  assert.ok(security.indexOf('run: npm ci') < security.indexOf('run: npm audit --omit=dev'));
+  assert.ok(security.indexOf('run: npm audit --omit=dev') < security.indexOf('run: npm audit\n'));
+  assert.doesNotMatch(security, /continue-on-error|\|\|\s*(true|:|exit 0)/);
+  assert.match(ci, /\n  test:\n/, 'functional tests remain an independent CI job');
+  assert.match(ci, /\n  ui:\n/, 'UI regressions remain independently observable');
 });

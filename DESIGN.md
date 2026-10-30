@@ -49,7 +49,7 @@ System UI stack. Scale uses at least 1.25 weight/size contrast.
 Review state is shown by a leading round review-number token tinted by urgency and a small status pill, never by a colored side-stripe border. Cards keep full hairline borders, and the done state gets a faint full-surface tint. This rule governs urgency/status (overdue, today, done) specifically — it does not extend to subject identity (see "Subject identity" below), which is a different signal with its own approved treatment.
 
 ## Subject identity
-A subject/discipline is identified by a neutral chip (`.subject-cell`): a neutral surface fill, a hairline border, and a solid left stripe in the subject's own color (`subjectColor`) running the full height of the chip. This stripe is a structural identity marker, not decoration — it is the one place in the app where `subjectColor` appears, and it never carries performance or status meaning. Reused as-is anywhere a subject/discipline needs to be identified: matrix rows, the subject-switch trigger, and the subject-switch list (each open option is the same `.subject-cell` chip, not a dot, bullet, or fully-colored row). Do not substitute a colored dot, a fully-tinted surface, or any other marker for this chip. Do not extend the left-stripe treatment to other components (cards, list rows unrelated to subject identity, status indicators) without a separate, explicit decision — it is scoped to subject identity only.
+A subject/discipline is identified by a neutral chip (`.subject-cell`): a neutral surface fill, a hairline border, and a solid left stripe in the subject's own color (`subjectColor`) running the full height of the chip. This stripe is a structural identity marker, not decoration: `subjectColor` has exactly one visual meaning, identifying the discipline. The canonical `.subject-cell` chip appears in the statistics matrices, subject-switch trigger and switch list (each option uses the same chip, never a dot or fully-colored row). In operational screens outside protected Estatísticas, the compact `.subject-chip` follows the same **neutral fill + left stripe** grammar. Do not substitute a colored dot, a fully-tinted surface, or any other identity marker. Do not extend the left-stripe treatment to unrelated cards, status indicators or decorative surfaces: it is reserved for the discipline's identity.
 
 ## Select / combobox / context-switcher — three distinct patterns, not one
 
@@ -123,3 +123,14 @@ Ease-out-quint (`cubic-bezier(0.22, 1, 0.36, 1)`), 140-200ms. Animate opacity an
 
 ## Bans
 No side-stripe accent borders for review/urgency status (see "Status, not stripes" — the subject-identity stripe in "Subject identity" is the sole, explicit exception), no gradient text, no decorative glass, no identical-card metric grids, no em dashes in UI copy.
+
+
+## Interface unification, 30 Oct 2026
+
+- Desktop navigation keeps the current sections and their internal IDs, with a visual divider separating lower-frequency destinations. On narrow screens, Hoje, Materiais (when available), Plano and Estatísticas remain first-level; Acompanhar, Disciplinas, Configurações and Conta live in an accessible **Mais** menu. No user destination is removed.
+- Disciplinas is a low-frequency administrative destination. The Plano offers a quiet **Gerenciar disciplinas** shortcut next to result metadata rather than competing with filters. Inline discipline registration remains available in lesson creation.
+- Plano and Acompanhamento share a control height of 2.75rem, neutral surface/border, radii and focus behavior. Search filters title, source and discipline name (case/accent insensitive), preserves ordering and displays the result count. A zero-result state offers a reset action.
+- Outside protected Estatísticas, discipline chips use a neutral surface plus the discipline-colored **left stripe**. Review urgency/status uses separate semantic color tokens. Archived cards remain legible at full text opacity.
+- Configurações theme picker follows a proper keyboard radio group model: Tab focuses the checked option, arrow keys change the checked option, Home/End jump to endpoints.
+- Estatísticas (ADR-0001 protected) retains its approved composition and the distinct select versus context-switcher semantics. Avoid redesigning its matrix and charts without an explicit new approval.
+- Validation priorities: search and reset, secondary navigation by mouse/keyboard, saved theme preference, 360–1440px reflow, dark palette, preservation of statistics tests and data semantics.

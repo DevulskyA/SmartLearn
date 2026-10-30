@@ -1,11 +1,9 @@
 import { test, expect } from '@playwright/test';
 
-// Bottom navigation at phone width: EVERY visible destination must be inside
-// the viewport and tappable. Materiais only appears under LOCAL_DESKTOP_
-// AUTHORITY, which makes 8 items; a fixed 7-column grid used to push the
-// 8th ("Conta") onto an invisible second row.
+// On narrow screens the most frequent destinations stay immediately
+// available. Secondary destinations remain reachable via the More menu.
 for (const localAuthority of [false, true]) {
-  test(`375px bottom nav keeps every destination reachable (${localAuthority ? '8 items, Materiais visible' : '7 items'})`, async ({ page }) => {
+  test(`375px navigation: core destinations and accessible More (${localAuthority ? 'with' : 'without'} Materiais)`, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript((local) => {
       window.__SMARTLEARN_REMOTE_MODE__ = true;
@@ -14,48 +12,83 @@ for (const localAuthority of [false, true]) {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const items = page.locator('.app-nav .nav-item:visible');
-    await expect(items).toHaveCount(localAuthority ? 8 : 7);
-    const boxes = await items.evaluateAll((els) => els.map((el) => {
+    const primary = page.locator('.app-nav > .nav-item:visible');
+    await expect(primary).toHaveCount(localAuthority ? 5 : 4);
+    const boxes = await primary.evaluateAll((elements) => elements.map((el) => {
       const r = el.getBoundingClientRect();
-      return { name: el.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      return { name: el.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
     }));
     for (const box of boxes) {
-      expect(box.left, `${box.name} starts inside the viewport`).toBeGreaterThanOrEqual(-0.5);
-      expect(box.right, `${box.name} ends inside the viewport`).toBeLessThanOrEqual(375.5);
-      expect(box.bottom, `${box.name} is not pushed below the viewport`).toBeLessThanOrEqual(814);
+      expect(box.left, `${box.name} starts within viewport`).toBeGreaterThanOrEqual(-0.5);
+      expect(box.right, `${box.name} ends within viewport`).toBeLessThanOrEqual(375.5);
+      expect(box.bottom, `${box.name} remains visible`).toBeLessThanOrEqual(814);
+      expect(box.width, `${box.name} touch width`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `${box.name} touch height`).toBeGreaterThanOrEqual(44);
     }
-    // One single row: all items share the same top edge.
-    expect(new Set(boxes.map((b) => Math.round(b.top))).size).toBe(1);
-    await page.locator('.app-nav [data-screen="account"]').click();
+    expect(new Set(boxes.map((r) => Math.round(r.top))).size).toBe(1);
+    const more = page.locator('#mobile-more-toggle');
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await more.click();
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#mobile-more-menu .nav-item:visible')).toHaveCount(4);
+    await page.keyboard.press('Escape');
+    await expect(more).toBeFocused();
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+
+    await more.click();
+    await page.locator('#mobile-more-menu [data-screen="account"]').click();
     await expect(page.locator('#screen-account')).toBeVisible();
+    await expect(more).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#mobile-more-menu')).toBeHidden();
   });
 }
 
-// MOBILENAV-1: a label must read whole on ONE line (or in an agreed short form), never be cut in the middle of a
-// word ("Estatístic/as"). Measured on the visible label of every item, with all 8 destinations shown.
-for (const width of [375, 360]) {
-  test(`${width}px bottom nav: every visible label is a single unbroken line and each item is a >=44px touch target`, async ({ page }) => {
+for (const width of [360, 375, 390]) {
+  test(`${width}px: primary labels fit without truncation and all secondary destinations are reachable`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
-    await page.addInitScript(() => { window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; });
+    await page.addInitScript(() => {
+      window.__SMARTLEARN_REMOTE_MODE__ = true;
+      window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+    });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    const items = page.locator('.app-nav .nav-item:visible');
-    await expect(items).toHaveCount(8);
+    const items = page.locator('.app-nav > .nav-item:visible');
+    await expect(items).toHaveCount(5);
     const report = await items.evaluateAll((els) => els.map((el) => {
-      const labels = [...el.querySelectorAll('span, span span')].filter((s) => s.getClientRects().length > 0 && getComputedStyle(s).position !== 'absolute' && s.textContent.trim() !== '');
-      const leaf = labels.filter((s) => !s.querySelector('span')).filter((s) => { const r = s.getBoundingClientRect(); return r.width > 1 && r.height > 1; });
-      const visible = leaf[leaf.length - 1] ?? el.querySelector('span');
+      const candidate = el.querySelector('.nav-short')?.getClientRects().length ? el.querySelector('.nav-short') : el.querySelector('span');
       const range = document.createRange();
-      range.selectNodeContents(visible);
-      const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
-      const box = el.getBoundingClientRect();
-      return { text: visible.textContent.trim(), lines, overflow: visible.scrollWidth > visible.clientWidth + 1, height: box.height, width: box.width };
+      range.selectNodeContents(candidate);
+      return {
+        label: candidate.textContent.trim(),
+        lines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
+        overflow: candidate.scrollWidth > candidate.clientWidth + 1,
+      };
     }));
-    for (const r of report) {
-      expect(r.lines, `"${r.text}" must be one line`).toBe(1);
-      expect(r.overflow, `"${r.text}" must not overflow its item`).toBe(false);
-      expect(r.height, `"${r.text}" touch target height`).toBeGreaterThanOrEqual(44);
+    for (const item of report) {
+      expect(item.lines, `label ${item.label}`).toBe(1);
+      expect(item.overflow, `label ${item.label}`).toBe(false);
+    }
+    await page.locator('#mobile-more-toggle').click();
+    for (const name of ['tracking', 'subjects', 'settings', 'account']) {
+      await expect(page.locator(`#mobile-more-menu [data-screen="${name}"]`)).toBeVisible();
     }
   });
 }
+
+test('Desktop sidebar separates administrative destinations without hiding them', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('#mobile-more-toggle')).toBeHidden();
+  await expect(page.locator('#mobile-more-menu [data-screen="subjects"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu [data-screen="settings"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu [data-screen="account"]')).toBeVisible();
+  await expect(page.locator('#mobile-more-menu')).toHaveCSS('border-top-style', 'solid');
+});
+
+test('800×600 desktop window keeps all sidebar destinations usable', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/');
+  const account = page.locator('.app-nav [data-screen="account"]');
+  await expect(account).toBeVisible();
+  await account.click();
+  await expect(page.locator('#screen-account')).toBeVisible();
+});

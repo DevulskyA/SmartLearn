@@ -73,6 +73,7 @@
           </svg>
           <span><span class="nav-long" data-i18n="screens.stats.title">Estatísticas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.statsShort">Estat.</span></span>
         </button>
+        <div class="mobile-more-menu" id="mobile-more-menu" role="group" aria-label="Mais áreas" data-i18n-aria-label="screens.nav.moreMenu">
         <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
@@ -81,7 +82,7 @@
         </button>
         <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
           <svg aria-hidden="true" viewBox="0 0 24 24">
-            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            <path d="M4 5.5h7l2 2H20v12H4zM4 10h16M8 14h8M8 17h6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span><span class="nav-long" data-i18n="screens.subjects.title">Disciplinas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.subjectsShort">Discipl.</span></span>
         </button>
@@ -96,6 +97,11 @@
             <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>
           </svg>
           <span data-i18n="screens.account.title">Conta</span>
+        </button>
+        </div>
+        <button class="nav-item mobile-more-toggle" type="button" id="mobile-more-toggle" aria-controls="mobile-more-menu" aria-expanded="false" aria-label="Mais áreas" data-i18n-aria-label="screens.nav.moreMenu">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          <span data-i18n="screens.nav.more">Mais</span>
         </button>
         <p class="build-identity" id="build-identity" hidden></p>
       </nav>
@@ -243,6 +249,10 @@
           </div>
 
           <div class="plan-filters" id="plan-filters">
+            <label class="plan-search" for="plan-search">
+              <span class="visually-hidden" data-i18n="screens.plan.searchLabel">Buscar aulas</span>
+              <input id="plan-search" type="search" autocomplete="off" aria-label="Buscar aulas" data-i18n-aria-label="screens.plan.searchLabel" placeholder="Buscar pelo título ou pela fonte" data-i18n-placeholder="screens.plan.searchPlaceholder" />
+            </label>
             <select id="plan-filter-subject" aria-label="Filtrar por disciplina" data-i18n-aria-label="screens.filter.subjectLabel">
               <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
             </select>
@@ -260,8 +270,13 @@
               <option value="next-review" data-i18n="screens.plan.sort.nextReview">Próxima revisão</option>
             </select>
           </div>
+          <div class="plan-filter-meta">
+            <span id="plan-result-count" class="plan-result-count" role="status" aria-live="polite"></span>
+            <button class="text-button plan-admin-link" id="plan-manage-subjects-btn" type="button" data-i18n="screens.plan.manageSubjects">Gerenciar disciplinas</button>
+          </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden data-i18n="screens.plan.empty">Nenhuma aula cadastrada.</p>
+          <button type="button" class="secondary-button plan-clear-filters" id="plan-clear-filters" hidden data-i18n="screens.plan.clearFilters">Limpar filtros</button>
         </section>
 
         <section class="screen" id="screen-tracking" data-screen-panel="tracking" aria-labelledby="title-tracking" hidden>

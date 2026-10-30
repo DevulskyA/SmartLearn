@@ -35,13 +35,6 @@ jobs:
       - name: "Lint (structural: eqeqeq, no-undef; no-unused-vars is warn-only, tracked separately)"
         run: npm run lint
 
-      - name: Dependency audit (root)
-        run: npm audit --omit=dev
-
-      - name: Dependency audit (server)
-        run: npm audit
-        working-directory: server
-
       - name: Test inventory check (no silently excluded test files)
         run: npm run test:inventory
 
@@ -71,6 +64,81 @@ jobs:
           path: test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  # Focused visual/keyboard regressions run independently, including when
+  # an existing contract/ratchet test in the wider unit suite is red.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install root dependencies (locked)
+        run: npm ci
+
+      - name: Install server dependencies (locked)
+        run: npm ci
+        working-directory: server
+
+      - name: Build production web UI
+        run: npm run build
+
+      - name: Package production web UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartlearn-web-ui-${{ github.run_id }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UI regression and protected Statistics tests
+        run: npx playwright test e2e/mobile-nav.spec.js e2e/ui-unification.spec.js e2e/stats-responsive-regression.spec.js e2e/stats-discipline-drilldown.spec.js e2e/theme.spec.js e2e/accessibility.spec.js
+
+      - name: Upload failures (UI)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Security findings remain a hard CI failure, but they cannot prevent
+  # functional/UI tests from running and giving independent feedback.
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install root dependencies (locked)
+        run: npm ci
+
+      - name: Install server dependencies (locked)
+        run: npm ci
+        working-directory: server
+
+      - name: Dependency audit (root)
+        run: npm audit --omit=dev
+
+      - name: Dependency audit (server)
+        run: npm audit
+        working-directory: server
 
   rust:
     runs-on: ubuntu-latest
