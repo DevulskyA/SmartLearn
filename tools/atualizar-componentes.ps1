@@ -46,23 +46,14 @@ function Test-ProtectedRepository([string]$Path, [string[]]$ProtectedRoots) {
     return $false
 }
 
-function Find-ContainingRepository([string]$Path, [string[]]$RepositoryRoots) {
-    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-    $normalizedPath = ($Path -replace '/', '\').TrimEnd('\')
-    foreach ($repository in @($RepositoryRoots | Sort-Object { $_.Length } -Descending)) {
-        $normalizedRepository = ($repository -replace '/', '\').TrimEnd('\')
-        if ($normalizedPath -ieq $normalizedRepository -or $normalizedPath.StartsWith("$normalizedRepository\", [System.StringComparison]::OrdinalIgnoreCase)) {
-            return $repository
-        }
-    }
-    return $null
-}
-
 function Get-Inventory([string[]]$Roots, [string[]]$ProtectedRoots) {
     $repos = @{}
     $skills = @{}
 
     foreach ($root in $Roots) {
+        $gitRoot = Find-GitRoot $root
+        if ($gitRoot -and -not (Test-ProtectedRepository $gitRoot $ProtectedRoots)) { $repos[$gitRoot] = $gitRoot }
+
         $dirs = @()
         try {
             $dirs = @(Get-ChildItem -LiteralPath $root -Directory -Recurse -Depth 3 -Force -ErrorAction SilentlyContinue |
@@ -70,35 +61,18 @@ function Get-Inventory([string[]]$Roots, [string[]]$ProtectedRoots) {
         } catch { Write-Warning "Não foi possível ler ${root}: $($_.Exception.Message)" }
 
         $paths = @($root) + @($dirs | ForEach-Object FullName)
-        $repositoryRoots = @{}
-        $gitRoot = Find-GitRoot $root
-        if ($gitRoot) { $repositoryRoots[$gitRoot] = $gitRoot }
         foreach ($dir in $paths) {
             if (Test-Path -LiteralPath (Join-Path $dir '.git')) {
                 $resolvedDir = ((Resolve-Path -LiteralPath $dir).Path -replace '/', '\')
-                $repositoryRoots[$resolvedDir] = $resolvedDir
+                if (-not (Test-ProtectedRepository $resolvedDir $ProtectedRoots)) { $repos[$resolvedDir] = $resolvedDir }
             }
-        }
-
-        # Descoberta de identidade/ownership uma vez por repositório. Antes,
-        # cada SKILL.md repetia rev-parse e remote get-url, o que tornava a
-        # abertura do inventário proporcional ao número de skills.
-        $repositoryInfo = @{}
-        foreach ($repository in @($repositoryRoots.Values | Sort-Object -Unique)) {
-            $isProtected = Test-ProtectedRepository $repository $ProtectedRoots
-            $repositoryInfo[$repository] = $isProtected
-            if (-not $isProtected) { $repos[$repository] = $repository }
-        }
-
-        foreach ($dir in $paths) {
             $skillFile = Join-Path $dir 'SKILL.md'
             if (Test-Path -LiteralPath $skillFile -PathType Leaf) {
                 $skillPath = (Resolve-Path -LiteralPath $dir).Path
-                $skillRepo = Find-ContainingRepository $skillPath @($repositoryRoots.Values)
                 $skills[$skillPath] = [pscustomobject]@{
                     Name = Split-Path $skillPath -Leaf
                     Path = $skillPath
-                    Repo = if ($skillRepo -and $repositoryInfo[$skillRepo]) { $null } else { $skillRepo }
+                    Repo = if (Test-ProtectedRepository (Find-GitRoot $skillPath) $ProtectedRoots) { $null } else { Find-GitRoot $skillPath }
                 }
             }
         }
