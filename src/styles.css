@@ -5681,6 +5681,17 @@ h1 {
 }
 
 
+/* Keyboard focus must remain visible on all supported themes. */
+.app-nav .nav-item:focus-visible,
+.theme-toggle:focus-visible,
+.theme-option:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.small-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 /* UI UNIFICATION 2026-10-30: accessible navigation, operational controls,
    subject identity and calmer surfaces. Statistics' protected layout stays intact. */
 .mobile-more-menu {
@@ -5833,4 +5844,16 @@ h1 {
   .tracking-filters .ui-select { flex: 1 1 min(100%, 11rem); }
   .plan-filters .ui-select-trigger,
   .tracking-filters .ui-select-trigger { width: 100%; }
+}
+
+/* Compact desktop windows (the product explicitly supports 800×600). */
+@media (min-width: 48rem) and (max-height: 720px) {
+  .app-nav {
+    overflow-y: auto;
+    min-height: 0;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+  }
+  .app-nav .nav-item { min-height: 2.75rem; padding: 0.55rem 0.75rem; }
+  .app-nav .mobile-more-menu { margin-top: 0.45rem; padding-top: 0.45rem; gap: 0.2rem; }
 }

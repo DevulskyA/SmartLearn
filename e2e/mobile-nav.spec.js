@@ -83,3 +83,12 @@ test('Desktop sidebar separates administrative destinations without hiding them'
   await expect(page.locator('#mobile-more-menu [data-screen="account"]')).toBeVisible();
   await expect(page.locator('#mobile-more-menu')).toHaveCSS('border-top-style', 'solid');
 });
+
+test('800×600 desktop window keeps all sidebar destinations usable', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/');
+  const account = page.locator('.app-nav [data-screen="account"]');
+  await expect(account).toBeVisible();
+  await account.click();
+  await expect(page.locator('#screen-account')).toBeVisible();
+});
