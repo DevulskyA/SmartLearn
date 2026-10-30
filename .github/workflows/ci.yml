@@ -86,6 +86,17 @@ jobs:
         run: npm ci
         working-directory: server
 
+      - name: Build production web UI
+        run: npm run build
+
+      - name: Package production web UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartlearn-web-ui-${{ github.run_id }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 

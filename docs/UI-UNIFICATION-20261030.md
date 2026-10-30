@@ -25,3 +25,6 @@ O novo fluxo de navegação substitui deliberadamente o antigo teste que exigia 
 - O teste `i18n-scan` já encontrava 576 textos em `server/src` e `shared`, acima do baseline de 574. O contrato determina decisão explícita para migrá-los; a contagem não foi relaxada.
 - A caracterização dos rótulos médicos foi atualizada para verificar também os cinco novos códigos de contradição já existentes na aplicação (unidade, qualificadores e negações).
 - O job `ui` testa navegação, pesquisa, temas, acessibilidade e as matrizes protegidas de Estatísticas independentemente desses débitos anteriores.
+
+## Artefato reproduzível
+O job de interface gera o bundle web de produção com `npm run build` e publica `dist/` como artifact `smartlearn-web-ui-<run_id>`. Esse artefato é o **frontend web estático**, que requer o backend SmartLearn para as ações com dados; não é um instalador Tauri/Windows. O build e os testes Playwright funcionam como gates independentes no GitHub Actions.
