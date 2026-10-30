@@ -19,3 +19,9 @@
 
 ## Observação
 O novo fluxo de navegação substitui deliberadamente o antigo teste que exigia oito destinos de 44–48 px no rodapé. Nenhuma funcionalidade foi removida: os destinos secundários foram realocados no menu Mais.
+
+## Integridade de CI pré-existente
+- Uma vulnerabilidade de dependência KaTeX no pacote original permanece visível no job `security` e bloqueia a aprovação automática; não foi ocultada com `continue-on-error`.
+- O teste `i18n-scan` já encontrava 576 textos em `server/src` e `shared`, acima do baseline de 574. O contrato determina decisão explícita para migrá-los; a contagem não foi relaxada.
+- A caracterização dos rótulos médicos foi atualizada para verificar também os cinco novos códigos de contradição já existentes na aplicação (unidade, qualificadores e negações).
+- O job `ui` testa navegação, pesquisa, temas, acessibilidade e as matrizes protegidas de Estatísticas independentemente desses débitos anteriores.
