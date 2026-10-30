@@ -125,7 +125,15 @@ for (const { theme, width, height } of CASES) {
     expect(await page.evaluate(() => document.documentElement.dataset.theme ?? document.documentElement.dataset.themeMode)).toBeTruthy();
     const found = [];
     for (const screen of SCREENS) {
-      await page.locator(`.app-nav [data-screen="${screen.id}"]:visible, [data-screen="${screen.id}"]:visible`).first().click();
+      // Secondary destinations live in Mais on phones. Open the
+      // actual UI menu before visiting that screen; never force-click a
+      // hidden element (which masks real a11y results with timeouts).
+      const destination = page.locator(`.app-nav [data-screen="${screen.id}"]`).first();
+      if (!(await destination.isVisible())) {
+        const more = page.locator('#mobile-more-toggle');
+        if (await more.isVisible()) await more.click();
+      }
+      await destination.click();
       await expect(page.locator(`#screen-${screen.id}`)).toBeVisible();
       await page.waitForLoadState('networkidle');
       if (screen.id === 'today') {
