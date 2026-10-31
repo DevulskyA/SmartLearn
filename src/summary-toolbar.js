@@ -2,6 +2,7 @@
 // can be clicked to be edited again. The textarea stays the single source of truth (summary_body is plain text); these controls only write
 // the controlled Markdown at the cursor, so the student never has to type the syntax.
 import { t } from "./i18n/index.js";
+import { showConfirm } from "./confirm-dialog.js";
 import { mathSnippet, replaceMath } from "../shared/summary-markdown.js";
 import { openMathDialog } from "./math-dialog.js";
 import { renderSummary } from "./summary-render.js";
@@ -196,7 +197,7 @@ function createModeSwitch(textarea, bar, preview) {
       editor.focus();
     } else {
       editor?.flush();
-      if (editor?.isBlocked() && !window.confirm(t("summary.mode.confirmDiscard"))) return;
+      if (editor?.isBlocked() && !(await showConfirm(t("summary.mode.confirmDiscard")))) return;
       show("text");
       if (remember) rememberMode("text");
       textarea.focus({ preventScroll: true });

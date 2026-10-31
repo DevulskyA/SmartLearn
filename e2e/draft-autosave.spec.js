@@ -166,10 +166,9 @@ test('the summary saves itself 2.5 s after the last keystroke, not before, and t
   await expect(summaryIndicator(editor)).toHaveAttribute('data-state', 'saved');
   await expect(editor.locator('[data-action="save-summary"]')).toBeDisabled();
   expect(await localCopy(page, editor)).toBeNull(); // the server has it: the local copy is gone
-  let asked = false;
-  page.once('dialog', (dialog) => { asked = true; dialog.dismiss(); });
   await editor.locator('[data-action="lesson-back"]').click();
-  expect(asked).toBe(false);
+  await expect(page.locator('.lesson-editor')).toHaveCount(0); // left at once: the app's confirmation never opened
+  await expect(page.locator('#confirm-dialog')).toBeHidden();
 });
 
 test('every keystroke is kept at once in a recoverable local copy, before any request', async ({ page }) => {
@@ -491,8 +490,6 @@ test('answers that arrive out of order never roll the screen back: an OLDER answ
 });
 
 test('leaving with a pending autosave saves first, asks nothing and loses nothing: summary and question', async ({ page }) => {
-  let asked = 0;
-  page.on('dialog', (dialog) => { asked += 1; dialog.dismiss(); });
   const editor = await startWith(page, 'Base.');
   const input = editor.locator('.lesson-summary-input');
   await input.click();
@@ -500,7 +497,7 @@ test('leaving with a pending autosave saves first, asks nothing and loses nothin
   await input.pressSequentially(' escrito antes de sair');
   await editor.locator('[data-action="lesson-back"]').click(); // well inside the 2.5 s wait
   await expect(page.locator('.lesson-editor')).toHaveCount(0);
-  expect(asked).toBe(0);
+  await expect(page.locator('#confirm-dialog')).toBeHidden(); // nothing was asked
   const again = await reopenDraft(page);
   await expect(again.locator('.lesson-summary-input')).toHaveValue('Base. escrito antes de sair'); // it was saved on the way out
   await expect(again.locator('.lesson-recovery')).toBeHidden();
@@ -514,7 +511,7 @@ test('leaving with a pending autosave saves first, asks nothing and loses nothin
   await answer.pressSequentially(' questão antes de sair');
   await again.locator('[data-action="lesson-back"]').click();
   await expect(page.locator('.lesson-editor')).toHaveCount(0);
-  expect(asked).toBe(0);
+  await expect(page.locator('#confirm-dialog')).toBeHidden(); // nothing was asked
   const third = await reopenDraft(page);
   expect((await serverDraft(page, third)).questions[1].answer).toBe(`${base} questão antes de sair`);
 });

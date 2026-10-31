@@ -30,6 +30,7 @@ export class ApiError extends Error {
     super((key && has(key) ? t(key, msg.params ?? {}) : message) || code);
     this.name = 'ApiError';
     this.code = code;
+    this.msgCode = typeof msg?.code === 'string' ? msg.code : null;
     this.status = status;
     this.field = field;
     this.requestId = requestId;

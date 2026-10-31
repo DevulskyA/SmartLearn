@@ -8,6 +8,7 @@ import { formatNumber } from "./i18n/format.js";
 import { t } from "./i18n/index.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { showConfirm } from "./confirm-dialog.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
 import * as GenerationJobsUI from "./generation-jobs-ui.js";
 import {
@@ -307,7 +308,7 @@ async function continueInBackground() {
 async function cancelWatched() {
   if (!watched) return;
   const { cancel } = watched.elements;
-  if (!window.confirm(t("materials.progress.cancelConfirm"))) {
+  if (!(await showConfirm(t("materials.progress.cancelConfirm")))) {
     cancel.focus({ preventScroll: true });
     return;
   }

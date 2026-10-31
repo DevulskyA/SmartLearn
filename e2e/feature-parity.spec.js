@@ -141,4 +141,40 @@ test('Configuracoes: import/reset show a safe explanatory state instead of a dea
   await expect(page.locator('#choose-backup-file')).toBeHidden({ timeout: 5000 });
   await expect(page.locator('#reset-database')).toBeHidden({ timeout: 5000 });
   await expect(page.locator('#reset-message')).toContainText(/não é uma operação suportada/i, { timeout: 5000 });
+  // T-F13-13: the card's own sentence promises the removal that is not offered here
+  await expect(page.locator('#reset-body')).toBeAttached({ timeout: 5000 });
+  await expect(page.locator('#reset-body')).toBeHidden({ timeout: 5000 });
+});
+
+test('Acompanhar: the discipline filter lists a discipline created after the screen was first opened (T-F13-13)', async ({ page }) => {
+  const createSubject = async (name) => {
+    await page.locator('[data-screen="subjects"]').click();
+    await page.locator('#subjects-show-create-btn').click();
+    await page.locator('#subjects-new-name').fill(name);
+    await page.locator('#subjects-create-save-btn').click();
+    await expect(page.locator('.subject-catalog-card', { hasText: name })).toBeVisible({ timeout: 5000 });
+  };
+  await createSubject('Disciplina Previa'); // the filter is first built with one discipline in it
+  await page.locator('[data-screen="tracking"]').click();
+  await expect(async () => {
+    expect(await page.locator('#tracking-filter-subject option').allTextContents()).toContain('Disciplina Previa');
+  }).toPass({ timeout: 5000 });
+  await createSubject('Disciplina Tardia');
+  await page.locator('[data-screen="tracking"]').click();
+  await expect(async () => {
+    const names = await page.locator('#tracking-filter-subject option').allTextContents();
+    expect(names).toContain('Disciplina Tardia');
+  }).toPass({ timeout: 5000 });
+});
+
+test('a data screen that cannot load says so and loads when the student tries again (T-F13-11)', async ({ page }) => {
+  await page.route('**/v1/learning-units', (route) => (route.request().method() === 'GET' ? route.abort() : route.continue()));
+  await page.locator('[data-screen="plan"]').click();
+  const error = page.locator('#screen-plan .screen-load-error');
+  await expect(error).toBeVisible({ timeout: 8000 });
+  await expect(error).toContainText('Não foi possível carregar esta tela');
+  await expect(page.locator('#screen-plan')).not.toHaveAttribute('aria-busy', 'true');
+  await page.unroute('**/v1/learning-units');
+  await error.getByRole('button', { name: 'Tentar de novo' }).click();
+  await expect(error).toBeHidden({ timeout: 8000 });
 });

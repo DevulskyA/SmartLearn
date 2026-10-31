@@ -34,6 +34,7 @@ import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningR
 import { configureMaterialsUI } from "./materials-ui.js";
 import { embeddedIdentity } from "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { showConfirm } from "./confirm-dialog.js";
 import { renderSummary } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
@@ -51,28 +52,6 @@ async function withScrollPreserved(fn) {
   });
 }
 
-function showConfirm(message) {
-  return new Promise((resolve) => {
-    const dialog = document.getElementById("confirm-dialog");
-    const msgEl = document.getElementById("confirm-dialog-message");
-    const okBtn = document.getElementById("confirm-dialog-ok");
-    const cancelBtn = document.getElementById("confirm-dialog-cancel");
-    msgEl.textContent = message;
-    const finish = (result) => {
-      okBtn.removeEventListener("click", onOk);
-      cancelBtn.removeEventListener("click", onCancel);
-      dialog.removeEventListener("cancel", onCancel);
-      dialog.close();
-      resolve(result);
-    };
-    const onOk = () => finish(true);
-    const onCancel = () => finish(false);
-    okBtn.addEventListener("click", onOk);
-    cancelBtn.addEventListener("click", onCancel);
-    dialog.addEventListener("cancel", onCancel);
-    dialog.showModal();
-  });
-}
 
 // T21: explicit, configuration-controlled authority switch — never an
 // automatic/implicit fallback. Default is the existing local BrowserStore/
@@ -149,7 +128,7 @@ const dbInit = DB.init()
     const banner = document.createElement('div');
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
+    banner.className = 'app-banner app-banner--fatal';
     banner.textContent = REMOTE_MODE
       ? t('shell.dbError.server')
       : t('shell.dbError.local');
@@ -367,6 +346,8 @@ const studyNowCorrectedSection = document.querySelector("#study-now-corrected-se
 const studyNowCorrectedTitle = document.querySelector("#study-now-corrected-title");
 const studyNowCorrectedList = document.querySelector("#study-now-corrected-list");
 const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
+const studyNowEvidenceNote = document.querySelector("#study-now-evidence-note");
+const studyNowEvidenceRetryBtn = document.querySelector("#study-now-evidence-retry-btn");
 const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
 const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
 const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
@@ -1153,7 +1134,7 @@ async function renderOfflineToday(accountId) {
     banner = document.createElement("div");
     banner.id = "offline-banner";
     banner.setAttribute("role", "status");
-    banner.style.cssText = "position:sticky;top:0;z-index:100;background:#92400e;color:#fff;padding:.5rem 1rem;font-size:.8125rem;text-align:center;";
+    banner.className = "app-banner";
     mainContent?.prepend(banner);
   }
   banner.hidden = false;
@@ -2284,13 +2265,18 @@ export async function renderTracking() {
   }
 
   // Populate subject filter
-  if (trackingFilterSubject && trackingFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
+  // Rebuilt on every render (like Plano's): a discipline created, renamed or archived since the last visit must show up here too.
+  if (trackingFilterSubject) {
+    const chosen = trackingFilterSubject.value;
+    const activeSubjects = subjects.filter((s) => s.isActive);
+    trackingFilterSubject.replaceChildren(trackingFilterSubject.options[0]);
+    for (const s of activeSubjects) {
       const opt = document.createElement("option");
       opt.value = String(s.id);
       opt.textContent = s.name;
       trackingFilterSubject.append(opt);
     }
+    if (activeSubjects.some((s) => String(s.id) === chosen)) trackingFilterSubject.value = chosen;
     syncSelect(trackingFilterSubject);
   }
 
@@ -2984,6 +2970,9 @@ export async function renderSettings() {
   // mirroring how import/reset are REMOTE_MODE-only in the opposite
   // direction above.
   if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
+  // The card's own sentence promises the removal; with the button gone only the reason below it stays.
+  const resetBody = document.querySelector("#reset-body");
+  if (resetBody) resetBody.hidden = REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
@@ -3225,6 +3214,9 @@ configureMaterialsUI({
 // created or completed by this flow. One question at a time, per spec.
 let studyNowState = null;
 let studyNowLastBlock = null;
+// The INITIAL_PRACTICE evidence of the block just finished, kept until the server has it: the answers are already on the
+// server (each judgment was accepted first), but the aggregate row that feeds Estatisticas is a separate request that can fail.
+let pendingStudyEvidence = null;
 
 // "initial" = the block the student just practiced (writes the aggregate
 // INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
@@ -3243,6 +3235,10 @@ function resetStudyNowResult() {
   studyNowResultText.textContent = "";
   studyNowResultNote.hidden = true;
   studyNowResultNote.textContent = "";
+  studyNowEvidenceNote.hidden = true;
+  studyNowEvidenceNote.textContent = "";
+  studyNowEvidenceRetryBtn.hidden = true;
+  pendingStudyEvidence = null;
   studyNowNextReviewText.textContent = "";
   studyNowErrorsSection.hidden = true;
   studyNowErrorsList.replaceChildren();
@@ -3453,18 +3449,15 @@ async function finishStudyNowSession() {
 
   const { unitId, answeredCount, correctCount, attemptIds } = state;
   if (answeredCount > 0 && !isRetest) {
-    try {
-      await DB.learningEvidence.create({
-        unitId,
-        context: "INITIAL_PRACTICE",
-        questionsCount: answeredCount,
-        correctCount,
-        evidenceDate: getLocalDateValue(),
-        attemptIds,
-      });
-    } catch (error) {
-      console.error("Falha ao registrar evidência de prática inicial.", error);
-    }
+    pendingStudyEvidence = {
+      unitId,
+      context: "INITIAL_PRACTICE",
+      questionsCount: answeredCount,
+      correctCount,
+      evidenceDate: getLocalDateValue(),
+      attemptIds,
+    };
+    await recordStudyEvidence();
   }
 
   if (isRetest) {
@@ -3530,6 +3523,40 @@ async function finishStudyNowSession() {
   renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
   renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
 }
+
+/** Sends the pending evidence; on failure tells the student and offers to send it again. An earlier try that did reach the server counts as recorded. */
+async function recordStudyEvidence() {
+  const evidence = pendingStudyEvidence;
+  if (!evidence) return;
+  try {
+    await DB.learningEvidence.create(evidence);
+  } catch (error) {
+    if (error?.msgCode !== "ATTEMPT_IN_OTHER_EVIDENCE") {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+      studyNowEvidenceNote.classList.add("is-error");
+      studyNowEvidenceNote.textContent = t("appStudyNow.evidenceFailed");
+      studyNowEvidenceNote.hidden = false;
+      studyNowEvidenceRetryBtn.hidden = false;
+      return;
+    }
+  }
+  const wasRetry = !studyNowEvidenceNote.hidden;
+  pendingStudyEvidence = null;
+  studyNowEvidenceRetryBtn.hidden = true;
+  studyNowEvidenceNote.classList.remove("is-error");
+  studyNowEvidenceNote.textContent = wasRetry ? t("appStudyNow.evidenceSaved") : "";
+  studyNowEvidenceNote.hidden = !wasRetry;
+  if (wasRetry) {
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  }
+}
+
+studyNowEvidenceRetryBtn?.addEventListener("click", async () => {
+  studyNowEvidenceRetryBtn.disabled = true;
+  try { await recordStudyEvidence(); } finally { studyNowEvidenceRetryBtn.disabled = false; }
+  (studyNowEvidenceRetryBtn.hidden ? studyNowDoneBtn : studyNowEvidenceRetryBtn).focus();
+});
 
 function createStudyErrorItem(exercise) {
   const li = document.createElement("li");
@@ -4597,6 +4624,34 @@ const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", 
 // A real fix (surfacing exercise management from Plano/Hoje instead of
 // this legacy screen) is future UI work, not a T22 redirect decision.
 
+/**
+ * Runs the render of a data screen and tells the student when it could not load (it used to reach only the console, leaving an
+ * empty or stale screen with no way forward). The panel is aria-busy while it loads; the message offers to try again.
+ */
+function runScreenRender(screenId, render) {
+  const panel = document.querySelector(`#screen-${screenId}`);
+  const clear = () => panel?.querySelector(":scope > .screen-load-error")?.remove();
+  clear();
+  panel?.setAttribute("aria-busy", "true");
+  return Promise.resolve()
+    .then(render)
+    .then(clear)
+    .catch((error) => {
+      console.error("Falha ao carregar a tela.", screenId, error);
+      clear();
+      if (!panel) return;
+      const box = document.createElement("div");
+      box.className = "screen-load-error";
+      box.setAttribute("role", "alert");
+      const retry = createTextElement("button", "small-button", t("shell.retry"));
+      retry.type = "button";
+      retry.addEventListener("click", () => runScreenRender(screenId, render));
+      box.append(createTextElement("p", "", t("shell.loadFailed")), retry);
+      panel.querySelector(":scope > .screen-heading")?.after(box);
+    })
+    .finally(() => panel?.removeAttribute("aria-busy"));
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
@@ -4656,27 +4711,27 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
 
   if (nextScreen === "today" && databaseAvailable) {
-    renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
+    runScreenRender("today", renderToday);
   }
 
   if (nextScreen === "stats" && databaseAvailable) {
-    renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
+    runScreenRender("stats", renderStats);
   }
   if (nextScreen === "plan" && databaseAvailable) {
     // Never leave an interactive stale Plano on screen while its authoritative refresh
     // is in flight. A fast click on an old row could otherwise expand stale closures
     // just before the fresh render replaced that row (CI EXAM-4 regression).
     planList?.replaceChildren();
-    renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
+    runScreenRender("plan", renderPlan);
   }
   if (nextScreen === "tracking" && databaseAvailable) {
-    renderTracking().catch((error) => console.error("Falha ao carregar acompanhamento.", error));
+    runScreenRender("tracking", renderTracking);
   }
   if (nextScreen === "subjects" && databaseAvailable) {
-    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
+    runScreenRender("subjects", renderDisciplinas);
   }
   if (nextScreen === "settings" && databaseAvailable) {
-    renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+    runScreenRender("settings", renderSettings);
   }
   // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
   // list populated on plain navigation — renderStudies() only ran after a

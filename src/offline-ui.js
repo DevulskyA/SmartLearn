@@ -18,7 +18,7 @@ function ensureIndicator() {
   indicatorEl.id = 'connectivity-banner';
   indicatorEl.setAttribute('role', 'status');
   indicatorEl.hidden = true;
-  indicatorEl.style.cssText = 'position:sticky;top:0;z-index:200;padding:.5rem 1rem;font-size:.8125rem;text-align:center;background:#92400e;color:#fff;';
+  indicatorEl.className = 'app-banner app-banner--connectivity';
   document.body.prepend(indicatorEl);
   return indicatorEl;
 }

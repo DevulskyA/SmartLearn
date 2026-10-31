@@ -2,6 +2,8 @@
 export default {
   // Boot
   'shell.dbError.server': 'Erro: não foi possível conectar ao servidor. Tente novamente em instantes.',
+  'shell.loadFailed': 'Não foi possível carregar esta tela. Verifique a conexão; o que você já salvou não foi afetado.',
+  'shell.retry': 'Tentar de novo',
   'shell.dbError.local': 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.',
 
   // Buttons and labels shared by several screens
