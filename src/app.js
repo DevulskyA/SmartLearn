@@ -32,7 +32,7 @@ import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experim
 
 import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
-import "./build-identity-ui.js";
+import { embeddedIdentity } from "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { renderSummary } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
@@ -5987,6 +5987,13 @@ document.querySelector("#account-show-login")?.addEventListener("click", () => {
   accountRegisterForm.hidden = true;
   accountLoginForm.hidden = false;
 });
+
+// DEV builds only (channel DEV, never RELEASE): the login form opens pre-filled with the local dev account (same literal as
+// scripts/seed-dev.mjs DEV_ACCOUNT), so the owner does not retype it on every start. Decision of the owner, 2026-10-27.
+if (embeddedIdentity()?.channel === "DEV" && accountLoginForm) {
+  accountLoginForm.email.value = "dev@smartlearn.local";
+  accountLoginForm.password.value = "SmartLearn-dev-2026-local-only";
+}
 
 accountLoginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
