@@ -133,3 +133,67 @@ test('T-F13-01: a first pass whose evidence is recorded shows no warning', async
   await expect(page.locator('#study-now-evidence-note')).toBeHidden();
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();
 });
+
+// T-F13-02 / T-F13-03: "Revisar uma por vez" opens the unanswered questions of the review Hoje suggests, one at a time, and closes the
+// review with the whole block (answers already given inside the row included).
+const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+async function reviewDueToday(page, title, questions = 3) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Revisão ${title}`, title, studyDate: yesterday() }); // review 1 falls due today
+  for (let i = 1; i <= questions; i += 1) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} ${i}?`, answer: `Certa ${i}`, provenance: 'MANUAL' });
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('[data-screen="today"]').click();
+  await expect(page.locator('#today-focus-review-btn')).toBeVisible({ timeout: 8000 });
+  return unit;
+}
+
+test('T-F13-02: a review is answered one question at a time and closes once, with every answer counted', async ({ page }) => {
+  const unit = await reviewDueToday(page, 'Aula revisao a');
+  await page.locator('#today-focus-review-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 3');
+  for (const judge of ['#study-now-correct-btn', '#study-now-correct-btn', '#study-now-incorrect-btn']) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(judge).click();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator('#study-now-result-title')).toHaveText('Resultado da revisão', { timeout: 8000 });
+  await expect(page.locator('#study-now-result-text')).toContainText('2/3 corretas na revisão');
+  await expect(page.locator('#study-now-retest-btn')).toBeVisible(); // the wrong one can be redone
+  const rows = await evidenceRows(page, unit.id);
+  expect(rows.length).toBe(1);
+  expect(rows[0].questionsCount).toBe(3);
+  expect(rows[0].correctCount).toBe(2);
+  await page.locator('#study-now-done-btn').click();
+  await expect(page.locator('#block-done-today .review-row')).toHaveCount(1, { timeout: 8000 });
+  await expect(page.locator('#today-focus-review-btn')).toBeHidden();
+});
+
+test('T-F13-02: answers already given inside the Hoje row are kept: the focused review asks only the rest and counts all', async ({ page }) => {
+  const unit = await reviewDueToday(page, 'Aula revisao b');
+  await page.locator('.review-row [data-action="toggle-row"]').first().click();
+  await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
+  await page.locator('.review-exercise-item [data-action="exercise-acertei"]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('#today-focus-review-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 2'); // one of three was already answered
+  for (const judge of ['#study-now-incorrect-btn', '#study-now-correct-btn']) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(judge).click();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator('#study-now-result-text')).toContainText('2/3 corretas na revisão', { timeout: 8000 }); // 1 inline + 1 right + 1 wrong
+  const rows = await evidenceRows(page, unit.id);
+  expect(rows.length).toBe(1);
+  expect(rows[0].questionsCount).toBe(3);
+  expect(rows[0].correctCount).toBe(2);
+});
+
+test('T-F13-02: with nothing left to answer the focused review is not offered', async ({ page }) => {
+  await reviewDueToday(page, 'Aula revisao c', 1);
+  await page.locator('.review-row [data-action="toggle-row"]').first().click();
+  await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
+  await page.locator('.review-exercise-item [data-action="exercise-acertei"]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('[data-screen="today"]').click();
+  await expect(page.locator('#today-focus-review-btn')).toBeHidden({ timeout: 8000 });
+});

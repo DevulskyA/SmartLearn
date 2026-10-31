@@ -14,6 +14,7 @@ export default {
   'screens.today.dailySummary.close': '× Fechar',
   'screens.today.dailySummary.closeLabel': 'Fechar painel de resumos',
   'screens.today.primaryAction': 'Começar agora',
+  'screens.today.focusReview': 'Revisar uma por vez',
   'screens.today.block.overdue': 'Vencidas',
   'screens.today.block.today': 'Para hoje',
   'screens.today.block.done': 'Feitas hoje',

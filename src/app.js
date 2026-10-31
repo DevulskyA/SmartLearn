@@ -204,6 +204,7 @@ const reviewDashboard = document.querySelector("#review-dashboard");
 const todayPrimaryAction = document.querySelector("#today-primary-action");
 const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
 const todayPrimaryActionBtn = document.querySelector("#today-primary-action-btn");
+const todayFocusReviewBtn = document.querySelector("#today-focus-review-btn");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
@@ -1414,9 +1415,16 @@ export async function renderToday() {
           : t("today.primary.start", { lead, title: unitTitle }))
         : lead;
       todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
+      // "Revisar uma por vez" opens the questions of this review one at a time; only offered while some are still unanswered.
+      if (todayFocusReviewBtn) {
+        const { exerciseIds, judgedIds } = contextOf(primaryTask);
+        todayFocusReviewBtn.dataset.reviewId = String(primaryTask.id);
+        todayFocusReviewBtn.hidden = !exerciseIds.some((id) => !judgedIds.has(id));
+      }
       todayPrimaryAction.hidden = false;
     } else {
       todayPrimaryAction.hidden = true;
+      if (todayFocusReviewBtn) todayFocusReviewBtn.hidden = true;
     }
   }
 
@@ -3430,11 +3438,13 @@ function renderStudyNowQuestion() {
   studyNowJudgment.hidden = true;
   studyNowRevealBtn.hidden = false;
   studyNowRevealBtn.textContent = t("appStudyNow.reveal");
-  studyNowProgress.textContent = t(state.mode === "retest" ? "appStudyNow.progress.retest" : "appStudyNow.progress.question", { current: state.index + 1, total: state.exercises.length });
-  studyNowPracticeTitle.textContent = t(state.mode === "retest" ? "appStudyNow.practiceTitle.retest" : "appStudyNow.practiceTitle");
+  const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review" }[state.mode] ?? "appStudyNow.progress.question";
+  const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
+  studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
+  studyNowPracticeTitle.textContent = t(titleKey);
   // The Resumo Mestre contains the very answers being retrieved: showing it
   // above a redo question would turn retrieval practice into reading.
-  if (state.mode === "retest") studyNowSummaryCard.hidden = true;
+  if (state.mode === "retest" || state.mode === "review") studyNowSummaryCard.hidden = true;
   state.attemptId = null;
   state.pendingReveal = null;
   delete studyNowQuestionArea.dataset.attemptId;
@@ -3448,15 +3458,21 @@ async function finishStudyNowSession() {
   studyNowProgress.textContent = "";
 
   const { unitId, answeredCount, correctCount, attemptIds } = state;
+  const isReview = state.mode === "review";
+  // A review that was partly judged inside its Hoje row counts those answers too: the review closes with the whole block.
+  const totalAnswered = answeredCount + (isReview ? state.restored.answered : 0);
+  const totalCorrect = correctCount + (isReview ? state.restored.correct : 0);
   if (answeredCount > 0 && !isRetest) {
-    pendingStudyEvidence = {
-      unitId,
-      context: "INITIAL_PRACTICE",
-      questionsCount: answeredCount,
-      correctCount,
-      evidenceDate: getLocalDateValue(),
-      attemptIds,
-    };
+    pendingStudyEvidence = isReview
+      ? { reviewTaskId: state.reviewTaskId, questionsCount: totalAnswered, correctCount: totalCorrect }
+      : {
+        unitId,
+        context: "INITIAL_PRACTICE",
+        questionsCount: answeredCount,
+        correctCount,
+        evidenceDate: getLocalDateValue(),
+        attemptIds,
+      };
     await recordStudyEvidence();
   }
 
@@ -3465,6 +3481,10 @@ async function finishStudyNowSession() {
     studyNowResultText.textContent = t("appStudyNow.score.retest", { correct: correctCount, answered: answeredCount });
     studyNowResultNote.hidden = false;
     studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
+  } else if (isReview) {
+    const pct = totalAnswered > 0 ? formatDecimal((totalCorrect / totalAnswered) * 100) : formatDecimal(0);
+    studyNowResultTitle.textContent = t("appStudyNow.result.review");
+    studyNowResultText.textContent = t("appStudyNow.score.review", { correct: totalCorrect, answered: totalAnswered, percent: pct });
   } else {
     const pct = answeredCount > 0 ? formatDecimal((correctCount / answeredCount) * 100) : formatDecimal(0);
     studyNowResultTitle.textContent = t("appStudyNow.result");
@@ -3529,9 +3549,12 @@ async function recordStudyEvidence() {
   const evidence = pendingStudyEvidence;
   if (!evidence) return;
   try {
-    await DB.learningEvidence.create(evidence);
+    if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
+    else await DB.learningEvidence.create(evidence);
   } catch (error) {
-    if (error?.msgCode !== "ATTEMPT_IN_OTHER_EVIDENCE") {
+    // an earlier try that did reach the server (its reply was lost) already recorded it: sending it again is refused as such
+    const alreadyRecorded = error?.msgCode === "ATTEMPT_IN_OTHER_EVIDENCE" || error?.code === "ALREADY_COMPLETED";
+    if (!alreadyRecorded) {
       console.error("Falha ao registrar evidência de prática inicial.", error);
       studyNowEvidenceNote.classList.add("is-error");
       studyNowEvidenceNote.textContent = t("appStudyNow.evidenceFailed");
@@ -3984,6 +4007,39 @@ function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exer
   studyNowRevealBtn.focus();
 }
 
+/**
+ * "Revisar uma por vez": the unanswered questions of a Hoje review, one at a time in the study screen. Each answer is accepted by the
+ * server (as an attempt of that review) before the next one; the review closes with the whole block, answers already given inside the
+ * row included. The row itself is untouched, so nothing is lost if the student goes back.
+ */
+async function startFocusedReview(reviewId) {
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  const section = row?.querySelector("[data-exercises-total]");
+  if (!row || !section) return;
+  const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  const answeredIds = new Set([...section.querySelectorAll('.review-exercise-item[data-exercise-answered="true"]')].map((el) => Number(el.dataset.exerciseId)));
+  const pending = (reviewBlockExercises.get(section) ?? []).filter((exercise) => !answeredIds.has(exercise.id));
+  if (pending.length === 0) return;
+  pendingTodayReturnReviewId = Number(reviewId);
+  resetStudyNowResult();
+  studyNowSubjectEl.textContent = row.querySelector(".subject-chip")?.textContent ?? "";
+  studyNowTitleEl.textContent = row.querySelector(".review-content")?.textContent ?? "";
+  studyNowSummaryCard.hidden = true;
+  studyNowSummaryBody.textContent = "";
+  studyNowState = newStudyNowState("review", Number(row.dataset.unitId), pending);
+  studyNowState.reviewTaskId = Number(reviewId);
+  studyNowState.restored = { answered: Number(section.dataset.exercisesAnswered), correct: Number(section.dataset.exercisesCorrect) };
+  showScreen("study-now", { focus: true });
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+  if (unsent > 0) studyNowMessage.textContent = t(unsent === 1 ? "appReview.unsentRetest.one" : "appReview.unsentRetest.other", { count: unsent });
+}
+
+todayFocusReviewBtn?.addEventListener("click", () => {
+  const reviewId = todayFocusReviewBtn.dataset.reviewId;
+  if (reviewId) startFocusedReview(reviewId).catch((error) => console.error("Falha ao abrir a revisão.", error));
+});
+
 studyNowRevealBtn?.addEventListener("click", async () => {
   const state = studyNowState;
   if (!state || state.index >= state.exercises.length) return;
@@ -4009,7 +4065,7 @@ studyNowRevealBtn?.addEventListener("click", async () => {
 async function recordStudyNowReveal(state, exercise) {
   try {
     // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
-    const attempt = await DB.attempts.start(exercise.id);
+    const attempt = await DB.attempts.start(exercise.id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
     state.attemptId = attempt.id;
     // Real, observable signal (same idiom as ensureAttemptStarted's
     // exItem.dataset.attemptId above) — lets tests confirm a real
@@ -4050,7 +4106,7 @@ async function judgeStudyNow(isCorrect) {
       if (!state.attemptId) {
         // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
         // or the screen would show progress the server does not have.
-        const started = await DB.attempts.start(state.exercises[state.index].id);
+        const started = await DB.attempts.start(state.exercises[state.index].id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
         state.attemptId = started.id;
         studyNowQuestionArea.dataset.attemptId = String(started.id);
         try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
