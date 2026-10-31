@@ -864,7 +864,7 @@ Origem: "SmartLearn — Prioridades Fixas de Produto V1.0" (proposta do usuário
 
 | PF | Resultado | Vínculo no ledger | Avaliação do agente |
 |---|---|---|---|
-| PF-00 | Continuidade entre agentes (índice lido no início de toda sessão) | — | ADICIONADO como `[H]`: só depois de o usuário revisar e instalar o `INSTALAR.cmd` (altera instruções globais e hooks de todos os projetos). Sem isso, nenhuma sessão é obrigada a ler este índice. |
+| PF-00 | Continuidade entre agentes (índice lido no início de toda sessão) | — | **ATENDIDO sem instalador (agente, 2026-10-31):** o CLAUDE.md da branch oficial manda toda sessão ler o tasks.md como fonte única de estado e este índice está no próprio tasks.md; o INSTALAR.cmd citado não existe nesta máquina (nenhum ZIP de prioridades do SmartLearn em Downloads, Desktop ou Documents) e fica dispensado. Sessões fora desta branch (nuvem, outras worktrees) precisam da mesma leitura por instrução do usuário. |
 | PF-01 | Primeira sessão médica real no Desktop | T-F4-01 `[H]` (roteiro e `SESSION_PACK.md`) | ADICIONADO por referência, sem tarefa nova. "Usar o rascunho Costanzo existente" fica condicionado a confirmar que ele e a conta existem; sem confirmação, o roteiro de T-F4-01 vale como está e sem nova geração. |
 | PF-02 | Defeitos P0/P1 vindos do uso | T-F13-01 (feito `3c6faf5`); os demais P0/P1 só existem depois de PF-01 | ADICIONADO. |
 | PF-03 | Menu de 5 destinos e Aulas unificada | T-F13-04..T-F13-09 | ADICIONADO com ressalva: a referência a "PR #8" foi omitida (não verificável no repositório); nome do primeiro destino ("Agenda") e Disciplinas dentro de Aulas seguem como decisões padrão reversíveis da Frente C. |
