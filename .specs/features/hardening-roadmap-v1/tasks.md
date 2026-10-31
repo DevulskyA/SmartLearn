@@ -857,3 +857,22 @@ Classificação: a direção (menu de 5 destinos, revisão diária focada, Estat
 | T-F13-12 | PF-08 | Trocar os 4 `window.confirm` pelo diálogo do app; levar os 3 banners de cor fixa para CSS com tokens | S | FEITO: banners `c263beb`, `window.confirm` `fdeae49` (prova em `validation.md`) | — | nenhum `window.confirm`; banners respeitam os temas |
 | T-F13-13 | PF-08 | Corrigir o cartão "Apagar base local" no Desktop (cartão sem botão) e o filtro de disciplina de Acompanhar que só carrega uma vez | S | FEITO `8b92c33` (branch `claude/smartlearn-ui-f13`; prova em `validation.md`) | — | texto coerente com o botão; teste reproduz e passa |
 | T-F13-14 | PF-08 | Capturas nativas de todos os estados, 4 temas, 1280×800 e 800×600, com índice do que cada captura prova (hoje `estudar-agora-*` é Hoje) | M | PROPOSTA, executável | — | pasta de evidência com índice |
+
+## Índice de prioridades PF (2026-10-31): vínculo ao ledger, não um segundo backlog
+
+Origem: "SmartLearn — Prioridades Fixas de Produto V1.0" (proposta do usuário, PF-00..PF-10; IDs estáveis). Este registro só liga cada PF às tarefas do ledger, com a avaliação crítica do agente. O estado de cada tarefa continua sendo o `Status:` do bloco dela. Nada aqui autoriza código, banco humano, chamada a modelo, push, merge, deploy ou release.
+
+| PF | Resultado | Vínculo no ledger | Avaliação do agente |
+|---|---|---|---|
+| PF-00 | Continuidade entre agentes (índice lido no início de toda sessão) | — | ADICIONADO como `[H]`: só depois de o usuário revisar e instalar o `INSTALAR.cmd` (altera instruções globais e hooks de todos os projetos). Sem isso, nenhuma sessão é obrigada a ler este índice. |
+| PF-01 | Primeira sessão médica real no Desktop | T-F4-01 `[H]` (roteiro e `SESSION_PACK.md`) | ADICIONADO por referência, sem tarefa nova. "Usar o rascunho Costanzo existente" fica condicionado a confirmar que ele e a conta existem; sem confirmação, o roteiro de T-F4-01 vale como está e sem nova geração. |
+| PF-02 | Defeitos P0/P1 vindos do uso | T-F13-01 (feito `3c6faf5`); os demais P0/P1 só existem depois de PF-01 | ADICIONADO. |
+| PF-03 | Menu de 5 destinos e Aulas unificada | T-F13-04..T-F13-09 | ADICIONADO com ressalva: a referência a "PR #8" foi omitida (não verificável no repositório); nome do primeiro destino ("Agenda") e Disciplinas dentro de Aulas seguem como decisões padrão reversíveis da Frente C. |
+| PF-04 | Revisão diária focada | T-F13-02, T-F13-03 | **CONFLITO a decidir:** o índice a ordena depois de PF-03; o agente a vê independente (depende só de T-F13-01) e de maior ganho, e mantida a decisão de ordem ela pode vir antes. Registrado com a dependência do agente; a precedência fica com o usuário. |
+| PF-05 | Estatísticas enxutas, nota = acertos ÷ questões | T-F13-10 `[H]` | ADICIONADO como `[H]`: superfície protegida (ADR-0001), qualquer mudança de composição, hierarquia ou filtros exige aprovação visual humana. Omitida a referência a "Elma Senado" (não existe no repositório). "Menos filtros redundantes" não está pré-autorizado. |
+| PF-06 | Avaliação complementar do MED-SUM | Frente de qualidade de geração (`PROGRAM.md` §2c, `prompt-lab/`, T-F10, T-F11) | ADICIONADO como `[H]`. Fora do registro: a frase "avaliações positivas em amostras reais" (o canário v8×v10 consta como NOT_PROVEN: não regrediu, não melhorou compressão nem vínculo à fonte). Qualquer chamada real a modelo só com autorização específica. |
+| PF-07 | Decidir planejamento diário e atraso de revisões | T-F7-07 (HG-09), T-F12-* (HG-14) | ADICIONADO por referência; estudos e simulações podem andar, código só depois de PF-01 e dos gates. |
+| PF-08 | Qualidade de uso no Windows | T-F13-11 (parcial `741083a`), T-F13-12 (feito `fdeae49`), T-F13-13 (feito `8b92c33`), T-F13-14 | ADICIONADO. Acrescentar ao fechamento: leitor de tela, janelas de 800×600 a tela cheia e WebView2 nativo, que as tarefas atuais não cobrem. |
+| PF-09 | Piloto de ~30 dias | T-F12-12 (rastreio de comportamento), T-F7-09 | ADICIONADO como `[H]`: exige consentimento, proteção de dados e as medidas definidas antes de começar. |
+| PF-10 | Decisão de comercialização | — | ADICIONADO como `[H]`, por último; hoje não existe nada de cobrança no código. |
+
