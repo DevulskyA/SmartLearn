@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 // T-F13-12: the banners the app builds itself (offline, local backend, database) must take their colours from the theme
 // tokens in CSS, so every theme reaches them; a fixed colour written in JS would not.
@@ -23,4 +23,10 @@ test('the banner classes exist and use the alert tokens of the theme', () => {
   for (const cls of ['app-banner--connectivity', 'app-banner--fatal']) assert.ok(css.includes(`.${cls}`), `${cls} is styled`);
   assert.ok(read('src/offline-ui.js').includes('app-banner--connectivity'));
   assert.ok(read('src/app.js').includes('app-banner--fatal'));
+});
+
+test('no source file asks the student with the native window.confirm: every confirmation is the themed dialog', () => {
+  for (const name of readdirSync(new URL('../src/', import.meta.url)).filter((f) => f.endsWith('.js'))) {
+    assert.equal(/window\.confirm\(/.test(read(`src/${name}`)), false, `src/${name} calls window.confirm`);
+  }
 });

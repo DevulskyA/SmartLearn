@@ -5,6 +5,7 @@
 // DOM semantics matter here because people copy text out of this screen: content lives only in <textarea>s and content <p>s;
 // state words, counts, buttons and findings are separate elements, always separated by real text, never glued to the content.
 import { createTextElement } from "./dom-utils.js";
+import { showConfirm } from "./confirm-dialog.js";
 import { renderSummary as renderSummaryBody } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import { createAutosaver } from "./draft-autosave.js";
@@ -513,8 +514,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     save.addEventListener("click", () => autosaver.saveNow(`q:${q.id}`, { manual: true })); // the same single-flight path as the autosave
     acceptQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: "ACCEPTED", expectedVersion: liveVersion() }), t("editor.question.msg.accepted"), "accept-question"));
     rejectQ.addEventListener("click", () => run(() => deps.reviseQuestion(draft.id, q.id, { ...editedFields(), status: q.status === "REJECTED" ? "PROPOSED" : "REJECTED", expectedVersion: liveVersion() }), q.status === "REJECTED" ? t("editor.question.msg.restored") : t("editor.question.msg.rejected"), "toggle-reject-question"));
-    del.addEventListener("click", () => {
-      if (!window.confirm(t("editor.question.confirmDelete", { number: index + 1 }))) return;
+    del.addEventListener("click", async () => {
+      if (!(await showConfirm(t("editor.question.confirmDelete", { number: index + 1 })))) return;
       const next = draft.questions[index + 1]?.id ?? draft.questions[index - 1]?.id ?? null;
       run(async () => ({ ...(await deps.deleteQuestion(draft.id, q.id)), keepId: next }), t("editor.question.msg.deleted"), "delete-question", { toQuestion: true });
     });
@@ -819,7 +820,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   back.addEventListener("click", async () => {
     await autosaver.flush(); // what is waiting for its 2.5 s goes out now; only what could not be saved still needs the question below
     const unsaved = summaryHasUnsavedChanges() || questionBuffers.size > 0;
-    if (unsaved && !window.confirm(t("editor.confirmLeave"))) return;
+    if (unsaved && !(await showConfirm(t("editor.confirmLeave")))) return;
     deps.onBack();
   });
 

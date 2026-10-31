@@ -34,6 +34,7 @@ import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningR
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { showConfirm } from "./confirm-dialog.js";
 import { renderSummary } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
@@ -51,28 +52,6 @@ async function withScrollPreserved(fn) {
   });
 }
 
-function showConfirm(message) {
-  return new Promise((resolve) => {
-    const dialog = document.getElementById("confirm-dialog");
-    const msgEl = document.getElementById("confirm-dialog-message");
-    const okBtn = document.getElementById("confirm-dialog-ok");
-    const cancelBtn = document.getElementById("confirm-dialog-cancel");
-    msgEl.textContent = message;
-    const finish = (result) => {
-      okBtn.removeEventListener("click", onOk);
-      cancelBtn.removeEventListener("click", onCancel);
-      dialog.removeEventListener("cancel", onCancel);
-      dialog.close();
-      resolve(result);
-    };
-    const onOk = () => finish(true);
-    const onCancel = () => finish(false);
-    okBtn.addEventListener("click", onOk);
-    cancelBtn.addEventListener("click", onCancel);
-    dialog.addEventListener("cancel", onCancel);
-    dialog.showModal();
-  });
-}
 
 // T21: explicit, configuration-controlled authority switch — never an
 // automatic/implicit fallback. Default is the existing local BrowserStore/

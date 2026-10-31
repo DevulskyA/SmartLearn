@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerConfirm, answerConfirmIfAsked } from './support/confirm.js';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -385,8 +386,8 @@ test('an edit that Markdown cannot express faithfully is never saved as somethin
   await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('nada foi salvo');
 
   // leaving for the text editor asks first, because the unwritable edit would be dropped
-  page.once('dialog', (d) => d.dismiss());
   await textButton(editor).click();
+  await answerConfirm(page, false);
   await expect(visualButton(editor)).toHaveAttribute('aria-pressed', 'true');
   await expect(notice).toBeVisible();
 
@@ -539,10 +540,8 @@ test('an edit the visual editor could not write is "unsaved" for every way out: 
   await expect(editor.locator('.source-draft-result')).toContainText('Salve as alterações pendentes');
   await expect(editor.locator('.lesson-accept-preview')).toBeHidden();
 
-  let asked = '';
-  page.once('dialog', (dialog) => { asked = dialog.message(); dialog.dismiss(); });
   await editor.locator('[data-action="lesson-back"]').click();
-  expect(asked).toContain('alterações não salvas');
+  expect(await answerConfirm(page, false)).toContain('alterações não salvas');
   await expect(editor).toBeVisible(); // the student stayed
   await expect(surface(editor)).toContainText('Um(a)'); // and the unwritten edit is still there to fix
 });
@@ -581,8 +580,8 @@ test('leaving the lesson with the visual editor open ends it cleanly: no script 
   await surface(editor).locator('p', { hasText: 'Texto.' }).click();
   await page.keyboard.press('End');
   await page.keyboard.type(' pendente');
-  page.once('dialog', (dialog) => dialog.accept()); // leaving with an unsaved change asks first
-  await editor.locator('[data-action="lesson-back"]').click();
+  await editor.locator('[data-action="lesson-back"]').click(); // an unsaved change may ask first (the way out saves it when it can)
+  await answerConfirmIfAsked(page, true);
   await expect(page.locator('.lesson-editor')).toHaveCount(0);
   await page.waitForTimeout(700); // longer than the editor's own write-back delay
   expect(await page.locator('.summary-visual-content').count()).toBe(0);

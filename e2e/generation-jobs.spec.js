@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerConfirm } from './support/confirm.js';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -182,13 +183,13 @@ test('cancel asks for confirmation, frees the unit, leaves no draft even if the 
   const cancel = progress(page).getByRole('button', { name: 'Cancelar geração' });
   const draftsBefore = draftCount();
   // refusing the confirmation keeps the job running
-  page.once('dialog', (dialog) => dialog.dismiss());
   await cancel.click();
+  await answerConfirm(page, false);
   await expect(progress(page)).toBeVisible();
   await expect(progress(page)).toContainText('pode levar alguns minutos');
   // accepting it stops the job; the provider (which ignores the stop) answers late and its draft is thrown away
-  page.once('dialog', (dialog) => { expect(dialog.message()).toMatch(/Cancelar/); dialog.accept(); });
   await cancel.click();
+  expect(await answerConfirm(page, true)).toMatch(/Cancelar/);
   await expect(progress(page).locator('.sources-generation-phase')).toHaveText('Cancelando a geração…');
   await release('ok');
   await expect(progress(page)).toBeHidden({ timeout: 15000 });
