@@ -4029,6 +4029,9 @@ async function startFocusedReview(reviewId) {
   studyNowState = newStudyNowState("review", Number(row.dataset.unitId), pending);
   studyNowState.reviewTaskId = Number(reviewId);
   studyNowState.restored = { answered: Number(section.dataset.exercisesAnswered), correct: Number(section.dataset.exercisesCorrect) };
+  // What was already marked wrong inside the row belongs to the same block: it is listed with its answer and can be redone with the rest.
+  const wrongInRow = new Set([...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)));
+  studyNowState.wrongExercises = (reviewBlockExercises.get(section) ?? []).filter((exercise) => wrongInRow.has(exercise.id));
   showScreen("study-now", { focus: true });
   renderStudyNowQuestion();
   studyNowRevealBtn.focus();

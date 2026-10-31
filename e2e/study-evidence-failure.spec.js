@@ -197,3 +197,22 @@ test('T-F13-02: with nothing left to answer the focused review is not offered', 
   await page.locator('[data-screen="today"]').click();
   await expect(page.locator('#today-focus-review-btn')).toBeHidden({ timeout: 8000 });
 });
+
+test('T-F13-03: the final screen lists every wrong answer of the review, those given inside the row too, and redoes them together', async ({ page }) => {
+  await reviewDueToday(page, 'Aula revisao d');
+  await page.locator('.review-row [data-action="toggle-row"]').first().click();
+  await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
+  await page.locator('.review-exercise-item [data-action="exercise-errei"]').first().click(); // wrong inside the row
+  await page.waitForTimeout(500);
+  await page.locator('#today-focus-review-btn').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 2');
+  for (const judge of ['#study-now-incorrect-btn', '#study-now-correct-btn']) { // one more wrong, one right
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(judge).click();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator('#study-now-result-text')).toContainText('1/3 corretas na revisão', { timeout: 8000 });
+  await expect(page.locator('#study-now-errors-list li')).toHaveCount(2); // the one from the row and the one from this screen
+  await expect(page.locator('#study-now-retest-btn')).toContainText('2');
+  await expect(page.locator('#study-now-next-review-text')).toContainText('Próxima revisão');
+});
