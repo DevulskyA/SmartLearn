@@ -856,7 +856,7 @@ Classificação: a direção (menu de 5 destinos, revisão diária focada, Estat
 | T-F13-11 | PF-08 | Estados de carregando e de erro de carga em Hoje, Plano, Acompanhar, Disciplinas e Estatísticas | M | PARCIAL: erro de carga e botão de nova tentativa FEITO `741083a`; indicador visual de carregando PENDENTE (decisão de design; hoje só `aria-busy`) | — | mensagem visível ao falhar; teste cobre |
 | T-F13-12 | PF-08 | Trocar os 4 `window.confirm` pelo diálogo do app; levar os 3 banners de cor fixa para CSS com tokens | S | FEITO: banners `c263beb`, `window.confirm` `fdeae49` (prova em `validation.md`) | — | nenhum `window.confirm`; banners respeitam os temas |
 | T-F13-13 | PF-08 | Corrigir o cartão "Apagar base local" no Desktop (cartão sem botão) e o filtro de disciplina de Acompanhar que só carrega uma vez | S | FEITO `8b92c33` (branch `claude/smartlearn-ui-f13`; prova em `validation.md`) | — | texto coerente com o botão; teste reproduz e passa |
-| T-F13-14 | PF-08 | Capturas nativas de todos os estados, 4 temas, 1280×800 e 800×600, com índice do que cada captura prova (hoje `estudar-agora-*` é Hoje) | M | PROPOSTA, executável | — | pasta de evidência com índice |
+| T-F13-14 | PF-08 | Capturas nativas de todos os estados, 4 temas, 1280×800 e 800×600, com índice do que cada captura prova (hoje `estudar-agora-*` é Hoje) | M | PARCIAL: 17 estados em claro e escuro, 1280 e 800 px, capturas WEB (Chromium) FEITAS 2026-10-31; PENDENTES as nativas (WebView2) e os temas Sépia e Alto contraste | — | pasta de evidência com índice |
 
 ## Índice de prioridades PF (2026-10-31): vínculo ao ledger, não um segundo backlog
 
