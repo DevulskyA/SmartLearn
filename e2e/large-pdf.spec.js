@@ -100,7 +100,8 @@ test('dense pages: chunks close before the model input limit, so every proposal 
   await page.setInputFiles('#sources-file-input', { name: 'capitulo-denso.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
   const proposals = page.locator('.source-proposal-item');
-  expect(await proposals.count()).toBeGreaterThanOrEqual(2); // split by size, not one impossible chunk
+  // the message appears a moment before the list is drawn: wait for the list instead of counting it at once
+  await expect(async () => { expect(await proposals.count()).toBeGreaterThanOrEqual(2); }).toPass({ timeout: 10000 }); // split by size, not one impossible chunk
   const first = proposals.first();
   await first.locator('[data-action="generate-draft"]').click();
   await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
