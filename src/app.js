@@ -149,7 +149,7 @@ const dbInit = DB.init()
     const banner = document.createElement('div');
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
+    banner.className = 'app-banner app-banner--fatal';
     banner.textContent = REMOTE_MODE
       ? t('shell.dbError.server')
       : t('shell.dbError.local');
@@ -1155,7 +1155,7 @@ async function renderOfflineToday(accountId) {
     banner = document.createElement("div");
     banner.id = "offline-banner";
     banner.setAttribute("role", "status");
-    banner.style.cssText = "position:sticky;top:0;z-index:100;background:#92400e;color:#fff;padding:.5rem 1rem;font-size:.8125rem;text-align:center;";
+    banner.className = "app-banner";
     mainContent?.prepend(banner);
   }
   banner.hidden = false;
