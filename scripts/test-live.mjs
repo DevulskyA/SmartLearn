@@ -15,9 +15,17 @@ import { SUITES, createParser, artifactDir, writeArtifact, readArtifacts, effect
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const git = (args) => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };
 const dir = artifactDir(root);
+// The heartbeat must stay well under HEARTBEAT_STALE_MS (15 s in test-live-core) so a live runner is never shown as "sem sinal".
+const HEARTBEAT_MS = 5000;
+// Each board refresh starts a whole Node process; 1 per 4 s cost ~217 spawns in a 14.5 min run. Start and finish still refresh.
+const BOARD_REFRESH_MS = 30000;
+let lastBoardRefresh = 0;
 
-function refreshBoard() {
+function refreshBoard({ force = false } = {}) {
   // fire-and-forget: the board is derived, a slow/failed refresh must never affect the run
+  const now = Date.now();
+  if (!force && now - lastBoardRefresh < BOARD_REFRESH_MS) return;
+  lastBoardRefresh = now;
   try { spawn(process.execPath, [join(root, 'scripts', 'agent-tasklist.mjs')], { cwd: root, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref(); } catch { /* ignore */ }
 }
 
@@ -56,7 +64,7 @@ const parser = createParser(suite.parser);
 const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 artifact.pid = child.pid;
 save();
-refreshBoard();
+refreshBoard({ force: true });
 
 const onData = (buf) => {
   log.write(buf);
@@ -69,10 +77,9 @@ const onData = (buf) => {
 child.stdout.on('data', onData);
 child.stderr.on('data', onData);
 
-// heartbeat: rewrites the artifact every second, so "updatedAt" proves the runner is still there
-const beat = setInterval(save, 1000);
-let lastRefresh = Date.now();
-const refreshTimer = setInterval(() => { if (Date.now() - lastRefresh >= 4000) { lastRefresh = Date.now(); refreshBoard(); } }, 1000);
+// heartbeat: rewrites the artifact every few seconds, so "updatedAt" proves the runner is still there
+const beat = setInterval(save, HEARTBEAT_MS);
+const refreshTimer = setInterval(() => refreshBoard(), BOARD_REFRESH_MS);
 
 function killTree() {
   if (!child.pid || child.exitCode !== null) return;
@@ -95,7 +102,7 @@ function finish(state, exitCode) {
   artifact.durationMs = Date.now() - Date.parse(artifact.startedAt);
   save();
   log.end(() => {
-    refreshBoard();
+    refreshBoard({ force: true });
     setTimeout(() => process.exit(exitCode ?? 1), 300); // let the last board refresh start
   });
 }
