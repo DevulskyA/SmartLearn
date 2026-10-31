@@ -217,7 +217,11 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
   await page.locator('[data-screen="today"]').click();
   // Visible WITHOUT opening the row: where the student was wrong, at a glance.
   await expect(r2.locator('.review-reinforce-chip')).toHaveText('1 para reforçar');
-  await r2.locator('.review-row-toggle').click();
+  // A late second render of Hoje (after the reload) rebuilds the rows collapsed: open the row again when that happens.
+  await expect(async () => {
+    if ((await r2.locator('.review-row-toggle').getAttribute('aria-expanded')) !== 'true') await r2.locator('.review-row-toggle').click();
+    await expect(r2.locator('.review-exercise-item').first()).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 10000 });
   const cue = (q) => r2.locator('.review-exercise-item', { hasText: q }).locator('.review-exercise-prior');
   await expect(cue('Cue A?')).toHaveText('Errou na última tentativa');
   await expect(cue('Cue B?')).toHaveCount(0);
