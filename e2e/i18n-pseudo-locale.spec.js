@@ -16,7 +16,7 @@ const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const OPEN = '\u27E6';
 // Texts a screen still shows from outside the catalog, measured on 2026-10-16 (static index.html text, filters, labels).
-const BASELINE = { today: 0, plan: 0, stats: 0, subjects: 0, settings: 0, account: 0, navigation: 0, register: 0 };
+const BASELINE = { today: 0, plan: 0, stats: 0, settings: 0, account: 0, navigation: 0, register: 0 };
 
 let serverProcess;
 let dbDir;
@@ -114,7 +114,7 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
   expect(served, 'the i18n module must have been served with the pseudo catalog, or this test measures nothing').toBeGreaterThan(0);
 
   const report = {};
-  for (const screen of ['today', 'plan', 'stats', 'subjects', 'settings', 'account']) {
+  for (const screen of ['today', 'plan', 'stats', 'settings', 'account']) {
     await pseudo.locator(`[data-screen="${screen}"]`).click();
     await expect(pseudo.locator(`#screen-${screen}`)).toBeVisible();
     await pseudo.waitForTimeout(400);

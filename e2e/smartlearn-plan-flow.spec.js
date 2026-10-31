@@ -23,7 +23,7 @@ async function preflight(page) {
   // still shows up in this [data-screen] enumeration). "study-now" has no
   // nav item by design (task's own wording: reachable via "Estudar agora",
   // not a permanent nav entry), so it never appears in this list.
-  expect(screens).toEqual(['account', 'materials', 'plan', 'settings', 'stats', 'subjects', 'today']);
+  expect(screens).toEqual(['account', 'materials', 'plan', 'settings', 'stats', 'today']);
   const saveBtn = await page.locator('#plan-unit-save-btn').count();
   expect(saveBtn, 'expected #plan-unit-save-btn to exist on this build').toBeGreaterThan(0);
 }

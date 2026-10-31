@@ -277,6 +277,8 @@ const planFilterState = document.querySelector("#plan-filter-state");
 const planFilterPeriod = document.querySelector("#plan-filter-period");
 const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
+const planManageSubjectsBtn = document.querySelector("#plan-manage-subjects-btn");
+const planSubjectsPanel = document.querySelector("#plan-subjects-panel");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
 const planSubjectSelect = document.querySelector("#plan-subject-select");
 const planSubjectForm = createSubjectCreateForm({
@@ -4509,7 +4511,7 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
-const DATA_SCREENS = new Set(["today", "stats", "plan", "subjects", "settings", "materials", "study-now", "exam"]);
+const DATA_SCREENS = new Set(["today", "stats", "plan", "settings", "materials", "study-now", "exam"]);
 
 // T22: "register" (#screen-register, "Cadastro") was removed from the NAV
 // in a prior decision (P1-2), but is NOT dead — it is the only UI in the
@@ -4524,6 +4526,19 @@ const DATA_SCREENS = new Set(["today", "stats", "plan", "subjects", "settings", 
 // as P1-2 left it: nav-hidden, but a direct/bookmarked hash still works.
 // A real fix (surfacing exercise management from Plano/Hoje instead of
 // this legacy screen) is future UI work, not a T22 redirect decision.
+
+/** The disciplines of the student live in a panel of Plano: opening it draws the catalog, closing it only hides it. */
+function setSubjectsPanel(open) {
+  if (!planSubjectsPanel || !planManageSubjectsBtn) return;
+  planSubjectsPanel.hidden = !open;
+  planManageSubjectsBtn.setAttribute("aria-expanded", String(open));
+  if (open) {
+    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
+    planSubjectsPanel.scrollIntoView({ block: "nearest" });
+  }
+}
+
+planManageSubjectsBtn?.addEventListener("click", () => setSubjectsPanel(planSubjectsPanel?.hidden !== false));
 
 /**
  * Runs the render of a data screen and tells the student when it could not load (it used to reach only the console, leaving an
@@ -4555,6 +4570,8 @@ function runScreenRender(screenId, render) {
 
 export function showScreen(screenId, { focus = false } = {}) {
   if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
+  const wantsSubjectsPanel = screenId === "subjects"; // so was Disciplinas, as the "Gerenciar disciplinas" panel of Plano
+  if (wantsSubjectsPanel) screenId = "plan";
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
   // Remote mode: a data screen with no authenticated session is a login
@@ -4626,9 +4643,7 @@ export function showScreen(screenId, { focus = false } = {}) {
     planList?.replaceChildren();
     runScreenRender("plan", renderPlan);
   }
-  if (nextScreen === "subjects" && databaseAvailable) {
-    runScreenRender("subjects", renderDisciplinas);
-  }
+  if (nextScreen === "plan" && wantsSubjectsPanel) setSubjectsPanel(true);
   if (nextScreen === "settings" && databaseAvailable) {
     runScreenRender("settings", renderSettings);
   }

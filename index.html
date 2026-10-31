@@ -73,12 +73,6 @@
           </svg>
           <span><span class="nav-long" data-i18n="screens.stats.title">Estatísticas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.statsShort">Estat.</span></span>
         </button>
-        <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>
-          </svg>
-          <span><span class="nav-long" data-i18n="screens.subjects.title">Disciplinas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.subjectsShort">Discipl.</span></span>
-        </button>
         <button class="nav-item" type="button" data-screen="settings" aria-controls="screen-settings">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke-linecap="round" stroke-linejoin="round"/>
@@ -193,8 +187,18 @@
               <p class="eyebrow" data-i18n="screens.plan.eyebrow">Conteúdo</p>
               <h1 id="title-plan" data-i18n="screens.plan.title">Plano</h1>
             </div>
+            <button class="secondary-button" id="plan-manage-subjects-btn" type="button" aria-expanded="false" aria-controls="plan-subjects-panel" data-i18n="screens.plan.manageSubjects">Gerenciar disciplinas</button>
             <button class="primary-button" id="plan-new-unit-btn" type="button" data-i18n="screens.plan.new">+ Nova aula</button>
           </div>
+          <section class="settings-card plan-subjects-panel" id="plan-subjects-panel" aria-labelledby="plan-subjects-title" hidden>
+            <div class="screen-heading">
+              <h2 id="plan-subjects-title" tabindex="-1" data-i18n="screens.subjects.title">Disciplinas</h2>
+              <button class="primary-button" id="subjects-show-create-btn" type="button" data-i18n="screens.subjects.new">+ Nova disciplina</button>
+            </div>
+            <div class="subjects-create-slot" id="subjects-create-slot"></div>
+            <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
+            <p class="panel-empty" id="subjects-catalog-empty" hidden data-i18n="screens.subjects.empty">Nenhuma disciplina cadastrada.</p>
+          </section>
           <div class="plan-new-unit-form form-card" id="plan-new-unit-form" hidden>
             <div class="section-heading compact-heading">
               <p class="eyebrow" data-i18n="screens.plan.form.eyebrow">Plano</p>
@@ -263,19 +267,6 @@
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden data-i18n="screens.plan.empty">Nenhuma aula cadastrada.</p>
-        </section>
-
-        <section class="screen" id="screen-subjects" data-screen-panel="subjects" aria-labelledby="title-subjects" hidden>
-          <div class="screen-heading">
-            <div>
-              <p class="eyebrow" data-i18n="screens.subjects.eyebrow">Organização</p>
-              <h1 id="title-subjects" data-i18n="screens.subjects.title">Disciplinas</h1>
-            </div>
-            <button class="primary-button" id="subjects-show-create-btn" type="button" data-i18n="screens.subjects.new">+ Nova disciplina</button>
-          </div>
-          <div class="subjects-create-slot" id="subjects-create-slot"></div>
-          <div class="subjects-catalog" id="subjects-catalog" aria-live="polite"></div>
-          <p class="panel-empty" id="subjects-catalog-empty" hidden data-i18n="screens.subjects.empty">Nenhuma disciplina cadastrada.</p>
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>

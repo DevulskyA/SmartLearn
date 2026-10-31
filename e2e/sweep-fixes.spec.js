@@ -125,11 +125,12 @@ test('Estatisticas > Estudar: a Plano subject filter that hides the unit is rela
 test('Disciplinas > Editar: the name field has an accessible name (axe "label")', async ({ page }) => {
   await signIn(page);
   await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
-  await openScreen(page, 'subjects');
+  await openScreen(page, 'plan');
+  await page.locator('#plan-manage-subjects-btn').click();
   const card = page.locator('.subject-catalog-card', { hasText: 'Fisiologia Renal' });
   await card.getByRole('button', { name: 'Editar' }).click();
   await expect(card.getByRole('textbox', { name: 'Nome da disciplina' })).toBeVisible();
-  const result = await new AxeBuilder({ page }).include('#screen-subjects').withRules(['label']).analyze();
+  const result = await new AxeBuilder({ page }).include('#plan-subjects-panel').withRules(['label']).analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
 });
 

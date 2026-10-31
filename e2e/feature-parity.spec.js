@@ -52,7 +52,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Disciplinas: create, rename, archive, reactivate, and delete a subject all work against the real server', async ({ page }) => {
-  await page.locator('[data-screen="subjects"]').click();
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('#plan-manage-subjects-btn').click();
   await page.locator('#subjects-show-create-btn').click();
   await page.locator('#subjects-new-name').fill('Fisiologia Parity');
   await page.locator('#subjects-create-save-btn').click();
@@ -148,7 +149,8 @@ test('Configuracoes: import/reset show a safe explanatory state instead of a dea
 
 test('Plano: the discipline filter lists a discipline created after the screen was first opened (T-F13-13)', async ({ page }) => {
   const createSubject = async (name) => {
-    await page.locator('[data-screen="subjects"]').click();
+    await page.locator('[data-screen="plan"]').click();
+    if (await page.locator('#plan-subjects-panel').isHidden()) await page.locator('#plan-manage-subjects-btn').click(); // the panel stays open between the two calls
     await page.locator('#subjects-show-create-btn').click();
     await page.locator('#subjects-new-name').fill(name);
     await page.locator('#subjects-create-save-btn').click();

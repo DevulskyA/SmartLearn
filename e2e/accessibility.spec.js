@@ -23,7 +23,6 @@ const SCREENS = [
   { id: 'today', name: 'Hoje' },
   { id: 'plan', name: 'Plano' },
   { id: 'materials', name: 'Materiais' },
-  { id: 'subjects', name: 'Disciplinas' },
   { id: 'stats', name: 'Estatísticas' },
   { id: 'settings', name: 'Configurações' },
   { id: 'account', name: 'Conta' },

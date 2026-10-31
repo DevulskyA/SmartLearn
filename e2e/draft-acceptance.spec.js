@@ -363,7 +363,8 @@ test('R-4: a new discipline created while accepting a draft gets the colour chos
   await editor.locator('[data-action="accept-draft"]').click();
   await expect(editor.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
 
-  await page.locator('[data-screen="subjects"]').click();
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('#plan-manage-subjects-btn').click();
   const card = page.locator('.subject-catalog-card', { hasText: 'Cor Aceite' });
   await expect(card).toBeVisible({ timeout: 5000 });
   expect(await card.evaluate((el) => el.style.getPropertyValue('--subject-color'))).toBe(chosen);

@@ -55,7 +55,8 @@ test.beforeEach(async ({ page }) => {
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 
-  await page.locator('[data-screen="subjects"]').click();
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('#plan-manage-subjects-btn').click();
   await page.locator('#subjects-show-create-btn').click();
   await page.locator('#subjects-new-name').fill('Cardiologia');
   await page.locator('#subjects-create-save-btn').click();

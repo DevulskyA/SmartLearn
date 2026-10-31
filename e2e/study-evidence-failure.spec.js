@@ -243,3 +243,17 @@ test('PF-03: a lesson with a review due has a shortcut to it in Plano, and the o
   await expect(page.locator('#screen-plan')).toBeVisible();
   await expect(page.locator('[data-screen="tracking"]')).toHaveCount(0); // no menu item any more
 });
+
+test('PF-03: Disciplinas is a panel of Plano (closed by default, opened by the button or the old #subjects link), not a menu item', async ({ page }) => {
+  await page.locator('[data-screen="plan"]').click();
+  await expect(page.locator('[data-screen="subjects"]')).toHaveCount(0);
+  await expect(page.locator('#plan-subjects-panel')).toBeHidden();
+  await page.locator('#plan-manage-subjects-btn').click();
+  await expect(page.locator('#plan-subjects-panel')).toBeVisible();
+  await expect(page.locator('#plan-manage-subjects-btn')).toHaveAttribute('aria-expanded', 'true');
+  await page.locator('#plan-manage-subjects-btn').click();
+  await expect(page.locator('#plan-subjects-panel')).toBeHidden();
+  await page.evaluate(() => { window.location.hash = '#subjects'; });
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  await expect(page.locator('#plan-subjects-panel')).toBeVisible();
+});
