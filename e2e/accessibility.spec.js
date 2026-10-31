@@ -25,7 +25,6 @@ const SCREENS = [
   { id: 'materials', name: 'Materiais' },
   { id: 'subjects', name: 'Disciplinas' },
   { id: 'stats', name: 'Estatísticas' },
-  { id: 'tracking', name: 'Acompanhamento' },
   { id: 'settings', name: 'Configurações' },
   { id: 'account', name: 'Conta' },
 ];

@@ -97,8 +97,8 @@ test('Estatisticas and Acompanhamento render real server data without error afte
   const overdueCount = await page.locator('#metric-reviews-overdue').textContent();
   expect(Number(overdueCount)).toBeGreaterThan(0);
 
-  await page.locator('[data-screen="tracking"]').click();
-  await expect(page.locator('#tracking-list')).not.toBeEmpty({ timeout: 5000 });
+  await page.locator('[data-screen="plan"]').click();
+  await expect(page.locator('#plan-list')).not.toBeEmpty({ timeout: 5000 });
 });
 
 test('Cadastro/exercises: the load-bearing legacy screen remains reachable and its exercise CRUD works against the real server', async ({ page }) => {
@@ -146,7 +146,7 @@ test('Configuracoes: import/reset show a safe explanatory state instead of a dea
   await expect(page.locator('#reset-body')).toBeHidden({ timeout: 5000 });
 });
 
-test('Acompanhar: the discipline filter lists a discipline created after the screen was first opened (T-F13-13)', async ({ page }) => {
+test('Plano: the discipline filter lists a discipline created after the screen was first opened (T-F13-13)', async ({ page }) => {
   const createSubject = async (name) => {
     await page.locator('[data-screen="subjects"]').click();
     await page.locator('#subjects-show-create-btn').click();
@@ -155,14 +155,14 @@ test('Acompanhar: the discipline filter lists a discipline created after the scr
     await expect(page.locator('.subject-catalog-card', { hasText: name })).toBeVisible({ timeout: 5000 });
   };
   await createSubject('Disciplina Previa'); // the filter is first built with one discipline in it
-  await page.locator('[data-screen="tracking"]').click();
+  await page.locator('[data-screen="plan"]').click();
   await expect(async () => {
-    expect(await page.locator('#tracking-filter-subject option').allTextContents()).toContain('Disciplina Previa');
+    expect(await page.locator('#plan-filter-subject option').allTextContents()).toContain('Disciplina Previa');
   }).toPass({ timeout: 5000 });
   await createSubject('Disciplina Tardia');
-  await page.locator('[data-screen="tracking"]').click();
+  await page.locator('[data-screen="plan"]').click();
   await expect(async () => {
-    const names = await page.locator('#tracking-filter-subject option').allTextContents();
+    const names = await page.locator('#plan-filter-subject option').allTextContents();
     expect(names).toContain('Disciplina Tardia');
   }).toPass({ timeout: 5000 });
 });

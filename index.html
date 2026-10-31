@@ -73,12 +73,6 @@
           </svg>
           <span><span class="nav-long" data-i18n="screens.stats.title">Estatísticas</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.statsShort">Estat.</span></span>
         </button>
-        <button class="nav-item" type="button" data-screen="tracking" aria-controls="screen-tracking">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M9 12l2 2 4-4M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span><span class="nav-long" data-i18n="screens.nav.tracking">Acompanhar</span><span class="nav-short" aria-hidden="true" data-i18n="screens.nav.trackingShort">Acomp.</span></span>
-        </button>
         <button class="nav-item" type="button" data-screen="subjects" aria-controls="screen-subjects">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>
@@ -255,6 +249,12 @@
               <option value="EM_ESTUDO" data-i18n="screens.state.studying">Em estudo</option>
               <option value="EM_DIA" data-i18n="screens.state.onTrack">Em dia</option>
             </select>
+            <select id="plan-filter-period" aria-label="Filtrar por período" data-i18n-aria-label="screens.filter.periodLabel">
+              <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
+              <option value="last-30" data-i18n="screens.filter.last30">Últimos 30 dias</option>
+              <option value="last-90" data-i18n="screens.filter.last90">Últimos 90 dias</option>
+              <option value="last-365" data-i18n="screens.filter.lastYear">Último ano</option>
+            </select>
             <select id="plan-sort" aria-label="Ordenar por" data-i18n-aria-label="screens.plan.sortLabel">
               <option value="study-date-desc" data-i18n="screens.plan.sort.date">Data (mais recente)</option>
               <option value="subject" data-i18n="screens.form.subject">Disciplina</option>
@@ -263,36 +263,6 @@
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden data-i18n="screens.plan.empty">Nenhuma aula cadastrada.</p>
-        </section>
-
-        <section class="screen" id="screen-tracking" data-screen-panel="tracking" aria-labelledby="title-tracking" hidden>
-          <div class="screen-heading">
-            <div>
-              <p class="eyebrow" data-i18n="screens.tracking.eyebrow">Processo</p>
-              <h1 id="title-tracking" data-i18n="screens.tracking.title">Acompanhamento</h1>
-            </div>
-          </div>
-          <div class="tracking-filters" id="tracking-filters">
-            <select id="tracking-filter-subject" aria-label="Filtrar por disciplina" data-i18n-aria-label="screens.filter.subjectLabel">
-              <option value="" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option>
-            </select>
-            <select id="tracking-filter-state" aria-label="Filtrar por estado" data-i18n-aria-label="screens.filter.stateLabel">
-              <option value="" data-i18n="screens.filter.allStates">Todos os estados</option>
-              <option value="ATRASADO" data-i18n="screens.state.overdue">Atrasada</option>
-              <option value="SEM_EVIDENCIA" data-i18n="screens.state.noEvidence">Sem prática registrada</option>
-              <option value="EM_REVISAO" data-i18n="screens.state.reviewToday">Revisar hoje</option>
-              <option value="EM_ESTUDO" data-i18n="screens.state.studying">Em estudo</option>
-              <option value="EM_DIA" data-i18n="screens.state.onTrack">Em dia</option>
-            </select>
-            <select id="tracking-filter-period" aria-label="Filtrar por período" data-i18n-aria-label="screens.filter.periodLabel">
-              <option value="" data-i18n="screens.filter.anyPeriod">Qualquer período</option>
-              <option value="last-30" data-i18n="screens.filter.last30">Últimos 30 dias</option>
-              <option value="last-90" data-i18n="screens.filter.last90">Últimos 90 dias</option>
-              <option value="last-365" data-i18n="screens.filter.lastYear">Último ano</option>
-            </select>
-          </div>
-          <div class="tracking-list" id="tracking-list" aria-live="polite"></div>
-          <p class="panel-empty" id="tracking-empty" hidden data-i18n="screens.tracking.empty">Nenhuma aula encontrada.</p>
         </section>
 
         <section class="screen" id="screen-subjects" data-screen-panel="subjects" aria-labelledby="title-subjects" hidden>

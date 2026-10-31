@@ -98,7 +98,7 @@ test('Backup: after an export the screen shows the date and not the "none" text,
   await expect(page.locator('#last-backup-label')).toContainText('Último backup:');
 });
 
-test('Acompanhar > Ver no Plano: a Plano subject filter that hides the unit is relaxed and the unit opens expanded', async ({ page }) => {
+test('Estatisticas > Estudar: a Plano subject filter that hides the unit is relaxed and the unit opens expanded', async ({ page }) => {
   await signIn(page);
   const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
   const b = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: '2026-08-02' });
@@ -111,9 +111,10 @@ test('Acompanhar > Ver no Plano: a Plano subject filter that hides the unit is r
     select.dispatchEvent(new Event('change', { bubbles: true }));
   }, b.unit.subjectId);
   await expect(page.locator('#plan-list .plan-row')).toHaveCount(1);
-  await openScreen(page, 'tracking');
-  const card = page.locator('.tracking-card', { hasText: 'Filtração glomerular' });
-  await card.getByRole('button', { name: 'Ver no Plano' }).click();
+  await openScreen(page, 'stats');
+  await page.locator('#subject-kpi-list tr', { hasText: 'Fisiologia Renal' }).click();
+  await page.locator('#unit-stats-list tr', { hasText: 'Filtração glomerular' }).click();
+  await page.locator('[data-action="study-unit"]').click();
   await expect(page.locator('#screen-plan')).toBeVisible();
   const row = page.locator(`#plan-list .plan-row[data-unit-id="${a.unit.id}"]`);
   await expect(row).toBeVisible();

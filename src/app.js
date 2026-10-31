@@ -257,11 +257,6 @@ reviewMessage.className = "form-message";
 reviewMessage.setAttribute("role", "status");
 reviewMessage.setAttribute("aria-live", "polite");
 reviewDashboard?.after(reviewMessage);
-const trackingList = document.querySelector("#tracking-list");
-const trackingEmpty = document.querySelector("#tracking-empty");
-const trackingFilterSubject = document.querySelector("#tracking-filter-subject");
-const trackingFilterState = document.querySelector("#tracking-filter-state");
-const trackingFilterPeriod = document.querySelector("#tracking-filter-period");
 const subjectsCatalog = document.querySelector("#subjects-catalog");
 const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
 const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
@@ -279,6 +274,7 @@ const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
+const planFilterPeriod = document.querySelector("#plan-filter-period");
 const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
@@ -1729,9 +1725,12 @@ export async function renderPlan() {
   // Apply filters
   const subjectFilter = planFilterSubject?.value ?? "";
   const stateFilter = planFilterState?.value ?? "";
+  const periodFilter = planFilterPeriod?.value ?? "";
+  const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
   const filtered = sorted.filter((unit) => {
     if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
     if (stateFilter && getTrackingState(unit.id, allTasks, allEvidence, today) !== stateFilter) return false;
+    if (periodCutoff && unit.studyDate < periodCutoff) return false;
     return true;
   });
 
@@ -1775,6 +1774,8 @@ export async function renderPlan() {
     if (unit.sourceText) parts.push(unit.sourceText);
     if (exerciseCount > 0) parts.push(t("plan.row.exercises", { count: exerciseCount }));
     parts.push(unit.summaryBody ? t("plan.row.summary.yes") : t("plan.row.summary.no"));
+    const unitTasks = allTasks.filter((task) => task.unitId === unit.id);
+    if (unitTasks.length > 0) parts.push(t("tracking.card.reviews", { done: unitTasks.filter((task) => task.reviewDone).length, total: unitTasks.length }));
     if (nextReview) parts.push(t("plan.row.next", { date: formatDate(nextReview) }));
     meta.textContent = parts.join(" · ");
 
@@ -1810,6 +1811,21 @@ export async function renderPlan() {
       if (!isExpanded && !detail.dataset.loaded) {
         detail.dataset.loaded = "1";
         detail.replaceChildren();
+
+        // The shortcut Acompanhar used to give: a review due today (or overdue) is done on Hoje, where it is waiting.
+        const dueReview = unitTasks.filter((task) => !task.reviewDone && task.dueDate <= today).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+        if (dueReview) {
+          const goToReviewBtn = createTextElement("button", "small-button plan-go-to-review", t("tracking.card.goToReview"));
+          goToReviewBtn.type = "button";
+          goToReviewBtn.dataset.action = "plan-go-to-review";
+          goToReviewBtn.addEventListener("click", () => {
+            showScreen("today");
+            renderToday().then(() => {
+              setTimeout(() => document.querySelector(`[data-review-id="${dueReview.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+            }).catch(console.error);
+          });
+          detail.append(goToReviewBtn);
+        }
 
         // Summary Mestre — always editable in Plan detail
         const summarySection = document.createElement("div");
@@ -2246,180 +2262,6 @@ function openSubjectContents(subjectId) {
   // tabindex=0 only on this tab) instead of leaving focus stranded on a
   // row that just disappeared into the other, now-hidden panel.
   unitTab?.focus();
-}
-
-function createTrackingStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "tracking-state-badge";
-  span.dataset.state = state;
-  span.textContent = TRACKING_STATE_LABELS[state] ?? state;
-  return span;
-}
-
-export async function renderTracking() {
-  if (!trackingList) return;
-  const today = getLocalDateValue();
-  const [units, subjects, allTasks, allEvidence] = await Promise.all([
-    DB.learningUnits.getAll(),
-    DB.subjects.getAll(),
-    DB.reviewTasks.getAll(),
-    DB.learningEvidence.getAll(),
-  ]);
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-  const evidenceByUnitId = new Map();
-  for (const ev of allEvidence) {
-    if (!evidenceByUnitId.has(ev.unitId)) evidenceByUnitId.set(ev.unitId, []);
-    evidenceByUnitId.get(ev.unitId).push(ev);
-  }
-
-  // Populate subject filter
-  // Rebuilt on every render (like Plano's): a discipline created, renamed or archived since the last visit must show up here too.
-  if (trackingFilterSubject) {
-    const chosen = trackingFilterSubject.value;
-    const activeSubjects = subjects.filter((s) => s.isActive);
-    trackingFilterSubject.replaceChildren(trackingFilterSubject.options[0]);
-    for (const s of activeSubjects) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      trackingFilterSubject.append(opt);
-    }
-    if (activeSubjects.some((s) => String(s.id) === chosen)) trackingFilterSubject.value = chosen;
-    syncSelect(trackingFilterSubject);
-  }
-
-  const subjFilter = trackingFilterSubject?.value ?? "";
-  const stateFilter = trackingFilterState?.value ?? "";
-  const periodFilter = trackingFilterPeriod?.value ?? "";
-  const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
-
-  let filtered = units.filter((u) => {
-    if (subjFilter && String(u.subjectId) !== subjFilter) return false;
-    if (stateFilter && getTrackingState(u.id, allTasks, allEvidence, today) !== stateFilter) return false;
-    if (periodCutoff && u.studyDate < periodCutoff) return false;
-    return true;
-  });
-  filtered.sort((a, b) => b.studyDate.localeCompare(a.studyDate));
-
-  trackingEmpty.hidden = filtered.length > 0;
-  trackingList.replaceChildren();
-
-  for (const unit of filtered) {
-    const subject = subjectsById.get(unit.subjectId);
-    const state = getTrackingState(unit.id, allTasks, allEvidence, today);
-    const evidence = evidenceByUnitId.get(unit.id) ?? [];
-    const tasks = allTasks.filter((t) => t.unitId === unit.id);
-    const doneTasks = tasks.filter((t) => t.reviewDone);
-    const pendingTasks = tasks.filter((t) => !t.reviewDone);
-
-    const totalQ = evidence.reduce((s, e) => s + e.questionsCount, 0);
-    const totalC = evidence.reduce((s, e) => s + e.correctCount, 0);
-    const accText = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
-
-    const card = document.createElement("article");
-    card.className = "tracking-card";
-
-    const header = document.createElement("div");
-    header.className = "tracking-card-header";
-
-    const chip = document.createElement("span");
-    chip.className = "subject-chip";
-    chip.textContent = subject?.name ?? t("stats.noSubject");
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
-
-    const title = document.createElement("span");
-    title.className = "tracking-unit-title";
-    title.textContent = unit.title;
-
-    header.append(chip, title, createTrackingStateBadge(state));
-
-    const meta = document.createElement("div");
-    meta.className = "tracking-card-meta";
-    const parts = [formatDate(unit.studyDate)];
-    if (unit.sourceText) parts.push(unit.sourceText);
-    parts.push(unit.summaryBody ? t("plan.row.summary.yes") : t("plan.row.summary.no"));
-    if (accText) parts.push(t("tracking.card.accuracy", { accuracy: accText, questions: totalQ }));
-    parts.push(t("tracking.card.reviews", { done: doneTasks.length, total: tasks.length }));
-
-    const nextPending = pendingTasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-    if (nextPending) parts.push(t("plan.row.next", { date: formatDate(nextPending.dueDate) }));
-
-    meta.textContent = parts.join(" · ");
-
-    // AC-ACOMP-05: quick actions — open unit (Plano), add Resumo, go to pending review
-    const actions = document.createElement("div");
-    actions.className = "tracking-card-actions";
-
-    const goToPlanBtn = document.createElement("button");
-    goToPlanBtn.className = "small-button";
-    goToPlanBtn.type = "button";
-    goToPlanBtn.textContent = t("shell.action.viewInPlan");
-    goToPlanBtn.addEventListener("click", () => {
-      // renderPlan consumes this once: it relaxes any Plano filter that hides the unit, then opens its row
-      pendingPlanFocusUnitId = unit.id;
-      showScreen("plan");
-    });
-
-    actions.append(goToPlanBtn);
-
-    if (!unit.summaryBody) {
-      const addSummaryBtn = document.createElement("button");
-      addSummaryBtn.className = "small-button";
-      addSummaryBtn.type = "button";
-      addSummaryBtn.textContent = t("tracking.card.addSummary");
-      addSummaryBtn.addEventListener("click", () => {
-        showScreen("plan");
-        renderPlan().then(() => {
-          const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-          if (!row) return;
-          row.scrollIntoView({ behavior: "smooth", block: "center" });
-          const expandBtn = row.querySelector(".plan-expand-btn");
-          if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
-          setTimeout(() => {
-            const editBtn = row.querySelector(".plan-edit-summary-btn");
-            if (editBtn) {
-              editBtn.scrollIntoView({ behavior: "smooth", block: "nearest" });
-              editBtn.click();
-            }
-          }, 350);
-        }).catch(console.error);
-      });
-      actions.append(addSummaryBtn);
-    }
-
-    if (nextPending) {
-      const goToReviewBtn = document.createElement("button");
-      goToReviewBtn.className = "small-button";
-      goToReviewBtn.type = "button";
-      goToReviewBtn.textContent = t("tracking.card.goToReview");
-      goToReviewBtn.addEventListener("click", () => {
-        if (nextPending.dueDate <= today) {
-          // Overdue or due today: visible on Hoje screen.
-          showScreen("today");
-          renderToday().then(() => {
-            setTimeout(() => {
-              const reviewRow = document.querySelector(`[data-review-id="${nextPending.id}"]`);
-              if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 300);
-          }).catch(console.error);
-        } else {
-          // Due tomorrow or future: not on Hoje. Navigate to Plano and expand the unit.
-          showScreen("plan");
-          renderPlan().then(() => {
-            const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-            if (!row) return;
-            row.scrollIntoView({ behavior: "smooth", block: "center" });
-            const expandBtn = row.querySelector(".plan-expand-btn");
-            if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
-          }).catch(console.error);
-        }
-      });
-      actions.append(goToReviewBtn);
-    }
-
-    card.append(header, meta, actions);
-    trackingList.append(card);
-  }
 }
 
 export async function renderDisciplinas() {
@@ -4667,7 +4509,7 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
-const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", "settings", "materials", "study-now", "exam"]);
+const DATA_SCREENS = new Set(["today", "stats", "plan", "subjects", "settings", "materials", "study-now", "exam"]);
 
 // T22: "register" (#screen-register, "Cadastro") was removed from the NAV
 // in a prior decision (P1-2), but is NOT dead — it is the only UI in the
@@ -4712,6 +4554,7 @@ function runScreenRender(screenId, render) {
 }
 
 export function showScreen(screenId, { focus = false } = {}) {
+  if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
   // Remote mode: a data screen with no authenticated session is a login
@@ -4782,9 +4625,6 @@ export function showScreen(screenId, { focus = false } = {}) {
     // just before the fresh render replaced that row (CI EXAM-4 regression).
     planList?.replaceChildren();
     runScreenRender("plan", renderPlan);
-  }
-  if (nextScreen === "tracking" && databaseAvailable) {
-    runScreenRender("tracking", renderTracking);
   }
   if (nextScreen === "subjects" && databaseAvailable) {
     runScreenRender("subjects", renderDisciplinas);
@@ -5900,14 +5740,8 @@ planSort?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 
-trackingFilterSubject?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
-});
-trackingFilterState?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
-});
-trackingFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
+planFilterPeriod?.addEventListener("change", () => {
+  if (databaseAvailable) renderPlan().catch(console.error);
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {

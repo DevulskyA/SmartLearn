@@ -216,3 +216,30 @@ test('T-F13-03: the final screen lists every wrong answer of the review, those g
   await expect(page.locator('#study-now-retest-btn')).toContainText('2');
   await expect(page.locator('#study-now-next-review-text')).toContainText('Próxima revisão');
 });
+
+// PF-03, first slice: Acompanhar was folded into Plano (reviews done/total, period filter, the shortcut to a due review, old links).
+const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+test('PF-03: Plano shows how many of the 16 reviews are done and filters lessons by period', async ({ page }) => {
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Plano periodo', title: 'Aula recente', studyDate: daysAgo(2) });
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Plano periodo antiga', title: 'Aula antiga', studyDate: daysAgo(100) });
+  await page.locator('[data-screen="plan"]').click();
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(2, { timeout: 8000 });
+  await expect(page.locator('#plan-list .plan-row', { hasText: 'Aula recente' }).locator('.plan-unit-meta')).toContainText('/16 revisões');
+  await page.evaluate(() => { const select = document.querySelector('#plan-filter-period'); select.value = 'last-30'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(1, { timeout: 8000 });
+  await expect(page.locator('#plan-list .plan-row')).toContainText('Aula recente');
+});
+
+test('PF-03: a lesson with a review due has a shortcut to it in Plano, and the old Acompanhar link lands in Plano', async ({ page }) => {
+  await reviewDueToday(page, 'Aula atalho', 1);
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('#plan-list .plan-row', { hasText: 'Aula atalho' });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-go-to-review"]').click();
+  await expect(page.locator('#screen-today')).toBeVisible();
+  await expect(page.locator('.review-row').first()).toBeVisible({ timeout: 8000 });
+  await page.evaluate(() => { window.location.hash = '#tracking'; });
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  await expect(page.locator('[data-screen="tracking"]')).toHaveCount(0); // no menu item any more
+});

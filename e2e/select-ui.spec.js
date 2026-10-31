@@ -174,26 +174,26 @@ async function seedUatAndGoto(page, screenId) {
 }
 
 test.describe('local BrowserStore consumers', () => {
-  test('period select (Acompanhar) — full checklist', async ({ page }) => {
-    await seedUatAndGoto(page, 'tracking');
-    await auditSelectConsumer(page, '#tracking-filter-period');
+  test('period select (Plano) — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-filter-period');
   });
 
-  test('discipline select (Acompanhar) — full checklist, includes a deliberately long label', async ({ page }) => {
-    await seedUatAndGoto(page, 'tracking');
-    const { menu, trigger } = await locateSelectUi(page, '#tracking-filter-subject');
+  test('discipline select (Plano) — full checklist, includes a deliberately long label', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    const { menu, trigger } = await locateSelectUi(page, '#plan-filter-subject');
     await trigger.click();
     // The fixture's deliberately long discipline name must appear intact
     // (not truncated to nothing, not duplicated) as one real menu item.
     const longLabel = 'Patologia Geral, Especial e Correlações Anatomoclínicas Multissistêmicas';
     await expect(menu.locator('li[role="option"]', { hasText: longLabel })).toHaveCount(1);
     await page.keyboard.press('Escape');
-    await auditSelectConsumer(page, '#tracking-filter-subject');
+    await auditSelectConsumer(page, '#plan-filter-subject');
   });
 
-  test('status select (Acompanhar) — full checklist', async ({ page }) => {
-    await seedUatAndGoto(page, 'tracking');
-    await auditSelectConsumer(page, '#tracking-filter-state');
+  test('status select (Plano) — full checklist', async ({ page }) => {
+    await seedUatAndGoto(page, 'plan');
+    await auditSelectConsumer(page, '#plan-filter-state');
   });
 
   test('a form select (Plano — Nova aula "Disciplina") — full checklist', async ({ page }) => {
@@ -234,8 +234,8 @@ test.describe('local BrowserStore consumers', () => {
 
   test('mobile viewport: discipline select opens, is fully usable, and does not clip off-screen', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await seedUatAndGoto(page, 'tracking');
-    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await seedUatAndGoto(page, 'plan');
+    const { trigger, menu } = await locateSelectUi(page, '#plan-filter-subject');
     await trigger.click();
     await expect(menu).toBeVisible();
     const box = await menu.boundingBox();
@@ -243,7 +243,7 @@ test.describe('local BrowserStore consumers', () => {
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390 + 1); // +1 for sub-pixel rounding
     await page.keyboard.press('Escape');
-    await auditSelectConsumer(page, '#tracking-filter-subject');
+    await auditSelectConsumer(page, '#plan-filter-subject');
   });
 
   // Closing the inventory loop: every remaining real <select> consumer
@@ -288,8 +288,8 @@ test.describe('local BrowserStore consumers', () => {
   });
 
   test('menu width is never narrower than its trigger', async ({ page }) => {
-    await seedUatAndGoto(page, 'tracking');
-    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await seedUatAndGoto(page, 'plan');
+    const { trigger, menu } = await locateSelectUi(page, '#plan-filter-subject');
     const triggerBox = await trigger.boundingBox();
     await trigger.click();
     await expect(menu).toBeVisible();
@@ -302,8 +302,8 @@ test.describe('local BrowserStore consumers', () => {
     // A short viewport guarantees the trigger sits close enough to the
     // bottom edge that the menu (several options tall) cannot fit below it.
     await page.setViewportSize({ width: 800, height: 320 });
-    await seedUatAndGoto(page, 'tracking');
-    const { trigger, menu } = await locateSelectUi(page, '#tracking-filter-subject');
+    await seedUatAndGoto(page, 'plan');
+    const { trigger, menu } = await locateSelectUi(page, '#plan-filter-subject');
     await trigger.scrollIntoViewIfNeeded();
     const triggerBox = await trigger.boundingBox();
     await trigger.click();

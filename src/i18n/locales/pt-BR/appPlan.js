@@ -40,9 +40,7 @@ export default {
   'plan.detail.empty': 'Nenhum detalhe disponível.',
 
   // Acompanhamento cards
-  'tracking.card.accuracy': '{accuracy} · {questions} q',
   'tracking.card.reviews': '{done}/{total} revisões',
-  'tracking.card.addSummary': '+ Resumo Mestre',
   'tracking.card.goToReview': 'Ir para revisão',
   // end of keys
 };

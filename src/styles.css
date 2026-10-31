@@ -2035,19 +2035,6 @@ h1 {
    this same overflow to happen even though it isn't the phone-nav case —
    verified live, a real title still overflowed at exactly 768px. */
 @media (max-width: 60rem) {
-  .tracking-card-header .subject-chip {
-    order: 1;
-  }
-  .tracking-card-header .tracking-state-badge {
-    order: 2;
-  }
-  .tracking-card-header .tracking-unit-title {
-    order: 3;
-    flex: 1 1 100%;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
 }
 
 @media (max-width: 22rem) {
@@ -3951,69 +3938,6 @@ label.select-control:has(> .ui-select) {
   display: block;
   overflow: visible;
   color: var(--color-text);
-}
-
-/* Tracking screen */
-.tracking-filters {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
-.tracking-card {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
-  background: var(--color-surface);
-}
-.tracking-card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.25rem;
-}
-.tracking-unit-title {
-  font-weight: 600;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tracking-card-meta {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-}
-.tracking-state-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 99px;
-  white-space: nowrap;
-}
-.tracking-card-actions {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-}
-.tracking-state-badge[data-state="SEM_EVIDENCIA"] { background: var(--color-surface-sunken); color: var(--color-muted); }
-.tracking-state-badge[data-state="EM_ESTUDO"] { background: #dbeafe; color: #1e40af; }
-.tracking-state-badge[data-state="EM_REVISAO"] { background: #fef9c3; color: #92400e; }
-.tracking-state-badge[data-state="ATRASADO"] { background: #fee2e2; color: #991b1b; }
-.tracking-state-badge[data-state="EM_DIA"] { background: #dcfce7; color: #166534; }
-
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_ESTUDO"] { background: #1e3a5f; color: #93c5fd; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="ATRASADO"] { background: #450a0a; color: #fca5a5; }
-:root[data-theme-mode="dark"] .tracking-state-badge[data-state="EM_DIA"] { background: #052e16; color: #86efac; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_ESTUDO"] { background: #1e3a5f; color: #93c5fd; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_REVISAO"] { background: #422006; color: #fde68a; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="ATRASADO"] { background: #450a0a; color: #fca5a5; }
-  :root:not([data-theme-mode="light"]) .tracking-state-badge[data-state="EM_DIA"] { background: #052e16; color: #86efac; }
 }
 
 /* Subjects screen */

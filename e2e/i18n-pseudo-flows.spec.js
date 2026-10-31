@@ -149,7 +149,7 @@ const STATES = [
   'study_question', 'study_revealed', 'study_resume', 'study_result_errors', 'study_retest_question', 'study_result_corrected',
   'exam_question', 'exam_submit_warning', 'exam_correction', 'exam_judged', 'exam_final',
   'stats_subject', 'stats_unit', 'stats_exercise_detail',
-  'plan_expanded', 'tracking_row',
+  'plan_expanded',
   'register_lists', 'register_exercise_edit', 'register_study_edit', 'register_subject_edit',
   'materials_initial', 'materials_proposals',
 ];
@@ -292,12 +292,10 @@ test('pseudo-locale: the texts of the data-driven states, and where they come fr
   await measure('stats_exercise_detail', '#exercise-detail-dialog', pseudo.locator('#exercise-detail-dialog .exercise-attempt-item').first());
   await pseudo.locator('#exercise-detail-close').click();
 
-  // ---- 5. Plano with the unit rows expanded, Acompanhamento with its rows -----------------------------------------------------------
+  // ---- 5. Plano with the unit rows expanded -----------------------------------------------------------
   await openPlanRow(PROVA.unit, '.plan-exercise-item');
   await openPlanRow(ESTUDO.unit, '.plan-exercise-item');
   await measure('plan_expanded', '#screen-plan', pseudo.locator('.plan-row', { hasText: ESTUDO.unit }).locator('.plan-evidence-list li').first());
-  await nav('tracking');
-  await measure('tracking_row', '#screen-tracking', pseudo.locator('.tracking-card').first());
 
   // ---- 6. Cadastro: the lists expanded and every inline editor open --------------------------------------------------------------------
   await pseudo.evaluate(() => { window.location.hash = '#register'; });
