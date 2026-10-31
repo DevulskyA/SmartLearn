@@ -2286,13 +2286,18 @@ export async function renderTracking() {
   }
 
   // Populate subject filter
-  if (trackingFilterSubject && trackingFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
+  // Rebuilt on every render (like Plano's): a discipline created, renamed or archived since the last visit must show up here too.
+  if (trackingFilterSubject) {
+    const chosen = trackingFilterSubject.value;
+    const activeSubjects = subjects.filter((s) => s.isActive);
+    trackingFilterSubject.replaceChildren(trackingFilterSubject.options[0]);
+    for (const s of activeSubjects) {
       const opt = document.createElement("option");
       opt.value = String(s.id);
       opt.textContent = s.name;
       trackingFilterSubject.append(opt);
     }
+    if (activeSubjects.some((s) => String(s.id) === chosen)) trackingFilterSubject.value = chosen;
     syncSelect(trackingFilterSubject);
   }
 
@@ -2986,6 +2991,9 @@ export async function renderSettings() {
   // mirroring how import/reset are REMOTE_MODE-only in the opposite
   // direction above.
   if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
+  // The card's own sentence promises the removal; with the button gone only the reason below it stays.
+  const resetBody = document.querySelector("#reset-body");
+  if (resetBody) resetBody.hidden = REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
