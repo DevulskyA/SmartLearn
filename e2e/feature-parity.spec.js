@@ -166,3 +166,15 @@ test('Acompanhar: the discipline filter lists a discipline created after the scr
     expect(names).toContain('Disciplina Tardia');
   }).toPass({ timeout: 5000 });
 });
+
+test('a data screen that cannot load says so and loads when the student tries again (T-F13-11)', async ({ page }) => {
+  await page.route('**/v1/learning-units', (route) => (route.request().method() === 'GET' ? route.abort() : route.continue()));
+  await page.locator('[data-screen="plan"]').click();
+  const error = page.locator('#screen-plan .screen-load-error');
+  await expect(error).toBeVisible({ timeout: 8000 });
+  await expect(error).toContainText('Não foi possível carregar esta tela');
+  await expect(page.locator('#screen-plan')).not.toHaveAttribute('aria-busy', 'true');
+  await page.unroute('**/v1/learning-units');
+  await error.getByRole('button', { name: 'Tentar de novo' }).click();
+  await expect(error).toBeHidden({ timeout: 8000 });
+});

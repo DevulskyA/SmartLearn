@@ -4624,6 +4624,34 @@ const DATA_SCREENS = new Set(["today", "stats", "plan", "tracking", "subjects", 
 // A real fix (surfacing exercise management from Plano/Hoje instead of
 // this legacy screen) is future UI work, not a T22 redirect decision.
 
+/**
+ * Runs the render of a data screen and tells the student when it could not load (it used to reach only the console, leaving an
+ * empty or stale screen with no way forward). The panel is aria-busy while it loads; the message offers to try again.
+ */
+function runScreenRender(screenId, render) {
+  const panel = document.querySelector(`#screen-${screenId}`);
+  const clear = () => panel?.querySelector(":scope > .screen-load-error")?.remove();
+  clear();
+  panel?.setAttribute("aria-busy", "true");
+  return Promise.resolve()
+    .then(render)
+    .then(clear)
+    .catch((error) => {
+      console.error("Falha ao carregar a tela.", screenId, error);
+      clear();
+      if (!panel) return;
+      const box = document.createElement("div");
+      box.className = "screen-load-error";
+      box.setAttribute("role", "alert");
+      const retry = createTextElement("button", "small-button", t("shell.retry"));
+      retry.type = "button";
+      retry.addEventListener("click", () => runScreenRender(screenId, render));
+      box.append(createTextElement("p", "", t("shell.loadFailed")), retry);
+      panel.querySelector(":scope > .screen-heading")?.after(box);
+    })
+    .finally(() => panel?.removeAttribute("aria-busy"));
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
   let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
 
@@ -4683,27 +4711,27 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
 
   if (nextScreen === "today" && databaseAvailable) {
-    renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
+    runScreenRender("today", renderToday);
   }
 
   if (nextScreen === "stats" && databaseAvailable) {
-    renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
+    runScreenRender("stats", renderStats);
   }
   if (nextScreen === "plan" && databaseAvailable) {
     // Never leave an interactive stale Plano on screen while its authoritative refresh
     // is in flight. A fast click on an old row could otherwise expand stale closures
     // just before the fresh render replaced that row (CI EXAM-4 regression).
     planList?.replaceChildren();
-    renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
+    runScreenRender("plan", renderPlan);
   }
   if (nextScreen === "tracking" && databaseAvailable) {
-    renderTracking().catch((error) => console.error("Falha ao carregar acompanhamento.", error));
+    runScreenRender("tracking", renderTracking);
   }
   if (nextScreen === "subjects" && databaseAvailable) {
-    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
+    runScreenRender("subjects", renderDisciplinas);
   }
   if (nextScreen === "settings" && databaseAvailable) {
-    renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+    runScreenRender("settings", renderSettings);
   }
   // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
   // list populated on plain navigation — renderStudies() only ran after a
