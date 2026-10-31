@@ -2,10 +2,10 @@ import { test, expect } from '@playwright/test';
 
 // Bottom navigation at phone width: EVERY visible destination must be inside
 // the viewport and tappable. Materiais only appears under LOCAL_DESKTOP_
-// AUTHORITY, which makes 7 items (Acompanhar lives in Plano now); a fixed 6-column grid used to push the
+// AUTHORITY, which makes 6 items (Acompanhar and Disciplinas live in Plano now); a fixed 5-column grid used to push the
 // last ("Conta") onto an invisible second row.
 for (const localAuthority of [false, true]) {
-  test(`375px bottom nav keeps every destination reachable (${localAuthority ? '7 items, Materiais visible' : '6 items'})`, async ({ page }) => {
+  test(`375px bottom nav keeps every destination reachable (${localAuthority ? '6 items, Materiais visible' : '5 items'})`, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript((local) => {
       window.__SMARTLEARN_REMOTE_MODE__ = true;
@@ -15,7 +15,7 @@ for (const localAuthority of [false, true]) {
     await page.waitForLoadState('networkidle');
 
     const items = page.locator('.app-nav .nav-item:visible');
-    await expect(items).toHaveCount(localAuthority ? 7 : 6);
+    await expect(items).toHaveCount(localAuthority ? 6 : 5);
     const boxes = await items.evaluateAll((els) => els.map((el) => {
       const r = el.getBoundingClientRect();
       return { name: el.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom };
@@ -33,7 +33,7 @@ for (const localAuthority of [false, true]) {
 }
 
 // MOBILENAV-1: a label must read whole on ONE line (or in an agreed short form), never be cut in the middle of a
-// word ("Estatístic/as"). Measured on the visible label of every item, with all 7 destinations shown.
+// word ("Estatístic/as"). Measured on the visible label of every item, with all 6 destinations shown.
 for (const width of [375, 360]) {
   test(`${width}px bottom nav: every visible label is a single unbroken line and each item is a >=44px touch target`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
@@ -41,7 +41,7 @@ for (const width of [375, 360]) {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const items = page.locator('.app-nav .nav-item:visible');
-    await expect(items).toHaveCount(7);
+    await expect(items).toHaveCount(6);
     const report = await items.evaluateAll((els) => els.map((el) => {
       const labels = [...el.querySelectorAll('span, span span')].filter((s) => s.getClientRects().length > 0 && getComputedStyle(s).position !== 'absolute' && s.textContent.trim() !== '');
       const leaf = labels.filter((s) => !s.querySelector('span')).filter((s) => { const r = s.getBoundingClientRect(); return r.width > 1 && r.height > 1; });
