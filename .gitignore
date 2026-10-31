@@ -43,3 +43,6 @@ conductor/.view/
 
 # Per-worktree resume position: overwritten, never history (see CLAUDE.md, Continuidade de contexto)
 .specs/HANDOFF.md
+
+# e2e run logs (Vite output, kept out of the console)
+test-logs/

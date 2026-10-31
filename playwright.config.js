@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from '@playwright/test';
 import { VITE_PORT } from './e2e/support/ports.js';
 import { SUITES } from './e2e/support/suites.js';
@@ -7,10 +8,14 @@ import { SUITES } from './e2e/support/suites.js';
 const suite = process.env.E2E_SUITE;
 if (suite && !SUITES[suite]) throw new Error(`unknown e2e suite "${suite}" (known: ${Object.keys(SUITES).join(', ')})`);
 
+const outputDir = process.env.E2E_RUN_ID ? `./test-results/${process.env.E2E_RUN_ID}` : './test-results';
+// Playwright empties its output directory at the start of a run, so the Vite log lives beside it, not inside it.
+const viteLog = resolve('test-logs', process.env.E2E_RUN_ID || 'default', 'vite.log');
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: suite ? SUITES[suite].map((name) => `**/${name}.spec.js`) : undefined,
-  outputDir: process.env.E2E_RUN_ID ? `./test-results/${process.env.E2E_RUN_ID}` : './test-results',
+  outputDir,
   fullyParallel: false,
   workers: Number(process.env.E2E_WORKERS || 1),
   reporter: [['list']],
@@ -19,12 +24,13 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: `npx vite --port ${VITE_PORT} --strictPort`,
+    // Vite's own messages (restarts, dependency re-optimization, proxy errors) used to be piped into the console, where every
+    // /health/build poll that no backend answered printed a stack trace (~220 per run, all read by whoever reads the run). They go to
+    // vite.log in the run's output directory instead: it is the place to look when the server itself is the suspect.
+    command: `node scripts/e2e-vite.mjs ${VITE_PORT} "${viteLog}"`,
     url: `http://localhost:${VITE_PORT}`,
     reuseExistingServer: false,
     timeout: 30000,
-    // Vite's own messages (server restart, dependency re-optimization, page reload) were hidden, so a one-off
-    // ERR_CONNECTION_REFUSED on the Vite port (accessibility.spec.js:158 once) could not be traced to a cause. Keep them in the log.
-    stdout: 'pipe',
+    stdout: 'ignore',
   },
 });
