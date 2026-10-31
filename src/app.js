@@ -367,6 +367,8 @@ const studyNowCorrectedSection = document.querySelector("#study-now-corrected-se
 const studyNowCorrectedTitle = document.querySelector("#study-now-corrected-title");
 const studyNowCorrectedList = document.querySelector("#study-now-corrected-list");
 const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
+const studyNowEvidenceNote = document.querySelector("#study-now-evidence-note");
+const studyNowEvidenceRetryBtn = document.querySelector("#study-now-evidence-retry-btn");
 const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
 const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
 const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
@@ -3225,6 +3227,9 @@ configureMaterialsUI({
 // created or completed by this flow. One question at a time, per spec.
 let studyNowState = null;
 let studyNowLastBlock = null;
+// The INITIAL_PRACTICE evidence of the block just finished, kept until the server has it: the answers are already on the
+// server (each judgment was accepted first), but the aggregate row that feeds Estatisticas is a separate request that can fail.
+let pendingStudyEvidence = null;
 
 // "initial" = the block the student just practiced (writes the aggregate
 // INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
@@ -3243,6 +3248,10 @@ function resetStudyNowResult() {
   studyNowResultText.textContent = "";
   studyNowResultNote.hidden = true;
   studyNowResultNote.textContent = "";
+  studyNowEvidenceNote.hidden = true;
+  studyNowEvidenceNote.textContent = "";
+  studyNowEvidenceRetryBtn.hidden = true;
+  pendingStudyEvidence = null;
   studyNowNextReviewText.textContent = "";
   studyNowErrorsSection.hidden = true;
   studyNowErrorsList.replaceChildren();
@@ -3453,18 +3462,15 @@ async function finishStudyNowSession() {
 
   const { unitId, answeredCount, correctCount, attemptIds } = state;
   if (answeredCount > 0 && !isRetest) {
-    try {
-      await DB.learningEvidence.create({
-        unitId,
-        context: "INITIAL_PRACTICE",
-        questionsCount: answeredCount,
-        correctCount,
-        evidenceDate: getLocalDateValue(),
-        attemptIds,
-      });
-    } catch (error) {
-      console.error("Falha ao registrar evidência de prática inicial.", error);
-    }
+    pendingStudyEvidence = {
+      unitId,
+      context: "INITIAL_PRACTICE",
+      questionsCount: answeredCount,
+      correctCount,
+      evidenceDate: getLocalDateValue(),
+      attemptIds,
+    };
+    await recordStudyEvidence();
   }
 
   if (isRetest) {
@@ -3530,6 +3536,40 @@ async function finishStudyNowSession() {
   renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
   renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
 }
+
+/** Sends the pending evidence; on failure tells the student and offers to send it again. An earlier try that did reach the server counts as recorded. */
+async function recordStudyEvidence() {
+  const evidence = pendingStudyEvidence;
+  if (!evidence) return;
+  try {
+    await DB.learningEvidence.create(evidence);
+  } catch (error) {
+    if (error?.msgCode !== "ATTEMPT_IN_OTHER_EVIDENCE") {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+      studyNowEvidenceNote.classList.add("is-error");
+      studyNowEvidenceNote.textContent = t("appStudyNow.evidenceFailed");
+      studyNowEvidenceNote.hidden = false;
+      studyNowEvidenceRetryBtn.hidden = false;
+      return;
+    }
+  }
+  const wasRetry = !studyNowEvidenceNote.hidden;
+  pendingStudyEvidence = null;
+  studyNowEvidenceRetryBtn.hidden = true;
+  studyNowEvidenceNote.classList.remove("is-error");
+  studyNowEvidenceNote.textContent = wasRetry ? t("appStudyNow.evidenceSaved") : "";
+  studyNowEvidenceNote.hidden = !wasRetry;
+  if (wasRetry) {
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  }
+}
+
+studyNowEvidenceRetryBtn?.addEventListener("click", async () => {
+  studyNowEvidenceRetryBtn.disabled = true;
+  try { await recordStudyEvidence(); } finally { studyNowEvidenceRetryBtn.disabled = false; }
+  (studyNowEvidenceRetryBtn.hidden ? studyNowDoneBtn : studyNowEvidenceRetryBtn).focus();
+});
 
 function createStudyErrorItem(exercise) {
   const li = document.createElement("li");
