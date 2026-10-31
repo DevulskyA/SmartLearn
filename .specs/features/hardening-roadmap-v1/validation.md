@@ -749,3 +749,5 @@ ode_modules desta worktree é uma junção para outra worktree e o Vite recusa s
 pm run build.
 - Gates na branch oficial depois do merge: 
 pm test 857 ok, 0 falhas; lint 0 avisos; context:check PASS. e2e: production-build, summary-pdf-crop, summary-visual-editor, eature-parity, study-evidence-failure, offline, draft-autosave, generation-jobs = 63 de 63 ok (as 7 falhas da worktree de teste eram do ambiente e sumiram aqui). NÃO executada: a suíte e2e completa na branch oficial (cadência semanal).
+- Suíte e2e COMPLETA em claude/smartlearn-v1-complete (HEAD 14df1ca, 2026-10-31, worktree com 
+ode_modules próprio): 365 ok, 0 falhas, 2 ignorados, 19,7 min. Fecha a lacuna deixada pela integração: as 7 falhas da worktree de teste eram do ambiente. Próxima rodada completa: cadência semanal ou fechamento de fase.
