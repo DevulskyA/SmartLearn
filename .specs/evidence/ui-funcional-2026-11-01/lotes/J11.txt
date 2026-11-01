@@ -1,6 +1,6 @@
 # keep-going
 click Estatísticas
-expect "66,7%"
+expect "Revisões feitas"
 click "Por conteúdo"
 snap
 click Plano

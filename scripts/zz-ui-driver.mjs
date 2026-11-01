@@ -220,6 +220,20 @@ async function run(c, a) {
     case 'key': await page.keyboard.press(a[0]); return `pressed\n${await brief()}`;
     case 'upload': await loc(a[0]).setInputFiles(a[1], { timeout: 1200 }); return 'file set';
     case 'shot': await page.screenshot({ path: a[0] }); return `saved ${a[0]}`;
+    // size <width> <height>: resizes the real window (outer size, physical pixels) so narrow-window behaviour (390 px phone width) can be tested.
+    case 'size': {
+      const [w, h] = [Number(a[0]), Number(a[1])];
+      if (!(w >= 300 && h >= 300)) throw new Error('uso: size <largura> <altura> (mínimo 300)');
+      ps(`Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class SlW { [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c); }'; $h = (Get-Process -Id ${app.pid}).MainWindowHandle; [SlW]::ShowWindow($h, 9) | Out-Null; [SlW]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, ${w}, ${h}, 0x0002 -bor 0x0004) | Out-Null`);
+      await sleep(300);
+      return `window ${await page.evaluate(() => `${innerWidth}x${innerHeight}`)} (viewport)`;
+    }
+    // noscroll: fails if the page scrolls sideways (content wider than the window), the classic narrow-window defect
+    case 'noscroll': {
+      const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+      if (m.sw > m.iw + 1) throw new Error(`rolagem horizontal: conteúdo ${m.sw}px em janela de ${m.iw}px`);
+      return `sem rolagem horizontal (${m.sw}/${m.iw})`;
+    }
     case 'wait': await sleep(Number(a[0] ?? 500)); return 'waited';
     // expect <texto>: passes the instant the text is visible (max 3 s), fails with the cause otherwise. Use it instead of wait/sleep: it is exact and as fast as the app.
     case 'expect': await page.getByText(a.join(' '), { exact: false }).locator('visible=true').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';

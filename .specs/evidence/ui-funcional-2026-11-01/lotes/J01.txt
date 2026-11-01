@@ -1,7 +1,7 @@
 # keep-going
 reload
 click Hoje
-expect "Resumo do Dia"
+expect "Vencidas"
 click Materiais
 expect "Selecionar PDF"
 click Plano
@@ -13,4 +13,4 @@ expect "Tema"
 click Conta
 expect "Conectado como"
 click Hoje
-expect "Resumo do Dia"
+expect "Vencidas"

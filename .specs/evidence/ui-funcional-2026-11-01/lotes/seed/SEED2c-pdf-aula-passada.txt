@@ -1,0 +1,15 @@
+# keep-going
+reload
+click Materiais
+upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf
+expect "propostos"
+expect "Gerar rascunho com IA"
+click css:button[data-action=generate-draft]
+expect "Aceitar a aula"
+select css:#lesson-1-subject Farmacologia
+fill "label:Data da aula" 2026-10-20
+click "Ver o que será criado"
+click "Aceitar e criar aula"
+expect "Estudar agora"
+click Hoje
+snap

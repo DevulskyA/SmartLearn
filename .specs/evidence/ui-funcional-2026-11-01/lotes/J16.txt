@@ -1,0 +1,22 @@
+# keep-going
+size 420 860
+click Hoje
+expect "Vencidas"
+noscroll
+click Plano
+expect "Gerenciar disciplinas"
+noscroll
+click Estatísticas
+expect "Por disciplina"
+noscroll
+click Configurações
+expect "Tema"
+noscroll
+click Conta
+expect "Conectado como"
+noscroll
+click Materiais
+expect "Selecionar PDF"
+noscroll
+size 1280 820
+click Hoje

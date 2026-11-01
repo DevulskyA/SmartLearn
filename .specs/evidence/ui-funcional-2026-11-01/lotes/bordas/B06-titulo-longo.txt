@@ -1,0 +1,22 @@
+# keep-going
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+click Editar
+fill "label:Nome da disciplina" Descartado
+key Escape
+expect "Farmacologia"
+click Editar
+fill "label:Nome da disciplina" Renomeada
+key Enter
+expect "Renomeada"
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+expect "Renomeada"
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Anatomia
+fill css:#plan-study-title AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+click css:#plan-unit-save-btn
+expect "AAAAAAAAAAAAAAAA"
+shot .specs/evidence/ui-funcional-2026-11-01/prints/A01-titulo-longo-corrigido.png

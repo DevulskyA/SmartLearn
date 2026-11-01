@@ -1,7 +1,7 @@
 # keep-going
 reload
 click Materiais
-upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-teste.pdf
+upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf
 expect "propostos"
 click "Gerar rascunho com IA"
 expect "Aceitar a aula"

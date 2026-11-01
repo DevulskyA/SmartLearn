@@ -3,13 +3,18 @@ reload
 click Plano
 ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
 ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
-fill "label:Nome da nova disciplina" Descartavel
+fill "label:Nome da nova disciplina" Patologia
 click css:[aria-label="rose"]
 click Adicionar
-expect "Descartavel"
-click Arquivar
+expect "Patologia"
+click 'css:.subject-catalog-card:has-text("Patologia") button:has-text("Arquivar")'
 expect "Reativar"
 click Reativar
-expect "Arquivar"
-click Excluir
-snap
+expect "Patologia"
+click 'css:.subject-catalog-card:has-text("Patologia") button:has-text("Excluir")'
+expect "não pode ser desfeita"
+click Confirmar
+gone "não pode ser desfeita"
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn

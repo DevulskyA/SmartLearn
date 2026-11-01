@@ -11,4 +11,4 @@ back
 forward
 click Hoje
 reload
-expect "Resumo do Dia"
+expect "Vencidas"

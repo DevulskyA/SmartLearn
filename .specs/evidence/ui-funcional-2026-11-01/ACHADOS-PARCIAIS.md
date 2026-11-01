@@ -64,3 +64,9 @@ Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenh
 - **A-07 corrigido no exe:** Esc cancela e descarta; Enter salva; o novo nome persiste após recarregar (lote `lotes/J06c.txt`, 21 linhas, 0 falhas).
 - **A-01 corrigido no exe:** título de 200 caracteres sem espaços quebra em duas linhas dentro do cartão (`prints/A01-titulo-longo-corrigido.png`).
 - **Baselines** gravados sobre dados novos (J00, J06c). Lotes que dependem de estado só têm baseline válido a partir de dados novos.
+
+## Higiene dos dados de teste (2026-11-01)
+- **Problema:** o conjunto de dados compartilhado tinha lixo (título de 300 "A", `<b>x</b>`, emoji, "Descartavel", "Renomeada", "Zeta"), vindo das jornadas de borda rodadas no mesmo app.
+- **Correção:** as jornadas de borda foram para `lotes/bordas/` e rodam em instância descartável (`scripts/zz-ui-bordas.sh`); o ciclo realista (`scripts/zz-ui-full.sh`) só usa dados corretos (disciplinas, aulas, resumo e PDF com nomes reais). Varredura de todas as telas depois do ciclo: nenhuma ocorrência de padrões de lixo.
+- **I-08 (instrumento):** seletor CSS com espaço (combinador descendente) era cortado no primeiro espaço pelo lote; usar aspas simples em volta do argumento inteiro. Explicava as falhas do J06d.
+- **A-08 (produto, candidato):** a tela final da revisão mostrava "Próxima revisão: 27 de out. de 2026", data anterior a hoje (01/11). Há uma correção não commitada em `src/app.js` e `src/i18n/locales/pt-BR/appStudyNow.js` feita por outra sessão; falta confirmar e commitar.
