@@ -4,7 +4,7 @@
 //   node scripts/e2e.mjs [--suite materials] [playwright arguments...]
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { openSync, writeSync, closeSync, readFileSync, rmSync } from 'node:fs';
+import { openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,9 +78,11 @@ async function blockFree(offset, free, workers = 1) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2);
   const env = { ...process.env };
+  const rec = args.indexOf('--record-baseline');
+  if (rec >= 0) args.splice(rec, 1);
   const i = args.indexOf('--suite');
   if (i >= 0) { env.E2E_SUITE = args[i + 1]; args.splice(i, 2); }
-  // a narrow suite can use more workers than the full run: the full run stays at 2 (stable under load), the area suites are measured to be faster with more
+  // full run = 4 workers (measured 2026-11-01: 1024 s -> 697 s, 0 failures in 2 runs; 3 workers = 799 s); area suites may override via SUITE_WORKERS
   const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 4);
   env.E2E_WORKERS = String(workers);
   const { offset, vitePort, release } = await pickRunPorts({ workers });
@@ -91,6 +93,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   env.SMARTLEARN_TEST_FAST_SCRYPT = '1';
   console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : ''}`);
   const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test', ...args], { env, stdio: 'inherit', shell: process.platform === 'win32' });
-  child.on('exit', (code) => { release(); process.exit(code ?? 1); });
+  const t0 = Date.now();
+  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: `${env.E2E_SUITE || 'full'}@${workers}w${args.length ? '+args' : ''}`, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
   process.on('SIGINT', () => { release(); process.exit(130); });
+}
+
+// every run has a measured baseline: a full-suite duration far from the recorded one means a slow target, a broken runner or skipped tests (exit 5 if the run was otherwise green)
+function checkDuration({ seconds, key, code, record }) {
+  const file = new URL('../e2e/.duration-baseline.json', import.meta.url);
+  let all = {};
+  try { all = JSON.parse(readFileSync(file, 'utf8')); } catch { /* none yet */ }
+  if (record && code === 0) { all[key] = Math.round(seconds); writeFileSync(file, JSON.stringify(all, null, 2) + '\n'); console.log(`[e2e] baseline ${key} = ${Math.round(seconds)} s recorded`); return; }
+  const base = all[key];
+  if (!base) { console.log(`[e2e] NO BASELINE for ${key} (${Math.round(seconds)} s); record one from a clean run with --record-baseline`); return; }
+  const dev = (seconds - base) / base;
+  if (Math.abs(dev) > 0.3) { console.log(`[e2e] PERF DEVIATION ${key}: ${Math.round(seconds)} s vs baseline ${base} s (${dev > 0 ? '+' : ''}${Math.round(dev * 100)}%): investigate runner/target before trusting the result`); return true; }
 }
