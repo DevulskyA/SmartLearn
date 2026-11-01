@@ -1,13 +1,16 @@
 # keep-going
+reload
 click Hoje
 expect "Resumo do Dia"
 click Materiais
-expect "Fontes em PDF"
+expect "Selecionar PDF"
 click Plano
 expect "Gerenciar disciplinas"
 click Estatísticas
-expect "Desempenho por disciplina"
+expect "Por disciplina"
 click Configurações
 expect "Tema"
 click Conta
 expect "Conectado como"
+click Hoje
+expect "Resumo do Dia"
