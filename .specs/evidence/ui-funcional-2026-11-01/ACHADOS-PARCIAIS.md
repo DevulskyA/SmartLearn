@@ -16,10 +16,10 @@ Instrumento: `scripts/zz-ui-driver.mjs` em modo `batch` (auto-teste 12/12). Lote
 | J12 Configurações | PASSOU COM RESSALVAS | temas e idioma salvam; "Apagar base local" só mostra aviso de não suportado |
 | J13 Conta | PASSOU | senha errada: "incorretos"; entrar de novo ok; 401 no console é esperado |
 | J01 Menu | PASSOU COM RESSALVAS | 6 destinos abrem; Materiais e Estatísticas lembram a última subtela (rascunho aberto, aba "Por conteúdo"), o que quebrou as esperas do roteiro, não o produto |
-| J04 Revisão focada | NÃO CONCLUÍDO | "Começar agora" não estava disponível após as revisões feitas; refazer com revisões vencidas |
+| J04 Revisão focada | NÃO APLICÁVEL COM ESTES DADOS | "Começar agora" abre a revisão vencida da aula sem exercícios (expande resumo e exercícios externos); a revisão focada exige vencida com exercícios, e a aula com exercícios só vence em 02/11 |
 | J14 Persistência | PASSOU | F5 em Estatísticas, Plano e Hoje; hash inexistente; voltar e avançar: 13 linhas, 2,7 s, sem erro (requisições abortadas no recarregamento são esperadas) |
 | J15 Teclado | PASSOU | Tab, Shift+Tab, Enter e Esc sem erro; foco visual não conferido |
-| J08 Editor do resumo | NÃO CONCLUÍDO | editor visual abre (Visual/Texto, barra, Salvar); o roteiro de edição falhou por estado da tela, refazer com seletor do editor |
+| J08 Editor do resumo | PASSOU | editar, salvar, recarregar: o texto com `<b>`, acentos e emoji persiste e aparece literal (12 linhas, 2,9 s) |
 | J09 Provas | NÃO ENCONTRADO | nenhuma entrada de prova visível na interface testada |
 | J16 Estresse e janela estreita | NÃO TESTADO | redimensionar a janela e diálogos nativos não são controláveis |
 

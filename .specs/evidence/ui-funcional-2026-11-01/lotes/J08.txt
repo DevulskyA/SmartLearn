@@ -1,10 +1,13 @@
 # keep-going
-click Texto
-click css:textarea
-type css:textarea "Resumo de teste: absorção e excreção. <b>não é html</b> acentuação ção 😀"
-click Salvar
-expect "Resumo"
 reload
-click Plano
-click "Expandir detalhes"
+click Hoje
+click "Começar agora"
+click "Editar resumo"
+fill "label:Resumo Mestre" "Resumo de teste: absorção e excreção. <b>não é html</b> ação 😀"
+click Salvar
+expect "Resumo de teste"
+reload
+click Hoje
+click "Começar agora"
+expect "Resumo de teste"
 snap

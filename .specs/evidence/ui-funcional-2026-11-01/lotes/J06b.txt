@@ -1,0 +1,15 @@
+# keep-going
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+click Editar
+fill "label:Nome da disciplina" Farmacologia2
+key Enter
+expect "Farmacologia2"
+click Editar
+fill "label:Nome da disciplina" Anatomia
+click Cancelar
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+snap
