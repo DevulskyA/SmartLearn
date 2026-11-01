@@ -42,3 +42,5 @@ Usar a menor capacidade suficiente para produzir o melhor resultado comprovável
 - **Travas no código:** timeout de ação 2,5 s; id velho falha em ~0,2 s com a causa; log por comando em `%TEMP%\sl-ui-driver.log` (hora, ms, ok/ERR); aviso `SPEED WARNING` com 8 ou mais chamadas soltas em 60 s.
 - **Saúde do instrumento antes de delegar:** `snap` e um `batch` de 8 linhas devem fechar em menos de 3 s no total.
 - **Prova das travas:** `node scripts/zz-ui-driver-selftest.mjs` (driver ligado) deve dar 9/9.
+- **Todo teste tem tempo medido:** `batch <arquivo> --record` grava tempo e número de passos de uma execução limpa em `lotes/baseline.json`; as execuções seguintes comparam e acusam `PERF DEVIATION` (saída 5) se o tempo sair de [0,5x − 0,5 s, 1,5x + 0,5 s] ou o número de passos mudar, e `NO BASELINE` se o teste nunca foi medido. Mais lento ou mais rápido que o normal é problema a investigar antes de confiar no resultado.
+- **Todo erro é registrado na hora**, também os da interface e os do próprio instrumento: `.specs/evidence/ui-funcional-2026-11-01/ACHADOS-PARCIAIS.md`.
