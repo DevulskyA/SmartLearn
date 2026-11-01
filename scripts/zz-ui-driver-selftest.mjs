@@ -31,6 +31,9 @@ check('a fast batch reports no slow lines', !/SLOW LINES/.test(fast.out));
 writeFileSync(file, 'click Plano\nclick "texto que nao existe em lugar nenhum"\nsnap\n');
 const slowRun = run(['batch', file]);
 check('a batch line that waits on a missing target is named as slow', /SLOW LINES.*#2/.test(slowRun.out), slowRun.out.match(/SLOW LINES[^\n]*/)?.[0]?.slice(0, 80));
+writeFileSync(file, 'click Plano\nexpect "texto que nunca aparece"\nsnap\n');
+const rejected = run(['batch', file]);
+check('a batch with a line over 1.5 s is rejected (exit 4)', rejected.code === 4 && /REJECTED AS SLOW/.test(rejected.out), `exit ${rejected.code}`);
 
 rmSync(pace, { force: true });
 let blockedAt = null;

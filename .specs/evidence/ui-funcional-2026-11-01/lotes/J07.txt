@@ -7,32 +7,57 @@ fill css:#plan-study-source "Aula 1 Anatomia"
 fill css:#plan-study-title "Sistema nervoso central"
 click css:#plan-unit-save-btn
 expect "Sistema nervoso central"
+reload
+click Plano
 ensure css:#plan-new-unit-btn css:#plan-study-title
 click css:#plan-unit-save-btn
+expect "Informe o conteúdo estudado"
+reload
+click Plano
 ensure css:#plan-new-unit-btn css:#plan-study-title
 select css:#plan-subject-select Farmacologia
+fill css:#plan-study-source "Aula 2"
 fill css:#plan-study-title "   "
 click css:#plan-unit-save-btn
-fill css:#plan-study-title "Farmacodinamica receptores"
+expect "Informe o conteúdo estudado"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Farmacologia
 fill css:#plan-study-source "Aula 2 Farmacologia"
+fill css:#plan-study-title "Farmacodinamica receptores"
 click css:#plan-unit-save-btn
 expect "Farmacodinamica receptores"
+reload
+click Plano
 ensure css:#plan-new-unit-btn css:#plan-study-title
 select css:#plan-subject-select Anatomia
+fill css:#plan-study-source ""
 fill css:#plan-study-title "Farmacodinamica receptores"
 click css:#plan-unit-save-btn
+reload
+click Plano
 ensure css:#plan-new-unit-btn css:#plan-study-title
 select css:#plan-subject-select Anatomia
-fill css:#plan-study-title "<b>x</b> \"aspas\" 'simples' ação 😀"
+fill css:#plan-study-source ""
+fill css:#plan-study-title "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 click css:#plan-unit-save-btn
+reload
+click Plano
 ensure css:#plan-new-unit-btn css:#plan-study-title
 select css:#plan-subject-select Anatomia
-fill css:#plan-study-title AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-click css:#plan-unit-save-btn
-ensure css:#plan-new-unit-btn css:#plan-study-title
-select css:#plan-subject-select Anatomia
+fill css:#plan-study-source "Aula antiga"
 fill css:#plan-study-title "Neuroanatomia antiga"
 fill css:#plan-study-date 2026-10-20
 click css:#plan-unit-save-btn
 expect "Neuroanatomia antiga"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Anatomia
+fill css:#plan-study-source "Futura"
+fill css:#plan-study-title "Aula futura"
+fill css:#plan-study-date 2026-12-20
+click css:#plan-unit-save-btn
+expect "Aula futura"
 snap

@@ -53,6 +53,9 @@ if (cmd !== 'daemon') {
     // of the test (wrong target, missing wait target), never normal: it is named so the test gets fixed instead of tolerated.
     if (slow.length) console.log(`SLOW LINES (>${SLOW_MS} ms): ${slow.map((s) => `#${s.n} ${s.ms}ms ${s.line.slice(0, 50)}`).join(' | ')}`);
     console.log(`batch: ${lines.length} lines, ${failed} failed, ${Date.now() - t0} ms`);
+    // A line over 1.5 s is a test defect (it waited on a target that never came): the run fails with its own exit code even if every command "passed".
+    const hardSlow = slow.filter((s) => s.ms > 1500);
+    if (hardSlow.length) { console.log(`BATCH REJECTED AS SLOW: ${hardSlow.length} line(s) over 1500 ms. Fix those lines' targets; do not accept this run.`); process.exit(4); }
     process.exit(failed ? 2 : 0);
   }
   // Speed guard: a model round trip costs ~3 s and ~10k tokens, a driver command ~0.3 s. Many single calls in a row means the work should be a batch.
@@ -204,7 +207,7 @@ async function run(c, a) {
     case 'shot': await page.screenshot({ path: a[0] }); return `saved ${a[0]}`;
     case 'wait': await sleep(Number(a[0] ?? 500)); return 'waited';
     // expect <texto>: passes the instant the text is visible (max 3 s), fails with the cause otherwise. Use it instead of wait/sleep: it is exact and as fast as the app.
-    case 'expect': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
+    case 'expect': await page.getByText(a.join(' '), { exact: false }).locator('visible=true').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
     // ensure <opener> <target>: open a toggle panel only if it is closed (a second click on the opener would close it); makes batches independent of leftover state.
     case 'ensure': { if (!(await page.locator(a[1].startsWith('css:') ? a[1].slice(4) : a[1]).first().isVisible())) await loc(a[0]).click({ timeout: 1200 }); return 'open'; }
     case 'gone': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'hidden', timeout: 3000 }).catch(() => { throw new Error(`texto ainda visível: "${a.join(' ')}"`); }); return 'gone';
