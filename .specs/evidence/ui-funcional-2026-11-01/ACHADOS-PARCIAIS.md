@@ -55,3 +55,7 @@ Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenh
 | I-05 | roteiros | `ensure` necessário: painéis que alternam abrem e fecham com o mesmo botão | corrigido (`ensure`) |
 | I-06 | driver | aspas escapadas dentro de argumentos não são entendidas pelo lote | limitação conhecida; usar aspas simples |
 | I-07 | operador | pasta `C:\c\` criada por caminho errado | pendente: apagar |
+
+## Reclassificação (2026-11-01)
+- **A-05 (ordem da validação) não é defeito:** o código documenta a ordem de propósito (data, conteúdo, depois disciplina, "antes de criar qualquer disciplina", `src/app.js:5842`). Fechado como projeto intencional.
+- **A-01 (título de 240 caracteres):** o corte em 240 vem do `maxlength` do campo (digitação real não passa de 240; o `fill` do teste truncou). O defeito real era o texto sem espaços ultrapassar a borda do cartão na lista: corrigido com `overflow-wrap: anywhere` em `.plan-unit-title` (`src/styles.css`). Falta conferir visualmente no app reconstruído.

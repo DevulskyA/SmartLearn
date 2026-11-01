@@ -3706,6 +3706,8 @@ label.select-control:has(> .ui-select) {
   flex: 1 1 100%;
   font-weight: 600;
   font-size: 0.95rem;
+  min-width: 0;
+  overflow-wrap: anywhere; /* a 240-character title without spaces must wrap inside the card, not run past its edge */
 }
 
 .plan-unit-meta {
