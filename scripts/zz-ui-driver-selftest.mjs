@@ -32,7 +32,7 @@ let blockedAt = null;
 for (let i = 1; i <= 20 && !blockedAt; i += 1) { if (run(['wait', '1']).code === 3) blockedAt = i; }
 check('the 17th separate call in 60 s is refused', blockedAt === 17, `blocked at ${blockedAt}`);
 check('batch stays allowed while blocked', run(['batch', file]).code === 0);
-check('the override works', run(['wait', '1'], { SL_DRIVER_ALLOW_SLOW: '1' }).code === 0);
+check('there is no bypass: the env var that used to override is ignored', run(['wait', '1'], { SL_DRIVER_ALLOW_SLOW: '1' }).code === 3);
 
 rmSync(pace, { force: true });
 rmSync(file, { force: true });

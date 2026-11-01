@@ -40,7 +40,7 @@ if (cmd !== 'daemon') {
     for (const [i, line] of lines.entries()) {
       const parts = [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
       const [c, ...a] = parts;
-      const r = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd: c, args: a }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
+      const r = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd: c, args: a, quiet: i < lines.length - 1 }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
       const out = await r.text();
       const last = i === lines.length - 1;
       console.log(`${r.ok ? 'ok ' : 'ERR'} ${line}${last || !r.ok ? `\n${out}` : (c === 'snap' || c === 'text' ? '' : ` -> ${out.split('\n').pop().slice(0, 100)}`)}`);
@@ -55,8 +55,8 @@ if (cmd !== 'daemon') {
     const now = Date.now();
     const recent = [...JSON.parse(existsSync(pace) ? readFileSync(pace, 'utf8') : '[]'), now].filter((t) => now - t < 60000);
     writeFileSync(pace, JSON.stringify(recent));
-    if (recent.length > 16 && cmd !== 'batch' && !process.env.SL_DRIVER_ALLOW_SLOW) {
-      console.error(`SPEED BLOCK: ${recent.length} separate calls in 60 s. Refused. Write the steps to a file and run: node scripts/zz-ui-driver.mjs batch <file>. (Override only on purpose: SL_DRIVER_ALLOW_SLOW=1.)`);
+    if (recent.length > 16 && cmd !== 'batch') {
+      console.error(`SPEED BLOCK: ${recent.length} separate calls in 60 s. Refused. Write the steps to a file and run: node scripts/zz-ui-driver.mjs batch <file>.`);
       process.exit(3);
     }
     if (recent.length >= 8 && cmd !== 'batch') console.error(`SPEED WARNING: ${recent.length} separate calls in 60 s. Write the steps to a file and run: node scripts/zz-ui-driver.mjs batch <file> (one call, ~0.2 s per step).`);
@@ -140,11 +140,12 @@ const loc = (target) => {
     return new Proxy(l, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? guard(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
   }
   if (target.startsWith('css:')) return page.locator(target.slice(4)).first();
+  if (target.startsWith('label:')) return page.getByLabel(target.slice(6), { exact: false }).locator('visible=true').first(); // a form field by its visible label, like a student finds it
   // A text target means the control a student would press: a button/link/tab with that text wins over a heading or paragraph that merely
   // contains it (otherwise "Criar conta" hits the page title, not the button). Plain text is the fallback.
   const wanted = target.replace(/"/g, '\\"');
-  const controls = page.locator(`button:has-text("${wanted}"), a:has-text("${wanted}"), [role=button]:has-text("${wanted}"), [role=tab]:has-text("${wanted}"), [role=menuitem]:has-text("${wanted}"), summary:has-text("${wanted}"), label:has-text("${wanted}")`).first();
-  const plain = page.getByText(target, { exact: false }).first();
+  const controls = page.locator(`button:has-text("${wanted}"), a:has-text("${wanted}"), [role=button]:has-text("${wanted}"), [role=tab]:has-text("${wanted}"), [role=menuitem]:has-text("${wanted}"), summary:has-text("${wanted}"), label:has-text("${wanted}")`).locator('visible=true').first();
+  const plain = page.getByText(target, { exact: false }).locator('visible=true').first();
   const pick = (fn) => async (...x) => ((await controls.count()) ? controls : plain)[fn](...x);
   return new Proxy(plain, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? pick(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
 };
@@ -177,24 +178,28 @@ const snapshot = async (full = false) => page.evaluate(({ full }) => {
   const text = clean((modal ?? document.body).innerText);
   return [`URL ${location.href}`, `TITLE ${document.title}`, modal ? 'MODAL OPEN (only its controls are listed)' : '', `HEADINGS ${heads.join(' | ')}`, `ALERTS ${alerts.join(' | ') || '-'}`, '--- controls', ...lines, '--- text', full ? text.slice(0, 9000) : text.slice(0, 700)].filter((l) => l !== '').join('\n');
 }, { full });
-const brief = async () => { await sleep(250); return page.evaluate(() => `now: ${location.hash || location.pathname} | ${[...document.querySelectorAll('h1,h2')].filter((h) => h.getBoundingClientRect().width).map((h) => h.textContent.trim()).slice(0, 2).join(' | ')} | alerts: ${[...document.querySelectorAll('[role=alert],[role=status]')].map((a) => a.textContent.trim()).filter(Boolean).slice(0, 3).join(' | ') || '-'}`); };
+let quiet = false; // inside a batch only the last line reports the screen; the others skip the 250 ms settle pause (Playwright already waits for each target)
+const brief = async () => { if (quiet) return 'ok'; await sleep(250); return page.evaluate(() => `now: ${location.hash || location.pathname} | ${[...document.querySelectorAll('h1,h2')].filter((h) => h.getBoundingClientRect().width).map((h) => h.textContent.trim()).slice(0, 2).join(' | ')} | alerts: ${[...document.querySelectorAll('[role=alert],[role=status]')].map((a) => a.textContent.trim()).filter(Boolean).slice(0, 3).join(' | ') || '-'}`); };
 
 async function run(c, a) {
   switch (c) {
     case 'snap': return snapshot(false);
     case 'text': return snapshot(true);
-    case 'click': await loc(a[0]).click({ timeout: 2500 }); return `clicked\n${await brief()}`;
-    case 'dblclick': await loc(a[0]).dblclick({ timeout: 2500 }); return `double-clicked\n${await brief()}`;
-    case 'hover': await loc(a[0]).hover({ timeout: 2500 }); return 'hovered';
-    case 'fill': await loc(a[0]).fill(a.slice(1).join(' '), { timeout: 2500 }); return 'filled';
-    case 'type': await loc(a[0]).click({ timeout: 2500 }); await page.keyboard.type(a.slice(1).join(' '), { delay: 8 }); return 'typed';
-    case 'select': await loc(a[0]).selectOption({ label: a.slice(1).join(' ') }, { timeout: 2500 }).catch(async () => loc(a[0]).selectOption(a.slice(1).join(' '), { timeout: 2500 })); return `selected\n${await brief()}`;
-    case 'check': await loc(a[0]).check({ timeout: 2500 }); return 'checked';
-    case 'uncheck': await loc(a[0]).uncheck({ timeout: 2500 }); return 'unchecked';
+    case 'click': await loc(a[0]).click({ timeout: 1200 }); return `clicked\n${await brief()}`;
+    case 'dblclick': await loc(a[0]).dblclick({ timeout: 1200 }); return `double-clicked\n${await brief()}`;
+    case 'hover': await loc(a[0]).hover({ timeout: 1200 }); return 'hovered';
+    case 'fill': await loc(a[0]).fill(a.slice(1).join(' '), { timeout: 1200 }); return 'filled';
+    case 'type': await loc(a[0]).click({ timeout: 1200 }); await page.keyboard.type(a.slice(1).join(' '), { delay: 8 }); return 'typed';
+    case 'select': await loc(a[0]).selectOption({ label: a.slice(1).join(' ') }, { timeout: 1200 }).catch(async () => loc(a[0]).selectOption(a.slice(1).join(' '), { timeout: 1200 })); return `selected\n${await brief()}`;
+    case 'check': await loc(a[0]).check({ timeout: 1200 }); return 'checked';
+    case 'uncheck': await loc(a[0]).uncheck({ timeout: 1200 }); return 'unchecked';
     case 'key': await page.keyboard.press(a[0]); return `pressed\n${await brief()}`;
-    case 'upload': await loc(a[0]).setInputFiles(a[1], { timeout: 2500 }); return 'file set';
+    case 'upload': await loc(a[0]).setInputFiles(a[1], { timeout: 1200 }); return 'file set';
     case 'shot': await page.screenshot({ path: a[0] }); return `saved ${a[0]}`;
     case 'wait': await sleep(Number(a[0] ?? 500)); return 'waited';
+    // expect <texto>: passes the instant the text is visible (max 3 s), fails with the cause otherwise. Use it instead of wait/sleep: it is exact and as fast as the app.
+    case 'expect': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
+    case 'gone': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'hidden', timeout: 3000 }).catch(() => { throw new Error(`texto ainda visível: "${a.join(' ')}"`); }); return 'gone';
     case 'reload': await page.reload({ waitUntil: 'networkidle' }); return `reloaded\n${await brief()}`;
     case 'back': await page.goBack().catch(() => {}); return `back\n${await brief()}`;
     case 'forward': await page.goForward().catch(() => {}); return `forward\n${await brief()}`;
@@ -219,6 +224,7 @@ const server = createServer((req, res) => {
     let parsed = {};
     try {
       parsed = JSON.parse(body);
+      quiet = parsed.quiet === true;
       const out = await run(parsed.cmd, parsed.args);
       // Control numbers belong to the snap that printed them. Anything that can change the screen retires them, so an old [n] fails loudly
       // ("run snap") instead of silently hitting whatever now has that number.

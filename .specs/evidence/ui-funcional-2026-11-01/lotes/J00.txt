@@ -1,0 +1,24 @@
+# keep-going
+goto #account
+click "Ainda não tem conta? Criar uma"
+fill label:E-mail abc
+fill label:Senha curta
+click "Criar conta"
+fill label:E-mail aluno1@example.com
+fill label:Senha "uma senha longa de teste 1"
+click "Criar conta"
+expect "Conta criada com sucesso"
+fill label:E-mail aluno1@example.com
+fill label:Senha "uma senha longa de teste 1"
+click Entrar
+expect "Conectado como"
+click Plano
+click "Gerenciar disciplinas"
+click "+ Nova disciplina"
+fill "label:Nome da nova disciplina" Farmacologia
+click Adicionar
+click "+ Nova disciplina"
+fill "label:Nome da nova disciplina" Anatomia
+click Adicionar
+click "+ Nova aula"
+snap
