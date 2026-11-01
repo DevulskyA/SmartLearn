@@ -1,0 +1,7 @@
+# keep-going
+click Confirmar
+gone Renomeada
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+snap
