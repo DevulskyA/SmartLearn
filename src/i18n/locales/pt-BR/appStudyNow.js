@@ -20,6 +20,7 @@ export default {
   'appStudyNow.note.allFixed': 'Você corrigiu todos os erros deste bloco. Acertar logo depois de ver a resposta mostra que você recuperou o conteúdo; a próxima revisão confirma se ficou.',
   'appStudyNow.note.someWrong': 'Acertar logo depois de ver a resposta mostra recuperação, não domínio. O que ainda errou fica abaixo para você fixar.',
   'appStudyNow.nextReview': 'Próxima revisão: {date}',
+  'appStudyNow.nextReview.overdue': 'Revisão em atraso desde {date}',
   'appStudyNow.nextReview.none': 'Nenhuma revisão pendente.',
   'appStudyNow.errors.retest': 'Ainda para fixar ({count})',
   'appStudyNow.errors.initial': 'Questões para revisar ({count})',

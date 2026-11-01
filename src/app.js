@@ -3343,7 +3343,11 @@ async function finishStudyNowSession() {
   try {
     const tasks = await DB.reviewTasks.getByUnit(unitId);
     const next = getNextReview(unitId, tasks);
-    studyNowNextReviewText.textContent = next ? t("appStudyNow.nextReview", { date: formatDate(next) }) : t("appStudyNow.nextReview.none");
+    // An earliest pending review dated before today is overdue, not "next": say so instead of printing a past date as the next review (J04).
+    const nextIsOverdue = next && next < getLocalDateValue();
+    studyNowNextReviewText.textContent = next
+      ? t(nextIsOverdue ? "appStudyNow.nextReview.overdue" : "appStudyNow.nextReview", { date: formatDate(next) })
+      : t("appStudyNow.nextReview.none");
   } catch (error) {
     console.error("Falha ao buscar próxima revisão.", error);
     studyNowNextReviewText.textContent = "";
