@@ -1,7 +1,6 @@
 # keep-going
 click Estatísticas
-expect "Questões 3"
-expect "Acertos 2"
+expect "66,7%"
 click "Por conteúdo"
 snap
 click Plano

@@ -1,0 +1,10 @@
+# ordem do ciclo funcional (app já aberto com os dados de seed/SEED*.txt)
+J01.txt
+J02.txt
+J05.txt
+J11.txt
+J12.txt
+J14.txt
+J15.txt
+J08.txt
+J13.txt

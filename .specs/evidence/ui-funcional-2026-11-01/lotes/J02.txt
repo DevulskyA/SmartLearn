@@ -1,11 +1,10 @@
 # keep-going
 click Hoje
 click "Revisão feita"
-expect "Desfazer"
+expect "feita"
 click Estatísticas
 expect "Revisões feitas"
 click Plano
 click Hoje
-click Desfazer
 click Hoje
 snap

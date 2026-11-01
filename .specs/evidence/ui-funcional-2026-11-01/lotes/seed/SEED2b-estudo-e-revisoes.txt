@@ -1,0 +1,20 @@
+# keep-going
+click Materiais
+click "Abrir rascunho"
+expect "Aceitar a aula"
+select css:#lesson-1-subject Farmacologia
+click "Ver o que será criado"
+click "Aceitar e criar aula"
+click "Estudar agora"
+expect "Questão 1 de 3"
+click "Ver resposta"
+click Acertei
+expect "Questão 2 de 3"
+click "Ver resposta"
+click Errei
+expect "Questão 3 de 3"
+click "Ver resposta"
+click Acertei
+expect "Resultado"
+click Hoje
+snap

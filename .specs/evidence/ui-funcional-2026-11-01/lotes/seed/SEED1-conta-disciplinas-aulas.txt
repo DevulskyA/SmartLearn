@@ -1,0 +1,84 @@
+# keep-going
+goto #account
+click "Ainda não tem conta? Criar uma"
+fill label:E-mail aluno1@example.com
+fill label:Senha "uma senha longa de teste 1"
+click "Criar conta"
+expect "Conta criada com sucesso"
+fill label:E-mail aluno1@example.com
+fill label:Senha "uma senha longa de teste 1"
+click Entrar
+expect "Conectado como"
+click Plano
+click "Gerenciar disciplinas"
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Farmacologia
+click Adicionar
+expect "Farmacologia"
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Anatomia
+click Adicionar
+expect "Anatomia"
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Fisiologia
+click Adicionar
+expect "Fisiologia"
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Bioquímica
+click Adicionar
+expect "Bioquímica"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Anatomia
+fill css:#plan-study-source "Atlas de Netter cap. 1"
+fill css:#plan-study-title "Sistema nervoso central"
+fill css:#plan-study-date 2026-10-05
+click css:#plan-unit-save-btn
+expect "Sistema nervoso central"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Anatomia
+fill css:#plan-study-source "Atlas de Netter cap. 6"
+fill css:#plan-study-title "Membro superior"
+fill css:#plan-study-date 2026-10-12
+click css:#plan-unit-save-btn
+expect "Membro superior"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Fisiologia
+fill css:#plan-study-source "Guyton cap. 5"
+fill css:#plan-study-title "Potencial de ação"
+fill css:#plan-study-date 2026-10-15
+click css:#plan-unit-save-btn
+expect "Potencial de ação"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Fisiologia
+fill css:#plan-study-source "Guyton cap. 9"
+fill css:#plan-study-title "Sistema cardiovascular"
+fill css:#plan-study-date 2026-10-22
+click css:#plan-unit-save-btn
+expect "Sistema cardiovascular"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Bioquímica
+fill css:#plan-study-source "Lehninger cap. 14"
+fill css:#plan-study-title "Glicólise"
+fill css:#plan-study-date 2026-10-28
+click css:#plan-unit-save-btn
+expect "Glicólise"
+reload
+click Plano
+ensure css:#plan-new-unit-btn css:#plan-study-title
+select css:#plan-subject-select Farmacologia
+fill css:#plan-study-source "Katzung cap. 1"
+fill css:#plan-study-title "Farmacocinética básica"
+fill css:#plan-study-date 2026-10-30
+click css:#plan-unit-save-btn
+expect "Farmacocinética básica"
+snap
