@@ -2,8 +2,8 @@
 seed/SEED1-conta-disciplinas-aulas.txt
 seed/SEED2c-pdf-aula-passada.txt
 J01.txt
-J02.txt
 J04.txt
+J02.txt
 J05.txt
 J11.txt
 J12.txt

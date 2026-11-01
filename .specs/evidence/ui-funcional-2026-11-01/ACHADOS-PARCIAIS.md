@@ -70,3 +70,9 @@ Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenh
 - **Correção:** as jornadas de borda foram para `lotes/bordas/` e rodam em instância descartável (`scripts/zz-ui-bordas.sh`); o ciclo realista (`scripts/zz-ui-full.sh`) só usa dados corretos (disciplinas, aulas, resumo e PDF com nomes reais). Varredura de todas as telas depois do ciclo: nenhuma ocorrência de padrões de lixo.
 - **I-08 (instrumento):** seletor CSS com espaço (combinador descendente) era cortado no primeiro espaço pelo lote; usar aspas simples em volta do argumento inteiro. Explicava as falhas do J06d.
 - **A-08 (produto, candidato):** a tela final da revisão mostrava "Próxima revisão: 27 de out. de 2026", data anterior a hoje (01/11). Há uma correção não commitada em `src/app.js` e `src/i18n/locales/pt-BR/appStudyNow.js` feita por outra sessão; falta confirmar e commitar.
+
+## A-08 corrigido e verificado no app nativo
+- **Antes:** a tela final da revisão focada mostrava "Próxima revisão: 27 de out. de 2026" com hoje = 01/11 (data no passado). Observado no ciclo nativo.
+- **Correção:** `src/app.js` (`finishStudyNowSession`) e `src/i18n/locales/pt-BR/appStudyNow.js`: se a revisão pendente mais antiga é anterior a hoje, a tela diz "Revisão em atraso desde {data}".
+- **Prova:** o lote `J04` agora exige "Revisão em atraso desde" depois de concluir a revisão; o ciclo completo no exe reconstruído deu 15 lotes, 0 falhas, 41 s. J04 e J16 passam (J16 com janela de 420 px sem rolagem horizontal).
+- J09 (provas) segue sem entrada na interface.

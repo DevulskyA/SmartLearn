@@ -10,4 +10,6 @@ click Errei
 expect "questão 3 de 3"
 click "Ver resposta"
 click Acertei
+expect "Resultado da revisão"
+expect "Revisão em atraso desde"
 snap
