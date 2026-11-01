@@ -2372,6 +2372,11 @@ export async function renderDisciplinas() {
       } catch { editMessage.textContent = t("subjects.card.saveError"); }
     });
     cancelEditBtn.addEventListener("click", () => { editForm.hidden = true; });
+    // Same keyboard contract as the other inline editors: Enter saves, Esc cancels (found by the native UI test: only the buttons worked).
+    nameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); saveEditBtn.click(); }
+      else if (event.key === "Escape") { event.preventDefault(); cancelEditBtn.click(); }
+    });
 
     // Action buttons
     const actions = document.createElement("div");

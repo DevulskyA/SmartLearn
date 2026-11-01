@@ -53,10 +53,25 @@ if (cmd !== 'daemon') {
     // of the test (wrong target, missing wait target), never normal: it is named so the test gets fixed instead of tolerated.
     if (slow.length) console.log(`SLOW LINES (>${SLOW_MS} ms): ${slow.map((s) => `#${s.n} ${s.ms}ms ${s.line.slice(0, 50)}`).join(' | ')}`);
     console.log(`batch: ${lines.length} lines, ${failed} failed, ${Date.now() - t0} ms`);
+    // Measured runtime baseline (rule: every test has a measured time and any deviation is a problem). `batch <file> --record` stores the time of a
+    // clean run next to the batches; later runs outside [0.5x - 0.5 s, 1.5x + 0.5 s] are flagged: slower means a slow target or a regressed app,
+    // faster means steps were skipped or something failed silently.
+    const baselineFile = join(dirname(args[0]), 'baseline.json');
+    const key = args[0].replace(/^.*[\\/]/, '');
+    const total = Date.now() - t0;
+    let baselines = {}; try { baselines = JSON.parse(readFileSync(baselineFile, 'utf8')); } catch { /* none yet */ }
+    if (args[1] === '--record') {
+      if (failed) console.log('NOT RECORDED: the run had failures; a baseline comes only from a clean run.');
+      else { baselines[key] = { ms: total, lines: lines.length }; writeFileSync(baselineFile, JSON.stringify(baselines, null, 1)); console.log(`BASELINE RECORDED ${key}: ${total} ms, ${lines.length} lines`); }
+    } else if (!baselines[key]) console.log(`NO BASELINE for ${key}: run once clean with --record. An unmeasured test cannot detect a slowdown.`);
+    else {
+      const b = baselines[key];
+      if (b.lines !== lines.length || total > b.ms * 1.5 + 500 || total < b.ms * 0.5 - 500) { console.log(`PERF DEVIATION ${key}: ${total} ms vs baseline ${b.ms} ms (${b.lines} lines, now ${lines.length}). Investigate: slower = slow target or regression; faster = skipped steps.`); process.exitCode = 5; }
+    }
     // A line over 1.5 s is a test defect (it waited on a target that never came): the run fails with its own exit code even if every command "passed".
     const hardSlow = slow.filter((s) => s.ms > 1500);
     if (hardSlow.length) { console.log(`BATCH REJECTED AS SLOW: ${hardSlow.length} line(s) over 1500 ms. Fix those lines' targets; do not accept this run.`); process.exit(4); }
-    process.exit(failed ? 2 : 0);
+    process.exit(failed ? 2 : (process.exitCode ?? 0));
   }
   // Speed guard: a model round trip costs ~3 s and ~10k tokens, a driver command ~0.3 s. Many single calls in a row means the work should be a batch.
   const pace = join(tmpdir(), 'sl-ui-driver-pace.json');

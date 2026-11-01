@@ -2,7 +2,7 @@
 // stale control numbers fail fast with the cause (click/fill/upload/select), numbers are retired after a screen-changing action,
 // an 8-line batch is quick, and the 17th separate call in a minute is refused while batch stays allowed.
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, rmSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,6 +34,23 @@ check('a batch line that waits on a missing target is named as slow', /SLOW LINE
 writeFileSync(file, 'click Plano\nexpect "texto que nunca aparece"\nsnap\n');
 const rejected = run(['batch', file]);
 check('a batch with a line over 1.5 s is rejected (exit 4)', rejected.code === 4 && /REJECTED AS SLOW/.test(rejected.out), `exit ${rejected.code}`);
+
+// measured baseline: a clean run is recorded, the same run passes, and any change in time or in step count is a deviation (exit 5)
+const dir = join(tmpdir(), 'sl-selftest-baseline'); mkdirSync(dir, { recursive: true });
+const bfile = join(dir, 't.txt');
+writeFileSync(bfile, 'click Plano\nsnap\nclick Hoje\nsnap\n');
+const rec = run(['batch', bfile, '--record']);
+check('a clean run records its baseline', /BASELINE RECORDED/.test(rec.out), rec.out.match(/BASELINE RECORDED[^\n]*/)?.[0]);
+check('the same run matches its baseline (exit 0)', run(['batch', bfile]).code === 0);
+writeFileSync(bfile, 'click Plano\nsnap\n');
+const fewer = run(['batch', bfile]);
+check('fewer steps than the baseline is a deviation (exit 5)', fewer.code === 5 && /PERF DEVIATION/.test(fewer.out), `exit ${fewer.code}`);
+writeFileSync(bfile, 'click Plano\nsnap\nclick Hoje\nsnap\n'); writeFileSync(join(dir, 'baseline.json'), JSON.stringify({ 't.txt': { ms: 5000, lines: 4 } }));
+const drift = run(['batch', bfile]);
+check('a time far from the baseline is a deviation (exit 5)', drift.code === 5, `exit ${drift.code}, ${drift.out.match(/PERF DEVIATION[^\n]*/)?.[0]?.slice(0, 70) ?? ''}`);
+writeFileSync(file, 'click Plano\nsnap\n');
+check('a batch with no baseline says so', /NO BASELINE/.test(run(['batch', file]).out));
+rmSync(dir, { recursive: true, force: true });
 
 rmSync(pace, { force: true });
 let blockedAt = null;

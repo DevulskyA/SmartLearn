@@ -39,3 +39,19 @@ Instrumento: `scripts/zz-ui-driver.mjs` em modo `batch` (auto-teste 12/12). Lote
 | A-07 | J06 | Renomear disciplina: **Salvar** grava e persiste após recarregar; **Enter** no campo não grava e a edição segue aberta (sem mensagem, sem erro no console). Reproduzido 3 vezes, também com digitação real (clicar, Ctrl+A, digitar, Enter), lote `lotes/J06b.txt` e variações. O código em `src/app.js:4854` trata Enter, então a causa não está diagnosticada (hipóteses: foco fora do `.inline-edit-input`, ou build do exe diferente do fonte). | P1 candidato |
 
 Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenha exercícios; J08 e a renomeação por **Salvar** passaram.
+
+## Atualização: A-07 corrigido (2026-11-01)
+- **Causa:** o formulário de edição dos cartões do catálogo de disciplinas (`src/app.js`, campo `.subject-edit-name`) só tinha os botões Salvar/Cancelar; o tratador de Enter/Esc existia apenas no editor da lista antiga (`inline-edit-input`). O Enter não fazia nada e a edição ficava aberta.
+- **Correção:** `keydown` no campo: Enter salva, Esc cancela (5 linhas).
+- **Prova:** teste E2E novo em `e2e/feature-parity.spec.js` ("Enter in the rename field saves and Escape cancels"): passa com a correção e FALHA sem ela (`expect(...toBeHidden()) failed`, 94); os dois testes de Disciplinas passam em 19,7 s. Falta reconferir no exe nativo depois de reconstruir.
+
+## Erros do meu próprio instrumento (registrados por regra)
+| ID | Onde | Observado | Status |
+|---|---|---|---|
+| I-01 | driver | número de controle velho esperava 6 s e repetia | corrigido (falha em ~0,2 s) |
+| I-02 | driver | clique por texto acertava o título e não o botão ("Criar conta") | corrigido |
+| I-03 | driver | clique/preenchimento em elemento escondido (formulário de login sob o de cadastro) | corrigido (`visible=true`) |
+| I-04 | driver | `expect` aceitava texto escondido | corrigido |
+| I-05 | roteiros | `ensure` necessário: painéis que alternam abrem e fecham com o mesmo botão | corrigido (`ensure`) |
+| I-06 | driver | aspas escapadas dentro de argumentos não são entendidas pelo lote | limitação conhecida; usar aspas simples |
+| I-07 | operador | pasta `C:\c\` criada por caminho errado | pendente: apagar |

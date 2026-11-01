@@ -79,6 +79,33 @@ test('Disciplinas: create, rename, archive, reactivate, and delete a subject all
   await expect(page.locator('.subject-catalog-card', { hasText: 'Fisiologia Renomeada' })).not.toBeVisible({ timeout: 5000 });
 });
 
+test('Disciplinas: Enter in the rename field saves and Escape cancels (found by the native UI test, A-07)', async ({ page }) => {
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('#plan-manage-subjects-btn').click();
+  await page.locator('#subjects-show-create-btn').click();
+  await page.locator('#subjects-new-name').fill('Teclado Original');
+  await page.locator('#subjects-create-save-btn').click();
+  const card = page.locator('.subject-catalog-card', { hasText: 'Teclado Original' });
+  await expect(card).toBeVisible({ timeout: 5000 });
+
+  await card.getByRole('button', { name: 'Editar' }).click();
+  await card.locator('.subject-edit-name').fill('Nome Descartado');
+  await card.locator('.subject-edit-name').press('Escape');
+  await expect(card.locator('.subject-catalog-edit')).toBeHidden();
+  await expect(page.locator('.subject-catalog-card', { hasText: 'Teclado Original' })).toBeVisible();
+
+  await card.getByRole('button', { name: 'Editar' }).click();
+  await card.locator('.subject-edit-name').fill('Teclado Renomeado');
+  await card.locator('.subject-edit-name').press('Enter');
+  await expect(page.locator('.subject-catalog-card', { hasText: 'Teclado Renomeado' })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.subject-catalog-card', { hasText: 'Nome Descartado' })).toHaveCount(0);
+
+  await page.reload();
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('#plan-manage-subjects-btn').click();
+  await expect(page.locator('.subject-catalog-card', { hasText: 'Teclado Renomeado' })).toBeVisible({ timeout: 5000 });
+});
+
 test('Estatisticas and Acompanhamento render real server data without error after a unit is created and a review is completed', async ({ page }) => {
   await page.locator('[data-screen="plan"]').click();
   await page.locator('#plan-new-unit-btn').click();
