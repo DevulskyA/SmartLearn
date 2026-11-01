@@ -41,3 +41,4 @@ Usar a menor capacidade suficiente para produzir o melhor resultado comprovável
 - **Regra:** o Haiku EXECUTA UM SCRIPT OU UM LOTE (como `desktop-study-journey.mjs`: ~1,5 min, uma chamada), nunca opera clique a clique. Jornadas manuais com `scripts/zz-ui-driver.mjs` viram arquivo de lote (`batch <arquivo>`, uma linha por comando, `# keep-going` na 1ª linha para não parar no primeiro erro), rodado em UMA chamada; só o último `snap` imprime inteiro.
 - **Travas no código:** timeout de ação 2,5 s; id velho falha em ~0,2 s com a causa; log por comando em `%TEMP%\sl-ui-driver.log` (hora, ms, ok/ERR); aviso `SPEED WARNING` com 8 ou mais chamadas soltas em 60 s.
 - **Saúde do instrumento antes de delegar:** `snap` e um `batch` de 8 linhas devem fechar em menos de 3 s no total.
+- **Prova das travas:** `node scripts/zz-ui-driver-selftest.mjs` (driver ligado) deve dar 9/9.
