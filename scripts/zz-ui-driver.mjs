@@ -55,6 +55,10 @@ if (cmd !== 'daemon') {
     const now = Date.now();
     const recent = [...JSON.parse(existsSync(pace) ? readFileSync(pace, 'utf8') : '[]'), now].filter((t) => now - t < 60000);
     writeFileSync(pace, JSON.stringify(recent));
+    if (recent.length > 16 && cmd !== 'batch' && !process.env.SL_DRIVER_ALLOW_SLOW) {
+      console.error(`SPEED BLOCK: ${recent.length} separate calls in 60 s. Refused. Write the steps to a file and run: node scripts/zz-ui-driver.mjs batch <file>. (Override only on purpose: SL_DRIVER_ALLOW_SLOW=1.)`);
+      process.exit(3);
+    }
     if (recent.length >= 8 && cmd !== 'batch') console.error(`SPEED WARNING: ${recent.length} separate calls in 60 s. Write the steps to a file and run: node scripts/zz-ui-driver.mjs batch <file> (one call, ~0.2 s per step).`);
   } catch { /* the guard never blocks a command */ }
   const res = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd, args }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
@@ -197,6 +201,7 @@ async function run(c, a) {
   }
 }
 let ctl;
+const RETIRES_NUMBERS = new Set(['click', 'dblclick', 'key', 'goto', 'reload', 'back', 'forward', 'select', 'upload', 'dialog', 'restart']);
 const writeState = () => writeFileSync(STATE, JSON.stringify({ ctl, cdp, pid: app.pid, work, head, title }));
 await launch();
 const server = createServer((req, res) => {
@@ -206,7 +211,14 @@ const server = createServer((req, res) => {
     const t0 = Date.now();
     let verdict = 'ok';
     let parsed = {};
-    try { parsed = JSON.parse(body); res.end(await run(parsed.cmd, parsed.args)); } catch (e) { verdict = 'ERR'; res.statusCode = 500; res.end(`ERROR ${String(e.message).split('\n')[0]}`); }
+    try {
+      parsed = JSON.parse(body);
+      const out = await run(parsed.cmd, parsed.args);
+      // Control numbers belong to the snap that printed them. Anything that can change the screen retires them, so an old [n] fails loudly
+      // ("run snap") instead of silently hitting whatever now has that number.
+      if (RETIRES_NUMBERS.has(parsed.cmd)) await page.evaluate(() => document.querySelectorAll('[data-uid]').forEach((e) => e.removeAttribute('data-uid'))).catch(() => {});
+      res.end(out);
+    } catch (e) { verdict = 'ERR'; res.statusCode = 500; res.end(`ERROR ${String(e.message).split('\n')[0]}`); }
     // one line per command (time, duration, verdict): the first place to look when a run feels slow
     try { appendFileSync(join(tmpdir(), 'sl-ui-driver.log'), `${new Date().toISOString().slice(11, 23)} ${String(Date.now() - t0).padStart(5)}ms ${verdict} ${parsed.cmd ?? '?'} ${(parsed.args ?? []).join(' ').slice(0, 60)}\n`); } catch { /* logging never breaks a test */ }
   });
