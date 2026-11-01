@@ -140,7 +140,13 @@ const loc = (target) => {
     return new Proxy(l, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? guard(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
   }
   if (target.startsWith('css:')) return page.locator(target.slice(4)).first();
-  return page.getByText(target, { exact: false }).first();
+  // A text target means the control a student would press: a button/link/tab with that text wins over a heading or paragraph that merely
+  // contains it (otherwise "Criar conta" hits the page title, not the button). Plain text is the fallback.
+  const wanted = target.replace(/"/g, '\\"');
+  const controls = page.locator(`button:has-text("${wanted}"), a:has-text("${wanted}"), [role=button]:has-text("${wanted}"), [role=tab]:has-text("${wanted}"), [role=menuitem]:has-text("${wanted}"), summary:has-text("${wanted}"), label:has-text("${wanted}")`).first();
+  const plain = page.getByText(target, { exact: false }).first();
+  const pick = (fn) => async (...x) => ((await controls.count()) ? controls : plain)[fn](...x);
+  return new Proxy(plain, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? pick(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
 };
 const snapshot = async (full = false) => page.evaluate(({ full }) => {
   const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
