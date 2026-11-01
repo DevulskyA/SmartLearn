@@ -32,3 +32,10 @@ Instrumento: `scripts/zz-ui-driver.mjs` em modo `batch` (auto-teste 12/12). Lote
 | A-04 | geral | Avisos antigos permanecem visíveis ao trocar de tela (ex.: o de apagar dados, o de "Ainda não há evidência…") | P2 |
 | A-05 | J07 | A validação do formulário de aula cobra o conteúdo estudado antes da disciplina | P2 (ordem) |
 | A-06 | J00 | Criar conta e Entrar levam ~840 ms cada | atrito |
+
+## Candidato a defeito funcional (a corrigir no 1º sprint)
+| ID | Jornada | Observado | Gravidade |
+|---|---|---|---|
+| A-07 | J06 | Renomear disciplina: **Salvar** grava e persiste após recarregar; **Enter** no campo não grava e a edição segue aberta (sem mensagem, sem erro no console). Reproduzido 3 vezes, também com digitação real (clicar, Ctrl+A, digitar, Enter), lote `lotes/J06b.txt` e variações. O código em `src/app.js:4854` trata Enter, então a causa não está diagnosticada (hipóteses: foco fora do `.inline-edit-input`, ou build do exe diferente do fonte). | P1 candidato |
+
+Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenha exercícios; J08 e a renomeação por **Salvar** passaram.
