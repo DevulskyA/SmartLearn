@@ -27,10 +27,16 @@ writeFileSync(file, ['click Plano', 'snap', 'click Estatísticas', 'snap', 'clic
 const fast = run(['batch', file]);
 check('an 8-line batch finishes in under 3 s, all ok', fast.code === 0 && fast.ms < 3000, `${fast.ms} ms`);
 
+check('a fast batch reports no slow lines', !/SLOW LINES/.test(fast.out));
+writeFileSync(file, 'click Plano\nclick "texto que nao existe em lugar nenhum"\nsnap\n');
+const slowRun = run(['batch', file]);
+check('a batch line that waits on a missing target is named as slow', /SLOW LINES.*#2/.test(slowRun.out), slowRun.out.match(/SLOW LINES[^\n]*/)?.[0]?.slice(0, 80));
+
 rmSync(pace, { force: true });
 let blockedAt = null;
 for (let i = 1; i <= 20 && !blockedAt; i += 1) { if (run(['wait', '1']).code === 3) blockedAt = i; }
 check('the 17th separate call in 60 s is refused', blockedAt === 17, `blocked at ${blockedAt}`);
+writeFileSync(file, 'click Plano\nsnap\n');
 check('batch stays allowed while blocked', run(['batch', file]).code === 0);
 check('there is no bypass: the env var that used to override is ignored', run(['wait', '1'], { SL_DRIVER_ALLOW_SLOW: '1' }).code === 3);
 

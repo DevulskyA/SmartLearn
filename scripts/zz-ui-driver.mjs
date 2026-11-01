@@ -37,15 +37,21 @@ if (cmd !== 'daemon') {
     const lines = readFileSync(args[0], 'utf8').split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'));
     const keepGoing = /^#\s*keep-going/.test(readFileSync(args[0], 'utf8').trimStart());
     const t0 = Date.now(); let failed = 0;
+    const SLOW_MS = 700; const slow = [];
     for (const [i, line] of lines.entries()) {
+      const lineStart = Date.now();
       const parts = [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
       const [c, ...a] = parts;
       const r = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd: c, args: a, quiet: i < lines.length - 1 }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
       const out = await r.text();
       const last = i === lines.length - 1;
+      if (Date.now() - lineStart > SLOW_MS && !/^(wait|restart)\b/.test(line)) slow.push({ n: i + 1, ms: Date.now() - lineStart, line });
       console.log(`${r.ok ? 'ok ' : 'ERR'} ${line}${last || !r.ok ? `\n${out}` : (c === 'snap' || c === 'text' ? '' : ` -> ${out.split('\n').pop().slice(0, 100)}`)}`);
       if (!r.ok) { failed += 1; if (!keepGoing) break; }
     }
+    // Slow-line report: every line is expected to take well under a second (the app is local and instant). Anything slower is a defect
+    // of the test (wrong target, missing wait target), never normal: it is named so the test gets fixed instead of tolerated.
+    if (slow.length) console.log(`SLOW LINES (>${SLOW_MS} ms): ${slow.map((s) => `#${s.n} ${s.ms}ms ${s.line.slice(0, 50)}`).join(' | ')}`);
     console.log(`batch: ${lines.length} lines, ${failed} failed, ${Date.now() - t0} ms`);
     process.exit(failed ? 2 : 0);
   }
