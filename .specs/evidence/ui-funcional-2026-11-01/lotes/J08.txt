@@ -1,0 +1,10 @@
+# keep-going
+click Texto
+click css:textarea
+type css:textarea "Resumo de teste: absorção e excreção. <b>não é html</b> acentuação ção 😀"
+click Salvar
+expect "Resumo"
+reload
+click Plano
+click "Expandir detalhes"
+snap

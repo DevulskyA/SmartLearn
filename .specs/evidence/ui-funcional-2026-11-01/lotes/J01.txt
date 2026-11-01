@@ -1,0 +1,13 @@
+# keep-going
+click Hoje
+expect "Resumo do Dia"
+click Materiais
+expect "Fontes em PDF"
+click Plano
+expect "Gerenciar disciplinas"
+click Estatísticas
+expect "Desempenho por disciplina"
+click Configurações
+expect "Tema"
+click Conta
+expect "Conectado como"

@@ -1,0 +1,14 @@
+# keep-going
+click Estatísticas
+reload
+expect "Desempenho por disciplina"
+click Plano
+reload
+expect "Gerenciar disciplinas"
+goto #inexistente
+snap
+back
+forward
+click Hoje
+reload
+expect "Resumo do Dia"

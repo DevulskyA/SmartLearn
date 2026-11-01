@@ -15,7 +15,13 @@ Instrumento: `scripts/zz-ui-driver.mjs` em modo `batch` (auto-teste 12/12). Lote
 | J11 Estatísticas | PASSOU COM RESSALVAS | 3 questões / 2 acertos / 66,7% coerentes com o estudo |
 | J12 Configurações | PASSOU COM RESSALVAS | temas e idioma salvam; "Apagar base local" só mostra aviso de não suportado |
 | J13 Conta | PASSOU | senha errada: "incorretos"; entrar de novo ok; 401 no console é esperado |
-| J01, J04, J08, J09, J14, J15, J16 | NÃO EXECUTADO | pendente; J16 (janela estreita) e diálogos nativos não são controláveis |
+| J01 Menu | PASSOU COM RESSALVAS | 6 destinos abrem; Materiais e Estatísticas lembram a última subtela (rascunho aberto, aba "Por conteúdo"), o que quebrou as esperas do roteiro, não o produto |
+| J04 Revisão focada | NÃO CONCLUÍDO | "Começar agora" não estava disponível após as revisões feitas; refazer com revisões vencidas |
+| J14 Persistência | PASSOU | F5 em Estatísticas, Plano e Hoje; hash inexistente; voltar e avançar: 13 linhas, 2,7 s, sem erro (requisições abortadas no recarregamento são esperadas) |
+| J15 Teclado | PASSOU | Tab, Shift+Tab, Enter e Esc sem erro; foco visual não conferido |
+| J08 Editor do resumo | NÃO CONCLUÍDO | editor visual abre (Visual/Texto, barra, Salvar); o roteiro de edição falhou por estado da tela, refazer com seletor do editor |
+| J09 Provas | NÃO ENCONTRADO | nenhuma entrada de prova visível na interface testada |
+| J16 Estresse e janela estreita | NÃO TESTADO | redimensionar a janela e diálogos nativos não são controláveis |
 
 ## Achados do produto
 | ID | Jornada | Observado | Gravidade |
