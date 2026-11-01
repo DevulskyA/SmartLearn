@@ -1,0 +1,13 @@
+# keep-going
+click Configurações
+click Papel
+click Sépia
+click Noite
+click "Alto contraste"
+click Automático
+select css:#generation-language-select English
+click css:#generation-language-save
+select css:#generation-language-select "Português (Brasil)"
+click css:#generation-language-save
+click "Apagar base local"
+snap

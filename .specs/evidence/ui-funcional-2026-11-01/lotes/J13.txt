@@ -1,0 +1,11 @@
+# keep-going
+click Conta
+click Sair
+fill label:E-mail aluno1@example.com
+fill label:Senha "senha errada errada errada"
+click Entrar
+expect "incorretos"
+fill label:Senha "uma senha longa de teste 1"
+click Entrar
+expect "Conectado como"
+snap

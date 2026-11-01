@@ -1,0 +1,11 @@
+# keep-going
+click Hoje
+click "Revisão feita"
+expect "Desfazer"
+click Estatísticas
+expect "Revisões feitas"
+click Plano
+click Hoje
+click Desfazer
+click Hoje
+snap

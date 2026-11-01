@@ -1,0 +1,10 @@
+# keep-going
+click Estatísticas
+expect "Questões 3"
+expect "Acertos 2"
+click "Por conteúdo"
+snap
+click Plano
+snap
+click Hoje
+snap
