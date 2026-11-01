@@ -59,3 +59,8 @@ Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenh
 ## Reclassificação (2026-11-01)
 - **A-05 (ordem da validação) não é defeito:** o código documenta a ordem de propósito (data, conteúdo, depois disciplina, "antes de criar qualquer disciplina", `src/app.js:5842`). Fechado como projeto intencional.
 - **A-01 (título de 240 caracteres):** o corte em 240 vem do `maxlength` do campo (digitação real não passa de 240; o `fill` do teste truncou). O defeito real era o texto sem espaços ultrapassar a borda do cartão na lista: corrigido com `overflow-wrap: anywhere` em `.plan-unit-title` (`src/styles.css`). Falta conferir visualmente no app reconstruído.
+
+## Verificação no app nativo (build 5c469f0)
+- **A-07 corrigido no exe:** Esc cancela e descarta; Enter salva; o novo nome persiste após recarregar (lote `lotes/J06c.txt`, 21 linhas, 0 falhas).
+- **A-01 corrigido no exe:** título de 200 caracteres sem espaços quebra em duas linhas dentro do cartão (`prints/A01-titulo-longo-corrigido.png`).
+- **Baselines** gravados sobre dados novos (J00, J06c). Lotes que dependem de estado só têm baseline válido a partir de dados novos.
