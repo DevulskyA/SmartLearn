@@ -13,7 +13,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 ## Quadro geral
 | # | Tarefa | Estado | Entrega que fecha a tarefa |
 |---|---|---|---|
-| 01 | Diagnóstico mensurável dos testes e plano | [ ] | 3 maiores gargalos comprovados, métricas de base, recomendação da 1ª otimização |
+| 01 | Diagnóstico mensurável dos testes e plano | [x] | 3 maiores gargalos comprovados, métricas de base, recomendação da 1ª otimização |
 | 02 | Execução persistente da interface | [ ] | 3+ fluxos numa mesma instância; antes/depois de tempo, inicializações, autenticações |
 | 03 | Otimização estrutural da suíte E2E | [ ] | uma otimização com tempo antes/depois e asserções preservadas |
 | 04 | Automação determinística e economia de tokens | [ ] | mesmo fluxo antes/depois: chamadas, saída, duração, evidências |
@@ -29,12 +29,12 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 ## Subtarefas
 
 ### 01 — Diagnóstico mensurável (somente medir e planejar)
-- [ ] 1.1 Inspecionar `zz-ui-full.sh`, `zz-ui-bordas.sh`, `zz-ui-cycle.mjs`, driver, `playwright.config.js`, scripts de teste do `package.json`.
-- [ ] 1.2 Inventariar processos, bancos descartáveis, worktrees e portas em uso (sem tocar dados humanos nem outras sessões).
-- [ ] 1.3 Medir uma amostra: duração, nº de inicializações do app, autenticações, reinicializações de serviço/banco, esperas e chamadas de ferramenta (sem rodar a suíte completa).
-- [ ] 1.4 Classificar cada custo: necessário para isolamento × redundante.
-- [ ] 1.5 Registrar os 3 maiores gargalos com evidência e as métricas de base neste arquivo.
-- [ ] 1.6 Priorizar por ganho × risco e recomendar a primeira otimização. Parar.
+- [x] 1.1 Inspecionar `zz-ui-full.sh`, `zz-ui-bordas.sh`, `zz-ui-cycle.mjs`, driver, `playwright.config.js`, scripts de teste do `package.json`.
+- [x] 1.2 Inventariar processos, bancos descartáveis, worktrees e portas em uso (sem tocar dados humanos nem outras sessões).
+- [x] 1.3 Medir uma amostra: duração, nº de inicializações do app, autenticações, reinicializações de serviço/banco, esperas e chamadas de ferramenta (sem rodar a suíte completa).
+- [x] 1.4 Classificar cada custo: necessário para isolamento × redundante.
+- [x] 1.5 Registrar os 3 maiores gargalos com evidência e as métricas de base neste arquivo.
+- [x] 1.6 Priorizar por ganho × risco e recomendar a primeira otimização. Parar.
 
 ### 02 — Execução persistente
 - [ ] 2.1 Ler o resultado da Tarefa 01 e o `zz-ui-cycle.mjs`; escolher a menor mudança estrutural.
@@ -120,4 +120,25 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [ ] 12.6 Fechamento executivo curto; declarar conclusão total ou parcial. Parar.
 
 ## Próxima ação
-Tarefa 01, subtarefa 1.1 (ainda não iniciada).
+Tarefa 02 (execução persistente), subtarefa 2.1. Pelos dados da T01, o ganho está em reduzir recargas (18) e reaproveitar a sessão; a otimização do E2E (workers=1) é a T03.
+
+## Resultados da Tarefa 01 (2026-11-01) — medido, sem rodar a suíte completa
+**Métricas de base**
+| Item | Valor | Fonte |
+|---|---|---|
+| Ciclo funcional da interface | 41,1 s, 16 lotes, ~230 linhas, 0 falhas | `lotes/CICLO-RESULTADO.md` |
+| Inicializações do app / autenticações no ciclo | 1 / 1 login + 1 cadastro (~0,85 s cada, hash de senha no servidor) | `zz-ui-full.sh`, J00/SEED1 |
+| Recargas de página no ciclo | 18 (~0,7 s cada ≈ 12,6 s ≈ 31% do ciclo) | contagem de `reload` nos lotes |
+| Chamadas de ferramenta por ciclo | 1 (`bash scripts/zz-ui-full.sh`) | antes: ~3 s e ~10 mil tokens por passo (benchmark: 8 passos = 34 s) |
+| Suíte E2E | 73 arquivos, 348 testes, `workers=1`, `fullyParallel=false`, servidor Vite próprio | `playwright.config.js`, contagem de `test(` |
+| Tempo da suíte E2E | ~16 min (base) / 19 min (com mudança do wrapper do Vite) | mensagem do commit 706def5 na branch `perf/e2e-speed-step1` (histórico; não reexecutado) |
+| Início do app (tempo de subida) | não medido nesta tarefa | — |
+
+**Três maiores gargalos comprovados**
+1. **Suíte E2E serial** (1 worker, 348 testes, ~16 min): o maior custo absoluto. Paralelismo exige banco descartável por worker; decisão da T03.
+2. **Recargas de página nos lotes da interface** (18 por ciclo ≈ 31%): usadas sobretudo para zerar o estado da tela, o que `ensure` e passos independentes de estado resolvem; só são necessárias para checar persistência (J14, renomear, editor) → redundância reduzível (T02/T04).
+3. **Custo por passo do modelo** (~3 s e ~10 mil tokens): já eliminado para a interface com `batch`/ciclo único; continua valendo para qualquer fluxo operado passo a passo (regra e trava no driver).
+
+**Necessário × redundante**: necessário para isolamento = 1 app + 1 banco descartável por ciclo, reinício deliberado só para persistência; redundante = recargas de reposicionamento, autenticação repetida por lote (já 1 por ciclo), reinícios do app a cada correção (evitar: registrar e corrigir depois).
+
+**Recomendação da primeira otimização**: T02 já está quase entregue (1 instância, 16 lotes); o próximo ganho comprovável na interface é cortar as recargas redundantes (≈ 8 s). Para o tempo total de testes, a T03 (paralelismo seguro da E2E) é o maior ganho, com risco de contaminação a controlar.
