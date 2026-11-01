@@ -76,3 +76,10 @@ Nota de método: J04 só pode ser exercido com revisão vencida de aula que tenh
 - **Correção:** `src/app.js` (`finishStudyNowSession`) e `src/i18n/locales/pt-BR/appStudyNow.js`: se a revisão pendente mais antiga é anterior a hoje, a tela diz "Revisão em atraso desde {data}".
 - **Prova:** o lote `J04` agora exige "Revisão em atraso desde" depois de concluir a revisão; o ciclo completo no exe reconstruído deu 15 lotes, 0 falhas, 41 s. J04 e J16 passam (J16 com janela de 420 px sem rolagem horizontal).
 - J09 (provas) segue sem entrada na interface.
+
+## Estatísticas: cálculo verificado (2026-11-01)
+O lote J11 agora confere os valores, não só a presença das telas: depois do J04 (acertou, errou, acertou), Estatísticas mostra "66,7%" e "3 questões" (2 de 3 = 66,7%). Ciclo completo: 15 lotes, 0 falhas, 40 s. Com menos de 10 questões a tendência continua "evidência insuficiente" por regra (`src/analytics.js`).
+
+## Fora do alcance do teste (decisão do usuário)
+- J09 (provas): não existe entrada de provas na interface; sem tela não há o que testar. Se a funcionalidade deveria existir, é decisão de produto.
+- Mudança de monitor da janela: está na branch `fix/window-opens-on-primary-monitor` (c65f53e), provada na janela real; a integração ao app usado (merge) é do usuário.
