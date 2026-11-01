@@ -164,12 +164,12 @@ const loc = (target) => {
     return new Proxy(l, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? guard(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
   }
   if (target.startsWith('css:')) return page.locator(target.slice(4)).first();
-  if (target.startsWith('label:')) return page.getByLabel(target.slice(6), { exact: false }).locator('visible=true').first(); // a form field by its visible label, like a student finds it
+  if (target.startsWith('label:')) return page.getByLabel(target.slice(6), { exact: false }).filter({ visible: true }).first(); // a form field by its visible label, like a student finds it
   // A text target means the control a student would press: a button/link/tab with that text wins over a heading or paragraph that merely
   // contains it (otherwise "Criar conta" hits the page title, not the button). Plain text is the fallback.
   const wanted = target.replace(/"/g, '\\"');
-  const controls = page.locator(`button:has-text("${wanted}"), a:has-text("${wanted}"), [role=button]:has-text("${wanted}"), [role=tab]:has-text("${wanted}"), [role=menuitem]:has-text("${wanted}"), summary:has-text("${wanted}"), label:has-text("${wanted}")`).locator('visible=true').first();
-  const plain = page.getByText(target, { exact: false }).locator('visible=true').first();
+  const controls = page.locator(`button:has-text("${wanted}"), a:has-text("${wanted}"), [role=button]:has-text("${wanted}"), [role=tab]:has-text("${wanted}"), [role=menuitem]:has-text("${wanted}"), summary:has-text("${wanted}"), label:has-text("${wanted}")`).filter({ visible: true }).first();
+  const plain = page.getByText(target, { exact: false }).filter({ visible: true }).first();
   const pick = (fn) => async (...x) => ((await controls.count()) ? controls : plain)[fn](...x);
   return new Proxy(plain, { get: (t, p) => (['click', 'dblclick', 'hover', 'fill', 'check', 'uncheck', 'selectOption', 'setInputFiles'].includes(p) ? pick(p) : (typeof t[p] === 'function' ? t[p].bind(t) : t[p])) });
 };
@@ -236,7 +236,7 @@ async function run(c, a) {
     }
     case 'wait': await sleep(Number(a[0] ?? 500)); return 'waited';
     // expect <texto>: passes the instant the text is visible (max 3 s), fails with the cause otherwise. Use it instead of wait/sleep: it is exact and as fast as the app.
-    case 'expect': await page.getByText(a.join(' '), { exact: false }).locator('visible=true').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
+    case 'expect': await page.getByText(a.join(' '), { exact: false }).filter({ visible: true }).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
     // ensure <opener> <target>: open a toggle panel only if it is closed (a second click on the opener would close it); makes batches independent of leftover state.
     case 'ensure': { if (!(await page.locator(a[1].startsWith('css:') ? a[1].slice(4) : a[1]).first().isVisible())) await loc(a[0]).click({ timeout: 1200 }); return 'open'; }
     case 'gone': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'hidden', timeout: 3000 }).catch(() => { throw new Error(`texto ainda visível: "${a.join(' ')}"`); }); return 'gone';
