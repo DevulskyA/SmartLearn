@@ -35,3 +35,9 @@ Usar a menor capacidade suficiente para produzir o melhor resultado comprovável
 - `package-standalone` copia como link o `node_modules` ligado por junção; em worktree com junção, forçar a cópia real (dereference) ou construir numa árvore normal.
 - Arquivo gravado pelo PowerShell traz BOM: removê-lo antes de `JSON.parse`.
 - Um `npm test` interrompido pode deixar um backend órfão na porta 13907 e fazer `dev-lock.test.js` falhar; encerrar só o que a própria execução iniciou.
+
+## Velocidade: regra e prova (2026-11-01)
+- **Incidente:** uma rodada de teste funcional levou ~25 min por 7 jornadas. Causa medida (nenhuma mudança de compilador ou de configuração de build desde 2026-10-25): o Haiku operava a UI comando a comando; cada chamada de modelo custa ~3 s e ~10 mil tokens (benchmark: 8 chamadas = 34 s), enquanto o comando do driver custa 4-370 ms. O mesmo teste de 8 passos num único `batch` levou 1,4 s. Um id de controle velho ainda esperava 6 s de timeout, e o agente repetia.
+- **Regra:** o Haiku EXECUTA UM SCRIPT OU UM LOTE (como `desktop-study-journey.mjs`: ~1,5 min, uma chamada), nunca opera clique a clique. Jornadas manuais com `scripts/zz-ui-driver.mjs` viram arquivo de lote (`batch <arquivo>`, uma linha por comando, `# keep-going` na 1ª linha para não parar no primeiro erro), rodado em UMA chamada; só o último `snap` imprime inteiro.
+- **Travas no código:** timeout de ação 2,5 s; id velho falha em ~0,2 s com a causa; log por comando em `%TEMP%\sl-ui-driver.log` (hora, ms, ok/ERR); aviso `SPEED WARNING` com 8 ou mais chamadas soltas em 60 s.
+- **Saúde do instrumento antes de delegar:** `snap` e um `batch` de 8 linhas devem fechar em menos de 3 s no total.
