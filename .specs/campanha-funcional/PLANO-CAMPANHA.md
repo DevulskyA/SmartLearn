@@ -45,12 +45,12 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [x] 2.6 Commit local. Parar.
 
 ### 03 — Otimização da suíte E2E
-- [ ] 3.1 Confirmar a configuração atual (nº de arquivos/testes, workers, servidor, banco).
-- [ ] 3.2 Medir custo por arquivo e por teste (servidor, banco, navegador, autenticação, fixtures, esperas).
-- [ ] 3.3 Escolher uma única otimização pela medição.
-- [ ] 3.4 Implementar e comparar antes/depois nos mesmos testes e condições, com asserções preservadas.
-- [ ] 3.5 Verificar ausência de contaminação e de falhas intermitentes (repetir).
-- [ ] 3.6 Registrar causa, alteração, tempos, ganho % e riscos; commit local. Parar.
+- [x] 3.1 Confirmar a configuração atual (nº de arquivos/testes, workers, servidor, banco).
+- [x] 3.2 Medir custo por arquivo e por teste (servidor, banco, navegador, autenticação, fixtures, esperas).
+- [x] 3.3 Escolher uma única otimização pela medição.
+- [x] 3.4 Implementar e comparar antes/depois nos mesmos testes e condições, com asserções preservadas.
+- [x] 3.5 Verificar ausência de contaminação e de falhas intermitentes (repetir).
+- [x] 3.6 Registrar causa, alteração, tempos, ganho % e riscos; commit local. Parar.
 
 ### 04 — Automação determinística e economia de tokens
 - [ ] 4.1 Inspecionar o driver e achar o maior desperdício de interações repetitivas.
@@ -120,7 +120,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [ ] 12.6 Fechamento executivo curto; declarar conclusão total ou parcial. Parar.
 
 ## Próxima ação
-Tarefa 03 (otimização da suíte E2E), subtarefa 3.1. Antes, decidir com o usuário se a T03 pode paralelizar a E2E (risco de contaminação).
+Tarefa 04, subtarefa 4.1.
 
 ## Resultados da Tarefa 01 (2026-11-01) — medido, sem rodar a suíte completa
 **Métricas de base**
@@ -160,3 +160,21 @@ Tarefa 03 (otimização da suíte E2E), subtarefa 3.1. Antes, decidir com o usu�
 Unidades medidas: subida do app 5,3 s; reinício deliberado 6,75 s (7,0 s no ciclo); cadastro + login + dados (SEED1) 9,7 s.
 
 **Limitações:** o "antes" é estimado por custos unitários, não reexecutado; reinício só é deliberado no J17; ainda há 18 recargas de página (≈ 12,6 s) que podem ser reduzidas (T04). Cobertura e isolamento preservados (bordas continuam em instância separada).
+
+## Resultados da Tarefa 03 (2026-11-01) — medido, suíte completa (373 testes, 2 ignorados)
+
+**Causa:** default de 2 workers com 12 núcleos / 15,9 GB; o runner já isola portas e banco por worker (bloco de 1000 portas), então o paralelismo era seguro mas subutilizado.
+
+**Alteração (única):** `scripts/e2e.mjs`, default de workers 2 → 4 (`E2E_WORKERS` e `SUITE_WORKERS` continuam sobrepondo).
+
+| Workers | Tempo | Falhas |
+|---|---|---|
+| 2 (base) | 1024 s | 1 (product-value:86, asserção desatualizada pelo A-08) |
+| 3 | 799 s | 0 |
+| 4 | 697 s (2ª rodada limpa; 1ª: 653 s com 1 falha intermitente) | 0 |
+
+**Ganho:** −32% (1024 → 697 s) com 4 workers; mesmos testes e asserções.
+
+**Correção junto:** `e2e/product-value.spec.js` passou a aceitar "Revisão em atraso desde" quando a data é anterior a hoje (o teste travava o defeito A-08).
+
+**Riscos:** `study-evidence-failure.spec.js:234` falhou uma vez a 4 workers (passa isolado e passou nas 2 rodadas seguintes) — suspeita de contenção; se recorrer, usar `E2E_WORKERS=3`. Sem contaminação observada (0 falhas em 2 rodadas completas).

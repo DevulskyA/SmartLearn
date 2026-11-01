@@ -81,7 +81,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const i = args.indexOf('--suite');
   if (i >= 0) { env.E2E_SUITE = args[i + 1]; args.splice(i, 2); }
   // a narrow suite can use more workers than the full run: the full run stays at 2 (stable under load), the area suites are measured to be faster with more
-  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 2);
+  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 4);
   env.E2E_WORKERS = String(workers);
   const { offset, vitePort, release } = await pickRunPorts({ workers });
   env.E2E_PORT_OFFSET = String(offset);

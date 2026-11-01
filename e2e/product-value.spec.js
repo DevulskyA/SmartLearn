@@ -282,7 +282,10 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
 
   // 16. Next review is shown, and matches the earliest real pending due date.
   const earliestDueDate = reviewTasksAfter.reviewTasks.map((t) => t.dueDate).sort()[0];
-  await expect(page.locator('#study-now-next-review-text')).toContainText('Próxima revisão:');
+  // A pending review dated before today is overdue, not "next" (A-08): the screen says so instead of printing a past date as the next review.
+  const todayLocal = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const expectedPrefix = earliestDueDate < todayLocal ? 'Revisão em atraso desde' : 'Próxima revisão:';
+  await expect(page.locator('#study-now-next-review-text')).toContainText(expectedPrefix);
   const expectedLabel = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
     .format(new Date(`${earliestDueDate}T12:00:00`));
   await expect(page.locator('#study-now-next-review-text')).toContainText(expectedLabel);
