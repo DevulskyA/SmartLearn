@@ -1,10 +1,10 @@
 {
  "SEED1-conta-disciplinas-aulas.txt": {
-  "ms": 9843,
+  "ms": 9181,
   "lines": 83
  },
  "SEED2c-pdf-aula-passada.txt": {
-  "ms": 2765,
+  "ms": 2395,
   "lines": 14
  }
 }

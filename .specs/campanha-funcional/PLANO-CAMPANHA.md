@@ -14,7 +14,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 | # | Tarefa | Estado | Entrega que fecha a tarefa |
 |---|---|---|---|
 | 01 | Diagnóstico mensurável dos testes e plano | [x] | 3 maiores gargalos comprovados, métricas de base, recomendação da 1ª otimização |
-| 02 | Execução persistente da interface | [ ] | 3+ fluxos numa mesma instância; antes/depois de tempo, inicializações, autenticações |
+| 02 | Execução persistente da interface | [x] | 3+ fluxos numa mesma instância; antes/depois de tempo, inicializações, autenticações |
 | 03 | Otimização estrutural da suíte E2E | [ ] | uma otimização com tempo antes/depois e asserções preservadas |
 | 04 | Automação determinística e economia de tokens | [ ] | mesmo fluxo antes/depois: chamadas, saída, duração, evidências |
 | 05 | Isolamento definitivo dos dados de teste | [ ] | estado dos dados antes/depois sem alteração indevida |
@@ -37,12 +37,12 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [x] 1.6 Priorizar por ganho × risco e recomendar a primeira otimização. Parar.
 
 ### 02 — Execução persistente
-- [ ] 2.1 Ler o resultado da Tarefa 01 e o `zz-ui-cycle.mjs`; escolher a menor mudança estrutural.
-- [ ] 2.2 Implementar: preparar dados isolados → iniciar app uma vez → vários fluxos → verificar → encerrar e limpar.
-- [ ] 2.3 Reinícios deliberados só para persistência, recuperação e independência.
-- [ ] 2.4 Executar ao menos 3 fluxos distintos na mesma instância; confirmar pela interface.
-- [ ] 2.5 Comparar com a execução anterior (tempo total, inicializações, autenticações).
-- [ ] 2.6 Commit local. Parar.
+- [x] 2.1 Ler o resultado da Tarefa 01 e o `zz-ui-cycle.mjs`; escolher a menor mudança estrutural.
+- [x] 2.2 Implementar: preparar dados isolados → iniciar app uma vez → vários fluxos → verificar → encerrar e limpar.
+- [x] 2.3 Reinícios deliberados só para persistência, recuperação e independência.
+- [x] 2.4 Executar ao menos 3 fluxos distintos na mesma instância; confirmar pela interface.
+- [x] 2.5 Comparar com a execução anterior (tempo total, inicializações, autenticações).
+- [x] 2.6 Commit local. Parar.
 
 ### 03 — Otimização da suíte E2E
 - [ ] 3.1 Confirmar a configuração atual (nº de arquivos/testes, workers, servidor, banco).
@@ -120,7 +120,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [ ] 12.6 Fechamento executivo curto; declarar conclusão total ou parcial. Parar.
 
 ## Próxima ação
-Tarefa 02 (execução persistente), subtarefa 2.1. Pelos dados da T01, o ganho está em reduzir recargas (18) e reaproveitar a sessão; a otimização do E2E (workers=1) é a T03.
+Tarefa 03 (otimização da suíte E2E), subtarefa 3.1. Antes, decidir com o usuário se a T03 pode paralelizar a E2E (risco de contaminação).
 
 ## Resultados da Tarefa 01 (2026-11-01) — medido, sem rodar a suíte completa
 **Métricas de base**
@@ -142,3 +142,21 @@ Tarefa 02 (execução persistente), subtarefa 2.1. Pelos dados da T01, o ganho e
 **Necessário × redundante**: necessário para isolamento = 1 app + 1 banco descartável por ciclo, reinício deliberado só para persistência; redundante = recargas de reposicionamento, autenticação repetida por lote (já 1 por ciclo), reinícios do app a cada correção (evitar: registrar e corrigir depois).
 
 **Recomendação da primeira otimização**: T02 já está quase entregue (1 instância, 16 lotes); o próximo ganho comprovável na interface é cortar as recargas redundantes (≈ 8 s). Para o tempo total de testes, a T03 (paralelismo seguro da E2E) é o maior ganho, com risco de contaminação a controlar.
+
+## Resultados da Tarefa 02 (2026-11-01)
+**Mecanismo (já existente, completado):** `bash scripts/zz-ui-full.sh` = preparar dados isolados → abrir o app UMA vez → seeds + 15 jornadas na mesma instância (sessão autenticada reaproveitada) → resultados em `lotes/CICLO-RESULTADO.md`. Novo lote `J17` faz o reinício deliberado do app (mesmos dados) e confere persistência de sessão, aulas, revisões e estatísticas; `J14` cobre recarga, `zz-ui-bordas.sh` segue em instância descartável separada.
+
+**Provas (mesma instância, fluxos distintos, confirmados pela interface):** Hoje, Revisão focada, Estatísticas, Provas, Plano, Configurações, Conta, Teclado, Janela estreita, Disciplinas, Editor do resumo, Materiais/PDF: 17 lotes, 0 falhas, 47,3 s (inclui o reinício deliberado de 7,0 s).
+
+**Antes × depois**
+| Medida | Antes (um app por jornada, como nas rodadas 1–2) | Depois (ciclo único) |
+|---|---|---|
+| Inicializações do app | 17 (uma por lote) | 1 + 1 reinício deliberado (J17) |
+| Cadastro + login | 17 | 1 |
+| Custo de infraestrutura | ≈ 17 × (5,3 s subida + ~1,7 s cadastro/login) ≈ 119 s (estimativa a partir de custos unitários medidos) | 5,3 s + ~1,7 s uma vez ≈ 7 s |
+| Chamadas de ferramenta | 1 por comando (≈ 3 s e ~10 mil tokens cada) | 1 por ciclo |
+| Tempo total do ciclo | ≈ 119 s de infraestrutura + ~41 s de passos ≈ 160 s (estimativa) | 47,3 s (medido) |
+
+Unidades medidas: subida do app 5,3 s; reinício deliberado 6,75 s (7,0 s no ciclo); cadastro + login + dados (SEED1) 9,7 s.
+
+**Limitações:** o "antes" é estimado por custos unitários, não reexecutado; reinício só é deliberado no J17; ainda há 18 recargas de página (≈ 12,6 s) que podem ser reduzidas (T04). Cobertura e isolamento preservados (bordas continuam em instância separada).
