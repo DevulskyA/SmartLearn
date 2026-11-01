@@ -205,6 +205,8 @@ async function run(c, a) {
     case 'wait': await sleep(Number(a[0] ?? 500)); return 'waited';
     // expect <texto>: passes the instant the text is visible (max 3 s), fails with the cause otherwise. Use it instead of wait/sleep: it is exact and as fast as the app.
     case 'expect': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => { throw new Error(`texto esperado não apareceu: "${a.join(' ')}"`); }); return 'seen';
+    // ensure <opener> <target>: open a toggle panel only if it is closed (a second click on the opener would close it); makes batches independent of leftover state.
+    case 'ensure': { if (!(await page.locator(a[1].startsWith('css:') ? a[1].slice(4) : a[1]).first().isVisible())) await loc(a[0]).click({ timeout: 1200 }); return 'open'; }
     case 'gone': await page.getByText(a.join(' '), { exact: false }).first().waitFor({ state: 'hidden', timeout: 3000 }).catch(() => { throw new Error(`texto ainda visível: "${a.join(' ')}"`); }); return 'gone';
     case 'reload': await page.reload({ waitUntil: 'networkidle' }); return `reloaded\n${await brief()}`;
     case 'back': await page.goBack().catch(() => {}); return `back\n${await brief()}`;
