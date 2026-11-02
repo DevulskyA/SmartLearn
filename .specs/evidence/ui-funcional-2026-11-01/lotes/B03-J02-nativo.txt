@@ -1,0 +1,13 @@
+# keep-going
+# B03 (Editar questões) and J02 (Desfazer conclusão) in the native window. Needs a lesson with exercises and one completed review:
+# run the seeds first, then add exercises + complete one review through the API (see ESTADO-LOCAL.md, "Prova nativa 2026-11-02").
+reload
+click Plano
+click css:.plan-expand-btn
+expect "Editar questões"
+click "Editar questões"
+expect "Cadastro rápido"
+click Hoje
+expect "Desfazer conclusão"
+click css:.review-undo
+snap
