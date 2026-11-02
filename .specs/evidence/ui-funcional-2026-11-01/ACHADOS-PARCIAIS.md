@@ -145,3 +145,7 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - **Regra:** "Instrument integrity" (um instrumento de cada vez; lentidão anômala é sinal). Existia e eu não segui: iniciei dois instrumentos concorrentes. Classificação 1. Guarda: não iniciar o driver nativo enquanto `scripts/e2e.mjs` roda (anotado aqui; se repetir, guardar em código no zz-ui-guard.sh).
 - **J12 (ciclo nativo):** 5 falhas porque o lote clica os botões antigos do tema (Papel, Sépia, Noite, Alto contraste, Automático) que viraram combo. Instrumento desatualizado; não alterado porque o usuário está refazendo a página de Tema.
 - **Achado de instrumento:** o app do driver serve `src-tauri/resources/dist-runtime`, empacotado só pelo launcher/`npm run package:standalone`. Estava em 91fe3d9, então o ciclo nativo anterior testou código velho (sem B03, J02, A-04). Reempacotado em 3296f0d+local.
+
+## A-19 Duas falhas intermitentes em 7 specs de Materiais/resumo — 2026-11-02
+- **Onde:** `draft-autosave`, `lesson-editor`, `smoke`, `summary-figure-width`, `summary-math-editor`, `summary-visual-editor`, `summary-wysiwyg` (75 testes) rodando logo após `npm test`. **Observado:** 2 falhas (`expect(locator).toBeVisible()`), 73 ok, 3,8 min. Rerodando as mesmas 7 specs: 75 de 75 ok, 3,4 min.
+- **Status:** DECLARADO, não provado. Não capturei os nomes dos 2 testes na primeira rodada (erro de instrumento meu: filtrei a saída antes de guardar). Mesma classe de A-16/A-18 (falha única sob carga, passa na repetição). Se repetir, rodar com `--repeat-each` e guardar o log inteiro.

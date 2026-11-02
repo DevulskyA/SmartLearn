@@ -155,6 +155,7 @@ export default {
   'screens.materials.sources.body': 'Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo.',
   'screens.materials.sources.choose': 'Selecionar PDF',
   'screens.materials.existing.title': 'Documentos já enviados',
+  'screens.materials.existing.hint': 'O SmartLearn guarda uma cópia de cada PDF dentro do próprio app. Mover ou apagar o arquivo original não afeta nada aqui.',
   'screens.materials.drafts.title': 'Rascunhos em andamento',
   'screens.materials.topic.title': 'O que você quer estudar?',
   'screens.materials.topic.label': 'Título da seção a buscar',
