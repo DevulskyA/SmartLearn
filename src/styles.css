@@ -5904,3 +5904,10 @@ label.select-control:has(> .ui-select) {
     min-height: 1.75rem;
   }
 }
+
+/* Phone: the stacked Estatísticas heading shares the page's left edge (it was centred by .stats-heading above the phone rule). */
+@media (max-width: 47.999rem) {
+  .stats-heading {
+    align-items: start;
+  }
+}
