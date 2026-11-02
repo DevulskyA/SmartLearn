@@ -1857,7 +1857,7 @@ export async function renderPlan() {
     expandBtn.className = "plan-expand-btn";
     expandBtn.type = "button";
     expandBtn.setAttribute("aria-expanded", "false");
-    expandBtn.setAttribute("aria-label", t("plan.row.expand"));
+    expandBtn.setAttribute("aria-label", t("plan.row.expand", { title: titleSpan.textContent }));
 
     compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
 
@@ -1869,7 +1869,7 @@ export async function renderPlan() {
     expandBtn.addEventListener("click", async () => {
       const isExpanded = expandBtn.getAttribute("aria-expanded") === "true";
       expandBtn.setAttribute("aria-expanded", String(!isExpanded));
-      expandBtn.setAttribute("aria-label", isExpanded ? t("plan.row.expand") : t("plan.row.collapse"));
+      expandBtn.setAttribute("aria-label", isExpanded ? t("plan.row.expand", { title: titleSpan.textContent }) : t("plan.row.collapse", { title: titleSpan.textContent }));
       detail.hidden = isExpanded;
 
       if (!isExpanded && !detail.dataset.loaded) {

@@ -20,8 +20,8 @@ export default {
   'plan.row.summary.yes': 'Resumo ✓',
   'plan.row.summary.no': 'Resumo —',
   'plan.row.next': 'Próx. {date}',
-  'plan.row.expand': 'Expandir detalhes',
-  'plan.row.collapse': 'Recolher detalhes',
+  'plan.row.expand': 'Expandir detalhes: {title}',
+  'plan.row.collapse': 'Recolher detalhes: {title}',
 
   // Lesson detail
   'plan.detail.summary.empty': 'Nenhum resumo. Clique em Editar para adicionar.',
