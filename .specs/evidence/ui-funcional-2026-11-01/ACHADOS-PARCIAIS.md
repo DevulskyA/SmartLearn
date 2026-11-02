@@ -112,3 +112,18 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - **Correção:** `scripts/move-window-to-small-display.ps1` inicia ANTES do app (sinal de pronto), acha a janela pelo PID mesmo escondida, move-a para o menor monitor (esquerdo) antes de ser mostrada, a mantém lá por 30 s e esconde o console do exe; `windowsHide: true` em todos os processos auxiliares (`zz-ui-driver.mjs`, `zz-ui-cycle.mjs`, `desktop-study-*.mjs`).
 - **Prova:** janela nunca visível fora do monitor esquerdo (criada escondida em -1360,40 e mostrada em -1368,24); janelas de console: 10 → 1 visível por ~4 ms (o console do exe, escondido em seguida); selftest 21/21; ciclo completo 17 lotes, 0 falhas, 51 s.
 - **Limite:** se houver um único monitor, nada é movido. Se o movedor morrer, a janela volta a se recentralizar no principal.
+
+## A-13 Tela Conta logada mostra só "Alterar senha" e "Sair" — relatado pelo usuário, 2026-11-01 
+- **Onde:** app nativo DEV 6f1fe2b, menu Conta, sessão `dev@smartlearn.local` já ativa.
+- **Esperado (usuário):** logado = estado claro de "conectado" (quem, e como sair); NÃO deixar campos de senha abertos para digitar, senão quem usa não sabe se está logado ou não e pode digitar achando que não entrou. Trocar senha só atrás de uma ação explícita (botão que abre o formulário). O usuário estuda medicina, não computação: o estado de login tem que ser óbvio sem conhecimento técnico.
+- **Observado:** "Conectado como dev@smartlearn.local" seguido direto do formulário Alterar senha (Senha atual / Nova senha) com o campo de senha em destaque; "Sair" fica no rodapé do cartão.
+- **Severidade:** média (UX/confusão de estado de login; usuário é estudante de medicina). **Status:** aberto, correção adiada (regra: registrar agora, corrigir depois).
+- **Relacionado:** A-14 abaixo.
+
+## A-14 App abre maximizado na tela 2 (primária), não na tela 1 — 2026-11-01
+- **Onde:** `npm run dev:desktop` em 6f1fe2b (sem a correção da branch `fix/window-opens-on-primary-monitor`, c65f53e).
+- **Esperado:** janela na DISPLAY1 (esquerda, 1440x900). **Observado:** L=-8 T=-8 R=1928 B=1088 (DISPLAY2). Movida à mão para DISPLAY1.
+- **Regra violada:** pedido repetido do usuário; memória `feedback_open_screen1_and_login`. **Status:** contornado à mão; correção real = integrar c65f53e (decisão do usuário).
+
+## A-15 App nativo DEV fechou sozinho — 2026-11-01
+- **Onde:** `npm run dev:desktop` em 6f1fe2b. **Observado:** launcher terminou com exit 0; nenhum `smartlearn.exe` rodando depois; log sem erro. **Causa:** não identificada (sem evidência de quem fechou). **Status:** aberto, sem reprodução.

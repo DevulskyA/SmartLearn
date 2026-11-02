@@ -11,5 +11,6 @@ Depois de /clear ou em sessão nova, nesta ordem:
 6. `npm run context:check` deve passar (portão de persistência).
 
 `.specs/HANDOFF.md` (local, gitignored) é conveniência DERIVADA e nunca é autoridade: apagá-lo não impede a retomada.
+Estado local de continuidade (testes, pendências, decisões humanas; reconciliar com o Git): `.specs/evidence/ui-funcional-2026-11-01/ESTADO-LOCAL.md`.
 Regras de trabalho, recuperação, portão de /clear e salvamento: `CLAUDE.md`.
 Histórico (não ler por rotina): `.specs/archive/` (inclui o EXECUTION anterior, `EXECUTION-ate-2026-10-05.md`).
