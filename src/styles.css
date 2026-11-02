@@ -2253,6 +2253,7 @@ h1 {
 
 .subject-chip {
   display: inline-flex;
+  justify-self: start; /* inside a grid parent (the review card) the chip keeps the width of its text instead of filling the row */
   align-items: center;
   gap: 0.35rem;
   padding: 0.2rem 0.6rem;
@@ -4031,6 +4032,9 @@ label.select-control:has(> .ui-select) {
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+.subject-catalog-actions .is-danger {
+  margin-inline-start: auto; /* the destructive action sits apart from Editar / Arquivar */
+}
 .subject-catalog-delete-msg {
   font-size: 0.8rem;
   color: var(--color-danger, #dc2626);
@@ -4657,6 +4661,7 @@ label.select-control:has(> .ui-select) {
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   column-gap: 1rem;
   row-gap: 0.25rem;
+  align-items: start; /* the new-subject block is taller than the other two fields: they keep their own height instead of stretching to it */
 }
 
 .lesson-accept > :not(.lesson-field) {

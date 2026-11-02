@@ -139,6 +139,8 @@ test("groundingLine: a summary with NO linked sentence says nothing was checked 
   const unlinked = (n) => ({ total: n, supported: 0, orphaned: 0, sentences: Array.from({ length: n }, () => ({ status: "NOT_LINKED" })) });
   assert.match(groundingLine(unlinked(55)), /Nenhuma das 55 frases do resumo tem trecho da fonte vinculado/);
   assert.match(groundingLine(unlinked(55)), /confira o resumo na fonte/);
+  assert.match(groundingLine(unlinked(1)), /^O resumo tem 1 frase, e nenhuma tem trecho da fonte vinculado/); // one sentence is not "Nenhuma das 1 frases"
+  assert.doesNotMatch(groundingLine(unlinked(1)), /1 frases/);
   const some = { total: 4, supported: 1, orphaned: 0, sentences: [{ status: "SOURCE_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }, { status: "NOT_LINKED" }] };
   assert.equal(groundingLine(some), "Trecho da fonte confirmado em 1 de 4 frases do resumo.");
   const stale = { total: 4, supported: 0, orphaned: 2, sentences: [{ status: "NOT_LINKED" }] };

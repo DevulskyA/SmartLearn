@@ -119,7 +119,7 @@ export function groupFindings(draft) {
  */
 export function groundingLine(g) {
   if (!g || g.total === 0) return "";
-  if (g.supported === 0 && g.orphaned === 0 && g.sentences.every((sentence) => sentence.status === "NOT_LINKED")) return t("editor.grounding.none", { total: g.total });
+  if (g.supported === 0 && g.orphaned === 0 && g.sentences.every((sentence) => sentence.status === "NOT_LINKED")) return tn("editor.grounding.none", g.total, { total: g.total });
   if (g.orphaned > 0) return t(g.orphaned === 1 ? "editor.grounding.lineOrphaned.one" : "editor.grounding.lineOrphaned.other", { supported: g.supported, total: g.total, orphaned: g.orphaned });
   return t("editor.grounding.line", { supported: g.supported, total: g.total });
 }
