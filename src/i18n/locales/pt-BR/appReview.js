@@ -12,6 +12,10 @@ export default {
   'appReview.summary.saved': 'Resumo salvo.',
   'appReview.summary.saveFailed': 'Não foi possível salvar o resumo.',
   'appReview.saveFailed': 'Não foi possível salvar a revisão.',
+  // the plural is chosen in the code (count === 1)
+  'appReview.practicePending.one': 'Falta {count} questão para concluir esta revisão. Responda para concluí-la.',
+  'appReview.practicePending.other': 'Faltam {count} questões para concluir esta revisão. Responda para concluí-la.',
+  'appReview.progress': '{answered} de {total} respondidas',
   'appReview.score.saveFailed': 'Não foi possível salvar questões e acertos.',
   'appReview.questionsStatus.saveFailed': 'Não foi possível salvar o status das questões.',
   'appReview.comment.saveFailed': 'Não foi possível salvar o comentário.',

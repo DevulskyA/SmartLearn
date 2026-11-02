@@ -132,3 +132,22 @@ test('POST /v1/review-obligations/:unitId/complete: owner only, parameters valid
     assert.ok(body.completedId && body.supersededIds.length > 0 && body.rescheduled.length > 0, JSON.stringify(body).slice(0, 300));
   } finally { await app.close(); cleanup(); }
 });
+
+test('a stage of a unit WITH questions is not concluded without their evidence (PRACTICE_REQUIRED); with it, it is; a unit without questions is concluded by reading, with no evidence', async () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const { userId, unit } = seed(db);
+    const { create } = await import('../src/services/exercises.js');
+    create(db, userId, { unitId: unit.id, question: 'Pergunta?', answer: 'Resposta', provenance: 'MANUAL' });
+    assert.equal(reviews.obligations(db, userId, { date: TODAY }).units[0].exerciseCount, 1);
+    assert.throws(() => reviews.completeObligation(db, userId, unit.id, { date: TODAY, profile: 'DECIDED' }), (err) => err.code === 'PRACTICE_REQUIRED');
+    assert.equal(tasks(db, unit.id).filter((t) => t.done).length, 0, 'nothing was concluded');
+    const out = reviews.completeObligation(db, userId, unit.id, { date: TODAY, profile: 'DECIDED', questionsCount: 1, correctCount: 1 });
+    assert.ok(out.completedId && out.evidenceId, 'concluded with the evidence of the answers');
+    const reading = learningUnits.create(db, userId, { newSubjectName: 'Anatomia', title: 'Aula B', studyDate: '2026-01-01' }).unit;
+    const read = reviews.completeObligation(db, userId, reading.id, { date: TODAY, profile: 'DECIDED' });
+    assert.ok(read.completedId);
+    assert.equal(read.reviewOnly, true);
+    assert.equal(read.evidenceId ?? null, null, 'reading creates no evidence');
+  } finally { cleanup(); }
+});

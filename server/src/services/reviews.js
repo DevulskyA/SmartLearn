@@ -108,6 +108,8 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
   const units = deriveObligations(tasks, today).map((u) => ({
     unitId: u.unitId,
     unitTitle: titles.get(u.unitId),
+    // a stage of a unit with questions is concluded by practising them; one without questions, by reading
+    exerciseCount: exerciseCount(db, userId, u.unitId),
     subjectId: subjects.get(u.unitId),
     paused: paused.has(u.unitId),
     // a paused unit owes nothing today, but what WOULD be owed stays visible (the plan lists it as deferred with the reason PAUSED)
@@ -118,6 +120,11 @@ export function obligations(db, userId, { date, timezoneOverride, recovery = REC
     pendingCount: u.pendingCount,
   }));
   return { date: today, timezone, recovery, units };
+}
+
+/** Active (not archived) questions of a unit. */
+function exerciseCount(db, userId, unitId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM exercises WHERE user_id = ? AND unit_id = ? AND archived_at IS NULL').get(userId, unitId).n;
 }
 
 /** Units whose latest pause event is PAUSE. */
@@ -178,6 +185,10 @@ export function completeObligation(db, userId, unitId, { date, timezoneOverride,
     const entry = view.units.find((u) => u.unitId === unitId);
     const base = { profile: profile ?? null, recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [], ...(entry?.paused ? { reason: 'PAUSED' } : {}) };
     if (!entry?.required) return base;
+    // One conclusion rule: a stage with questions is concluded by their evidence, never by a bare "done" (reading is for stages without questions).
+    if (entry.exerciseCount > 0 && (questionsCount === undefined || questionsCount === null)) {
+      throw new ReviewError('PRACTICE_REQUIRED', 'questionsCount is required: this unit has questions to practise.', 'questionsCount');
+    }
     const completed = complete(db, userId, entry.required.id, { questionsCount, correctCount, operationKey }, now);
     const nowIso = completed.completedAt;
     const pending = db.prepare(`${TASK_SELECT} AND rt.unit_id = ? AND rt.completed_at IS NULL${NOT_SUPERSEDED} ORDER BY rt.due_date`).all(userId, unitId);

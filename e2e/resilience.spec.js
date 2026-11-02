@@ -247,10 +247,9 @@ test('REVIEWNET-1: a wrong item whose attempt could not be sent is retried when 
   expect(await reinforceTotal(page)).toBe(0); // the server has not heard about it yet
   await page.unroute('**/v1/attempts/*/submit'); // the connection returns before the review is completed
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
-  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
-  await row.locator('[data-action="review-done"]').check();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click(); // the last answer concludes the stage by itself and retries the unsent item
   await expect.poll(async () => (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence.length, { timeout: 8000 }).toBe(1);
-  const evidence = (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
+  const evidence =(await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence;
   expect([evidence[0].type, evidence[0].questionsCount, evidence[0].correctCount]).toEqual(['REVIEW', 2, 1]);
   expect(await reinforceTotal(page)).toBe(1); // the wrong item now shows up as "para reforçar"
 });
@@ -261,9 +260,7 @@ test('REVIEWNET-1: if the connection is STILL down when the review is completed,
   await page.route('**/v1/attempts/*/submit', (route) => route.abort());
   await row.locator('[data-action="exercise-errei"]').first().click();
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
-  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
-  await page.waitForTimeout(400);
-  await row.locator('[data-action="review-done"]').check();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click(); // the last answer concludes the stage by itself; the attempts still cannot be sent
   await expect(page.locator('#review-dashboard-message')).toContainText('não consegui marcar 2 itens');
   await page.unroute('**/v1/attempts/*/submit');
 });
@@ -273,6 +270,8 @@ async function reviewWithOneWrongPending(page, title) {
   const { unit, row } = await reviewWithTwoItems(page, title);
   await row.locator('[data-action="reveal-answer"]').first().click();
   await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  // a real outage also stops the conclusion the last answer triggers: the stage stays as it was, with the unsent item remembered
+  await page.route('**/v1/review-tasks/*/complete', (route) => route.abort());
   await row.locator('[data-action="exercise-errei"]').first().click();
   await page.waitForTimeout(600);
   expect(await reinforceTotal(page)).toBe(0);
@@ -310,8 +309,7 @@ test('RETESTNET-1: in Hoje, an item the server already holds (reply lost) is not
   await page.waitForTimeout(600);
   expect(await reinforceTotal(page)).toBe(1); // the server has it
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
-  await row.locator('[data-action="exercise-acertei"]').nth(1).click();
-  await row.locator('[data-action="review-done"]').check();
+  await row.locator('[data-action="exercise-acertei"]').nth(1).click(); // the last answer concludes the stage by itself
   await expect.poll(async () => (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence.length, { timeout: 8000 }).toBe(1);
   await expect(page.locator('#review-dashboard-message')).not.toContainText('não consegui marcar');
   expect(await reinforceTotal(page)).toBe(1); // still exactly one, no duplicate attempt
