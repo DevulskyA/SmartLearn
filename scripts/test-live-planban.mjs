@@ -14,8 +14,11 @@ export const RUN_TAG = 'test-live-run';
 /** The card of one suite is found by this tag, so every worktree reuses the same card instead of piling up new ones. */
 export const suiteTag = (suite) => `${RUN_TAG}-${suite}`;
 
-const CALL_TIMEOUT_MS = 6000; // a healthy CLI call takes ~0.8 s
-const FLUSH_DEADLINE_MS = 12000; // upper bound for the wait at the end of the run
+// A CLI call takes ~0.8 s on an idle machine but 2.4-5.6 s while the unit suite saturates the CPU (measured); 6 s timed out in a real run.
+// Calls run in the background, so a generous timeout costs the run nothing; only the final flush below can make the run wait.
+const CALL_TIMEOUT_MS = 20000;
+const FLUSH_DEADLINE_MS = 10000; // upper bound for the wait at the end of the run (the final calls take ~1.5 s once the load is gone)
+const MAX_SOFT_FAILURES = 3; // periodic count refreshes that may fail in a row before publishing is switched off
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour12: false }) : '—');
 const clip = (text, n) => (String(text).length > n ? `${String(text).slice(0, n - 1)}…` : String(text));
 
@@ -101,9 +104,14 @@ export function createPlanbanPublisher({ exec, root = null, say = (m) => console
     disabled = true;
     say(`[test-live] Planban indisponível (${why}); o teste segue sem publicar o cartão.`);
   };
-  const enqueue = (fn) => {
+  // `soft` calls (periodic count refreshes) may fail a few times without losing the card: the final close still gets its chance.
+  let softFailures = 0;
+  const enqueue = (fn, { soft = false } = {}) => {
     pending += 1;
-    chain = chain.then(() => (disabled ? undefined : fn())).catch((e) => off(e.message)).finally(() => { pending -= 1; });
+    chain = chain.then(() => (disabled ? undefined : fn())).then(
+      () => { if (soft) softFailures = 0; },
+      (e) => { if (!soft || (softFailures += 1) >= MAX_SOFT_FAILURES) off(e.message); },
+    ).finally(() => { pending -= 1; });
     return chain;
   };
   const fields = (card) => ['--title', card.title, '--summary', card.summary, '--next-action', card.nextAction];
@@ -135,7 +143,7 @@ export function createPlanbanPublisher({ exec, root = null, say = (m) => console
       if (pending > 0 || disabled || !cardId) return chain;
       return enqueue(async () => {
         await exec(['update-card', cardId, '--summary', formatCard(artifact, { now: now(), root }).summary]);
-      });
+      }, { soft: true });
     },
     /** Final state: title, summary and next action, then out of In Progress. */
     finish(artifact) {

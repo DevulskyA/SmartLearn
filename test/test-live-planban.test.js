@@ -122,6 +122,28 @@ test('publisher: the first failure switches publishing off ONCE with a clear mes
   assert.match(b.messages[0], /Planban indisponível \(boom\); o teste segue sem publicar o cartão/);
 });
 
+test('publisher: a failed count refresh does not cost the card its final close; three in a row switch publishing off', async () => {
+  const b = fakeBoard();
+  let failRefresh = true;
+  const exec = (args) => (failRefresh && args[0] === 'update-card' && args[2] === '--summary' ? Promise.reject(new Error('slow')) : b.exec(args));
+  const p = createPlanbanPublisher({ exec, say: b.say });
+  await p.start(running);
+  await p.update(running);
+  await p.update(running);
+  assert.equal(p.disabled, false);
+  failRefresh = false;
+  await p.finish(passed);
+  assert.deepEqual(b.calls.at(-1), ['move-card', 'rodando-test-live-unit', '--status', 'pending', '--first']);
+  assert.equal(b.messages.filter((m) => /indisponível/.test(m)).length, 0);
+
+  const c = fakeBoard();
+  const q = createPlanbanPublisher({ exec: (args) => (args[2] === '--summary' ? Promise.reject(new Error('slow')) : c.exec(args)), say: c.say });
+  await q.start(running);
+  await q.update(running); await q.update(running); await q.update(running);
+  assert.equal(q.disabled, true);
+  assert.equal(c.messages.filter((m) => /indisponível/.test(m)).length, 1);
+});
+
 test('publisher: a Planban that never answers cannot hold the end of the run past the flush deadline', async () => {
   const b = fakeBoard();
   const p = createPlanbanPublisher({ exec: () => new Promise(() => {}), say: b.say });
