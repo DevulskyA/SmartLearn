@@ -657,6 +657,10 @@ function createBrowserStore() {
         state.subjects = state.subjects.filter((subject) => subject.id !== id);
         writeState(state);
       },
+      // The Disciplinas catalog calls delete(); the other stores take that name too (remote-store maps it to deleteIfEmpty).
+      async delete(id) {
+        return this.deleteIfEmpty(id);
+      },
     },
 
     learningUnits: {
