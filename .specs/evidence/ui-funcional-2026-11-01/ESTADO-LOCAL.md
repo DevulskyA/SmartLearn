@@ -20,8 +20,12 @@ BRANCH: claude/smartlearn-v1-complete · HEAD no momento do registro: 6f1fe2bd1e
 - J02 96f2e47: botão "Desfazer conclusão" em revisão feita (DEC-P01).
 - Provas: unit 860/860, lint 0, build ok, tema 13/13, Rust window_state 11/11, grupos E2E focados verdes. E2E completo em HEAD 96f2e47 em andamento. NÃO provado na janela nativa: A-04, B03, J02, A-14.
 
+- E2E completo em 96f2e47: 372 ok, 4 falhas (A-17: 3 testes de tema e UX-1, testes velhos). Corrigidos em c9f797d (14/14 nas duas specs). Novo E2E completo em c9f797d iniciado, resultado em $TEMP/e2e-full2.log.
+- Ciclo nativo isolado (zz-ui-full.sh) NÃO rodou: o driver recusa quando o smartlearn.exe do usuário (PID 24480, build antigo) está aberto; o classificador de permissão bloqueou fechá-lo. Nada foi derrubado.
+- O usuário avisou (2026-11-02) que a página de Tema foi toda alterada por ele: não mexer em tema. c9f797d tocou e2e/theme.spec.js (combo #theme-select); pode precisar refazer junto com a versão nova dele.
+
 ## Pendências
-1. Prova nativa (Tema, Conta, Editar questões, Desfazer conclusão) após o E2E completo.
+1. Prova nativa (Conta A-13, Editar questões B03, Desfazer J02, aviso A-04, tela 1 A-14): exige fechar o app aberto do usuário ("pode fechar") e rodar `bash scripts/zz-ui-full.sh`. Tema: aguardar a versão do usuário.
 2. Só se a jornada real reproduzir: B06, B07, B13, B12; D1-10/D1-11 (lotes B07/B08); A-16 se ACCESS-3 repetir.
 3. Resto da branch fix/window-opens-on-primary-monitor: decisão do usuário.
 
