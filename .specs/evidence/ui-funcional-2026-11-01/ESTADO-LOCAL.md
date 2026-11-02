@@ -26,7 +26,8 @@ BRANCH: claude/smartlearn-v1-complete · HEAD no momento do registro: 6f1fe2bd1e
 
 ## Pendências
 1. Prova nativa (Conta A-13, Editar questões B03, Desfazer J02, aviso A-04, tela 1 A-14): exige fechar o app aberto do usuário ("pode fechar") e rodar `bash scripts/zz-ui-full.sh`. Tema: aguardar a versão do usuário.
-2. Só se a jornada real reproduzir: B06, B07, B13, B12; D1-10/D1-11 (lotes B07/B08); A-16 se ACCESS-3 repetir.
+2. NOVA TAREFA (pedido do usuário, 2026-11-02): o aluno precisa poder DISPENSAR revisões, principalmente quando há muitas pendentes (ex.: 7 de uma mesma aula; o dev data mostra 36 vencidas em 10 conteúdos). Proposta a validar: ação "Dispensar" por revisão e por conteúdo (todas as vencidas daquela aula), motivo opcional, reversível ("Desfazer dispensa"), auditada, NÃO conta como feita nem entra em desempenho/evidência, some da fila de Hoje. Decidir o efeito sobre as etapas seguintes (R+1...) antes de implementar; é regra de produto de repetição espaçada, não só UI.
+3. Só se a jornada real reproduzir: B06, B07, B13, B12; D1-10/D1-11 (lotes B07/B08); A-16 se ACCESS-3 repetir.
 3. Resto da branch fix/window-opens-on-primary-monitor: decisão do usuário.
 
 ## Decisões humanas
