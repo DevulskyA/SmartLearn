@@ -813,9 +813,10 @@
           </div>
 
           <div class="form-card" id="account-logged-in-view" hidden>
-            <p id="account-logged-in-as"></p>
+            <p class="account-status" id="account-logged-in-as"></p>
+            <details class="account-password-details" id="account-password-details">
+            <summary class="secondary-button" data-i18n="screens.account.changePassword">Alterar senha</summary>
             <form class="study-form" id="account-password-form">
-              <h2 data-i18n="screens.account.changePassword">Alterar senha</h2>
               <div class="field-group">
                 <label for="account-current-password" data-i18n="screens.account.currentPassword">Senha atual</label>
                 <input id="account-current-password" name="currentPassword" type="password" required autocomplete="current-password">
@@ -829,6 +830,7 @@
               </div>
               <p class="form-message" id="account-password-message" role="status" aria-live="polite"></p>
             </form>
+            </details>
             <div class="settings-actions">
               <button class="secondary-button" id="account-logout-btn" type="button" data-i18n="screens.account.logout">Sair</button>
             </div>

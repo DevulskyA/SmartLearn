@@ -5757,3 +5757,10 @@ label.select-control:has(> .ui-select) {
 .screen-load-error p {
   margin: 0;
 }
+
+.account-status { font-weight: 700; }
+.account-status::before { content: "\2713\00a0"; color: var(--success, currentColor); }
+.account-password-details { margin-block: 1rem; }
+.account-password-details > summary { display: inline-block; cursor: pointer; list-style: none; }
+.account-password-details > summary::-webkit-details-marker { display: none; }
+.account-password-details[open] > summary { margin-bottom: 1rem; }

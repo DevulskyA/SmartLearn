@@ -5946,6 +5946,7 @@ const accountLoggedInView = document.querySelector("#account-logged-in-view");
 const accountLoginForm = document.querySelector("#account-login-form");
 const accountRegisterForm = document.querySelector("#account-register-form");
 const accountPasswordForm = document.querySelector("#account-password-form");
+const accountPasswordDetails = document.querySelector("#account-password-details");
 const accountLogoutBtn = document.querySelector("#account-logout-btn");
 const accountLoggedInAs = document.querySelector("#account-logged-in-as");
 
@@ -5961,6 +5962,8 @@ async function renderAccount() {
   const loggedIn = !!user;
   if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
   if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
+  // a signed-in screen never leaves the password fields open for typing: they stay behind the button
+  if (!loggedIn || !accountLoggedInView) accountPasswordDetails?.removeAttribute("open");
   if (loggedIn && accountLoggedInAs) {
     accountLoggedInAs.textContent = t("account.connectedAs", { email: user.emailDisplay });
   }
@@ -6027,6 +6030,7 @@ accountPasswordForm?.addEventListener("submit", async (event) => {
   }
   setAccountMessage("account-password", t("auth.success.passwordChanged"));
   accountPasswordForm.reset();
+  accountPasswordDetails?.removeAttribute("open");
 });
 
 accountLogoutBtn?.addEventListener("click", async () => {

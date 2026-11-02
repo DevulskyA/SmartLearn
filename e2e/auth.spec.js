@@ -143,6 +143,10 @@ test('password change via the real UI: old password stops working, new one logs 
   await page.locator('#account-login-form button[type="submit"]').click();
   await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
 
+  // signed in: the password fields stay closed behind a button until the user asks for them
+  await expect(page.locator('#account-current-password')).toBeHidden();
+  await page.locator('#account-password-details > summary').click();
+
   await page.locator('#account-current-password').fill(oldPassword);
   await page.locator('#account-new-password').fill(newPassword);
   await page.locator('#account-password-form button[type="submit"]').click();
