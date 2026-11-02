@@ -46,3 +46,4 @@ conductor/.view/
 
 # UI driver full batch logs (regenerated every run; failures keep their evidence in lotes/**/falhas)
 .specs/evidence/*/lotes/logs/
+.specs/evidence/*/lotes/**/falhas/

@@ -61,11 +61,11 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [x] 4.6 Validar antes/depois (chamadas, volume de saída, duração, evidências; tokens como estimativa se não houver contagem real); commit local. Parar.
 
 ### 05 — Isolamento dos dados
-- [ ] 5.1 Registrar o estado dos dados demonstrativos (contagens e identificadores).
-- [ ] 5.2 Auditar caminhos, bancos, portas, processos, inicialização e limpeza de `zz-ui-full.sh` e `zz-ui-bordas.sh`.
-- [ ] 5.3 Testar resistência a falha, interrupção e execução concorrente.
-- [ ] 5.4 Rodar teste normal + de borda e comparar o estado: nenhuma alteração indevida.
-- [ ] 5.5 Corrigir só falhas efetivamente encontradas; commit local. Parar.
+- [x] 5.1 Registrar o estado dos dados demonstrativos (contagens e identificadores).
+- [x] 5.2 Auditar caminhos, bancos, portas, processos, inicialização e limpeza de `zz-ui-full.sh` e `zz-ui-bordas.sh`.
+- [x] 5.3 Testar resistência a falha, interrupção e execução concorrente.
+- [x] 5.4 Rodar teste normal + de borda e comparar o estado: nenhuma alteração indevida.
+- [x] 5.5 Corrigir só falhas efetivamente encontradas; commit local. Parar.
 
 ### 06 — Inventário e matriz de cobertura
 - [ ] 6.1 Inventariar código, rotas, menus, componentes, estados e fluxos realmente implementados.
@@ -120,7 +120,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [ ] 12.6 Fechamento executivo curto; declarar conclusão total ou parcial. Parar.
 
 ## Próxima ação
-Tarefa 05, subtarefa 5.1.
+Tarefa 06, subtarefa 6.1.
 
 ## Resultados da Tarefa 01 (2026-11-01) — medido, sem rodar a suíte completa
 **Métricas de base**
@@ -195,3 +195,13 @@ Unidades medidas: subida do app 5,3 s; reinício deliberado 6,75 s (7,0 s no cic
 | Duração | 52-60 s | 52,6 s e 54,0 s (rodadas limpas); 59,8 s com a falha |
 
 **Prova real:** na 1ª rodada o SEED2c falhou (A-09, intermitente, 1 em 3) e a evidência automática bastou para ver que o botão existia 3 s depois; rodadas 2 e 3: 0 falhas. Causa de A-09 não provada. Limitação: o "antes" é o tamanho do log integral, não uma reexecução do fluxo antigo.
+
+## Resultados da Tarefa 05 (2026-11-01)
+**Lacunas achadas na auditoria (5.2) e correção mínima (5.5):**
+1. Os dois scripts compartilham 1 driver e 1 arquivo de estado: rodar os dois juntos (ou 2x) fazia um `quit` do app do outro, ou mandar lixo de borda para o conjunto realista. Novo `scripts/zz-ui-guard.sh` (lock atômico por `mkdir`, dono morto é substituído, `trap` encerra o app e solta o lock em saída/INT/TERM).
+2. 40 pastas `sl-ui-driver-*` (dados descartáveis das instâncias) acumuladas em `%TEMP%`. Agora `quit` apaga a pasta da própria instância (só prefixo `sl-ui-driver-` direto no temp) e o guarda varre as com mais de 1 dia.
+3. Snapshot imprimia o valor de campos de senha em `tela.txt`/logs; agora `***`.
+4. Retenção: `falhas/` (nome fixo por lote+linha, é sobrescrito) e `logs/` ficam fora do Git.
+
+**Provas:** (a) execução concorrente recusada, sem abrir janela: `full exit=3`, `bordas exit=3` com a mensagem do dono; (b) normal depois borda em sequência: ciclo 17 lotes 0 falhas (46,9 s); (c) impressão digital da pasta de dados humanos (`~/SmartLearn-DevData`, só nomes/tamanhos/datas, sem abrir arquivos) idêntica antes e depois: `72cd1829ec32`; (d) 0 pastas de instância sobraram, lock e estado removidos; (e) interrupção por TERM no dono real no meio da borda: lock removido, estado removido, 0 processos `smartlearn`, 0 pastas. Instâncias de dados distintas por construção (`mkdtemp` aleatório por `start`); minha tentativa de comparar os nomes pelo arquivo de estado deu falso "igual" por leitura de estado velho (erro do meu instrumento, não do isolamento).
+**Riscos remanescentes:** morte forçada (`taskkill /F` do bash) não roda o `trap`: o lock órfão é substituído na próxima execução e o app órfão é fechado pelo `quit` inicial dos scripts, mas a janela fica aberta até lá. A-10 (abaixo) é falha de lote de borda, fora do isolamento.

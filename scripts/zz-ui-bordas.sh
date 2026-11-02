@@ -3,6 +3,7 @@
 # at the end. The realistic dataset used by other tests (statistics, etc.) never receives this junk.
 set -u
 cd "$(dirname "$0")/.."
+. scripts/zz-ui-guard.sh
 D="node scripts/zz-ui-driver.mjs"
 L=.specs/evidence/ui-funcional-2026-11-01/lotes
 $D quit >/dev/null 2>&1; sleep 4; rm -f "$TEMP/sl-ui-driver-state.json" "$TEMP/sl-ui-driver-pace.json"

@@ -194,7 +194,7 @@ const snapshot = async (full = false) => page.evaluate(({ full }) => {
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') st.push('disabled');
     if (el.checked) st.push('checked');
     for (const a of ['aria-expanded', 'aria-selected', 'aria-current', 'aria-pressed']) if (el.getAttribute(a) && el.getAttribute(a) !== 'false') st.push(`${a.slice(5)}=${el.getAttribute(a)}`);
-    if (['input', 'textarea', 'select'].includes(tag) && el.type !== 'checkbox' && el.type !== 'radio') st.push(`value="${clean(tag === 'select' ? el.selectedOptions[0]?.text : el.value).slice(0, 40)}"`);
+    if (['input', 'textarea', 'select'].includes(tag) && el.type !== 'checkbox' && el.type !== 'radio') st.push(`value="${el.type === 'password' ? (el.value ? '***' : '') : clean(tag === 'select' ? el.selectedOptions[0]?.text : el.value).slice(0, 40)}"`); // secrets never reach logs or evidence files
     if (tag === 'a') st.push(`href=${el.getAttribute('href')}`);
     el.setAttribute('data-uid', String(i));
     lines.push(`[${i}] ${el.getAttribute('role') || (tag === 'input' ? `input:${el.type}` : tag)} "${name}"${st.length ? ` (${st.join(', ')})` : ''}`);
@@ -250,7 +250,12 @@ async function run(c, a) {
     case 'dialog': dialogPolicy = a[0] === 'dismiss' ? 'dismiss' : 'accept'; return `dialogs will be ${dialogPolicy}ed`;
     case 'console': { const out = events.join('\n') || '(no console errors, page errors or failed requests)'; if (a[0] === 'clear') events.length = 0; return out; }
     case 'restart': await shutdown(); await launch(); writeState(); return `app closed and reopened on the SAME data\n${await brief()}`;
-    case 'quit': setTimeout(async () => { await shutdown(); try { rmSync(STATE); } catch { /* gone */ } process.exit(0); }, 50); return 'closing';
+    case 'quit': setTimeout(async () => {
+      await shutdown(); try { rmSync(STATE); } catch { /* gone */ }
+      // the instance's data is throwaway: remove it with the instance (only our own prefix under the OS temp dir, never anything else)
+      if (resolve(dirname(work)).toLowerCase() === resolve(tmpdir()).toLowerCase() && /^sl-ui-driver-/.test(work.split(/[\\/]/).pop())) { try { rmSync(work, { recursive: true, force: true }); } catch { /* still locked: the guard sweeps it later */ } }
+      process.exit(0);
+    }, 50); return 'closing';
     default: throw new Error(`unknown command ${c}. commands: snap text click dblclick hover fill type select check uncheck key upload shot wait reload back forward goto dialog console restart quit`);
   }
 }

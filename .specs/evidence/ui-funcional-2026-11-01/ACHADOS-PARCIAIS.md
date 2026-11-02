@@ -95,3 +95,12 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - **Causa provada (sincronização do teste, não desempenho do produto):** `expect "propostos"` casava com o texto de progresso `materials.upload.chunking` = "Gerando trechos propostos…" (`src/i18n/locales/pt-BR/materials.js:93`), que aparece ANTES do fim da análise. A espera passava cedo e o `expect` seguinte do botão corria contra a análise do PDF (3 s). Na rodada limpa o botão aparece em ~2,5 s; sob carga passou de 3 s.
 - **Correção mínima:** os 3 lotes que esperavam por "propostos" (SEED2c, SEED2, J10) passam a esperar a mensagem final "trecho proposto." (não aparece no texto de progresso, que está no plural). Nenhum timeout aumentado; nenhum limite de produto tocado.
 - **Prova:** SEED1 + SEED2c em app novo: 0 falhas, SEED2c 2545 ms (baseline 2395 ms), sem DESVIO. Não repeti os 17 lotes. Classe do erro: instrumento (rodada 1 = 1 em 3 era a corrida), regra "espera pelo alvo certo" já existia em "Fail fast, name the cause": eu não conferi se o alvo do `expect` era a condição final (classe 1).
+
+## A-10 Lotes de borda B07 (3 linhas) e B08 (2 linhas) falham na instância descartável — T05, 2026-11-01
+- **Onde:** `bordas/B07-aulas-bordas.txt` L17 e L25 (`select #plan-subject-select Farmacologia`, timeout 1200 ms), L29 (`expect "Farmacodinamica receptores"`); `bordas/B08-resumo-html-emoji.txt` L7 e L11 (`expect "ADME"`).
+- **Observado:** lotes de borda nunca tiveram baseline (sem medição) e não rodam no ciclo oficial; 5 linhas falham. Evidência: `lotes/bordas/falhas/` (local, fora do Git) e `lotes/bordas/logs/`.
+- **Causa:** NÃO PROVADA. SEED1 contém "Farmacologia"; hipótese: B06 ou a ordem dos lotes de borda altera o estado do qual B07/B08 dependem, ou os lotes ficaram defasados em relação à interface. Status: aberto; não afeta o isolamento; resolver na T06/T12 ao gravar baselines das bordas.
+- **Meu erro (classe 1, regra "Every test has a measured runtime"):** lotes de borda sem baseline desde o commit 2b42ce0.
+
+## A-11 Senha no snapshot e instâncias esquecidas — corrigidos na T05
+- Valor de `input:password` aparecia em `tela.txt`/logs (agora `***`); 40 pastas de instância ficavam em `%TEMP%` (agora `quit` apaga e o guarda varre >1 dia).
