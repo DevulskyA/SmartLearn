@@ -82,6 +82,17 @@ pub fn first_run_size(monitor_width: u32, monitor_height: u32, scale: f64) -> (u
     (want_w.min(max_w).max(MIN_SIZE), want_h.min(max_h).max(MIN_SIZE))
 }
 
+/// True for Windows display 1 (device name `\\.\DISPLAY1`), the number Windows Settings shows for that monitor.
+pub fn is_display_one(device_name: &str) -> bool {
+    device_name.ends_with("DISPLAY1")
+}
+
+/// Top-left corner that centres a window of this size on the given monitor (never above/left of the monitor's origin).
+pub fn centered_in(monitor: MonitorRect, width: u32, height: u32) -> (i32, i32) {
+    let (mx, my, mw, mh) = monitor;
+    (mx + (mw.saturating_sub(width) / 2) as i32, my + (mh.saturating_sub(height) / 2) as i32)
+}
+
 /// Throttle for the stream of Moved/Resized events while a window is dragged: at most one disk write per SAVE_EVERY; the close always saves.
 pub struct Throttle {
     last: Option<Instant>,
@@ -133,6 +144,19 @@ impl Saver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_one_is_recognised_by_its_windows_device_name() {
+        assert!(is_display_one(r"\\.\DISPLAY1"));
+        assert!(!is_display_one(r"\\.\DISPLAY2"));
+        assert!(!is_display_one(r"\\.\DISPLAY11"));
+    }
+
+    #[test]
+    fn a_first_run_window_is_centred_on_the_chosen_monitor_even_one_left_of_the_origin() {
+        // a 1440x900 monitor at x=-1440 (the layout of this machine): the window lands inside it, not on the primary
+        assert_eq!(centered_in((-1440, 0, 1440, 900), 1280, 820), (-1360, 40));
+    }
 
     const LEFT: MonitorRect = (0, 0, 1920, 1080);
     const RIGHT: MonitorRect = (1920, 0, 1280, 1024);

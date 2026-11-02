@@ -470,12 +470,23 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
     }
     if last.is_none() {
         // nothing usable saved (first run, or the monitor it was on is gone): start from scratch, centred on a connected monitor, never bigger than it
-        let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+        // Windows display 1 (device name DISPLAY1, the number Windows Settings shows) first; without it, the monitor the window is on, then the primary
+        let monitor = window
+            .available_monitors()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|m| m.name().is_some_and(|name| window_state::is_display_one(name)))
+            .or_else(|| window.current_monitor().ok().flatten())
+            .or_else(|| window.primary_monitor().ok().flatten());
         if let Some(monitor) = monitor {
             let (width, height) = window_state::first_run_size(monitor.size().width, monitor.size().height, window.scale_factor().unwrap_or(1.0));
             let _ = window.set_size(tauri::PhysicalSize::new(width, height));
+            let rect = (monitor.position().x, monitor.position().y, monitor.size().width, monitor.size().height);
+            let (x, y) = window_state::centered_in(rect, width, height);
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+        } else {
+            let _ = window.center();
         }
-        let _ = window.center();
     }
     let _ = window.show();
 
