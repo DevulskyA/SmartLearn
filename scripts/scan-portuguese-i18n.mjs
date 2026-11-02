@@ -200,9 +200,9 @@ export function scanAll() {
  * model (prompts). The client cannot translate them. MEASURED and frozen here, not migrated: moving them needs a contract decision (a code plus
  * parameters from the server, the text in the client catalog), which is the product owner's. Lower the number when that migration happens.
  */
-// 576 -> 579: the 3 sentences of server/src/migration-authorization.js are operator messages printed to stderr by the backend and the CLI scripts
+// 576 -> 580: the 4 sentences of server/src/migration-authorization.js are operator messages printed to stderr by the backend and the CLI scripts
 // (never returned to a screen), like the ones already counted in main.js.
-export const SERVER_PROSE_BASELINE = 579;
+export const SERVER_PROSE_BASELINE = 580;
 export function scanServerAndShared() {
   const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'server/src', 'shared'], { cwd: root, encoding: 'utf8' }).split('\n')
     .filter((f) => f.endsWith('.js') && existsSync(join(root, f)));
