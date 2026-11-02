@@ -166,8 +166,13 @@ function createModeSwitch(textarea, bar, preview) {
     visualBtn.setAttribute("aria-pressed", String(visual));
     textBtn.setAttribute("aria-pressed", String(!visual));
   };
-  async function startVisual() {
-    if (editor) { editor.reload(); return true; }
+  let starting = null; // the import is async: a second call during it must wait for the first, not mount a second editor
+  function startVisual() {
+    if (editor) { editor.reload(); return Promise.resolve(true); }
+    starting ||= mountVisual().finally(() => { starting = null; });
+    return starting;
+  }
+  async function mountVisual() {
     try {
       const { createVisualSummaryEditor } = await import("./summary-visual-editor.js");
       editor = createVisualSummaryEditor(textarea, { editInText: jumpToText });
