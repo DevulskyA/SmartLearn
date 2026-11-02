@@ -3,8 +3,8 @@
 // The lock exists exactly as long as the writer does: a forced kill leaves a stale file whose pid is dead, which the next
 // writer takes over.
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { mkdirSync, openSync, writeSync, closeSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { join, resolve, dirname, basename } from 'node:path';
+import { mkdirSync, openSync, writeSync, closeSync, readFileSync, rmSync, existsSync, realpathSync } from 'node:fs';
 
 export function devDataDir(env = process.env, home = homedir()) {
   return env.SMARTLEARN_DEV_DATA_DIR || join(home, 'SmartLearn-DevData');
@@ -17,7 +17,14 @@ export function devDbPaths(env = process.env, home = homedir()) {
 
 /** True when `dbPath` is the persistent DEV database (the only file the single-writer lock guards). */
 export function isDevDatastoreDb(dbPath, env = process.env, home = homedir()) {
-  return resolve(dbPath).toLowerCase() === resolve(devDbPaths(env, home).dbPath).toLowerCase();
+  return canonicalPath(dbPath) === canonicalPath(devDbPaths(env, home).dbPath);
+}
+
+// The same file through a junction/symlink, an 8.3 name or another spelling of the folder is still that file: resolve the REAL folder
+// (the file itself may not exist yet) and compare case-insensitively like the Windows file system does.
+function canonicalPath(path) {
+  const absolute = resolve(path);
+  try { return join(realpathSync.native(dirname(absolute)), basename(absolute)).toLowerCase(); } catch { return absolute.toLowerCase(); }
 }
 
 export function pidAlive(pid) {

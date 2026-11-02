@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, readFileSync, readdirSync, copyFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync, copyFileSync, writeFileSync, existsSync, statSync, mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/migrations.js';
+import { isDevDatastoreDb } from '../src/dev-datastore.js';
 import { parseAuthorizedVersions, checkMigrationAuthorization, assertMigrationAuthorizedForPath, AUTHORIZE_ENV } from '../src/migration-authorization.js';
 
 test('only a plain list of positive integers authorizes anything', () => {
@@ -70,6 +71,25 @@ test('assertMigrationAuthorizedForPath guards the DEV datastore only, and a refu
       assert.doesNotThrow(() => assertMigrationAuthorizedForPath(other, env));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
+});
+
+test('the DEV datastore is recognised through a junction/symlink and through 8.3 or different-case spellings, so the gate cannot be walked around', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-migauth-'));
+  try {
+    const dataDir = join(dir, 'DevData');
+    mkdirSync(dataDir);
+    const { dbPath } = devDatastoreWithPendingNewest(dataDir, { wal: true });
+    const link = join(dir, 'alias');
+    symlinkSync(dataDir, link, 'junction');
+    const env = { SMARTLEARN_DEV_DATA_DIR: dataDir };
+    assert.equal(isDevDatastoreDb(join(link, 'smartlearn-dev.db'), env), true, 'a junction to the datastore is the datastore');
+    assert.throws(() => assertMigrationAuthorizedForPath(join(link, 'smartlearn-dev.db'), env), /not authorized/);
+    if (process.platform === 'win32') { // the Windows file system ignores case; others do not
+      assert.throws(() => assertMigrationAuthorizedForPath(dbPath.toUpperCase().replace(dir.toUpperCase(), dir), env), /not authorized/);
+    }
+    // and the datastore pointed at THROUGH the alias guards the real file as well
+    assert.throws(() => assertMigrationAuthorizedForPath(dbPath, { SMARTLEARN_DEV_DATA_DIR: link }), /not authorized/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('a DEV database that cannot be inspected read-only is refused (fail closed), not migrated', () => {
