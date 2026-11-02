@@ -1,0 +1,58 @@
+{
+  "mode": "telas",
+  "root": "C:\\Projetos\\SmartLearn\\.claude\\worktrees\\agent-ab5cfca1045ff17b7",
+  "started": "2026-11-02T22:38:08.446Z",
+  "notes": [
+    "4.7s servidor + vite prontos",
+    "8.7s seed ok",
+    "21.6s ok telas-1280-plano",
+    "28.7s ok telas-1280-stats",
+    "31.0s ok telas-1280-config",
+    "34.3s ok telas-1280-conta",
+    "46.9s ok telas-1280-materiais",
+    "59.3s ok telas-390-plano",
+    "66.3s ok telas-390-stats",
+    "68.5s ok telas-390-config",
+    "71.7s ok telas-390-conta",
+    "88.6s FALHOU telas-390-materiais"
+  ],
+  "seed": {
+    "seeded": true,
+    "units": 10,
+    "subjects": 6
+  },
+  "scenarioErrors": [
+    "telas-390-materiais: locator.waitFor: Timeout 15000ms exceeded."
+  ],
+  "shots": [
+    "1280-plano 1280x1478",
+    "1280-plano-expandido 1280x1855",
+    "1280-plano-disciplinas 1280x2529",
+    "1280-plano-nova-aula 1280x2201",
+    "1280-estatisticas 1280x2639",
+    "1280-estatisticas-qualquer-periodo 1280x2639",
+    "1280-estatisticas-por-conteudo 1280x2177",
+    "1280-configuracoes 1280x2379",
+    "1280-conta 1280x920",
+    "1280-conta-alterar-senha 1280x920",
+    "1280-materiais 1280x920",
+    "1280-materiais-propostas 1280x1212",
+    "1280-editor-resumo 1280x1512",
+    "1280-editor-questoes 1280x2064",
+    "1280-editor-fonte 1280x1418",
+    "1280-editor-revisao 1280x1442",
+    "390-plano 390x1915",
+    "390-plano-expandido 390x2446",
+    "390-plano-disciplinas 390x2994",
+    "390-plano-nova-aula 390x2600",
+    "390-estatisticas 390x4792",
+    "390-estatisticas-qualquer-periodo 390x4792",
+    "390-estatisticas-por-conteudo 390x3716",
+    "390-configuracoes 390x2613",
+    "390-conta 390x884",
+    "390-conta-alterar-senha 390x884",
+    "390-materiais 390x884"
+  ],
+  "finished": "2026-11-02T22:39:37.752Z",
+  "seconds": 89
+}
