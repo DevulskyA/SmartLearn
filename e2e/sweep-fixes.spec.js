@@ -112,6 +112,8 @@ test('Estatisticas > Estudar: a Plano subject filter that hides the unit is rela
   }, b.unit.subjectId);
   await expect(page.locator('#plan-list .plan-row')).toHaveCount(1);
   await openScreen(page, 'stats');
+  // the Stats default is the last 90 days, which hides units with no answered questions; these units have none
+  await page.locator('#stats-unit-filter-period').selectOption('');
   await page.locator('#subject-kpi-list tr', { hasText: 'Fisiologia Renal' }).click();
   await page.locator('#unit-stats-list tr', { hasText: 'Filtração glomerular' }).click();
   await page.locator('[data-action="study-unit"]').click();
