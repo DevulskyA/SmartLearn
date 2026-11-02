@@ -2283,7 +2283,7 @@ export async function renderStatsBySubject() {
     if (r.lastEvidence) {
       const last = document.createElement("div");
       last.className = "practice-recent";
-      last.textContent = t("statsView.evidence.last", { date: formatIntlDate(r.lastEvidence.evidenceDate, { day: "2-digit", month: "2-digit", year: "2-digit" }) });
+      last.textContent = t("statsView.evidence.last", { date: formatIntlDate(new Date(`${String(r.lastEvidence.evidenceDate).slice(0, 10)}T12:00:00`), { day: "2-digit", month: "2-digit", year: "2-digit" }) });
       practiceCell.append(last);
     }
 
