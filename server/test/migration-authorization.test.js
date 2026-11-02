@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, readFileSync, readdirSync, copyFileSync, writeFileSync, existsSync, statSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync, copyFileSync, writeFileSync, existsSync, statSync, mkdirSync, symlinkSync, linkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
@@ -89,6 +89,62 @@ test('the DEV datastore is recognised through a junction/symlink and through 8.3
     }
     // and the datastore pointed at THROUGH the alias guards the real file as well
     assert.throws(() => assertMigrationAuthorizedForPath(dbPath, { SMARTLEARN_DEV_DATA_DIR: link }), /not authorized/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the DEV database is recognised through a hard link or a symlink to the FILE itself, not only through its folder', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-migauth-'));
+  try {
+    const dataDir = join(dir, 'DevData');
+    mkdirSync(dataDir);
+    const { dbPath } = devDatastoreWithPendingNewest(dataDir, { wal: true });
+    const env = { SMARTLEARN_DEV_DATA_DIR: dataDir };
+    const hard = join(dir, 'hard.db');
+    linkSync(dbPath, hard); // another name for the same file (no privilege needed)
+    assert.equal(isDevDatastoreDb(hard, env), true, 'a hard link is the same database');
+    assert.throws(() => assertMigrationAuthorizedForPath(hard, env), /not authorized/);
+    const sym = join(dir, 'sym.db');
+    let symlinked = true;
+    try { symlinkSync(dbPath, sym, 'file'); } catch (err) { if (err.code === 'EPERM') symlinked = false; else throw err; } // Windows needs a privilege for file symlinks
+    if (symlinked) {
+      assert.equal(isDevDatastoreDb(sym, env), true, 'a symlink to the database file is the database');
+      assert.throws(() => assertMigrationAuthorizedForPath(sym, env), /not authorized/);
+    }
+    // a different database that merely sits next to it is not the DEV database
+    const sibling = join(dataDir, 'other.db');
+    copyFileSync(dbPath, sibling);
+    assert.equal(isDevDatastoreDb(sibling, env), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an EXISTING DEV database with tables but no migration history is refused (never treated as new); a new, empty or header-only file is not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-migauth-'));
+  try {
+    const dbPath = join(dir, 'smartlearn-dev.db');
+    const env = { SMARTLEARN_DEV_DATA_DIR: dir };
+    // a database somebody already filled, with no schema_migrations table at all
+    let db = new Database(dbPath);
+    db.exec("CREATE TABLE subjects (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO subjects (name) VALUES ('Farmacologia')");
+    db.close();
+    const before = sha256(dbPath);
+    assert.throws(() => assertMigrationAuthorizedForPath(dbPath, env), /no migration history/);
+    assert.throws(() => assertMigrationAuthorizedForPath(dbPath, { ...env, [AUTHORIZE_ENV]: '1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38' }), /no migration history/, 'no authorization list opens this door');
+    assert.equal(sha256(dbPath), before, 'refusing changes nothing');
+    // history table present but empty, with other tables: same thing
+    db = new Database(dbPath);
+    db.exec('CREATE TABLE schema_migrations (version INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)');
+    db.close();
+    assert.throws(() => assertMigrationAuthorizedForPath(dbPath, env), /no migration history/);
+    // a file that does not exist yet, an empty file, and a header-only WAL database (a crash between openDb and the first migration) are new
+    assert.doesNotThrow(() => assertMigrationAuthorizedForPath(join(dir, 'smartlearn-dev.db.missing'), env));
+    rmSync(dbPath);
+    writeFileSync(dbPath, '');
+    assert.doesNotThrow(() => assertMigrationAuthorizedForPath(dbPath, env));
+    rmSync(dbPath);
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.close();
+    assert.doesNotThrow(() => assertMigrationAuthorizedForPath(dbPath, env));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

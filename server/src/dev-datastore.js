@@ -4,7 +4,7 @@
 // writer takes over.
 import { homedir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
-import { mkdirSync, openSync, writeSync, closeSync, readFileSync, rmSync, existsSync, realpathSync } from 'node:fs';
+import { mkdirSync, openSync, writeSync, closeSync, readFileSync, rmSync, existsSync, realpathSync, statSync } from 'node:fs';
 
 export function devDataDir(env = process.env, home = homedir()) {
   return env.SMARTLEARN_DEV_DATA_DIR || join(home, 'SmartLearn-DevData');
@@ -17,7 +17,19 @@ export function devDbPaths(env = process.env, home = homedir()) {
 
 /** True when `dbPath` is the persistent DEV database (the only file the single-writer lock guards). */
 export function isDevDatastoreDb(dbPath, env = process.env, home = homedir()) {
-  return canonicalPath(dbPath) === canonicalPath(devDbPaths(env, home).dbPath);
+  const dev = devDbPaths(env, home).dbPath;
+  const same = sameFile(dbPath, dev);
+  return same ?? (canonicalPath(dbPath) === canonicalPath(dev));
+}
+
+// The same FILE under another name (a symlink or a hard link to it, a junction above it): both files exist and have the same device and
+// file id. null when either does not exist yet (a database about to be created), where the path comparison decides.
+function sameFile(a, b) {
+  try {
+    const x = statSync(a, { bigint: true });
+    const y = statSync(b, { bigint: true });
+    return x.ino !== 0n && x.ino === y.ino && x.dev === y.dev;
+  } catch { return null; }
 }
 
 // The same file through a junction/symlink, an 8.3 name or another spelling of the folder is still that file: resolve the REAL folder

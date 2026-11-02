@@ -45,7 +45,7 @@ test('the backup of a DEV datastore with an unauthorized pending migration still
     const pkg = join(w.dir, 'package');
     const result = run(w.dir, w.dbPath, ['--package', pkg]);
     assert.equal(result.status, 0, result.stderr + result.stdout);
-    assert.match(result.stderr, /not migrating/);
+    assert.match(result.stderr, /backed up as it is/);
     assert.equal(sha256(w.dbPath), before, 'the live database file is byte-identical');
     assert.ok(walIsEmpty(w.dbPath), 'nothing was written to the write-ahead log');
     const live = new Database(w.dbPath, { readonly: true });
@@ -57,11 +57,39 @@ test('the backup of a DEV datastore with an unauthorized pending migration still
   } finally { rmSync(w.dir, { recursive: true, force: true }); }
 });
 
-test('the same backup with the pending migration authorized migrates first, as before', () => {
+test('a backup of the DEV datastore NEVER migrates it, not even when the migration is authorized: the package keeps the existing schema', () => {
+  for (const mode of ['--package', 'physical']) {
+    const w = pendingDevDatastore();
+    try {
+      const before = sha256(w.dbPath);
+      const target = mode === '--package' ? join(w.dir, 'package') : join(w.dir, 'copy.db');
+      const args = mode === '--package' ? ['--package', target] : [target, '--db', w.dbPath];
+      const result = run(w.dir, w.dbPath, args, String(w.newest));
+      assert.equal(result.status, 0, `${mode}: ${result.stderr}${result.stdout}`);
+      assert.equal(sha256(w.dbPath), before, `${mode}: the live database file is byte-identical`);
+      assert.ok(walIsEmpty(w.dbPath), `${mode}: nothing was written to the write-ahead log`);
+      const live = new Database(w.dbPath, { readonly: true });
+      assert.equal(live.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.applied, `${mode}: the migration did not run`);
+      live.close();
+      if (mode === '--package') assert.equal(JSON.parse(readFileSync(join(target, 'manifest.json'), 'utf8')).schemaVersion, w.applied);
+      else {
+        const copy = new Database(target, { readonly: true });
+        assert.equal(copy.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.applied, 'the physical copy has the existing schema');
+        copy.close();
+      }
+    } finally { rmSync(w.dir, { recursive: true, force: true }); }
+  }
+});
+
+test('a backup of any OTHER database keeps the old behaviour: it is migrated first', () => {
   const w = pendingDevDatastore();
   try {
-    const pkg = join(w.dir, 'package');
-    const result = run(w.dir, w.dbPath, ['--package', pkg], String(w.newest));
+    const other = join(w.dir, 'scratch.db');
+    copyFileSync(w.dbPath, other);
+    const pkg = join(w.dir, 'package-other');
+    const result = spawnSync(process.execPath, [BACKUP, '--package', pkg, '--db', other, '--sources', join(w.dir, 'sources')], {
+      cwd: tmpdir(), encoding: 'utf8', env: { ...process.env, SMARTLEARN_DEV_DATA_DIR: w.dir, SMARTLEARN_AUTHORIZE_MIGRATIONS: '' },
+    });
     assert.equal(result.status, 0, result.stderr + result.stdout);
     assert.equal(JSON.parse(readFileSync(join(pkg, 'manifest.json'), 'utf8')).schemaVersion, w.newest);
   } finally { rmSync(w.dir, { recursive: true, force: true }); }

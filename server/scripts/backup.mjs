@@ -15,7 +15,7 @@
 import Database from 'better-sqlite3';
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
-import { migrationAuthorizationForPath } from '../src/migration-authorization.js';
+import { isDevDatastoreDb } from '../src/dev-datastore.js';
 import { config } from '../src/config.js';
 import { createPhysicalBackup, verifyPhysicalBackup } from '../src/backup.js';
 import { createOperationalBackup, verifyOperationalBackup, rehearseRestore } from '../src/operational-backup.js';
@@ -33,12 +33,12 @@ function flag(args, name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-// A backup never needs the migration: when the persistent DEV database has a pending migration nobody authorized, it is backed up AS IT IS
-// through a read-only connection (no WAL pragma, no migration, nothing written to it). Every other database keeps the old behaviour.
+// A backup never needs the migration. The persistent DEV database is ALWAYS backed up AS IT IS, through a read-only connection (no WAL
+// pragma, no migration, nothing written to it), whether or not a pending migration was authorized: the package keeps the schema it has.
+// Every other database keeps the old behaviour (migrated first).
 function openForBackup(dbPath) {
-  const authorization = migrationAuthorizationForPath(dbPath);
-  if (!authorization.ok) {
-    console.error(`NOTE: ${authorization.message.replace('REFUSING to migrate', 'not migrating')} Backing up the database as it is.`);
+  if (isDevDatastoreDb(dbPath)) {
+    console.error('NOTE: the persistent DEV database is backed up as it is; a backup never runs migrations.');
     return new Database(dbPath, { readonly: true, fileMustExist: true });
   }
   const db = openDb(dbPath);

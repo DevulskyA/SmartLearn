@@ -101,6 +101,24 @@ test('a pending migration on the DEV datastore that nobody authorized is refused
   } finally { server.child.kill(); rmSync(w.dataDir, { recursive: true, force: true }); }
 });
 
+test('an existing DEV database with tables but no migration history is refused at startup, even with a full authorization list, and is left byte-identical', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'sl-startup-'));
+  const dbPath = join(dataDir, 'smartlearn-dev.db');
+  const seed = new Database(dbPath);
+  seed.exec("CREATE TABLE subjects (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO subjects (name) VALUES ('Farmacologia')");
+  seed.close();
+  const before = createHash('sha256').update(readFileSync(dbPath)).digest('hex');
+  const everything = Array.from({ length: 200 }, (_, i) => i + 1).join(',');
+  const server = start(dataDir, dbPath, 13914, everything);
+  try {
+    const code = await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('TIMEOUT'), 20000))]);
+    assert.equal(code, 1, server.output());
+    assert.match(server.output(), /no migration history/);
+    assert.equal(createHash('sha256').update(readFileSync(dbPath)).digest('hex'), before, 'the database file is byte-identical');
+    assert.equal(existsSync(join(dataDir, 'snapshots')), false);
+  } finally { server.child.kill(); rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('authorizing a different version does not authorize the pending one', async () => {
   const w = olderDevDatastore();
   const server = start(w.dataDir, w.dbPath, 13912, String(parseInt(w.latest, 10) + 1));

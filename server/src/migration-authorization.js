@@ -52,7 +52,16 @@ export function migrationAuthorizationForPath(dbPath, env = process.env) {
   let probe;
   try {
     probe = new Database(dbPath, { readonly: true, fileMustExist: true });
-    return checkMigrationAuthorization(pendingMigrations(probe), env);
+    const state = pendingMigrations(probe);
+    // "no history" means a NEW database only when it also has no tables. A database somebody already filled but that records no migration
+    // (history table missing or empty) is not new: nothing is run on it, whatever the authorization says.
+    if (state.fromVersion === 0) {
+      const tables = probe.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'").get().n;
+      if (tables > 0) {
+        return { ok: false, unauthorized: state.pending, fromVersion: 0, message: 'REFUSING to migrate: the persistent DEV database already has tables but no migration history, so it is not a new database and no migration can be applied to it. Nothing was changed.' };
+      }
+    }
+    return checkMigrationAuthorization(state, env);
   } catch (err) {
     return { ok: false, unauthorized: [], fromVersion: 0, message: `REFUSING to migrate: the persistent DEV database could not be inspected read-only (${err.message}). Nothing was changed.` };
   } finally {
