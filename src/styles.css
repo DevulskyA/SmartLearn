@@ -5896,3 +5896,11 @@ label.select-control:has(> .ui-select) {
     overflow-wrap: anywhere;
   }
 }
+
+/* Phone touch targets: WCAG 2.2 minimum is 24x24 CSS px. Sort buttons and custom selects were 14-17px tall. */
+@media (max-width: 47.999rem) {
+  .th-sort-btn,
+  .ui-select-trigger {
+    min-height: 1.75rem;
+  }
+}
