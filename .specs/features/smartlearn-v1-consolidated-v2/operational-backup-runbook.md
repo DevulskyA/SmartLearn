@@ -44,6 +44,10 @@ Defaults come from `SMARTLEARN_DB_PATH` and `SMARTLEARN_SOURCES_DIR` (same varia
 3. Restore into a NEW empty directory using the module API (`restoreOperationalBackup(package, target)`), or copy `database.db` -> `<target>/smartlearn.db` and `sources/` -> `<target>/sources/` after `--verify`.
 4. Point `SMARTLEARN_DB_PATH` / `SMARTLEARN_SOURCES_DIR` at the new directory and start the server; users sign in again.
 
+## Migrations on the persistent DEV datastore need explicit authorization
+
+Applied migrations stay recognised. A migration still pending on `~/SmartLearn-DevData/smartlearn-dev.db` (the human's data) is refused, before anything is written, by the backend (`main.js`), `server/scripts/backup.mjs`, `server/scripts/reset-password.mjs` and `scripts/dev-import-sources-cli.mjs`, unless that process is started with `SMARTLEARN_AUTHORIZE_MIGRATIONS=<version[,version]>` naming EVERY pending version. The verified `pre-migrate-v<N>` snapshot is still taken first. A database with no history and every other database (tests, e2e, scratch copies) are not guarded. Code: `server/src/migration-authorization.js`.
+
 ## Known limits (honest)
 
 - Files present in the sources directory but not referenced by the database are listed in `manifest.orphanSourceFiles` and are NOT copied.

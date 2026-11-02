@@ -14,6 +14,7 @@
 
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
+import { assertMigrationAuthorized } from '../src/migration-authorization.js';
 import { config } from '../src/config.js';
 import { createPhysicalBackup, verifyPhysicalBackup } from '../src/backup.js';
 import { createOperationalBackup, verifyOperationalBackup, rehearseRestore } from '../src/operational-backup.js';
@@ -35,6 +36,7 @@ async function physical(args) {
   const [destPath] = args;
   const sourcePath = flag(args, '--db') ?? config.dbPath;
   const db = openDb(sourcePath);
+  assertMigrationAuthorized(db, sourcePath);
   runMigrations(db);
   const { path, tables } = await createPhysicalBackup(db, destPath);
   const { integrityCheck, tableCounts } = verifyPhysicalBackup(db, path);
@@ -48,7 +50,9 @@ async function pack(args) {
   const destDir = args[1];
   if (!destDir) throw new Error(USAGE);
   const retainRaw = flag(args, '--retain-days');
-  const db = openDb(flag(args, '--db') ?? config.dbPath);
+  const packDbPath = flag(args, '--db') ?? config.dbPath;
+  const db = openDb(packDbPath);
+  assertMigrationAuthorized(db, packDbPath);
   runMigrations(db);
   try {
     const manifest = await createOperationalBackup(db, {

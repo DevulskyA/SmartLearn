@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 import { openDb } from '../server/src/db.js';
 import { runMigrations } from '../server/src/migrations.js';
+import { assertMigrationAuthorized } from '../server/src/migration-authorization.js';
 import { importSources } from './dev-import-sources.mjs';
 
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
@@ -14,6 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const srcDb = new Database(need('src-db'), { readonly: true, fileMustExist: true });
 const dstDb = openDb(need('dst-db'));
+assertMigrationAuthorized(dstDb, need('dst-db'));
 runMigrations(dstDb, join(root, 'server', 'migrations'));
 const report = importSources({
   srcDb, dstDb, srcUserId: Number(need('src-user')), dstUserEmail: need('dst-email'),

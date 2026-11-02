@@ -29,10 +29,11 @@ function olderDevDatastore() {
   return { dataDir, dbPath, fromVersion, latest };
 }
 
-function start(dataDir, dbPath, port) {
+// `authorize` = the value of SMARTLEARN_AUTHORIZE_MIGRATIONS for this process ('' = nothing authorized).
+function start(dataDir, dbPath, port, authorize = '') {
   const child = spawn(process.execPath, [MAIN_JS], {
     cwd: tmpdir(),
-    env: { ...process.env, SMARTLEARN_DEV_DATA_DIR: dataDir, SMARTLEARN_DB_PATH: dbPath, PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'test' },
+    env: { ...process.env, SMARTLEARN_DEV_DATA_DIR: dataDir, SMARTLEARN_DB_PATH: dbPath, PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'test', SMARTLEARN_AUTHORIZE_MIGRATIONS: authorize },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';
@@ -52,7 +53,7 @@ async function ready(port) {
 
 test('starting the backend on the DEV datastore with a pending migration takes a verified pre-migrate snapshot and a daily snapshot first, then migrates', async () => {
   const w = olderDevDatastore();
-  const server = start(w.dataDir, w.dbPath, 13909);
+  const server = start(w.dataDir, w.dbPath, 13909, String(parseInt(w.latest, 10)));
   try {
     assert.equal(await ready(13909), true, server.output());
     const snaps = join(w.dataDir, 'snapshots');
@@ -71,7 +72,7 @@ test('if the pre-migration snapshot cannot be taken the backend refuses to migra
   const w = olderDevDatastore();
   // a FILE where the snapshots directory must be: mkdir fails, so no backup can exist
   writeFileSync(join(w.dataDir, 'snapshots'), 'not a directory');
-  const server = start(w.dataDir, w.dbPath, 13910);
+  const server = start(w.dataDir, w.dbPath, 13910, String(parseInt(w.latest, 10)));
   try {
     const code = await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('TIMEOUT'), 20000))]);
     assert.equal(code, 1, server.output());
@@ -80,4 +81,41 @@ test('if the pre-migration snapshot cannot be taken the backend refuses to migra
     assert.equal(live.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.fromVersion, 'the migration did not run');
     live.close();
   } finally { server.child.kill(); rmSync(w.dataDir, { recursive: true, force: true }); }
+});
+
+test('a pending migration on the DEV datastore that nobody authorized is refused before anything is written: no snapshot, schema unchanged', async () => {
+  const w = olderDevDatastore();
+  const server = start(w.dataDir, w.dbPath, 13911);
+  try {
+    const code = await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('TIMEOUT'), 20000))]);
+    assert.equal(code, 1, server.output());
+    assert.match(server.output(), /REFUSING to migrate: .*not authorized/);
+    assert.equal(existsSync(join(w.dataDir, 'snapshots')), false, 'nothing was written to the datastore');
+    const live = new Database(w.dbPath, { readonly: true });
+    assert.equal(live.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.fromVersion, 'the migration did not run');
+    live.close();
+  } finally { server.child.kill(); rmSync(w.dataDir, { recursive: true, force: true }); }
+});
+
+test('authorizing a different version does not authorize the pending one', async () => {
+  const w = olderDevDatastore();
+  const server = start(w.dataDir, w.dbPath, 13912, String(parseInt(w.latest, 10) + 1));
+  try {
+    const code = await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('TIMEOUT'), 20000))]);
+    assert.equal(code, 1, server.output());
+    const live = new Database(w.dbPath, { readonly: true });
+    assert.equal(live.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.fromVersion);
+    live.close();
+  } finally { server.child.kill(); rmSync(w.dataDir, { recursive: true, force: true }); }
+});
+
+test('a DEV datastore that is already fully migrated starts with no authorization at all (applied migrations stay recognised)', async () => {
+  const w = olderDevDatastore();
+  const db = new Database(w.dbPath);
+  runMigrations(db);
+  db.close();
+  const server = start(w.dataDir, w.dbPath, 13913);
+  try {
+    assert.equal(await ready(13913), true, server.output());
+  } finally { server.child.kill(); await server.exited; rmSync(w.dataDir, { recursive: true, force: true }); }
 });
