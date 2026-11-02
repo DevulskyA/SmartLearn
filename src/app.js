@@ -4577,6 +4577,12 @@ function runScreenRender(screenId, render) {
     .finally(() => panel?.removeAttribute("aria-busy"));
 }
 
+function clearTransientMessages(panel) {
+  for (const el of panel.querySelectorAll(".form-message:not(.is-error):not([hidden]), .field-message:not(.is-error):not([hidden])")) {
+    el.textContent = "";
+  }
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
   if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
   const wantsSubjectsPanel = screenId === "subjects"; // so was Disciplinas, as the "Gerenciar disciplinas" panel of Plano
@@ -4611,7 +4617,11 @@ export function showScreen(screenId, { focus = false } = {}) {
   if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
 
   for (const panel of screenPanels) {
+    const leaving = !panel.hidden && panel.dataset.screenPanel !== nextScreen;
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
+    // A passing status ("saved", "copied", "nothing to show") belongs to the moment it was said: it must not greet the student
+    // again when they come back. Errors stay until the student acts, and hidden notes keep their own lifecycle.
+    if (leaving) clearTransientMessages(panel);
   }
 
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey

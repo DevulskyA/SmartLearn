@@ -173,3 +173,18 @@ test('Materiais: the topic search input has a real accessible name (axe label + 
   const result = await new AxeBuilder({ page }).include('#sources-topic-form').withRules(['label', 'label-title-only']).analyze();
   expect(result.violations.map((v) => `${v.impact} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
 });
+
+test('A-04: a passing status is cleared when its screen is left; an error message stays until the student acts', async ({ page }) => {
+  await signIn(page);
+  await openScreen(page, 'settings');
+  await page.evaluate(() => {
+    document.querySelector('#backup-message').textContent = 'Backup salvo em teste.';
+    const bad = document.querySelector('#copy-diagnostics-message');
+    bad.textContent = 'Não foi possível apagar em teste.';
+    bad.classList.add('is-error');
+  });
+  await openScreen(page, 'stats');
+  await openScreen(page, 'settings');
+  await expect(page.locator('#backup-message')).toHaveText('');
+  await expect(page.locator('#copy-diagnostics-message')).toHaveText('Não foi possível apagar em teste.');
+});
