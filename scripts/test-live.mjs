@@ -4,6 +4,9 @@
 // Nobody writes a status by hand: PASS/FAIL come from the exit code, RUNNING lives only while the runner
 // process lives, and the board turns a result STALE when the head moved on.
 //
+// It also keeps one Planban card per suite ("[Rodando]" while it runs, "[Terminou]" at the end) via the Planban CLI, best effort:
+// TEST_LIVE_PLANBAN=0 turns that off, and a missing/slow/failing Planban never fails or delays the run (see test-live-planban.mjs).
+//
 // Usage: node scripts/test-live.mjs <unit|server|e2e> [extra runner args...]
 //        node scripts/test-live.mjs status     (prints the effective state of every recorded suite)
 import { spawn, execFileSync } from 'node:child_process';
@@ -11,6 +14,7 @@ import { createWriteStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SUITES, createParser, artifactDir, writeArtifact, readArtifacts, effectiveState, unaffectedBy } from './test-live-core.mjs';
+import { createPlanbanPublisher, findPlanbanCli, makeCliExec } from './test-live-planban.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const git = (args) => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };
@@ -66,6 +70,13 @@ artifact.pid = child.pid;
 save();
 refreshBoard({ force: true });
 
+// Planban card: started AFTER the runner is up and never awaited, so it cannot delay the tests.
+const snapshot = () => ({ ...artifact, counts: { ...artifact.counts } });
+const planbanCli = process.env.TEST_LIVE_PLANBAN === '0' ? null : findPlanbanCli();
+if (process.env.TEST_LIVE_PLANBAN !== '0' && !planbanCli) console.error('[test-live] Planban: CLI não encontrada (defina PLANBAN_CLI); o teste segue sem publicar o cartão.');
+const planban = planbanCli ? createPlanbanPublisher({ exec: makeCliExec({ cli: planbanCli, cwd: root }), root }) : null;
+planban?.start(snapshot());
+
 const onData = (buf) => {
   log.write(buf);
   process.stdout.write(buf);
@@ -79,7 +90,7 @@ child.stderr.on('data', onData);
 
 // heartbeat: rewrites the artifact every few seconds, so "updatedAt" proves the runner is still there
 const beat = setInterval(save, HEARTBEAT_MS);
-const refreshTimer = setInterval(() => refreshBoard(), BOARD_REFRESH_MS);
+const refreshTimer = setInterval(() => { refreshBoard(); planban?.update(snapshot()); }, BOARD_REFRESH_MS);
 
 function killTree() {
   if (!child.pid || child.exitCode !== null) return;
@@ -101,9 +112,11 @@ function finish(state, exitCode) {
   artifact.exitCode = exitCode;
   artifact.durationMs = Date.now() - Date.parse(artifact.startedAt);
   save();
+  planban?.finish(snapshot());
   log.end(() => {
     refreshBoard({ force: true });
-    setTimeout(() => process.exit(exitCode ?? 1), 300); // let the last board refresh start
+    // bounded wait (flush has its own deadline) so the "[Terminou]" card is written before exit; 300 ms lets the last board refresh start
+    (planban ? planban.flush() : Promise.resolve()).then(() => setTimeout(() => process.exit(exitCode ?? 1), 300));
   });
 }
 
