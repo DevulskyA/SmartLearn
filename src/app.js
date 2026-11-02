@@ -193,6 +193,7 @@ const studyManagerMessage = document.querySelector("#study-manager-message");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
+const todayLoadingState = document.querySelector("#today-loading");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
@@ -1139,6 +1140,7 @@ function renderOfflineUpcoming(upcoming, nothingDueToday) {
 }
 
 async function renderOfflineToday(accountId) {
+  if (todayLoadingState) todayLoadingState.hidden = true;
   const snapshot = await OfflineStore.loadSnapshot(accountId);
   const today = getLocalDateValue();
 
@@ -1281,7 +1283,9 @@ export async function renderToday() {
         DB.learningUnits.getAll(),
         DB.subjects.getAll(),
       ]);
+    if (todayLoadingState) todayLoadingState.hidden = true;
   } catch (error) {
+    if (todayLoadingState) todayLoadingState.hidden = true; // a failure speaks through the error banner, not through "loading" or "empty"
     // T42 fix (AC-24): navigator.onLine only reflects the OS network
     // adapter's link state, not whether the SmartLearn server itself is
     // reachable — a dead/restarting/firewalled server with Wi-Fi otherwise

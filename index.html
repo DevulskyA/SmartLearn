@@ -168,7 +168,10 @@
             <p data-i18n="screens.today.success.body">Nenhuma revisão pendente para hoje. Bom descanso ou adiante os estudos.</p>
           </div>
 
-          <div class="empty-state" id="today-empty-state">
+          <!-- shown until the first answer (or failure) arrives: the empty state below must never speak before the data does -->
+          <p class="today-loading" id="today-loading" role="status" data-i18n="screens.today.loading">Carregando suas revisões…</p>
+
+          <div class="empty-state" id="today-empty-state" hidden>
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M6 3v3M18 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 12h2M14 12h2M8 16h2M14 16h2" />
             </svg>

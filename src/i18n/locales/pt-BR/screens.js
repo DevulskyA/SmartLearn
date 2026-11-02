@@ -23,6 +23,7 @@ export default {
   'screens.today.weakNote': 'Sugestões a partir do que você registrou. Não mudam suas revisões.',
   'screens.today.success.title': 'Tudo em dia!',
   'screens.today.success.body': 'Nenhuma revisão pendente para hoje. Bom descanso ou adiante os estudos.',
+  'screens.today.loading': 'Carregando suas revisões…',
   'screens.today.empty.title': 'Nenhuma revisão cadastrada.',
   'screens.today.empty.body': 'Comece pelo material de uma aula: envie o PDF e o SmartLearn propõe um resumo e questões para você revisar antes de estudar.',
   'screens.today.empty.upload': 'Enviar um PDF de aula',

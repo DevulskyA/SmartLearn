@@ -4032,6 +4032,14 @@ label.select-control:has(> .ui-select) {
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+.today-loading {
+  margin: 2rem 0;
+  color: var(--color-muted);
+  text-align: center;
+}
+.today-loading[hidden] {
+  display: none;
+}
 .subject-catalog-actions .is-danger {
   margin-inline-start: auto; /* the destructive action sits apart from Editar / Arquivar */
 }
