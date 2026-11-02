@@ -169,3 +169,15 @@ test('editing the "Por quê" saves a new version with the new text; clearing it 
   await expect(row2.locator('.exercise-item-edit .exercise-why-input')).toBeVisible();
   expect(await fits()).toBe(true); // create + edit forms with the new field fit a phone
 });
+
+test('B03: Plano offers "Editar questões" on the unit; it opens that unit\'s questions ready to edit, with no hash knowledge', async ({ page }) => {
+  await createUnit(page, { subject: 'Acesso', title: 'Aula acesso' }).then((studyRow) => addExercise(studyRow, { question: 'Q acesso?', answer: 'Resp acesso', why: '' }));
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'Aula acesso' });
+  await expandPlanRow(row);
+  await row.locator('[data-action="plan-edit-questions"]').click();
+  const studyRow = page.locator('.study-row', { hasText: 'Aula acesso' });
+  await expect(studyRow.locator('.exercise-item', { hasText: 'Q acesso?' })).toBeVisible({ timeout: 5000 });
+  await studyRow.locator('[data-action="edit-exercise"]').click();
+  await expect(studyRow.locator('.exercise-item-edit')).toBeVisible();
+});

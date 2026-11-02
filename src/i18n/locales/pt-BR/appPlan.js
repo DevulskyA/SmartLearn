@@ -29,6 +29,7 @@ export default {
   'plan.detail.summary.add': 'Adicionar Resumo Mestre',
   'plan.detail.summary.saveError': 'Erro ao salvar: {message}',
   'plan.detail.studyNow': 'Estudar agora',
+  'plan.detail.editQuestions': 'Editar questões',
   'plan.detail.takeExam': 'Fazer prova',
   'plan.detail.subjectExam.title': 'Uma prova com questões de todas as aulas de {subject}, começando pelo que você errou',
   'plan.detail.history': 'Histórico de desempenho',

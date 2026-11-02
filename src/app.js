@@ -1611,6 +1611,8 @@ async function loadReinforcementByUnit() {
 
 // Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
 let pendingPlanFocusUnitId = null;
+// set by Plano's "Editar questões": the Cadastro screen opens that unit's question list once it has drawn
+let pendingRegisterFocusUnitId = null;
 
 /**
  * Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. It goes only where the lesson
@@ -1963,6 +1965,17 @@ export async function renderPlan() {
             startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
             actions.append(startBtn);
           }
+          // B03: question authoring lives on the Cadastro screen (nav-hidden); this is the entry from the unit the student is looking at.
+          const editQuestionsBtn = document.createElement("button");
+          editQuestionsBtn.type = "button";
+          editQuestionsBtn.className = "secondary-button plan-edit-questions";
+          editQuestionsBtn.dataset.action = "plan-edit-questions";
+          editQuestionsBtn.textContent = t("plan.detail.editQuestions");
+          editQuestionsBtn.addEventListener("click", () => {
+            pendingRegisterFocusUnitId = unit.id;
+            showScreen("register", { focus: true });
+          });
+          actions.append(editQuestionsBtn);
           // Modo Prova: measure first, teach after (nothing is revealed until the student submits).
           if (REMOTE_MODE && DB.exams) {
             const examBtn = document.createElement("button");
@@ -4082,6 +4095,18 @@ function resetRegisterState() {
   studyMessage.textContent = "";
 }
 
+async function openPendingRegisterUnit() {
+  const unitId = pendingRegisterFocusUnitId;
+  pendingRegisterFocusUnitId = null;
+  if (unitId == null) return;
+  const row = studyList.querySelector(`.study-row[data-study-id="${unitId}"]`);
+  const toggle = row?.querySelector('[data-action="toggle-exercises"]');
+  if (!row || !toggle) return;
+  toggle.click();
+  row.scrollIntoView({ block: "start" });
+  toggle.focus({ preventScroll: true });
+}
+
 async function renderStudies() {
   const [learningUnits, subjects] = await Promise.all([
     DB.learningUnits.getAll(),
@@ -4676,7 +4701,9 @@ export function showScreen(screenId, { focus = false } = {}) {
   // wiring this screen's list to the same on-navigate pattern every
   // other screen already uses.
   if (nextScreen === "register" && databaseAvailable) {
-    renderStudies().catch((error) => console.error("Falha ao carregar estudos.", error));
+    renderStudies()
+      .then(openPendingRegisterUnit)
+      .catch((error) => console.error("Falha ao carregar estudos.", error));
   }
   if (nextScreen === "account") {
     renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));
