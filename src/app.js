@@ -392,8 +392,8 @@ function setReviewMessage(message = "", isError = false) {
 function formatPerformanceScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  const rounded = Math.round(number * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${formatDecimal(rounded)}%`;
+  // same one-decimal policy as the Estatísticas average (formatAverageScore): 2/3 reads 66,7% on both screens
+  return `${formatDecimal(number)}%`;
 }
 
 const PERFORMANCE_BAND_CLASS = {
@@ -1591,7 +1591,7 @@ function getPlanPerfBadge(evidence) {
   // own lowercase vocabulary exactly — see getPerformanceBandClass above for
   // why this delegates to getState instead of an independent threshold chain.
   span.dataset.perf = getState(pct, total).toLowerCase();
-  span.textContent = `${pct.toFixed(0)}%`;
+  span.textContent = formatPerformanceScore(pct);
   return span;
 }
 
@@ -1999,7 +1999,7 @@ export async function renderPlan() {
             const li = document.createElement("li");
             const ctx = { INITIAL_PRACTICE: t("plan.detail.history.initialPractice"), REVIEW: t("plan.detail.history.review"), EXTERNAL: t("plan.detail.history.external") };
             const label = ev.origin === "EXAM" ? t("plan.detail.history.exam") : (ctx[ev.context] ?? ev.context);
-            li.textContent = t("plan.detail.history.entry", { date: formatDate(ev.evidenceDate), label, correct: ev.correctCount, questions: ev.questionsCount, percent: ev.scorePercent.toFixed(0) });
+            li.textContent = t("plan.detail.history.entry", { date: formatDate(ev.evidenceDate), label, correct: ev.correctCount, questions: ev.questionsCount, percent: formatDecimal(ev.scorePercent) });
             evList.append(li);
           }
           evSection.append(evList);
@@ -2292,7 +2292,7 @@ export async function renderDisciplinas() {
     const subjectEvidence = units.flatMap((u) => evidenceByUnit.get(u.id) ?? []);
     const totalQ = subjectEvidence.reduce((s, e) => s + e.questionsCount, 0);
     const totalC = subjectEvidence.reduce((s, e) => s + e.correctCount, 0);
-    const acc = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
+    const acc = totalQ > 0 ? formatPerformanceScore((totalC / totalQ) * 100) : null;
 
     const card = document.createElement("article");
     card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;

@@ -181,3 +181,9 @@ test("evolution chart with every point on one day falls back to index spacing (n
   assert.deepEqual(points.map((p) => p.x), [0, 100, 200]);
   assert.equal(labels.length, 1);
 });
+
+test("A-02: Plano e Estatísticas exibem 2/3 com a mesma política de uma casa decimal", async () => {
+  const { formatDecimal } = await import("../src/i18n/format.js");
+  assert.equal(formatAverageScore((2 / 3) * 100), `${formatDecimal((2 / 3) * 100)}%`);
+  assert.equal(formatAverageScore((2 / 3) * 100), "66,7%");
+});
