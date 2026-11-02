@@ -21,6 +21,19 @@ Fonte de verdade para o estado real: `git log`. Este arquivo é análise, não r
 | I-04 | `scripts/desktop-study-journey.mjs` passo 7 | `fill` expirou em `.lesson-summary-input` (campo oculto) | INSTRUMENTO velho: o Resumo agora abre como leitura ("Editar resumo"), o E2E já usava `startEditingSummary`, a jornada nativa não | defeito do instrumento (o produto segue a decisão "leitura primeiro") | corrigido: o script chama `startEditingSummary` depois de cada aba Resumo; 23/23 |
 | I-05 | E2E completo, `summary-visual-editor.spec.js:523` ("every way out") | `toBeVisible` do aviso `.summary-visual-notice` estourou 5 s uma vez na rodada completa (3 workers) | NÃO provada; o spec passou 3/3 isolado e 45/45 no conjunto focado | provável oscilação sob carga (mesma classe já registrada: ACCESS-5, keyboard-today); sem defeito de produto reproduzido | DECLARADO; sem alteração de código |
 
+| I-05b | mesmo spec | tentativa de reproduzir: 24/24 sob 12 processos de carga (`--repeat-each=12`), 3/3 isolado, 45/45 no conjunto focado; 1 falha em 378 execuções do E2E completo | nenhuma causa provada | oscilação não explicada; o teste digita logo após o clique sem esperar o editor pronto (hipótese, não provada); nenhuma alteração feita | DECLARADO |
+| I-06 | ensaio de Estatísticas AAA | 38/38 E2E falharam em ~2 s | INSTRUMENTO: um `>` perdido num `styles.css` (o Edit tratou `>>>>>>>` como citação) quebrou o build; as falhas rápidas e idênticas denunciaram o defeito | meu erro; regra "velocidade anômala é sinal" funcionou, "instrumento é código" não foi aplicada antes de rodar | corrigido no ensaio; rodada válida abaixo |
+
+## Ensaio funcional isolado de Estatísticas AAA (worktree descartável, nada commitado na integração)
+Base: integração 2cd68bf + merge de `claude/stats-aaa-6405e1`. Resolução: Rust, docs e `feature-parity.spec` pelo lado de f1cddd9; `appStats.js` e `styles.css` união; `analytics.js` e os 4 hunks de `app.js` pelo fluxo da AAA; imports unidos (sem `performanceColor`, que a AAA deixa de usar).
+- ESLint 0. Unit: 860 passaram, 2 falhas — (a) conflito de comportamento real abaixo, (b) teste de build do Vite que só falha porque o merge não estava commitado (instrumento).
+- E2E (stats-aaa, stats-sorting, study-verdict, feature-parity, select-ui): 37 passaram, 1 falhou.
+- **Conflitos de COMPORTAMENTO demonstrados (exigem decisão do usuário, não são só mecânicos):**
+  1. Janela do período: AAA usa "últimos N dias contando hoje" (`hoje-(N-1)` até hoje); f1cddd9 usa `hoje-N` inclusive (N+1 dias). Teste `evidenceInPeriod ... today-30 inclusive` de f1cddd9 contradiz a AAA. A AAA também ignora evidência com data futura e exige `correctCount` válido.
+  2. Cabeçalho de Estatísticas: f1cddd9 mostra Vencidas / Revisões feitas / Questões; a AAA mostra só o bloco de KPIs de questões (some `#metric-reviews-done`, `#metric-reviews-overdue`). O E2E `feature-parity.spec.js:109` de f1cddd9 falha por isso.
+  3. `filterByPeriod` (linhas por última atividade) deixa de existir; a AAA recalcula tudo a partir da evidência do período.
+- Conclusão: a fusão é viável em ~2 arquivos de lógica, mas a AAA muda números e remove KPIs; é decisão de produto (superfície protegida, ADR-0001). Nada foi integrado.
+
 ## Provas no SHA final 3519915 (+ correção do instrumento)
 - Lint 0; unit 859 ok/0 falhas/1 ignorado; servidor 1189/1189.
 - E2E completo: 375 passaram, 2 ignorados, 1 falha (I-05), 11,2 min (orçamento ~16 min). Conjunto focado do editor: 45/45.
