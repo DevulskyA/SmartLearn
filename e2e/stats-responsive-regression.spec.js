@@ -66,6 +66,16 @@ for (const width of WIDTHS) {
       const longRow = page.locator('#subject-kpi-list tr.matrix-row', { hasText: 'Patologia' });
       await expect(longRow).toBeVisible();
 
+      // Phone cards: the discipline name gets the full row, never ellipsized.
+      if (width < 768) {
+        const nameBox = await longRow.locator('.subject-cell').first().evaluate((el) => ({
+          clipped: el.scrollWidth > el.clientWidth + 1,
+          chars: el.getBoundingClientRect().width / (parseFloat(getComputedStyle(el).fontSize) * 0.55),
+        }));
+        expect(nameBox.clipped, `discipline name clipped at ${width}px`).toBe(false);
+        expect(nameBox.chars, `discipline name too narrow at ${width}px`).toBeGreaterThan(14);
+      }
+
       // Every real metric stays on-screen for that same row: performance
       // percentage, practice volume, and the trend badge.
       await expect(longRow.locator('.subject-compare-value, .subject-cell + td, td').nth(1)).toBeVisible();

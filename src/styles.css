@@ -5838,3 +5838,60 @@ label.select-control:has(> .ui-select) {
 .evo-line { fill: none; stroke: var(--color-primary); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
 .evo-dot { fill: var(--color-primary); stroke: var(--color-surface); stroke-width: 1.5; }
 .evolution-caption { margin: 0.6rem 0 0; color: var(--color-muted); font-size: 0.82rem; max-width: 46ch; }
+
+/* Por disciplina at phone width: a four-column fixed table truncated every
+   subject name to a fragment. Each row becomes a card instead: the subject
+   chip gets the full width on its own line, and performance, practice and
+   trend sit side by side below it. The header stays as a wrapping row of
+   sort buttons so sorting remains available on a phone. */
+@media (max-width: 47.999rem) {
+  .matrix-table--cards,
+  .matrix-table--cards tbody {
+    display: block;
+    table-layout: auto;
+  }
+
+  .matrix-table--cards thead,
+  .matrix-table--cards thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+  }
+
+  .matrix-table--cards thead th {
+    display: block;
+    width: auto;
+    padding: 0.4rem 0;
+  }
+
+  .matrix-table--cards tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .matrix-table--cards tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .matrix-table--cards tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+  }
+
+  .matrix-table--cards tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .matrix-table--cards .subject-cell {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
