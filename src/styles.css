@@ -3746,22 +3746,18 @@ label.select-control:has(> .ui-select) {
   border-radius: 999px;
 }
 
-.performance-badge[data-perf="strong"]   { background: #dcfce7; color: #166534; }
-.performance-badge[data-perf="adequate"] { background: #fef9c3; color: #713f12; }
-.performance-badge[data-perf="attention"]{ background: #ffedd5; color: #9a3412; }
-.performance-badge[data-perf="critical"] { background: #fee2e2; color: #991b1b; }
-
-:root[data-theme-mode="dark"] .performance-badge[data-perf="strong"]   { background: #14532d; color: #86efac; }
-:root[data-theme-mode="dark"] .performance-badge[data-perf="adequate"] { background: #422006; color: #fde68a; }
-:root[data-theme-mode="dark"] .performance-badge[data-perf="attention"]{ background: #431407; color: #fdba74; }
-:root[data-theme-mode="dark"] .performance-badge[data-perf="critical"] { background: #450a0a; color: #fca5a5; }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme-mode="light"]) .performance-badge[data-perf="strong"]   { background: #14532d; color: #86efac; }
-  :root:not([data-theme-mode="light"]) .performance-badge[data-perf="adequate"] { background: #422006; color: #fde68a; }
-  :root:not([data-theme-mode="light"]) .performance-badge[data-perf="attention"]{ background: #431407; color: #fdba74; }
-  :root:not([data-theme-mode="light"]) .performance-badge[data-perf="critical"] { background: #450a0a; color: #fca5a5; }
+/* Plano uses the same band tokens as Estatísticas (--band-*), so a band has one colour on every screen. */
+.performance-badge[data-perf="strong"],
+.performance-badge[data-perf="adequate"],
+.performance-badge[data-perf="attention"],
+.performance-badge[data-perf="critical"] {
+  background: color-mix(in oklch, var(--perf-band) 12%, var(--color-surface));
+  color: color-mix(in oklch, var(--perf-band) 40%, var(--color-text));
 }
+.performance-badge[data-perf="strong"]    { --perf-band: var(--band-strong); }
+.performance-badge[data-perf="adequate"]  { --perf-band: var(--band-adequate); }
+.performance-badge[data-perf="attention"] { --perf-band: var(--band-attention); }
+.performance-badge[data-perf="critical"]  { --perf-band: var(--band-critical); }
 
 .plan-expand-btn {
   display: inline-flex;
