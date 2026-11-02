@@ -132,3 +132,9 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 ## A-16 ACCESS-3 (keyboard-today) falhou 1 vez em lote paralelo, passa sozinho — 2026-11-02
 - **Onde:** `e2e/keyboard-today.spec.js:77`, rodando junto com 4 outras specs (5 specs, 3 workers). **Observado:** `toBeChecked` estourou os 8 s e o teste levou 14,6 s (sozinho: 3,3 s, 2 de 2 execuções verdes). **Hipótese:** carga do lote, não a mudança do botão "Desfazer conclusão" (a falha não toca o botão). **Status:** DECLARED, não provado; reabrir se repetir em lote.
 - **J02 (corrigido):** botão "Desfazer conclusão" em revisão concluída (mesmo reopen auditado); E2E `robustness-study-loop.spec.js` verde.
+
+## A-17 E2E completo em 96f2e47: 4 testes antigos falharam (3 de tema, 1 do Plano) — 2026-11-02
+- **Onde:** `e2e/theme.spec.js` (3 testes) e `e2e/exam-mode.spec.js:404` (UX-1). Rodada completa: 372 passaram, 4 falharam, 2 ignorados, 14,3 min (baseline ~13 min).
+- **Causa (provada, reproduz sozinho):** testes velhos, não defeito do produto. O tema virou um combo `#theme-select` em 6f1fe2b e os testes ainda procuravam `[data-theme-option]`; o B03 (0348c3d) trouxe o 4º botão "Editar questões" e UX-1 contava 3.
+- **Correção:** testes atualizados para o comportamento novo (combo com 3 grupos, valor e rótulo ativos; 4 botões). 14/14 verdes em 46 s.
+- **Classificação (erro meu):** 1 — a regra de ampliar a regressão conforme o alcance existia; rodei só grupos focados e não as specs que tocam o mesmo DOM. Só o E2E completo pegou. Regra não alterada.

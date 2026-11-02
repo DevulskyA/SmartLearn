@@ -16,33 +16,33 @@ async function freshApp(page) {
   await page.waitForLoadState('networkidle');
 }
 
-test('picking a theme in Configurações updates data-theme/data-theme-mode and highlights the active option', async ({ page }) => {
+// Since 6f1fe2b the picker is one grouped combo (#theme-select: Sistema / Claros / Escuros), not a row of swatch buttons.
+test('picking a theme in Configurações updates data-theme/data-theme-mode and the combo shows the active option', async ({ page }) => {
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
 
-  const sepiaOption = page.locator('[data-theme-option="sepia"]');
-  await expect(sepiaOption).toBeVisible();
-  await sepiaOption.click();
+  const select = page.locator('#theme-select');
+  await expect(select).toBeVisible();
+  await expect(select).toHaveValue('auto');
+  await expect(page.locator('#theme-select optgroup')).toHaveCount(3);
 
+  await select.selectOption('sepia');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sepia');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
-  await expect(sepiaOption).toHaveAttribute('aria-checked', 'true');
-  await expect(sepiaOption).toHaveClass(/is-active/);
+  await expect(select).toHaveValue('sepia');
+  await expect(page.locator('.theme-live-label')).toContainText('Sépia');
 
-  const nightOption = page.locator('[data-theme-option="night"]');
-  await nightOption.click();
+  await select.selectOption('night');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
-  // Only one option is ever active at a time.
-  await expect(sepiaOption).toHaveAttribute('aria-checked', 'false');
-  await expect(nightOption).toHaveAttribute('aria-checked', 'true');
+  await expect(select).toHaveValue('night');
 
-  await page.locator('[data-theme-option="ocean"]').click();
+  await select.selectOption('ocean');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'ocean');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim())).not.toBe('');
 
-  await page.locator('[data-theme-option="dusk"]').click();
+  await select.selectOption('dusk');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dusk');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
 });
@@ -50,7 +50,7 @@ test('picking a theme in Configurações updates data-theme/data-theme-mode and 
 test('an explicit theme choice persists across reload (not silently reset to auto)', async ({ page }) => {
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('[data-theme-option="contrast"]').click();
+  await page.locator('#theme-select').selectOption('contrast');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'contrast');
 
   await page.reload();
@@ -68,7 +68,7 @@ test('"Sistema" follows the OS color scheme on first use and after an explicit s
   await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBeNull();
 
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('[data-theme-option="auto"]').click();
+  await page.locator('#theme-select').selectOption('auto');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBe('auto');
 

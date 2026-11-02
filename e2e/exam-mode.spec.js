@@ -407,7 +407,7 @@ test('UX-1: Plano action buttons are spaced apart (also at 375), and once the re
 
   const gaps = async () => {
     const boxes = await page.locator('.plan-row', { hasText: 'Aula visual' }).locator('.plan-exercise-actions button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom })));
-    expect(boxes.length).toBe(3);
+    expect(boxes.length).toBe(4); // was 3 before B03 added "Editar questões"
     for (let i = 1; i < boxes.length; i += 1) {
       const horizontal = boxes[i].l - boxes[i - 1].r; // same line: needs a visible gap
       const vertical = boxes[i].t - boxes[i - 1].b;   // wrapped to a new line: needs a gap too
@@ -422,7 +422,7 @@ test('UX-1: Plano action buttons are spaced apart (also at 375), and once the re
     // replaced. Retry the read+expand until the three action buttons really exist.
     await expect(async () => {
       if ((await row.locator('.plan-expand-btn').getAttribute('aria-expanded', { timeout: 1500 })) !== 'true') await row.locator('.plan-expand-btn').click({ timeout: 1500 });
-      await expect(row.locator('.plan-exercise-actions button')).toHaveCount(3, { timeout: 1500 });
+      await expect(row.locator('.plan-exercise-actions button')).toHaveCount(4, { timeout: 1500 });
     }).toPass({ timeout: 15000 });
     await gaps();
   }
