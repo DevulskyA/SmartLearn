@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
@@ -35,13 +36,7 @@ test.beforeAll(async ({ browser }) => {
     env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), SMARTLEARN_MEDIA_DIR: join(dataDir, 'media'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  let ready = false;
-  while (Date.now() < deadline && !ready) {
-    try { ready = (await fetch(`${API_BASE}/health/ready`)).status === 200; } catch { /* not up yet */ }
-    if (!ready) await new Promise((r) => setTimeout(r, 150));
-  }
-  if (!ready) throw new Error('smoke: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'smoke' });
   context = await browser.newContext({ baseURL: VITE_ORIGIN });
   await context.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;

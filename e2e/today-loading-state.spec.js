@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // The screen review (L-01/L-02) found that Hoje said "Nenhuma revisão cadastrada. Envie um PDF" while the answer was still on its way
@@ -33,12 +34,7 @@ test.beforeAll(async () => {
     },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('today-loading E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'today-loading E2E' });
 });
 
 test.afterAll(async () => {

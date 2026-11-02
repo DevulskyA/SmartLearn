@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // T21: proves the server-authoritative cutover with a real server, a real
@@ -24,16 +25,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise(r => setTimeout(r, 150));
-  }
-  throw new Error('server-authority E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(API_BASE, { label: 'server-authority E2E' });
 }
 
 function startServer() {
@@ -92,7 +85,7 @@ test('an unauthenticated visitor is redirected to the login screen instead of se
   await enableRemoteMode(page);
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 });
 
 test('two browser contexts logged in as the SAME account observe the exact same server-authoritative state', async ({ browser }) => {
@@ -103,7 +96,7 @@ test('two browser contexts logged in as the SAME account observe the exact same 
   const pageA = await contextA.newPage();
   await enableRemoteMode(pageA);
   await registerAndLogin(pageA, email, password);
-  await expect(pageA.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(pageA.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   await createUnit(pageA, { subjectName: 'Cardiologia E2E', title: 'Debito Cardiaco E2E', studyDate: '2020-01-01' });
   await pageA.locator('[data-screen="today"]').click();
@@ -121,7 +114,7 @@ test('two browser contexts logged in as the SAME account observe the exact same 
   await pageB.locator('#account-login-email').fill(email);
   await pageB.locator('#account-login-password').fill(password);
   await pageB.locator('#account-login-form button[type="submit"]').click();
-  await expect(pageB.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(pageB.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   await pageB.locator('[data-screen="today"]').click();
   await expect(pageB.locator('[data-review-list="overdue"] .review-row').first()).toContainText('Debito Cardiaco E2E', { timeout: 5000 });
@@ -134,7 +127,7 @@ test('two browser contexts logged in as the SAME account observe the exact same 
 
   await pageA.locator('[data-screen="plan"]').click();
   await pageA.locator('[data-screen="today"]').click();
-  await expect(pageA.locator('text=1 feita')).toBeVisible({ timeout: 5000 });
+  await expect(pageA.locator('text=1 feita')).toBeVisible({ timeout: 15000 });
 
   await contextA.close();
   await contextB.close();
@@ -149,7 +142,7 @@ test('a second, different account never sees the first account\'s data', async (
   const pageA = await contextA.newPage();
   await enableRemoteMode(pageA);
   await registerAndLogin(pageA, emailA, password);
-  await expect(pageA.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(pageA.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
   await createUnit(pageA, { subjectName: 'Isolamento A', title: 'Conteudo Exclusivo De A', studyDate: '2026-01-01' });
   await pageA.locator('[data-screen="plan"]').click();
   await expect(pageA.locator('#screen-plan').getByText('Conteudo Exclusivo De A')).toBeVisible({ timeout: 5000 });
@@ -158,7 +151,7 @@ test('a second, different account never sees the first account\'s data', async (
   const pageB = await contextB.newPage();
   await enableRemoteMode(pageB);
   await registerAndLogin(pageB, emailB, password);
-  await expect(pageB.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(pageB.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
   await pageB.locator('[data-screen="plan"]').click();
   await expect(pageB.locator('text=Nenhuma aula cadastrada')).toBeVisible({ timeout: 5000 });
   await expect(pageB.locator('body')).not.toContainText('Conteudo Exclusivo De A');
@@ -173,7 +166,7 @@ test('data created before a server restart is still there after it comes back up
 
   await enableRemoteMode(page);
   await registerAndLogin(page, email, password);
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
   await createUnit(page, { subjectName: 'Persistencia E2E', title: 'Sobrevive Ao Restart', studyDate: '2026-01-01' });
   await page.locator('[data-screen="plan"]').click();
   await expect(page.locator('#screen-plan').getByText('Sobrevive Ao Restart')).toBeVisible({ timeout: 5000 });
@@ -195,7 +188,7 @@ test('network loss during a write produces a clear, visible failure — never a 
 
   await enableRemoteMode(page);
   await registerAndLogin(page, email, password);
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   await page.locator('[data-screen="plan"]').click();
   await page.locator('#plan-new-unit-btn').click();

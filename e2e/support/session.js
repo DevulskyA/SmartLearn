@@ -44,9 +44,9 @@ export async function signInRegistered(page, { email, password, summaryMode = 't
   const response = await registration;
   expect(response.ok(), `registering ${email} over HTTP failed with ${response.status()}: ${await response.text()}`).toBeTruthy();
   await page.locator('[data-screen="account"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 }

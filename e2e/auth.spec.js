@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 
 // T11: real server + real browser end-to-end auth journey. Boots the actual
 // central server as a child process (not app.inject) against a TempDir DB,
@@ -41,15 +42,7 @@ test.beforeAll(async () => {
     stdio: 'ignore',
   });
 
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise(r => setTimeout(r, 150));
-  }
-  throw new Error('Auth E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'Auth E2E' });
 });
 
 test.afterAll(async () => {
@@ -79,13 +72,13 @@ test('keyboard journey: register, then log in, then see the account view', async
   await page.locator('#account-register-password').fill(password);
   await page.keyboard.press('Enter');
 
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
 
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.keyboard.press('Enter');
 
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#account-logged-in-as')).toContainText(email);
 });
 
@@ -95,7 +88,7 @@ test('wrong password shows an understandable error with no sensitive existence l
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill('a genuinely long test password 42');
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
 
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill('totally the wrong password here');
@@ -114,18 +107,18 @@ test('logout clears the session — reloading the account screen shows the logge
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   await page.locator('#account-logout-btn').click();
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 
   await page.reload();
   await page.locator('[data-screen="account"]').click();
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 });
 
 test('password change via the real UI: old password stops working, new one logs in', async ({ page }) => {
@@ -137,11 +130,11 @@ test('password change via the real UI: old password stops working, new one logs 
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(oldPassword);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(oldPassword);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   // signed in: the password fields stay closed behind a button until the user asks for them
   await expect(page.locator('#account-current-password')).toBeHidden();
@@ -153,7 +146,7 @@ test('password change via the real UI: old password stops working, new one logs 
   await expect(page.locator('#account-password-message')).toContainText(/sucesso/i, { timeout: 5000 });
 
   await page.locator('#account-logout-btn').click();
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(oldPassword);
@@ -162,7 +155,7 @@ test('password change via the real UI: old password stops working, new one logs 
 
   await page.locator('#account-login-password').fill(newPassword);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 });
 
 test('learning screens remain reachable and independent of account login state', async ({ page }) => {

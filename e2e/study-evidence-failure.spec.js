@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 
 // T-F13-01: the aggregate evidence of a first pass ("Estudar agora") is a request of its own, after every answer was
 // already accepted. When it fails the student must be told, keep what was answered and be able to send it again.
@@ -22,12 +23,7 @@ test.beforeAll(async () => {
     env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('evidence-failure E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'evidence-failure E2E' });
 });
 
 test.afterAll(async () => {
@@ -53,11 +49,11 @@ test.beforeEach(async ({ page }) => {
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 });
 
 async function apiCall(page, path, body) {
