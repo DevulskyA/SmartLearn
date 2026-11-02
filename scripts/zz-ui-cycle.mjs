@@ -15,7 +15,7 @@ const rows = []; const t0 = Date.now();
 for (const rel of order) {
   rmSync(join(tmpdir(), 'sl-ui-driver-pace.json'), { force: true });
   const t = Date.now();
-  const r = spawnSync(process.execPath, [driver, 'batch', join(lotes, rel), ...(process.argv.includes('--record') ? ['--record'] : [])], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [driver, 'batch', join(lotes, rel), ...(process.argv.includes('--record') ? ['--record'] : [])], { encoding: 'utf8', windowsHide: true });
   const out = `${r.stdout}${r.stderr}`;
   const line = out.match(/batch: (\d+) lines, (\d+) failed, (\d+) ms/);
   const evid = out.match(/EVIDENCE (\S.*)$/m)?.[1]?.trim();

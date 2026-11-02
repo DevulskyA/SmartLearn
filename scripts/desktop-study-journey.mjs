@@ -114,7 +114,7 @@ function placeWindowOnSmallDisplay(pid) {
   if (process.env.SL_JOURNEY_NO_MOVE) return Promise.resolve({ moved: false, reason: 'SL_JOURNEY_NO_MOVE' });
   return new Promise((done) => {
     let out = '';
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.on('error', (error) => done({ moved: false, reason: String(error.message) }));
     child.on('close', () => { try { done(JSON.parse(out.trim().split('\n').pop())); } catch { done({ moved: false, reason: `unreadable: ${out.slice(0, 120)}` }); } });

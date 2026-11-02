@@ -104,3 +104,11 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 
 ## A-11 Senha no snapshot e instâncias esquecidas — corrigidos na T05
 - Valor de `input:password` aparecia em `tela.txt`/logs (agora `***`); 40 pastas de instância ficavam em `%TEMP%` (agora `quit` apaga e o guarda varre >1 dia).
+
+## A-12 Janelas de teste abriam no monitor de trabalho e janelas de console piscavam — corrigido, 2026-11-01
+- **Observado (usuário):** janelas de teste caíam no monitor direito (o de operação) e janelas pretas de console apareciam.
+- **Causa 1 (monitor):** o app cria a janela escondida no monitor principal e a mostra ~0,5 s depois; depois se recentraliza no principal ~1 s após. O movedor começava depois do app, via `Process.MainWindowHandle` (só vê janela visível), e movia uma vez só. Medido antes: janela em 156,156 → movida → de volta a 312,114 (direita).
+- **Causa 2 (console):** o daemon não tem console; cada filho (git, node, powershell, taskkill) abria uma janela preta. Medido antes: 10 janelas de console por início/fim de teste. Além disso o exe de debug tem uma janela de console própria.
+- **Correção:** `scripts/move-window-to-small-display.ps1` inicia ANTES do app (sinal de pronto), acha a janela pelo PID mesmo escondida, move-a para o menor monitor (esquerdo) antes de ser mostrada, a mantém lá por 30 s e esconde o console do exe; `windowsHide: true` em todos os processos auxiliares (`zz-ui-driver.mjs`, `zz-ui-cycle.mjs`, `desktop-study-*.mjs`).
+- **Prova:** janela nunca visível fora do monitor esquerdo (criada escondida em -1360,40 e mostrada em -1368,24); janelas de console: 10 → 1 visível por ~4 ms (o console do exe, escondido em seguida); selftest 21/21; ciclo completo 17 lotes, 0 falhas, 51 s.
+- **Limite:** se houver um único monitor, nada é movido. Se o movedor morrer, a janela volta a se recentralizar no principal.

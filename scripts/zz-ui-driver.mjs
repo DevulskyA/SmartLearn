@@ -97,13 +97,14 @@ if (cmd !== 'daemon') {
 const { chromium } = await import('@playwright/test');
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(targetDir, 'debug', 'smartlearn.exe'));
-const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8' }).trim();
+// windowsHide on EVERY helper process: the daemon has no console, so each console child (git, node, powershell, taskkill) would otherwise pop a black window on the person's screen
+const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
 const head = git('rev-parse', '--short', 'HEAD');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', windowsHide: true, env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const title = `SmartLearn DEV - v${identity.version} - ${head}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((ok, fail) => { const s = createNetServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); s.on('error', fail); });
-const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
+const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8', windowsHide: true }).trim();
 
 if (!existsSync(exe)) throw new Error(`debug executable missing: ${exe}`);
 if (ps('Get-Process -Name smartlearn -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }').split(/\r?\n/).map((p) => p.trim().toLowerCase()).includes(exe.toLowerCase())) throw new Error('that smartlearn.exe is already running (someone else\'s)');
@@ -123,9 +124,13 @@ const note = (kind, text) => events.push(`${new Date().toISOString().slice(11, 1
 
 async function launch() {
   cdp = await freePort();
-  app = spawn(exe, [], { env: { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdp}` }, stdio: 'ignore', windowsHide: false });
-  const mover = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(app.pid)], { stdio: 'ignore' });
+  // The mover starts FIRST and signals when it is compiled and watching: the app creates its window hidden on the primary display and shows it
+  // ~0.5 s later, and a mover that starts after the app loses that race (the window flashed over the display the person works on).
+  const ready = join(work, 'mover-ready'); rmSync(ready, { force: true });
+  const mover = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ReadyFile', ready], { stdio: 'ignore', windowsHide: true });
   mover.on('error', () => {});
+  for (let i = 0; i < 100 && !existsSync(ready) && mover.exitCode === null; i += 1) await sleep(100);
+  app = spawn(exe, [], { env: { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdp}` }, stdio: 'ignore', windowsHide: false });
   for (const t = Date.now() + 90000; ;) {
     try { if ((await fetch(`http://127.0.0.1:${cdp}/json/version`)).ok) break; } catch { /* not yet */ }
     if (app.exitCode !== null) throw new Error(`exe exited early (${app.exitCode})`);
@@ -150,11 +155,11 @@ async function shutdown() {
   const pid = app.pid;
   const kids = ps(`Get-CimInstance Win32_Process -Filter "ParentProcessId=${pid}" | ForEach-Object { $_.ProcessId }`).split(/\r?\n/).filter(Boolean);
   await browser?.close().catch(() => {});
-  if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid)], { stdio: 'ignore' }); } catch { /* refuse */ } }
+  if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid)], { stdio: 'ignore', windowsHide: true }); } catch { /* refuse */ } }
   for (const t = Date.now() + 20000; app.exitCode === null && Date.now() < t;) await sleep(300);
-  if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }); } catch { /* gone */ } }
   await sleep(1500);
-  for (const k of kids) { try { execFileSync('taskkill', ['/PID', k, '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  for (const k of kids) { try { execFileSync('taskkill', ['/PID', k, '/T', '/F'], { stdio: 'ignore', windowsHide: true }); } catch { /* gone */ } }
 }
 
 const loc = (target) => {
