@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, readFileSync, readdirSync, copyFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/migrations.js';
-import { parseAuthorizedVersions, checkMigrationAuthorization, assertMigrationAuthorized, AUTHORIZE_ENV } from '../src/migration-authorization.js';
+import { parseAuthorizedVersions, checkMigrationAuthorization, assertMigrationAuthorizedForPath, AUTHORIZE_ENV } from '../src/migration-authorization.js';
 
 test('only a plain list of positive integers authorizes anything', () => {
   assert.deepEqual([...parseAuthorizedVersions('35, 36')], [35, 36]);
@@ -29,21 +30,53 @@ test('pending migrations on a database with history are refused unless EVERY pen
   assert.equal(checkMigrationAuthorization({ fromVersion: 38, pending: [39] }, { [AUTHORIZE_ENV]: '39,40' }).ok, true);
 });
 
-test('assertMigrationAuthorized guards the DEV datastore only, and leaves the database untouched when it refuses', () => {
+const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+// A DEV datastore (in a temp dir) whose newest migration is "pending" again. `wal` = false leaves it in rollback-journal mode, the case
+// where opening it with openDb (journal_mode = WAL) would rewrite the header.
+function devDatastoreWithPendingNewest(dir, { wal }) {
+  const dbPath = join(dir, 'smartlearn-dev.db');
+  const db = new Database(dbPath);
+  if (wal) db.pragma('journal_mode = WAL');
+  runMigrations(db);
+  const newest = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v;
+  db.prepare('DELETE FROM schema_migrations WHERE version = ?').run(newest);
+  db.close();
+  return { dbPath, newest };
+}
+
+test('assertMigrationAuthorizedForPath guards the DEV datastore only, and a refusal leaves the database file byte-identical (WAL or not)', () => {
+  for (const wal of [true, false]) {
+    const dir = mkdtempSync(join(tmpdir(), 'sl-migauth-'));
+    try {
+      const { dbPath, newest } = devDatastoreWithPendingNewest(dir, { wal });
+      const env = { SMARTLEARN_DEV_DATA_DIR: dir };
+      const before = sha256(dbPath);
+      assert.throws(() => assertMigrationAuthorizedForPath(dbPath, env), /not authorized/);
+      assert.equal(sha256(dbPath), before, `wal=${wal}: refusing must not write to the database file`);
+      // SQLite itself creates EMPTY -wal/-shm sidecars for any reader of a WAL database; no content may ever be in them
+      assert.ok(readdirSync(dir).every((name) => name === 'smartlearn-dev.db' || /-(wal|shm)$/.test(name)), `wal=${wal}: no other file appears`);
+      const walFile = `${dbPath}-wal`;
+      assert.ok(!existsSync(walFile) || statSync(walFile).size === 0, `wal=${wal}: the write-ahead log holds nothing`);
+      const check = new Database(dbPath, { readonly: true });
+      assert.equal(check.pragma('journal_mode', { simple: true }), wal ? 'wal' : 'delete', 'the journal mode was not switched');
+      check.close();
+      // the pending version, and only it, is what authorization names
+      assert.doesNotThrow(() => assertMigrationAuthorizedForPath(dbPath, { ...env, [AUTHORIZE_ENV]: String(newest) }));
+      assert.throws(() => assertMigrationAuthorizedForPath(dbPath, { ...env, [AUTHORIZE_ENV]: String(newest + 1) }), /not authorized/);
+      // any other database (tests, e2e, scratch copies) is not guarded
+      const other = join(dir, 'other.db');
+      copyFileSync(dbPath, other);
+      assert.doesNotThrow(() => assertMigrationAuthorizedForPath(other, env));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('a DEV database that cannot be inspected read-only is refused (fail closed), not migrated', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sl-migauth-'));
   try {
     const dbPath = join(dir, 'smartlearn-dev.db');
-    const db = new Database(dbPath);
-    runMigrations(db);
-    const newest = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v;
-    db.prepare('DELETE FROM schema_migrations WHERE version = ?').run(newest); // the newest migration is "pending" again
-    const before = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n;
-    const env = { SMARTLEARN_DEV_DATA_DIR: dir };
-    assert.throws(() => assertMigrationAuthorized(db, dbPath, env), /not authorized/);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, before, 'refusing changes nothing');
-    assert.doesNotThrow(() => assertMigrationAuthorized(db, dbPath, { ...env, [AUTHORIZE_ENV]: String(newest) }));
-    // any other database (tests, e2e, scratch copies) is not guarded
-    assert.doesNotThrow(() => assertMigrationAuthorized(db, join(dir, 'other.db'), env));
-    db.close();
+    writeFileSync(dbPath, 'this is not a sqlite database, but it is long enough to be read as one header '.repeat(20));
+    assert.throws(() => assertMigrationAuthorizedForPath(dbPath, { SMARTLEARN_DEV_DATA_DIR: dir }), /could not be inspected read-only/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

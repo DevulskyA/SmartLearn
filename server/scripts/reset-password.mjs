@@ -7,7 +7,7 @@
 
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
-import { assertMigrationAuthorized } from '../src/migration-authorization.js';
+import { assertMigrationAuthorizedForPath } from '../src/migration-authorization.js';
 import { config } from '../src/config.js';
 import { issueResetToken, RESET_TOKEN_LIFETIME_MS } from '../src/auth/reset-tokens.js';
 
@@ -20,8 +20,8 @@ async function main() {
   const dbPathFlagIndex = rest.indexOf('--db');
   const dbPath = dbPathFlagIndex >= 0 ? rest[dbPathFlagIndex + 1] : config.dbPath;
 
+  assertMigrationAuthorizedForPath(dbPath);
   const db = openDb(dbPath);
-  assertMigrationAuthorized(db, dbPath);
   runMigrations(db);
 
   const normalized = email.trim().toLowerCase();

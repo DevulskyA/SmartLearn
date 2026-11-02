@@ -3,11 +3,16 @@
 // Applied migrations stay recognised as they always were. A migration that is still PENDING on a database that already has history
 // must be authorized, version by version, before this process may run it: SMARTLEARN_AUTHORIZE_MIGRATIONS="39" or "39,40".
 // A database with no migration history yet (first creation) needs no authorization: there is no data to change.
+//
+// The check reads the database through its OWN read-only connection and runs BEFORE the caller opens it for writing (openDb sets
+// journal_mode = WAL, which rewrites the header of a database that is not in WAL yet): a refusal leaves the database files untouched.
 
+import { existsSync } from 'node:fs';
+import Database from 'better-sqlite3';
 import { isDevDatastoreDb } from './dev-datastore.js';
 import { pendingMigrations } from './migrations.js';
 
-export const AUTHORIZE_ENV ='SMARTLEARN_AUTHORIZE_MIGRATIONS';
+export const AUTHORIZE_ENV = 'SMARTLEARN_AUTHORIZE_MIGRATIONS';
 
 /** "35, 36" -> Set{35, 36}. Anything that is not a list of positive integers authorizes nothing. */
 export function parseAuthorizedVersions(raw) {
@@ -17,17 +22,10 @@ export function parseAuthorizedVersions(raw) {
   return new Set(parts.map(Number));
 }
 
-/** For every command that is about to run migrations on `dbPath`: throws unless that is not the DEV datastore or nothing unauthorized is pending. */
-export function assertMigrationAuthorized(db, dbPath, env = process.env) {
-  if (!isDevDatastoreDb(dbPath, env)) return;
-  const result = checkMigrationAuthorization(pendingMigrations(db), env);
-  if (!result.ok) throw new Error(result.message);
-}
-
 /**
  * @param fromVersion newest applied version (0 = the database has no history)
  * @param pending     versions that are in the build but not yet applied
- * @returns {{ ok: true } | { ok: false, unauthorized: number[], message: string }}
+ * @returns {{ ok: true } | { ok: false, unauthorized: number[], fromVersion: number, message: string }}
  */
 export function checkMigrationAuthorization({ fromVersion, pending }, env = process.env) {
   if (fromVersion === 0 || pending.length === 0) return { ok: true };
@@ -37,9 +35,33 @@ export function checkMigrationAuthorization({ fromVersion, pending }, env = proc
   return {
     ok: false,
     unauthorized,
+    fromVersion,
     message:
       `REFUSING to migrate: this build would apply migration(s) ${unauthorized.join(', ')} to the persistent DEV database ` +
       `(currently at schema v${fromVersion}), and they are not authorized. Nothing was changed. ` +
       `To allow it, start this process with ${AUTHORIZE_ENV}=${pending.join(',')} (a verified pre-migration snapshot is still taken first).`,
   };
+}
+
+/**
+ * Decides for the database FILE, without opening it for writing. Anything that is not the DEV datastore (tests, e2e, scratch copies),
+ * or does not exist yet, is not guarded. A DEV database that cannot even be read is refused (fail closed).
+ */
+export function migrationAuthorizationForPath(dbPath, env = process.env) {
+  if (!isDevDatastoreDb(dbPath, env) || !existsSync(dbPath)) return { ok: true };
+  let probe;
+  try {
+    probe = new Database(dbPath, { readonly: true, fileMustExist: true });
+    return checkMigrationAuthorization(pendingMigrations(probe), env);
+  } catch (err) {
+    return { ok: false, unauthorized: [], fromVersion: 0, message: `REFUSING to migrate: the persistent DEV database could not be inspected read-only (${err.message}). Nothing was changed.` };
+  } finally {
+    probe?.close();
+  }
+}
+
+/** For every command that is about to run migrations and writes: throws unless the check above passes. */
+export function assertMigrationAuthorizedForPath(dbPath, env = process.env) {
+  const result = migrationAuthorizationForPath(dbPath, env);
+  if (!result.ok) throw new Error(result.message);
 }

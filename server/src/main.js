@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { openDb } from './db.js';
-import { runMigrations, pendingMigrations } from './migrations.js';
-import { checkMigrationAuthorization } from './migration-authorization.js';
+import { runMigrations } from './migrations.js';
+import { migrationAuthorizationForPath } from './migration-authorization.js';
 import { buildApp } from './app.js';
 import { purgeStaleSessions } from './repositories/sessions.js';
 import { reconcileOrphans } from './services/generation-budget.js';
@@ -48,16 +48,16 @@ if (isDevDatastoreDb(config.dbPath)) {
 const dbExisted = existsSync(config.dbPath);
 console.log(`SmartLearn database: ${resolve(config.dbPath)} (${dbExisted ? 'existing' : 'NEW, empty'})`);
 
+// A pending migration on the human's data runs only when it was authorized by version. Checked through a read-only connection BEFORE
+// openDb (which sets journal_mode = WAL), so a refusal leaves the database files exactly as they were.
+const authorization = migrationAuthorizationForPath(config.dbPath);
+if (!authorization.ok) {
+  console.error(authorization.message);
+  process.exit(1);
+}
 const db = openDb(config.dbPath);
 // T-F1-02: the human's data is never migrated without a verified backup taken first, and gets one verified snapshot per day.
 if (isDevDatastoreDb(config.dbPath)) {
-  // A pending migration on the human's data runs only when it was authorized by version; checked before anything is written.
-  const authorization = checkMigrationAuthorization(pendingMigrations(db));
-  if (!authorization.ok) {
-    console.error(authorization.message);
-    db.close();
-    process.exit(1);
-  }
   const { snapshotsDir } = devDbPaths();
   try {
     const daily = dailySnapshotIfNeeded(config.dbPath, snapshotsDir);

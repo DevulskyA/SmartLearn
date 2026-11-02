@@ -12,9 +12,10 @@
 //   node server/scripts/backup.mjs --rehearse <package-directory>    (restore into a temp env, prove units/questions/citations resolve, remove the temp env)
 // Nothing here ever deletes a backup; --retain-days is only recorded in the manifest.
 
+import Database from 'better-sqlite3';
 import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
-import { assertMigrationAuthorized } from '../src/migration-authorization.js';
+import { migrationAuthorizationForPath } from '../src/migration-authorization.js';
 import { config } from '../src/config.js';
 import { createPhysicalBackup, verifyPhysicalBackup } from '../src/backup.js';
 import { createOperationalBackup, verifyOperationalBackup, rehearseRestore } from '../src/operational-backup.js';
@@ -32,12 +33,23 @@ function flag(args, name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+// A backup never needs the migration: when the persistent DEV database has a pending migration nobody authorized, it is backed up AS IT IS
+// through a read-only connection (no WAL pragma, no migration, nothing written to it). Every other database keeps the old behaviour.
+function openForBackup(dbPath) {
+  const authorization = migrationAuthorizationForPath(dbPath);
+  if (!authorization.ok) {
+    console.error(`NOTE: ${authorization.message.replace('REFUSING to migrate', 'not migrating')} Backing up the database as it is.`);
+    return new Database(dbPath, { readonly: true, fileMustExist: true });
+  }
+  const db = openDb(dbPath);
+  runMigrations(db);
+  return db;
+}
+
 async function physical(args) {
   const [destPath] = args;
   const sourcePath = flag(args, '--db') ?? config.dbPath;
-  const db = openDb(sourcePath);
-  assertMigrationAuthorized(db, sourcePath);
-  runMigrations(db);
+  const db = openForBackup(sourcePath);
   const { path, tables } = await createPhysicalBackup(db, destPath);
   const { integrityCheck, tableCounts } = verifyPhysicalBackup(db, path);
   db.close();
@@ -50,10 +62,7 @@ async function pack(args) {
   const destDir = args[1];
   if (!destDir) throw new Error(USAGE);
   const retainRaw = flag(args, '--retain-days');
-  const packDbPath = flag(args, '--db') ?? config.dbPath;
-  const db = openDb(packDbPath);
-  assertMigrationAuthorized(db, packDbPath);
-  runMigrations(db);
+  const db = openForBackup(flag(args, '--db') ?? config.dbPath);
   try {
     const manifest = await createOperationalBackup(db, {
       sourcesDir: flag(args, '--sources') ?? config.sourcesDir,

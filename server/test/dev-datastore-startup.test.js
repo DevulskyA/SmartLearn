@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { statSync, mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -85,12 +86,15 @@ test('if the pre-migration snapshot cannot be taken the backend refuses to migra
 
 test('a pending migration on the DEV datastore that nobody authorized is refused before anything is written: no snapshot, schema unchanged', async () => {
   const w = olderDevDatastore();
+  const before = createHash('sha256').update(readFileSync(w.dbPath)).digest('hex');
   const server = start(w.dataDir, w.dbPath, 13911);
   try {
     const code = await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('TIMEOUT'), 20000))]);
     assert.equal(code, 1, server.output());
     assert.match(server.output(), /REFUSING to migrate: .*not authorized/);
     assert.equal(existsSync(join(w.dataDir, 'snapshots')), false, 'nothing was written to the datastore');
+    assert.equal(createHash('sha256').update(readFileSync(w.dbPath)).digest('hex'), before, 'the database file is byte-identical');
+    assert.ok(!existsSync(`${w.dbPath}-wal`) || statSync(`${w.dbPath}-wal`).size === 0, 'the write-ahead log holds nothing (the gate only read)');
     const live = new Database(w.dbPath, { readonly: true });
     assert.equal(live.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, w.fromVersion, 'the migration did not run');
     live.close();
