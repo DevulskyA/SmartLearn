@@ -37,10 +37,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * fetch() itself rejected. Like ApiError it carries a stable `code` (always NETWORK_ERROR) and `params` ({ path, reason }: the path
+ * asked and the browser's own reason, a technical detail); `message` is the catalog sentence `store.error.network` filled with them,
+ * so a screen that shows `message` and one that renders t('store.error.network', err.params) say the same thing.
+ */
 export class NetworkError extends Error {
-  constructor(message) {
-    super(message);
+  constructor(path, reason) {
+    const params = { path: String(path), reason: String(reason ?? '') };
+    super(t('store.error.network', params));
     this.name = 'NetworkError';
+    this.code = 'NETWORK_ERROR';
+    this.params = params;
   }
 }
 
@@ -147,7 +155,7 @@ export async function apiRequest(path, { method = 'GET', body } = {}) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch (err) {
-    throw new NetworkError(`Falha de rede ao acessar ${path}: ${err.message}`);
+    throw new NetworkError(path, err.message);
   }
 
   return handleResponse(res);
@@ -170,7 +178,7 @@ export async function apiUpload(path, formData) {
   try {
     res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, credentials: 'include', body: formData });
   } catch (err) {
-    throw new NetworkError(`Falha de rede ao acessar ${path}: ${err.message}`);
+    throw new NetworkError(path, err.message);
   }
 
   return handleResponse(res);

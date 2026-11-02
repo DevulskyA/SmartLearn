@@ -16,6 +16,7 @@
 // of the export and are not restored; the preview says so explicitly.
 import { ImportNormalizationError } from './import-normalization.js';
 import { resolveSupportedLocale } from './locales.js';
+import { importWarning } from './import-warnings.js';
 
 export const LOGICAL_EXPORT_VERSION = 1;
 
@@ -306,7 +307,7 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
       if (issues.length === issuesBefore) rows.push(out);
     });
     if (unknownColumns.size > 0) {
-      warnings.push({ code: 'UNKNOWN_FIELDS_IGNORED', set: key, message: `Campos desconhecidos em ${key} foram ignorados: ${[...unknownColumns].sort().join(', ')}.` });
+      warnings.push(importWarning('UNKNOWN_FIELDS_IGNORED', { set: key, fields: [...unknownColumns].sort().join(', ') }, { set: key }));
     }
     rows.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
     sets[key] = rows;
@@ -395,15 +396,9 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
 
   if (issues.length > 0) throw new ImportNormalizationError(issues);
 
-  warnings.push({
-    code: 'MATERIALS_NOT_RESTORED',
-    message: 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos, imagens dos resumos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
-  });
+  warnings.push(importWarning('MATERIALS_NOT_RESTORED'));
   if (Array.isArray(raw.notices) && raw.notices.some((n) => n?.code === 'MEDIA_NOT_INCLUDED')) {
-    warnings.push({
-      code: 'MEDIA_NOT_INCLUDED',
-      message: 'Este arquivo foi exportado sem as imagens dos resumos: no lugar de cada figura há uma frase descritiva. Para recuperar as imagens use o backup operacional.',
-    });
+    warnings.push(importWarning('MEDIA_NOT_INCLUDED'));
   }
 
   return {

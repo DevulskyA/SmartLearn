@@ -19,6 +19,7 @@
 // with a safe, disclosed default and recorded in `warnings` instead.
 
 import { validateNamingField } from './text-validation.js';
+import { importWarning } from './import-warnings.js';
 
 export class ImportNormalizationError extends Error {
   constructor(issues) {
@@ -123,8 +124,8 @@ function normalizeSubjects(rawSubjects, issues, warnings) {
       pushIssue(issues, 'INVALID_NAME', 'Disciplina ' + row.id + ': ' + nameError);
       continue;
     }
-    if (row.color == null) warnings.push({ code: 'DEFAULTED_COLOR', message: 'Disciplina ' + row.id + ' sem cor na origem — usando cor padrão.' });
-    if (row.sortOrder == null && row.sort_order == null) warnings.push({ code: 'DEFAULTED_SORT_ORDER', message: 'Disciplina ' + row.id + ' sem ordem na origem — usando ordem 0.' });
+    if (row.color == null) warnings.push(importWarning('DEFAULTED_COLOR', { id: row.id }));
+    if (row.sortOrder == null && row.sort_order == null) warnings.push(importWarning('DEFAULTED_SORT_ORDER', { id: row.id }));
     const normalized = {
       legacyId: row.id,
       name: row.name,
@@ -170,7 +171,7 @@ function normalizeLearningUnits(rawUnits, subjectsByLegacyId, issues, warnings) 
     const createdAt = row.createdAt ?? row.created_at;
     const updatedAt = row.updatedAt ?? row.updated_at;
     if (!createdAt || !updatedAt) {
-      warnings.push({ code: 'DEFAULTED_TIMESTAMP', message: 'Unidade ' + row.id + ' sem createdAt/updatedAt na origem — usando a data de estudo.' });
+      warnings.push(importWarning('DEFAULTED_TIMESTAMP', { id: row.id }));
     }
     const normalized = {
       legacyId: row.id,

@@ -2990,7 +2990,7 @@ function renderMigrationPreview(preview) {
     migrationWarnings.replaceChildren();
     for (const warning of preview.warnings ?? []) {
       const li = document.createElement("li");
-      li.textContent = warning.message ?? warning.code ?? String(warning);
+      li.textContent = MigrationUI.warningText(warning);
       migrationWarnings.append(li);
     }
   }
