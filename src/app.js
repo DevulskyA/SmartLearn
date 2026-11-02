@@ -7,7 +7,7 @@ import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
-import { groupOverdueByUnit, stageRanges, shouldCollapseOverdue } from "./overdue-groups.js";
+import { groupOverdueByUnit, stageRanges, shouldCollapseOverdue, foldedFlags, VISIBLE_LIMIT } from "./overdue-groups.js";
 import { weakPracticeReason } from "./priorities-text.js";
 import { groupUpcomingReviews } from "./upcoming-reviews.js";
 import {
@@ -640,6 +640,47 @@ function createOverdueUnitCard(group, unit, subject, today, collapsed, buildRow)
   for (const task of group.tasks) stages.append(buildRow(task));
   card.append(summary, stages);
   return card;
+}
+
+// Hoje lists show their first items and fold the rest behind "Ver mais N" (H-01: 18 overdue + 12 done reached ~7000 px).
+// Folded items stay in the DOM with `hidden`, so nothing is dropped; the button is a native <button> with aria-expanded, so
+// keyboard and screen readers work. `keep` items (the "Começar agora" target, cards the student opened) are never folded.
+const expandedHojeLists = new Set();
+function appendFoldedList(list, groupName, items) {
+  const folded = foldedFlags(items.map((item) => item.keep), VISIBLE_LIMIT[groupName]);
+  const foldedCount = folded.filter(Boolean).length;
+  const expanded = expandedHojeLists.has(groupName);
+  items.forEach((item, i) => {
+    if (folded[i]) {
+      item.el.dataset.folded = "true";
+      item.el.hidden = !expanded;
+    }
+    list.append(item.el);
+  });
+  if (foldedCount === 0) return;
+  const showLabel = groupName === "overdue"
+    ? tn("today.more.show.contents", foldedCount)
+    : tn("today.more.show.reviews", foldedCount);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-button review-list-more";
+  button.dataset.foldToggle = groupName;
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? t("today.more.hide") : showLabel;
+  button.addEventListener("click", () => {
+    const expand = button.getAttribute("aria-expanded") !== "true";
+    for (const el of list.querySelectorAll('[data-folded="true"]')) el.hidden = !expand;
+    if (expand) expandedHojeLists.add(groupName); else expandedHojeLists.delete(groupName);
+    button.setAttribute("aria-expanded", String(expand));
+    button.textContent = expand ? t("today.more.hide") : showLabel;
+  });
+  list.append(button);
+}
+
+// A review that is looked up by id (Começar agora, coming back from a redo) may sit in a folded part of its list: unfold it.
+function revealFolded(el) {
+  const folded = el?.closest('[data-folded="true"]');
+  if (folded?.hidden) folded.closest(".review-list")?.querySelector("[data-fold-toggle]")?.click();
 }
 
 function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set()) {
@@ -1386,30 +1427,33 @@ export async function renderToday() {
       return createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set());
     };
 
+    // What the list shows, in order; `keep` = must stay visible when the list is folded (see appendFoldedList).
+    const items = [];
     if (groupName !== "overdue") {
-      for (const task of tasks) list.append(buildRow(task));
-      continue;
-    }
-
-    // Vencidas: one card per unit. A unit with a single overdue stage keeps
-    // its plain row; a unit with several becomes an expandable card whose
-    // stages are the very same rows (each keeps its own "Revisão feita").
-    const unitGroups = groupOverdueByUnit(tasks);
-    const collapse = shouldCollapseOverdue(tasks.length);
-    if (unitGroups.length < tasks.length) {
-      count.textContent = t("today.overdue.count", {
-        stages: tn("today.overdue.count.stages", tasks.length),
-        units: tn("today.overdue.count.units", unitGroups.length),
-      });
-    }
-    for (const group of unitGroups) {
-      if (group.tasks.length === 1) {
-        list.append(buildRow(group.tasks[0]));
-        continue;
+      for (const task of tasks) items.push({ el: buildRow(task), keep: false });
+    } else {
+      // Vencidas: one card per unit. A unit with a single overdue stage keeps
+      // its plain row; a unit with several becomes an expandable card whose
+      // stages are the very same rows (each keeps its own "Revisão feita").
+      const unitGroups = groupOverdueByUnit(tasks);
+      const collapse = shouldCollapseOverdue(tasks.length);
+      if (unitGroups.length < tasks.length) {
+        count.textContent = t("today.overdue.count", {
+          stages: tn("today.overdue.count.stages", tasks.length),
+          units: tn("today.overdue.count.units", unitGroups.length),
+        });
       }
-      const unit = unitsById.get(group.unitId);
-      list.append(createOverdueUnitCard(group, unit, subjectsById.get(unit?.subjectId), today, collapse && !openUnitIds.has(String(group.unitId)), buildRow));
+      for (const group of unitGroups) {
+        const keep = openUnitIds.has(String(group.unitId));
+        if (group.tasks.length === 1) {
+          items.push({ el: buildRow(group.tasks[0]), keep });
+          continue;
+        }
+        const unit = unitsById.get(group.unitId);
+        items.push({ el: createOverdueUnitCard(group, unit, subjectsById.get(unit?.subjectId), today, collapse && !keep, buildRow), keep });
+      }
     }
+    appendFoldedList(list, groupName, items);
   }
 
   renderWeakPractice(today).catch(console.error); // not awaited: suggestions must never delay Hoje
@@ -1493,6 +1537,7 @@ export async function renderToday() {
   if (pendingTodayReturnReviewId != null && document.querySelector("#screen-today")?.hidden === false) {
     const target = reviewDashboard.querySelector(`.review-row[data-review-id="${pendingTodayReturnReviewId}"]`);
     pendingTodayReturnReviewId = null;
+    revealFolded(target);
     const anchor = target?.querySelector(".review-block-result:not([hidden])") ?? target;
     anchor?.scrollIntoView({ block: "center" });
   }
@@ -5080,6 +5125,7 @@ todayPrimaryActionBtn?.addEventListener("click", () => {
   if (!reviewId) return;
   const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
   if (!row) return;
+  revealFolded(row);
   // The review may sit inside a collapsed per-unit card on Vencidas.
   const unitCard = row.closest("details.overdue-unit");
   if (unitCard) unitCard.open = true;
