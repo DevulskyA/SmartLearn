@@ -207,3 +207,19 @@ test('ROBUST-6: undoing a Revisão feita whose reply was lost: the retry leaves 
   const open = (await getJson(page, `/v1/review-tasks?unitId=${unit.id}`)).reviewTasks.filter((r) => !(r.completedAt || r.completed_at)).length;
   expect(open).toBeGreaterThan(0);
 });
+
+test('J02: a review marked by mistake has a "Desfazer conclusão" button that reopens it (the history is kept by the audited reopen)', async ({ page }) => {
+  await seedLesson(page, 'Aula desfazer botao', { n: 1, studyDate: '2020-01-01' });
+  await page.locator('[data-screen="today"]').click();
+  const first = page.locator('.review-row').first();
+  await expect(first).toBeVisible({ timeout: 8000 });
+  const reviewId = await first.getAttribute('data-review-id');
+  const row = page.locator(`.review-row[data-review-id="${reviewId}"]`);
+  await expect(row.locator('.review-undo')).toHaveCount(0); // nothing to undo before it is done
+  await row.locator('[data-action="review-done"]').check();
+  await expect(row).toHaveAttribute('data-group', 'doneToday');
+  await row.getByRole('button', { name: /Desfazer conclusão/ }).click();
+  await expect(row).not.toHaveAttribute('data-group', 'doneToday');
+  await expect(row.locator('[data-action="review-done"]')).not.toBeChecked();
+  await expect(row.locator('.review-undo')).toHaveCount(0);
+});

@@ -798,7 +798,21 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   toggleRowBtn.setAttribute("aria-expanded", "false");
   toggleRowBtn.textContent = t("shell.action.viewContent");
 
-  primary.append(reviewDoneLabel, toggleRowBtn);
+  primary.append(reviewDoneLabel);
+  if (task.reviewDone) {
+    // J02: a review marked by mistake can be taken back with a button that says so (the same audited reopen as clearing the box)
+    const undoBtn = document.createElement("button");
+    undoBtn.type = "button";
+    undoBtn.className = "small-button review-undo";
+    undoBtn.textContent = t("today.review.undo");
+    undoBtn.setAttribute("aria-label", t("today.review.undo.aria", { title: unit?.title ?? t("today.review.done.fallbackTitle"), number: task.reviewNumber }));
+    undoBtn.addEventListener("click", () => {
+      reviewDoneInput.checked = false;
+      reviewDoneInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    primary.append(undoBtn);
+  }
+  primary.append(toggleRowBtn);
 
   const secondaryControls = document.createElement("div");
   secondaryControls.className = "review-row-secondary-controls";

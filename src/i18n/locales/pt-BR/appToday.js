@@ -7,6 +7,8 @@ export default {
   'today.review.done.aria': 'Revisão feita: {title}, revisão número {number}',
   'today.review.done.fallbackTitle': 'conteúdo',
   'today.review.done.label': 'Revisão feita',
+  'today.review.undo': 'Desfazer conclusão',
+  'today.review.undo.aria': 'Desfazer conclusão: {title}, revisão número {number}',
   'today.review.viewPerformance': 'Ver desempenho',
   'today.review.questionsDone': 'Questões feitas',
   'today.review.performance': 'Aproveitamento',

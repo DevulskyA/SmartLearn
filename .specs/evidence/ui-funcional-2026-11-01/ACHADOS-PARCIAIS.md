@@ -128,3 +128,7 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 ## A-15 App nativo DEV fechou sozinho — 2026-11-01
 - **Onde:** `npm run dev:desktop` em 6f1fe2b. **Observado:** launcher terminou com exit 0; nenhum `smartlearn.exe` rodando depois; log sem erro. **Causa:** não identificada (sem evidência de quem fechou). **Status:** aberto, sem reprodução.
 - **A-14, preparação da validação (2026-11-02):** `git merge-tree` de HEAD com `fix/window-opens-on-primary-monitor` (c65f53e) CONFLITA em `src-tauri/src/lib.rs` e `window_state.rs`: o HEAD já tem sua própria versão do estado de janela (d5215a6, 2bed0cf, 5ed8075, c985a9d). Não integrar às cegas. A diferença provável que falta no HEAD é só "primeira execução / monitor sumido centraliza na DISPLAY1". Próximo passo: reabrir o app sem mover a janela à mão e ver onde ele abre; se abrir na DISPLAY2, portar só essa regra (não a branch inteira). Integração depende de autorização do usuário.
+
+## A-16 ACCESS-3 (keyboard-today) falhou 1 vez em lote paralelo, passa sozinho — 2026-11-02
+- **Onde:** `e2e/keyboard-today.spec.js:77`, rodando junto com 4 outras specs (5 specs, 3 workers). **Observado:** `toBeChecked` estourou os 8 s e o teste levou 14,6 s (sozinho: 3,3 s, 2 de 2 execuções verdes). **Hipótese:** carga do lote, não a mudança do botão "Desfazer conclusão" (a falha não toca o botão). **Status:** DECLARED, não provado; reabrir se repetir em lote.
+- **J02 (corrigido):** botão "Desfazer conclusão" em revisão concluída (mesmo reopen auditado); E2E `robustness-study-loop.spec.js` verde.
