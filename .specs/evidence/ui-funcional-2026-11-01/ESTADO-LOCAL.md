@@ -56,3 +56,6 @@ Como: `SL_JOURNEY_EXE` aponta para uma cópia de `src-tauri/target/debug/smartle
 - J02 PROVADO: em Hoje, a revisão concluída mostra "Desfazer conclusão"; depois do clique o botão some (2 ocorrências → 0) e a revisão volta a pendente.
 - NÃO reverificado na janela: A-04 (aviso some ao sair da tela; coberto por E2E) e A-14 (primeira execução na DISPLAY1; coberto por teste Rust 11/11 e pela abertura anterior; o app do usuário tinha posição salva).
 - Lote reutilizável: `lotes/B03-J02-nativo.txt` (precisa de dados: semear, adicionar exercícios e concluir uma revisão pela API).
+- A-14 PROVADO na janela real (2026-11-02): instância isolada com pasta de dados nova (primeira execução) abriu em L=-1360 T=40 R=-64 B=899, dentro da DISPLAY1 (X de -1440 a 0). O app do usuário não foi tocado.
+- A-04 PROVADO na janela real: em Configurações, "Salvar idioma" mostra "Idioma salvo."; ao ir para Hoje e voltar, a mensagem não está mais lá.
+- Com isso A-13, A-02(E2E/unit), A-04, B03, A-14 e J02 têm prova na janela nativa ou em teste; o que sobra é só decisão do usuário (migrar a pausa 035 ao banco humano; PDF opção B).
