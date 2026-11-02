@@ -18,6 +18,14 @@ Fonte de verdade para o estado real: `git log`. Este arquivo é análise, não r
 | I-02 | `isDevDatastoreDb` | um junction para a pasta do DEV fazia o portão (e o lock e os snapshots) não reconhecer o banco | comparação só por `resolve()` | defeito de produto demonstrado por teste que falhava | corrigido em f7bd054 |
 | I-03 | E2E focado do editor | 6 falhas, todas no recorte de PDF (pdf.js/KaTeX) | INSTRUMENTO: `node_modules` ligado por junction à worktree vizinha; o Vite recusa servir arquivos fora da raiz (`outside of Vite serving allow list`) | meu erro de instrumento; regra "Integridade do instrumento" 1 e 4 existia e eu não validei o alvo antes de ler resultado | corrigido (cópia real); mesmas 45 specs: 45 passaram em 3,1 min |
 
+| I-04 | `scripts/desktop-study-journey.mjs` passo 7 | `fill` expirou em `.lesson-summary-input` (campo oculto) | INSTRUMENTO velho: o Resumo agora abre como leitura ("Editar resumo"), o E2E já usava `startEditingSummary`, a jornada nativa não | defeito do instrumento (o produto segue a decisão "leitura primeiro") | corrigido: o script chama `startEditingSummary` depois de cada aba Resumo; 23/23 |
+| I-05 | E2E completo, `summary-visual-editor.spec.js:523` ("every way out") | `toBeVisible` do aviso `.summary-visual-notice` estourou 5 s uma vez na rodada completa (3 workers) | NÃO provada; o spec passou 3/3 isolado e 45/45 no conjunto focado | provável oscilação sob carga (mesma classe já registrada: ACCESS-5, keyboard-today); sem defeito de produto reproduzido | DECLARADO; sem alteração de código |
+
+## Provas no SHA final 3519915 (+ correção do instrumento)
+- Lint 0; unit 859 ok/0 falhas/1 ignorado; servidor 1189/1189.
+- E2E completo: 375 passaram, 2 ignorados, 1 falha (I-05), 11,2 min (orçamento ~16 min). Conjunto focado do editor: 45/45.
+- Jornada nativa (WebView2 real, exe isolado, dados e perfil descartáveis, título `SmartLearn DEV - v0.1.0 - 3519915`, `inputsHash 2fde0750efe8` igual ao empacotado): 23/23 em 82 s. O exe é o `smartlearn.exe` de f1cddd9 (src-tauri sem diferença) com os recursos empacotados de 3519915.
+
 ## Nada a recuperar
 - `split-fatia2`: o conserto "esperar o reveal antes de julgar" e os refactors já estão em f1cddd9 (mesmo código, contexto diferente).
 - `fix/window-opens-on-primary-monitor`: f1cddd9 já tem DISPLAY1, tamanho de primeira execução, centralização e salvamento posterior (`Saver`).

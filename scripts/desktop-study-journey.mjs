@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { chromium } from '@playwright/test';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { startEditingSummary } from '../e2e/support/summary-editing.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
@@ -347,6 +348,7 @@ try {
   await step(6, 'open Resumo and Questões', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await startEditingSummary(page); // the Resumo opens as the formatted lesson (reading first); the student presses "Editar resumo" to type
     const summary = await editor.locator('.lesson-summary-input').inputValue();
     expect(summary.length > 20, 'summary empty');
     await editor.getByRole('tab', { name: /Questões/ }).click();
@@ -363,6 +365,7 @@ try {
     await editor.locator('[data-action="save-question"]').click();
     await editor.locator('.lesson-qeditor .lesson-message').getByText('Questão salva').waitFor({ timeout: 10000 });
     await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await startEditingSummary(page); // the Resumo opens as the formatted lesson (reading first); the student presses "Editar resumo" to type
     await editor.locator('.lesson-summary-input').fill(SUMMARY_EDIT);
     // the visual formula editor (MathLive) must really open inside the Desktop WebView: its mathfield, the LaTeX box and the KaTeX preview
     await editor.getByRole('button', { name: 'Inserir fórmula' }).click();
@@ -419,6 +422,7 @@ try {
   await step(21, 'the visual editor shows a formatted page in the REAL Desktop window (rendered formulas, a real table, both figures, no Markdown); opening changes nothing; text, a table cell and a formula are edited IN PLACE, with window screenshots before and after, and saved', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await startEditingSummary(page); // the Resumo opens as the formatted lesson (reading first); the student presses "Editar resumo" to type
     const input = editor.locator('.lesson-summary-input');
     const before = await input.inputValue();
     expect(before === ctx.summaryFinal, 'the summary reopened differs from the one saved in step 7');
@@ -479,6 +483,7 @@ try {
   await step(22, 'autosave in the Desktop: an idle save after 2.5 s, typing during a slow save, a lost connection, a killed process, reopening and recovering the text; formulas and figures survive it all', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await startEditingSummary(page); // the Resumo opens as the formatted lesson (reading first); the student presses "Editar resumo" to type
     const input = editor.locator('.lesson-summary-input');
     const saved = editor.locator('[data-panel="summary"] .save-indicator[data-state="saved"]');
     const indicator = editor.locator('[data-panel="summary"] .save-indicator');
@@ -613,6 +618,7 @@ try {
   await step(23, 'a figure is dragged to another place and resized with its handles in the REAL window; the text saves itself; one copy; a figure still in use cannot be deleted', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
+    await startEditingSummary(page); // the Resumo opens as the formatted lesson (reading first); the student presses "Editar resumo" to type
     await editor.locator('.summary-mode-btn[data-mode="visual"]').click();
     const surface = editor.locator('.summary-visual-content');
     const images = surface.locator('figure.summary-figure img');
