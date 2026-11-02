@@ -39,3 +39,15 @@ test("collapsed by default only when the overdue list is long enough to bury tod
   assert.equal(shouldCollapseOverdue(34), true);
   assert.equal(shouldCollapseOverdue(0), false);
 });
+
+test("foldedFlags folds items past the limit, keeps the marked ones and never folds a lone item", async () => {
+  const { foldedFlags } = await import("../src/overdue-groups.js");
+  const none = (n) => Array(n).fill(false);
+  assert.deepEqual(foldedFlags(none(5), 5), none(5));                               // within the limit
+  assert.deepEqual(foldedFlags(none(6), 5), none(6));                               // one folded item is not worth a button
+  assert.deepEqual(foldedFlags(none(8), 5), [false, false, false, false, false, true, true, true]);
+  const keep = none(8); keep[6] = true;                                              // the "Começar agora" card stays visible
+  assert.deepEqual(foldedFlags(keep, 5), [false, false, false, false, false, true, false, true]);
+  keep[5] = true;                                                                    // only one left to fold -> fold nothing
+  assert.deepEqual(foldedFlags(keep, 5), none(8));
+});

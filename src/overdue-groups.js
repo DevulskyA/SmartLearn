@@ -36,3 +36,17 @@ export function stageRanges(reviewNumbers) {
   }
   return ranges;
 }
+
+// Hoje with a long list (H-01): a long-absent student saw ~7000 px of cards. Each Hoje list shows its first N items and
+// folds the rest behind a "Ver mais" button. Nothing is dropped or rescheduled: folded items stay in the DOM (`hidden`).
+export const VISIBLE_LIMIT = { overdue: 5, today: 5, doneToday: 3 };
+
+// Folding a single item saves nothing and costs a click, so it only happens from this many hidden items on.
+const MIN_FOLDED = 2;
+
+// `keep[i]` marks an item that must stay visible whatever its position (the "Começar agora" target, a card the student
+// opened). Returns one boolean per item: true = folded.
+export function foldedFlags(keep, limit) {
+  const flags = keep.map((kept, i) => i >= limit && !kept);
+  return flags.filter(Boolean).length >= MIN_FOLDED ? flags : flags.map(() => false);
+}

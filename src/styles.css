@@ -2082,6 +2082,15 @@ h1 {
   box-shadow: var(--shadow-card);
 }
 
+/* a folded item ("Ver mais") must stay hidden even though .review-row / .overdue-unit set their own display */
+.review-list > [data-folded][hidden] {
+  display: none;
+}
+
+.review-list-more {
+  justify-self: start;
+}
+
 .overdue-unit-summary {
   display: grid;
   gap: 0.2rem;

@@ -60,6 +60,12 @@ export default {
   'today.overdue.unit.oldest.one': 'a mais antiga há {count} dia',
   'today.overdue.unit.oldest.other': 'a mais antiga há {count} dias',
   'today.overdue.unit.meta': '{stages} · {ranges} · {oldest}',
+  // Long lists: the first items are shown, the rest folds behind a button
+  'today.more.show.contents.one': 'Ver mais {count} conteúdo',
+  'today.more.show.contents.other': 'Ver mais {count} conteúdos',
+  'today.more.show.reviews.one': 'Ver mais {count} revisão',
+  'today.more.show.reviews.other': 'Ver mais {count} revisões',
+  'today.more.hide': 'Ver menos',
   'today.primary.overdue.one': 'Você tem {count} revisão vencida.',
   'today.primary.overdue.other': 'Você tem {count} revisões vencidas.',
   'today.primary.today.one': 'Você tem {count} revisão para hoje.',
