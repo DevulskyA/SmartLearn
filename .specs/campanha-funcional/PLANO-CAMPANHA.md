@@ -165,16 +165,18 @@ Unidades medidas: subida do app 5,3 s; reinício deliberado 6,75 s (7,0 s no cic
 
 **Causa:** default de 2 workers com 12 núcleos / 15,9 GB; o runner já isola portas e banco por worker (bloco de 1000 portas), então o paralelismo era seguro mas subutilizado.
 
-**Alteração (única):** `scripts/e2e.mjs`, default de workers 2 → 4 (`E2E_WORKERS` e `SUITE_WORKERS` continuam sobrepondo).
+**Alteração (única):** `scripts/e2e.mjs`, default de workers 2 -> 3 (`E2E_WORKERS` e `SUITE_WORKERS` continuam sobrepondo).
 
 | Workers | Tempo | Falhas |
 |---|---|---|
 | 2 (base) | 1024 s | 1 (product-value:86, asserção desatualizada pelo A-08) |
-| 3 | 799 s | 0 |
-| 4 | 697 s (2ª rodada limpa; 1ª: 653 s com 1 falha intermitente) | 0 |
+| 3 | 799 s e 770 s (baseline gravada) | 0 em 2 rodadas |
+| 4 | 653 s, 697 s, 852 s | 2, 0, 3 (testes diferentes a cada vez: contenção) |
 
-**Ganho:** −32% (1024 → 697 s) com 4 workers; mesmos testes e asserções.
+**Ganho:** -25% (1024 -> 770 s) a 3 workers, mesmos testes e asserções. 4 workers descartado por instabilidade.
 
-**Correção junto:** `e2e/product-value.spec.js` passou a aceitar "Revisão em atraso desde" quando a data é anterior a hoje (o teste travava o defeito A-08).
+**Correção junto:** `e2e/product-value.spec.js` aceita "Revisão em atraso desde" quando a data é anterior a hoje (o teste travava o defeito A-08).
 
-**Riscos:** `study-evidence-failure.spec.js:234` falhou uma vez a 4 workers (passa isolado e passou nas 2 rodadas seguintes) — suspeita de contenção; se recorrer, usar `E2E_WORKERS=3`. Sem contaminação observada (0 falhas em 2 rodadas completas).
+**Segurança contra recorrência:** `scripts/e2e.mjs` compara cada execução com `e2e/.duration-baseline.json`: desvio > 30% = `PERF DEVIATION` (exit 5), sem baseline = `NO BASELINE`; `--record-baseline` grava a partir de execução limpa. Uma rodada com máquina carregada (58 processos msedge, 5 GB livres) chegou a 1171 s com 10+ falhas: o guarda sinaliza isso.
+
+**Riscos:** sob carga externa a suíte falha por "server not ready"; rodar com a máquina ociosa.

@@ -82,8 +82,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (rec >= 0) args.splice(rec, 1);
   const i = args.indexOf('--suite');
   if (i >= 0) { env.E2E_SUITE = args[i + 1]; args.splice(i, 2); }
-  // full run = 4 workers (measured 2026-11-01: 1024 s -> 697 s, 0 failures in 2 runs; 3 workers = 799 s); area suites may override via SUITE_WORKERS
-  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 4);
+  // full run = 3 workers (measured 2026-11-01: 2w 1024 s; 3w 799 s, 0 failures; 4w 653-852 s but 3 different tests failed in 3 of 3 runs, contention, not stable); area suites may override via SUITE_WORKERS
+  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 3);
   env.E2E_WORKERS = String(workers);
   const { offset, vitePort, release } = await pickRunPorts({ workers });
   env.E2E_PORT_OFFSET = String(offset);
