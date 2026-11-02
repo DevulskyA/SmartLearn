@@ -153,3 +153,21 @@ test('a non-empty account refuses the restore with a clear message and changes n
   const after = await exportViaApi(page);
   expect({ ...after, exportedAt: null }).toEqual({ ...before, exportedAt: null });
 });
+
+test('import preview warnings are written by the client from code + params: the pt-BR sentence appears even when the server text is replaced, and nothing is written', async ({ page }) => {
+  await registerAndLogin(page);
+  // The shared module sends { code, params, message }. Replace `message` on the wire: what the student reads must still be the catalog text.
+  await page.route('**/v1/imports/preview', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const warning of body.preview.warnings) warning.message = 'TEXTO DO SERVIDOR';
+    await route.fulfill({ response, json: body });
+  });
+  const legacy = readFileSync(fileURLToPath(new URL('../server/test/import-fixtures/v1-legacy.json', import.meta.url)));
+  await page.locator('[data-screen="settings"]').click();
+  await page.locator('#migration-file-input').setInputFiles({ name: 'v1-legacy.json', mimeType: 'application/json', buffer: legacy });
+  await expect(page.locator('#migration-preview-panel')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#migration-warnings')).toContainText('Disciplina 1 sem cor na origem — usando cor padrão.');
+  await expect(page.locator('#migration-warnings')).not.toContainText('TEXTO DO SERVIDOR');
+  expect((await exportViaApi(page)).subjects.length).toBe(0);
+});

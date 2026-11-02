@@ -15,7 +15,7 @@
 // in .specs/features/smartlearn-v1-consolidated-v2/migration-runbook.md,
 // not something client code can determine from a payload's shape.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
-import { t } from './i18n/index.js';
+import { t, has } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
@@ -69,6 +69,19 @@ const ENTITY_LABEL_KEYS = {
 
 export function entityLabel(key) {
   return Object.hasOwn(ENTITY_LABEL_KEYS, key) ? t(ENTITY_LABEL_KEYS[key]) : key;
+}
+
+/**
+ * The sentence for one warning of an import preview, from the catalog (`migration.warning.<CODE>` filled with `warning.params`).
+ * A warning with no params (a preview stored by an older server), an unknown code (a newer server) or a bare string falls back to
+ * the warning's own `message`, then to its code: never to an empty line.
+ */
+export function warningText(warning) {
+  if (typeof warning === 'string') return warning;
+  const code = typeof warning?.code === 'string' ? warning.code : '';
+  const key = `migration.warning.${code}`;
+  if (code && warning.params && typeof warning.params === 'object' && has(key)) return t(key, warning.params);
+  return warning?.message ?? (code || String(warning));
 }
 
 /** A downloadable, self-contained record of what a commit actually did —
