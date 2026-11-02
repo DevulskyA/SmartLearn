@@ -189,6 +189,7 @@ export default {
   'screens.dialog.close': 'Fechar',
   'screens.nav.brandLabel': 'SmartLearn - ir para Hoje',
   'screens.nav.label': 'Navegação principal',
+  'screens.nav.skip': 'Pular para o conteúdo',
   'screens.nav.statsShort': 'Estat.',
   'screens.nav.settingsShort': 'Config.',
   'screens.register.title': 'Cadastro',

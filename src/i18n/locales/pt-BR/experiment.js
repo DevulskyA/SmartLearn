@@ -1,5 +1,7 @@
 // Experimental panel "Revisões por unidade" (obligations-ui.js): only visible when the student turns the experiment on in Configurações.
 export default {
+  'experiment.card.eyebrow': 'Experimental',
+  'experiment.card.title': 'Recurso em teste',
   'experiment.switch.label': 'Experimento: revisões por unidade e plano do dia',
   'experiment.switch.hint': 'Mostra na tela Hoje um painel experimental. Não substitui o calendário padrão e pode ser desligado a qualquer momento.',
   'experiment.panel.title': 'Revisões por unidade (experimental)',

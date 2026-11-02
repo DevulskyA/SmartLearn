@@ -4363,6 +4363,26 @@ label.select-control:has(> .ui-select) {
   }
 }
 
+/* the chosen verdict is also a mark, not only an outline/tint colour (colour-blind and high-contrast readers) */
+.exercise-judgment button.is-selected[data-action="exercise-acertei"]::before { content: "✓ "; }
+.exercise-judgment button.is-selected[data-action="exercise-errei"]::before { content: "✕ "; }
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  inset-block-start: -4rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #000);
+  border: 2px solid currentColor;
+}
+
+.skip-link:focus {
+  inset-block-start: 0.5rem;
+}
+
 /* an 800 px window: the four tabs stay on one row */
 @media (max-width: 900px) and (min-width: 561px) {
   .lesson-tabs .lesson-tab {

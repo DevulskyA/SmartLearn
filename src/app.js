@@ -273,6 +273,7 @@ createSubjectCreateForm({
 });
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
+const planEmptyNewBtn = document.querySelector("#plan-empty-new");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
 const planFilterPeriod = document.querySelector("#plan-filter-period");
@@ -1011,6 +1012,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
         acerteiBtn.disabled = true;
         erreiBtn.disabled = true;
         (wasCorrect ? acerteiBtn : erreiBtn).classList.add("is-selected");
+        (wasCorrect ? acerteiBtn : erreiBtn).setAttribute("aria-pressed", "true");
         if (restored.retest) {
           const redoCorrect = restored.retest.outcome === "CORRECT";
           exItem.dataset.retest = restored.retest.outcome;
@@ -1757,6 +1759,8 @@ export async function renderPlan() {
   });
 
   planEmpty.hidden = filtered.length > 0;
+  // no lessons at all: the way to start sits in the body too, not only in the heading
+  if (planEmptyNewBtn) planEmptyNewBtn.hidden = filtered.length > 0 || learningUnits.length > 0;
   // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
   planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
     ? t("plan.empty.withMaterials")
@@ -4585,6 +4589,8 @@ function setSubjectsPanel(open) {
   planSubjectsPanel.hidden = !open;
   planManageSubjectsBtn.setAttribute("aria-expanded", String(open));
   if (open) {
+    // one panel at a time: both open stacked pushed the lesson list ~1,300 px down
+    if (planNewUnitForm && !planNewUnitForm.hidden) setPlanFormVisible(false);
     renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
     planSubjectsPanel.scrollIntoView({ block: "nearest" });
   }
@@ -5278,6 +5284,7 @@ reviewDashboard.addEventListener("click", async (event) => {
     btn.disabled = true;
   }
   button.classList.add("is-selected");
+  button.setAttribute("aria-pressed", "true");
 
   const section = exItem.closest("[data-exercises-total]");
   if (!section) return;
@@ -5849,6 +5856,7 @@ function setPlanFormVisible(visible) {
   planNewUnitForm.hidden = !visible;
   planNewUnitBtn.setAttribute("aria-expanded", String(visible));
   if (visible) {
+    if (planSubjectsPanel && !planSubjectsPanel.hidden) setSubjectsPanel(false);
     if (!planStudyDate.value) planStudyDate.value = getLocalDateValue();
     planStudyTitle.focus();
   }
@@ -5879,6 +5887,13 @@ const studySaveOperation = createOperationKeyTracker();
 
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
+});
+planEmptyNewBtn?.addEventListener("click", () => setPlanFormVisible(true));
+
+// "Pular para o conteúdo": the hash router owns location.hash, so the link moves focus itself instead of navigating.
+document.querySelector(".skip-link")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  document.querySelector(".app-main")?.focus();
 });
 
 // First run (empty Hoje): the two ways to start. "Enviar um PDF" exists only where Materiais does.

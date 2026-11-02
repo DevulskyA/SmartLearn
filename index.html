@@ -33,6 +33,7 @@
     <script type="module" src="/src/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#screen-today" data-i18n="screens.nav.skip">Pular para o conteúdo</a>
     <div class="app-shell">
       <header class="app-header">
         <a class="brand" href="#today" aria-label="SmartLearn - ir para Hoje" data-i18n-aria-label="screens.nav.brandLabel">SmartLearn</a>
@@ -270,6 +271,7 @@
           </div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <p class="panel-empty" id="plan-empty" hidden data-i18n="screens.plan.empty">Nenhuma aula cadastrada.</p>
+          <button class="primary-button" id="plan-empty-new" type="button" hidden data-i18n="screens.plan.new">+ Nova aula</button>
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
@@ -536,7 +538,11 @@
             </div>
             <p class="form-message" id="generation-language-message" role="status" aria-live="polite"></p>
           </section>
-          <section class="settings-card" id="experiment-card">
+          <section class="settings-card" id="experiment-card" aria-labelledby="experiment-title">
+            <div class="section-heading">
+              <p class="eyebrow" data-i18n="experiment.card.eyebrow">Experimental</p>
+              <h2 id="experiment-title" data-i18n="experiment.card.title">Recurso em teste</h2>
+            </div>
             <label class="experiment-switch">
               <input type="checkbox" id="experiment-switch" />
               <span data-i18n="experiment.switch.label">Experimento: revisões por unidade e plano do dia</span>
