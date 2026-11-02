@@ -16,6 +16,8 @@ const ALLOWED = new Set([
   'test/dev-data.test.js', 'test/desktop-entrypoint.test.js', 'test/test-db-isolation.test.js',
   'test/prompt-lab-runner.test.js',
   'server/test/dev-lock.test.js', 'server/test/dev-snapshot.test.js', 'server/test/dev-restore.test.js', 'server/test/dev-datastore-startup.test.js',
+  // migration authorization: fake DEV datastores (SMARTLEARN_DEV_DATA_DIR) inside os.tmpdir(); they prove a refusal leaves the file byte-identical
+  'server/test/migration-authorization.test.js', 'server/test/backup-pending-migration.test.js',
 ]);
 const FORBIDDEN = [/SmartLearn-DevData/, /com\.devulsky\.smartlearn/, /smartlearn-dev\.db/, /\bdevDbPaths\b/, /\bdevDataDir\b/];
 
