@@ -2,7 +2,7 @@
 reload
 click Materiais
 upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf
-expect "propostos"
+expect "trecho proposto."
 expect "Gerar rascunho com IA"
 click css:button[data-action=generate-draft]
 expect "Aceitar a aula"

@@ -2,7 +2,7 @@
 reload
 click Materiais
 upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-teste.pdf
-expect "propostos"
+expect "trecho proposto."
 click css:.source-proposal-item [data-action=generate-draft]
 expect "Resumo"
 snap

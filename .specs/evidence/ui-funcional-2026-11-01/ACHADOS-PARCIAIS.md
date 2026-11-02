@@ -90,3 +90,8 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - **Severidade:** baixa (teste), mas é intermitência; o guarda de tempo a detectou.
 - **Evidência:** `lotes/seed/falhas/SEED2c-pdf-aula-passada-L5/` (falha.png, tela.txt), primeira captura automática do driver.
 - **Causa:** NÃO PROVADA. Hipótese: análise do PDF excedeu 3 s com a máquina carregada na 1ª rodada (instrumento com espera curta, ou produto lento sob carga). Reprodução: repetir o ciclo sob carga. Status: aberto, sem correção (regra: não corrigir durante o ciclo).
+
+### A-09 — causa e correção (2026-11-01)
+- **Causa provada (sincronização do teste, não desempenho do produto):** `expect "propostos"` casava com o texto de progresso `materials.upload.chunking` = "Gerando trechos propostos…" (`src/i18n/locales/pt-BR/materials.js:93`), que aparece ANTES do fim da análise. A espera passava cedo e o `expect` seguinte do botão corria contra a análise do PDF (3 s). Na rodada limpa o botão aparece em ~2,5 s; sob carga passou de 3 s.
+- **Correção mínima:** os 3 lotes que esperavam por "propostos" (SEED2c, SEED2, J10) passam a esperar a mensagem final "trecho proposto." (não aparece no texto de progresso, que está no plural). Nenhum timeout aumentado; nenhum limite de produto tocado.
+- **Prova:** SEED1 + SEED2c em app novo: 0 falhas, SEED2c 2545 ms (baseline 2395 ms), sem DESVIO. Não repeti os 17 lotes. Classe do erro: instrumento (rodada 1 = 1 em 3 era a corrida), regra "espera pelo alvo certo" já existia em "Fail fast, name the cause": eu não conferi se o alvo do `expect` era a condição final (classe 1).
