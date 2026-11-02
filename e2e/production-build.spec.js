@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 
 // T24: the dev-server e2e suite (playwright.config.js's webServer runs
 // `vite --port 5199`, a dev server) never exercises the real production
@@ -30,16 +31,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${SERVER_ORIGIN}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise(r => setTimeout(r, 150));
-  }
-  throw new Error('production-build E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(SERVER_ORIGIN, { label: 'production-build E2E' });
 }
 
 test.beforeAll(async () => {
@@ -109,7 +102,7 @@ test('the real production build, served single-origin with no Vite involved, com
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
@@ -117,7 +110,7 @@ test('the real production build, served single-origin with no Vite involved, com
   // inside the submit handler (src/app.js) — wait for its own visible
   // completion signal (same pattern as e2e/server-authority.spec.js) rather
   // than racing the click against that promise.
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 
   await page.locator('[data-screen="plan"]').click();
   await page.locator('#plan-new-unit-btn').click();

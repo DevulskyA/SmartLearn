@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // T23: ports the one-save acceptance (T03/AC-03/AC-04) to real server
@@ -34,16 +35,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise(r => setTimeout(r, 150));
-  }
-  throw new Error('atomic-save E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(API_BASE, { label: 'atomic-save E2E' });
 }
 
 function startServer() {

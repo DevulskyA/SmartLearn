@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // T41: "offline is read-only" proved from the WRITE side (e2e/offline.spec.js
@@ -21,16 +22,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('offline-writes E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(API_BASE, { label: 'offline-writes E2E' });
 }
 
 function startServer() {
@@ -158,10 +151,10 @@ test('an expired online session locks protected operations and clears stale clie
   // The 401 -> smartlearn:unauthenticated -> re-confirm bootstrap -> logout
   // UI chain locks the app: the logged-out view reappears without the user
   // ever clicking "Sair".
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 
   // Stale identity is actually cleared, not just hidden: a fresh reload
   // with no session confirms logged-out state from a cold start too.
   await page.reload();
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 });

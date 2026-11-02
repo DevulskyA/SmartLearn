@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // Partial T-F10-06 (the full UI-language selector stays behind HG-13): the Configurações card exposes ONLY generationLocale,
@@ -24,12 +25,7 @@ test.beforeAll(async () => {
     env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('generation-language E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'generation-language E2E' });
 });
 
 test.afterAll(async () => {

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // CONTENT-QUALITY CQ-4: one medical unit through the WHOLE product, on the LIVE-provider code path
@@ -101,12 +102,7 @@ test.beforeAll(async () => {
     },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('content-quality E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'content-quality E2E' });
 });
 
 test.afterAll(async () => {

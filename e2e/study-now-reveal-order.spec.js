@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // Estudar agora records two things on the server for one question: that the solution was revealed (assistance SOLUTION) and then the
@@ -25,12 +26,7 @@ test.beforeAll(async () => {
     env: { ...process.env, SMARTLEARN_DB_PATH: join(dbDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('reveal-order E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'reveal-order E2E' });
 });
 
 test.afterAll(async () => {

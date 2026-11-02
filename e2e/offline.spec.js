@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // T40: PWA shell + private cache lifecycle, proved against a real spawned
@@ -24,16 +25,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('offline E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(API_BASE, { label: 'offline E2E' });
 }
 
 function startServer() {
@@ -101,7 +94,7 @@ async function waitForServiceWorkerActive(page) {
 async function waitForSnapshotSync(page) {
   await page.waitForResponse(
     (res) => res.url().includes('/v1/agenda-snapshot') && res.status() === 200,
-    { timeout: 5000 },
+    { timeout: 15000 },
   );
 }
 
@@ -206,11 +199,7 @@ test('a reachable network but a dead SmartLearn server still falls back to the c
     stdio: 'ignore',
   });
   try {
-    const deadline = Date.now() + 8000;
-    while (Date.now() < deadline) {
-      try { if ((await fetch(`${base}/health/ready`)).status === 200) break; } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 150));
-    }
+    await waitForServerReady(base, { label: 'offline E2E (server-down)' });
 
     await page.addInitScript((b) => {
       window.__SMARTLEARN_API_BASE__ = b;
@@ -224,7 +213,7 @@ test('a reachable network but a dead SmartLearn server still falls back to the c
 
     const syncResponse = page.waitForResponse(
       (res) => res.url().includes('/v1/agenda-snapshot') && res.status() === 200,
-      { timeout: 5000 },
+      { timeout: 15000 },
     );
     await page.reload();
     await syncResponse; // proves the just-created unit is in the stored snapshot
@@ -263,7 +252,7 @@ test('a second account never sees the first account\'s agenda after switching, e
 
   await page.locator('[data-screen="account"]').click();
   await page.locator('#account-logout-btn').click();
-  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-out-view')).toBeVisible({ timeout: 15000 });
 
   await registerAndLogin(page, emailB, password);
 

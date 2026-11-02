@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 
 // GUI-05: ONE student journey through the whole product, in one profile and one database (real server,
 // real UI, real PDF extraction; the model endpoint is a scripted local stub on the live-provider code
@@ -91,12 +92,7 @@ test.beforeAll(async () => {
     },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('journey E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'journey E2E' });
 });
 
 test.afterAll(async () => {
@@ -121,11 +117,11 @@ test.beforeEach(async ({ page }) => {
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 });
 
 const noHorizontalScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);

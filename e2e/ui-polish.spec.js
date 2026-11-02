@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 const shot = async (target, name) => { if (process.env.SCREENSHOT_DIR) await target.screenshot({ path: join(process.env.SCREENSHOT_DIR, name + '.png') }); };
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // Screen review polish that changes no behaviour a student relies on: P-01 (one Plano panel at a time), L-04 (empty Plano has a
@@ -32,12 +33,7 @@ test.beforeAll(async () => {
     },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('ui-polish E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'ui-polish E2E' });
 });
 
 test.afterAll(async () => {

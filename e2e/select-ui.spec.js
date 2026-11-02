@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // Proves the shared select/combobox primitive (src/select-ui.js) live,
@@ -336,12 +337,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       },
       stdio: 'ignore',
     });
-    const deadline = Date.now() + 8000;
-    while (Date.now() < deadline) {
-      try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    throw new Error('select-ui E2E: real server did not become ready in time');
+    await waitForServerReady(API_BASE, { label: 'select-ui E2E' });
   });
 
   test.afterAll(async () => {

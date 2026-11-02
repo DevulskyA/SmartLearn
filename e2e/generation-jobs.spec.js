@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // T-F3-04 (R-04 AC-04.3, F-14): the student can leave the screen while a draft is generated and come back to the REAL state:
@@ -87,12 +88,7 @@ test.beforeAll(async () => {
     },
     stdio: 'ignore',
   });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try { if ((await fetch(`${API_BASE}/health/ready`)).status === 200) return; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('generation-jobs E2E: real server did not become ready in time');
+  await waitForServerReady(API_BASE, { label: 'generation-jobs E2E' });
 });
 
 test.afterAll(async () => {

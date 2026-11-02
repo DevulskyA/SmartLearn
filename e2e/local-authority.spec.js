@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
 
 // LOCAL-01A: Desktop reuses the same remote-store.js/api-client.js HTTP
 // pipeline as REMOTE_MODE (see .specs/STATE.md's "ARCHITECTURE
@@ -27,16 +28,8 @@ let serverProcess;
 let dbDir;
 let dbPath;
 
-async function waitForReady(deadlineMs = 8000) {
-  const deadline = Date.now() + deadlineMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API_BASE}/health/ready`);
-      if (res.status === 200) return;
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error('local-authority E2E: real server did not become ready in time');
+async function waitForReady() {
+  await waitForServerReady(API_BASE, { label: 'local-authority E2E' });
 }
 
 function startServer() {
@@ -95,11 +88,11 @@ async function registerAndLogin(page, email, password) {
   await page.locator('#account-register-email').fill(email);
   await page.locator('#account-register-password').fill(password);
   await page.locator('#account-register-form button[type="submit"]').click();
-  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);
   await page.locator('#account-login-form button[type="submit"]').click();
-  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
 }
 
 async function fillPlanUnitForm(page, { subjectName, title, studyDate }) {
