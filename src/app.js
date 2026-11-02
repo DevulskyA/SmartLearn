@@ -4670,13 +4670,17 @@ export function showScreen(screenId, { focus = false } = {}) {
   // back on Hoje; wandering elsewhere drops it instead of surprising them later.
   if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
 
+  let leftStudyResultUnsent = false;
   for (const panel of screenPanels) {
     const leaving = !panel.hidden && panel.dataset.screenPanel !== nextScreen;
     panel.hidden = panel.dataset.screenPanel !== nextScreen;
     // A passing status ("saved", "copied", "nothing to show") belongs to the moment it was said: it must not greet the student
     // again when they come back. Errors stay until the student acts, and hidden notes keep their own lifecycle.
     if (leaving) clearTransientMessages(panel);
+    if (leaving && panel.dataset.screenPanel === "study-now" && pendingStudyEvidence) leftStudyResultUnsent = true;
   }
+  // The "send again" control lives only on the result screen: a result left unsent (H-T04) is sent once more on the way out, not dropped.
+  if (leftStudyResultUnsent) recordStudyEvidence().catch((error) => console.error("Falha ao registrar o resultado ao sair.", error));
 
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey
   // — the scrollable container (.app-main) kept whatever scroll offset the

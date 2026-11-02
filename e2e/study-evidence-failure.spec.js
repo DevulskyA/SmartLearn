@@ -257,3 +257,22 @@ test('PF-03: Disciplinas is a panel of Plano (closed by default, opened by the b
   await expect(page.locator('#screen-plan')).toBeVisible();
   await expect(page.locator('#plan-subjects-panel')).toBeVisible();
 });
+
+// H-T04 (kit audit): the evidence request failed and the student leaves the result without sending it again. The result screen was the
+// only place with the "send again" control, so leaving must not drop the result silently: it is either sent on the way out or still reachable.
+test('H-T04: leaving the result with evidence unsent does not lose it', async ({ page }) => {
+  const unit = await studyOnce(page, 'Aula evidencia d', async () => {
+    await page.route('**/v1/learning-evidence', (route) => (isEvidencePost(route) ? route.abort() : route.continue()));
+  });
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  expect((await evidenceRows(page, unit.id)).length).toBe(0);
+
+  await page.unroute('**/v1/learning-evidence'); // the connection is back by the time the student leaves
+  await page.locator('#study-now-done-btn').click();
+  await expect(page.locator('[data-screen="today"][aria-current="page"], [data-screen="today"].is-active')).toBeVisible();
+  await expect(async () => {
+    const recorded = (await evidenceRows(page, unit.id)).length === 1;
+    const stillOffered = await page.locator('#study-now-evidence-retry-btn').isVisible();
+    expect(recorded || stillOffered, 'the unsent result must be sent on the way out or still be offered').toBe(true);
+  }).toPass({ timeout: 4000 });
+});
