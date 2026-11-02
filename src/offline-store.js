@@ -165,6 +165,9 @@ let reloadedOnce = false;
 export async function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
   try {
+    // A first visit has no controller: the worker claiming the page is not an update, and reloading then wiped what the student
+    // had already started typing (the "Criar conta" flake). Only an update to a page that was already controlled reloads.
+    const wasControlled = !!navigator.serviceWorker.controller;
     const registration = await navigator.serviceWorker.register('/service-worker.js');
     if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     registration.addEventListener('updatefound', () => {
@@ -176,7 +179,7 @@ export async function registerServiceWorker() {
       });
     });
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloadedOnce) return;
+      if (reloadedOnce || !wasControlled) return;
       reloadedOnce = true;
       window.location.reload();
     });
