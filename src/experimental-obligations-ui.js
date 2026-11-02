@@ -27,7 +27,7 @@ function button(label, action, onClick) {
 }
 
 /** Renders the panel into `host` (a container on Hoje). Safe to call again: it replaces its own content. */
-export async function renderObligationsPanel(host, { plan } = {}) {
+export async function renderObligationsPanel(host, { plan, onPractice } = {}) {
   host.replaceChildren();
   let view;
   try {
@@ -42,7 +42,7 @@ export async function renderObligationsPanel(host, { plan } = {}) {
   message.setAttribute("role", "status");
   message.setAttribute("aria-live", "polite");
 
-  const refresh = (planArg) => renderObligationsPanel(host, { plan: planArg });
+  const refresh = (planArg) => renderObligationsPanel(host, { plan: planArg, onPractice });
   const act = async (path, body, okText) => {
     try {
       await apiRequest(path, { method: "POST", body });
@@ -69,7 +69,13 @@ export async function renderObligationsPanel(host, { plan } = {}) {
     if (unit.required && unit.collapsedCount > 0) li.append(createTextElement("p", "lesson-hint", t("experiment.unit.grouped", { count: unit.collapsedCount })));
     const actions = document.createElement("div");
     actions.className = "experiment-actions";
-    if (unit.required) actions.append(button(t("experiment.action.do"), "experiment-complete", () => act(`/v1/review-obligations/${unit.unitId}/complete`, { profile: "DECIDED" }, t("experiment.done"))));
+    // A stage with questions is concluded by practising them (the app opens the focused review and concludes it with their evidence);
+    // only a stage without questions is concluded by reading, straight from here.
+    if (unit.required && unit.exerciseCount > 0) actions.append(button(t("experiment.action.do"), "experiment-complete", () => {
+      if (!onPractice) { message.textContent = t("experiment.failed"); return; }
+      Promise.resolve(onPractice(unit)).then((opened) => { if (opened === false) message.textContent = t("experiment.failed"); });
+    }));
+    else if (unit.required) actions.append(button(t("experiment.action.do"), "experiment-complete", () => act(`/v1/review-obligations/${unit.unitId}/complete`, { profile: "DECIDED" }, t("experiment.done"))));
     actions.append(unit.paused
       ? button(t("experiment.action.resume"), "experiment-resume", () => act(`/v1/review-obligations/${unit.unitId}/resume`, {}))
       : button(t("experiment.action.pause"), "experiment-pause", () => act(`/v1/review-obligations/${unit.unitId}/pause`, {})));

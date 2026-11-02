@@ -30,7 +30,7 @@ export default {
   'today.review.block.score': 'Bloco concluído: {correct}/{total} corretas',
   'today.review.block.retest.one': 'Reteste: {fixed} de {wrong} erro corrigido',
   'today.review.block.retest.other': 'Reteste: {fixed} de {wrong} erros corrigidos',
-  'today.review.block.allFixed': 'Todos os erros foram corrigidos. Marque a revisão como feita quando terminar.',
+  'today.review.block.allFixed': 'Todos os erros foram corrigidos.',
 
   // Offline agenda
   'today.upcoming.more.one': 'e mais {count} revisão nos dias seguintes.',

@@ -79,8 +79,10 @@ test('ACCESS-3 Hoje: open a review, reveal, judge and complete it with the keybo
   for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Hoje pergunta ${i}?`, answer: `Certa ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
 
   await page.locator('[data-screen="today"]').click();
-  const row = page.locator('.review-row', { hasText: 'Aula hoje teclado' }).first();
-  await expect(row).toBeVisible({ timeout: 8000 });
+  const first = page.locator('.review-row', { hasText: 'Aula hoje teclado' }).first();
+  await expect(first).toBeVisible({ timeout: 8000 });
+  // pinned by id: the stage concludes and moves to another group, so "the first row of the lesson" would then be another stage
+  const row = page.locator(`.review-row[data-review-id="${await first.getAttribute('data-review-id')}"]`);
 
   // open the row from the keyboard
   await row.locator('.review-row-toggle').first().focus();
@@ -110,15 +112,23 @@ test('ACCESS-3 Hoje: open a review, reveal, judge and complete it with the keybo
   await expect(row.locator('[data-action="retest-block"]')).toBeFocused(); // the one obvious next action
 
   // the "Revisão feita" checkbox says WHICH review (several rows say the same words), and still starts with the visible label
+  // The last answer concluded the stage by itself (one rule: all answered = concluded): the checkbox is already checked, and the
+  // focus is back on the redo action after the redraw.
   const done = row.locator('[data-action="review-done"]');
+  await expect(done).toBeChecked({ timeout: 8000 });
+  await expect(row.locator('[data-action="retest-block"]')).toBeFocused();
   const name = await done.evaluate((el) => el.getAttribute('aria-label'));
   expect(name).toMatch(/^Revisão feita/);
   expect(name).toContain('Aula hoje teclado');
+  // undoing it from the keyboard re-renders Hoje: focus is on the SAME review's checkbox (now unchecked), not lost to the page
+  const doneId = await done.getAttribute('data-review-id');
+  const again = page.locator(`[data-action="review-done"][data-review-id="${doneId}"]`);
   await done.focus();
   await page.keyboard.press('Space');
-  const doneId = await done.getAttribute('data-review-id');
-  // completing re-rendered Hoje: focus is on the SAME review's checkbox (now checked), not lost to the page
-  const again = page.locator(`[data-action="review-done"][data-review-id="${doneId}"]`);
+  await expect(again).not.toBeChecked({ timeout: 8000 });
+  await expect(again).toBeFocused();
+  // all questions are still answered: ticking it again concludes it again, focus stays on the checkbox
+  await page.keyboard.press('Space');
   await expect(again).toBeChecked({ timeout: 8000 });
   await expect(again).toBeFocused();
 });

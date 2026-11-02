@@ -9,7 +9,7 @@
 // Tiers (lower = first):
 //   0  has items the student got wrong last time and has not answered yet here ("para reforçar")
 //   1  has exercises not yet answered in this review
-//   2  every exercise already answered (only "Revisão feita" / redo is left)
+//   2  every exercise already answered (the stage concluded itself; only the redo of errors is left)
 //   3  no exercises to practice at all
 export function reviewTier({ exerciseIds = [], judgedIds = new Set(), priorWrongIds = new Set() }) {
   if (exerciseIds.length === 0) return 3;

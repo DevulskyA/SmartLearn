@@ -74,7 +74,10 @@ test('ROBUST-1: Revisão feita whose reply was lost: the retry completes the rev
     if (!lost) { lost = true; await route.fetch(); await route.abort(); return; } // the server recorded it; the answer never came back
     await route.continue();
   });
-  await first.locator('[data-action="review-done"]').check();
+  // the last (only) answer concludes the stage by itself: that conclusion's reply is the one that is lost
+  await first.locator('.review-row-toggle').click();
+  await first.locator('[data-action="reveal-answer"]').click();
+  await first.locator('[data-action="exercise-acertei"]').click();
   const message = page.locator('#review-dashboard-message');
   await expect(message).toContainText('Não foi possível salvar'); // the student cannot know it was recorded
   const completedCount = async () => (await getJson(page, `/v1/review-tasks?unitId=${unit.id}`)).reviewTasks.filter((r) => r.completedAt || r.completed_at).length;
@@ -185,7 +188,7 @@ test('ROBUST-5: while a judgment is on its way to the server the buttons show it
 });
 
 test('ROBUST-6: undoing a Revisão feita whose reply was lost: the retry leaves the review reopened instead of failing forever', async ({ page }) => {
-  const unit = await seedLesson(page, 'Aula desfazer perdida', { n: 1, studyDate: '2020-01-01' });
+  const unit = await seedLesson(page, 'Aula desfazer perdida', { n: 0, studyDate: '2020-01-01' });
   await page.locator('[data-screen="today"]').click();
   const first = page.locator('.review-row').first();
   await expect(first).toBeVisible({ timeout: 8000 });
@@ -209,7 +212,7 @@ test('ROBUST-6: undoing a Revisão feita whose reply was lost: the retry leaves 
 });
 
 test('J02: a review marked by mistake has a "Desfazer conclusão" button that reopens it (the history is kept by the audited reopen)', async ({ page }) => {
-  await seedLesson(page, 'Aula desfazer botao', { n: 1, studyDate: '2020-01-01' });
+  await seedLesson(page, 'Aula desfazer botao', { n: 0, studyDate: '2020-01-01' });
   await page.locator('[data-screen="today"]').click();
   const first = page.locator('.review-row').first();
   await expect(first).toBeVisible({ timeout: 8000 });

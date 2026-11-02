@@ -5,7 +5,7 @@ export default {
   'experiment.switch.label': 'Experimento: revisões por unidade e plano do dia',
   'experiment.switch.hint': 'Mostra na tela Hoje um painel experimental. Não substitui o calendário padrão e pode ser desligado a qualquer momento.',
   'experiment.panel.title': 'Revisões por unidade (experimental)',
-  'experiment.panel.hint': 'Uma revisão por unidade: ao fazê-la, as próximas datas partem do dia em que você a fez. Não dá pontos de aprendizagem e não cria evidência.',
+  'experiment.panel.hint': 'Uma revisão por unidade: ao concluí-la, as próximas datas partem do dia em que você a fez. Com questões, você as responde (elas contam como evidência); sem questões, a leitura basta e não dá pontos de aprendizagem.',
   'experiment.unit.required': 'Revisão da etapa de {days} dias, vencida em {due}.',
   'experiment.unit.grouped': '{count} etapas atrasadas agrupadas nesta.',
   'experiment.unit.nothing': 'Nada a revisar hoje. Próxima revisão: {due}.',

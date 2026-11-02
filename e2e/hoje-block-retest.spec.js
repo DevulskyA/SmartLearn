@@ -141,7 +141,7 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   await expect(blockResult).toContainText('Reteste: 1 de 1 erro corrigido');
   await expect(item('Pergunta A?')).toContainText('Reteste: corrigido');
   await expect(blockResult.getByRole('button', { name: /Refazer/ })).toHaveCount(0);
-  await expect(blockResult).toContainText('Marque a revisão como feita');
+  await expect(blockResult).toContainText('Todos os erros foram corrigidos');
 
   // Accessibility sensor (WCAG AA, 4.5:1 for small text) on the new secondary
   // text: it was 4.26:1 (muted on the sunken surface) before this was fixed.
@@ -165,8 +165,8 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   }, { base: API_BASE, id: reviewId });
   expect(judged.attempts.map((a) => a.outcome).sort()).toEqual(['CORRECT', 'INCORRECT']);
 
-  // Completing the review records the ORIGINAL 1/2, not the redo.
-  await page.locator(`.review-row[data-review-id="${reviewId}"] input[data-action="review-done"]`).check();
+  // The stage concluded by itself at the last answer (before the redo): its evidence is the ORIGINAL 1/2, not the redo.
+  await expect(page.locator(`.review-row[data-review-id="${reviewId}"] input[data-action="review-done"]`)).toBeChecked();
   const fetchReviewEvidence = async () => {
     const evidence = await page.evaluate(async (base) => {
       const res = await fetch(`${base}/v1/learning-evidence`, { credentials: 'include' });

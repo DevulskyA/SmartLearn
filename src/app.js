@@ -7,6 +7,7 @@ import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
 import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
 import { pickPrimaryReview } from "./today-priority.js";
+import { reviewConclusion } from "./review-completion.js";
 import { groupOverdueByUnit, stageRanges, shouldCollapseOverdue } from "./overdue-groups.js";
 import { weakPracticeReason } from "./priorities-text.js";
 import { groupUpcomingReviews } from "./upcoming-reviews.js";
@@ -1061,7 +1062,24 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     toggleRowBtn.setAttribute("aria-expanded", "true");
     toggleRowBtn.textContent = t("shell.action.collapse");
   }
+  syncReviewProgress(row);
   return row;
+}
+
+/** A stage with questions part answered shows "x de y respondidas" on its card (visible while collapsed): it stays pending until all are answered. */
+function syncReviewProgress(row) {
+  const section = row.querySelector("[data-exercises-total]");
+  if (!section) return;
+  const total = Number(section.dataset.exercisesTotal);
+  const answered = Number(section.dataset.exercisesAnswered);
+  const concluded = row.querySelector('[data-action="review-done"]')?.checked;
+  let chip = row.querySelector(".review-progress-chip");
+  if (concluded || answered === 0 || answered >= total) { chip?.remove(); return; }
+  if (!chip) {
+    chip = createTextElement("span", "study-now-chip review-progress-chip", "");
+    row.querySelector(".review-row-tags")?.append(chip);
+  }
+  chip.textContent = t("appReview.progress", { answered, total });
 }
 
 let pendingTodayReturnReviewId = null;
@@ -1249,7 +1267,7 @@ if (REMOTE_MODE) setSourceOpeningRecorder((opening) => apiRequest("/v1/source-op
 function refreshExperimentPanel() {
   const host = document.querySelector("#experiment-host");
   if (!host) return;
-  if (isExperimentOn()) void renderObligationsPanel(host);
+  if (isExperimentOn()) void renderObligationsPanel(host, { onPractice: practiceObligation });
   else host.replaceChildren();
 }
 const experimentSwitch = document.querySelector("#experiment-switch");
@@ -3353,7 +3371,7 @@ async function finishStudyNowSession() {
   const totalCorrect = correctCount + (isReview ? state.restored.correct : 0);
   if (answeredCount > 0 && !isRetest) {
     pendingStudyEvidence = isReview
-      ? { reviewTaskId: state.reviewTaskId, questionsCount: totalAnswered, correctCount: totalCorrect }
+      ? { reviewTaskId: state.reviewTaskId, obligationUnitId: state.obligationUnitId ?? null, questionsCount: totalAnswered, correctCount: totalCorrect }
       : {
         unitId,
         context: "INITIAL_PRACTICE",
@@ -3442,7 +3460,8 @@ async function recordStudyEvidence() {
   const evidence = pendingStudyEvidence;
   if (!evidence) return;
   try {
-    if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
+    if (evidence.obligationUnitId != null) await apiRequest(`/v1/review-obligations/${evidence.obligationUnitId}/complete`, { method: "POST", body: { profile: "DECIDED", questionsCount: evidence.questionsCount, correctCount: evidence.correctCount } });
+    else if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
     else await DB.learningEvidence.create(evidence);
   } catch (error) {
     // an earlier try that did reach the server (its reply was lost) already recorded it: sending it again is refused as such
@@ -3905,14 +3924,14 @@ function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exer
  * server (as an attempt of that review) before the next one; the review closes with the whole block, answers already given inside the
  * row included. The row itself is untouched, so nothing is lost if the student goes back.
  */
-async function startFocusedReview(reviewId) {
+async function startFocusedReview(reviewId, { obligationUnitId = null } = {}) {
   const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
   const section = row?.querySelector("[data-exercises-total]");
-  if (!row || !section) return;
+  if (!row || !section) return false;
   const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
   const answeredIds = new Set([...section.querySelectorAll('.review-exercise-item[data-exercise-answered="true"]')].map((el) => Number(el.dataset.exerciseId)));
   const pending = (reviewBlockExercises.get(section) ?? []).filter((exercise) => !answeredIds.has(exercise.id));
-  if (pending.length === 0) return;
+  if (pending.length === 0) return false;
   pendingTodayReturnReviewId = Number(reviewId);
   resetStudyNowResult();
   studyNowSubjectEl.textContent = row.querySelector(".subject-chip")?.textContent ?? "";
@@ -3921,6 +3940,7 @@ async function startFocusedReview(reviewId) {
   studyNowSummaryBody.textContent = "";
   studyNowState = newStudyNowState("review", Number(row.dataset.unitId), pending);
   studyNowState.reviewTaskId = Number(reviewId);
+  studyNowState.obligationUnitId = obligationUnitId; // set when the experimental panel started it: the stage is then concluded through the experimental route
   studyNowState.restored = { answered: Number(section.dataset.exercisesAnswered), correct: Number(section.dataset.exercisesCorrect) };
   // What was already marked wrong inside the row belongs to the same block: it is listed with its answer and can be redone with the rest.
   const wrongInRow = new Set([...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)));
@@ -3929,6 +3949,13 @@ async function startFocusedReview(reviewId) {
   renderStudyNowQuestion();
   studyNowRevealBtn.focus();
   if (unsent > 0) studyNowMessage.textContent = t(unsent === 1 ? "appReview.unsentRetest.one" : "appReview.unsentRetest.other", { count: unsent });
+  return true;
+}
+
+/** The experimental panel's "Fazer a revisão" on a unit with questions: opens the practice of the stage it requires. False = nothing to open. */
+async function practiceObligation(unit) {
+  try { return await startFocusedReview(unit.required.id, { obligationUnitId: unit.unitId }); }
+  catch (error) { console.error("Falha ao abrir a revisão.", error); return false; }
 }
 
 todayFocusReviewBtn?.addEventListener("click", () => {
@@ -5314,12 +5341,31 @@ reviewDashboard.addEventListener("click", async (event) => {
     section.dataset.allAnswered = "true";
   }
   updateReviewBlockResult(section);
+  if (row) syncReviewProgress(row);
 
   // The judged button was just disabled, which drops keyboard focus to <body>:
   // hand it to the next actionable control (next question, or the redo action
   // when the block just ended with errors).
   const nextOpen = section.querySelector('.review-exercise-item[data-exercise-answered="false"] [data-action="reveal-answer"]');
   (nextOpen ?? section.querySelector(".review-block-retest"))?.focus();
+
+  // The last answer concludes the stage by itself (one rule, see review-completion.js): no second "Revisão feita".
+  const box = row?.querySelector('[data-action="review-done"]');
+  if (row && box && !box.checked && !box.disabled && reviewConclusion({ total, answered }).kind === "EVIDENCE") {
+    box.disabled = true;
+    try {
+      await concludeReviewWithEvidence(Number(box.dataset.reviewId), section, { retestFirst: true });
+    } catch (error) {
+      if (error?.code === "ALREADY_COMPLETED") {
+        await renderToday().catch((refreshError) => console.error("Falha ao atualizar Hoje.", refreshError));
+        return;
+      }
+      // nothing was concluded: the box stays as the way to try again
+      box.disabled = false;
+      setReviewMessage(t("appReview.saveFailed"), true);
+      console.error("Falha ao concluir a revisão.", error);
+    }
+  }
 });
 
 reviewDashboard.addEventListener("click", async (event) => {
@@ -5412,11 +5458,30 @@ reviewDashboard.addEventListener("click", async (event) => {
  * was on no longer exists. Put focus on the same review's checkbox in its new place (its state is now committed and
  * it can be undone from there); if that row is gone, on the page heading.
  */
-function refocusReviewDone(taskId) {
-  const again = reviewDashboard.querySelector(`[data-action="review-done"][data-review-id="${taskId}"]`);
+function refocusReviewDone(taskId, { retestFirst = false } = {}) {
+  const retest = retestFirst ? reviewDashboard.querySelector(`.review-row[data-review-id="${taskId}"] .review-block-retest`) : null;
+  const again = retest ?? reviewDashboard.querySelector(`[data-action="review-done"][data-review-id="${taskId}"]`);
   if (again) { again.focus({ preventScroll: true }); return; }
   const heading = document.querySelector("#title-today");
   if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+}
+
+/**
+ * Concludes a stage whose questions are ALL answered (the one conclusion rule, review-completion.js): items whose attempt could not be
+ * sent earlier get another try, the answers are recorded as the stage's evidence, and Hoje is redrawn with focus back on the same review.
+ * Throws when the server refuses, leaving the stage as it was.
+ */
+async function concludeReviewWithEvidence(taskId, section, { retestFirst = false } = {}) {
+  const unsentItems = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  await DB.completeReviewWithEvidence({
+    taskId,
+    questionsCount: Number(section.dataset.exercisesAnswered),
+    correctCount: Number(section.dataset.exercisesCorrect),
+  });
+  setReviewMessage();
+  await renderToday();
+  refocusReviewDone(taskId, { retestFirst });
+  if (unsentItems > 0) setReviewMessage(t(unsentItems === 1 ? "appReview.unsentReview.one" : "appReview.unsentReview.other", { count: unsentItems }), true);
 }
 
 reviewDashboard.addEventListener("change", async (event) => {
@@ -5428,27 +5493,24 @@ reviewDashboard.addEventListener("change", async (event) => {
   try {
     const row = input.closest(".review-row");
     const exercisesSection = row?.querySelector("[data-exercises-total]");
-    // Items whose attempt could not be sent earlier get another try now, before the review is closed.
-    let unsentItems = 0;
-    if (input.checked && exercisesSection && REMOTE_MODE && DB.attempts) unsentItems = await flushPendingAttempts(exercisesSection);
-    const unsentNote = () => (unsentItems > 0
-      ? t(unsentItems === 1 ? "appReview.unsentReview.one" : "appReview.unsentReview.other", { count: unsentItems })
-      : "");
 
     if (input.checked && exercisesSection) {
-      const total = Number(exercisesSection.dataset.exercisesTotal);
-      const answered = Number(exercisesSection.dataset.exercisesAnswered);
-      const correct = Number(exercisesSection.dataset.exercisesCorrect);
-      if (total > 0 && answered > 0) {
-        await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
-        setReviewMessage();
-        await renderToday();
-        refocusReviewDone(taskId);
-        if (unsentItems > 0) setReviewMessage(unsentNote(), true);
+      const rule = reviewConclusion({ total: Number(exercisesSection.dataset.exercisesTotal), answered: Number(exercisesSection.dataset.exercisesAnswered) });
+      if (rule.kind === "PRACTICE_PENDING") {
+        // A stage with questions is not concluded by reading nor by a part of them: it stays pending.
+        input.checked = false;
+        input.disabled = false;
+        input.focus({ preventScroll: true });
+        setReviewMessage(t(rule.remaining === 1 ? "appReview.practicePending.one" : "appReview.practicePending.other", { count: rule.remaining }), true);
+        return;
+      }
+      if (rule.kind === "EVIDENCE") {
+        await concludeReviewWithEvidence(taskId, exercisesSection);
         return;
       }
     }
 
+    // reading: only a stage without questions gets here (or undoing a conclusion); it records "lida" and never a score
     await DB.reviewTasks.update(taskId, {
       reviewDone: input.checked,
       completedAt: input.checked ? new Date().toISOString() : null,
