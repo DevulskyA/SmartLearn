@@ -157,6 +157,7 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   await expect(panel.locator('.lesson-qeditor textarea')).toHaveCount(1); // the prompt only
   await expect(panel.locator('.lesson-qeditor')).not.toContainText('Contrai a arteríola eferente');
   await expect(panel.locator('[data-action="accept-question"]')).toHaveCount(0);
+  await shot(panel, '1280-draft-answer-hidden');
   await panel.locator('[data-action="reveal-answer"]').click(); // author mode: asked for on purpose
   await expect(panel.locator('.lesson-qeditor textarea').nth(1)).toHaveValue(/Contrai a arteríola eferente/);
   await panel.locator('.lesson-qitem').nth(0).click();
