@@ -27,7 +27,8 @@ BRANCH: claude/smartlearn-v1-complete · HEAD no momento do registro: 6f1fe2bd1e
 ## Pendências
 1. Prova nativa (Conta A-13, Editar questões B03, Desfazer J02, aviso A-04, tela 1 A-14): exige fechar o app aberto do usuário ("pode fechar") e rodar `bash scripts/zz-ui-full.sh`. Tema: aguardar a versão do usuário.
 2. NOVA TAREFA (pedido do usuário, 2026-11-02): o aluno precisa poder DISPENSAR revisões, principalmente quando há muitas pendentes (ex.: 7 de uma mesma aula; o dev data mostra 36 vencidas em 10 conteúdos). Proposta a validar: ação "Dispensar" por revisão e por conteúdo (todas as vencidas daquela aula), motivo opcional, reversível ("Desfazer dispensa"), auditada, NÃO conta como feita nem entra em desempenho/evidência, some da fila de Hoje. Decidir o efeito sobre as etapas seguintes (R+1...) antes de implementar; é regra de produto de repetição espaçada, não só UI.
-3. Só se a jornada real reproduzir: B06, B07, B13, B12; D1-10/D1-11 (lotes B07/B08); A-16 se ACCESS-3 repetir.
+3. NOVA TAREFA (pedido do usuário, 2026-11-02, tela Materiais > "Documentos já enviados"): decisão vigente = o app NÃO guarda os livros; ele aponta para o arquivo onde estava. Falta deixar isso claro e tratar o arquivo movido/apagado, que o software não detecta sozinho. Proposta a validar: (a) texto curto na tela dizendo que o PDF precisa ficar na pasta original; (b) ao abrir, checar se o arquivo ainda existe e, se não, dizer "Arquivo não encontrado em <pasta>" com o botão "Localizar arquivo" (escolher o novo caminho, conferido por tamanho, hash e nº de páginas contra o registrado); (c) marcar o documento na lista como "arquivo ausente" para o aluno ver antes de clicar. Aulas e resumos já criados continuam válidos sem o PDF.
+4. Só se a jornada real reproduzir: B06, B07, B13, B12; D1-10/D1-11 (lotes B07/B08); A-16 se ACCESS-3 repetir.
 3. Resto da branch fix/window-opens-on-primary-monitor: decisão do usuário.
 
 ## Decisões humanas
