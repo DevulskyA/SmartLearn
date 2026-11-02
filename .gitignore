@@ -43,3 +43,6 @@ conductor/.view/
 
 # Per-worktree resume position: overwritten, never history (see CLAUDE.md, Continuidade de contexto)
 .specs/HANDOFF.md
+
+# UI driver full batch logs (regenerated every run; failures keep their evidence in lotes/**/falhas)
+.specs/evidence/*/lotes/logs/

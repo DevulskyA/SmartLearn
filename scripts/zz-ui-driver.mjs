@@ -4,7 +4,7 @@
 //   node scripts/zz-ui-driver.mjs <command> ...    talks to the running one (snap, text, click, fill, type, select, key, shot, console, ...)
 // Same isolation rules as scripts/desktop-study-journey.mjs: throwaway data under the OS temp dir, no model, never the human datastore.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer as createNetServer } from 'node:net';
@@ -38,21 +38,24 @@ if (cmd !== 'daemon') {
     const keepGoing = /^#\s*keep-going/.test(readFileSync(args[0], 'utf8').trimStart());
     const t0 = Date.now(); let failed = 0;
     const SLOW_MS = 700; const slow = [];
+    const fullLog = []; // complete output of every line goes to lotes/logs/<batch>.log; the model reads only the compact lines printed to the console
     for (const [i, line] of lines.entries()) {
       const lineStart = Date.now();
       const parts = [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
       const [c, ...a] = parts;
-      const r = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd: c, args: a, quiet: i < lines.length - 1 }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
+      const r = await fetch(`http://127.0.0.1:${ctl}/cmd`, { method: 'POST', body: JSON.stringify({ cmd: c, args: a, quiet: i < lines.length - 1, evidence: join(dirname(args[0]), 'falhas', `${args[0].replace(/^.*[\\/]/, '').replace(/\.txt$/, '')}-L${i + 1}`) }) }).catch((e) => { console.error('driver unreachable:', e.message); process.exit(1); });
       const out = await r.text();
       const last = i === lines.length - 1;
       if (Date.now() - lineStart > SLOW_MS && !/^(wait|restart)\b/.test(line)) slow.push({ n: i + 1, ms: Date.now() - lineStart, line });
       console.log(`${r.ok ? 'ok ' : 'ERR'} ${line}${last || !r.ok ? `\n${out}` : (c === 'snap' || c === 'text' ? '' : ` -> ${out.split('\n').pop().slice(0, 100)}`)}`);
+      fullLog.push(`${r.ok ? 'ok ' : 'ERR'} ${line}\n${out}`);
       if (!r.ok) { failed += 1; if (!keepGoing) break; }
     }
     // Slow-line report: every line is expected to take well under a second (the app is local and instant). Anything slower is a defect
     // of the test (wrong target, missing wait target), never normal: it is named so the test gets fixed instead of tolerated.
     if (slow.length) console.log(`SLOW LINES (>${SLOW_MS} ms): ${slow.map((s) => `#${s.n} ${s.ms}ms ${s.line.slice(0, 50)}`).join(' | ')}`);
     console.log(`batch: ${lines.length} lines, ${failed} failed, ${Date.now() - t0} ms`);
+    try { const ld = join(dirname(args[0]), 'logs'); mkdirSync(ld, { recursive: true }); writeFileSync(join(ld, `${args[0].replace(/^.*[\\/]/, '').replace(/\.txt$/, '')}.log`), `${fullLog.join('\n')}\n`); } catch { /* the log never breaks a test */ }
     // Measured runtime baseline (rule: every test has a measured time and any deviation is a problem). `batch <file> --record` stores the time of a
     // clean run next to the batches; later runs outside [0.5x - 0.5 s, 1.5x + 0.5 s] are flagged: slower means a slow target or a regressed app,
     // faster means steps were skipped or something failed silently.
@@ -270,7 +273,20 @@ const server = createServer((req, res) => {
       // ("run snap") instead of silently hitting whatever now has that number.
       if (RETIRES_NUMBERS.has(parsed.cmd)) await page.evaluate(() => document.querySelectorAll('[data-uid]').forEach((e) => e.removeAttribute('data-uid'))).catch(() => {});
       res.end(out);
-    } catch (e) { verdict = 'ERR'; res.statusCode = 500; res.end(`ERROR ${String(e.message).split('\n')[0]}`); }
+    } catch (e) {
+      verdict = 'ERR'; res.statusCode = 500;
+      let ref = '';
+      // A failing line inside a batch saves its own evidence (screen shot, controls/text, console events) so triage needs zero extra tool calls.
+      if (parsed.evidence) {
+        try {
+          mkdirSync(parsed.evidence, { recursive: true });
+          await page.screenshot({ path: join(parsed.evidence, 'falha.png') });
+          writeFileSync(join(parsed.evidence, 'tela.txt'), `${await snapshot(false)}\n--- console\n${events.join('\n') || '-'}\n`);
+          ref = ` | EVIDENCE ${parsed.evidence}`;
+        } catch { /* evidence is best effort: the failure itself is still reported */ }
+      }
+      res.end(`ERROR ${String(e.message).split('\n')[0]}${ref}`);
+    }
     // one line per command (time, duration, verdict): the first place to look when a run feels slow
     try { appendFileSync(join(tmpdir(), 'sl-ui-driver.log'), `${new Date().toISOString().slice(11, 23)} ${String(Date.now() - t0).padStart(5)}ms ${verdict} ${parsed.cmd ?? '?'} ${(parsed.args ?? []).join(' ').slice(0, 60)}\n`); } catch { /* logging never breaks a test */ }
   });

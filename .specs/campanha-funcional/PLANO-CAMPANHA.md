@@ -53,12 +53,12 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [x] 3.6 Registrar causa, alteração, tempos, ganho % e riscos; commit local. Parar.
 
 ### 04 — Automação determinística e economia de tokens
-- [ ] 4.1 Inspecionar o driver e achar o maior desperdício de interações repetitivas.
-- [ ] 4.2 Transformá-lo numa sequência automatizada reutilizável.
-- [ ] 4.3 Logs completos em arquivo local; ao modelo, só resumo compacto com falhas e referências.
-- [ ] 4.4 Capturas de tela só em checkpoints que comprovem comportamento e em falhas.
-- [ ] 4.5 Corrigir defeitos do driver relacionados (inclusive truncamento de seletor com espaço, se existir).
-- [ ] 4.6 Validar antes/depois (chamadas, volume de saída, duração, evidências; tokens como estimativa se não houver contagem real); commit local. Parar.
+- [x] 4.1 Inspecionar o driver e achar o maior desperdício de interações repetitivas.
+- [x] 4.2 Transformá-lo numa sequência automatizada reutilizável.
+- [x] 4.3 Logs completos em arquivo local; ao modelo, só resumo compacto com falhas e referências.
+- [x] 4.4 Capturas de tela só em checkpoints que comprovem comportamento e em falhas.
+- [x] 4.5 Corrigir defeitos do driver relacionados (inclusive truncamento de seletor com espaço, se existir).
+- [x] 4.6 Validar antes/depois (chamadas, volume de saída, duração, evidências; tokens como estimativa se não houver contagem real); commit local. Parar.
 
 ### 05 — Isolamento dos dados
 - [ ] 5.1 Registrar o estado dos dados demonstrativos (contagens e identificadores).
@@ -120,7 +120,7 @@ Regra de execução: **uma tarefa por vez; parar ao concluir; um commit local po
 - [ ] 12.6 Fechamento executivo curto; declarar conclusão total ou parcial. Parar.
 
 ## Próxima ação
-Tarefa 04, subtarefa 4.1.
+Tarefa 05, subtarefa 5.1.
 
 ## Resultados da Tarefa 01 (2026-11-01) — medido, sem rodar a suíte completa
 **Métricas de base**
@@ -180,3 +180,18 @@ Unidades medidas: subida do app 5,3 s; reinício deliberado 6,75 s (7,0 s no cic
 **Segurança contra recorrência:** `scripts/e2e.mjs` compara cada execução com `e2e/.duration-baseline.json`: desvio > 30% = `PERF DEVIATION` (exit 5), sem baseline = `NO BASELINE`; `--record-baseline` grava a partir de execução limpa. Uma rodada com máquina carregada (58 processos msedge, 5 GB livres) chegou a 1171 s com 10+ falhas: o guarda sinaliza isso.
 
 **Riscos:** sob carga externa a suíte falha por "server not ready"; rodar com a máquina ociosa.
+
+## Resultados da Tarefa 04 (2026-11-01)
+**Maior desperdício achado (4.1):** o ciclo já roda em 1 chamada; o que sobrava era a falha. Antes, uma linha com erro imprimia só `ERR`, e o modelo gastava 3-4 chamadas extras (snap, shot, console), estimadas em ~10k tokens cada (estimativa do próprio driver, sem contagem real). Também não havia log completo em arquivo.
+
+**Mudança (4.2-4.4):** em `scripts/zz-ui-driver.mjs`, toda linha de lote que falha salva sozinha `falhas/<lote>-L<n>/falha.png` + `tela.txt` (controles, texto, console) e a mensagem de erro cita a pasta; todo lote grava o log completo em `lotes/logs/<lote>.log` (ignorado no Git). `scripts/zz-ui-cycle.mjs` repete a referência da evidência na tabela de falhas. Capturas só na falha; o ciclo normal não gera nenhuma.
+
+**Selftest (4.5/4.6):** 21/21 (eram 17; 4 novos: pasta de evidência citada, png + tela.txt existem, log completo em arquivo, seletor entre aspas com espaço chega inteiro). Truncamento: seletor sem aspas ainda vira só a 1ª palavra por desenho; com aspas está correto e coberto.
+
+| Medida (ciclo completo, 17 lotes) | Antes (estimado) | Depois (medido) |
+|---|---|---|
+| Texto que o modelo lê | saída integral ≈ 43.422 caracteres (≈ 10.900 tokens, estimativa chars/4) | 663-716 caracteres (≈ 170-180 tokens) |
+| Chamadas para triar 1 falha | ≥ 3 | 0 extras; ler 1 arquivo `tela.txt` (~1,5 mil caracteres) |
+| Duração | 52-60 s | 52,6 s e 54,0 s (rodadas limpas); 59,8 s com a falha |
+
+**Prova real:** na 1ª rodada o SEED2c falhou (A-09, intermitente, 1 em 3) e a evidência automática bastou para ver que o botão existia 3 s depois; rodadas 2 e 3: 0 falhas. Causa de A-09 não provada. Limitação: o "antes" é o tamanho do log integral, não uma reexecução do fluxo antigo.

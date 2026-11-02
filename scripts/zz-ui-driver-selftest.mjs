@@ -2,7 +2,7 @@
 // stale control numbers fail fast with the cause (click/fill/upload/select), numbers are retired after a screen-changing action,
 // an 8-line batch is quick, and the 17th separate call in a minute is refused while batch stays allowed.
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -51,6 +51,19 @@ check('a time far from the baseline is a deviation (exit 5)', drift.code === 5, 
 writeFileSync(file, 'click Plano\nsnap\n');
 check('a batch with no baseline says so', /NO BASELINE/.test(run(['batch', file]).out));
 rmSync(dir, { recursive: true, force: true });
+
+// T04: a failing line saves its own evidence (screenshot + screen text + console) and names it; every batch leaves a complete log file.
+{
+  const bd = join(tmpdir(), 'sl-ui-selftest-evid'); rmSync(bd, { recursive: true, force: true }); mkdirSync(bd, { recursive: true });
+  const bf = join(bd, 'falha.txt'); writeFileSync(bf, 'click Plano\nclick "controle que nao existe xyz"\nsnap\n');
+  const r = run(['batch', bf]);
+  const ev = r.out.match(/EVIDENCE (\S.*)$/m)?.[1]?.trim();
+  check('a failing batch line names its evidence folder', r.code === 2 && !!ev && /falha-L2$/.test(ev), ev ?? 'none');
+  check('the evidence has screenshot and screen text', !!ev && existsSync(join(ev, 'falha.png')) && /--- controls/.test(readFileSync(join(ev, 'tela.txt'), 'utf8')));
+  check('the full log is written to a file', existsSync(join(bd, 'logs', 'falha.log')) && /click Plano/.test(readFileSync(join(bd, 'logs', 'falha.log'), 'utf8')));
+  check('a quoted multi-word selector reaches the driver whole (error names it)', /controle que nao existe xyz/.test(r.out));
+  rmSync(bd, { recursive: true, force: true });
+}
 
 rmSync(pace, { force: true });
 let blockedAt = null;

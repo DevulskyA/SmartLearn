@@ -83,3 +83,10 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 ## Fora do alcance do teste (decisão do usuário)
 - J09 (provas): não existe entrada de provas na interface; sem tela não há o que testar. Se a funcionalidade deveria existir, é decisão de produto.
 - Mudança de monitor da janela: está na branch `fix/window-opens-on-primary-monitor` (c65f53e), provada na janela real; a integração ao app usado (merge) é do usuário.
+
+## A-09 SEED2c falhou 1 de 3 rodadas (intermitente) — registrado na T04, 2026-11-01
+- **Onde:** `seed/SEED2c-pdf-aula-passada.txt` linha 5, `expect "Gerar rascunho com IA"` (timeout de 3 s).
+- **Esperado:** botão aparece depois da análise do PDF. **Observado (rodada 1):** `texto esperado não apareceu`; a tela capturada 3 s depois já mostrava o botão `[16]`. Lote levou 5213 ms e o guarda marcou DESVIO (baseline ≈ 2,7 s). Rodadas 2 e 3: 0 falhas, 2675 e 2716 ms.
+- **Severidade:** baixa (teste), mas é intermitência; o guarda de tempo a detectou.
+- **Evidência:** `lotes/seed/falhas/SEED2c-pdf-aula-passada-L5/` (falha.png, tela.txt), primeira captura automática do driver.
+- **Causa:** NÃO PROVADA. Hipótese: análise do PDF excedeu 3 s com a máquina carregada na 1ª rodada (instrumento com espera curta, ou produto lento sob carga). Reprodução: repetir o ciclo sob carga. Status: aberto, sem correção (regra: não corrigir durante o ciclo).

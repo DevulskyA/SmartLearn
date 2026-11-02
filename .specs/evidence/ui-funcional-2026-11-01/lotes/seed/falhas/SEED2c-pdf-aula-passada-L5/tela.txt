@@ -1,0 +1,41 @@
+URL http://127.0.0.1:58226/#materials
+TITLE SmartLearn
+HEADINGS Materiais | Fontes em PDF | O que você quer estudar?
+ALERTS 1 trecho proposto. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.
+--- controls
+[0] a "SmartLearn - ir para Hoje" (href=#today)
+[1] button "Alternar tema rápido"
+[2] button "Hoje"
+[3] button "Materiais" (current=page)
+[4] button "Plano"
+[5] button "Estatísticas"
+[6] button "Configurações"
+[7] button "Conta"
+[8] button "Selecionar PDF"
+[9] input:file "" (value="")
+[10] input:search "Título da seção a buscar" (value="")
+[11] button "Buscar"
+[12] summary "Índice do documento (1 unidade)"
+[13] input:text "Título do trecho, páginas 1–3" (value="farmacologia-cap1 — páginas 1-3")
+[14] button "Salvar título"
+[15] button "Ver trecho da fonte"
+[16] button "Gerar rascunho com IA"
+--- text
+SmartLearn Hoje Materiais Plano Estatísticas Configurações Conta SmartLearn DEV · v0.1.0 · 2b42ce0+local FONTES Materiais FONTES Fontes em PDF Envie um PDF para revisar os trechos propostos antes de criar qualquer aula. Nenhuma aula é criada automaticamente — você inspeciona e ajusta os títulos antes de aceitar qualquer conteúdo. Selecionar PDF 1 trecho proposto. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso. O que você quer estudar? Buscar Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA. Índice do documento (1 unidade) PÁGINAS 1–3 Salvar título Ver trecho da fonte Ger
+--- console
+00:30:26 http401: GET http://127.0.0.1:58226/v1/auth/me
+00:30:26 console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+00:30:26 http401: GET http://127.0.0.1:58226/v1/auth/me
+00:30:26 console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+00:30:26 http401: GET http://127.0.0.1:58226/v1/auth/me
+00:30:26 console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+00:30:31 requestfailed: GET http://127.0.0.1:58226/v1/priorities?date=2026-11-01 net::ERR_ABORTED
+00:30:31 console.warning: Falha ao carregar sugestões de reforço. NetworkError: Falha de rede ao acessar /v1/priorities?date=2026-11-01: Failed to fetch
+    at w (http://127.0.0.1:58226/assets/pdf-crop-dialog-CcAUx4Qt.js:2:89317)
+    at async wu (http://127.0.0.1:58226/assets/index-Y3ObMQDw.js:149:33577)
+00:30:32 requestfailed: GET http://127.0.0.1:58226/v1/learning-units/2/exercises net::ERR_ABORTED
+00:30:32 requestfailed: GET http://127.0.0.1:58226/v1/learning-units/1/exercises net::ERR_ABORTED
+00:30:35 requestfailed: GET http://127.0.0.1:58226/v1/priorities?date=2026-11-01 net::ERR_ABORTED
+00:30:35 console.warning: Falha ao carregar sugestões de reforço. NetworkError: Falha de rede ao acessar /v1/priorities?date=2026-11-01: Failed to fetch
+    at w (http://127.0.0.1:58226/assets/pdf-crop-dialog-CcAUx4Qt.js:2:89317)
+    at async wu (http://127.0.0.1:58226/assets/index-Y3ObMQDw.js:149:33577)
