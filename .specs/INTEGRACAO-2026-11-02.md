@@ -41,6 +41,11 @@ Base: integração 2cd68bf + merge de `claude/stats-aaa-6405e1`. Resolução: Ru
 - E2E completo: 375 passaram, 2 ignorados, 1 falha (I-05), 11,2 min (orçamento ~16 min). Conjunto focado do editor: 45/45.
 - Jornada nativa (WebView2 real, exe isolado, dados e perfil descartáveis, título `SmartLearn DEV - v0.1.0 - 3519915`, `inputsHash 2fde0750efe8` igual ao empacotado): 23/23 em 82 s. O exe é o `smartlearn.exe` de f1cddd9 (src-tauri sem diferença) com os recursos empacotados de 3519915.
 
+## Auditoria independente de 3519915: 3 defeitos, corrigidos em 17e7027 (+ baseline em 088a48f)
+Cada um reproduzido por teste que falhava antes: (1) `backup.mjs` migrava o banco DEV quando a migração estava autorizada → agora o backup do DEV é sempre "como está", somente leitura; (2) hard link/symlink para o próprio `.db` não era reconhecido → comparação por dispositivo+id do arquivo (symlink de arquivo exercitado no Windows, não pulado); (3) `fromVersion === 0` tratava banco existente sem histórico como novo → só é novo o banco sem tabelas; com tabelas e sem histórico é recusado, mesmo com lista de autorização completa. Erro meu: baseline de prosa 579→580 (regra do ratchet existia, não conferi antes de commitar).
+
+Provas no SHA 088a48f (nada reaproveitado de outro SHA): lint 0; unit 860/860; servidor 1193/1193; jornada nativa 23/23 (título `SmartLearn DEV - v0.1.0 - 088a48f`, `inputsHash 976dd5cc3e24`); E2E completo 376 passaram, 2 ignorados, 0 falhas, 11,8 min. Commits posteriores só tocam documentação.
+
 ## Nada a recuperar
 - `split-fatia2`: o conserto "esperar o reveal antes de julgar" e os refactors já estão em f1cddd9 (mesmo código, contexto diferente).
 - `fix/window-opens-on-primary-monitor`: f1cddd9 já tem DISPLAY1, tamanho de primeira execução, centralização e salvamento posterior (`Saver`).
