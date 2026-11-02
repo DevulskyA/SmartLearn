@@ -83,7 +83,8 @@ export function makeCliExec({ cli, cwd, timeoutMs = CALL_TIMEOUT_MS }) {
   });
 }
 
-const cardIdOf = (json) => json?.id ?? json?.card?.id ?? json?.item?.id ?? null;
+// `planban create-card -o json` answers { ...board state, createdCard: { id, ... } } (src/core/storage.ts, createCard)
+const cardIdOf = (json) => json?.createdCard?.id ?? null;
 
 /**
  * The run's publisher. `exec(args)` -> Promise<stdout> (rejects on failure). Calls are serialized (the board takes one mutation at a time),
@@ -122,6 +123,8 @@ export function createPlanbanPublisher({ exec, root = null, say = (m) => console
           if (found.status !== card.status) await exec(['move-card', cardId, '--status', card.status, '--first']);
         } else {
           cardId = cardIdOf(JSON.parse(await exec(['create-card', card.title, '--status', card.status, '--summary', card.summary, '--next-action', card.nextAction, '--tag', RUN_TAG, '--tag', tag, '--position', 'top'])));
+          // the card exists even if the answer had an unexpected shape: find it by its tag rather than giving up on it
+          cardId ??= JSON.parse(await exec(['query-cards', '--tag', tag])).matches?.[0]?.item?.id ?? null;
           if (!cardId) throw new Error('o Planban não devolveu o id do cartão criado');
         }
         say(`[test-live] Planban: cartão ${cardId} publicado como "${card.title}".`);

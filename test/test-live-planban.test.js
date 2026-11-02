@@ -42,14 +42,16 @@ test('findPlanbanCli: PLANBAN_CLI wins, then the registered marketplace, else nu
   assert.equal(findPlanbanCli({ env: {}, home: '/h', exists: () => false, readText: () => { throw new Error('no file'); } }), null);
 });
 
-function fakeBoard({ existing = null, failOn = null } = {}) {
+// create-card answers like the real CLI (verified against the installed Planban: { ...state, createdCard })
+function fakeBoard({ existing = null, failOn = null, createAnswer = { revision: 9, createdCard: { id: 'rodando-test-live-unit' } } } = {}) {
   const calls = [];
   const messages = [];
+  let created = null;
   const exec = async (args) => {
     calls.push(args);
     if (failOn && args[0] === failOn) throw new Error('boom');
-    if (args[0] === 'query-cards') return JSON.stringify({ matches: existing ? [{ item: existing }] : [] });
-    if (args[0] === 'create-card') return JSON.stringify({ id: 'rodando-test-live-unit' });
+    if (args[0] === 'query-cards') return JSON.stringify({ matches: existing || created ? [{ item: existing ?? created }] : [] });
+    if (args[0] === 'create-card') { created = { id: 'rodando-test-live-unit', status: 'in-progress' }; return JSON.stringify(createAnswer); }
     return '{}';
   };
   return { calls, messages, exec, say: (m) => messages.push(m) };
@@ -76,6 +78,15 @@ test('publisher: first run creates the tagged card in In Progress; updates and t
   assert.equal(fin[fin.indexOf('--title') + 1], '[Terminou] test-live unit · PASS');
   assert.deepEqual(move, ['move-card', 'rodando-test-live-unit', '--status', 'pending', '--first']);
   assert.equal(p.disabled, false);
+});
+
+test('publisher: if create-card answers in an unexpected shape, the new card is still found by its tag (no orphan, no failure)', async () => {
+  const b = fakeBoard({ createAnswer: { revision: 9 } });
+  const p = createPlanbanPublisher({ exec: b.exec, say: b.say });
+  await p.start(running);
+  assert.equal(p.cardId, 'rodando-test-live-unit');
+  assert.equal(p.disabled, false);
+  assert.deepEqual(b.calls.map((a) => a[0]), ['query-cards', 'create-card', 'query-cards']);
 });
 
 test('publisher: a later run finds the suite card by tag and reopens it instead of creating another', async () => {
