@@ -1797,6 +1797,11 @@ h1 {
     font-size: 1.25rem;
   }
 
+  /* Keyboard focus must never land under the fixed bottom nav. */
+  .app-main {
+    scroll-padding-bottom: calc(5.25rem + var(--safe-area-bottom));
+  }
+
   .app-nav {
     position: fixed;
     right: 0;
