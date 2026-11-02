@@ -23,7 +23,11 @@ Neutrals are tinted toward the accent hue (~262). Never `#000` or `#fff`.
 - `sepia` is a warmer light variant for longer reading sessions.
 - `night` is the default dark theme.
 - `contrast` is the high-contrast dark variant.
-- `auto` follows system preference and resolves to `paper` or `night`.
+- `auto` (Sistema) follows the Windows/system preference and resolves to `paper` or `night` until the user chooses a theme.
+- `ocean` is a serene blue light variant.
+- `forest` is a soft green light variant.
+- `dusk` is a violet dark variant.
+- SmartPrompt2-adapted themes: `dracula`, `catppuccin`, `onedark`, `gruvbox`, `neon`, `premium`, `tokyo`, `midnight`, `forest-serenity`, `sunset`, `cyberpunk`, `catppuccin-latte`, `gruvbox-light`, `solarized-light`, `dracula-light`, and `tokyo-day`.
 
 ### Semantic status
 | State | Text | Fill |
@@ -114,7 +118,7 @@ LOCKED visual and functional grammar, unchanged by the above:
   A above where focus never leaves the trigger.
 
 ## Theme delivery
-- Theme choice is exposed in Settings and persisted locally on the device.
+- The first launch uses `auto` (Sistema) and does not persist a value. A value is persisted locally only after the user explicitly changes the theme.
 - The app applies the theme before the shell paints, so there is no flash of the wrong palette on startup.
 - Component contrast should come from tokens, not hard-coded hex values in the screen layer.
 

@@ -4680,25 +4680,42 @@ function renderThemePicker(preference = currentThemePreference) {
 
   themePicker.replaceChildren();
 
-  for (const option of THEME_OPTIONS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "theme-option";
-    button.setAttribute("role", "radio");
-    button.dataset.themeOption = option.id;
-    button.setAttribute("aria-checked", "false");
+  const select = document.createElement("select");
+  select.className = "theme-select";
+  select.id = "theme-select";
+  select.setAttribute("aria-label", t("theme.selectLabel"));
 
-    const label = document.createElement("span");
-    label.className = "theme-option-label";
-    label.textContent = option.label;
+  const groups = [
+    { key: "system", options: THEME_OPTIONS.filter((option) => option.mode === "auto") },
+    { key: "light", options: THEME_OPTIONS.filter((option) => option.mode === "light") },
+    { key: "dark", options: THEME_OPTIONS.filter((option) => option.mode === "dark") },
+  ];
 
-    const description = document.createElement("span");
-    description.className = "theme-option-description";
-    description.textContent = option.description;
-
-    button.append(label, description);
-    themePicker.append(button);
+  for (const group of groups) {
+    if (!group.options.length) continue;
+    const optionGroup = document.createElement("optgroup");
+    optionGroup.label = t(`theme.group.${group.key}`);
+    for (const option of group.options) {
+      const item = document.createElement("option");
+      item.value = option.id;
+      item.textContent = option.label;
+      optionGroup.append(item);
+    }
+    select.append(optionGroup);
   }
+
+  const preview = document.createElement("div");
+  preview.className = "theme-live-preview";
+  preview.setAttribute("role", "status");
+  preview.setAttribute("aria-live", "polite");
+  const swatch = document.createElement("span");
+  swatch.className = "theme-live-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  const previewLabel = document.createElement("span");
+  previewLabel.className = "theme-live-label";
+  preview.append(swatch, previewLabel);
+
+  themePicker.append(select, preview);
 
   syncThemePicker(preference);
 }
@@ -4706,12 +4723,11 @@ function renderThemePicker(preference = currentThemePreference) {
 // Destaca o tema ativo na tela de Configurações.
 function syncThemePicker(preference) {
   if (!themePicker) return;
-
-  for (const button of themePicker.querySelectorAll("[data-theme-option]")) {
-    const isActive = button.dataset.themeOption === preference;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-checked", isActive ? "true" : "false");
-  }
+  const select = themePicker.querySelector(".theme-select");
+  const previewLabel = themePicker.querySelector(".theme-live-label");
+  const option = THEME_OPTIONS.find((item) => item.id === preference) ?? THEME_OPTIONS.find((item) => item.id === "auto");
+  if (select && option) select.value = option.id;
+  if (previewLabel && option) previewLabel.textContent = `${t("theme.preview")} · ${option.label}`;
 }
 
 function setThemePreference(preference) {
@@ -4729,14 +4745,13 @@ applyThemePreference(currentThemePreference);
 
 themeToggle.addEventListener("click", () => {
   const effectiveThemeId = resolveThemePreference(currentThemePreference, prefersDarkScheme.matches);
-  const next = effectiveThemeId === "night" || effectiveThemeId === "contrast" ? "paper" : "night";
+  const next = THEME_OPTIONS.find((option) => option.id === effectiveThemeId)?.mode === "dark" ? "paper" : "night";
   setThemePreference(next);
 });
 
-themePicker?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-theme-option]");
-  if (!button) return;
-  setThemePreference(button.dataset.themeOption);
+themePicker?.addEventListener("change", (event) => {
+  if (!(event.target instanceof HTMLSelectElement)) return;
+  setThemePreference(event.target.value);
 });
 
 // No modo automático, acompanha mudanças de tema do sistema em tempo real.

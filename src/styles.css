@@ -27,6 +27,23 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Avoid a light flash before the System preference is resolved by the first script. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-mode]) {
+    color-scheme: dark;
+    --color-bg: oklch(0.2 0.012 262);
+    --color-surface: oklch(0.255 0.014 262);
+    --color-surface-sunken: oklch(0.175 0.012 262);
+    --color-text: oklch(0.94 0.012 262);
+    --color-muted: oklch(0.72 0.018 262);
+    --color-border: oklch(0.34 0.014 262);
+    --color-primary: oklch(0.72 0.15 264);
+    --color-primary-strong: oklch(0.8 0.14 264);
+    --color-primary-soft: oklch(0.3 0.055 264);
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.35), 0 10px 28px oklch(0 0 0 / 0.42);
+  }
+}
+
 /* SMARTLEARN_PRODUCT_FIRST_V1: a component's own `display` rule (an
    author rule) always beats the browser's default `[hidden]` style,
    regardless of stylesheet order — this specific bug was independently
@@ -180,54 +197,63 @@
 
 .theme-picker {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9rem;
 }
 
-.theme-option {
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.9rem 1rem;
+.theme-select {
+  width: 100%;
+  min-height: 2.9rem;
+  padding: 0.65rem 2.25rem 0.65rem 0.8rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.9rem;
+  border-radius: 0.7rem;
   background: var(--color-surface);
-  color: var(--color-muted);
+  color: var(--color-text);
   font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.theme-option-label {
-  color: var(--color-text);
-  font-size: 0.96rem;
   font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
-.theme-option-description {
+.theme-select:hover,
+.theme-select:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+  outline: none;
+}
+
+.theme-live-preview {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--color-muted);
   font-size: 0.84rem;
-  line-height: 1.35;
 }
 
-.theme-option:hover {
-  color: var(--color-text);
-  border-color: var(--color-primary);
-}
-
-.theme-option:focus-visible {
-  outline: 3px solid var(--color-primary-soft);
-  outline-offset: 2px;
-}
-
-.theme-option.is-active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-text);
+.theme-live-swatch {
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
   box-shadow: var(--shadow-card);
+  transition: background 220ms ease, box-shadow 220ms ease;
+}
+
+.theme-live-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .theme-picker {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
 }
 
 * {
@@ -1543,7 +1569,8 @@ h1 {
 
 .section-heading h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: clamp(1.45rem, 2vw, 1.65rem);
+  font-weight: 740;
   letter-spacing: -0.025em;
 }
 

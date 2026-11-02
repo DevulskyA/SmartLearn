@@ -36,6 +36,15 @@ test('picking a theme in Configurações updates data-theme/data-theme-mode and 
   // Only one option is ever active at a time.
   await expect(sepiaOption).toHaveAttribute('aria-checked', 'false');
   await expect(nightOption).toHaveAttribute('aria-checked', 'true');
+
+  await page.locator('[data-theme-option="ocean"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ocean');
+  await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim())).not.toBe('');
+
+  await page.locator('[data-theme-option="dusk"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dusk');
+  await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
 });
 
 test('an explicit theme choice persists across reload (not silently reset to auto)', async ({ page }) => {
@@ -50,16 +59,18 @@ test('an explicit theme choice persists across reload (not silently reset to aut
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
 });
 
-test('"Automático" follows the OS color scheme, both at load and on a live change, and persists "auto" itself (not the resolved theme)', async ({ page }) => {
+test('"Sistema" follows the OS color scheme on first use and after an explicit selection', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await freshApp(page);
   // Default preference with nothing stored is "auto" — should already have
   // resolved to the dark system preference on first load.
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBeNull();
 
   await page.locator('[data-screen="settings"]').click();
   await page.locator('[data-theme-option="auto"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBe('auto');
 
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper', { timeout: 5000 });

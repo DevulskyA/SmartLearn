@@ -5,6 +5,7 @@ import {
   THEME_STORAGE_KEY,
   resolveThemePreference,
   getThemeOption,
+  getStoredThemePreference,
 } from "../src/theme.js";
 
 // TEST_COVERAGE_MATRIX.md gap #2: theme.js had zero test evidence (no unit
@@ -23,6 +24,38 @@ test("resolveThemePreference: 'auto' follows system mode — dark system -> nigh
 test("resolveThemePreference: an explicit valid theme id is returned unchanged regardless of system mode", () => {
   assert.equal(resolveThemePreference("sepia", "dark"), "sepia");
   assert.equal(resolveThemePreference("contrast", "light"), "contrast");
+  assert.equal(resolveThemePreference("ocean", "dark"), "ocean");
+  assert.equal(resolveThemePreference("dusk", "light"), "dusk");
+  assert.equal(resolveThemePreference("dracula", "light"), "dracula");
+  assert.equal(resolveThemePreference("solarized-light", "dark"), "solarized-light");
+});
+
+test("getStoredThemePreference: first use follows the system without creating a stored choice", () => {
+  const originalStorage = globalThis.localStorage;
+  const reads = [];
+  globalThis.localStorage = {
+    getItem(key) { reads.push(key); return null; },
+    setItem() { throw new Error("first use must not write"); },
+  };
+  try {
+    assert.equal(getStoredThemePreference(), "auto");
+    assert.deepEqual(reads, [THEME_STORAGE_KEY]);
+  } finally {
+    globalThis.localStorage = originalStorage;
+  }
+});
+
+test("getStoredThemePreference: an explicit choice is kept and an unknown value returns to System", () => {
+  const originalStorage = globalThis.localStorage;
+  let saved = "ocean";
+  globalThis.localStorage = { getItem() { return saved; } };
+  try {
+    assert.equal(getStoredThemePreference(), "ocean");
+    saved = "removed-theme";
+    assert.equal(getStoredThemePreference(), "auto");
+  } finally {
+    globalThis.localStorage = originalStorage;
+  }
 });
 
 test("resolveThemePreference: legacy 'light'/'dark' aliases normalize to 'paper'/'night' before resolution, not treated as 'auto'", () => {
@@ -59,49 +92,48 @@ test("THEME_OPTIONS: every option has a label and description; mode is 'light'/'
   }
 });
 
-// REGRESSION sensor for a real duplication hazard found while writing this
-// suite: applyThemePreference (src/theme.js) and the quick theme-toggle
-// handler (src/app.js) BOTH decide dark-vs-light by hardcoding
-// `themeId === "night" || themeId === "contrast"`, instead of reading each
-// option's own `mode` field from THEME_OPTIONS (which already carries this
-// exact information). Not fixed here — it works correctly today and
-// refactoring two call sites of a data-driven check that currently agrees
-// with itself is out of this task's authorized scope, not a proven active
-// defect. But the moment a new theme is added to THEME_OPTIONS without also
-// updating both hardcoded checks, CSS that keys off `[data-theme-mode]`
-// (this app has several, including the exercise-attempt-review dialog)
-// would silently render with the wrong palette. This test independently
-// derives "is dark" from THEME_OPTIONS.mode and pins it against the exact
-// two ids the hardcoded checks use — it will fail the day those two things
-// drift apart, which is the earliest possible signal short of refactoring
-// the checks to share one source of truth.
-test("REGRESSION: the hardcoded night/contrast dark-theme id set in applyThemePreference and the theme-toggle handler still matches THEME_OPTIONS' own mode field", () => {
-  const hardcodedDarkIds = new Set(["night", "contrast"]);
-  for (const option of THEME_OPTIONS) {
-    const isHardcodedDark = hardcodedDarkIds.has(option.id);
-    assert.equal(
-      isHardcodedDark,
-      option.mode === "dark",
-      `theme '${option.id}': hardcoded dark-id check says ${isHardcodedDark}, THEME_OPTIONS.mode says ${option.mode}`,
-    );
-  }
+test("THEME_OPTIONS: every dark theme is represented by its declared mode", () => {
+  assert.deepEqual(
+    THEME_OPTIONS.filter((option) => option.mode === "dark").map((option) => option.id),
+    ["night", "contrast", "dusk", "dracula", "catppuccin", "onedark", "gruvbox", "neon", "premium", "tokyo", "midnight", "forest-serenity", "sunset", "cyberpunk"],
+  );
 });
 
 test("THEME_STORAGE_KEY is a stable, namespaced localStorage key", () => {
   assert.equal(THEME_STORAGE_KEY, "smartlearn:theme");
 });
 
-// i18n: the labels come from the catalog (src/i18n/locales/pt-BR.js). These pin the exact pt-BR texts the screen showed before the
-// move, and prove every id has both keys (a missing key would silently show "theme.x.label").
-test("THEME_OPTIONS: pt-BR texts are exactly what the interface showed before they moved to the catalog", () => {
+// i18n: the labels come from the catalog (src/i18n/locales/pt-BR.js). These
+// pin the exact pt-BR texts rendered by the picker and prove every id has both
+// keys (a missing key would silently show "theme.x.label").
+test("THEME_OPTIONS: pt-BR texts match the theme picker catalog", () => {
   assert.deepEqual(
     THEME_OPTIONS.map(({ id, label, description }) => [id, label, description]),
     [
-      ["auto", "Automático", "Segue o tema do sistema."],
+      ["auto", "Sistema", "Segue o tema do sistema."],
       ["paper", "Papel", "Claro, calmo e legível."],
       ["sepia", "Sépia", "Mais quente para leitura longa."],
+      ["ocean", "Oceano", "Azul sereno para foco prolongado."],
+      ["forest", "Floresta", "Verde suave, natural e equilibrado."],
       ["night", "Noite", "Escuro, estável e discreto."],
       ["contrast", "Alto contraste", "Mais nítido para leitura rápida."],
+      ["dusk", "Crepúsculo", "Escuro violeta para ambientes tranquilos."],
+      ["dracula", "Dracula", "Violeta escuro com acentos rosados."],
+      ["catppuccin", "Catppuccin", "Escuro suave e aconchegante."],
+      ["onedark", "One Dark", "Escuro técnico com azul sereno."],
+      ["gruvbox", "Gruvbox", "Terroso, quente e confortável."],
+      ["neon", "Neon", "Preto intenso com cyan e magenta."],
+      ["premium", "Premium", "Azul profundo com destaque cyan."],
+      ["tokyo", "Tokyo Night", "Noturno, azul e violeta."],
+      ["midnight", "Midnight Pro", "Azul meia-noite profissional."],
+      ["forest-serenity", "Forest Serenity", "Verde profundo e tranquilo."],
+      ["sunset", "Sunset Vibes", "Violeta quente com acentos de pôr do sol."],
+      ["cyberpunk", "Cyberpunk 2077", "Alto contraste com amarelo elétrico."],
+      ["catppuccin-latte", "Catppuccin Latte", "Claro, macio e azulado."],
+      ["gruvbox-light", "Gruvbox Light", "Claro, terroso e acolhedor."],
+      ["solarized-light", "Solarized Light", "Claro, equilibrado e confortável."],
+      ["dracula-light", "Dracula Light", "Claro com violeta e rosa."],
+      ["tokyo-day", "Tokyo Day", "Claro, frio e luminoso."],
     ],
   );
 });
