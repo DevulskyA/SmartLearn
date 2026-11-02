@@ -3,7 +3,7 @@
 ## ACTIVE TRACK (ler primeiro)
 
 <!-- ACTIVE-TRACK:BEGIN (gerado por node scripts/agent-tasklist.mjs; não edite à mão) -->
-**`conductor/tracks/hardening-roadmap-v1/plan.md`** — SMARTLEARN — DESENVOLVIMENTO · Status: IDLE · só human gate: S7 · bloqueadas: S5c, S5b, SEM-SPRINT · concluídas (14): BASE, S1, S2, S2G-a, S2G-b, S2b, S3, S4, S5a, S6A, S6B, S6C, S8, S9 · branch `claude/smartlearn-v1-complete` · sincronizado 2026-10-18
+**`conductor/tracks/hardening-roadmap-v1/plan.md`** — SMARTLEARN — DESENVOLVIMENTO · Status: IDLE · só human gate: S7 · bloqueadas: S5c, S5b, SEM-SPRINT · concluídas (14): BASE, S1, S2, S2G-a, S2G-b, S2b, S3, S4, S5a, S6A, S6B, S6C, S8, S9 · branch `integration/v1-recover-20261102` · sincronizado 2026-11-02
 <!-- ACTIVE-TRACK:END -->
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
