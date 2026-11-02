@@ -138,3 +138,10 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - **Causa (provada, reproduz sozinho):** testes velhos, não defeito do produto. O tema virou um combo `#theme-select` em 6f1fe2b e os testes ainda procuravam `[data-theme-option]`; o B03 (0348c3d) trouxe o 4º botão "Editar questões" e UX-1 contava 3.
 - **Correção:** testes atualizados para o comportamento novo (combo com 3 grupos, valor e rótulo ativos; 4 botões). 14/14 verdes em 46 s.
 - **Classificação (erro meu):** 1 — a regra de ampliar a regressão conforme o alcance existia; rodei só grupos focados e não as specs que tocam o mesmo DOM. Só o E2E completo pegou. Regra não alterada.
+
+## A-18 Rodar E2E e ciclo nativo ao mesmo tempo gerou falha e lentidão falsas — 2026-11-02
+- **Onde:** E2E completo em c9f797d (375 ok, 1 falha, 2 ignorados, 15,4 min contra ~14) e `e2e/sweep-fixes.spec.js:137` ("Criar conta": `#account-login-message` vazio em 5 s). Sozinha a spec passa 2/2 (8/8 testes, ~30 s).
+- **Causa provável (DECLARADA, não provada):** eu rodei o ciclo nativo (`zz-ui-full.sh`) e o driver durante o E2E; o ciclo mediu 116 s contra ~50 s de baseline (PERF DEVIATION em quase todos os lotes) e o lote SEED1 foi REJEITADO COMO LENTO. A falha única e a lentidão coincidem com a disputa de CPU. Mesma classe de A-16.
+- **Regra:** "Instrument integrity" (um instrumento de cada vez; lentidão anômala é sinal). Existia e eu não segui: iniciei dois instrumentos concorrentes. Classificação 1. Guarda: não iniciar o driver nativo enquanto `scripts/e2e.mjs` roda (anotado aqui; se repetir, guardar em código no zz-ui-guard.sh).
+- **J12 (ciclo nativo):** 5 falhas porque o lote clica os botões antigos do tema (Papel, Sépia, Noite, Alto contraste, Automático) que viraram combo. Instrumento desatualizado; não alterado porque o usuário está refazendo a página de Tema.
+- **Achado de instrumento:** o app do driver serve `src-tauri/resources/dist-runtime`, empacotado só pelo launcher/`npm run package:standalone`. Estava em 91fe3d9, então o ciclo nativo anterior testou código velho (sem B03, J02, A-04). Reempacotado em 3296f0d+local.
