@@ -279,6 +279,37 @@ test('reviewTasks DTO synthesizes reviewDone from completedAt and reviewNumber f
   } finally { globalThis.fetch = realFetch; }
 });
 
+// The caller (Hoje) passes the date of TOMORROW, exactly as the local stores take it. The server's /v1/agenda treats `date` as "today" and
+// buckets `tomorrow` as date+1, so asking it with tomorrow's date returned the day AFTER tomorrow. The request must carry today's date.
+test('reviewTasks.getTomorrow asks the agenda for the day before the date it was given, across month, year and leap boundaries', async () => {
+  const cases = [
+    ['2026-01-02', '2026-01-01'],
+    ['2026-03-01', '2026-02-28'],
+    ['2028-03-01', '2028-02-29'],
+    ['2027-01-01', '2026-12-31'],
+  ];
+  for (const [tomorrowDate, expectedToday] of cases) {
+    const calls = mockFetch([{ status: 200, body: { date: expectedToday, timezone: 'UTC', overdue: [], today: [], tomorrow: [], completedToday: [] } }]);
+    try {
+      await DB.reviewTasks.getTomorrow(tomorrowDate);
+      assert.equal(new URL(calls[0].url).searchParams.get('date'), expectedToday, `getTomorrow(${tomorrowDate}) must request agenda for ${expectedToday}`);
+    } finally { globalThis.fetch = realFetch; }
+  }
+});
+
+test('reviewTasks.getTomorrow against the real server returns the tasks due exactly the day after today, not two days after', async () => {
+  await bootstrapSession('remotestore-tomorrow@example.com');
+  try {
+    const subject = await DB.subjects.create('Amanha', 'DISC-GREEN');
+    await DB.learningUnits.createWithReviews({ subjectId: subject.id, title: 'Aula do dia 10', studyDate: '2026-05-10' });
+    const dueDates = (await DB.reviewTasks.getAll()).map((task) => task.dueDate);
+    assert.ok(dueDates.includes('2026-05-11'), 'the day-1 review of a lesson studied on 2026-05-10 is due 2026-05-11');
+    // today = 2026-05-10, so "tomorrow" is 2026-05-11: that is the date the screen passes.
+    const tomorrow = await DB.reviewTasks.getTomorrow('2026-05-11');
+    assert.deepEqual(tomorrow.map((task) => task.dueDate), ['2026-05-11'], 'only the tasks due the day after today, not two days after');
+  } finally { globalThis.fetch = realFetch; setCsrfToken(null); }
+});
+
 test('reviewTasks.update maps the two coherent legacy shapes onto complete()/reopen(), and rejects the unmappable questionsDone-only shape without any network call', async () => {
   const completeCalls = mockFetch([{ status: 200, body: { reviewTaskId: 1, completedAt: 'x', reviewOnly: false, score: 1, evidenceId: 1 } }]);
   try {

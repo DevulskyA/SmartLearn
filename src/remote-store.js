@@ -152,8 +152,9 @@ const reviewTasks = {
     const agendaResult = await agenda(dateStr);
     return agendaResult.completedToday;
   },
-  async getTomorrow(dateStr) {
-    const agendaResult = await agenda(dateStr);
+  // Takes the date of TOMORROW (like the local stores). /v1/agenda buckets `tomorrow` as date+1, so ask it for today.
+  async getTomorrow(tomorrowStr) {
+    const agendaResult = await agenda(dayBefore(tomorrowStr));
     return agendaResult.tomorrow;
   },
   /**
@@ -179,6 +180,13 @@ const reviewTasks = {
     throw new RemoteStoreError('UNSUPPORTED_PARTIAL_UPDATE', t('store.error.unsupportedPartialUpdate'));
   },
 };
+
+function dayBefore(dateStr) {
+  if (!dateStr) return dateStr;
+  const date = new Date(`${dateStr}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
 
 async function agenda(dateStr) {
   // The date is the browser's "today"; the browser's timezone goes with it so the server buckets "completed today" in the same day.
