@@ -5,9 +5,9 @@ click "Começar agora"
 click "Editar resumo"
 fill "label:Resumo Mestre" "Resumo de teste: absorção e excreção. <b>não é html</b> ação 😀"
 click Salvar
-expect "ADME"
+expect "não é html"
 reload
 click Hoje
 click "Começar agora"
-expect "ADME"
+expect "não é html"
 snap
