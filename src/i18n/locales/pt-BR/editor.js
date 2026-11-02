@@ -65,6 +65,8 @@ export default {
   'editor.question.answer': 'Resposta',
   'editor.question.explanation': 'Explicação (por quê)',
   'editor.question.hint': 'Dica (opcional)',
+  'editor.question.hidden': 'A resposta está oculta. A conferência automática não achou pontos nesta questão, então ela não precisa da sua aprovação: ver a resposta agora gasta a sua primeira tentativa quando ela cair no estudo.',
+  'editor.question.reveal': 'Mostrar resposta (modo autor)',
   'editor.question.source.one': 'Fonte desta questão · página {pages}',
   'editor.question.source.other': 'Fonte desta questão · páginas {pages}',
   'editor.question.save': 'Salvar questão',

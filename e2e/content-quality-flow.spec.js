@@ -152,10 +152,16 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   await expect(panel.locator('[data-panel="review"]')).toContainText('Nada sinalizado'); // the repaired draft re-screens clean
   await panel.getByRole('tab', { name: /Questões/ }).click();
   await expect(panel.locator('.lesson-qitem')).toHaveCount(3);
+  // nothing was flagged, so no answer is shown: the student is not asked to approve what they will later be tested on
   await panel.locator('.lesson-qitem').nth(1).click();
+  await expect(panel.locator('.lesson-qeditor textarea')).toHaveCount(1); // the prompt only
+  await expect(panel.locator('.lesson-qeditor')).not.toContainText('Contrai a arteríola eferente');
+  await expect(panel.locator('[data-action="accept-question"]')).toHaveCount(0);
+  await panel.locator('[data-action="reveal-answer"]').click(); // author mode: asked for on purpose
   await expect(panel.locator('.lesson-qeditor textarea').nth(1)).toHaveValue(/Contrai a arteríola eferente/);
   await panel.locator('.lesson-qitem').nth(0).click();
   await expect(panel.locator('.lesson-qtype')).toHaveText('Recordação');
+  await panel.locator('[data-action="reveal-answer"]').click();
   await expect(panel.locator('.lesson-qeditor textarea').nth(2)).toHaveValue(/Resulta do balanço/);
 
   await shot(panel, '1280-draft-review');

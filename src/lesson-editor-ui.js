@@ -90,6 +90,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   let selectedId = draft.questions[0]?.id ?? null;
   let summaryBuffer = null; // unsaved text of the summary (null = nothing typed)
   const questionBuffers = new Map(); // questionId -> { question, answer, explanation, hint } typed but not saved
+  const revealedAnswers = new Set(); // questionIds whose answer the student chose to see in this window (author mode, see renderQuestionEditor)
   let accepted = false;
 
   // ---- autosave ---------------------------------------------------------------------------------------------------------
@@ -520,7 +521,23 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       run(async () => ({ ...(await deps.deleteQuestion(draft.id, q.id)), keepId: next }), t("editor.question.msg.deleted"), "delete-question", { toQuestion: true });
     });
 
-    qForm.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions);
+    // The student is the one who will be tested on this question, so its answer is not shown just to ask whether it is good: that
+    // spends the first attempt. The automatic check decides which questions need a person; only those (a finding to resolve) show
+    // the answer, because resolving a finding needs it. Any other question shows the prompt only, until the student asks otherwise.
+    const answerHidden = q.status === "PROPOSED" && findings.length === 0 && !revealedAnswers.has(q.id) && !questionBuffers.has(q.id)
+      && q.origin !== "HUMAN_ADDED" && q.origin !== "HUMAN_EDITED";
+    if (answerHidden) {
+      acceptQ.remove(); // nothing to validate without the answer: the question stays proposed and still becomes an exercise
+      const hidden = document.createElement("div");
+      hidden.className = "lesson-answer-hidden";
+      hidden.dataset.part = "answer-hidden";
+      const reveal = button("text-button", t("editor.question.reveal"), "reveal-answer");
+      reveal.addEventListener("click", () => { revealedAnswers.add(q.id); renderQuestionEditor(); qForm.querySelector(`[data-part="${q.id}"]`)?.focus({ preventScroll: true }); });
+      hidden.append(createTextElement("p", "lesson-hint", t("editor.question.hidden")), reveal);
+      qForm.append(toList, titleRow, fPrompt.wrap, hidden, sourceBlock, actions);
+    } else {
+      qForm.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions);
+    }
     qFindings.append(findingsBlock);
   }
 
