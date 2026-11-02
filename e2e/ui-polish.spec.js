@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+const shot = async (target, name) => { if (process.env.SCREENSHOT_DIR) await target.screenshot({ path: join(process.env.SCREENSHOT_DIR, name + '.png') }); };
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { signInRegistered } from './support/session.js';
 
@@ -63,6 +64,7 @@ test('Plano: the disciplines panel and the new-lesson form never stay open toget
   await page.locator('#plan-new-unit-btn').click();
   await expect(form).toBeVisible();
   await expect(panel).toBeHidden();
+  await shot(page.locator('[data-screen-panel="plan"]'), '1280-plano-so-formulario');
   await expect(page.locator('#plan-manage-subjects-btn')).toHaveAttribute('aria-expanded', 'false');
   await page.locator('#plan-manage-subjects-btn').click();
   await expect(panel).toBeVisible();
@@ -73,6 +75,7 @@ test('Plano: the disciplines panel and the new-lesson form never stay open toget
   await page.locator('#plan-manage-subjects-btn').click(); // close
   const emptyNew = page.locator('#plan-empty-new');
   await expect(emptyNew).toBeVisible();
+  await shot(page.locator('[data-screen-panel="plan"]'), '1280-plano-vazio-com-botao');
   await emptyNew.click();
   await expect(form).toBeVisible();
 });
@@ -81,6 +84,7 @@ test('Configurações: the experiment switch sits under its own heading', async 
   await page.locator('[data-screen="settings"]').click();
   await expect(page.getByRole('heading', { name: 'Recurso em teste' })).toBeVisible();
   await expect(page.locator('#experiment-card #experiment-switch')).toBeVisible();
+  await shot(page.locator('#experiment-card'), '1280-configuracoes-experimento-com-titulo');
 });
 
 test('the skip link is the first stop of the keyboard and moves focus to the content without changing the screen', async ({ page }) => {
@@ -89,6 +93,7 @@ test('the skip link is the first stop of the keyboard and moves focus to the con
   const link = page.locator('.skip-link');
   await link.focus();
   await expect(link).toBeVisible();
+  await shot(page, '1280-link-pular-com-foco');
   await page.keyboard.press('Enter');
   await expect(page.locator('.app-main')).toBeFocused();
   await expect(page.locator('[data-screen-panel="plan"]')).toBeVisible();

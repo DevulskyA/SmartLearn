@@ -96,6 +96,15 @@ test('Hoje block: judgments survive leaving/reloading, the block ends with error
   await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
   await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeFocused();   // ...and lands on the next action
 
+  // The verdict is a mark and a state, not only a colour (screen review X-02).
+  const pseudo = (q, name) => item(q).getByRole('button', { name }).evaluate((el) => getComputedStyle(el, '::before').content);
+  expect(await pseudo('Pergunta A?', 'Errei')).toContain('✕');
+  expect(await pseudo('Pergunta B?', 'Acertei')).toContain('✓');
+  await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(item('Pergunta B?').getByRole('button', { name: 'Acertei' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(item('Pergunta A?').getByRole('button', { name: 'Acertei' })).not.toHaveAttribute('aria-pressed', 'true');
+  if (process.env.SCREENSHOT_DIR) await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-exercises`).screenshot({ path: join(process.env.SCREENSHOT_DIR, '1280-hoje-veredito-marcado.png') });
+
   // Leaving Hoje and coming back must NOT drop the judgments.
   await page.locator('[data-screen="plan"]').click();
   await page.locator('[data-screen="today"]').click();
