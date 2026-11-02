@@ -149,3 +149,11 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 ## A-19 Duas falhas intermitentes em 7 specs de Materiais/resumo — 2026-11-02
 - **Onde:** `draft-autosave`, `lesson-editor`, `smoke`, `summary-figure-width`, `summary-math-editor`, `summary-visual-editor`, `summary-wysiwyg` (75 testes) rodando logo após `npm test`. **Observado:** 2 falhas (`expect(locator).toBeVisible()`), 73 ok, 3,8 min. Rerodando as mesmas 7 specs: 75 de 75 ok, 3,4 min.
 - **Status:** DECLARADO, não provado. Não capturei os nomes dos 2 testes na primeira rodada (erro de instrumento meu: filtrei a saída antes de guardar). Mesma classe de A-16/A-18 (falha única sob carga, passa na repetição). Se repetir, rodar com `--repeat-each` e guardar o log inteiro.
+
+- **E2E-F2 (2026-11-02, E2E completo em d186db3):** 7 specs falharam de 380 (migration:66, summary-pdf-crop:154, summary-wysiwyg:107, today-loading-state:59, sweep-fixes:139 e 157, ui-polish:58); o log tem 12 mensagens "real server did not become ready in time"; a duração foi 17,3 min contra 10,6 min da última rodada limpa (63% a mais). **Causa provável: carga da máquina (outras sessões e agentes ativos), não produto:** os mesmos 6 arquivos reexecutados isolados passaram 28 de 28 (2,3 min). **Severidade:** P2. **Status:** a suíte completa sobre d186db3 NÃO ficou verde numa única rodada; está verde só em duas rodadas parciais. Mitigação possível: não rodar a suíte com outras sessões ativas; o prazo de 8 s para o servidor subir nos specs é curto sob carga (guarda a considerar). Log: `.specs/evidence/e2e-full5.txt` e `e2e-rerun-failed.txt`.
+
+## E2E completo a9fb9bb (2026-11-02) — flake de infraestrutura
+- Onde: `e2e/study-now-reveal-order.spec.js:81`, `support/session.js:32` (`page.goto('/')`).
+- Esperado: página carrega. Observado: `net::ERR_CONNECTION_REFUSED` em `localhost:62363` (servidor Vite do worker caiu/ainda não escutava).
+- Gravidade: baixa (instrumento, não produto). Reprodução: não reproduz; reexecução isolada 5/5 verde. Suíte: 416 ok, 1 falha, 2 puladas, 10,1 min, sem desvio de duração.
+- Estado: aberto como candidato F-1 (porta/servidor por worker); classe repetida (cartão anterior: 7 falhas por carga) — guardar no código se voltar.
