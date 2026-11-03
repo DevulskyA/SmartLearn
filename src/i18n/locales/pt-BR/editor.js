@@ -76,6 +76,7 @@ export default {
   'editor.question.restore': 'Restaurar questão',
   'editor.question.reject': 'Rejeitar questão',
   'editor.question.delete': 'Excluir questão',
+  'editor.question.rejectVsDelete': 'Rejeitar tira a questão do estudo e pode ser desfeito. Excluir apaga a questão de vez.',
   'editor.question.saveFailed': 'Não foi possível salvar.',
   'editor.question.msg.saved': 'Questão salva.',
   'editor.question.msg.backInReview': 'Você alterou uma questão que estava aceita: ela voltou a "proposta" e precisa ser aceita de novo.',

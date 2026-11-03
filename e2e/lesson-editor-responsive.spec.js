@@ -148,6 +148,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 
     await editor.locator('[data-action="save-question"]').click();
     await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
     for (const action of ['accept-question', 'toggle-reject-question', 'delete-question']) await expect(editor.locator(`[data-action="${action}"]`)).toBeVisible();
+    await expect(editor.locator(".lesson-actions + .field-hint")).toContainText("Excluir apaga a questão de vez");
     await editor.getByRole('tab', { name: /Fonte/ }).click();
     await expect(editor.locator('[data-panel="source"]')).toContainText('responsivo.pdf');
     await editor.getByRole('tab', { name: /Revisão/ }).click();

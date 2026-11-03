@@ -474,6 +474,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     questionIndicator = createSaveIndicator();
     const known = autosaveInfo.get(`q:${q.id}`);
     if (known) questionIndicator.set(known.state, known.info);
+    const actionsHint = createTextElement("p", "field-hint", t("editor.question.rejectVsDelete"));
     actions.append(save, acceptQ, rejectQ, del, document.createTextNode(" "), dirtyEl, document.createTextNode(" "), questionIndicator.element);
     const message = qMessage;
 
@@ -534,9 +535,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       const reveal = button("text-button", t("editor.question.reveal"), "reveal-answer");
       reveal.addEventListener("click", () => { revealedAnswers.add(q.id); renderQuestionEditor(); qForm.querySelector(`[data-part="${q.id}"]`)?.focus({ preventScroll: true }); });
       hidden.append(createTextElement("p", "lesson-hint", t("editor.question.hidden")), reveal);
-      qForm.append(toList, titleRow, fPrompt.wrap, hidden, sourceBlock, actions);
+      qForm.append(toList, titleRow, fPrompt.wrap, hidden, sourceBlock, actions, actionsHint);
     } else {
-      qForm.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions);
+      qForm.append(toList, titleRow, fPrompt.wrap, fAnswer.wrap, fExplanation.wrap, fHint.wrap, sourceBlock, actions, actionsHint);
     }
     qFindings.append(findingsBlock);
   }
