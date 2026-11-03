@@ -1,0 +1,10 @@
+# keep-going
+click Plano
+select css:#plan-filter-subject Anatomia
+select css:#plan-filter-state Atrasada
+select css:#plan-filter-period "Últimos 30 dias"
+select css:#plan-sort Disciplina
+select css:#plan-filter-subject "Todas as disciplinas"
+select css:#plan-filter-state "Todos os estados"
+select css:#plan-filter-period "Qualquer período"
+snap

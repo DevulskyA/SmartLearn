@@ -1,0 +1,19 @@
+# Ordem do ciclo completo. As linhas seed/* criam os dados; o resto lê a interface já preenchida. Roda tudo numa chamada: node scripts/zz-ui-cycle.mjs
+seed/SEED1-conta-disciplinas-aulas.txt
+seed/SEED2c-pdf-aula-passada.txt
+J01.txt
+J04.txt
+J02.txt
+J05.txt
+J11.txt
+J09.txt
+J12.txt
+J14.txt
+J15.txt
+J08.txt
+J13.txt
+J06c.txt
+J06d.txt
+
+J17.txt
+J16.txt

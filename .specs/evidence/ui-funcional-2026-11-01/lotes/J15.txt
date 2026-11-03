@@ -1,0 +1,11 @@
+# keep-going
+click Hoje
+key Tab
+key Tab
+key Tab
+key Enter
+snap
+key Escape
+key Shift+Tab
+key Enter
+snap

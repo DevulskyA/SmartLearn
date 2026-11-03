@@ -1,0 +1,21 @@
+{
+  "mode": "build",
+  "root": "C:\\Projetos\\SmartLearn\\.claude\\worktrees\\agent-ab5cfca1045ff17b7",
+  "started": "2026-11-02T22:36:35.228Z",
+  "notes": [
+    "5.2s servidor + vite prontos",
+    "9.5s seed ok"
+  ],
+  "seed": {
+    "seeded": true,
+    "units": 10,
+    "subjects": 6
+  },
+  "scenarioErrors": [],
+  "build": {
+    "footer": "SmartLearn DEV · v0.1.0 · 09e0ac2",
+    "statsText": "Estatísticas Onde você está forte e onde precisa revisar. Período Últimos 90 dias Últimos 30 dias Últimos 90 dias Último ano Qualquer período Média geral 70,8% Questões 233 165 acertos Disciplinas 6 4 com questões Por disciplina Por conteúdo Desempenho por disciplina DISCIPLINA DESEMPENHO EVIDÊNCIA TENDÊNCIA Farmacologia 65,1% 43 questões Última: 01/11/26 −12 p.p. Fisiologia 66,7% 60 questões Última: 01/11/26 −28 p.p. Neurologia 73,3% 15 questões Última: 01/11/26 Amostra insuficiente Anatomia 74,8% 115 questões Última: 01/11/26 +15 p.p. Semiologia Médica Sem evidência Sem questões Amostra insuficiente Patologia Geral Sem evidência Sem questões Amostra insuficiente Tendência histórica · todo o histórico, não segue o filtro de período Resultado misto: melhorando em umas áreas e piorando em outras. Disciplinas: 1 melhorando (115 questões) · 2 piorando (103 questões) · 1 com evidência insufi"
+  },
+  "finished": "2026-11-02T22:37:25.806Z",
+  "seconds": 51
+}

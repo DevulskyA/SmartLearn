@@ -1,0 +1,188 @@
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
+import { signInRegistered } from './support/session.js';
+
+// Functional / accessibility / text-correctness defects found by a Playwright + axe sweep of the real UI (empty account, then
+// a seeded one). One test per defect, on the REAL server and UI. The interface itself is frozen: these assert behavior and text.
+
+const SERVER_PORT = serverPort(13991);
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+const PASSWORD = 'a genuinely long test password 1';
+
+let serverProcess;
+let dataDir;
+
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-sweep-'));
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: {
+      ...process.env,
+      SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'),
+      SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'),
+      PORT: String(SERVER_PORT),
+      HOST: 'localhost',
+      NODE_ENV: 'test',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
+    },
+    stdio: 'ignore',
+  });
+  await waitForServerReady(API_BASE, { label: 'sweep-fixes E2E' });
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+const uniqueEmail = () => `sweep-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+
+async function signIn(page, email = uniqueEmail()) {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  await signInRegistered(page, { email, password: PASSWORD });
+  return email;
+}
+
+async function apiCall(page, path, body) {
+  return page.evaluate(async ({ base, path, body }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+}
+
+const openScreen = async (page, id) => {
+  await page.locator(`.app-nav [data-screen="${id}"]:visible, [data-screen="${id}"]:visible`).first().click();
+  await expect(page.locator(`#screen-${id}`)).toBeVisible();
+};
+
+test('Estatísticas: an account with no answered question shows a dash, not a 0,0% average', async ({ page }) => {
+  await signIn(page);
+  await openScreen(page, 'stats');
+  await expect(page.locator('#metric-average')).toHaveText('—');
+});
+
+test('Backup: after an export the screen shows the date and not the "none" text, and it survives a reload', async ({ page }) => {
+  const warnings = [];
+  page.on('console', (msg) => { if (msg.type() === 'warning') warnings.push(msg.text()); });
+  await signIn(page);
+  await openScreen(page, 'settings');
+  await expect(page.locator('#last-backup-label')).toHaveText('Nenhum backup exportado.');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export-backup').click()]);
+  expect(download.suggestedFilename()).toMatch(/^smartlearn-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  await expect(page.locator('#backup-message')).toHaveText('Backup exportado com sucesso.');
+  await expect(page.locator('#last-backup-label')).toContainText('Último backup:');
+  await expect(page.locator('#last-backup-label')).not.toContainText('Nenhum backup');
+  expect(warnings.filter((w) => w.includes('último backup'))).toEqual([]);
+  // a reload keeps it (same device, same account)
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await openScreen(page, 'settings');
+  await expect(page.locator('#last-backup-label')).toContainText('Último backup:');
+});
+
+test('Estatisticas > Estudar: a Plano subject filter that hides the unit is relaxed and the unit opens expanded', async ({ page }) => {
+  await signIn(page);
+  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
+  const b = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: '2026-08-02' });
+  await openScreen(page, 'plan');
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(2);
+  // filter the Plano down to the OTHER discipline (what a student does before leaving the screen)
+  await page.evaluate((subjectId) => {
+    const select = document.querySelector('#plan-filter-subject');
+    select.value = String(subjectId);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, b.unit.subjectId);
+  await expect(page.locator('#plan-list .plan-row')).toHaveCount(1);
+  await openScreen(page, 'stats');
+  // the Stats default is the last 90 days, which hides units with no answered questions; these units have none
+  await page.locator('#stats-unit-filter-period').selectOption('');
+  await page.locator('#subject-kpi-list tr', { hasText: 'Fisiologia Renal' }).click();
+  await page.locator('#unit-stats-list tr', { hasText: 'Filtração glomerular' }).click();
+  await page.locator('[data-action="study-unit"]').click();
+  await expect(page.locator('#screen-plan')).toBeVisible();
+  const row = page.locator(`#plan-list .plan-row[data-unit-id="${a.unit.id}"]`);
+  await expect(row).toBeVisible();
+  await expect(row.locator('.plan-expand-btn')).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.locator('.plan-row-detail')).toBeVisible();
+});
+
+test('Disciplinas > Editar: the name field has an accessible name (axe "label")', async ({ page }) => {
+  await signIn(page);
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
+  await openScreen(page, 'plan');
+  await page.locator('#plan-manage-subjects-btn').click();
+  const card = page.locator('.subject-catalog-card', { hasText: 'Fisiologia Renal' });
+  await card.getByRole('button', { name: 'Editar' }).click();
+  await expect(card.getByRole('textbox', { name: 'Nome da disciplina' })).toBeVisible();
+  const result = await new AxeBuilder({ page }).include('#plan-subjects-panel').withRules(['label']).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+});
+
+test('Conta: after "Criar conta" the success text is shown where the student can see it (login form)', async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  await page.goto('/');
+  await page.locator('[data-screen="account"]').click();
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(uniqueEmail());
+  await page.locator('#account-register-password').fill(PASSWORD);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible();
+  await expect(page.locator('#account-register-form')).toBeHidden();
+  await expect(page.locator('#account-login-message')).toHaveText('Conta criada com sucesso. Entre com suas credenciais.');
+  await expect(page.locator('#account-login-message')).toBeVisible();
+});
+
+test('Conta > Alterar senha: a wrong current password says so (no e-mail/senha wording)', async ({ page }) => {
+  await signIn(page);
+  await page.locator('#account-password-details > summary').click();
+  await page.locator('#account-password-form [name="currentPassword"]').fill('definitely not the current password');
+  await page.locator('#account-password-form [name="newPassword"]').fill('another genuinely long password 2');
+  await page.locator('#account-password-form button[type="submit"]').click();
+  await expect(page.locator('#account-password-message')).toHaveText('Senha atual incorreta.');
+});
+
+test('Materiais: the topic search input has a real accessible name (axe label + label-title-only) and a Portuguese example', async ({ page }) => {
+  await signIn(page);
+  await openScreen(page, 'materials');
+  // the panel only appears once a document has proposals; its markup is static, so audit it as a student would see it
+  await page.evaluate(() => { document.querySelector('#sources-proposals-panel').hidden = false; });
+  const input = page.locator('#sources-topic-input');
+  await expect(input).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: /título da seção/i })).toBeVisible();
+  expect(await input.getAttribute('placeholder')).not.toMatch(/Measurement|Filtration/);
+  const result = await new AxeBuilder({ page }).include('#sources-topic-form').withRules(['label', 'label-title-only']).analyze();
+  expect(result.violations.map((v) => `${v.impact} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+});
+
+test('A-04: a passing status is cleared when its screen is left; an error message stays until the student acts', async ({ page }) => {
+  await signIn(page);
+  await openScreen(page, 'settings');
+  await page.evaluate(() => {
+    document.querySelector('#backup-message').textContent = 'Backup salvo em teste.';
+    const bad = document.querySelector('#copy-diagnostics-message');
+    bad.textContent = 'Não foi possível apagar em teste.';
+    bad.classList.add('is-error');
+  });
+  await openScreen(page, 'stats');
+  await openScreen(page, 'settings');
+  await expect(page.locator('#backup-message')).toHaveText('');
+  await expect(page.locator('#copy-diagnostics-message')).toHaveText('Não foi possível apagar em teste.');
+});

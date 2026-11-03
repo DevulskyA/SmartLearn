@@ -1,0 +1,23 @@
+# Defeitos condicionais - reproducao na integracao (2026-11-02)
+
+Base: integration/v1-recover-20261102 @ 09e0ac2. Branch: integration/defeitos-condicionais. E2E headless, servidor descartavel (tmp), nunca o banco humano. Testes dirigidos por defeito; suite completa NAO rodada (regra do coordenador).
+
+| id | esperado | observado | reproduz? | correcao | teste / SHA |
+|---|---|---|---|---|---|
+| B06 | criar/arquivar/reativar/excluir disciplina descartavel; Esc descarta e Enter salva a renomeacao; titulo de 200 caracteres sem espacos fica dentro do cartao | tudo correto no produto (3 testes verdes) | NAO (produto). O lote nativo B06-titulo-longo renomeia "Farmacologia" para "Renomeada" e deixa estado para o proximo lote | lote nativo: `scripts/zz-ui-bordas.sh` agora usa instancia nova + SEED1 por lote | `e2e/defeitos-condicionais.spec.js` (B06 x3); SHA no relatorio |
+| B07 | formulario de aula recusa conteudo vazio/so espacos sem criar nada; aceita mesmo titulo em duas disciplinas, origem vazia, data passada e futura | correto no produto (2 testes verdes). As 3 falhas de A-10 (L18, L26, L30 do arquivo) vem de `select Farmacologia` depois de B06-titulo-longo ter renomeado: `falhas/B07-*/tela.txt` (v1-complete) lista "Renomeada Farmacocinetica basica", sem "Farmacologia" | NAO (produto); CAUSA DO LOTE PROVADA | idem B06 (isolamento por lote) | teste "A-10: after a discipline is renamed..." prova que a opcao antiga some; DECLARADO: o lote nativo corrigido nao foi reexecutado (nao ha exe nativo nesta worktree) |
+| B08 | resumo com `<b>` e emoji fica literal, apos recarregar | correto no produto (teste verde). O lote esperava "ADME", texto que ele nunca digita (copiado do J08) | NAO (produto); defeito do lote | `expect "ADME"` -> `expect "não é html"` em `lotes/bordas/B08-resumo-html-emoji.txt` (nao reexecutado no nativo) | teste B08 |
+| B12 | - | NAO HA REGISTRO. O id so aparece na lista de pendencias do ESTADO-LOCAL.md ("B06, B07, B13, B12"); nao existe em ACHADOS-PARCIAIS.md, LISTA-ERROS.md, cartao Planban nem historico git (`git log -S`) | NAO VERIFICAVEL | nenhuma | precisa da descricao original (onde/esperado/observado) |
+| B13 | - | idem B12 | NAO VERIFICAVEL | nenhuma | idem |
+| A-16 | ACCESS-3 (keyboard-today) passa em lote paralelo | falha unica original nao reproduzida: 30/30 verdes com `--repeat-each=30`, 3 workers (106 s). Causa original continua DECLARADA (carga; o passo e `toBeChecked` 8 s apos Space, que espera flushPendingAttempts + completeReviewWithEvidence + renderToday em `src/app.js:5422`) | NAO | nenhuma | log local; sem teste novo (o proprio ACCESS-3 e a regressao) |
+| flake summary-visual-editor:523 | aviso `.summary-visual-notice` visivel em <5 s | 12/12 verdes na rodada sequencial (whole-spec `--repeat-each=20`, 1 worker, 27,6 min: 208 ok, 9 falhas, 123 nao executados; nenhuma falha no 523) e 30/30 verdes so o 523 com 3 workers (106 s) | NAO reproduzido (taxa observada 0/42) | nenhuma | ver abaixo |
+
+## Flake do spec summary-visual-editor (achados extras, registrados)
+- **F-1 (instrumento, reproduzido):** em `--repeat-each=20`, 7 das 20 repeticoes falharam no `beforeAll` ("real server did not become ready in time", 8 s) e cascatearam 123 testes como "nao executados". O servidor de uma repeticao e morto no `afterAll` e o seguinte sobe na mesma porta (13980+lane). So acontece quando o arquivo roda varias vezes na mesma execucao (repeat-each ou worker reiniciado depois de falha). Nao e a causa do 523. Correcao nao feita (fora do turno): usar porta por repeticao (`testInfo.repeatEachIndex`) ou esperar a porta liberar.
+- **F-2:** 1 falha `browserContext.newPage: Target crashed` (teste de figuras, repeticao 13); 1 teste seguinte sem executar. Crash do navegador, nao assercao. Nao investigado.
+- **Hipotese NAO provada para o 523 original** (`toBeVisible` do aviso estourou 5 s uma vez, INTEGRACAO-2026-11-02.md I-05): o teste faz click no paragrafo, `End` e `Control+b` sem nenhuma transacao entre eles; o ProseMirror segue a selecao do navegador de forma assincrona (commit 7beeaca ja corrigiu isso em outro teste). Se a selecao antiga valesse no Ctrl+B, "(a)" seria digitado sem negrito, o texto seria fiel e o aviso nunca apareceria. Fix proposto (nao aplicado, sem reproducao para provar antes/depois): esperar dois `requestAnimationFrame` depois do `End`, como fazem os outros testes do arquivo que digitam um caractere antes do Ctrl+B (linha 369+).
+
+## Pendente (nao fechado neste sprint)
+- Reexecutar `scripts/zz-ui-bordas.sh` no app nativo (exige build do exe) para provar o lote corrigido.
+- B12/B13: obter a descricao.
+- 523: aplicar e medir o fix de selecao somente se reaparecer.

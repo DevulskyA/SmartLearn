@@ -1,0 +1,15 @@
+# keep-going
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Descartavel
+click css:[aria-label="rose"]
+click Adicionar
+expect "Descartavel"
+click Arquivar
+expect "Reativar"
+click Reativar
+expect "Arquivar"
+click Excluir
+snap

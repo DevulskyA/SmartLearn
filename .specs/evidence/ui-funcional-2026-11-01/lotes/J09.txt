@@ -1,0 +1,20 @@
+# keep-going
+size 1280 820
+reload
+click Plano
+click 'css:.plan-row:has-text("farmacologia-cap1") button[aria-label="Expandir detalhes"]'
+click 'css:.plan-row:has-text("farmacologia-cap1") button[data-action=plan-exam]'
+expect "Submeter prova"
+fill css:#exam-answer-input "Absorção, distribuição, metabolismo e excreção dos fármacos."
+click css:#exam-next-btn
+fill css:#exam-answer-input "Mecanismo de ação nos receptores e relação dose-resposta."
+click css:#exam-next-btn
+fill css:#exam-answer-input "Competição metabólica ou ação em receptores comuns."
+click css:#exam-submit-btn
+click css:#exam-submit-confirm-btn
+expect "Correção da prova"
+click 'css:#exam-review-list li:nth-child(1) button:has-text("Acertei")'
+click 'css:#exam-review-list li:nth-child(2) button:has-text("Errei")'
+click 'css:#exam-review-list li:nth-child(3) button:has-text("Acertei")'
+expect "2/3 corretas"
+snap

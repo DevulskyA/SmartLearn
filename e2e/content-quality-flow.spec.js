@@ -1,0 +1,285 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
+import { signInRegistered } from './support/session.js';
+
+// CONTENT-QUALITY CQ-4: one medical unit through the WHOLE product, on the LIVE-provider code path
+// (real server, real UI, real PDF extraction) with the model endpoint replaced by a local stub that
+// returns a flawed first draft, a semantic audit finding, and a targeted repair. The stub is a
+// scripted double: it proves the PIPELINE (audit -> one repair -> revalidate -> DRAFT -> human accept
+// -> study -> feedback -> evidence), NOT the quality of a real model.
+//
+//   PDF -> pages -> proposal -> draft (invented value + semantic contradiction) -> audit -> repair
+//   -> reviewer sees flags + sources -> accept -> Plano shows the summary origin -> Study Now with
+//   the WHY -> a wrong item -> error card -> redo -> exactly ONE evidence row (a redo is not evidence)
+
+const SERVER_PORT = serverPort(13983);
+const STUB_PORT = serverPort(13984);
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+const PAGE_1 = 'Filtração glomerular. A filtração glomerular é determinada pelo balanço entre a pressão hidrostática capilar glomerular de 60 mmHg, que favorece a filtração, e a soma da pressão oncótica capilar de 32 mmHg com a pressão hidrostática da cápsula de Bowman de 18 mmHg, que se opõem. A pressão efetiva de filtração resulta em 10 mmHg. A taxa de filtração glomerular normal é cerca de 125 mL/min.';
+const PAGE_2 = 'Regulação da filtração. A arteríola aferente dilata e a eferente contrai para aumentar a taxa de filtração glomerular. A angiotensina II contrai preferencialmente a arteríola eferente, mantendo a pressão hidrostática glomerular quando a perfusão renal cai. Os inibidores da enzima conversora reduzem essa contração e podem diminuir a taxa de filtração glomerular na estenose bilateral da artéria renal.';
+
+const Q1 = {
+  question: 'Qual é a taxa de filtração glomerular normal?', questionType: 'RECALL', answer: 'Cerca de 125 mL/min.',
+  explanation: 'Resulta do balanço entre a pressão hidrostática capilar, que favorece a filtração, e as pressões oncótica e da cápsula de Bowman, que se opõem.',
+  hint: 'Pense na ordem de grandeza por minuto.', sourceSpans: [{ pageIndex: 1 }],
+};
+const Q2_WRONG = {
+  question: 'O que a angiotensina II faz na arteríola eferente?', questionType: 'MECHANISM', answer: 'Dilata a arteríola eferente, reduzindo a filtração.',
+  explanation: 'A dilatação da eferente reduz a pressão hidrostática glomerular e a taxa de filtração glomerular.', hint: null, sourceSpans: [{ pageIndex: 2 }],
+};
+const Q2_RIGHT = {
+  ...Q2_WRONG, answer: 'Contrai a arteríola eferente.',
+  explanation: 'A eferente contraída mantém a pressão hidrostática glomerular quando a perfusão renal cai, sustentando a taxa de filtração glomerular.',
+};
+const Q3 = {
+  question: 'Por que inibidores da enzima conversora podem diminuir a filtração na estenose bilateral da artéria renal?', questionType: 'APPLICATION',
+  answer: 'Porque reduzem a contração da arteríola eferente.',
+  explanation: 'Sem a contração da eferente a pressão hidrostática glomerular cai quando a perfusão renal já está baixa, e a taxa de filtração glomerular diminui.',
+  hint: null, sourceSpans: [{ pageIndex: 2 }],
+};
+const SUMMARY_WRONG = 'A filtração glomerular resulta do balanço entre a pressão hidrostática capilar glomerular de 60 mmHg, que favorece a filtração, e a soma da pressão oncótica de 32 mmHg com a pressão da cápsula de Bowman de 18 mmHg, que se opõem; a pressão efetiva de filtração resulta em 25 mmHg. A taxa de filtração glomerular normal é cerca de 125 mL/min. A angiotensina II contrai a arteríola eferente, mantendo a pressão hidrostática glomerular.';
+const SUMMARY_RIGHT = SUMMARY_WRONG.replace('25 mmHg', '10 mmHg');
+const draft = (summary, q2) => ({ summary, summarySourceSpans: [{ pageIndex: 1 }, { pageIndex: 2 }], questions: [Q1, q2, Q3], modelVersion: 'stub-model-1', promptVersion: '3' });
+
+let stubServer;
+let stubCalls;
+let serverProcess;
+let dataDir;
+
+function startStub() {
+  stubCalls = [];
+  stubServer = createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const prompt = JSON.parse(Buffer.concat(chunks).toString()).messages[0].content;
+      let reply;
+      if (prompt.includes('strict medical content auditor')) {
+        stubCalls.push('AUDIT');
+        reply = { result: 'REPAIR', findings: [{ issue: 'ANSWER_CONTRADICTS_SOURCE', severity: 'HIGH', scope: 'question:1', generatedClaim: 'Dilata a arteríola eferente', sourceEvidence: 'A angiotensina II contrai preferencialmente a arteríola eferente.', repair: 'A angiotensina II contrai a arteríola eferente.' }] };
+      } else if (prompt.includes('repairing a study draft')) {
+        stubCalls.push('REPAIR');
+        reply = draft(SUMMARY_RIGHT, Q2_RIGHT);
+      } else {
+        stubCalls.push('GENERATE');
+        reply = draft(SUMMARY_WRONG, Q2_WRONG);
+      }
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(reply) }] }));
+    });
+  });
+  return new Promise((resolve) => stubServer.listen(STUB_PORT, '127.0.0.1', resolve));
+}
+
+test.beforeAll(async () => {
+  await startStub();
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-cq-flow-'));
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: {
+      ...process.env,
+      SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'),
+      SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'),
+      PORT: String(SERVER_PORT),
+      HOST: 'localhost',
+      NODE_ENV: 'test',
+      SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
+      // the live path is gated on ALL of these; the endpoint is the local stub, never the network
+      SMARTLEARN_AI_API_KEY: 'stub-key',
+      SMARTLEARN_AI_MODEL: 'stub-model',
+      SMARTLEARN_AI_CONSENT: 'true',
+      SMARTLEARN_AI_BUDGET_CAP_USD: '5',
+      SMARTLEARN_AI_API_URL: `http://127.0.0.1:${STUB_PORT}/v1/messages`,
+    },
+    stdio: 'ignore',
+  });
+  await waitForServerReady(API_BASE, { label: 'content-quality E2E' });
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise((r) => stubServer?.close(r));
+  await new Promise((r) => setTimeout(r, 300));
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  const email = `cq-flow-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'a genuinely long test password 1';
+  await signInRegistered(page, { email: email, password: password });
+});
+
+// Optional visual evidence for a human: SCREENSHOT_DIR=... npx playwright test e2e/content-quality-flow.spec.js
+const shot = async (target, name) => { if (process.env.SCREENSHOT_DIR) await target.screenshot({ path: join(process.env.SCREENSHOT_DIR, `${name}.png`) }); };
+const noHorizontalScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+
+test('medical PDF -> audited draft -> human accept -> summary origin -> study with the WHY -> error card -> redo -> exactly one evidence row', async ({ page }) => {
+  // 1) material -> pages -> proposal -> draft on the live path
+  await page.locator('[data-screen="materials"]').click();
+  await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  const panel = page.locator('.lesson-editor');
+  await expect(panel).toBeVisible({ timeout: 15000 });
+
+  // 2) the production gate ran exactly: generate -> independent audit -> ONE repair (never a loop)
+  expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);
+
+  // 3) what the reviewer sees is the REPAIRED draft, marked as such, still a DRAFT for a human
+  await expect(panel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
+  await expect(panel.locator('.lesson-summary-input')).toHaveValue(/10 mmHg/);
+  await expect(panel.locator('.lesson-summary-input')).not.toHaveValue(/25 mmHg/);
+  await panel.getByRole('tab', { name: /Revisão/ }).click();
+  await expect(panel.locator('[data-panel="review"]')).toContainText('corrigido automaticamente uma vez');
+  await expect(panel.locator('[data-panel="review"]')).toContainText('Nada sinalizado'); // the repaired draft re-screens clean
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  await expect(panel.locator('.lesson-qitem')).toHaveCount(3);
+  // nothing was flagged, so no answer is shown: the student is not asked to approve what they will later be tested on
+  await panel.locator('.lesson-qitem').nth(1).click();
+  await expect(panel.locator('.lesson-qeditor textarea')).toHaveCount(1); // the prompt only
+  await expect(panel.locator('.lesson-qeditor')).not.toContainText('Contrai a arteríola eferente');
+  await expect(panel.locator('[data-action="accept-question"]')).toHaveCount(0);
+  await shot(panel, '1280-draft-answer-hidden');
+  await panel.locator('[data-action="reveal-answer"]').click(); // author mode: asked for on purpose
+  await expect(panel.locator('.lesson-qeditor textarea').nth(1)).toHaveValue(/Contrai a arteríola eferente/);
+  await panel.locator('.lesson-qitem').nth(0).click();
+  await expect(panel.locator('.lesson-qtype')).toHaveText('Recordação');
+  await panel.locator('[data-action="reveal-answer"]').click();
+  await expect(panel.locator('.lesson-qeditor textarea').nth(2)).toHaveValue(/Resulta do balanço/);
+
+  await shot(panel, '1280-draft-review');
+
+  // 4) the reviewer can verify: source pages beside the summary and each question, text one click away
+  await panel.getByRole('tab', { name: /Resumo/ }).click();
+  const summaryOrigin = panel.locator('.summary-source', { hasText: 'Fonte do resumo' });
+  await expect(summaryOrigin).toContainText('páginas 1–2');
+  await summaryOrigin.locator('summary').click();
+  await expect(summaryOrigin.locator('.study-now-source-text').first()).toContainText('pressão efetiva de filtração resulta em 10 mmHg');
+  await panel.getByRole('tab', { name: /Questões/ }).click();
+  for (let q = 0; q < 3; q += 1) {
+    await panel.locator('.lesson-qitem').nth(q).click();
+    await expect(panel.locator('.lesson-qeditor .summary-source', { hasText: 'Fonte desta questão' })).toHaveCount(1);
+  }
+
+  // 5) mobile: the review panel fits a 375px screen without horizontal page scroll
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(panel, '375-draft-review');
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // 6) human acceptance: only now does a unit exist
+  await panel.locator('.source-draft-subject-input').fill('Fisiologia renal');
+  await panel.locator('.source-draft-date-input').fill('2026-04-01');
+  await panel.locator('[data-action="accept-draft"]').click();
+  await expect(panel.locator('.source-draft-result')).toContainText('Aula criada', { timeout: 10000 });
+
+  // 7) the accepted unit keeps its summary origin where the student reads the summary
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: 'fisiologia-renal' });
+  await row.locator('.plan-expand-btn').click();
+  await expect(row.locator('.summary-source')).toContainText('Origem do resumo · fisiologia-renal.pdf, páginas 1–2', { timeout: 5000 });
+  await expect(row.locator('.plan-exercise-item')).toHaveCount(3, { timeout: 5000 });
+  await shot(row, '1280-plano-origem');
+
+  // 8) study: 3 questions, each answer with its WHY after the reveal; the semantic-error item is judged wrong
+  await row.locator('[data-action="plan-study-now"]').click();
+  await expect(page.locator('#screen-study-now')).toBeVisible();
+  const outcomes = ['correct', 'incorrect', 'correct'];
+  for (let i = 0; i < 3; i += 1) {
+    await expect(page.locator('#study-now-explanation-text')).toBeHidden();
+    await expect(page.locator('.study-now-source-box')).toBeHidden();
+    await page.locator('#study-now-reveal-btn').click();
+    await expect(page.locator('#study-now-explanation-text')).toContainText('Por quê:');
+    // back to the material, right at the reveal: the cited page, not only on the final result
+    await expect(page.locator('.study-now-source-box .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+    // ... and the original PDF itself is one click away: a real, owner-authenticated PDF at that page
+    const open = page.locator('.study-now-source-box .study-now-source-open').first();
+    await expect(open).toHaveText(/Abrir o PDF original, página \d+/);
+    const href = await open.getAttribute('href');
+    expect(href).toMatch(/\/v1\/sources\/\d+\/file#page=\d+$/);
+    const pdf = await page.evaluate(async (path) => {
+      const res = await fetch(path, { credentials: 'include' });
+      return { status: res.status, type: res.headers.get('content-type'), head: new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5)) };
+    }, href.split('#')[0]);
+    expect(pdf).toEqual({ status: 200, type: 'application/pdf', head: '%PDF-' });
+    // clicking it opens the viewer INSIDE the app (an external browser has no session), at that page; Esc closes it
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await open.click();
+    const viewer = page.locator('.original-pdf-dialog[open]');
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator('.original-pdf-title')).toHaveText(/PDF original · página \d+/);
+    await expect(viewer.locator('.original-pdf-frame')).toHaveAttribute('src', /\/v1\/sources\/\d+\/file#page=\d+$/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.original-pdf-dialog[open]')).toHaveCount(0);
+    // the opening was recorded as a fact (and only that): one row, no evidence
+    await expect(async () => {
+      const rows = await page.evaluate(async (base) => (await (await fetch(`${base}/v1/source-openings`, { credentials: 'include' })).json()).openings, API_BASE);
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[0]).toMatchObject({ context: 'STUDY' });
+    }).toPass({ timeout: 5000 });
+    // the opened source block fits a 375px screen (long page text + the link must not push the page sideways)
+    await page.locator('.study-now-source-box .study-now-source').first().evaluate((el) => { el.open = true; });
+    await page.setViewportSize({ width: 375, height: 800 });
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator(`#study-now-${outcomes[i]}-btn`).click();
+  }
+
+  // 9) the result: 2/3, the wrong item teaches (answer, WHY, exact source excerpt), and offers the redo
+  await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 8000 });
+  const wrong = page.locator('#study-now-errors-list .study-now-error-item');
+  await expect(wrong).toHaveCount(1);
+  await expect(wrong.locator('.study-now-error-answer')).toHaveText('Contrai a arteríola eferente.');
+  await expect(wrong.locator('.study-now-error-why')).toContainText('mantém a pressão hidrostática glomerular');
+  await expect(wrong.locator('.study-now-source')).toContainText('Trecho do material · fisiologia-renal.pdf, página 2');
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(page.locator('#study-now-result-card'), '1280-study-result');
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(page.locator('#study-now-result-card'), '375-study-result');
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // 10) redo the wrong item correctly -> "erros corrigidos", but a redo is recovery, NOT evidence
+  await page.locator('#study-now-retest-btn').click();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-correct-btn').click();
+  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos', { timeout: 8000 });
+
+  const evidence = await page.evaluate(async (base) => {
+    const units = await (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}/v1/learning-evidence?unitId=${units.units[0].id}`, { credentials: 'include' });
+    return res.json();
+  }, API_BASE);
+  expect(evidence.evidence).toHaveLength(1);
+  expect(evidence.evidence[0]).toMatchObject({ type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2 });
+
+  // 10b) the daily review also goes back to the material: the cited page rides along with the revealed answer
+  await page.locator('[data-screen="today"]').click();
+  const reviewRow = page.locator('.review-row', { hasText: 'fisiologia-renal' }).first();
+  await expect(reviewRow).toBeVisible({ timeout: 8000 });
+  await reviewRow.locator('.review-row-toggle').first().click();
+  const reviewItem = reviewRow.locator('.review-exercise-item').first();
+  await expect(reviewItem).toBeVisible({ timeout: 5000 });
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source .study-now-source').first()).toContainText('Trecho do material · fisiologia-renal.pdf, página');
+  await reviewItem.locator('[data-action="reveal-answer"]').click();
+  await expect(reviewItem.locator('.review-exercise-source')).toBeHidden();
+
+  // 11) the model was consulted only to PRODUCE the material: studying and redoing added no model call
+  expect(stubCalls).toEqual(['GENERATE', 'AUDIT', 'REPAIR']);
+});

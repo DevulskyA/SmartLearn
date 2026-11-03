@@ -1,0 +1,11 @@
+# keep-going
+# reinício deliberado do app (mesmos dados): persistência de sessão, aulas, revisões e estatísticas
+restart
+click Plano
+expect "Sistema nervoso central"
+expect "Farmacocinética básica"
+click Hoje
+expect "Vencidas"
+click Estatísticas
+expect "66,7%"
+expect "3 questões"

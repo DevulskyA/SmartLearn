@@ -1,0 +1,189 @@
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
+
+// ACCESS-3: the scheduled review in "Hoje" completed with the KEYBOARD ALONE (Tab / Shift+Tab / Enter / Space).
+
+const SERVER_PORT = serverPort(13997);
+const API_BASE = `http://localhost:${SERVER_PORT}`;
+const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+
+let serverProcess;
+let dataDir;
+
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-kbd-'));
+  serverProcess = spawn(process.execPath, [MAIN_JS], {
+    env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
+    stdio: 'ignore',
+  });
+  await waitForServerReady(API_BASE, { label: 'keyboard E2E' });
+});
+
+test.afterAll(async () => {
+  serverProcess?.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    }, API_BASE);
+  const email = `kbd-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'a genuinely long test password 1';
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await expect(async () => {
+    await page.locator('[data-screen="account"]').click();
+    await expect(page.locator('#account-show-register')).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
+  await page.locator('#account-show-register').click();
+  await page.locator('#account-register-email').fill(email);
+  await page.locator('#account-register-password').fill(password);
+  await page.locator('#account-register-form button[type="submit"]').click();
+  await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill(password);
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
+});
+
+async function apiCall(page, path, body) {
+  return page.evaluate(async ({ base, path, body }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+}
+
+/** A real keyboard focus indicator (outline or ring) on the element that has focus. */
+const hasFocusRing = (page) => page.evaluate(() => {
+  const cs = getComputedStyle(document.activeElement);
+  return (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || (!!cs.boxShadow && cs.boxShadow !== 'none');
+});
+
+test('ACCESS-3 Hoje: open a review, reveal, judge and complete it with the keyboard; focus is never lost and the checkbox names its review', async ({ page }) => {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Hoje Teclado', title: 'Aula hoje teclado', studyDate: '2026-08-01' });
+  for (const i of [1, 2]) await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `Hoje pergunta ${i}?`, answer: `Certa ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
+
+  await page.locator('[data-screen="today"]').click();
+  const first = page.locator('.review-row', { hasText: 'Aula hoje teclado' }).first();
+  await expect(first).toBeVisible({ timeout: 8000 });
+  // pinned by id: the stage concludes and moves to another group, so "the first row of the lesson" would then be another stage
+  const row = page.locator(`.review-row[data-review-id="${await first.getAttribute('data-review-id')}"]`);
+
+  // open the row from the keyboard
+  await row.locator('.review-row-toggle').first().focus();
+  await page.keyboard.press('Enter');
+  const reveal = row.locator('[data-action="reveal-answer"]');
+  await expect(reveal.first()).toBeVisible({ timeout: 5000 });
+  await expect(row.locator('.review-row-toggle').first()).toBeFocused(); // still where the user was
+
+  // question 1: reveal, then Tab reaches "Acertei", Enter judges it
+  await reveal.first().focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="exercise-acertei"]').first()).toBeFocused();
+  expect(await hasFocusRing(page)).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.review-exercise-item').first()).toHaveClass(/is-correct/);
+  expect(await page.evaluate(() => document.activeElement !== document.body), 'focus must not fall out of the page after judging').toBe(true);
+
+  // question 2: reveal, Tab, Tab -> "Errei"
+  await reveal.nth(1).focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="exercise-errei"]').nth(1)).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.review-exercise-item').nth(1)).toHaveClass(/is-wrong/);
+  await expect(row.locator('[data-action="retest-block"]')).toBeFocused(); // the one obvious next action
+
+  // the "Revisão feita" checkbox says WHICH review (several rows say the same words), and still starts with the visible label
+  // The last answer concluded the stage by itself (one rule: all answered = concluded): the checkbox is already checked, and the
+  // focus is back on the redo action after the redraw.
+  const done = row.locator('[data-action="review-done"]');
+  await expect(done).toBeChecked({ timeout: 8000 });
+  await expect(row.locator('[data-action="retest-block"]')).toBeFocused();
+  const name = await done.evaluate((el) => el.getAttribute('aria-label'));
+  expect(name).toMatch(/^Revisão feita/);
+  expect(name).toContain('Aula hoje teclado');
+  // undoing it from the keyboard re-renders Hoje: focus is on the SAME review's checkbox (now unchecked), not lost to the page
+  const doneId = await done.getAttribute('data-review-id');
+  const again = page.locator(`[data-action="review-done"][data-review-id="${doneId}"]`);
+  await done.focus();
+  await page.keyboard.press('Space');
+  await expect(again).not.toBeChecked({ timeout: 8000 });
+  await expect(again).toBeFocused();
+  // all questions are still answered: ticking it again concludes it again, focus stays on the checkbox
+  await page.keyboard.press('Space');
+  await expect(again).toBeChecked({ timeout: 8000 });
+  await expect(again).toBeFocused();
+});
+
+async function openTodayRow(page, title) {
+  const { unit } = await apiCall(page, '/v1/learning-units', { newSubjectName: `Form ${title}`, title, studyDate: '2026-08-01' });
+  await apiCall(page, `/v1/learning-units/${unit.id}/exercises`, { question: `${title} pergunta?`, answer: 'Certa', provenance: 'MANUAL' });
+  await page.locator('[data-screen="today"]').click();
+  const row = page.locator('.review-row', { hasText: title }).first();
+  await expect(row).toBeVisible({ timeout: 8000 });
+  await row.locator('.review-row-toggle').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('[data-action="toggle-external"]')).toBeVisible({ timeout: 5000 });
+  return { unit, row };
+}
+
+test('ACCESS-4 Hoje: "Exercícios externos" is completed with the keyboard and focus stays on the form', async ({ page }) => {
+  const { unit, row } = await openTodayRow(page, 'Aula forms externos');
+  await row.locator('[data-action="toggle-external"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-questions-input')).toBeFocused(); // opening the form puts the cursor in it
+  await expect(row.locator('[data-action="toggle-external"]')).toHaveAttribute('aria-expanded', 'true');
+
+  // a wrong entry is explained in place and focus goes to the field to fix
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-form-message')).toContainText('Informe o número de questões');
+  await expect(row.locator('.external-questions-input')).toBeFocused();
+
+  await page.keyboard.type('10');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('7');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.external-form-message')).toContainText('Registrado: 10 questões, 7 acertos', { timeout: 8000 });
+  // the pressed button was disabled while sending: focus must still be on the form, not lost to the page
+  await expect(row.locator('[data-action="submit-external"]')).toBeFocused();
+  const rows = (await (await page.evaluate(async ({ base, id }) => (await fetch(`${base}/v1/learning-evidence?unitId=${id}`, { credentials: 'include' })).json(), { base: API_BASE, id: unit.id })).evidence);
+  expect(rows.filter((r) => r.type === 'EXTERNAL')).toHaveLength(1);
+});
+
+test('ACCESS-4 Hoje: "Editar Resumo" is edited and saved with the keyboard; focus returns to the button that opened it', async ({ page }) => {
+  const { row } = await openTodayRow(page, 'Aula forms resumo');
+  const edit = row.locator('[data-action="edit-summary"]');
+  await edit.focus();
+  await expect(edit).toHaveAttribute('aria-expanded', 'false'); // the state of the disclosure is exposed
+  await page.keyboard.press('Enter');
+  await expect(edit).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.locator('.review-summary-edit textarea')).toBeFocused();
+  await page.keyboard.type('Resumo escrito só com o teclado.');
+  await page.keyboard.press('Tab');
+  await expect(row.locator('[data-action="save-summary"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(row.locator('.review-summary-message')).toContainText('Resumo salvo', { timeout: 8000 });
+  // the editor closed with the focused button inside it: focus goes back to "Editar Resumo", not to the page
+  await expect(edit).toBeFocused();
+  await expect(edit).toHaveAttribute('aria-expanded', 'false');
+  await expect(row.locator('.review-summary-text')).toContainText('Resumo escrito só com o teclado.');
+});

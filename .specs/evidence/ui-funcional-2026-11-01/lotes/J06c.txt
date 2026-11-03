@@ -1,0 +1,16 @@
+# keep-going
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+click Editar
+fill "label:Nome da disciplina" "Farmacologia Básica"
+key Escape
+expect "Farmacologia"
+click Editar
+fill "label:Nome da disciplina" "Farmacologia Clínica"
+key Enter
+expect "Farmacologia Clínica"
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+expect "Farmacologia Clínica"

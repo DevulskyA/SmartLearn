@@ -1,0 +1,17 @@
+# keep-going
+reload
+click Plano
+ensure css:#plan-manage-subjects-btn css:#subjects-show-create-btn
+click "+ Nova disciplina"
+click Adicionar
+click Cancelar
+ensure css:#subjects-show-create-btn "label:Nome da nova disciplina"
+fill "label:Nome da nova disciplina" Farmacologia
+click Adicionar
+fill "label:Nome da nova disciplina" "  "
+click Adicionar
+fill "label:Nome da nova disciplina" "Bioquímica"
+click css:[aria-label="rose"]
+click Adicionar
+expect "Bioquímica"
+snap

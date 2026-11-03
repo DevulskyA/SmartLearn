@@ -27,3 +27,12 @@ tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"] }
+
+# T-F1-04: Job Object (kill-on-close) so a force-closed Desktop cannot leave the local backend (and the Codex CLI under it) running.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_IO"] }
+
+# T-F6-05 (F-43): MSVC link.exe prints "Criando biblioteca ...dll.lib e objeto ...dll.exp" on every cdylib link (informational, not a defect);
+# rustc surfaces it as `warning: linker stdout` through this lint. Allowed so a real new Rust warning is visible, never buried by this one.
+[lints.rust]
+linker_messages = "allow"

@@ -1,0 +1,15 @@
+# keep-going
+size 1280 820
+reload
+click Hoje
+click "Começar agora"
+click "Editar resumo"
+fill "label:Resumo Mestre" "Absorção, distribuição, metabolismo e excreção (ADME) determinam a concentração do fármaco no organismo ao longo do tempo."
+click Salvar
+expect "ADME"
+size 1280 820
+reload
+click Hoje
+click "Começar agora"
+expect "ADME"
+snap

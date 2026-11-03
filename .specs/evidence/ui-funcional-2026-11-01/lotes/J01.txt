@@ -1,0 +1,16 @@
+# keep-going
+reload
+click Hoje
+expect "Vencidas"
+click Materiais
+expect "Selecionar PDF"
+click Plano
+expect "Gerenciar disciplinas"
+click Estatísticas
+expect "Por disciplina"
+click Configurações
+expect "Tema"
+click Conta
+expect "Conectado como"
+click Hoje
+expect "Vencidas"

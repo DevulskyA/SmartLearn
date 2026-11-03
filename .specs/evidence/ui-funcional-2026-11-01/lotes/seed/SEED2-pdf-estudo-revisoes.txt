@@ -1,0 +1,27 @@
+# keep-going
+reload
+click Materiais
+upload css:#sources-file-input .specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf
+expect "trecho proposto."
+click "Gerar rascunho com IA"
+expect "Aceitar a aula"
+ensure "Gerar rascunho com IA" css:#lesson-1-subject
+select css:#lesson-1-subject Farmacologia
+click "Ver o que será criado"
+click Aceito
+click "Estudar agora"
+expect "Questão 1 de 3"
+click "Ver resposta"
+click Acertei
+expect "Questão 2 de 3"
+click "Ver resposta"
+click Errei
+expect "Questão 3 de 3"
+click "Ver resposta"
+click Acertei
+expect "Resultado"
+click Hoje
+click "Revisão feita"
+click "Revisão feita"
+click Estatísticas
+snap

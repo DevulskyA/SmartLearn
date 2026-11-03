@@ -1,0 +1,156 @@
+// Characterization of the shared "origin" block (moved out of src/app.js): the exact DOM it builds, what it
+// leaves out, and when appendSummarySources shows nothing. Uses a tiny fake `document` — the module only needs
+// createElement/append/textContent/className.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+class FakeEl {
+  constructor(tagName) { this.tagName = tagName; this.className = ''; this.textContent = ''; this.children = []; }
+  append(...nodes) { this.children.push(...nodes); }
+  addEventListener(type, fn) { (this.handlers ??= {})[type] = fn; }
+  querySelector(selector) {
+    assert.equal(selector, ':scope > .summary-source');
+    return this.children.find((c) => c.className.split(' ').includes('summary-source')) ?? null;
+  }
+  remove() { this.removed = true; this.parent.children = this.parent.children.filter((c) => c !== this); }
+  /** Shape the e2e specs read: tag, class, text, children. */
+  shape() { return { tag: this.tagName, cls: this.className, text: this.textContent, kids: this.children.map((c) => c.shape()) }; }
+}
+globalThis.document = { createElement: (tag) => new FakeEl(tag) };
+
+const { formatPageList, createSourceDetails, citationDetails, appendSummarySources, setOriginalPdfOpener, setSourceOpeningRecorder } = await import('../src/source-details-ui.js');
+
+test('formatPageList: compact, sorted, de-duplicated ranges', () => {
+  assert.equal(formatPageList([3]), '3');
+  assert.equal(formatPageList([1, 2, 3]), '1–3');
+  assert.equal(formatPageList([4, 3, 1, 3]), '1, 3–4');
+  assert.equal(formatPageList([1, 3, 5]), '1, 3, 5');
+  assert.equal(formatPageList([]), '');
+});
+
+test('createSourceDetails: collapsed <details> with a <summary> label, then label+text per page', () => {
+  const el = createSourceDetails('Origem do resumo · a.pdf, página 2', [
+    { pageIndex: 2, text: 'texto da página' },
+  ]);
+  assert.deepEqual(el.shape(), {
+    tag: 'details', cls: 'study-now-source summary-source', text: '',
+    kids: [
+      { tag: 'summary', cls: '', text: 'Origem do resumo · a.pdf, página 2', kids: [] },
+      { tag: 'p', cls: 'study-now-error-label', text: 'Página 2', kids: [] },
+      { tag: 'p', cls: 'study-now-source-text', text: 'texto da página', kids: [] },
+    ],
+  });
+});
+
+test('createSourceDetails: a page that knows its source gets a link to the ORIGINAL PDF at that page; one that does not gets none', () => {
+  const el = createSourceDetails('Fonte', [{ pageIndex: 269, text: 'texto', sourceId: 7 }, { pageIndex: 270, text: 'outro' }]);
+  const links = el.children.filter((c) => c.tagName === 'a');
+  assert.equal(links.length, 1);
+  assert.equal(links[0].href, '/v1/sources/7/file#page=269');
+  assert.equal(links[0].textContent, 'Abrir o PDF original, página 269');
+  assert.equal(links[0].target, '_blank');
+});
+
+test('the original-PDF link opens the IN-APP viewer on click (the external browser has no session -> 401) and keeps its href as the fallback', () => {
+  const el = createSourceDetails('Fonte', [{ pageIndex: 3, text: 't', sourceId: 5 }]);
+  const link = el.children.find((c) => c.tagName === 'a');
+  let prevented = 0;
+  // no dialog support in this fake environment: the click must NOT be swallowed (the plain link still works)
+  link.handlers.click({ preventDefault() { prevented += 1; } });
+  assert.equal(prevented, 0);
+  // with a viewer available the click is taken over: the dialog gets the file URL and the page title
+  const opened = [];
+  setOriginalPdfOpener((url, title) => { opened.push([url, title]); return true; });
+  link.handlers.click({ preventDefault() { prevented += 1; } });
+  setOriginalPdfOpener(null);
+  assert.equal(prevented, 1);
+  assert.deepEqual(opened, [['/v1/sources/5/file#page=3', 'PDF original · página 3']]);
+});
+
+test('opening the original PDF records ONLY the observable opening (source, page, context, a fresh key per click); a failing recorder never blocks the viewer', () => {
+  const calls = [];
+  setSourceOpeningRecorder((o) => { calls.push(o); });
+  const study = citationDetails([{ sourceId: 7, sourceName: 'f.pdf', pageIndex: 269, pageText: 't' }])[0].children[2];
+  const editor = createSourceDetails('Fonte', [{ pageIndex: 3, text: 't', sourceId: 5 }]).children.find((c) => c.tagName === 'a');
+  const opened = [];
+  setOriginalPdfOpener((url) => { opened.push(url); return true; });
+  study.handlers.click({ preventDefault() {} });
+  study.handlers.click({ preventDefault() {} });
+  editor.handlers.click({ preventDefault() {} });
+  assert.deepEqual(calls.map(({ sourceId, pageIndex, context }) => [sourceId, pageIndex, context]), [[7, 269, 'STUDY'], [7, 269, 'STUDY'], [5, 3, 'EDITOR']]);
+  assert.equal(new Set(calls.map((c) => c.operationKey)).size, 3, 'each click is its own fact');
+  assert.equal(opened.length, 3);
+  setSourceOpeningRecorder(() => { throw new Error('offline'); });
+  study.handlers.click({ preventDefault() {} });
+  assert.equal(opened.length, 4, 'the viewer opens even if recording fails');
+  setSourceOpeningRecorder(null);
+  setOriginalPdfOpener(null);
+});
+
+test('createSourceDetails: a page without text is left out entirely (no empty label)', () => {
+  const el = createSourceDetails('x', [{ pageIndex: 1, text: '' }, { pageIndex: 2 }, { pageIndex: 3, text: 'ok' }]);
+  assert.deepEqual(el.children.slice(1).map((c) => c.textContent), ['Página 3', 'ok']);
+});
+
+test('citationDetails: one collapsed block per cited page, exactly the frozen text; nothing for manual/edited exercises', () => {
+  const blocks = citationDetails([
+    { sourceId: 7, sourceName: 'fisio.pdf', pageIndex: 269, pageText: 'Kf é mais de 100 vezes maior' },
+    { sourceId: 7, sourceName: 'fisio.pdf', pageIndex: 270, pageText: null },
+    { sourceName: 'sem-id.pdf', pageIndex: 3, pageText: 'sem arquivo para abrir' },
+  ]);
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(blocks[0].shape(), {
+    tag: 'details', cls: 'study-now-source', text: '',
+    kids: [
+      { tag: 'summary', cls: '', text: 'Trecho do material · fisio.pdf, página 269', kids: [] },
+      { tag: 'p', cls: 'study-now-source-text', text: 'Kf é mais de 100 vezes maior', kids: [] },
+      { tag: 'a', cls: 'study-now-source-open', text: 'Abrir o PDF original, página 269', kids: [] },
+    ],
+  });
+  const link = blocks[0].children[2];
+  assert.equal(link.href, '/v1/sources/7/file#page=269');
+  assert.equal(link.target, '_blank');
+  assert.equal(link.rel, 'noopener');
+  assert.equal(blocks[1].children.length, 2, 'no source id = no link to a file that cannot be addressed');
+  assert.deepEqual(citationDetails([]), []);
+  assert.deepEqual(citationDetails(undefined), []);
+});
+
+test('appendSummarySources: nothing is shown without an API, without a container, or when the call fails', async () => {
+  const container = new FakeEl('div');
+  await appendSummarySources(container, 1, null);
+  await appendSummarySources(container, 1, undefined);
+  await appendSummarySources(container, 1, {}); // API without summarySources (offline store)
+  await appendSummarySources(null, 1, { summarySources: async () => [{ pageIndex: 1, sourceName: 'a', pageText: 't' }] });
+  await appendSummarySources(container, 1, { summarySources: async () => { throw new Error('offline'); } });
+  assert.equal(container.children.length, 0);
+});
+
+test('appendSummarySources: no sources = nothing shown; with sources = one origin block, pages listed compactly', async () => {
+  const empty = new FakeEl('div');
+  await appendSummarySources(empty, 7, { summarySources: async () => [] });
+  assert.equal(empty.children.length, 0);
+
+  const container = new FakeEl('div');
+  const asked = [];
+  await appendSummarySources(container, 7, {
+    summarySources: async (id) => { asked.push(id); return [
+      { pageIndex: 2, sourceName: 'fisio.pdf', pageText: 'dois' },
+      { pageIndex: 1, sourceName: 'fisio.pdf', pageText: 'um' },
+    ]; },
+  });
+  assert.deepEqual(asked, [7]);
+  assert.equal(container.children.length, 1);
+  assert.equal(container.children[0].children[0].textContent, 'Origem do resumo · fisio.pdf, páginas 1–2');
+});
+
+test('appendSummarySources: a re-render replaces the previous origin block instead of stacking', async () => {
+  const container = new FakeEl('div');
+  const api = { summarySources: async () => [{ pageIndex: 1, sourceName: 'a.pdf', pageText: 't' }] };
+  await appendSummarySources(container, 1, api);
+  const first = container.children[0];
+  first.parent = container;
+  await appendSummarySources(container, 1, api);
+  assert.equal(first.removed, true);
+  assert.equal(container.children.filter((c) => c.className.includes('summary-source')).length, 1);
+});

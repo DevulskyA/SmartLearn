@@ -1,4 +1,5 @@
 import { REVIEW_DAY_OFFSETS, generateReviewDates } from "./review-schedule.js";
+import { t, tn } from "./i18n/index.js";
 
 // LEGACY_TEMPORARY: fixed 16-review schedule. Boundary: scheduling logic stays here.
 // A future adaptive scheduler (SM-2, FSRS) replaces this file; may require schema evolution.
@@ -20,4 +21,39 @@ export function generateInitialTasks(studyDate, algorithm = ALGORITHMS.LEGACY) {
     reviewNumber: i + 1,
     dueDate,
   }));
+}
+
+// The earliest still-pending review task for a given unit, by dueDate — the
+// answer to "when does this unit next need review?", used by both Plano's
+// list and Study Now's own question selection. A unit with no pending tasks
+// (all reviewDone, or none scheduled) has no next review: null.
+export function getNextReview(unitId, allTasks) {
+  const pending = allTasks
+    .filter((t) => t.unitId === unitId && !t.reviewDone)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return pending.length > 0 ? pending[0].dueDate : null;
+}
+
+// Whole calendar days between two YYYY-MM-DD dates (UTC midnight, matching
+// generateReviewDates' own date arithmetic) — positive when toDate is after
+// fromDate.
+export function getDaysBetween(fromDate, toDate) {
+  const from = new Date(`${fromDate}T00:00:00.000Z`);
+  const to = new Date(`${toDate}T00:00:00.000Z`);
+  return Math.round((to - from) / 86400000);
+}
+
+// Hoje's own overdue/due-today status label for one review row. groupName is
+// the row's pre-computed bucket (doneToday/today/overdue — see renderToday
+// in app.js); for an overdue row, the day count is derived from the task's
+// own dueDate vs today. "Atrasada 1 dia" also covers the 0-or-negative-days
+// case (a task whose dueDate is today or later but sorted into the overdue
+// group by a caller bug would still read as "at least 1 day late" rather
+// than a confusing "0 dias" or negative count) — deliberate floor, not a bug.
+export function getReviewStatusLabel(groupName, task, today) {
+  if (groupName === "doneToday") return t("review.status.doneToday");
+  if (groupName === "today") return t("review.status.dueToday");
+  const days = getDaysBetween(task.dueDate, today);
+  // The count is a plural parameter, not text glued to a word: other languages order and inflect it differently.
+  return tn("review.status.overdue", Math.max(1, days));
 }

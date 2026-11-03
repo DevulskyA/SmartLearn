@@ -9,6 +9,14 @@ export const THRESHOLDS = {
 
 export const TREND_DELTA_MIN = 0.03;
 
+// Fewer questions than this is "not enough evidence", never "difficulty": the colour stays neutral, as it already does
+// with no evidence. Same value as the server's MIN_SAMPLE_QUESTIONS and the trend minimum (a test pins the equality).
+export const MIN_SAMPLE_QUESTIONS = 10;
+
+// VERDICT-1 (human-approved): the aggregate "Meu estudo está funcionando?" headline says "Resultado misto" only
+// when BOTH improving and worsening subjects each hold at least this share of the compared question volume.
+export const VERDICT_MIXED_VOLUME_SHARE_MIN = 0.25;
+
 export const PERFORMANCE_STATES = {
   STRONG: 'STRONG',
   ADEQUATE: 'ADEQUATE',
@@ -36,6 +44,12 @@ export const DEFAULT_SUBJECT_COLOR = 'DISC-BLUE';
 
 export const SUBJECT_COLOR_KEYS = Object.keys(SUBJECT_COLORS);
 
+// The colour a new discipline starts with: the first one no existing discipline uses, so students who never open the picker do not end up with all-blue disciplines.
+export function firstUnusedSubjectColor(usedColors = []) {
+  const used = new Set(usedColors);
+  return SUBJECT_COLOR_KEYS.find((key) => !used.has(key)) ?? DEFAULT_SUBJECT_COLOR;
+}
+
 export function getState(weightedAccuracy, totalQuestions) {
   if (totalQuestions == null || totalQuestions === 0) return PERFORMANCE_STATES.NO_EVIDENCE;
   const pct = Number(weightedAccuracy);
@@ -49,4 +63,41 @@ export function getState(weightedAccuracy, totalQuestions) {
 export function colorVarForKey(colorKey) {
   const key = SUBJECT_COLORS[colorKey] ? colorKey : DEFAULT_SUBJECT_COLOR;
   return `--disc-color-${SUBJECT_COLORS[key].css}`;
+}
+
+// PERFORMANCE_COLOR != SUBJECT_COLOR. This is a continuous visual signal for
+// how well a subject/unit is doing (0%=red, 60%=yellow, 100%=green); it does
+// not identify or replace the subject's own color (colorVarForKey above).
+export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-text-muted)';
+const PERFORMANCE_COLOR_STOPS = [
+  { pct: 0, rgb: [220, 38, 38] },   // red-600
+  { pct: 60, rgb: [234, 179, 8] },  // yellow-500
+  { pct: 100, rgb: [22, 163, 74] }, // green-600
+];
+
+function lerp(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+export function performanceColor(weightedAccuracy, totalQuestions) {
+  if (totalQuestions == null || totalQuestions < MIN_SAMPLE_QUESTIONS) return PERFORMANCE_COLOR_NEUTRAL;
+  const pct = Number(weightedAccuracy);
+  if (!Number.isFinite(pct)) return PERFORMANCE_COLOR_NEUTRAL;
+  const clamped = Math.min(100, Math.max(0, pct));
+
+  const [lo, hi] = clamped <= 60
+    ? [PERFORMANCE_COLOR_STOPS[0], PERFORMANCE_COLOR_STOPS[1]]
+    : [PERFORMANCE_COLOR_STOPS[1], PERFORMANCE_COLOR_STOPS[2]];
+  const t = (clamped - lo.pct) / (hi.pct - lo.pct);
+
+  const [r, g, b] = [0, 1, 2].map((i) => lerp(lo.rgb[i], hi.rgb[i], t));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// VOLUME != PERFORMANCE: how much a subject was practiced, scaled relative
+// to the largest volume in the currently displayed set — never mapped
+// through performanceColor, and never a factor in it either.
+export function volumeBarWidth(totalQuestions, maxVolume) {
+  if (!maxVolume) return 0;
+  return Math.min(100, Math.max(0, (Number(totalQuestions) || 0) / maxVolume * 100));
 }
