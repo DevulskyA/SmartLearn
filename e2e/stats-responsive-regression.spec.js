@@ -147,6 +147,7 @@ test('Por conteúdo last-activity date shows a clean cut (not a mid-word fragmen
 });
 
 test('Prática/Recência header never becomes two stacked controls, at any width, in either table', async ({ page }) => {
+  test.setTimeout(90000); // seeds and reloads once per width (6 widths, ~18 s alone); the default 30 s only holds on an idle machine
   for (const width of WIDTHS) {
     await seedUatAndOpenStats(page, width);
     for (const headId of ['#subject-kpi-head', '#unit-stats-head']) {

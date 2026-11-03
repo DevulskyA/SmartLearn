@@ -163,3 +163,8 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Observado: `strict mode violation` (2 elementos). Corrigido neste commit com a classe `stats-trend-note`.
 - Causa: rodei só os specs que eu julguei relacionados (stats-aaa, trend-chip, responsivo, ordenação) e empurrei sem buscar quem mais usa a classe nova/antiga.
 - Classificação 2 (regra existia e segui, mas incompleta): "testes dirigidos" não diz para procurar por seletor/classe em TODOS os specs. Ajuste de método: antes de nomear classe ou id novo em HTML compartilhado, `grep` da classe em `e2e/`; a suíte completa final pega o resto.
+
+## E2E completo 1638ac3 (2026-11-03)
+- Resultado: 419 ok, 1 falha, 2 puladas, 15,6 min (rodada anterior: 10,1 min; +54%, desvio relevante; outra sessão ativa na máquina).
+- Falha: `stats-responsive-regression.spec.js:149` (Prática/Recência), `Test timeout of 30000ms exceeded`. Sozinho passa em 18 s; o teste semeia e recarrega 6 vezes (um por largura) e o limite padrão de 30 s só serve em máquina ociosa. Causa: INSTRUMENTO (limite subdimensionado), não produto. Corrigido com `test.setTimeout(90000)`.
+- Regra de método: o limite de um teste deve ser maior que 2x o tempo medido dele sozinho; este tinha 1,7x.
