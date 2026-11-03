@@ -168,6 +168,8 @@ function forgetSelection(key) {
   }
 }
 const navigationItems = [...document.querySelectorAll("[data-screen]")];
+const mobileMoreToggle = document.querySelector("#mobile-more-toggle");
+const mobileMoreMenu = document.querySelector("#mobile-more-menu");
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
 const subjectSelect = document.querySelector("#subject-select");
@@ -4709,7 +4711,18 @@ function clearTransientMessages(panel) {
   }
 }
 
+// Phone only: Configurações and Conta live behind "Mais" so the bottom bar keeps four large targets. On desktop the
+// group is an ordinary part of the sidebar and the toggle is hidden, so none of this state is ever set there.
+function closeMobileMore({ restoreFocus = false } = {}) {
+  const wasOpen = Boolean(mobileMoreMenu?.classList.contains("is-open"));
+  mobileMoreMenu?.classList.remove("is-open");
+  mobileMoreToggle?.classList.remove("is-open");
+  mobileMoreToggle?.setAttribute("aria-expanded", "false");
+  if (restoreFocus && wasOpen) mobileMoreToggle?.focus();
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
+  closeMobileMore();
   if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
   const wantsSubjectsPanel = screenId === "subjects"; // so was Disciplinas, as the "Gerenciar disciplinas" panel of Plano
   if (wantsSubjectsPanel) screenId = "plan";
@@ -4769,6 +4782,9 @@ export function showScreen(screenId, { focus = false } = {}) {
     item.classList.toggle("is-active", isActive);
     item.setAttribute("aria-current", isActive ? "page" : "false");
   }
+  const moreIsCurrent = Boolean(mobileMoreMenu?.querySelector(`[data-screen="${nextScreen}"]`));
+  mobileMoreToggle?.classList.toggle("is-active", moreIsCurrent);
+  mobileMoreToggle?.setAttribute("aria-current", moreIsCurrent ? "page" : "false");
 
   if (window.location.hash !== `#${nextScreen}`) {
     window.history.replaceState(null, "", `#${nextScreen}`);
@@ -4913,6 +4929,27 @@ for (const item of navigationItems) {
     showScreen(item.dataset.screen, { focus: true });
   });
 }
+
+mobileMoreToggle?.addEventListener("click", () => {
+  const open = !mobileMoreMenu.classList.contains("is-open");
+  mobileMoreMenu.classList.toggle("is-open", open);
+  mobileMoreToggle.classList.toggle("is-open", open);
+  mobileMoreToggle.setAttribute("aria-expanded", String(open));
+  if (open) mobileMoreMenu.querySelector(".nav-item:not([hidden])")?.focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && mobileMoreMenu?.classList.contains("is-open")) {
+    event.preventDefault();
+    closeMobileMore({ restoreFocus: true });
+  }
+});
+function closeMobileMoreOnOutside(event) {
+  if (!mobileMoreMenu?.classList.contains("is-open")) return;
+  if (!mobileMoreMenu.contains(event.target) && !mobileMoreToggle?.contains(event.target)) closeMobileMore();
+}
+document.addEventListener("pointerdown", closeMobileMoreOnOutside);
+document.addEventListener("focusin", closeMobileMoreOnOutside);
+window.matchMedia("(max-width: 47.99rem)").addEventListener("change", () => closeMobileMore());
 
 window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));

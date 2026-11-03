@@ -200,6 +200,8 @@ export default {
   'screens.nav.skip': 'Pular para o conteúdo',
   'screens.nav.statsShort': 'Estat.',
   'screens.nav.settingsShort': 'Config.',
+  'screens.nav.more': 'Mais',
+  'screens.nav.moreMenu': 'Mais áreas',
   'screens.register.title': 'Cadastro',
   'screens.register.eyebrow': 'Novo estudo',
   'screens.register.quick': 'Cadastro rápido',

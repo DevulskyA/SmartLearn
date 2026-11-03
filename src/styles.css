@@ -374,6 +374,15 @@ button {
   display: none;
 }
 
+/* "Mais" groups Configurações and Conta on the phone bottom bar only; on desktop the group is transparent to layout, so the sidebar is unchanged. */
+.mobile-more-menu {
+  display: contents;
+}
+
+.mobile-more-toggle {
+  display: none;
+}
+
 .nav-item:hover {
   background: var(--color-surface-sunken);
   color: var(--color-primary);
@@ -1833,9 +1842,52 @@ h1 {
     gap: 0.3rem;
     padding: 0.45rem 0.05rem 0.35rem;
     border-radius: 0;
-    font-size: clamp(0.56rem, 2.4vw, 0.68rem);
+    font-size: 0.75rem;
     font-weight: 600;
     text-align: center;
+  }
+
+  .mobile-more-toggle {
+    display: flex;
+  }
+
+  .mobile-more-toggle.is-open {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+  }
+
+  .app-nav .mobile-more-menu {
+    display: none;
+    position: fixed;
+    right: 0.75rem;
+    bottom: calc(4.75rem + var(--safe-area-bottom) + 0.55rem);
+    z-index: 4;
+    width: min(18rem, calc(100vw - 1.5rem));
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .app-nav .mobile-more-menu.is-open {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .app-nav .mobile-more-menu .nav-item {
+    min-height: 3rem;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    text-align: left;
+  }
+
+  .app-nav .mobile-more-menu .nav-item span {
+    width: auto;
   }
 
   .nav-item span {
