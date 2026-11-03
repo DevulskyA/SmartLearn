@@ -231,6 +231,8 @@ export default {
   'api.msg.SOURCE_NOT_FOUND': 'Fonte não encontrada.',
   'api.msg.SOURCE_FILE_MISSING': 'O arquivo original desta fonte não foi encontrado no armazenamento.',
   'api.msg.SOURCE_FILE_MISSING_NOTHING_CHANGED': 'O arquivo original desta fonte não foi encontrado no armazenamento. Nada foi extraído nem alterado.',
+  'api.msg.SOURCE_HAS_UNITS': 'Esta fonte já gerou aulas ou questões. Remova-as antes de apagar a fonte; nada foi apagado.',
+  'api.msg.SOURCE_GENERATION_RUNNING': 'Há uma geração em andamento para esta fonte. Aguarde ou cancele antes de apagá-la; nada foi apagado.',
   'api.msg.SOURCE_INTEGRITY_FAILED': 'O arquivo armazenado desta fonte não confere mais com o que foi enviado.',
   'api.msg.SOURCE_FILE_EMPTY': 'Arquivo vazio ou inválido.',
   'api.msg.SOURCE_NOT_PDF_TYPE': 'Apenas arquivos PDF são aceitos.',

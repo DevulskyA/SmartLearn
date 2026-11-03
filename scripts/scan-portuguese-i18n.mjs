@@ -202,7 +202,9 @@ export function scanAll() {
  */
 // 576 -> 580: the 4 sentences of server/src/migration-authorization.js are operator messages printed to stderr by the backend and the CLI scripts
 // (never returned to a screen), like the ones already counted in main.js.
-export const SERVER_PROSE_BASELINE = 580;
+// 580 -> 582: DELETE /sources/:id refuses with SOURCE_HAS_UNITS / SOURCE_GENERATION_RUNNING; dm() needs the server-side sentence, and the screen
+// shows the client-catalog twin (api.msg.SOURCE_HAS_UNITS, api.msg.SOURCE_GENERATION_RUNNING) through the code, per the contract.
+export const SERVER_PROSE_BASELINE = 582;
 export function scanServerAndShared() {
   const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'server/src', 'shared'], { cwd: root, encoding: 'utf8' }).split('\n')
     .filter((f) => f.endsWith('.js') && existsSync(join(root, f)));

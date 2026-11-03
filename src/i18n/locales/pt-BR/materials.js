@@ -82,6 +82,11 @@ export default {
   'materials.existing.pages': '{count} páginas',
   'materials.existing.open': 'Abrir',
   'materials.existing.openLabel': 'Abrir {name}',
+  'materials.existing.remove': 'Remover',
+  'materials.existing.removeLabel': 'Remover {name}',
+  'materials.existing.removeConfirm': 'Remover "{name}"? O PDF e os trechos propostos serão apagados. Aulas e questões já criadas não são afetadas, e o documento só é removido se nenhuma delas veio dele.',
+  'materials.existing.removed': 'Documento removido.',
+  'materials.existing.removeFailed': 'Não foi possível remover o documento.',
   'materials.existing.opening': 'Abrindo o documento…',
   'materials.existing.openFailed': 'Não foi possível abrir o documento.',
 
