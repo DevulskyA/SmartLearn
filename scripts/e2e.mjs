@@ -8,6 +8,7 @@ import { openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { SUITE_WORKERS } from '../e2e/support/suites.js';
 
 // the e2e specs use server/stub ports 13950..13998 (offset 0)
@@ -91,10 +92,17 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   env.E2E_RUN_ID = `${Date.now()}-${process.pid}`;
   // T-F6-10: the spec servers (all started with NODE_ENV=test) hash passwords with cheap scrypt params; see server/src/auth/passwords.js
   env.SMARTLEARN_TEST_FAST_SCRYPT = '1';
-  console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : ''}`);
-  const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test', ...args], { env, stdio: 'inherit', shell: process.platform === 'win32' });
+  if (env.E2E_VERBOSE) console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : ''}`);
+  // --changed = only the specs whose files differ from HEAD (Playwright --only-changed); --failed = re-run last failures only
+  for (const [flag, pw] of [['--changed', '--only-changed'], ['--failed', '--last-failed']]) { const k = args.indexOf(flag); if (k >= 0) args[k] = pw; }
+  // token-cheap output by default: only failures and one summary line; E2E_VERBOSE=1 or an explicit --reporter keeps Playwright's own
+  const userArgs = args.length; // the baseline key counts the caller's arguments, not the reporter added below
+  if (!env.E2E_VERBOSE && !args.some((a) => a === '--reporter' || a.startsWith('--reporter='))) args.push(`--reporter=${fileURLToPath(new URL('../e2e/support/quiet-reporter.js', import.meta.url))}`);
+  // run Playwright's CLI directly: no npx/npm "notice" lines, no shell quoting
+  const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
+  const child = spawn(process.execPath, [cli, 'test', ...args], { env, stdio: 'inherit' });
   const t0 = Date.now();
-  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: `${env.E2E_SUITE || 'full'}@${workers}w${args.length ? '+args' : ''}`, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
+  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: `${env.E2E_SUITE || 'full'}@${workers}w${userArgs ? '+args' : ''}`, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
   process.on('SIGINT', () => { release(); process.exit(130); });
 }
 
