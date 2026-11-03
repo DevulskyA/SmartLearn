@@ -315,6 +315,10 @@ button {
   font-weight: 750;
   letter-spacing: -0.035em;
   text-decoration: none;
+  /* WCAG 2.2 target size: the link's height must not depend on the fallback font's line height (Linux CI measured 23px). */
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 .app-nav {
