@@ -5,7 +5,7 @@
 
 import { t } from "./i18n/index.js";
 import { validateNamingField } from "./naming-validation.js";
-import { colorVarForKey, SUBJECT_COLOR_KEYS } from "./performance-thresholds.js";
+import { colorVarForKey, firstUnusedSubjectColor, SUBJECT_COLOR_KEYS } from "./performance-thresholds.js";
 
 export const DEFAULT_SUBJECT_COLOR = "DISC-BLUE";
 
@@ -65,10 +65,12 @@ const isDuplicate = (error) => /unique|duplicate/i.test(String(error?.message ??
  *   the typed name and colour when it saves; Enter does nothing
  * @param {string} [o.inputClass] extra class of the name input
  * @param {() => void} [o.onHide]  runs when the form closes (cancel, success or hide())
+ * @param {() => string[]} [o.usedColors]  colour keys already taken by existing disciplines (the default skips them)
  */
-export function createSubjectCreateForm({ slot, ids, trigger = null, submit = null, report = null, cancellable = false, atomic = false, inputClass = "", onHide = null }) {
+export function createSubjectCreateForm({ slot, ids, trigger = null, submit = null, report = null, cancellable = false, atomic = false, inputClass = "", onHide = null, usedColors = () => [] }) {
   if (!slot) return null;
-  let color = DEFAULT_SUBJECT_COLOR;
+  const defaultColor = () => firstUnusedSubjectColor(usedColors());
+  let color = defaultColor();
 
   const form = document.createElement("form");
   form.className = "inline-form subject-create-form";
@@ -144,7 +146,7 @@ export function createSubjectCreateForm({ slot, ids, trigger = null, submit = nu
 
   function reset() {
     input.value = "";
-    color = DEFAULT_SUBJECT_COLOR;
+    color = defaultColor();
     paintPicker();
   }
   function hide() {

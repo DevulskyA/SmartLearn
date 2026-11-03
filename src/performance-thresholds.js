@@ -44,6 +44,12 @@ export const DEFAULT_SUBJECT_COLOR = 'DISC-BLUE';
 
 export const SUBJECT_COLOR_KEYS = Object.keys(SUBJECT_COLORS);
 
+// The colour a new discipline starts with: the first one no existing discipline uses, so students who never open the picker do not end up with all-blue disciplines.
+export function firstUnusedSubjectColor(usedColors = []) {
+  const used = new Set(usedColors);
+  return SUBJECT_COLOR_KEYS.find((key) => !used.has(key)) ?? DEFAULT_SUBJECT_COLOR;
+}
+
 export function getState(weightedAccuracy, totalQuestions) {
   if (totalQuestions == null || totalQuestions === 0) return PERFORMANCE_STATES.NO_EVIDENCE;
   const pct = Number(weightedAccuracy);

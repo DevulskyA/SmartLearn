@@ -261,6 +261,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     ids: { form: `${uid}-new-subject`, input: `${uid}-subject-name` },
     atomic: true,
     inputClass: "source-draft-subject-input",
+    usedColors: () => subjects.map((subject) => subject.color),
     report: (text, isError) => setMessage(acceptMessage, text, isError),
   });
   const dateField = labelledField(`${uid}-date`, t("editor.accept.date"), "input", today);
