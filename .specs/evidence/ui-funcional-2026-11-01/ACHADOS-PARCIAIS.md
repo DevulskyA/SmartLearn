@@ -168,3 +168,11 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Resultado: 419 ok, 1 falha, 2 puladas, 15,6 min (rodada anterior: 10,1 min; +54%, desvio relevante; outra sessão ativa na máquina).
 - Falha: `stats-responsive-regression.spec.js:149` (Prática/Recência), `Test timeout of 30000ms exceeded`. Sozinho passa em 18 s; o teste semeia e recarrega 6 vezes (um por largura) e o limite padrão de 30 s só serve em máquina ociosa. Causa: INSTRUMENTO (limite subdimensionado), não produto. Corrigido com `test.setTimeout(90000)`.
 - Regra de método: o limite de um teste deve ser maior que 2x o tempo medido dele sozinho; este tinha 1,7x.
+
+## CI-01 — job security do CI da main falhou na auditoria npm (2026-11-03)
+- Onde: GitHub Actions, run 41559850493, job `security`, passo `Dependency audit (root)`.
+- Esperado: auditoria sem vulnerabilidades. Observado: katex 0.11.0 a 0.18.1, prototype pollution contorna restrições de trust (1 baixa).
+- Gravidade: baixa (o projeto usa `trust: false`), mas deixa a main vermelha.
+- Causa: o CI novo nunca tinha rodado; o `npm audit` não foi verificado antes do merge (declarado como não verificado no parecer).
+- Correção: katex 0.19.1 em 6eff76a (integração); 36 testes unitários e 13 E2E de matemática passam. Falta publicar na main (decisão do dono).
+- Classe do erro (regra de auditoria de erro próprio): 3, sem regra que cobrisse "um gate novo que nunca rodou deve rodar localmente antes do merge". Guarda: rodar `npm audit --omit=dev` e `npm audit` do servidor antes de qualquer merge que traga CI.
