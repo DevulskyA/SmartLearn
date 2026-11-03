@@ -157,3 +157,9 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Esperado: página carrega. Observado: `net::ERR_CONNECTION_REFUSED` em `localhost:62363` (servidor Vite do worker caiu/ainda não escutava).
 - Gravidade: baixa (instrumento, não produto). Reprodução: não reproduz; reexecução isolada 5/5 verde. Suíte: 416 ok, 1 falha, 2 puladas, 10,1 min, sem desvio de duração.
 - Estado: aberto como candidato F-1 (porta/servidor por worker); classe repetida (cartão anterior: 7 falhas por carga) — guardar no código se voltar.
+
+## A-09 quebrou study-verdict.spec.js:139 (2026-11-03) — erro meu
+- Onde: commit a585ff4 (nota da janela da tendência em Estatísticas). Usei a classe `stats-panel-note`, que o spec `study-verdict.spec.js:139` já usa com seletor único.
+- Observado: `strict mode violation` (2 elementos). Corrigido neste commit com a classe `stats-trend-note`.
+- Causa: rodei só os specs que eu julguei relacionados (stats-aaa, trend-chip, responsivo, ordenação) e empurrei sem buscar quem mais usa a classe nova/antiga.
+- Classificação 2 (regra existia e segui, mas incompleta): "testes dirigidos" não diz para procurar por seletor/classe em TODOS os specs. Ajuste de método: antes de nomear classe ou id novo em HTML compartilhado, `grep` da classe em `e2e/`; a suíte completa final pega o resto.

@@ -5785,6 +5785,7 @@ label.select-control:has(> .ui-select) {
 #subject-kpi-section .stats-verdict-label { color: var(--color-muted); font-size: 0.75rem; letter-spacing: 0.02em; margin-bottom: 0.2rem; }
 #subject-kpi-section .stats-verdict-headline { font-size: 0.9rem; font-weight: 600; }
 .stats-panel-note { margin: 0.2rem 0 0; color: var(--color-muted); font-size: 0.84rem; }
+.stats-trend-note { margin: 0.6rem 0 0; color: var(--color-muted); font-size: 0.84rem; }
 #subject-kpi-section .stats-verdict-detail,
 #subject-kpi-section .stats-verdict-attention { font-size: 0.84rem; }
 #subject-kpi-section .stats-verdict-attention { margin-top: 0.35rem; }

@@ -92,7 +92,7 @@ test('mixed areas: says so, counts them apart, names the falling unit with old -
   const attention = page.locator('#stats-verdict-attention-text');
   await expect(attention).toContainText('Filtração glomerular');
   await expect(attention).toContainText('de 80% para 40%');
-  await expect(attention).toContainText('1 exercício para reforçar');
+  await expect(attention).toContainText('Nesta aula: 1 exercício para reforçar');
   // never a mastery/score claim
   expect(await verdict.innerText()).not.toMatch(/dom[ií]n|mastery|reten[cç][aã]o|score/i);
 
