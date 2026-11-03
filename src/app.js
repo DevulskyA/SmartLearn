@@ -300,6 +300,7 @@ const planStudySummary = document.querySelector("#plan-study-summary");
 const planUnitSaveBtn = document.querySelector("#plan-unit-save-btn");
 const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
 const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
+const resetCard = document.querySelector("#reset-card");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
 const migrationCard = document.querySelector("#migration-card");
@@ -2924,6 +2925,8 @@ export async function renderSettings() {
   // hidden buttons, a plain-language reason in their place.
   if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
   if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
+  // The whole "Apagar base local" card is offered only where it works (this device's own database); against the server it is not shown at all.
+  if (resetCard) resetCard.hidden = REMOTE_MODE;
   if (REMOTE_MODE) {
     setResetMessage(t("appBackup.resetUnsupported"));
   }

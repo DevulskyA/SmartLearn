@@ -161,11 +161,11 @@ test('Configuracoes: import/reset show a safe explanatory state instead of a dea
   await page.locator('[data-screen="settings"]').click();
   await expect(page.locator('#export-backup')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#choose-backup-file')).toBeHidden({ timeout: 5000 });
+  // against the server there is nothing to wipe on this device: the whole "Apagar base local" card (title, sentence, button) is not offered
+  await expect(page.locator('#reset-card')).toBeAttached({ timeout: 5000 });
+  await expect(page.locator('#reset-card')).toBeHidden({ timeout: 5000 });
   await expect(page.locator('#reset-database')).toBeHidden({ timeout: 5000 });
-  await expect(page.locator('#reset-message')).toContainText(/não é uma operação suportada/i, { timeout: 5000 });
-  // T-F13-13: the card's own sentence promises the removal that is not offered here
-  await expect(page.locator('#reset-body')).toBeAttached({ timeout: 5000 });
-  await expect(page.locator('#reset-body')).toBeHidden({ timeout: 5000 });
+  await expect(page.getByRole('heading', { name: 'Apagar base local' })).toHaveCount(0);
 });
 
 test('Plano: the discipline filter lists a discipline created after the screen was first opened (T-F13-13)', async ({ page }) => {
