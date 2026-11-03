@@ -31,7 +31,7 @@ export function buildColorPicker(container, selectedKey, onSelect) {
     btn.dataset.colorKey = key;
     btn.style.setProperty("--swatch-color", `var(${colorVarForKey(key)})`);
     btn.setAttribute("role", "radio");
-    btn.setAttribute("aria-label", key.replace("DISC-", "").toLowerCase());
+    btn.setAttribute("aria-label", t(`subject.color.${key.replace("DISC-", "").toLowerCase()}`));
     const selected = key === selectedKey;
     if (selected) btn.classList.add("is-selected");
     btn.setAttribute("aria-checked", String(selected));

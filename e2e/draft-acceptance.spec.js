@@ -352,6 +352,13 @@ test('R-4: a new discipline created while accepting a draft gets the colour chos
   const editor = await openFirstDraft(page, 'cor-aceite.pdf', ['Farmacocinética: absorção e distribuição']);
   const swatches = editor.locator('form.subject-create-form .color-swatch');
   expect(await swatches.count()).toBeGreaterThan(1);
+  // A-20: colour names are Portuguese words, and the footer buttons do not touch each other
+  const names = await swatches.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+  expect(names[0]).toBe('Azul');
+  for (const name of names) expect(name).toMatch(/^[A-ZÀ-Ý]/);
+  const previewBox = await editor.locator('[data-action="preview-accept"]').boundingBox();
+  const acceptBox = await editor.locator('[data-action="accept-draft"]').boundingBox();
+  expect(acceptBox.y - (previewBox.y + previewBox.height)).toBeGreaterThanOrEqual(8);
   await swatches.nth(3).click();
   const chosen = await swatches.nth(3).evaluate((el) => el.style.getPropertyValue('--swatch-color'));
   await editor.locator('.source-draft-subject-input').fill('Cor Aceite');

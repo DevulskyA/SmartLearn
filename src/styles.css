@@ -4611,7 +4611,7 @@ label.select-control:has(> .ui-select) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   column-gap: 1rem;
-  row-gap: 0.25rem;
+  row-gap: 0.75rem;
   align-items: start; /* the new-subject block is taller than the other two fields: they keep their own height instead of stretching to it */
 }
 
