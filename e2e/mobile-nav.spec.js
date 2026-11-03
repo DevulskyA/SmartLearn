@@ -1,4 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { VITE_ORIGIN, serverPort } from './support/ports.js';
+import { waitForServerReady } from './support/wait-for-server.js';
+import { signInRegistered } from './support/session.js';
 
 // Bottom navigation at phone width: EVERY visible destination must be inside
 // the viewport and tappable. The bar holds Hoje, Plano, Estatísticas and "Mais" (Materiais joins them only under
@@ -109,3 +117,58 @@ for (const width of [375, 360]) {
     }
   });
 }
+
+// With a session the data screens open, so "Mais" must stop being the current page as soon as the student
+// lands on a bar destination, and become current again on Conta (behind "Mais").
+test.describe('signed in', () => {
+  const SERVER_PORT = serverPort(13944);
+  const API_BASE = `http://localhost:${SERVER_PORT}`;
+  const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+  let serverProcess;
+  let dataDir;
+
+  test.beforeAll(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-mobile-nav-'));
+    serverProcess = spawn(process.execPath, [MAIN_JS], {
+      env: {
+        ...process.env,
+        SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'),
+        SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'),
+        PORT: String(SERVER_PORT),
+        HOST: 'localhost',
+        NODE_ENV: 'test',
+        SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN,
+      },
+      stdio: 'ignore',
+    });
+    await waitForServerReady(API_BASE, { label: 'mobile-nav E2E' });
+  });
+
+  test.afterAll(async () => {
+    serverProcess?.kill();
+    await new Promise((r) => setTimeout(r, 300));
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
+
+  test('375px "Mais" is not current on Plano, Hoje or Estatísticas and is current on Conta', async ({ page }) => {
+    await page.addInitScript((base) => {
+      window.__SMARTLEARN_API_BASE__ = base;
+      window.__SMARTLEARN_REMOTE_MODE__ = true;
+    }, API_BASE);
+    // the sign-in helper clicks Conta in the sidebar, which only exists at desktop width
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signInRegistered(page, { email: `nav-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    const toggle = page.locator('#mobile-more-toggle');
+    for (const screen of ['plan', 'today', 'stats']) {
+      await page.locator(`.app-nav > [data-screen="${screen}"]`).click();
+      await expect(page.locator(`#screen-${screen}`)).toBeVisible();
+      await expect(toggle, `"Mais" while ${screen} is open`).toHaveAttribute('aria-current', 'false');
+    }
+    await toggle.click();
+    await page.locator('#mobile-more-menu [data-screen="account"]').click();
+    await expect(page.locator('#screen-account')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-current', 'page');
+  });
+});
