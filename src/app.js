@@ -2315,7 +2315,7 @@ export async function renderStatsBySubject() {
   subjectKpiList.replaceChildren();
 
   // Matrix row: identity (subject-cell) | performance (% + band bar, never a number without evidence)
-  // | evidence (real question count) | trend (p.p. between named windows). Activating a row opens its
+  // | evidence (real question count) | trend (points between named windows). Activating a row opens its
   // contents; the evolution filter follows it (see openSubjectContents).
   for (const r of results) {
     const row = document.createElement("tr");

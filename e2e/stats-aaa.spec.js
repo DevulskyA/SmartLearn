@@ -106,7 +106,7 @@ test('trend shows percentage points or says the sample is insufficient', async (
   await openStats(page);
   const texts = await page.locator('#subject-kpi-list .trend-badge').allTextContents();
   expect(texts.length).toBeGreaterThan(3);
-  for (const text of texts) expect(text.trim()).toMatch(/^([+−]\d+ p\.p\.|Estável|Amostra insuficiente)$/);
+  for (const text of texts) expect(text.trim()).toMatch(/^([+−]\d+ pontos|Estável|Amostra insuficiente)$/);
   expect(await page.locator('#subject-kpi-list .trend-badge[title]').count()).toBe(texts.length);
 });
 

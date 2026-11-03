@@ -87,6 +87,7 @@ export default {
   'screens.stats.viewInPlan': 'Ver no Plano',
   'screens.stats.col.performance': 'Desempenho',
   'screens.stats.col.trend': 'Tendência',
+  'screens.stats.subject.trendNote': 'Tendência: últimos 30 dias contra os 30 anteriores, em pontos de acerto.',
   'screens.stats.subject.empty': 'Registre questões para ver o desempenho por disciplina.',
   'screens.stats.evolution.title': 'Evolução geral',
   'screens.stats.evolution.subjectLabel': 'Filtrar disciplina no gráfico',
