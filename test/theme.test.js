@@ -6,6 +6,9 @@ import {
   resolveThemePreference,
   getThemeOption,
   getStoredThemePreference,
+  quickToggleTarget,
+  readQuickToggleMemory,
+  writeQuickToggleMemory,
 } from "../src/theme.js";
 
 // TEST_COVERAGE_MATRIX.md gap #2: theme.js had zero test evidence (no unit
@@ -152,6 +155,55 @@ test("THEME_OPTIONS: every id has its label and description keys in the catalog,
   } finally {
     setLocale("pt-BR");
     registerCatalog("en", undefined);
+  }
+});
+
+test("quickToggleTarget: flips the mode and a second click returns to the theme the user had chosen", () => {
+  const first = quickToggleTarget("dracula", "light", {});
+  assert.equal(first.target, "paper", "no light theme remembered yet: default light");
+  assert.deepEqual(first.memory, { dark: "dracula" });
+  const back = quickToggleTarget(first.target, "light", first.memory);
+  assert.equal(back.target, "dracula", "the dark choice was not erased");
+  assert.deepEqual(back.memory, { dark: "dracula", light: "paper" });
+});
+
+test("quickToggleTarget: remembers the light choice too (tokyo-day -> dark default -> tokyo-day)", () => {
+  const toDark = quickToggleTarget("tokyo-day", "light", {});
+  assert.equal(toDark.target, "night");
+  assert.equal(quickToggleTarget("night", "light", toDark.memory).target, "tokyo-day");
+});
+
+test("quickToggleTarget: 'auto' under a dark system flips to light on the FIRST click and is remembered as 'auto'", () => {
+  const toLight = quickToggleTarget("auto", "dark", {});
+  assert.equal(toLight.target, "paper");
+  assert.deepEqual(toLight.memory, { dark: "auto" });
+  assert.equal(quickToggleTarget("paper", "dark", toLight.memory).target, "auto");
+});
+
+test("quickToggleTarget: a remembered value that no longer fits (unknown id, wrong mode, 'auto' resolving to the same mode) falls back to the mode default", () => {
+  assert.equal(quickToggleTarget("night", "dark", { light: "removed-theme" }).target, "paper");
+  assert.equal(quickToggleTarget("night", "dark", { light: "dracula" }).target, "paper", "dracula is dark, not a light choice");
+  assert.equal(quickToggleTarget("paper", "light", { dark: "auto" }).target, "night", "'auto' under a light system is light, not dark");
+  assert.equal(quickToggleTarget("night", "dark", { light: 7 }).target, "paper");
+});
+
+test("readQuickToggleMemory / writeQuickToggleMemory: round trip, and garbage or missing storage reads as empty", () => {
+  const original = globalThis.localStorage;
+  let saved = null;
+  globalThis.localStorage = { getItem: () => saved, setItem: (_key, value) => { saved = value; } };
+  try {
+    assert.deepEqual(readQuickToggleMemory(), {});
+    writeQuickToggleMemory({ dark: "dracula", light: "paper" });
+    assert.deepEqual(readQuickToggleMemory(), { light: "paper", dark: "dracula" });
+    saved = "not json";
+    assert.deepEqual(readQuickToggleMemory(), {});
+    saved = "[1]";
+    assert.deepEqual(readQuickToggleMemory(), {});
+    globalThis.localStorage = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
+    assert.deepEqual(readQuickToggleMemory(), {});
+    assert.doesNotThrow(() => writeQuickToggleMemory({ dark: "night" }));
+  } finally {
+    globalThis.localStorage = original;
   }
 });
 

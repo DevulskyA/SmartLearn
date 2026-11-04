@@ -15,7 +15,9 @@ import {
   THEME_OPTIONS,
   applyThemePreference,
   getStoredThemePreference,
-  resolveThemePreference,
+  quickToggleTarget,
+  readQuickToggleMemory,
+  writeQuickToggleMemory,
 } from "./theme.js";
 import { colorVarForKey, getState, THRESHOLDS } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
@@ -4866,6 +4868,7 @@ export function showScreen(screenId, { focus = false } = {}) {
 }
 
 let currentThemePreference = getStoredThemePreference();
+let quickToggleMemory = readQuickToggleMemory();
 
 function renderThemePicker(preference = currentThemePreference) {
   if (!themePicker) return;
@@ -4936,9 +4939,12 @@ renderThemePicker(currentThemePreference);
 applyThemePreference(currentThemePreference);
 
 themeToggle.addEventListener("click", () => {
-  const effectiveThemeId = resolveThemePreference(currentThemePreference, prefersDarkScheme.matches);
-  const next = THEME_OPTIONS.find((option) => option.id === effectiveThemeId)?.mode === "dark" ? "paper" : "night";
-  setThemePreference(next);
+  // Antes: passava um booleano onde resolveThemePreference espera "dark"/"light" (com "Sistema" escuro o 1º clique não mudava nada)
+  // e sempre caía em Papel/Noite, apagando a escolha do usuário. Agora vira o modo e lembra a escolha de cada modo.
+  const { target, memory } = quickToggleTarget(currentThemePreference, prefersDarkScheme.matches ? "dark" : "light", quickToggleMemory);
+  quickToggleMemory = memory;
+  writeQuickToggleMemory(memory);
+  setThemePreference(target);
 });
 
 themePicker?.addEventListener("change", (event) => {

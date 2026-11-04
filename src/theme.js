@@ -274,6 +274,36 @@ export function resolveThemePreference(preference, systemMode = getSystemThemeMo
     : THEME_DEFAULTS_BY_MODE.light;
 }
 
+// Quick light/dark button: flips the mode but remembers, per mode, the preference the user was on, so the second click returns to it
+// (picking Dracula, toggling to light and back lands on Dracula, not on Noite). `preference` may be "auto"; it is remembered as such.
+export const QUICK_TOGGLE_MEMORY_KEY = "smartlearn:theme-quick-memory";
+
+export function quickToggleTarget(preference, systemMode, memory = {}) {
+  const modeOf = (pref) => (THEME_OPTIONS_BY_ID.get(resolveThemePreference(pref, systemMode))?.mode === "dark" ? "dark" : "light");
+  const mode = modeOf(preference);
+  const other = mode === "dark" ? "light" : "dark";
+  const remembered = memory[other];
+  const usable = typeof remembered === "string" && (remembered === "auto" || THEME_OPTIONS_BY_ID.has(remembered)) && modeOf(remembered) === other;
+  return { target: usable ? remembered : THEME_DEFAULTS_BY_MODE[other], memory: { ...memory, [mode]: preference } };
+}
+
+export function readQuickToggleMemory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(QUICK_TOGGLE_MEMORY_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { light: parsed.light, dark: parsed.dark } : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeQuickToggleMemory(memory) {
+  try {
+    localStorage.setItem(QUICK_TOGGLE_MEMORY_KEY, JSON.stringify(memory));
+  } catch {
+    // localStorage indisponível: a lembrança vale só nesta sessão (o chamador guarda a memória em variável).
+  }
+}
+
 export function applyThemePreference(preference, { persist = false } = {}) {
   const themeId = resolveThemePreference(preference);
   const theme = THEME_VARIABLES[themeId] || THEME_VARIABLES.paper;
