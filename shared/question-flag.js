@@ -19,13 +19,13 @@ export function normalizeQuestionFlag({ reason, comment } = {}) {
 /**
  * The questions that are marked NOW.
  * @param events  every event, any order: { id, exerciseId, action: 'FLAG'|'CLEAR', attemptId?, reason?, comment?, createdAt }
- * @returns [{ exerciseId, attemptId, reason, comment, flaggedAt }]  the latest event of each question decides; a CLEAR removes it. Oldest mark first.
+ * @returns [{ exerciseId, attemptId, reason, comment, flaggedAt }]  the latest event of each question decides; a CLEAR removes it. Oldest mark first (by event order, which never ties).
  */
 export function currentQuestionFlags(events) {
   const latest = new Map();
   for (const event of [...events].sort((a, b) => a.id - b.id)) latest.set(event.exerciseId, event);
   return [...latest.values()]
     .filter((event) => event.action === 'FLAG')
-    .map((event) => ({ exerciseId: event.exerciseId, attemptId: event.attemptId ?? null, reason: event.reason, comment: event.comment ?? null, flaggedAt: event.createdAt }))
-    .sort((a, b) => (a.flaggedAt < b.flaggedAt ? -1 : a.flaggedAt > b.flaggedAt ? 1 : a.exerciseId - b.exerciseId));
+    .sort((a, b) => a.id - b.id)
+    .map((event) => ({ exerciseId: event.exerciseId, attemptId: event.attemptId ?? null, reason: event.reason, comment: event.comment ?? null, flaggedAt: event.createdAt }));
 }

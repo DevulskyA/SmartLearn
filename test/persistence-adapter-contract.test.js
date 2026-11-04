@@ -99,6 +99,8 @@ const adapters = [
       const unit = await store.learningUnits.createWithReviews({ subjectId, title, studyDate, sourceText: '' }, tasks);
       return unit.id;
     },
+    // this store keeps no attempts: a mark carries no attemptId
+    async answer() { return {}; },
   },
   {
     name: 'RemoteDB',
@@ -116,6 +118,12 @@ const adapters = [
     async createUnit(store, { subjectId, title, studyDate }) {
       const created = await store.learningUnits.createWithReviews({ subjectId, title, studyDate });
       return created.unit.id;
+    },
+    // the server accepts a mark only for an ANSWERED attempt
+    async answer(store, exerciseId, outcome = 'INCORRECT') {
+      const attempt = await store.attempts.start(exerciseId);
+      await store.attempts.submit(attempt.id, { outcome, assessmentMethod: 'SELF_REPORT' });
+      return { attemptId: attempt.id };
     },
     cleanup() { globalThis.fetch = realFetch; setCsrfToken(null); },
   },
@@ -309,6 +317,45 @@ for (const adapter of adapters) {
     const before = (await s.reviewTasks.getAll()).map((r) => [r.id, r.dueDate]);
     for (const perDay of [0, 31, 1.5]) await assert.rejects(() => s.reviewTasks.postponeOverdue('2020-06-01', { perDay }), String(perDay));
     assert.deepEqual((await s.reviewTasks.getAll()).map((r) => [r.id, r.dueDate]), before);
+  });
+
+  // -- questionFlags ("Questão com problema") ---------------------------------------
+  t('questionFlags: mark with a reason and comment, list it, take it back, mark again; the latest mark replaces the earlier one', async (s) => {
+    const unitId = await unitFor(s, 'Marcas');
+    const q1 = await s.exercises.create(unitId, { questionText: 'Q1', answerText: 'A1', provenance: 'MANUAL' });
+    const q2 = await s.exercises.create(unitId, { questionText: 'Q2', answerText: 'A2', provenance: 'MANUAL' });
+    assert.deepEqual(await s.questionFlags.list(), []);
+    const mark = await s.questionFlags.flag(q1.id, { ...(await adapter.answer(s, q1.id)), reason: 'DOUBTFUL_ANSWER_KEY', comment: '  confira o gabarito ' });
+    assert.equal(mark.exerciseId, q1.id);
+    assert.equal(mark.reason, 'DOUBTFUL_ANSWER_KEY');
+    assert.equal(mark.comment, 'confira o gabarito');
+    assert.deepEqual((await s.questionFlags.list()).map((f) => [f.exerciseId, f.reason, f.comment]), [[q1.id, 'DOUBTFUL_ANSWER_KEY', 'confira o gabarito']]);
+
+    await s.questionFlags.flag(q1.id, { ...(await adapter.answer(s, q1.id)), reason: 'OTHER' });
+    await s.questionFlags.flag(q2.id, { ...(await adapter.answer(s, q2.id, 'CORRECT')), reason: 'CONTENT_ERROR' });
+    assert.deepEqual((await s.questionFlags.list()).map((f) => [f.exerciseId, f.reason, f.comment]), [[q1.id, 'OTHER', null], [q2.id, 'CONTENT_ERROR', null]]);
+
+    assert.equal(await s.questionFlags.clear(q1.id), null);
+    assert.equal(await s.questionFlags.clear(q1.id), null, 'repeating changes nothing');
+    assert.deepEqual((await s.questionFlags.list()).map((f) => f.exerciseId), [q2.id]);
+    await s.questionFlags.flag(q1.id, { ...(await adapter.answer(s, q1.id)), reason: 'CONFUSING_STATEMENT' });
+    assert.deepEqual((await s.questionFlags.list()).map((f) => [f.exerciseId, f.reason]), [[q2.id, 'CONTENT_ERROR'], [q1.id, 'CONFUSING_STATEMENT']]);
+  });
+
+  t('questionFlags: an unknown reason or a comment over 500 characters is refused and nothing is marked; marking never changes the evidence', async (s) => {
+    const unitId = await unitFor(s, 'Marcas invalidas');
+    const q = await s.exercises.create(unitId, { questionText: 'Q', answerText: 'A', provenance: 'MANUAL' });
+    const answered = await adapter.answer(s, q.id);
+    const evidenceBefore = JSON.stringify(await s.learningEvidence.getAll());
+    const tasksBefore = JSON.stringify(await s.reviewTasks.getAll());
+    await assert.rejects(() => s.questionFlags.flag(q.id, { ...answered, reason: 'NOPE' }));
+    await assert.rejects(() => s.questionFlags.flag(q.id, { ...answered, reason: undefined }));
+    await assert.rejects(() => s.questionFlags.flag(q.id, { ...answered, reason: 'OTHER', comment: 'x'.repeat(501) }));
+    assert.deepEqual(await s.questionFlags.list(), []);
+    await s.questionFlags.flag(q.id, { ...answered, reason: 'OTHER', comment: 'ok' });
+    await s.questionFlags.clear(q.id);
+    assert.equal(JSON.stringify(await s.learningEvidence.getAll()), evidenceBefore);
+    assert.equal(JSON.stringify(await s.reviewTasks.getAll()), tasksBefore);
   });
 
   // -- exercises --------------------------------------------------------------------

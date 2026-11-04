@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
 import { planPostpone, POSTPONE_DEFAULT_PER_DAY } from "../shared/review-postpone.js";
+import { normalizeQuestionFlag, currentQuestionFlags } from "../shared/question-flag.js";
 import { compareText, sameName } from "./i18n/format.js";
 import { t } from "./i18n/index.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
@@ -925,6 +926,37 @@ function createBrowserStore() {
         state.exercises.splice(index, 1);
         writeState(state);
         return true;
+      },
+    },
+
+    // "Questão com problema": same rules and same answers as the server (shared/question-flag.js). Append-only events, current state derived from them.
+    // A mark is an annotation: it never touches evidence, review tasks or any score. This store keeps no attempts, so a mark carries no attemptId here
+    // (the screen offers it only after the student judged the question); the server requires an answered attempt.
+    questionFlags: {
+      async list() {
+        const state = readState();
+        const exerciseIds = new Set(state.exercises.map((exercise) => exercise.id));
+        return currentQuestionFlags(state.exerciseFlagEvents ?? []).filter((flag) => exerciseIds.has(flag.exerciseId));
+      },
+      async flag(exerciseId, { reason, comment } = {}) {
+        const state = readState();
+        if (!state.exercises.some((exercise) => exercise.id === exerciseId)) throw new Error("exercise not found");
+        const normalized = normalizeQuestionFlag({ reason, comment });
+        state.exerciseFlagEvents = [...(state.exerciseFlagEvents ?? []), {
+          id: nextId(state, "exerciseFlagEvents"), exerciseId, action: "FLAG", attemptId: null, reason: normalized.reason, comment: normalized.comment, createdAt: nowIso(),
+        }];
+        writeState(state);
+        return currentQuestionFlags(state.exerciseFlagEvents).find((flag) => flag.exerciseId === exerciseId);
+      },
+      async clear(exerciseId) {
+        const state = readState();
+        if (!state.exercises.some((exercise) => exercise.id === exerciseId)) throw new Error("exercise not found");
+        const events = state.exerciseFlagEvents ?? [];
+        if (currentQuestionFlags(events).some((flag) => flag.exerciseId === exerciseId)) {
+          state.exerciseFlagEvents = [...events, { id: nextId(state, "exerciseFlagEvents"), exerciseId, action: "CLEAR", createdAt: nowIso() }];
+          writeState(state);
+        }
+        return null;
       },
     },
 
