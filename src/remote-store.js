@@ -157,6 +157,16 @@ const reviewTasks = {
     const agendaResult = await agenda(dayBefore(tomorrowStr));
     return agendaResult.tomorrow;
   },
+  // "Adiar vencidas" (HG-09): the SERVER moves every overdue review to a future day, `perDay` at most per day. `dateStr` is the browser's "today".
+  async postponeOverdue(dateStr, { perDay } = {}) {
+    let browserTimezone = null;
+    try { browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { /* the server falls back to the saved timezone */ }
+    const body = { date: dateStr };
+    if (browserTimezone) body.timezone = browserTimezone;
+    if (perDay !== undefined) body.perDay = perDay;
+    const result = await apiRequest('/v1/review-tasks/postpone-overdue', { method: 'POST', body });
+    return { date: result.date, perDay: result.perDay, postponed: result.postponed, moves: result.moves, days: result.days };
+  },
   /**
    * Maps the two coherent partial-update shapes the current UI actually
    * sends (see test/remote-store.test.js's contract matrix) onto the

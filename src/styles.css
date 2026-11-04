@@ -3564,6 +3564,52 @@ label.select-control:has(> .ui-select) {
   gap: 0.75rem;
 }
 
+/* "Adiar vencidas" (Hoje, bloco Vencidas) */
+.block-heading-action {
+  margin-left: auto;
+  min-height: 2.75rem;
+}
+#postpone-dialog {
+  border: none;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  width: min(90vw, 28rem);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+#postpone-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+#postpone-dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+#postpone-summary {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+#postpone-dialog label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 650;
+}
+#postpone-per-day {
+  width: 6rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+#postpone-dialog .field-hint {
+  margin: 0.75rem 0 1.25rem;
+}
+#postpone-error {
+  margin: 0.5rem 0 0;
+}
+
 .exercise-detail-dialog {
   border: none;
   border-radius: 0.9rem;

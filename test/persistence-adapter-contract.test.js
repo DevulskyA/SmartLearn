@@ -270,6 +270,47 @@ for (const adapter of adapters) {
     assert.equal(evidence[0].scorePercent, 75);
   });
 
+  // "Adiar vencidas" (HG-09): the SAME promise from both adapters.
+  t('reviewTasks: postponeOverdue moves only the overdue ones to future days (max perDay each), keeps them pending, creates no evidence, and repeating it moves nothing', async (s) => {
+    const subj = await s.subjects.create('Adiar');
+    await adapter.createUnit(s, { subjectId: subj.id, title: 'Aula A', studyDate: '2020-01-01' });
+    await adapter.createUnit(s, { subjectId: subj.id, title: 'Aula B', studyDate: '2020-02-01' });
+    const reference = '2020-06-01';
+    const before = await s.reviewTasks.getAll();
+    const overdueBefore = await s.reviewTasks.getOverdue(reference);
+    assert.ok(overdueBefore.length > 6, 'fixture must leave a real pile overdue');
+    const notOverdue = before.filter((r) => r.dueDate >= reference);
+
+    const out = await s.reviewTasks.postponeOverdue(reference, { perDay: 4 });
+    assert.equal(out.postponed, overdueBefore.length);
+    assert.ok(out.days.every((d) => d.count <= 4 && d.date > reference));
+    assert.deepEqual(out.moves.map((m) => m.id).sort((a, b) => a - b), overdueBefore.map((r) => r.id).sort((a, b) => a - b));
+
+    assert.deepEqual(await s.reviewTasks.getOverdue(reference), [], 'nothing is overdue any more');
+    const after = await s.reviewTasks.getAll();
+    assert.equal(after.length, before.length, 'nothing created or deleted');
+    assert.ok(after.every((r) => r.reviewDone === false), 'nothing is completed');
+    for (const r of notOverdue) assert.equal(after.find((a) => a.id === r.id).dueDate, r.dueDate, 'a review that was not overdue keeps its date');
+    for (const r of overdueBefore) {
+      const moved = after.find((a) => a.id === r.id);
+      assert.ok(moved.dueDate >= '2020-06-02', 'the new date is in the future');
+      assert.equal(moved.reviewNumber, r.reviewNumber, 'the stage is the same');
+    }
+    assert.equal((await s.learningEvidence.getAll()).length, 0, 'no evidence is invented');
+
+    const again = await s.reviewTasks.postponeOverdue(reference, { perDay: 4 });
+    assert.equal(again.postponed, 0);
+    assert.deepEqual((await s.reviewTasks.getAll()).map((r) => [r.id, r.dueDate]), after.map((r) => [r.id, r.dueDate]));
+  });
+
+  t('reviewTasks: postponeOverdue refuses an invalid perDay and changes nothing', async (s) => {
+    const subj = await s.subjects.create('Adiar invalido');
+    await adapter.createUnit(s, { subjectId: subj.id, title: 'Aula', studyDate: '2020-01-01' });
+    const before = (await s.reviewTasks.getAll()).map((r) => [r.id, r.dueDate]);
+    for (const perDay of [0, 31, 1.5]) await assert.rejects(() => s.reviewTasks.postponeOverdue('2020-06-01', { perDay }), String(perDay));
+    assert.deepEqual((await s.reviewTasks.getAll()).map((r) => [r.id, r.dueDate]), before);
+  });
+
   // -- exercises --------------------------------------------------------------------
   async function unitFor(s, subjectName = 'Exercicios') {
     const subj = await s.subjects.create(subjectName);

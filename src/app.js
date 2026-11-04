@@ -36,6 +36,7 @@ import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { showConfirm } from "./confirm-dialog.js";
+import { askPostpone } from "./postpone-dialog.js";
 import { renderSummary } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
@@ -213,6 +214,8 @@ const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
 const dailySummaryClose = document.querySelector("#daily-summary-close");
+const postponeBtn = document.querySelector("#postpone-overdue-btn");
+let postponeContext = null; // { tasks, today } of the last Hoje render: what "Adiar vencidas" previews
 const reviewGroups = {
   overdue: document.querySelector("#block-overdue"),
   today: document.querySelector("#block-today"),
@@ -1205,6 +1208,8 @@ function renderOfflineUpcoming(upcoming, nothingDueToday) {
 
 async function renderOfflineToday(accountId) {
   if (todayLoadingState) todayLoadingState.hidden = true;
+  postponeContext = null; // the read-only snapshot cannot move dates
+  if (postponeBtn) postponeBtn.hidden = true;
   const snapshot = await OfflineStore.loadSnapshot(accountId);
   const today = getLocalDateValue();
 
@@ -1379,6 +1384,9 @@ export async function renderToday() {
     today: pendingToday,
     doneToday: completedToday,
   };
+  // "Adiar vencidas" (HG-09): offered whenever something is overdue; the dialog previews the plan from exactly this list.
+  postponeContext = { tasks: overdueReviews, today };
+  if (postponeBtn) postponeBtn.hidden = overdueReviews.length === 0;
 
   // Load exercises for all learning units visible in the review groups
   const visibleUnitIds = new Set([
@@ -4007,6 +4015,29 @@ async function practiceObligation(unit) {
   try { return await startFocusedReview(unit.required.id, { obligationUnitId: unit.unitId }); }
   catch (error) { console.error("Falha ao abrir a revisão.", error); return false; }
 }
+
+// "Adiar vencidas" (HG-09): confirm (how many, to when, how many per day), then the store moves the overdue reviews to future days. They stay
+// pending: nothing is completed, no evidence is created. Failing leaves every date as it was.
+postponeBtn?.addEventListener("click", async () => {
+  if (!postponeContext || postponeContext.tasks.length === 0) return;
+  const { tasks, today } = postponeContext;
+  const perDay = await askPostpone({ tasks, today, formatDay: (day) => formatDate(day) });
+  if (perDay === null) { postponeBtn.focus(); return; }
+  postponeBtn.disabled = true;
+  try {
+    const result = await DB.reviewTasks.postponeOverdue(today, { perDay });
+    setReviewMessage();
+    await renderToday();
+    setReviewMessage(result.postponed === 0 ? t("today.postpone.none") : tn("today.postpone.done", result.postponed));
+    if (todayPrimaryAction && !todayPrimaryAction.hidden) todayPrimaryActionBtn.focus({ preventScroll: true });
+  } catch (error) {
+    setReviewMessage(t("today.postpone.failed"), true);
+    console.error("Falha ao adiar as revisões vencidas.", error);
+    postponeBtn.focus();
+  } finally {
+    postponeBtn.disabled = false;
+  }
+});
 
 todayFocusReviewBtn?.addEventListener("click", () => {
   const reviewId = todayFocusReviewBtn.dataset.reviewId;
