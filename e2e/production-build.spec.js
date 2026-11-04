@@ -42,7 +42,7 @@ test.beforeAll(async () => {
   // static constants (no interpolated/user-controlled input), so the
   // unescaped-argument concern the Node deprecation warning flags does
   // not apply here.
-  execFileSync('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit', shell: true });
+  execFileSync('npm', ['exec', '--', 'vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit', shell: true });
   if (!existsSync(DIST_DIR)) {
     throw new Error(`production-build E2E: expected build output at ${DIST_DIR}, none found`);
   }

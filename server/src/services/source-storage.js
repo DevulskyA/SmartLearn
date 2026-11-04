@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { dm, splitMessage } from '../api-error-messages.js';
-import { mkdirSync, writeFileSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { referencesOf } from './visual-assets.js';
 
 export class SourceError extends Error {
   constructor(code, message, field) {
@@ -180,6 +181,44 @@ export function readVerifiedFile(db, userId, id, sourcesDir) {
     throw new SourceError('SOURCE_INTEGRITY_FAILED', dm('SOURCE_INTEGRITY_FAILED'));
   }
   return { bytes, originalName: row.original_name };
+}
+
+/**
+ * Removes one of the student's sources, but ONLY while nothing was derived from it: no lesson summary or exercise cites it, no
+ * draft of it was accepted into a unit, no unit shows one of its figures, and no generation is running on it. Otherwise it
+ * throws SOURCE_HAS_UNITS / SOURCE_GENERATION_RUNNING and deletes NOTHING. What goes with it is only what exists because of the
+ * source: pages, outline, proposals, unaccepted drafts, openings and its PDF crops. The files are removed after the database
+ * transaction commits, so a failed removal never leaves a row pointing at a missing file.
+ */
+export function remove(db, userId, id, { sourcesDir, mediaDir }) {
+  const row = db.prepare('SELECT * FROM sources WHERE user_id = ? AND id = ?').get(userId, id);
+  if (!row) throw new SourceError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
+  const proposals = '(SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)';
+  const { cited } = db.prepare(`
+    SELECT (SELECT COUNT(*) FROM unit_summary_citations WHERE user_id = ? AND source_id = ?)
+         + (SELECT COUNT(*) FROM exercise_source_citations WHERE user_id = ? AND source_id = ?)
+         + (SELECT COUNT(*) FROM generated_drafts WHERE user_id = ? AND status = 'ACCEPTED' AND proposal_id IN ${proposals}) AS cited
+  `).get(userId, id, userId, id, userId, userId, id);
+  const assets = db.prepare('SELECT id, filename FROM visual_assets WHERE user_id = ? AND source_id = ?').all(userId, id);
+  const figureInUnit = assets.some((a) => referencesOf(db, userId, a.id).some((ref) => ref.type === 'unit'));
+  if (cited > 0 || figureInUnit) throw new SourceError('SOURCE_HAS_UNITS', dm('SOURCE_HAS_UNITS'));
+  const running = db.prepare(`SELECT COUNT(*) AS n FROM generation_jobs WHERE user_id = ? AND state IN ('QUEUED', 'CALLING_PROVIDER', 'STALLED') AND proposal_id IN ${proposals}`).get(userId, userId, id).n;
+  if (running > 0) throw new SourceError('SOURCE_GENERATION_RUNNING', dm('SOURCE_GENERATION_RUNNING'));
+
+  db.transaction(() => {
+    db.prepare(`UPDATE generation_jobs SET draft_id = NULL WHERE user_id = ? AND draft_id IN (SELECT id FROM generated_drafts WHERE user_id = ? AND proposal_id IN ${proposals})`).run(userId, userId, userId, id);
+    db.prepare(`DELETE FROM generated_drafts WHERE user_id = ? AND proposal_id IN ${proposals}`).run(userId, userId, id);
+    db.prepare('DELETE FROM content_proposals WHERE user_id = ? AND source_id = ?').run(userId, id);
+    db.prepare('DELETE FROM source_pages WHERE user_id = ? AND source_id = ?').run(userId, id);
+    db.prepare('DELETE FROM source_outline WHERE user_id = ? AND source_id = ?').run(userId, id);
+    db.prepare('DELETE FROM source_openings WHERE user_id = ? AND source_id = ?').run(userId, id);
+    db.prepare('DELETE FROM visual_assets WHERE user_id = ? AND source_id = ?').run(userId, id);
+    db.prepare('DELETE FROM sources WHERE user_id = ? AND id = ?').run(userId, id);
+  })();
+
+  for (const a of assets) rmSync(join(mediaDir, basename(a.filename)), { force: true });
+  rmSync(join(sourcesDir, basename(row.filename)), { force: true });
+  return { removed: true, id };
 }
 
 export function getById(db, userId, id) {

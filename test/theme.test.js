@@ -6,6 +6,7 @@ import {
   resolveThemePreference,
   getThemeOption,
   getStoredThemePreference,
+  THEME_VARIABLES,
 } from "../src/theme.js";
 
 // TEST_COVERAGE_MATRIX.md gap #2: theme.js had zero test evidence (no unit
@@ -153,4 +154,19 @@ test("THEME_OPTIONS: every id has its label and description keys in the catalog,
     setLocale("pt-BR");
     registerCatalog("en", undefined);
   }
+});
+
+// A-18/T-01: the primary button (--color-on-primary on --color-primary) must reach WCAG AA (4.5:1) in every theme whose tokens are plain rgb().
+test("primary button text reaches 4.5:1 in every rgb-token theme", () => {
+  const rgb = (v) => (/^rgb((d+) (d+) (d+))$/.exec(v) || []).slice(1).map(Number);
+  const lum = (c) => { const [r, g, b] = c.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const failing = [];
+  for (const [id, theme] of Object.entries(THEME_VARIABLES)) {
+    const bg = rgb(theme.tokens["--color-primary"]); const fg = rgb(theme.tokens["--color-on-primary"]);
+    if (bg.length !== 3 || fg.length !== 3) continue;
+    const [a, b] = [lum(bg), lum(fg)].sort((x, y) => y - x);
+    const ratio = (a + 0.05) / (b + 0.05);
+    if (ratio < 4.5) failing.push(id + " " + ratio.toFixed(2));
+  }
+  assert.deepEqual(failing, []);
 });

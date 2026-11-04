@@ -37,6 +37,14 @@ export async function listSources() {
   } catch (err) { return fail(err); }
 }
 
+/** Removes a document nothing was derived from; the server refuses (409 SOURCE_HAS_UNITS) once it has lessons or questions, and deletes nothing. */
+export async function removeSource(sourceId) {
+  try {
+    await apiRequest(`/v1/sources/${sourceId}`, { method: 'DELETE' });
+    return { ok: true };
+  } catch (err) { return fail(err); }
+}
+
 /** Step 2: extract text with page provenance (T35). Awaits the full
  * bounded worker run server-side — the caller sees one of EXTRACTED,
  * ENCRYPTED, TIMEOUT, IMAGE_ONLY_OR_UNREADABLE or EXTRACTION_FAILED, never

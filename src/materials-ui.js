@@ -669,12 +669,39 @@ async function loadExistingSources() {
     open.textContent = t("materials.existing.open");
     open.setAttribute("aria-label", t("materials.existing.openLabel", { name: source.originalName }));
     li.append(document.createTextNode(" "), open);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "small-button is-danger";
+    remove.dataset.action = "remove-source";
+    remove.dataset.sourceId = String(source.id);
+    remove.dataset.sourceName = source.originalName;
+    remove.textContent = t("materials.existing.remove");
+    remove.setAttribute("aria-label", t("materials.existing.removeLabel", { name: source.originalName }));
+    li.append(document.createTextNode(" "), remove);
     existingList.append(li);
   }
   existingBox.hidden = ready.length === 0;
 }
 
 existingList?.addEventListener("click", async (event) => {
+  const removeButton = event.target.closest('[data-action="remove-source"]');
+  if (removeButton) {
+    const id = Number(removeButton.dataset.sourceId);
+    if (!(await showConfirm(t("materials.existing.removeConfirm", { name: removeButton.dataset.sourceName })))) { removeButton.focus({ preventScroll: true }); return; }
+    removeButton.disabled = true;
+    const result = await SourceProposalsUI.removeSource(id);
+    if (!result.ok) {
+      removeButton.disabled = false;
+      setSourcesMessage(result.message || t("materials.existing.removeFailed"), true);
+      removeButton.focus({ preventScroll: true });
+      return;
+    }
+    if (currentSourceId === id) { currentSourceId = null; if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true; }
+    await loadExistingSources();
+    setSourcesMessage(t("materials.existing.removed"));
+    sourcesChooseFileButton?.focus({ preventScroll: true });
+    return;
+  }
   const button = event.target.closest('[data-action="open-source"]');
   if (!button) return;
   button.disabled = true;

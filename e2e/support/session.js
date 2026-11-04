@@ -43,7 +43,10 @@ export async function signInRegistered(page, { email, password, summaryMode = 't
   await page.waitForLoadState('networkidle');
   const response = await registration;
   expect(response.ok(), `registering ${email} over HTTP failed with ${response.status()}: ${await response.text()}`).toBeTruthy();
-  await page.locator('[data-screen="account"]').click();
+  // At phone width Conta sits behind the "Mais" button of the bottom bar, so the menu is opened first.
+  const moreToggle = page.locator('#mobile-more-toggle');
+  if (await moreToggle.isVisible()) await moreToggle.click();
+  await page.locator('[data-screen="account"]:visible').click();
   await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 15000 });
   await page.locator('#account-login-email').fill(email);
   await page.locator('#account-login-password').fill(password);

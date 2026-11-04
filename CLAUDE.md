@@ -49,3 +49,7 @@ Objetivo: posição + outcome ativo + próximo passo + bloqueios em ~15 linhas, 
 - Antes de /clear, compaction ou troca de sessão: Git reconciliado; `tasks.md` com exatamente UMA tarefa `[>]` (com `Próximo passo:`); `validation.md` com a prova das concluídas; `npm run context:check` PASS; estado rastreado commitado.
 - Commits só com arquivos explícitos (nunca `git add .` nem `git add .specs`); nunca `.impeccable/` nem `.specs/benchmarks/`.
 - Subagentes devolvem conclusão + evidência (arquivo:linha, comando, resultado), não logs. Caminho errado: voltar ao último checkpoint bom em vez de resumir a tentativa falha para dentro do contexto.
+
+## E2E com saída mínima
+
+`node scripts/e2e.mjs` imprime só falhas e uma linha `E2E passed|failed: ...`. Leia apenas essa saída; detalhes em `test-results/e2e-problems.txt`. Dia a dia use `--changed` (specs afetadas) e `--failed` (repetir falhas); suíte completa 1x no fim do lote. `E2E_VERBOSE=1` ou `--reporter=...` restaura a lista completa.

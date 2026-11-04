@@ -120,7 +120,10 @@ for (const { theme, width, height } of CASES) {
     expect(await page.evaluate(() => document.documentElement.dataset.theme ?? document.documentElement.dataset.themeMode)).toBeTruthy();
     const found = [];
     for (const screen of SCREENS) {
-      await page.locator(`.app-nav [data-screen="${screen.id}"]:visible, [data-screen="${screen.id}"]:visible`).first().click();
+      const target = page.locator(`.app-nav [data-screen="${screen.id}"]:visible, [data-screen="${screen.id}"]:visible`).first();
+      // At phone width Configurações and Conta sit behind the "Mais" button of the bottom bar.
+      if (!(await target.isVisible()) && (await page.locator('#mobile-more-toggle').isVisible())) await page.locator('#mobile-more-toggle').click();
+      await target.click();
       await expect(page.locator(`#screen-${screen.id}`)).toBeVisible();
       await page.waitForLoadState('networkidle');
       if (screen.id === 'today') {
