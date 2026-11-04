@@ -290,7 +290,8 @@ export function quickToggleTarget(preference, systemMode, memory = {}) {
 export function readQuickToggleMemory() {
   try {
     const parsed = JSON.parse(localStorage.getItem(QUICK_TOGGLE_MEMORY_KEY) || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { light: parsed.light, dark: parsed.dark } : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(["light", "dark"].filter((mode) => typeof parsed[mode] === "string").map((mode) => [mode, parsed[mode]]));
   } catch {
     return {};
   }
