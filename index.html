@@ -129,6 +129,7 @@
               <div class="block-heading">
                 <h2 id="title-overdue" data-i18n="screens.today.block.overdue">Vencidas</h2>
                 <span class="block-count is-overdue" data-count-for="overdue"></span>
+                <button class="secondary-button block-heading-action" id="postpone-overdue-btn" type="button" hidden data-i18n="screens.today.postpone.open">Adiar vencidas</button>
               </div>
               <div class="review-list" data-review-list="overdue"></div>
             </section>
@@ -856,6 +857,21 @@
         <button id="confirm-dialog-cancel" type="button" class="secondary-button" data-i18n="screens.form.cancel">Cancelar</button>
         <button id="confirm-dialog-ok" type="button" class="small-button is-danger" data-i18n="screens.dialog.confirm">Confirmar</button>
       </div>
+    </dialog>
+
+    <dialog id="postpone-dialog" aria-modal="true" aria-labelledby="postpone-dialog-title">
+      <form id="postpone-form" novalidate>
+        <h2 id="postpone-dialog-title" data-i18n="screens.today.postpone.title">Adiar revisões vencidas</h2>
+        <p id="postpone-summary" aria-live="polite"></p>
+        <label for="postpone-per-day" data-i18n="screens.today.postpone.perDay">Máximo de revisões por dia</label>
+        <input id="postpone-per-day" type="number" inputmode="numeric" min="1" max="30" step="1" value="5" aria-describedby="postpone-note postpone-error">
+        <p id="postpone-error" class="form-message is-error" role="alert" hidden></p>
+        <p id="postpone-note" class="field-hint" data-i18n="screens.today.postpone.note">Elas continuam pendentes e só mudam de data: nenhuma é apagada, marcada como feita ou conta como estudo.</p>
+        <div class="confirm-dialog-actions">
+          <button id="postpone-cancel" type="button" class="secondary-button" data-i18n="screens.form.cancel">Cancelar</button>
+          <button id="postpone-confirm" type="submit" class="primary-button" data-i18n="screens.today.postpone.confirm">Adiar</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="exercise-detail-dialog" class="exercise-detail-dialog" aria-modal="true" aria-labelledby="exercise-detail-title">

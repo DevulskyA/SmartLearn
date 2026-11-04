@@ -335,7 +335,7 @@ test('offline Hoje lists upcoming reviews by date with aula and disciplina, besi
   await expect(block.getByText('Nada vence hoje')).toBeHidden();
   // read-only: no control that could write anything
   await expect(block.locator('button, a, input, select, textarea, [role="button"]')).toHaveCount(0);
-  await expect(page.locator('#review-dashboard button')).toHaveCount(0);
+  await expect(page.locator('#review-dashboard button:visible')).toHaveCount(0);
   await page.context().setOffline(false);
 });
 

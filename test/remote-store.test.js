@@ -46,7 +46,7 @@ test('contract matrix: every DB.* method the current UI calls exists and is call
     ['subjects', 'update'], ['subjects', 'deactivate'], ['subjects', 'deleteIfEmpty'], ['subjects', 'delete'],
     ['learningUnits', 'getAll'], ['learningUnits', 'getByDate'], ['learningUnits', 'update'], ['learningUnits', 'createWithReviews'],
     ['reviewTasks', 'getAll'], ['reviewTasks', 'getForToday'], ['reviewTasks', 'getOverdue'],
-    ['reviewTasks', 'getCompletedToday'], ['reviewTasks', 'getTomorrow'], ['reviewTasks', 'update'],
+    ['reviewTasks', 'getCompletedToday'], ['reviewTasks', 'getTomorrow'], ['reviewTasks', 'update'], ['reviewTasks', 'postponeOverdue'],
     ['exercises', 'create'], ['exercises', 'getAll'], ['exercises', 'update'], ['exercises', 'delete'],
     ['learningEvidence', 'create'], ['learningEvidence', 'getAll'],
     ['settings', 'get'], ['settings', 'update'],

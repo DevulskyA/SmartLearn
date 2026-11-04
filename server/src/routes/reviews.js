@@ -137,6 +137,16 @@ export function registerReviewRoutes(app, db) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // "Adiar vencidas": moves the overdue reviews to future days, `perDay` at most per day. Completes nothing, creates no evidence, idempotent.
+  app.post('/review-tasks/postpone-overdue', {
+    schema: { body: { type: 'object', properties: { date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 }, perDay: { type: 'integer' } } } },
+  }, async (request, reply) => {
+    const { timezone, ...rest } = request.body ?? {};
+    try {
+      return reviews.postponeOverdue(db, request.actor.userId, { ...rest, timezoneOverride: timezone });
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/review-tasks/:id/reopen', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   }, async (request, reply) => {

@@ -60,6 +60,15 @@ export default {
   'today.overdue.unit.oldest.one': 'a mais antiga há {count} dia',
   'today.overdue.unit.oldest.other': 'a mais antiga há {count} dias',
   'today.overdue.unit.meta': '{stages} · {ranges} · {oldest}',
+  // "Adiar vencidas": the dialog's live summary (the key is chosen in the code), the result and the failures
+  'today.postpone.summary.single': '{count} revisão vencida será adiada para {first}.',
+  'today.postpone.summary.oneDay': '{count} revisões vencidas serão adiadas para {first}.',
+  'today.postpone.summary.range': '{count} revisões vencidas serão adiadas, no máximo {perDay} por dia: de {first} a {last}.',
+  'today.postpone.perDay.invalid': 'Informe um número inteiro de 1 a {max}.',
+  'today.postpone.done.one': '{count} revisão adiada. Ela continua pendente: só mudou de data.',
+  'today.postpone.done.other': '{count} revisões adiadas. Elas continuam pendentes: só mudaram de data.',
+  'today.postpone.none': 'Não há revisões vencidas para adiar.',
+  'today.postpone.failed': 'Não foi possível adiar as revisões. Nada foi alterado.',
   // Long lists: the first items are shown, the rest folds behind a button
   'today.more.show.contents.one': 'Ver mais {count} conteúdo',
   'today.more.show.contents.other': 'Ver mais {count} conteúdos',

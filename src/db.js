@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
+import { planPostpone, POSTPONE_DEFAULT_PER_DAY } from "../shared/review-postpone.js";
 import { compareText, sameName } from "./i18n/format.js";
 import { t } from "./i18n/index.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
@@ -844,6 +845,20 @@ function createBrowserStore() {
         writeState(state);
         return task;
       },
+      // "Adiar vencidas" (HG-09): same plan and same result as the server (shared/review-postpone.js). Moves only due dates: nothing is completed
+      // and no evidence is created. One write for the whole plan, so it either happens entirely or not at all.
+      async postponeOverdue(today, { perDay = POSTPONE_DEFAULT_PER_DAY } = {}) {
+        const state = readState();
+        const { moves, days } = planPostpone(state.reviewTasks, today, perDay);
+        const stamp = nowIso();
+        for (const move of moves) {
+          const task = state.reviewTasks.find((item) => item.id === move.id);
+          task.dueDate = move.to;
+          task.updatedAt = stamp;
+        }
+        if (moves.length > 0) writeState(state);
+        return { date: today, perDay, postponed: moves.length, moves, days };
+      },
     },
 
     // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
@@ -1670,6 +1685,16 @@ export const DB = {
         [tomorrow],
       );
       return rows.map(mapReviewTask);
+    },
+
+    // "Adiar vencidas" (HG-09), same contract as the browser store (this branch is not live: desktop runs against the server).
+    async postponeOverdue(today, { perDay = POSTPONE_DEFAULT_PER_DAY } = {}) {
+      const { moves, days } = planPostpone(await DB.reviewTasks.getOverdue(today), today, perDay);
+      const stamp = nowIso();
+      for (const move of moves) {
+        await requireDatabase().execute("UPDATE review_tasks SET due_date = $1, updated_at = $2 WHERE id = $3", [move.to, stamp, move.id]);
+      }
+      return { date: today, perDay, postponed: moves.length, moves, days };
     },
 
     async update(id, fields) {
