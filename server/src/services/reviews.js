@@ -2,6 +2,7 @@ import { checkIdempotency, recordIdempotency } from './idempotency.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 import { get as getSettings } from './settings.js';
 import { deriveObligations, RECOVERY } from '../../../shared/review-obligation.js';
+import { planPostpone, normalizePerDay, POSTPONE_DEFAULT_PER_DAY, POSTPONE_MAX_PER_DAY } from '../../../shared/review-postpone.js';
 
 export class ReviewError extends Error {
   constructor(code, message, field) {
@@ -210,6 +211,33 @@ export function completeObligation(db, userId, unitId, { date, timezoneOverride,
       }
     }
     return { ...base, completedId: entry.required.id, completedAt: nowIso, reviewOnly: completed.reviewOnly, evidenceId: completed.evidenceId, supersededIds, rescheduled };
+  });
+  return run();
+}
+
+/**
+ * "Adiar vencidas" (HG-09): moves every OVERDUE review of the student to a future day, at most `perDay` per day starting tomorrow. The reviews stay
+ * pending with their own stage: nothing is completed, no evidence is created and nothing is deleted; the date each one had stays in
+ * review_task_postponements. Reviews of a paused unit are not asked for today, so they are not touched. Repeating it the same day finds nothing
+ * overdue and changes nothing (idempotent). The plan itself is shared/review-postpone.js (the local store promises the same one).
+ */
+export function postponeOverdue(db, userId, { date, timezoneOverride, perDay = POSTPONE_DEFAULT_PER_DAY } = {}, now = () => new Date()) {
+  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ReviewError('VALIDATION_FAILED', 'date deve ser AAAA-MM-DD.', 'date');
+  const size = normalizePerDay(perDay);
+  if (size === null) throw new ReviewError('VALIDATION_FAILED', `perDay deve ser um inteiro de 1 a ${POSTPONE_MAX_PER_DAY}.`, 'perDay');
+  const timezone = timezoneOverride ?? getUserTimezone(db, userId);
+  const today = date ?? localDateString(new Date(), timezone);
+  const run = db.transaction(() => {
+    const rows = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today);
+    const { moves, days } = planPostpone(rows.map((row) => ({ id: row.id, unitId: row.unit_id, dueDate: row.due_date, offsetDays: row.offset_days, completedAt: row.completed_at })), today, size);
+    const update = db.prepare('UPDATE review_tasks SET due_date = ? WHERE user_id = ? AND id = ?');
+    const log = db.prepare('INSERT INTO review_task_postponements (user_id, task_id, from_due_date, to_due_date, postponed_at) VALUES (?, ?, ?, ?, ?)');
+    const at = now().toISOString();
+    for (const move of moves) {
+      update.run(move.to, userId, move.id);
+      log.run(userId, move.id, move.from, move.to, at);
+    }
+    return { date: today, perDay: size, postponed: moves.length, moves, days };
   });
   return run();
 }
