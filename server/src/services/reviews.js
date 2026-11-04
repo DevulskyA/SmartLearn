@@ -65,6 +65,11 @@ const NOT_SUPERSEDED = ' AND NOT EXISTS (SELECT 1 FROM review_task_supersessions
 // A unit whose reviews the student paused is not asked for (experimental). With no pause event (every V1 flow) this removes nothing.
 const NOT_PAUSED = " AND COALESCE((SELECT p.action FROM review_unit_pauses p WHERE p.user_id = rt.user_id AND p.unit_id = rt.unit_id ORDER BY p.id DESC LIMIT 1), 'RESUME') != 'PAUSE'";
 
+/** The pending reviews due before `today`, oldest first: what Hoje lists as "Vencidas" and what "Adiar vencidas" moves (one query, so they agree). */
+function overdueRows(db, userId, today) {
+  return db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today);
+}
+
 /**
  * Agenda buckets with explicit local-day semantics (design.md §4).
  * completedToday includes REVIEW-ONLY completions (no questions), not just
@@ -77,7 +82,7 @@ export function agenda(db, userId, { date, timezoneOverride } = {}) {
   const today = date ?? localDateString(new Date(), timezone);
   const tomorrow = addDays(today, 1);
 
-  const overdue = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
+  const overdue = overdueRows(db, userId, today).map(taskDto);
   const dueToday = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, today).map(taskDto);
   const dueTomorrow = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date = ? ORDER BY rt.due_date`).all(userId, tomorrow).map(taskDto);
 
@@ -222,13 +227,13 @@ export function completeObligation(db, userId, unitId, { date, timezoneOverride,
  * overdue and changes nothing (idempotent). The plan itself is shared/review-postpone.js (the local store promises the same one).
  */
 export function postponeOverdue(db, userId, { date, timezoneOverride, perDay = POSTPONE_DEFAULT_PER_DAY } = {}, now = () => new Date()) {
-  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ReviewError('VALIDATION_FAILED', 'date deve ser AAAA-MM-DD.', 'date');
+  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ReviewError('VALIDATION_FAILED', 'date must be YYYY-MM-DD.', 'date');
   const size = normalizePerDay(perDay);
-  if (size === null) throw new ReviewError('VALIDATION_FAILED', `perDay deve ser um inteiro de 1 a ${POSTPONE_MAX_PER_DAY}.`, 'perDay');
+  if (size === null) throw new ReviewError('VALIDATION_FAILED', `perDay must be an integer from 1 to ${POSTPONE_MAX_PER_DAY}.`, 'perDay');
   const timezone = timezoneOverride ?? getUserTimezone(db, userId);
   const today = date ?? localDateString(new Date(), timezone);
   const run = db.transaction(() => {
-    const rows = db.prepare(`${TASK_SELECT} AND rt.completed_at IS NULL${NOT_SUPERSEDED}${NOT_PAUSED} AND rt.due_date < ? ORDER BY rt.due_date`).all(userId, today);
+    const rows = overdueRows(db, userId, today);
     const { moves, days } = planPostpone(rows.map((row) => ({ id: row.id, unitId: row.unit_id, dueDate: row.due_date, offsetDays: row.offset_days, completedAt: row.completed_at })), today, size);
     const update = db.prepare('UPDATE review_tasks SET due_date = ? WHERE user_id = ? AND id = ?');
     const log = db.prepare('INSERT INTO review_task_postponements (user_id, task_id, from_due_date, to_due_date, postponed_at) VALUES (?, ?, ?, ?, ?)');

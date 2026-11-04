@@ -80,7 +80,6 @@ test('overdue reviews move to future days, at most perDay per day; they stay pen
   } finally { cleanup(); }
 });
 
-const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 
 test('the old date is kept in an append-only log', () => {
   const { db, cleanup } = tmpDb();
