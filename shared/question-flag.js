@@ -1,4 +1,4 @@
-// "Questão com problema": after answering, the student can mark a question as problematic (confusing statement, doubtful answer key, content
+// "Questao com problema": after answering, the student can mark a question as problematic (confusing statement, doubtful answer key, content
 // error, other), with an optional comment, and take the mark back. Pure and shared by the server and the local store, so both promise the same
 // rules. A mark is an ANNOTATION about the question: it is never a grade, never learning evidence and never enters any statistic, so nothing in
 // this file knows about outcomes or scores. Marks are kept as an append-only list of events (FLAG / CLEAR); the CURRENT state of a question is

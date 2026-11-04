@@ -16,10 +16,10 @@ export class QuestionFlagError extends Error {
 }
 
 function events(db, userId, exerciseId) {
-  const where = exerciseId === undefined ? '' : ' AND exercise_id = ?';
-  const params = exerciseId === undefined ? [userId] : [userId, exerciseId];
-  return db.prepare(`SELECT id, exercise_id, attempt_id, action, reason, comment, created_at FROM exercise_flag_events WHERE user_id = ?${where} ORDER BY id`)
-    .all(...params)
+  const rows = exerciseId === undefined
+    ? db.prepare('SELECT id, exercise_id, attempt_id, action, reason, comment, created_at FROM exercise_flag_events WHERE user_id = ? ORDER BY id').all(userId)
+    : db.prepare('SELECT id, exercise_id, attempt_id, action, reason, comment, created_at FROM exercise_flag_events WHERE user_id = ? AND exercise_id = ? ORDER BY id').all(userId, exerciseId);
+  return rows
     .map((row) => ({ id: row.id, exerciseId: row.exercise_id, attemptId: row.attempt_id, action: row.action, reason: row.reason, comment: row.comment, createdAt: row.created_at }));
 }
 
