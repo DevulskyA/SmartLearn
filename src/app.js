@@ -67,27 +67,26 @@ async function withScrollPreserved(fn) {
 const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
 const DB = REMOTE_MODE ? RemoteDB : LocalDB;
 
-const questionFlagText = (...parts) => parts.join("");
 const QUESTION_FLAG_REASONS = Object.freeze([
-  ["CONFUSING_STATEMENT", questionFlagText("Enunciado", " confuso")],
-  ["DOUBTFUL_ANSWER_KEY", questionFlagText("Gabarito", " duvidoso")],
-  ["CONTENT_ERROR", questionFlagText("Erro", " no", " conteúdo")],
-  ["OTHER", questionFlagText("Outro", " motivo")],
+  ["CONFUSING_STATEMENT", t("questionFlag.reason.confusingStatement")],
+  ["DOUBTFUL_ANSWER_KEY", t("questionFlag.reason.doubtfulAnswerKey")],
+  ["CONTENT_ERROR", t("questionFlag.reason.contentError")],
+  ["OTHER", t("questionFlag.reason.other")],
 ]);
 const QUESTION_FLAG_TEXT = Object.freeze({
-  action: questionFlagText("Marcar", " questão", " como", " problemática"),
-  marked: questionFlagText("Questão", " marcada", " como", " problemática"),
-  remove: questionFlagText("Desmarcar", " questão"),
-  reason: questionFlagText("Motivo"),
-  comment: questionFlagText("Comentário", " opcional"),
-  commentPlaceholder: questionFlagText("Explique", " brevemente", " o", " problema", " (opcional)"),
-  save: questionFlagText("Salvar", " marca"),
-  cancel: questionFlagText("Cancelar"),
-  previous: questionFlagText("Questão", " julgada", " anteriormente"),
-  resultTitle: questionFlagText("Questões", " marcadas", " como", " problemáticas"),
-  saved: questionFlagText("Marca", " salva."),
-  removed: questionFlagText("Marca", " removida."),
-  failed: questionFlagText("Não", " foi", " possível", " salvar", " a", " marca."),
+  action: t("questionFlag.action"),
+  marked: t("questionFlag.marked"),
+  remove: t("questionFlag.remove"),
+  reason: t("questionFlag.reason"),
+  comment: t("questionFlag.comment"),
+  commentPlaceholder: t("questionFlag.commentPlaceholder"),
+  save: t("questionFlag.save"),
+  cancel: t("questionFlag.cancel"),
+  previous: t("questionFlag.previous"),
+  resultTitle: t("questionFlag.resultTitle"),
+  saved: t("questionFlag.saved"),
+  removed: t("questionFlag.removed"),
+  failed: t("questionFlag.failed"),
 });
 let questionFlagsByExerciseId = new Map();
 const judgedQuestionExerciseIds = new Set();
