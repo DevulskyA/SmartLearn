@@ -25,6 +25,7 @@ export const LOGICAL_KIND = 'LOGICAL_RESTORE';
 const OWNED_DATA_TABLES = [
   'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions',
   'learning_evidence', 'exercise_attempts', 'learning_events', 'exams', 'exam_items',
+  'exercise_flag_events',
   'exam_evidence', 'competencies', 'sources', 'source_pages', 'source_outline',
   'content_proposals', 'generated_drafts', 'exercise_source_citations', 'unit_summary_citations', 'visual_assets',
 ];

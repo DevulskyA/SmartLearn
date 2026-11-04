@@ -315,6 +315,20 @@ function validateImportContent(normalized) {
     }
     if (!isValidIsoDate(ev.evidenceDate ?? ev.evidence_date)) throw new Error('Backup inválido: learningEvidence tem evidenceDate inválida.');
   }
+
+  const exerciseIds = new Set((Array.isArray(normalized.exercises) ? normalized.exercises : []).map((e) => e.id));
+  for (const event of (Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : [])) {
+    const exerciseId = event.exerciseId ?? event.exercise_id;
+    if (!exerciseIds.has(exerciseId)) throw new Error('Invalid backup: exerciseFlagEvent references a missing exercise: ' + exerciseId);
+    if (!['FLAG', 'CLEAR'].includes(event.action)) throw new Error('Invalid backup: exerciseFlagEvent has an invalid action: ' + event.action);
+    if (event.action === 'FLAG') {
+      if (!['CONFUSING_STATEMENT', 'DOUBTFUL_ANSWER_KEY', 'CONTENT_ERROR', 'OTHER'].includes(event.reason)) {
+        throw new Error('Invalid backup: exerciseFlagEvent has an invalid reason: ' + event.reason);
+      }
+      if (event.comment != null && typeof event.comment !== 'string') throw new Error('Invalid backup: exerciseFlagEvent comment must be text.');
+      if (typeof event.comment === 'string' && event.comment.trim().length > 500) throw new Error('Invalid backup: exerciseFlagEvent comment exceeds 500 characters.');
+    }
+  }
 }
 
 function assertImportData(data) {
@@ -511,6 +525,7 @@ function createBrowserStore() {
       reviewTasks: [],
       exercises: [],
       learningEvidence: [],
+      exerciseFlagEvents: [],
       settings: defaultSettings,
       nextIds: {
         subjects: 1,
@@ -518,6 +533,7 @@ function createBrowserStore() {
         reviewTasks: 1,
         exercises: 1,
         learningEvidence: 1,
+        exerciseFlagEvents: 1,
       },
     };
   }
@@ -576,7 +592,7 @@ function createBrowserStore() {
   }
 
   function refreshNextIds(state) {
-    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises", "learningEvidence"]) {
+    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises", "learningEvidence", "exerciseFlagEvents"]) {
       const ids = (state[collection] ?? []).map((item) => Number(item.id) || 0);
       state.nextIds[collection] = Math.max(0, ...ids) + 1;
     }
@@ -1125,6 +1141,7 @@ function createBrowserStore() {
         reviewTasks: state.reviewTasks,
         exercises: state.exercises ?? [],
         learningEvidence: state.learningEvidence ?? [],
+        exerciseFlagEvents: state.exerciseFlagEvents ?? [],
         settings: state.settings,
       };
     },
@@ -1186,6 +1203,15 @@ function createBrowserStore() {
           reviewTaskId: row.reviewTaskId ?? row.review_task_id ?? null,
           createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         }));
+      state.exerciseFlagEvents = (Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : []).map((row) => ({
+        id: row.id,
+        exerciseId: row.exerciseId ?? row.exercise_id,
+        action: row.action,
+        attemptId: row.attemptId ?? row.attempt_id ?? null,
+        reason: row.reason,
+        comment: row.comment ?? null,
+        createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+      }));
       state.settings = Array.isArray(normalized.settings)
         ? (normalized.settings[0] ?? defaultSettings)
         : (normalized.settings ?? defaultSettings);
@@ -2062,7 +2088,7 @@ export const DB = {
         .catch(() => []),
       DB.settings.get(),
     ]);
-    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, learningEvidence, settings };
+    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, learningEvidence, exerciseFlagEvents: [], settings };
   },
 
   async importAll(data) {

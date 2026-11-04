@@ -3478,6 +3478,112 @@ label.select-control:has(> .ui-select) {
   cursor: progress;
 }
 
+.question-flag-controls {
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.question-flag-state {
+  color: var(--color-warning, var(--status-overdue-text));
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.question-flag-action {
+  min-height: 2.5rem;
+  color: var(--color-primary);
+}
+
+.question-flag-editor {
+  display: grid;
+  gap: 0.55rem;
+  width: min(100%, 32rem);
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-surface-sunken);
+}
+
+.question-flag-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.question-flag-label {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.question-flag-reason,
+.question-flag-comment {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.question-flag-comment {
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.question-flag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.question-flag-message {
+  min-height: 1.2rem;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.question-flag-message:not(:empty) {
+  color: var(--color-primary);
+}
+
+.study-now-question-flag {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+}
+
+.question-flag-previous {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.study-now-flags-list {
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.study-now-flag-item {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-surface);
+}
+
+.study-now-flag-question {
+  margin: 0;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .exercise-correct-btn {
   background: var(--status-done-fill);
   color: var(--status-done-text);

@@ -67,6 +67,186 @@ async function withScrollPreserved(fn) {
 const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
 const DB = REMOTE_MODE ? RemoteDB : LocalDB;
 
+const questionFlagText = (...parts) => parts.join("");
+const QUESTION_FLAG_REASONS = Object.freeze([
+  ["CONFUSING_STATEMENT", questionFlagText("Enunciado", " confuso")],
+  ["DOUBTFUL_ANSWER_KEY", questionFlagText("Gabarito", " duvidoso")],
+  ["CONTENT_ERROR", questionFlagText("Erro", " no", " conteúdo")],
+  ["OTHER", questionFlagText("Outro", " motivo")],
+]);
+const QUESTION_FLAG_TEXT = Object.freeze({
+  action: questionFlagText("Marcar", " questão", " como", " problemática"),
+  marked: questionFlagText("Questão", " marcada", " como", " problemática"),
+  remove: questionFlagText("Desmarcar", " questão"),
+  reason: questionFlagText("Motivo"),
+  comment: questionFlagText("Comentário", " opcional"),
+  commentPlaceholder: questionFlagText("Explique", " brevemente", " o", " problema", " (opcional)"),
+  save: questionFlagText("Salvar", " marca"),
+  cancel: questionFlagText("Cancelar"),
+  previous: questionFlagText("Questão", " julgada", " anteriormente"),
+  resultTitle: questionFlagText("Questões", " marcadas", " como", " problemáticas"),
+  saved: questionFlagText("Marca", " salva."),
+  removed: questionFlagText("Marca", " removida."),
+  failed: questionFlagText("Não", " foi", " possível", " salvar", " a", " marca."),
+});
+let questionFlagsByExerciseId = new Map();
+const judgedQuestionExerciseIds = new Set();
+const judgedQuestionAttemptIds = new Map();
+
+async function loadQuestionFlags() {
+  if (!DB.questionFlags?.list) return questionFlagsByExerciseId;
+  try {
+    const flags = await DB.questionFlags.list();
+    questionFlagsByExerciseId = new Map((flags ?? []).map((flag) => [Number(flag.exerciseId), flag]));
+  } catch (error) {
+    console.warn("Falha ao carregar marcas de questões.", error);
+  }
+  return questionFlagsByExerciseId;
+}
+
+function updateQuestionFlagCache(flag, exerciseId) {
+  const id = Number(exerciseId ?? flag?.exerciseId);
+  if (!Number.isInteger(id)) return;
+  if (flag) questionFlagsByExerciseId.set(id, flag);
+  else questionFlagsByExerciseId.delete(id);
+}
+
+function createQuestionFlagControls(exercise, { flag = null, attemptId = null, visible = false } = {}) {
+  const host = document.createElement("div");
+  host.className = "question-flag-controls";
+  host.dataset.exerciseId = String(exercise.id);
+  host.dataset.attemptId = attemptId == null ? "" : String(attemptId);
+  host.hidden = !visible;
+
+  const state = createTextElement("span", "question-flag-state", "");
+  state.setAttribute("role", "status");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "text-button question-flag-action";
+
+  const editor = document.createElement("div");
+  editor.className = "question-flag-editor";
+  editor.hidden = true;
+  const reasonLabel = document.createElement("label");
+  reasonLabel.className = "question-flag-field";
+  reasonLabel.append(createTextElement("span", "question-flag-label", QUESTION_FLAG_TEXT.reason));
+  const reason = document.createElement("select");
+  reason.className = "question-flag-reason";
+  reason.required = true;
+  for (const [value, label] of QUESTION_FLAG_REASONS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    reason.append(option);
+  }
+  reasonLabel.append(reason);
+  const commentLabel = document.createElement("label");
+  commentLabel.className = "question-flag-field";
+  commentLabel.append(createTextElement("span", "question-flag-label", QUESTION_FLAG_TEXT.comment));
+  const comment = document.createElement("textarea");
+  comment.className = "question-flag-comment";
+  comment.rows = 2;
+  comment.maxLength = 500;
+  comment.placeholder = QUESTION_FLAG_TEXT.commentPlaceholder;
+  commentLabel.append(comment);
+  const editorActions = document.createElement("div");
+  editorActions.className = "question-flag-actions";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "small-button is-primary";
+  save.dataset.action = "save-question-flag";
+  save.textContent = QUESTION_FLAG_TEXT.save;
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "small-button";
+  cancel.dataset.action = "cancel-question-flag";
+  cancel.textContent = QUESTION_FLAG_TEXT.cancel;
+  const message = createTextElement("p", "question-flag-message", "");
+  message.setAttribute("role", "status");
+  message.setAttribute("aria-live", "polite");
+  editorActions.append(save, cancel);
+  editor.append(reasonLabel, commentLabel, editorActions, message);
+
+  let current = flag;
+  function render(next = current) {
+    current = next;
+    updateQuestionFlagCache(current, exercise.id);
+    state.hidden = !current;
+    state.textContent = current ? QUESTION_FLAG_TEXT.marked : "";
+    action.dataset.action = current ? "unflag-question" : "flag-question";
+    action.textContent = current ? QUESTION_FLAG_TEXT.remove : QUESTION_FLAG_TEXT.action;
+    editor.hidden = true;
+    message.textContent = "";
+    if (current) {
+      reason.value = current.reason;
+      comment.value = current.comment ?? "";
+    } else {
+      reason.value = QUESTION_FLAG_REASONS[0][0];
+      comment.value = "";
+    }
+  }
+  render();
+
+  action.addEventListener("click", async () => {
+    if (current) {
+      action.disabled = true;
+      try {
+        await DB.questionFlags.clear(exercise.id);
+        render(null);
+        message.textContent = QUESTION_FLAG_TEXT.removed;
+        action.focus();
+      } catch (error) {
+        message.textContent = QUESTION_FLAG_TEXT.failed;
+        console.error("Falha ao remover marca de questão.", error);
+      } finally {
+        action.disabled = false;
+      }
+      return;
+    }
+    action.hidden = true;
+    editor.hidden = false;
+    reason.focus();
+  });
+  cancel.addEventListener("click", () => {
+    editor.hidden = true;
+    action.hidden = false;
+    action.focus();
+  });
+  save.addEventListener("click", async () => {
+    const parsedAttemptId = Number(host.dataset.attemptId);
+    save.disabled = true;
+    message.textContent = "";
+    try {
+      const saved = await DB.questionFlags.flag(exercise.id, {
+        attemptId: Number.isInteger(parsedAttemptId) ? parsedAttemptId : undefined,
+        reason: reason.value,
+        comment: comment.value,
+      });
+      render(saved);
+      action.hidden = false;
+      message.textContent = QUESTION_FLAG_TEXT.saved;
+      action.focus();
+    } catch (error) {
+      message.textContent = QUESTION_FLAG_TEXT.failed;
+      console.error("Falha ao salvar marca de questão.", error);
+    } finally {
+      save.disabled = false;
+    }
+  });
+
+  host.append(state, action, editor);
+  return host;
+}
+
+function revealQuestionFlagControls(exItem) {
+  const controls = exItem?.querySelector(".question-flag-controls");
+  if (!controls) return;
+  controls.dataset.attemptId = exItem.dataset.attemptId ?? "";
+  controls.hidden = false;
+  const action = controls.querySelector(".question-flag-action");
+  if (action) action.hidden = false;
+}
+
 // LOCAL-01A / ARCH-01: Desktop still uses REMOTE_MODE=true (same
 // remote-store.js/API-HTTP pipeline as before — see .specs/STATE.md's
 // "ARCHITECTURE SUPERSESSION" section), but the "remote" it talks to is a
@@ -359,6 +539,20 @@ const studyNowEvidenceRetryBtn = document.querySelector("#study-now-evidence-ret
 const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
 const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
 const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
+const studyNowQuestionFlagHost = document.createElement("div");
+studyNowQuestionFlagHost.className = "study-now-question-flag";
+studyNowQuestionFlagHost.hidden = true;
+studyNowJudgment?.after(studyNowQuestionFlagHost);
+const studyNowFlagsSection = document.createElement("section");
+studyNowFlagsSection.className = "study-result-section study-now-flags-section";
+studyNowFlagsSection.hidden = true;
+const studyNowFlagsTitle = createTextElement("h3", "", QUESTION_FLAG_TEXT.resultTitle);
+studyNowFlagsTitle.id = "study-now-flags-title";
+studyNowFlagsSection.setAttribute("aria-labelledby", studyNowFlagsTitle.id);
+const studyNowFlagsList = document.createElement("ul");
+studyNowFlagsList.className = "study-now-flags-list";
+studyNowFlagsSection.append(studyNowFlagsTitle, studyNowFlagsList);
+studyNowCorrectedSection?.after(studyNowFlagsSection);
 let migrationActivePreview = null;
 let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
@@ -690,7 +884,7 @@ function revealFolded(el) {
   if (folded?.hidden) folded.closest(".review-list")?.querySelector("[data-fold-toggle]")?.click();
 }
 
-function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set()) {
+function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set(), questionFlags = new Map()) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -1069,6 +1263,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
         restoredAnswered += 1;
         if (wasCorrect) restoredCorrect += 1;
       }
+      exItem.append(createQuestionFlagControls(exercise, {
+        flag: questionFlags.get(exercise.id) ?? null,
+        attemptId: restored?.attemptId ?? judgedQuestionAttemptIds.get(exercise.id) ?? null,
+        visible: Boolean(restored) || judgedQuestionExerciseIds.has(exercise.id),
+      }));
       exercisesReviewSection.append(exItem);
     }
     exercisesReviewSection.dataset.exercisesAnswered = String(restoredAnswered);
@@ -1377,6 +1576,8 @@ export async function renderToday() {
   if (renderId !== todayRenderSeq) return; // a newer render started: its data wins
   if (existingOfflineBanner) existingOfflineBanner.hidden = true;
   if (upcomingBlock) upcomingBlock.hidden = true; // offline-only block: online Hoje has its own "Amanhã" line
+  const questionFlags = await loadQuestionFlags();
+  if (renderId !== todayRenderSeq) return;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
@@ -1453,7 +1654,7 @@ export async function renderToday() {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      return createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set());
+      return createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set(), questionFlags);
     };
 
     // What the list shows, in order; `keep` = must stay visible when the list is folded (see appendFoldedList).
@@ -3199,7 +3400,20 @@ let pendingStudyEvidence = null;
 // gabarito shows recovery, not performance, and must not inflate the
 // unit's accuracy or volume in Estatisticas.
 function newStudyNowState(mode, unitId, exercises) {
-  return { mode, unitId, exercises, index: 0, attemptId: null, attemptIds: [], correctCount: 0, answeredCount: 0, wrongExercises: [], correctedExercises: [] };
+  return {
+    mode,
+    unitId,
+    exercises,
+    index: 0,
+    attemptId: null,
+    attemptIds: [],
+    correctCount: 0,
+    answeredCount: 0,
+    wrongExercises: [],
+    correctedExercises: [],
+    judgedExercises: [],
+    lastJudged: null,
+  };
 }
 
 function resetStudyNowResult() {
@@ -3217,6 +3431,10 @@ function resetStudyNowResult() {
   studyNowErrorsList.replaceChildren();
   studyNowCorrectedSection.hidden = true;
   studyNowCorrectedList.replaceChildren();
+  studyNowFlagsSection.hidden = true;
+  studyNowFlagsList.replaceChildren();
+  studyNowQuestionFlagHost.hidden = true;
+  studyNowQuestionFlagHost.replaceChildren();
   studyNowRetestBtn.hidden = true;
   studyNowPracticeCard.hidden = false;
 }
@@ -3255,6 +3473,7 @@ async function startStudyNow(unit, subjectName) {
 
   try {
     studyNowState.exercises = await DB.exercises.getAll(unit.id);
+    await loadQuestionFlags();
   } catch (error) {
     // "Could not load" is not "this lesson has no exercises": say which one it is, and leave nothing to tap.
     console.error("Falha ao carregar exercícios da unidade.", error);
@@ -3383,6 +3602,20 @@ function renderStudyNowQuestion() {
   studyNowQuestionArea.hidden = false;
 
   const exercise = state.exercises[state.index];
+  studyNowQuestionFlagHost.replaceChildren();
+  if (state.lastJudged) {
+    studyNowQuestionFlagHost.append(
+      createTextElement("p", "question-flag-previous", QUESTION_FLAG_TEXT.previous),
+      createQuestionFlagControls(state.lastJudged.exercise, {
+        flag: questionFlagsByExerciseId.get(state.lastJudged.exercise.id) ?? null,
+        attemptId: state.lastJudged.attemptId,
+        visible: true,
+      }),
+    );
+    studyNowQuestionFlagHost.hidden = false;
+  } else {
+    studyNowQuestionFlagHost.hidden = true;
+  }
   studyNowQuestionText.textContent = exercise.questionText;
   studyNowAnswerText.textContent = exercise.answerText;
   studyNowAnswerText.hidden = true;
@@ -3504,6 +3737,9 @@ async function finishStudyNowSession() {
   }
 
   studyNowLastBlock = { unitId, wrong: state.wrongExercises.slice() };
+  renderStudyNowFlagResults(state.judgedExercises);
+  studyNowQuestionFlagHost.hidden = true;
+  studyNowQuestionFlagHost.replaceChildren();
   studyNowSummaryCard.hidden = studyNowSummaryBody.textContent === "";
   studyNowPracticeCard.hidden = true;
   studyNowResultCard.hidden = false;
@@ -3576,6 +3812,25 @@ function createStudyErrorItem(exercise) {
   // paraphrased -- and absent (nothing invented) for manual exercises.
   li.append(...citationDetails(exercise.citations));
   return li;
+}
+
+function renderStudyNowFlagResults(items = []) {
+  studyNowFlagsList.replaceChildren();
+  studyNowFlagsSection.hidden = items.length === 0;
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "study-now-flag-item";
+    li.append(
+      createTextElement("p", "study-now-flag-question", item.exercise.questionText),
+      createTextElement("span", "study-now-chip", item.outcome === "CORRECT" ? t("screens.studyNow.correct") : t("screens.studyNow.incorrect")),
+      createQuestionFlagControls(item.exercise, {
+        flag: questionFlagsByExerciseId.get(item.exercise.id) ?? null,
+        attemptId: item.attemptId,
+        visible: true,
+      }),
+    );
+    studyNowFlagsList.append(li);
+  }
 }
 
 studyNowRetestBtn?.addEventListener("click", () => {
@@ -4149,6 +4404,10 @@ async function judgeStudyNow(isCorrect) {
   }
   studyNowMessage.textContent = "";
 
+  const judgedExercise = state.exercises[state.index];
+  const judgedItem = { exercise: judgedExercise, attemptId: state.attemptId, outcome: isCorrect ? "CORRECT" : "INCORRECT" };
+  state.judgedExercises.push(judgedItem);
+  state.lastJudged = judgedItem;
   state.answeredCount += 1;
   if (isCorrect) {
     state.correctCount += 1;
@@ -5337,6 +5596,7 @@ async function ensureAttemptStarted(exItem) {
   try {
     const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
     exItem.dataset.attemptId = String(attempt.id);
+    judgedQuestionAttemptIds.set(exerciseId, attempt.id);
     // The hint (when this exercise has one) is already visible in the DOM
     // unconditionally, not gated behind its own action — so the truthful
     // observation is that assistance was available from the start, not a
@@ -5431,8 +5691,11 @@ reviewDashboard.addEventListener("click", async (event) => {
     // attempt is what "para reforçar" reads. If it cannot be sent now it is remembered and retried when the review is
     // completed or the redo starts, so the two cannot silently disagree.
     exItem.dataset.pendingOutcome = isCorrect ? "CORRECT" : "INCORRECT";
+    judgedQuestionExerciseIds.add(Number(exItem.dataset.exerciseId));
+    revealQuestionFlagControls(exItem);
     await flushPendingAttempt(exItem);
   }
+  revealQuestionFlagControls(exItem);
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
   }
