@@ -2192,6 +2192,15 @@ h1 {
   justify-self: start;
 }
 
+/* The summary is interactive text, so its label must use the theme text token.
+   The discipline color remains visible in the dot without becoming the label's
+   foreground; some light themes cannot guarantee 4.5:1 for arbitrary mixes. */
+.overdue-unit-summary > .subject-chip {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
 .overdue-unit-stages {
   display: grid;
   gap: 0.85rem;
@@ -2263,9 +2272,9 @@ h1 {
   gap: 0.35rem;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
-  background: color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 14%, var(--color-surface));
-  border: 1px solid color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 30%, var(--color-border));
-  color: color-mix(in oklch, var(--subject-color, var(--disc-color-disc-blue)) 80%, var(--color-text));
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -3853,8 +3862,9 @@ label.select-control:has(> .ui-select) {
 .performance-badge[data-perf="adequate"],
 .performance-badge[data-perf="attention"],
 .performance-badge[data-perf="critical"] {
-  background: color-mix(in oklch, var(--perf-band) 12%, var(--color-surface));
-  color: color-mix(in oklch, var(--perf-band) 40%, var(--color-text));
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  border-color: var(--perf-band);
 }
 .performance-badge[data-perf="strong"]    { --perf-band: var(--band-strong); }
 .performance-badge[data-perf="adequate"]  { --perf-band: var(--band-adequate); }
