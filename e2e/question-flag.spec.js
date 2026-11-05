@@ -67,7 +67,8 @@ test('marca uma questão julgada como problemática e a remove sem alterar o jul
   const flags = exercise.locator('.question-flag-controls');
   await expect(flags).not.toHaveAttribute('hidden', '');
   const visibleFlags = exercise.locator('.question-flag-controls:visible');
-  await visibleFlags.locator('.question-flag-action').evaluate((element) => element.click());
+  await visibleFlags.locator('.question-flag-action').click();
+  await expect(visibleFlags.locator('.question-flag-editor')).toBeVisible();
   await visibleFlags.locator('.question-flag-reason:visible').selectOption('CONTENT_ERROR');
   await visibleFlags.locator('.question-flag-comment:visible').fill('A resposta precisa de fonte.');
   await visibleFlags.getByRole('button', { name: 'Salvar marca' }).click();
