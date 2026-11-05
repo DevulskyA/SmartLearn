@@ -4,6 +4,9 @@
   "description": "Aplicação local de estudos e revisões periódicas",
   "private": true,
   "type": "module",
+  "overrides": {
+    "minimatch": "^11.0.1"
+  },
   "scripts": {
     "predev": "node scripts/require-work-branch.mjs",
     "dev": "vite",
@@ -76,8 +79,8 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@tauri-apps/cli": "^2.11.3",
-    "eslint": "^10.11.0",
+    "eslint": "^10.14.0",
     "globals": "^17.12.0",
-    "vite": "^8.0.16"
+    "vite": "^8.3.5"
   }
 }
