@@ -2501,14 +2501,22 @@ function renderStatsDistribution(rows) {
   }
 }
 
+// Estatísticas can be refreshed by navigation, period changes and row activation at
+// the same time. Only the newest async snapshot may publish DOM; otherwise an older
+// response can detach the detail action while the student is clicking it.
+let statsSubjectRenderSeq = 0;
+let statsUnitRenderSeq = 0;
+
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
+  const renderId = ++statsSubjectRenderSeq;
   const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
+  if (renderId !== statsSubjectRenderSeq) return;
   const periodValue = statsUnitFilterPeriod?.value ?? "";
   // "Is my study working?" compares periods over time, so it uses all valid history, not the period slice.
   const history = validEvidence(evidence);
@@ -2873,12 +2881,14 @@ function renderContentContext(activeSubjectRows, currentSubjectId) {
 
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
+  const renderId = ++statsUnitRenderSeq;
   const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
+  if (renderId !== statsUnitRenderSeq) return;
   const periodValue = statsUnitFilterPeriod?.value ?? "";
   let results = Analytics.byUnit(evidenceInPeriod(evidence, periodValue, today), units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
