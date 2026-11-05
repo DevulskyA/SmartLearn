@@ -879,6 +879,9 @@ try {
     await page.locator('#today-primary-action-btn').click();
     const row = page.locator(`.review-row[data-review-id="${reviewId}"]`);
     await row.waitFor({ state: 'visible', timeout: 10000 });
+    const rowBody = row.locator('.review-row-body');
+    if (await rowBody.getAttribute('hidden') !== null) await row.locator('.review-row-toggle').click();
+    await rowBody.waitFor({ state: 'visible', timeout: 10000 });
     // the unit has several overdue stages (16-review schedule): Hoje must show them as ONE grouped card that holds this review, open
     const grouped = await page.evaluate((id) => {
       const card = document.querySelector(`.review-row[data-review-id="${id}"]`)?.closest('details.overdue-unit');
@@ -938,6 +941,15 @@ try {
     const evidenceBefore = (await api('GET', '/v1/learning-evidence')).evidence;
     await box.click();
     await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).waitFor({ state: 'visible', timeout: 10000 });
+    // A partial review is intentionally not complete: the first two exercises
+    // were judged in step 14, while this stage has three. Prove the guard
+    // before answering the remaining exercise, then finish the stage honestly.
+    await sleep(1000);
+    expect(await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).isChecked() === false, 'a partial review was incorrectly completed');
+    const remaining = page.locator(`.review-row[data-review-id="${id}"] .review-exercise-item`).nth(2);
+    await remaining.getByRole('button', { name: 'Ver resposta' }).click();
+    await remaining.getByRole('button', { name: 'Acertei' }).click();
+    await page.waitForFunction(({ id: rid }) => document.querySelectorAll(`.review-row[data-review-id="${rid}"] .review-exercise-item`)[2]?.dataset.attemptId, { id }, { timeout: 10000 });
     await page.waitForFunction((rid) => document.querySelector(`[data-action="review-done"][data-review-id="${rid}"]`)?.checked === true, id, { timeout: 15000 });
     const tasks = (await api('GET', '/v1/review-tasks')).reviewTasks;
     const done = tasks.find((t) => String(t.id) === String(id));
@@ -949,7 +961,7 @@ try {
     const evidenceAfter = (await api('GET', '/v1/learning-evidence')).evidence;
     const added = evidenceAfter.filter((e) => !evidenceBefore.some((b) => b.id === e.id));
     expect(added.length === 1 && added[0].type === 'REVIEW', `evidence added: ${JSON.stringify(added.map((e) => [e.type, e.questionsCount, e.correctCount]))}`);
-    expect(added[0].questionsCount === 2 && added[0].correctCount === 1, `the evidence must carry what the student judged (2 questions, 1 right): ${added[0].questionsCount}/${added[0].correctCount}`);
+    expect(added[0].questionsCount === 3 && added[0].correctCount === 2, `the evidence must carry all three judged questions (3 questions, 2 right): ${added[0].questionsCount}/${added[0].correctCount}`);
     // the same checkbox again: what does the student get? (observed, not assumed)
     await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).click();
     await sleep(2500);
@@ -999,7 +1011,9 @@ try {
     await sleep(1500);
     const closing = await shutdown({ graceful: true });
     snapshotBefore = dbSnapshot();
-    expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 1, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 retest`);
+    // The Hoje review has two judgments in step 14 and the final exercise in
+    // step 20; the latter is also a real persisted attempt before restart.
+    expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 2, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 completion judgment + 1 retest`);
     const submitted = snapshotBefore.attempts.filter((a) => a.status === 'SUBMITTED');
     expect(submitted.length === snapshotBefore.attempts.length && submitted.every((a) => a.maxAssistance === 'SOLUTION' && a.assistanceUsed === 'SOLUTION'), `DB attempts not all SUBMITTED with SOLUTION assistance: ${JSON.stringify(snapshotBefore.attempts)}`);
     const outcomes = snapshotBefore.attempts.map((a) => a.outcome);
@@ -1008,7 +1022,7 @@ try {
     expect(hojeRows.length === 2 && hojeRows.map((a) => a.outcome).join() === 'CORRECT,INCORRECT', `DB Hoje rows ${JSON.stringify(hojeRows)}`);
     const perExercise = {};
     for (const a of snapshotBefore.attempts.filter((x) => String(x.reviewTaskId) === String(ctx.reviewId))) perExercise[a.exerciseId] = (perExercise[a.exerciseId] ?? 0) + 1;
-    expect(Object.keys(perExercise).length === 2 && Object.values(perExercise).every((n) => n === 1), `DB: attempts per exercise inside the Hoje review ${JSON.stringify(perExercise)} (expected 2 exercises, 1 attempt each)`);
+    expect(Object.keys(perExercise).length === 3 && Object.values(perExercise).every((n) => n === 1), `DB: attempts per exercise inside the Hoje review ${JSON.stringify(perExercise)} (expected 3 exercises, 1 attempt each)`);
     ctx.hojePerExercise = perExercise;
     await launch({ place: false });
     const rectAfter = windowRect(app.pid);
