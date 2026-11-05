@@ -63,7 +63,7 @@ const commitRaw = (app, account, previewId) => post(app, `/v1/imports/${previewI
 
 const DATA_TABLES = [
   'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions', 'learning_evidence',
-  'exercise_attempts', 'learning_events', 'exams', 'exam_items', 'exam_evidence',
+  'exercise_attempts', 'exercise_flag_events', 'learning_events', 'exams', 'exam_items', 'exam_evidence',
 ];
 
 function countsOf(db, userId) {
@@ -128,6 +128,8 @@ function seedRichAccount(db, userId) {
   const LE1 = insertEvent(U1, AT1, V1, null, 'ATTEMPT', 1, 'INCORRECT', 'HINT', t(4), 0.5);
   insertEvent(U1, AT1, V1, LE1, 'CORRECTION', 2, 'CORRECT', 'HINT', t(5), null);
   insertEvent(U2, AT3, V4, null, 'ATTEMPT', 1, 'UNKNOWN', 'NONE', t(5), 0);
+  db.prepare('INSERT INTO exercise_flag_events (user_id, exercise_id, attempt_id, action, reason, comment, created_at) VALUES (?,?,?,?,?,?,?)')
+    .run(userId, E1, AT1, 'FLAG', 'CONTENT_ERROR', 'Confira a fonte.', t(6));
 
   const X1 = run('INSERT INTO exams (user_id, unit_id, status, started_at, submitted_at, corrected_at, evidence_id, subject_id) VALUES (?,?,?,?,?,?,?,?)', userId, U1, 'CORRECTED', t(8), t(8), t(9), EV2, S1);
   const X2 = run('INSERT INTO exams (user_id, unit_id, status, started_at, submitted_at, corrected_at, evidence_id, subject_id) VALUES (?,?,?,?,?,?,?,?)', userId, U2, 'IN_PROGRESS', t(10), null, null, null, S2);
@@ -153,6 +155,7 @@ const FOREIGN_KEYS = {
   exerciseVersions: { exercise_id: 'exercises' },
   learningEvidence: { unit_id: 'learningUnits', review_task_id: 'reviewTasks' },
   exerciseAttempts: { unit_id: 'learningUnits', exercise_version_id: 'exerciseVersions', review_task_id: 'reviewTasks', evidence_id: 'learningEvidence' },
+  exerciseFlagEvents: { exercise_id: 'exercises', attempt_id: 'exerciseAttempts' },
   learningEvents: { unit_id: 'learningUnits', attempt_id: 'exerciseAttempts', exercise_version_id: 'exerciseVersions', corrects_event_id: 'learningEvents' },
   exams: { unit_id: 'learningUnits', evidence_id: 'learningEvidence', subject_id: 'subjects' },
   examItems: { exam_id: 'exams', exercise_id: 'exercises', exercise_version_id: 'exerciseVersions' },
@@ -523,7 +526,7 @@ test('IMPORT-1: createLogicalExport is the shape the restore consumes (guards ex
     const exported = createLogicalExport(db, a.userId);
     const known = {
       subjects: 8, learningUnits: 9, reviewTasks: 7, exercises: 7, exerciseVersions: 10, learningEvidence: 9,
-      exerciseAttempts: 11, learningEvents: 18, exams: 9, examItems: 8, examEvidence: 3,
+      exerciseAttempts: 11, exerciseFlagEvents: 7, learningEvents: 18, exams: 9, examItems: 8, examEvidence: 3,
     };
     for (const [key, columns] of Object.entries(known)) {
       assert.equal(Object.keys(exported[key][0]).length, columns, `${key} gained or lost a column — update shared/logical-import.js`);

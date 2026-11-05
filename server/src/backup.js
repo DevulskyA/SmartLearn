@@ -70,6 +70,7 @@ export function createLogicalExport(db, userId) {
     exercises: db.prepare('SELECT * FROM exercises WHERE user_id = ? ORDER BY id').all(userId),
     exerciseVersions: db.prepare('SELECT * FROM exercise_versions WHERE user_id = ? ORDER BY id').all(userId),
     learningEvidence: db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? ORDER BY id').all(userId),
+    exerciseFlagEvents: db.prepare('SELECT id, exercise_id, attempt_id, action, reason, comment, created_at FROM exercise_flag_events WHERE user_id = ? ORDER BY id').all(userId),
     // Added later, ADDITIVELY (existing keys unchanged, exportVersion unchanged, the importer ignores them): what the
     // student produced — item-level attempts and their outcome events, and exam answers/corrections.
     exerciseAttempts: db.prepare('SELECT * FROM exercise_attempts WHERE user_id = ? ORDER BY id').all(userId),
@@ -82,7 +83,7 @@ export function createLogicalExport(db, userId) {
   };
 }
 
-const BACKUP_TABLES = ['users', 'sessions', 'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions', 'learning_evidence', 'exercise_attempts', 'learning_events', 'exams', 'exam_items', 'exam_evidence', 'user_settings', 'schema_migrations'];
+const BACKUP_TABLES = ['users', 'sessions', 'subjects', 'learning_units', 'review_tasks', 'exercises', 'exercise_versions', 'learning_evidence', 'exercise_attempts', 'exercise_flag_events', 'learning_events', 'exams', 'exam_items', 'exam_evidence', 'user_settings', 'schema_migrations'];
 
 /**
  * Writes a consistent whole-database physical snapshot via better-sqlite3's
@@ -120,6 +121,15 @@ export function verifyPhysicalBackup(sourceDb, backupPath) {
 
     const tableCounts = {};
     for (const table of BACKUP_TABLES) {
+      const sourceHasTable = Boolean(sourceDb.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+      const backupHasTable = Boolean(backupDb.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+      if (!sourceHasTable && !backupHasTable) {
+        tableCounts[table] = { sourceCount: 0, backupCount: 0, match: true };
+        continue;
+      }
+      if (sourceHasTable !== backupHasTable) {
+        throw new BackupError('CONTENT_MISMATCH', `SCHEMA_TABLE_MISSING:${table}`);
+      }
       const { n: sourceCount } = sourceDb.prepare(`SELECT COUNT(*) as n FROM ${table}`).get();
       const { n: backupCount } = backupDb.prepare(`SELECT COUNT(*) as n FROM ${table}`).get();
       tableCounts[table] = { sourceCount, backupCount, match: sourceCount === backupCount };

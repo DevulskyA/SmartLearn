@@ -482,6 +482,26 @@ const exams = {
   },
 };
 
+// -- questionFlags ("Questão com problema") ------------------------------------
+// An annotation about a question, never a grade nor evidence. Same shape as the local store; the server needs the ANSWERED attempt that justifies the mark.
+const questionFlags = {
+  async list() {
+    const { flags } = await apiRequest('/v1/question-flags');
+    return flags;
+  },
+  async flag(exerciseId, { attemptId, reason, comment } = {}) {
+    if (!Number.isInteger(attemptId)) throw new Error('attemptId of an answered attempt is required');
+    const body = { reason };
+    if (comment != null) body.comment = comment;
+    const { flag } = await apiRequest(`/v1/attempts/${attemptId}/flag`, { method: 'POST', body });
+    return flag;
+  },
+  async clear(exerciseId) {
+    const { flag } = await apiRequest(`/v1/exercises/${exerciseId}/unflag`, { method: 'POST' });
+    return flag;
+  },
+};
+
 export const DB = {
   // No local schema to initialize — the server owns its own migrations.
   // Kept as a resolved no-op returning DB itself so callers written
@@ -494,6 +514,7 @@ export const DB = {
   reviewTasks,
   exercises,
   attempts,
+  questionFlags,
   exams,
   priorities,
   learningEvidence,

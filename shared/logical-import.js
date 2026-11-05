@@ -30,6 +30,7 @@ const SET_TABLES = [
   ['exerciseVersions', 'exercise_versions'],
   ['learningEvidence', 'learning_evidence'],
   ['exerciseAttempts', 'exercise_attempts'],
+  ['exerciseFlagEvents', 'exercise_flag_events'],
   ['learningEvents', 'learning_events'],
   ['exams', 'exams'],
   ['examItems', 'exam_items'],
@@ -124,6 +125,17 @@ const SPECS = {
       { name: 'submitted_at', type: 'timestamp', nullable: true },
       { name: 'review_task_id', type: 'int', ref: 'reviewTasks', nullable: true },
       { name: 'evidence_id', type: 'int', ref: 'learningEvidence', nullable: true },
+    ],
+  },
+  exerciseFlagEvents: {
+    hasId: true,
+    cols: [
+      { name: 'exercise_id', type: 'int', ref: 'exercises' },
+      { name: 'attempt_id', type: 'int', ref: 'exerciseAttempts', nullable: true },
+      { name: 'action', type: 'text', enum: ['FLAG', 'CLEAR'] },
+      { name: 'reason', type: 'text', nullable: true, enum: ['CONFUSING_STATEMENT', 'DOUBTFUL_ANSWER_KEY', 'CONTENT_ERROR', 'OTHER'] },
+      { name: 'comment', type: 'text', nullable: true },
+      { name: 'created_at', type: 'timestamp' },
     ],
   },
   learningEvents: {
@@ -247,7 +259,7 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
     if (source === undefined) {
       // Tables added after the first logical export are optional in older files;
       // the core learning tables are not.
-      const optional = ['exerciseAttempts', 'learningEvents', 'exams', 'examItems', 'examEvidence'].includes(key);
+      const optional = ['exerciseAttempts', 'exerciseFlagEvents', 'learningEvents', 'exams', 'examItems', 'examEvidence'].includes(key);
       if (!optional) issue('MISSING_SET', `Conjunto obrigatório ausente: ${key}.`);
       sets[key] = [];
       idsBySet[key] = new Set();
@@ -340,6 +352,12 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
     const slot = `${ev.attempt_id}:${ev.sequence}`;
     if (sequences.has(slot)) issue('DUPLICATE_SEQUENCE', `${where}: sequência repetida na mesma tentativa.`);
     sequences.add(slot);
+  }
+  for (const event of sets.exerciseFlagEvents) {
+    const where = `exerciseFlagEvents (id ${event.id})`;
+    const isFlag = event.action === 'FLAG';
+    if (isFlag !== (event.reason !== null && event.attempt_id !== null)) issue('INVALID_FLAG_EVENT', `${where}:FLAG_REASON_ATTEMPT_CONSTRAINT`);
+    if (!isFlag && event.comment !== null) issue('INVALID_FLAG_EVENT', `${where}:CLEAR_COMMENT_CONSTRAINT`);
   }
   const positions = new Set();
   for (const item of sets.examItems) {

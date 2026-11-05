@@ -19,6 +19,7 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerAttemptRoutes } from './routes/attempts.js';
+import { registerQuestionFlagRoutes } from './routes/question-flags.js';
 import { registerSourceRoutes } from './routes/sources.js';
 import { registerVisualAssetRoutes } from './routes/visual-assets.js';
 import { dirname, join } from 'node:path';
@@ -132,6 +133,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerBackupRoutes(v1, db);
     registerImportRoutes(v1, db);
     registerAttemptRoutes(v1, db);
+    registerQuestionFlagRoutes(v1, db);
     registerSourceRoutes(v1, db, { mediaDir, ...sources });
     registerVisualAssetRoutes(v1, db, { mediaDir, limits: mediaLimits });
     registerContentProposalRoutes(v1, db);

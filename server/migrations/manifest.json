@@ -193,5 +193,10 @@
     "version": 39,
     "name": "review-postponements",
     "checksum": "61a18d0712ef8e5a56f7b13ef987c22f7537c4d7f9a1cfef6bdc645cf0713bbb"
+  },
+  {
+    "version": 40,
+    "name": "exercise-flag-events",
+    "checksum": "f4c6dbb03510932d3882974ebd4d5b9aa708792a42031ee0d1933abcd63e1531"
   }
 ]

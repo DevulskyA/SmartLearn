@@ -224,9 +224,11 @@ test('formulas: inserted, edited and fixed IN PLACE with the visual formula edit
   // by keyboard: arrow onto the formula, Enter opens the field
   await surface(editor).locator('p', { hasText: 'no meio' }).click();
   await page.keyboard.press('End');
-  // arrow left until the formula itself is the selection (ProseMirror follows the browser selection asynchronously, so the number of presses is not fixed)
-  for (let i = 0; i < 16 && (await surface(editor).locator('.ProseMirror-selectednode').count()) === 0; i += 1) await page.keyboard.press('ArrowLeft');
-  await expect(surface(editor).locator('.ProseMirror-selectednode')).toHaveCount(1);
+  // Arrow left until THIS paragraph's formula is selected. Checking only for any
+  // selected node allowed a stale selection from another formula to pass on CI.
+  const selectedMiddleFormula = surface(editor).locator('.ProseMirror-selectednode').filter({ has: page.locator('annotation', { hasText: /^a-b$/ }) });
+  for (let i = 0; i < 16 && (await selectedMiddleFormula.count()) === 0; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(selectedMiddleFormula).toHaveCount(1);
   await page.keyboard.press('Enter');
   await expect(field).toBeVisible();
   await expect(field).toBeFocused(); // typing starts once the field holds the focus
@@ -522,8 +524,13 @@ test('an edit the visual editor could not write is "unsaved" for every way out: 
   await visualButton(editor).click();
   await surface(editor).locator('p', { hasText: 'Um' }).click();
   await page.keyboard.press('End');
-  await page.keyboard.press('Control+b');
+  // The behavior under test is the blocked serialization, not the browser's
+  // shortcut dispatch. Use the real toolbar command and assert it took effect.
+  const bold = editor.locator('[data-visual="bold"]');
+  await bold.click();
+  await expect(bold).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.type('(a)'); // "Um**(a)**" cannot be written back faithfully: the very first edit is already unwritable
+  await expect(surface(editor).locator('strong')).toHaveText('(a)');
   await expect(editor.locator('.summary-visual-notice')).toBeVisible();
   await expect(input).toHaveValue('Um'); // so the text never differs from the saved one: only the editor knows there is an edit
   await expect(editor.locator('[data-action="save-summary"]')).toBeDisabled();

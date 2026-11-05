@@ -1,0 +1,20 @@
+// Marcações de questões problemáticas, desenhadas por app.js.
+export default {
+  'questionFlag.reason.confusingStatement': 'Enunciado confuso',
+  'questionFlag.reason.doubtfulAnswerKey': 'Gabarito duvidoso',
+  'questionFlag.reason.contentError': 'Erro no conteúdo',
+  'questionFlag.reason.other': 'Outro motivo',
+  'questionFlag.action': 'Marcar questão como problemática',
+  'questionFlag.marked': 'Questão marcada como problemática',
+  'questionFlag.remove': 'Desmarcar questão',
+  'questionFlag.reason': 'Motivo',
+  'questionFlag.comment': 'Comentário opcional',
+  'questionFlag.commentPlaceholder': 'Explique brevemente o problema (opcional)',
+  'questionFlag.save': 'Salvar marca',
+  'questionFlag.cancel': 'Cancelar',
+  'questionFlag.previous': 'Questão julgada anteriormente',
+  'questionFlag.resultTitle': 'Questões marcadas como problemáticas',
+  'questionFlag.saved': 'Marca salva.',
+  'questionFlag.removed': 'Marca removida.',
+  'questionFlag.failed': 'Não foi possível salvar a marca.',
+};
