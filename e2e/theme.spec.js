@@ -97,3 +97,60 @@ test('the quick theme-toggle button flips between a light and a dark theme witho
   await page.locator('#theme-toggle').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
 });
+
+// Card "Corrigir o contraste de 8 temas e o botão lua/sol" (T-06): the quick button used to overwrite the chosen theme with Papel/Noite,
+// and under "Sistema" + dark OS its first click did nothing (a boolean was passed where "dark"/"light" is expected).
+test('the quick theme-toggle returns to the theme the user had chosen instead of erasing it', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await freshApp(page);
+  await page.locator('[data-screen="settings"]').click();
+  await page.locator('#theme-select').selectOption('dracula');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
+
+  await page.locator('#theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper');
+  await expect(page.locator('#theme-select')).toHaveValue('paper');
+
+  await page.locator('#theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
+  await expect(page.locator('#theme-select')).toHaveValue('dracula');
+
+  // the memory survives a reload (per-viewer convenience in localStorage)
+  await page.locator('#theme-toggle').click();
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('#theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
+});
+
+test('the quick theme-toggle changes the theme on the FIRST click under "Sistema" with a dark OS, and a second click returns to "Sistema"', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await freshApp(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+
+  await page.locator('#theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
+
+  await page.locator('#theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await page.locator('[data-screen="settings"]').click();
+  await expect(page.locator('#theme-select')).toHaveValue('auto');
+});
+
+test('the quick theme-toggle is a named button whose icon keeps AA contrast on its card in a corrected theme', async ({ page }) => {
+  await freshApp(page);
+  await page.locator('[data-screen="settings"]').click();
+  await page.locator('#theme-select').selectOption('solarized-light');
+  const button = page.locator('#theme-toggle');
+  await expect(button).toHaveAccessibleName(/tema/i);
+  const readRatio = () => button.evaluate((el) => {
+    const parse = (c) => c.match(/[\d.]+/g).map(Number).slice(0, 3);
+    const lin = (v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+    const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    const style = getComputedStyle(el);
+    const [hi, lo] = [lum(parse(style.color)), lum(parse(style.backgroundColor))].sort((a, b) => b - a);
+    return (hi + 0.05) / (lo + 0.05);
+  });
+  // the button animates color/background for 140 ms after a theme switch: poll until it has settled
+  await expect.poll(readRatio).toBeGreaterThanOrEqual(4.5);
+});

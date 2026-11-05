@@ -6,7 +6,9 @@ import {
   resolveThemePreference,
   getThemeOption,
   getStoredThemePreference,
-  THEME_VARIABLES,
+  quickToggleTarget,
+  readQuickToggleMemory,
+  writeQuickToggleMemory,
 } from "../src/theme.js";
 
 // TEST_COVERAGE_MATRIX.md gap #2: theme.js had zero test evidence (no unit
@@ -156,17 +158,54 @@ test("THEME_OPTIONS: every id has its label and description keys in the catalog,
   }
 });
 
-// A-18/T-01: the primary button (--color-on-primary on --color-primary) must reach WCAG AA (4.5:1) in every theme whose tokens are plain rgb().
-test("primary button text reaches 4.5:1 in every rgb-token theme", () => {
-  const rgb = (v) => (/^rgb((d+) (d+) (d+))$/.exec(v) || []).slice(1).map(Number);
-  const lum = (c) => { const [r, g, b] = c.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const failing = [];
-  for (const [id, theme] of Object.entries(THEME_VARIABLES)) {
-    const bg = rgb(theme.tokens["--color-primary"]); const fg = rgb(theme.tokens["--color-on-primary"]);
-    if (bg.length !== 3 || fg.length !== 3) continue;
-    const [a, b] = [lum(bg), lum(fg)].sort((x, y) => y - x);
-    const ratio = (a + 0.05) / (b + 0.05);
-    if (ratio < 4.5) failing.push(id + " " + ratio.toFixed(2));
-  }
-  assert.deepEqual(failing, []);
+test("quickToggleTarget: flips the mode and a second click returns to the theme the user had chosen", () => {
+  const first = quickToggleTarget("dracula", "light", {});
+  assert.equal(first.target, "paper", "no light theme remembered yet: default light");
+  assert.deepEqual(first.memory, { dark: "dracula" });
+  const back = quickToggleTarget(first.target, "light", first.memory);
+  assert.equal(back.target, "dracula", "the dark choice was not erased");
+  assert.deepEqual(back.memory, { dark: "dracula", light: "paper" });
 });
+
+test("quickToggleTarget: remembers the light choice too (tokyo-day -> dark default -> tokyo-day)", () => {
+  const toDark = quickToggleTarget("tokyo-day", "light", {});
+  assert.equal(toDark.target, "night");
+  assert.equal(quickToggleTarget("night", "light", toDark.memory).target, "tokyo-day");
+});
+
+test("quickToggleTarget: 'auto' under a dark system flips to light on the FIRST click and is remembered as 'auto'", () => {
+  const toLight = quickToggleTarget("auto", "dark", {});
+  assert.equal(toLight.target, "paper");
+  assert.deepEqual(toLight.memory, { dark: "auto" });
+  assert.equal(quickToggleTarget("paper", "dark", toLight.memory).target, "auto");
+});
+
+test("quickToggleTarget: a remembered value that no longer fits (unknown id, wrong mode, 'auto' resolving to the same mode) falls back to the mode default", () => {
+  assert.equal(quickToggleTarget("night", "dark", { light: "removed-theme" }).target, "paper");
+  assert.equal(quickToggleTarget("night", "dark", { light: "dracula" }).target, "paper", "dracula is dark, not a light choice");
+  assert.equal(quickToggleTarget("paper", "light", { dark: "auto" }).target, "night", "'auto' under a light system is light, not dark");
+  assert.equal(quickToggleTarget("night", "dark", { light: 7 }).target, "paper");
+});
+
+test("readQuickToggleMemory / writeQuickToggleMemory: round trip, and garbage or missing storage reads as empty", () => {
+  const original = globalThis.localStorage;
+  let saved = null;
+  globalThis.localStorage = { getItem: () => saved, setItem: (_key, value) => { saved = value; } };
+  try {
+    assert.deepEqual(readQuickToggleMemory(), {});
+    writeQuickToggleMemory({ dark: "dracula", light: "paper" });
+    assert.deepEqual(readQuickToggleMemory(), { light: "paper", dark: "dracula" });
+    saved = "not json";
+    assert.deepEqual(readQuickToggleMemory(), {});
+    saved = "[1]";
+    assert.deepEqual(readQuickToggleMemory(), {});
+    globalThis.localStorage = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
+    assert.deepEqual(readQuickToggleMemory(), {});
+    assert.doesNotThrow(() => writeQuickToggleMemory({ dark: "night" }));
+  } finally {
+    globalThis.localStorage = original;
+  }
+});
+
+// The A-18/T-01 primary-button contrast test lived here; its regex had lost its backslashes and skipped every theme, so it proved nothing.
+// WCAG contrast for every token pair of all themes (including --color-on-primary on --color-primary) is now test/theme-contrast.test.js.
