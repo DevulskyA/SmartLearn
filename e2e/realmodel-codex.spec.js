@@ -91,7 +91,7 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
   await draftPanel.getByRole('tab', { name: /Questões/ }).click();
   expect(await draftPanel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(5);
   await draftPanel.getByRole('tab', { name: /Revisão/ }).click();
-  await expect(draftPanel.locator('[data-panel="review"]')).toContainText('Conferência automática');
+  await expect(draftPanel.locator('[data-panel="review"]')).toContainText(/conferência automática/i);
 
   // The draft says what it is made of, and the injected sentence did not take over (read from the saved draft: the
   // summary and every question, never the screen chrome).
