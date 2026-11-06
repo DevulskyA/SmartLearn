@@ -41,7 +41,7 @@ export const READ_ONLY_VAR_MODULES = new Set([
 export const DEV_DATA_PATH_MODULES = new Set(['server-runtime/src/dev-datastore.js']);
 
 // The exact backend environment the Tauri shell may set (lib.rs local_backend_env). Adding a key is a reviewed change.
-export const ALLOWED_BACKEND_ENV_KEYS = ['HOST', 'PORT', 'SMARTLEARN_DB_PATH', 'SMARTLEARN_SOURCES_DIR', 'SMARTLEARN_STATIC_DIR', 'SMARTLEARN_ALLOWED_ORIGINS'];
+export const ALLOWED_BACKEND_ENV_KEYS = ['HOST', 'PORT', 'SMARTLEARN_DB_PATH', 'SMARTLEARN_SOURCES_DIR', 'SMARTLEARN_STATIC_DIR', 'SMARTLEARN_ALLOWED_ORIGINS', 'SMARTLEARN_AI_PROVIDER'];
 
 const TEXT_EXT = new Set(['.js', '.mjs', '.cjs', '.json', '.html', '.css', '.txt', '.md', '.ps1', '.bat', '.cmd', '.sh', '.env', '.toml', '.yml', '.yaml', '.svg']);
 const FIRST_PARTY_PREFIXES = ['server-runtime/src/', 'shared/', 'dist-runtime/'];
@@ -133,6 +133,9 @@ export function inspectPackage({ resourcesDir, tauriConfPath, libRsPath }) {
     }
     // The shell may only ever pass the DEV pin through (with_data_overrides), never invent a DEV variable.
     for (const v of DEV_ENV_VARS) {
+      // The desktop shell deliberately selects the real provider for the
+      // packaged app. Consent and credentials remain separate settings.
+      if (v === 'SMARTLEARN_AI_PROVIDER') continue;
       if (new RegExp(`\\.env\\(\\s*"${escapeRe(v)}"`).test(text) || new RegExp(`"${escapeRe(v)}"\\.to_string\\(\\)\\s*,`).test(text)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the native shell`);
     }
   }
