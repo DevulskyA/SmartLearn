@@ -53,3 +53,9 @@ Objetivo: posição + outcome ativo + próximo passo + bloqueios em ~15 linhas, 
 ## E2E com saída mínima
 
 `node scripts/e2e.mjs` imprime só falhas e uma linha `E2E passed|failed: ...`. Leia apenas essa saída; detalhes em `test-results/e2e-problems.txt`. Dia a dia use `--changed` (specs afetadas) e `--failed` (repetir falhas); suíte completa 1x no fim do lote. `E2E_VERBOSE=1` ou `--reporter=...` restaura a lista completa.
+
+Para testar aplicativos desktop, a ordem obrigatória é: (1) API/CLI ou teste headless
+determinístico; (2) teste de integração/E2E somente no escopo afetado; (3) uma única
+inspeção visual curta, apenas se a aparência fizer parte do aceite. Não abrir nem manter
+a janela do aplicativo ou o navegador compartilhado durante a validação funcional. Se o
+teste headless já provar o fluxo, a inspeção visual não deve ser repetida.
