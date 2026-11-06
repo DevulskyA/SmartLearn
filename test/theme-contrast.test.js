@@ -71,6 +71,24 @@ test("contrast math matches WCAG reference values", () => {
   assert.equal(contrastRatio("oklch(1 0 0)", "oklch(0 0 0)").toFixed(1), "21.0");
 });
 
+test("theme consumers use only declared semantic color tokens", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const [styles, performanceThresholds] = await Promise.all([
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/performance-thresholds.js", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(styles, /var\(--color-surface-alt\b/);
+  assert.doesNotMatch(performanceThresholds, /var\(--color-text-muted\b/);
+  for (const id of CONCRETE_THEMES) {
+    const tokens = THEME_VARIABLES[id].tokens;
+    for (const value of Object.values(tokens)) {
+      if (typeof value === "string" && value.startsWith("var(")) {
+        assert.match(value, /^var\(--[a-z0-9-]+\)$/);
+      }
+    }
+  }
+});
+
 for (const id of CONCRETE_THEMES) {
   test(`theme ${id}: every drawn token pair reaches WCAG AA (text 4.5:1, UI 3:1)`, () => {
     const tokens = THEME_VARIABLES[id].tokens;

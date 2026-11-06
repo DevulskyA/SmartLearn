@@ -68,7 +68,10 @@ export function colorVarForKey(colorKey) {
 // PERFORMANCE_COLOR != SUBJECT_COLOR. This is a continuous visual signal for
 // how well a subject/unit is doing (0%=red, 60%=yellow, 100%=green); it does
 // not identify or replace the subject's own color (colorVarForKey above).
-export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-text-muted)';
+// Keep the neutral performance state readable in every theme. `--color-text-muted`
+// was never part of the theme contract, so browsers fell back to the inherited
+// foreground and could render the neutral label with the wrong contrast.
+export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-muted)';
 const PERFORMANCE_COLOR_STOPS = [
   { pct: 0, rgb: [220, 38, 38] },   // red-600
   { pct: 60, rgb: [234, 179, 8] },  // yellow-500
