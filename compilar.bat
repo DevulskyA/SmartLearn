@@ -39,6 +39,7 @@ echo.
 echo ==================================================
 echo   O que voce quer fazer agora?
 echo.
+echo     [E]  Gerar EXE release   ^(sem instaladores, mais rapido^)
 echo     [D]  Testar em modo DEV  ^(hot-reload, abre a janela^)
 echo     [R]  Gerar RELEASE       ^(.exe + instalador definitivos^)
 echo     [Q]  Sair
@@ -46,6 +47,7 @@ echo ==================================================
 set "opcao="
 set /p "opcao=Opcao [D/R/Q]: "
 
+if /i "%opcao%"=="E" goto exe
 if /i "%opcao%"=="D" goto dev
 if /i "%opcao%"=="R" goto release
 if /i "%opcao%"=="Q" goto fim
@@ -59,10 +61,20 @@ echo Subindo modo DEV... feche a janela do app para encerrar.
 call npm run tauri dev
 goto fim
 
+:exe
+echo.
+echo Gerando EXE release sem instaladores...
+call npm run build:exe
+if errorlevel 1 goto erro
+echo.
+echo EXE pronto:
+echo   src-tauri\target\release\smartlearn.exe
+goto fim
+
 :release
 echo.
 echo Gerando build de RELEASE... pode levar alguns minutos.
-call npm run tauri build
+call npm run build:installer
 if errorlevel 1 goto erro
 echo.
 echo ==================================================

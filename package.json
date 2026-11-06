@@ -9,7 +9,9 @@
     "build": "vite build",
     "test": "node --test \"test/*.test.js\"",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:exe": "tauri build --no-bundle --ci",
+    "build:installer": "tauri build --ci"
   },
   "repository": {
     "type": "git",
