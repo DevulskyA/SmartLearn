@@ -19,15 +19,20 @@ const DEV_APP_ORIGIN: &str = "http://127.0.0.1:3000";
 // the EXISTING Node/Fastify/SQLite backend as a local process on 127.0.0.1 —
 // the frontend keeps talking to it exactly the way it talks to a remote
 // server (same remote-store.js/api-client.js HTTP pipeline), it's just that
-// "the server" now lives on this computer. This env var is a dev-time-only
-// opt-in switch (LOCAL-01A is an explicit runtime/dev proof, not yet a
-// packaged production mode — that is LOCAL-01B's job): unset/false keeps
-// T42's original remote-WebView behavior byte-for-byte.
+// "the server" now lives on this computer. Release builds are local-first by
+// default; the env var remains the explicit opt-in for development builds.
 const LOCAL_AUTHORITY_ENV: &str = "SMARTLEARN_LOCAL_AUTHORITY";
 const LOCAL_BACKEND_HOST: &str = "127.0.0.1";
 const LOCAL_BACKEND_READY_TIMEOUT: Duration = Duration::from_secs(15);
 
 fn local_authority_enabled() -> bool {
+    local_authority_enabled_for_build(cfg!(debug_assertions))
+}
+
+fn local_authority_enabled_for_build(debug_build: bool) -> bool {
+    if !debug_build {
+        return true;
+    }
     std::env::var(LOCAL_AUTHORITY_ENV)
         .map(|value| value == "true")
         .unwrap_or(false)
@@ -557,16 +562,18 @@ pub fn run() {
                 )?;
             }
 
-            // LOCAL-01A / ARCH-01: when SMARTLEARN_LOCAL_AUTHORITY=true, spawn
+            // LOCAL-01A / ARCH-01: in release, or when
+            // SMARTLEARN_LOCAL_AUTHORITY=true in development, spawn
             // the existing SmartLearn backend as a LOCAL process on this
             // computer (127.0.0.1 loopback) and point the window at it —
             // Desktop becomes its own authority for its study data without
             // duplicating the domain. If the local backend fails to start,
             // this returns Err from setup(), which aborts startup entirely:
             // no window is ever built pretending an empty/working state
-            // (LOCAL-01A requirement 2's explicit-failure rule). Unset (the
-            // default): byte-for-byte T42 behavior, one configured REMOTE
-            // trusted origin, no local process spawned at all.
+            // (LOCAL-01A requirement 2's explicit-failure rule). Development
+            // remains opt-in so hot-reload and remote QA keep their existing
+            // behavior; a shipped release never depends on an environment
+            // variable or an external server.
             let (app_url, local_authority, local_backend) = if local_authority_enabled() {
                 let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
                 let resource_dir = strip_windows_verbatim_prefix(
@@ -652,6 +659,16 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn release_build_is_local_first_without_environment_configuration() {
+        assert!(super::local_authority_enabled_for_build(false));
+    }
+
+    #[test]
+    fn development_build_requires_explicit_local_authority_configuration() {
+        assert!(!super::local_authority_enabled_for_build(true));
+    }
+
     use super::{
         window_title, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
         pick_free_local_port, pick_stable_local_port, backend_port_file, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
