@@ -35,6 +35,7 @@ Only known, material, intentionally deferred imperfections. Not a wish list.
 - **Priority**: P2 (não bloqueia esta feature; bloqueará ciclo longitudinal de Medicina)
 - **Owner**: unassigned
 - **Evidence**: `.specs/project/STATE.md` DEC-016 — "Risco de escala" section
+- **Atualização 2026-10-17 (CANÔNICO como direção; nada implementado)**: este débito é tratado por DUAS frentes separadas. Frente A (prevenir sobrecarga: orçamento de tempo, plano do dia, previsão de carga) mostra o déficit de tempo sem controlar a entrada de aulas, que a escola define (Constituição I.19; `spec.md` R-14, INV-15/16). Frente B (HG-09: uma obrigação exigível por unidade, dívida = conhecimento a recuperar) é a resposta de calendário, ainda sem decisão formal e em CONFLITO com Constituição §21/§91-C (`hg-09-proposal.md` §0). O texto "FSRS is necessary" acima é HISTÓRICO (DEC-016) e não é a direção vigente.
 
 ---
 

@@ -3,16 +3,15 @@
 Aplicação local de estudos e revisões periódicas, construída com uma única base para desktop,
 iOS e Android.
 
-## Arquitetura do MVP
+## Arquitetura
 
-- HTML, CSS e JavaScript puro
-- Vite como empacotador mínimo
-- Tauri 2 para desktop e mobile
-- SQLite local nativo via `@tauri-apps/plugin-sql`
-- Sem backend, Supabase ou banco remoto
-- Desktop como primeiro alvo; Android posterior; iOS preparado para build em Apple/Mac
+- Cliente: HTML, CSS e JavaScript puro (`src/`), Vite como empacotador mínimo
+- Servidor: Node.js com SQLite (`server/`), API `/v1`; é a autoridade dos dados da V1
+- Armazenamento local legado: SQLite nativo via `@tauri-apps/plugin-sql` (`src/db.js`); o cliente escolhe local ou servidor por configuração explícita, sem fallback automático
+- Tauri 2 para desktop e mobile; desktop como primeiro alvo, Android posterior, iOS preparado para build em Apple/Mac
+- Sem Supabase nem banco remoto de terceiros
 
-As regras funcionais e o plano de execução estão em [`.specs/`](.specs/).
+Onde está cada coisa: [`CODEMAP.md`](CODEMAP.md). As regras funcionais e o plano de execução estão em [`.specs/`](.specs/).
 
 ## Pré-requisitos para desktop no Windows
 

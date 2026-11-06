@@ -1,0 +1,8 @@
+fill css:#account-login-email aluno1@example.com
+fill css:#account-login-password "uma senha longa de teste 1"
+click Entrar
+wait 1200
+click Plano
+click "Gerenciar disciplinas"
+click "+ Nova disciplina"
+snap

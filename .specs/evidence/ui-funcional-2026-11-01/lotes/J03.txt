@@ -1,0 +1,9 @@
+# keep-going
+click Acertei
+expect "Questão 2 de 3"
+click "Ver resposta"
+click Errei
+expect "Questão 3 de 3"
+click "Ver resposta"
+click Acertei
+snap

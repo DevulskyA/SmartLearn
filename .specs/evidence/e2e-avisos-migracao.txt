@@ -1,0 +1,24 @@
+[e2e] run 1793660671181-22916: vite 62114, server ports +21000, 3 worker(s)
+(node:22916) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+npm notice run smartlearn@0.1.0 npx
+npm notice run playwright test e2e/restore-backup.spec.js e2e/migration.spec.js
+[WebServer] npm notice run smartlearn@0.1.0 npx
+[WebServer] npm notice run vite --port 62114 --strictPort
+[WebServer] 
+[WebServer]   VITE v8.0.16  ready in 960 ms
+[WebServer] 
+[WebServer]   ➜  Local:   http://localhost:62114/
+[WebServer]   ➜  Network: use --host to expose
+
+Running 6 tests using 2 workers
+
+  ok 1 e2e\migration.spec.js:66:1 › a fresh test user migrates a representative fixture end-to-end and the result survives a full owned export round trip (3.9s)
+  ok 3 e2e\migration.spec.js:111:1 › recovery rehearsal: cancelling a preview changes nothing, and the account is still migratable afterward (2.6s)
+  ok 4 e2e\migration.spec.js:135:1 › recovery rehearsal: a name conflict blocks confirm and commits nothing (2.3s)
+  ok 2 e2e\restore-backup.spec.js:87:1 › a student restores their own exported backup into a new, empty account — it is all there, survives a reload, and exports back identically (9.9s)
+  ok 5 e2e\restore-backup.spec.js:142:1 › a non-empty account refuses the restore with a clear message and changes nothing (2.5s)
+  ok 6 e2e\restore-backup.spec.js:157:1 › import preview warnings are written by the client from code + params: the pt-BR sentence appears even when the server text is replaced, and nothing is written (1.8s)
+
+  6 passed (23.4s)
+[e2e] NO BASELINE for full@3w+args (26 s); record one from a clean run with --record-baseline

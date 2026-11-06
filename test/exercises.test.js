@@ -152,6 +152,39 @@ test("exportAll inclui exercises; importAll roundtrip preserva exercises e prove
   assert.ok(imported.some((e) => e.questionText === "Q exportada" && e.provenance === "AI_GENERATED"));
 });
 
+test("exportAll/importAll roundtrip preserva eventos de questão problemática", async () => {
+  const unit = await makeLearningUnit();
+  const exercise = await DB.exercises.create(unit.id, {
+    questionText: "Q sinalizada",
+    answerText: "R",
+    provenance: "MANUAL",
+  });
+  await DB.questionFlags.flag(exercise.id, { reason: "CONTENT_ERROR", comment: "  revisar fonte  " });
+  const backup = await DB.exportAll();
+
+  assert.deepEqual(backup.exerciseFlagEvents.map(({ exerciseId, action, reason, comment }) => ({ exerciseId, action, reason, comment })), [
+    { exerciseId: exercise.id, action: "FLAG", reason: "CONTENT_ERROR", comment: "revisar fonte" },
+  ]);
+
+  await DB.importAll(backup);
+  assert.deepEqual(await DB.questionFlags.list(), [{
+    exerciseId: exercise.id,
+    attemptId: null,
+    reason: "CONTENT_ERROR",
+    comment: "revisar fonte",
+    flaggedAt: backup.exerciseFlagEvents[0].createdAt,
+  }]);
+});
+
+test("importAll rejeita evento de questão problemática que aponta para exercício inexistente", async () => {
+  await DB.init();
+  const backup = await DB.exportAll();
+  await assert.rejects(
+    () => DB.importAll({ ...backup, exerciseFlagEvents: [{ id: 1, exerciseId: 999, action: "FLAG", reason: "OTHER", comment: null }] }),
+    /exerciseFlagEvent references a missing exercise/i,
+  );
+});
+
 test("DB.exercises.update atualiza apenas os campos passados, preserva os demais", async () => {
   const unit = await makeLearningUnit();
   const exercise = await DB.exercises.create(unit.id, {

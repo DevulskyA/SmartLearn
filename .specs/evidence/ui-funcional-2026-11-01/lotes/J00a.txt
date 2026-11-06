@@ -1,0 +1,15 @@
+# keep-going
+goto #account
+click "Ainda não tem conta? Criar uma"
+fill css:#account-register-email abc
+fill css:#account-register-password curta
+click "Criar conta"
+snap
+fill css:#account-register-email aluno1@example.com
+fill css:#account-register-password "uma senha longa de teste 1"
+click "Criar conta"
+wait 1000
+snap
+click Plano
+click "Gerenciar disciplinas"
+snap

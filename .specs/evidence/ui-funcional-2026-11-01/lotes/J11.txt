@@ -1,0 +1,11 @@
+# keep-going
+click Estatísticas
+expect "Revisões feitas"
+expect "66,7%"
+expect "3 questões"
+click "Por conteúdo"
+snap
+click Plano
+snap
+click Hoje
+snap

@@ -1,0 +1,181 @@
+{
+  "mode": "hoje390",
+  "root": "C:\\Projetos\\SmartLearn\\.claude\\worktrees\\agent-ab5cfca1045ff17b7",
+  "started": "2026-11-02T22:46:05.843Z",
+  "notes": [
+    "8.1s servidor + vite prontos",
+    "13.7s seed ok"
+  ],
+  "seed": {
+    "seeded": true,
+    "units": 10,
+    "subjects": 6
+  },
+  "scenarioErrors": [],
+  "hoje390": {
+    "geo": {
+      "innerHeight": 844,
+      "docScrollHeight": 844,
+      "innerScrollers": [
+        {
+          "tag": "MAIN",
+          "cls": "app-main",
+          "sh": 9906,
+          "ch": 780
+        }
+      ],
+      "navRect": {
+        "top": 768,
+        "height": 76
+      },
+      "navPos": "fixed",
+      "reviewCards": 33
+    },
+    "wheelSteps": 14,
+    "end": {
+      "scrollTop": 9126,
+      "scrollHeight": 9906,
+      "mainClientHeight": 780,
+      "scrollPaddingBottom": "auto",
+      "navTop": 768,
+      "panelBottomPaddingPx": 0,
+      "mainPaddingBottomPx": 96,
+      "lastControlsTail": [
+        {
+          "text": "Desfazer conclusão",
+          "top": 47,
+          "bottom": 87,
+          "w": 139,
+          "h": 40,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "button.small-button review-undo"
+        },
+        {
+          "text": "Ver conteúdo",
+          "top": 101,
+          "bottom": 132,
+          "w": 130,
+          "h": 32,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "button.review-row-toggle"
+        },
+        {
+          "text": "Revisão feita: Farmacocinética: absorção",
+          "top": 356,
+          "bottom": 375,
+          "w": 18,
+          "h": 18,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "input."
+        },
+        {
+          "text": "Desfazer conclusão",
+          "top": 346,
+          "bottom": 386,
+          "w": 139,
+          "h": 40,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "button.small-button review-undo"
+        },
+        {
+          "text": "Ver conteúdo",
+          "top": 400,
+          "bottom": 431,
+          "w": 130,
+          "h": 32,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "button.review-row-toggle"
+        },
+        {
+          "text": "Ver no Plano",
+          "top": 643,
+          "bottom": 687,
+          "w": 101,
+          "h": 44,
+          "aboveNav": true,
+          "hitIsControl": true,
+          "hitIs": "button.small-button"
+        }
+      ],
+      "lastLeafTextTail": [
+        {
+          "text": "Neurologia · 1 exercício para reforçar",
+          "bottom": 635
+        },
+        {
+          "text": "Ver no Plano",
+          "bottom": 687
+        },
+        {
+          "text": "Amanhã: 2 revisões.",
+          "bottom": 748
+        }
+      ],
+      "lastControlCount": 109,
+      "lastControlText": "Ver no Plano"
+    },
+    "focusCtrlCount": 109,
+    "focusTail": [
+      {
+        "text": "Ver conteúdo",
+        "inNav": false,
+        "top": 488,
+        "bottom": 519,
+        "navTop": 768,
+        "obscuredPx": 0
+      },
+      {
+        "text": "Revisão feita: Farmacocinética: ab",
+        "inNav": false,
+        "top": 743,
+        "bottom": 762,
+        "navTop": 768,
+        "obscuredPx": 0
+      },
+      {
+        "text": "Desfazer conclusão",
+        "inNav": false,
+        "top": 733,
+        "bottom": 773,
+        "navTop": 768,
+        "obscuredPx": 5
+      },
+      {
+        "text": "Ver conteúdo",
+        "inNav": false,
+        "top": 787,
+        "bottom": 818,
+        "navTop": 768,
+        "obscuredPx": 50
+      },
+      {
+        "text": "Ver no Plano",
+        "inNav": false,
+        "top": 643,
+        "bottom": 687,
+        "navTop": 768,
+        "obscuredPx": 0
+      },
+      {
+        "text": "Pular para o conteúdo SmartLearn H",
+        "inNav": false,
+        "top": 0,
+        "bottom": 844,
+        "navTop": 768,
+        "obscuredPx": 76
+      }
+    ],
+    "errors": [
+      "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ]
+  },
+  "finished": "2026-11-02T22:46:31.726Z",
+  "seconds": 26
+}

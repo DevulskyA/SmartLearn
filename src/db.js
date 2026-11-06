@@ -2,6 +2,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getReviewScoreValues } from "./review-score.js";
 import { SCHEDULE_OFFSETS as REVIEW_SCHEDULE } from "./scheduler.js";
+import { planPostpone, POSTPONE_DEFAULT_PER_DAY } from "../shared/review-postpone.js";
+import { normalizeQuestionFlag, currentQuestionFlags } from "../shared/question-flag.js";
+import { compareText, sameName } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 // Canonical DDL — single source of truth shared with Rust sensor (src-tauri/src/lib.rs)
 import schemaDdl from "./schema-statements.json" with { type: "json" };
 // Canonical migration plan — shared with Rust integration test; neither may duplicate these SQL strings.
@@ -65,10 +69,6 @@ function mapSubject(row) {
     isActive: Boolean(row.is_active),
     sortOrder: row.sort_order ?? 0,
   };
-}
-
-function mapUsageCount(row, key) {
-  return Number(row?.[key] ?? 0) || 0;
 }
 
 function mapLearningUnit(row) {
@@ -169,23 +169,23 @@ function normalizeEntityName(name, label) {
 
 function rejectNulBytes(value, label) {
   if (typeof value === 'string' && value.includes('\x00')) {
-    throw new Error(label + ' contém bytes nulos não permitidos.');
+    throw new Error(t('localStore.nulBytes', { label }));
   }
 }
 
 const LINE_TERMINATOR_RE = /[\u0085\u2028\u2029]/u;
 function rejectLineTerminators(value, label) {
   if (typeof value === 'string' && LINE_TERMINATOR_RE.test(value)) {
-    throw new Error(label + ' contém separadores de linha não permitidos.');
+    throw new Error(t('localStore.lineTerminators', { label }));
   }
 }
 
 function validateUnitData(data) {
-  rejectNulBytes(String(data.title ?? ''), 'O título');
-  rejectNulBytes(String(data.sourceText ?? ''), 'A fonte');
-  if (data.summaryBody != null) rejectNulBytes(data.summaryBody, 'O resumo');
-  rejectLineTerminators(String(data.title ?? ''), 'O título');
-  rejectLineTerminators(String(data.sourceText ?? ''), 'A fonte');
+  rejectNulBytes(String(data.title ?? ''), t('localStore.label.title'));
+  rejectNulBytes(String(data.sourceText ?? ''), t('localStore.label.source'));
+  if (data.summaryBody != null) rejectNulBytes(data.summaryBody, t('localStore.label.summary'));
+  rejectLineTerminators(String(data.title ?? ''), t('localStore.label.title'));
+  rejectLineTerminators(String(data.sourceText ?? ''), t('localStore.label.source'));
 }
 
 async function assertActiveSubject(subjectId) {
@@ -202,24 +202,6 @@ async function getNextSortOrder(tableName) {
   const query = 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM ' + tableName;
   const [{ next_order: nextOrder = 0 } = {}] = await requireDatabase().select(query);
   return nextOrder;
-}
-
-async function ensureNamedRows(tableName, names, label) {
-  const timestamp = nowIso();
-  let nextSortOrder = await getNextSortOrder(tableName);
-
-  for (const name of names) {
-    const normalized = normalizeEntityName(name, label);
-    const query = 'SELECT id FROM ' + tableName + ' WHERE name = $1 COLLATE NOCASE';
-    const [existing] = await requireDatabase().select(query, [normalized]);
-    if (existing) continue;
-
-    await requireDatabase().execute(
-      'INSERT INTO ' + tableName + ' (name, created_at, updated_at, is_active, sort_order) VALUES ($1, $2, $3, 1, $4)',
-      [normalized, timestamp, timestamp, nextSortOrder],
-    );
-    nextSortOrder += 1;
-  }
 }
 
 function migrateV1ImportData(data) {
@@ -277,9 +259,9 @@ function validateImportContent(normalized) {
     if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
     if (!(u.title ?? u.content ?? '').trim()) throw new Error('Backup inválido: learningUnit ' + u.id + ' sem title.');
     if ((u.title ?? u.content ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos no título.');
-    rejectLineTerminators(u.title ?? u.content ?? '', 'Título da unidade ' + u.id);
+    rejectLineTerminators(u.title ?? u.content ?? '', t('localStore.label.unitTitle', { id: u.id }));
     if (String(u.sourceText ?? u.source_text ?? '').includes('\x00')) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem bytes nulos na fonte.');
-    rejectLineTerminators(String(u.sourceText ?? u.source_text ?? ''), 'Fonte da unidade ' + u.id);
+    rejectLineTerminators(String(u.sourceText ?? u.source_text ?? ''), t('localStore.label.unitSource', { id: u.id }));
     if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
     unitIds.add(u.id);
   }
@@ -332,6 +314,20 @@ function validateImportContent(normalized) {
       evidenceTaskIds.add(reviewTaskId);
     }
     if (!isValidIsoDate(ev.evidenceDate ?? ev.evidence_date)) throw new Error('Backup inválido: learningEvidence tem evidenceDate inválida.');
+  }
+
+  const exerciseIds = new Set((Array.isArray(normalized.exercises) ? normalized.exercises : []).map((e) => e.id));
+  for (const event of (Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : [])) {
+    const exerciseId = event.exerciseId ?? event.exercise_id;
+    if (!exerciseIds.has(exerciseId)) throw new Error('Invalid backup: exerciseFlagEvent references a missing exercise: ' + exerciseId);
+    if (!['FLAG', 'CLEAR'].includes(event.action)) throw new Error('Invalid backup: exerciseFlagEvent has an invalid action: ' + event.action);
+    if (event.action === 'FLAG') {
+      if (!['CONFUSING_STATEMENT', 'DOUBTFUL_ANSWER_KEY', 'CONTENT_ERROR', 'OTHER'].includes(event.reason)) {
+        throw new Error('Invalid backup: exerciseFlagEvent has an invalid reason: ' + event.reason);
+      }
+      if (event.comment != null && typeof event.comment !== 'string') throw new Error('Invalid backup: exerciseFlagEvent comment must be text.');
+      if (typeof event.comment === 'string' && event.comment.trim().length > 500) throw new Error('Invalid backup: exerciseFlagEvent comment exceeds 500 characters.');
+    }
   }
 }
 
@@ -389,7 +385,7 @@ function buildImportStatements(data) {
       query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order, color)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
       values: [
         row.id,
-        normalizeEntityName(row.name, 'o nome da disciplina'),
+        normalizeEntityName(row.name, t('shell.field.subjectName')),
         row.createdAt,
         row.updatedAt,
         (row.isActive ?? row.is_active ?? true) ? 1 : 0,
@@ -529,6 +525,7 @@ function createBrowserStore() {
       reviewTasks: [],
       exercises: [],
       learningEvidence: [],
+      exerciseFlagEvents: [],
       settings: defaultSettings,
       nextIds: {
         subjects: 1,
@@ -536,6 +533,7 @@ function createBrowserStore() {
         reviewTasks: 1,
         exercises: 1,
         learningEvidence: 1,
+        exerciseFlagEvents: 1,
       },
     };
   }
@@ -549,7 +547,7 @@ function createBrowserStore() {
       refreshNextIds(state);
       return state;
     } catch {
-      throw new Error('Falha ao ler armazenamento: dados corrompidos. Nenhuma operação será realizada.');
+      throw new Error(t('localStore.state.corrupted'));
     }
   }
 
@@ -564,13 +562,13 @@ function createBrowserStore() {
   }
 
   function sortByOrderAndName(a, b) {
-    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "pt-BR");
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || compareText(a.name, b.name);
   }
 
   function normalizeUniqueName(items, name, label, currentId = null) {
     const value = normalizeEntityName(name, label);
     const duplicate = items.some(
-      (item) => item.id !== currentId && item.name.localeCompare(value, "pt-BR", { sensitivity: "accent" }) === 0,
+      (item) => item.id !== currentId && sameName(item.name, value),
     );
     if (duplicate) throw new Error("unique constraint");
     return value;
@@ -594,7 +592,7 @@ function createBrowserStore() {
   }
 
   function refreshNextIds(state) {
-    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises", "learningEvidence"]) {
+    for (const collection of ["subjects", "learningUnits", "reviewTasks", "exercises", "learningEvidence", "exerciseFlagEvents"]) {
       const ids = (state[collection] ?? []).map((item) => Number(item.id) || 0);
       state.nextIds[collection] = Math.max(0, ...ids) + 1;
     }
@@ -607,10 +605,21 @@ function createBrowserStore() {
       // DEV-only seed: uses a separate key so importAll/clearAll never resets it.
       // Production build: import.meta.env.DEV = false → this block never runs.
       // Guard: only seed when BrowserStore has no subjects — never overwrite existing user data.
+      // P0 (PR #6 audit): `npm run dev:uat` (scripts/dev-uat.mjs) sets
+      // VITE_SEED_UAT_DATASET=1 to seed the rich ~9-discipline UAT fixture
+      // instead of the small 2-subject one — same DEV-only, empty-store-only
+      // guard, just a different dataset. Plain `npm run dev` (this env var
+      // unset) is completely unaffected, so every existing e2e test that
+      // depends on the small dataset's exact shape keeps working unchanged.
       if (import.meta.env?.DEV && !localStorage.getItem('smartlearn:dev-seeded')) {
         if (state.subjects.length === 0) {
-          const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-          await this.importAll(getDevDataset());
+          if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
+            const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+            await this.importAll(getUatMedicalDataset());
+          } else {
+            const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+            await this.importAll(getDevDataset());
+          }
         }
         localStorage.setItem('smartlearn:dev-seeded', '1');
       }
@@ -629,7 +638,7 @@ function createBrowserStore() {
         const timestamp = nowIso();
         const subject = {
           id: nextId(state, "subjects"),
-          name: normalizeUniqueName(state.subjects, name, "o nome da disciplina"),
+          name: normalizeUniqueName(state.subjects, name, t('shell.field.subjectName')),
           color: color ?? 'DISC-BLUE',
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -645,7 +654,7 @@ function createBrowserStore() {
         const subject = state.subjects.find((item) => item.id === id);
         if (!subject) return null;
         if (Object.hasOwn(fields, "name")) {
-          subject.name = normalizeUniqueName(state.subjects, fields.name, "o nome da disciplina", id);
+          subject.name = normalizeUniqueName(state.subjects, fields.name, t('shell.field.subjectName'), id);
         }
         if (Object.hasOwn(fields, "isActive")) subject.isActive = Boolean(fields.isActive);
         if (Object.hasOwn(fields, "sortOrder")) subject.sortOrder = Number(fields.sortOrder) || 0;
@@ -665,6 +674,10 @@ function createBrowserStore() {
         }
         state.subjects = state.subjects.filter((subject) => subject.id !== id);
         writeState(state);
+      },
+      // The Disciplinas catalog calls delete(); the other stores take that name too (remote-store maps it to deleteIfEmpty).
+      async delete(id) {
+        return this.deleteIfEmpty(id);
       },
     },
 
@@ -705,7 +718,7 @@ function createBrowserStore() {
       async create(data) {
         validateUnitData(data);
         const state = readState();
-        assertActive(state.subjects, data.subjectId, "Selecione uma disciplina ativa.");
+        assertActive(state.subjects, data.subjectId, t('localStore.subject.activeRequired'));
         const timestamp = nowIso();
         const record = {
           id: nextId(state, "learningUnits"),
@@ -726,15 +739,15 @@ function createBrowserStore() {
         let subjectId = data.subjectId;
 
         if (data.newSubjectName) {
-          const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+          const name = normalizeEntityName(data.newSubjectName, t('shell.field.subjectName'));
           const existing = state.subjects.find(
-            s => s.isActive && s.name.localeCompare(name, 'pt-BR', { sensitivity: 'accent' }) === 0,
+            s => s.isActive && sameName(s.name, name),
           );
           if (existing) {
             subjectId = existing.id;
           } else {
             const archived = state.subjects.find(
-              s => !s.isActive && s.name.localeCompare(name, 'pt-BR', { sensitivity: 'accent' }) === 0,
+              s => !s.isActive && sameName(s.name, name),
             );
             if (archived) {
               throw new Error('Disciplina "' + archived.name + '" está arquivada. Ative-a antes de criar uma aula.');
@@ -752,7 +765,7 @@ function createBrowserStore() {
             subjectId = newSubject.id;
           }
         } else {
-          assertActive(state.subjects, subjectId, "Selecione uma disciplina ativa.");
+          assertActive(state.subjects, subjectId, t('localStore.subject.activeRequired'));
         }
 
         validateUnitData(data);
@@ -849,6 +862,20 @@ function createBrowserStore() {
         writeState(state);
         return task;
       },
+      // "Adiar vencidas" (HG-09): same plan and same result as the server (shared/review-postpone.js). Moves only due dates: nothing is completed
+      // and no evidence is created. One write for the whole plan, so it either happens entirely or not at all.
+      async postponeOverdue(today, { perDay = POSTPONE_DEFAULT_PER_DAY } = {}) {
+        const state = readState();
+        const { moves, days } = planPostpone(state.reviewTasks, today, perDay);
+        const stamp = nowIso();
+        for (const move of moves) {
+          const task = state.reviewTasks.find((item) => item.id === move.id);
+          task.dueDate = move.to;
+          task.updatedAt = stamp;
+        }
+        if (moves.length > 0) writeState(state);
+        return { date: today, perDay, postponed: moves.length, moves, days };
+      },
     },
 
     // BOUNDARY: exercises store pedagogy (questions/answers/hints/provenance).
@@ -915,6 +942,37 @@ function createBrowserStore() {
         state.exercises.splice(index, 1);
         writeState(state);
         return true;
+      },
+    },
+
+    // "Questão com problema": same rules and same answers as the server (shared/question-flag.js). Append-only events, current state derived from them.
+    // A mark is an annotation: it never touches evidence, review tasks or any score. This store keeps no attempts, so a mark carries no attemptId here
+    // (the screen offers it only after the student judged the question); the server requires an answered attempt.
+    questionFlags: {
+      async list() {
+        const state = readState();
+        const exerciseIds = new Set(state.exercises.map((exercise) => exercise.id));
+        return currentQuestionFlags(state.exerciseFlagEvents ?? []).filter((flag) => exerciseIds.has(flag.exerciseId));
+      },
+      async flag(exerciseId, { reason, comment } = {}) {
+        const state = readState();
+        if (!state.exercises.some((exercise) => exercise.id === exerciseId)) throw new Error("exercise not found");
+        const normalized = normalizeQuestionFlag({ reason, comment });
+        state.exerciseFlagEvents = [...(state.exerciseFlagEvents ?? []), {
+          id: nextId(state, "exerciseFlagEvents"), exerciseId, action: "FLAG", attemptId: null, reason: normalized.reason, comment: normalized.comment, createdAt: nowIso(),
+        }];
+        writeState(state);
+        return currentQuestionFlags(state.exerciseFlagEvents).find((flag) => flag.exerciseId === exerciseId);
+      },
+      async clear(exerciseId) {
+        const state = readState();
+        if (!state.exercises.some((exercise) => exercise.id === exerciseId)) throw new Error("exercise not found");
+        const events = state.exerciseFlagEvents ?? [];
+        if (currentQuestionFlags(events).some((flag) => flag.exerciseId === exerciseId)) {
+          state.exerciseFlagEvents = [...events, { id: nextId(state, "exerciseFlagEvents"), exerciseId, action: "CLEAR", createdAt: nowIso() }];
+          writeState(state);
+        }
+        return null;
       },
     },
 
@@ -986,6 +1044,14 @@ function createBrowserStore() {
         state.learningEvidence.push(evidence);
         writeState(state);
         return evidence;
+      },
+      // Local/browser store has no exercises/attempts tables at all (see the
+      // BOUNDARY note above) — there is no item-level data to ever return
+      // here, by construction, not because of a missing link. Parity method
+      // so app.js can call DB.learningEvidence.getAttempts(id) unconditionally
+      // regardless of which store is active.
+      async getAttempts() {
+        return { source: "NONE", attempts: [] };
       },
       async getAll() {
         return [...readState().learningEvidence].sort(
@@ -1075,6 +1141,7 @@ function createBrowserStore() {
         reviewTasks: state.reviewTasks,
         exercises: state.exercises ?? [],
         learningEvidence: state.learningEvidence ?? [],
+        exerciseFlagEvents: state.exerciseFlagEvents ?? [],
         settings: state.settings,
       };
     },
@@ -1083,7 +1150,7 @@ function createBrowserStore() {
       const normalized = assertImportData(data);
       const state = emptyState();
       state.subjects = normalized.subjects.map((row) => ({
-        ...mapEntityForImport(row, state, "subjects", "o nome da disciplina"),
+        ...mapEntityForImport(row, state, "subjects", t('shell.field.subjectName')),
         color: row.color ?? 'DISC-BLUE',
       }));
       state.learningUnits = normalized.learningUnits.map((row) => ({
@@ -1136,6 +1203,15 @@ function createBrowserStore() {
           reviewTaskId: row.reviewTaskId ?? row.review_task_id ?? null,
           createdAt: row.createdAt ?? row.created_at ?? nowIso(),
         }));
+      state.exerciseFlagEvents = (Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : []).map((row) => ({
+        id: row.id,
+        exerciseId: row.exerciseId ?? row.exercise_id,
+        action: row.action,
+        attemptId: row.attemptId ?? row.attempt_id ?? null,
+        reason: row.reason,
+        comment: row.comment ?? null,
+        createdAt: row.createdAt ?? row.created_at ?? nowIso(),
+      }));
       state.settings = Array.isArray(normalized.settings)
         ? (normalized.settings[0] ?? defaultSettings)
         : (normalized.settings ?? defaultSettings);
@@ -1231,6 +1307,10 @@ export const DB = {
 
         // DEV-only seed: _bootstrap table survives importAll/clearAll/subject deletes.
         // Production build: import.meta.env.DEV = false → never runs; app opens empty (correct).
+        // P0 (PR #6 audit): same VITE_SEED_UAT_DATASET opt-in as the
+        // BrowserStore path above (see that comment for the full rationale)
+        // — `npm run dev:uat` seeds the rich UAT fixture here too, so the
+        // Tauri/local-authority dev path shows the same rich data.
         if (import.meta.env?.DEV) {
           const rows = await database.select(
             "SELECT dev_seed_version FROM _bootstrap WHERE id = 1",
@@ -1238,8 +1318,13 @@ export const DB = {
           if (rows.length === 0 || !rows[0].dev_seed_version) {
             const [{ count }] = await database.select("SELECT COUNT(*) AS count FROM subjects");
             if (Number(count) === 0) {
-              const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-              await DB.importAll(getDevDataset());
+              if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
+                const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+                await DB.importAll(getUatMedicalDataset());
+              } else {
+                const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+                await DB.importAll(getDevDataset());
+              }
             }
             await database.execute(
               "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",
@@ -1295,7 +1380,7 @@ export const DB = {
     },
 
     async create(name, color = 'DISC-BLUE') {
-      const value = normalizeEntityName(name, 'o nome da disciplina');
+      const value = normalizeEntityName(name, t('shell.field.subjectName'));
       const [existing] = await requireDatabase().select(
         'SELECT id FROM subjects WHERE name = $1 COLLATE NOCASE AND is_active = 1', [value],
       );
@@ -1315,7 +1400,7 @@ export const DB = {
 
     async update(id, fields) {
       const columns = {
-        name: ['name', (value) => normalizeEntityName(value, 'o nome da disciplina')],
+        name: ['name', (value) => normalizeEntityName(value, t('shell.field.subjectName'))],
         isActive: ['is_active', (value) => (value ? 1 : 0)],
         sortOrder: ['sort_order', (value) => Number(value) || 0],
         color: ['color', (value) => String(value ?? 'DISC-BLUE')],
@@ -1462,7 +1547,7 @@ export const DB = {
       const statements = [];
 
       if (data.newSubjectName) {
-        const name = normalizeEntityName(data.newSubjectName, 'o nome da disciplina');
+        const name = normalizeEntityName(data.newSubjectName, t('shell.field.subjectName'));
         // AC-008: reuse active equivalent subject if found (COLLATE NOCASE is SQLite built-in)
         const [activeRow] = await requireDatabase().select(
           'SELECT id FROM subjects WHERE name = $1 COLLATE NOCASE AND is_active = 1', [name],
@@ -1658,6 +1743,16 @@ export const DB = {
         [tomorrow],
       );
       return rows.map(mapReviewTask);
+    },
+
+    // "Adiar vencidas" (HG-09), same contract as the browser store (this branch is not live: desktop runs against the server).
+    async postponeOverdue(today, { perDay = POSTPONE_DEFAULT_PER_DAY } = {}) {
+      const { moves, days } = planPostpone(await DB.reviewTasks.getOverdue(today), today, perDay);
+      const stamp = nowIso();
+      for (const move of moves) {
+        await requireDatabase().execute("UPDATE review_tasks SET due_date = $1, updated_at = $2 WHERE id = $3", [move.to, stamp, move.id]);
+      }
+      return { date: today, perDay, postponed: moves.length, moves, days };
     },
 
     async update(id, fields) {
@@ -1993,7 +2088,7 @@ export const DB = {
         .catch(() => []),
       DB.settings.get(),
     ]);
-    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, learningEvidence, settings };
+    return { schemaVersion: SCHEMA_VERSION, subjects, learningUnits, reviewTasks, exercises, learningEvidence, exerciseFlagEvents: [], settings };
   },
 
   async importAll(data) {

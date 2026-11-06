@@ -1,18 +1,52 @@
 ﻿import "./styles.css";
-import { DB } from "./db.js";
-import { Stats } from "./stats.js";
+import { DB as LocalDB } from "./db.js";
+import { DB as RemoteDB } from "./remote-store.js";
+import { NetworkError, apiRequest } from "./api-client.js";
+import { Stats, formatAverageScore } from "./stats.js";
+import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
-import { generateInitialTasks } from "./scheduler.js";
+import { generateInitialTasks, getNextReview, getReviewStatusLabel, getDaysBetween } from "./scheduler.js";
+import { pickPrimaryReview } from "./today-priority.js";
+import { reviewConclusion } from "./review-completion.js";
+import { groupOverdueByUnit, stageRanges, shouldCollapseOverdue, foldedFlags, VISIBLE_LIMIT } from "./overdue-groups.js";
+import { weakPracticeReason } from "./priorities-text.js";
+import { groupUpcomingReviews } from "./upcoming-reviews.js";
 import {
   THEME_OPTIONS,
   applyThemePreference,
   getStoredThemePreference,
-  resolveThemePreference,
+  quickToggleTarget,
+  readQuickToggleMemory,
+  writeQuickToggleMemory,
 } from "./theme.js";
-import { colorVarForKey, SUBJECT_COLORS, SUBJECT_COLOR_KEYS, THRESHOLDS } from "./performance-thresholds.js";
-import { Analytics, subtractDays } from "./analytics.js";
+import { colorVarForKey, getState, THRESHOLDS } from "./performance-thresholds.js";
+import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
+import { findLesson } from "./lesson-link.js";
+import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
+import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
+import { t, tn } from "./i18n/index.js";
+import { applyStaticTexts } from "./i18n/dom.js";
+import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
 import { validateNamingField, validateTitleField } from "./naming-validation.js";
+import * as AuthUI from "./auth-ui.js";
+import * as MigrationUI from "./migration-ui.js";
+import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experimental-obligations-ui.js";
+
+import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
+import { configureMaterialsUI } from "./materials-ui.js";
+import "./build-identity-ui.js";
+import { createTextElement } from "./dom-utils.js";
+import { showConfirm } from "./confirm-dialog.js";
+import { askPostpone } from "./postpone-dialog.js";
+import { renderSummary } from "./summary-render.js";
+import { createSummaryAuthoring } from "./summary-toolbar.js";
+import * as OfflineStore from "./offline-store.js";
+import * as OfflineUI from "./offline-ui.js";
+import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
+
+// index.html carries the pt-BR text only as first-paint fallback; every [data-i18n*] element is filled from the catalog.
+applyStaticTexts(document);
 
 async function withScrollPreserved(fn) {
   const top = mainContent?.scrollTop ?? 0;
@@ -22,33 +56,254 @@ async function withScrollPreserved(fn) {
   });
 }
 
-function showConfirm(message) {
-  return new Promise((resolve) => {
-    const dialog = document.getElementById("confirm-dialog");
-    const msgEl = document.getElementById("confirm-dialog-message");
-    const okBtn = document.getElementById("confirm-dialog-ok");
-    const cancelBtn = document.getElementById("confirm-dialog-cancel");
-    msgEl.textContent = message;
-    const finish = (result) => {
-      okBtn.removeEventListener("click", onOk);
-      cancelBtn.removeEventListener("click", onCancel);
-      dialog.removeEventListener("cancel", onCancel);
-      dialog.close();
-      resolve(result);
-    };
-    const onOk = () => finish(true);
-    const onCancel = () => finish(false);
-    okBtn.addEventListener("click", onOk);
-    cancelBtn.addEventListener("click", onCancel);
-    dialog.addEventListener("cancel", onCancel);
-    dialog.showModal();
-  });
+
+// T21: explicit, configuration-controlled authority switch — never an
+// automatic/implicit fallback. Default is the existing local BrowserStore/
+// SQLite path (db.js), completely unchanged; the real server-authoritative
+// path (remote-store.js) is opt-in via this runtime flag so it can be
+// staged and tested (e.g. e2e/server-authority.spec.js sets it via
+// page.addInitScript, the same mechanism already used for
+// window.__SMARTLEARN_API_BASE__) without touching the many existing
+// screens/tests that still assume the local store. Flipping this default
+// once every screen has real server parity is T22-T24's job, not this one's.
+const REMOTE_MODE = typeof window !== "undefined" && window.__SMARTLEARN_REMOTE_MODE__ === true;
+const DB = REMOTE_MODE ? RemoteDB : LocalDB;
+
+const QUESTION_FLAG_REASONS = Object.freeze([
+  ["CONFUSING_STATEMENT", t("questionFlag.reason.confusingStatement")],
+  ["DOUBTFUL_ANSWER_KEY", t("questionFlag.reason.doubtfulAnswerKey")],
+  ["CONTENT_ERROR", t("questionFlag.reason.contentError")],
+  ["OTHER", t("questionFlag.reason.other")],
+]);
+const QUESTION_FLAG_TEXT = Object.freeze({
+  action: t("questionFlag.action"),
+  marked: t("questionFlag.marked"),
+  remove: t("questionFlag.remove"),
+  reason: t("questionFlag.reason"),
+  comment: t("questionFlag.comment"),
+  commentPlaceholder: t("questionFlag.commentPlaceholder"),
+  save: t("questionFlag.save"),
+  cancel: t("questionFlag.cancel"),
+  previous: t("questionFlag.previous"),
+  resultTitle: t("questionFlag.resultTitle"),
+  saved: t("questionFlag.saved"),
+  removed: t("questionFlag.removed"),
+  failed: t("questionFlag.failed"),
+});
+let questionFlagsByExerciseId = new Map();
+const judgedQuestionExerciseIds = new Set();
+const judgedQuestionAttemptIds = new Map();
+
+async function loadQuestionFlags() {
+  if (!DB.questionFlags?.list) return questionFlagsByExerciseId;
+  try {
+    const flags = await DB.questionFlags.list();
+    questionFlagsByExerciseId = new Map((flags ?? []).map((flag) => [Number(flag.exerciseId), flag]));
+  } catch (error) {
+    console.warn("Falha ao carregar marcas de questões.", error);
+  }
+  return questionFlagsByExerciseId;
 }
 
+function updateQuestionFlagCache(flag, exerciseId) {
+  const id = Number(exerciseId ?? flag?.exerciseId);
+  if (!Number.isInteger(id)) return;
+  if (flag) questionFlagsByExerciseId.set(id, flag);
+  else questionFlagsByExerciseId.delete(id);
+}
+
+function createQuestionFlagControls(exercise, { flag = null, attemptId = null, visible = false } = {}) {
+  const host = document.createElement("div");
+  host.className = "question-flag-controls";
+  host.dataset.exerciseId = String(exercise.id);
+  host.dataset.attemptId = attemptId == null ? "" : String(attemptId);
+  host.hidden = !visible;
+
+  const state = createTextElement("span", "question-flag-state", "");
+  state.setAttribute("role", "status");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "text-button question-flag-action";
+
+  const editor = document.createElement("div");
+  editor.className = "question-flag-editor";
+  editor.hidden = true;
+  const reasonLabel = document.createElement("label");
+  reasonLabel.className = "question-flag-field";
+  reasonLabel.append(createTextElement("span", "question-flag-label", QUESTION_FLAG_TEXT.reason));
+  const reason = document.createElement("select");
+  reason.className = "question-flag-reason";
+  reason.required = true;
+  for (const [value, label] of QUESTION_FLAG_REASONS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    reason.append(option);
+  }
+  reasonLabel.append(reason);
+  const commentLabel = document.createElement("label");
+  commentLabel.className = "question-flag-field";
+  commentLabel.append(createTextElement("span", "question-flag-label", QUESTION_FLAG_TEXT.comment));
+  const comment = document.createElement("textarea");
+  comment.className = "question-flag-comment";
+  comment.rows = 2;
+  comment.maxLength = 500;
+  comment.placeholder = QUESTION_FLAG_TEXT.commentPlaceholder;
+  commentLabel.append(comment);
+  const editorActions = document.createElement("div");
+  editorActions.className = "question-flag-actions";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "small-button is-primary";
+  save.dataset.action = "save-question-flag";
+  save.textContent = QUESTION_FLAG_TEXT.save;
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "small-button";
+  cancel.dataset.action = "cancel-question-flag";
+  cancel.textContent = QUESTION_FLAG_TEXT.cancel;
+  const message = createTextElement("p", "question-flag-message", "");
+  message.setAttribute("role", "status");
+  message.setAttribute("aria-live", "polite");
+  editorActions.append(save, cancel);
+  editor.append(reasonLabel, commentLabel, editorActions, message);
+
+  let current = flag;
+  function render(next = current) {
+    current = next;
+    updateQuestionFlagCache(current, exercise.id);
+    state.hidden = !current;
+    state.textContent = current ? QUESTION_FLAG_TEXT.marked : "";
+    action.dataset.action = current ? "unflag-question" : "flag-question";
+    action.textContent = current ? QUESTION_FLAG_TEXT.remove : QUESTION_FLAG_TEXT.action;
+    editor.hidden = true;
+    message.textContent = "";
+    if (current) {
+      reason.value = current.reason;
+      comment.value = current.comment ?? "";
+    } else {
+      reason.value = QUESTION_FLAG_REASONS[0][0];
+      comment.value = "";
+    }
+  }
+  render();
+
+  action.addEventListener("click", async () => {
+    if (current) {
+      action.disabled = true;
+      try {
+        await DB.questionFlags.clear(exercise.id);
+        render(null);
+        message.textContent = QUESTION_FLAG_TEXT.removed;
+        action.focus();
+      } catch (error) {
+        message.textContent = QUESTION_FLAG_TEXT.failed;
+        console.error("Falha ao remover marca de questão.", error);
+      } finally {
+        action.disabled = false;
+      }
+      return;
+    }
+    action.hidden = true;
+    editor.hidden = false;
+    reason.focus();
+  });
+  cancel.addEventListener("click", () => {
+    editor.hidden = true;
+    action.hidden = false;
+    action.focus();
+  });
+  save.addEventListener("click", async () => {
+    const parsedAttemptId = Number(host.dataset.attemptId);
+    save.disabled = true;
+    message.textContent = "";
+    try {
+      const saved = await DB.questionFlags.flag(exercise.id, {
+        attemptId: Number.isInteger(parsedAttemptId) ? parsedAttemptId : undefined,
+        reason: reason.value,
+        comment: comment.value,
+      });
+      render(saved);
+      action.hidden = false;
+      message.textContent = QUESTION_FLAG_TEXT.saved;
+      action.focus();
+    } catch (error) {
+      message.textContent = QUESTION_FLAG_TEXT.failed;
+      console.error("Falha ao salvar marca de questão.", error);
+    } finally {
+      save.disabled = false;
+    }
+  });
+
+  host.append(state, action, editor);
+  return host;
+}
+
+function revealQuestionFlagControls(exItem) {
+  const controls = exItem?.querySelector(".question-flag-controls");
+  if (!controls) return;
+  controls.dataset.attemptId = exItem.dataset.attemptId ?? "";
+  controls.hidden = false;
+  const action = controls.querySelector(".question-flag-action");
+  if (action) action.hidden = false;
+}
+
+// LOCAL-01A / ARCH-01: Desktop still uses REMOTE_MODE=true (same
+// remote-store.js/API-HTTP pipeline as before — see .specs/STATE.md's
+// "ARCHITECTURE SUPERSESSION" section), but the "remote" it talks to is a
+// backend running on THIS computer (127.0.0.1 loopback), started by the
+// Tauri wrapper, not a cloud server. Set once by src-tauri/src/lib.rs's
+// window init script, never by remote/web content. api-client.js and
+// offline-ui.js each read this same flag independently for their own
+// LOCAL_DESKTOP_AUTHORITY branches — this module's copy is for renderToday.
+const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOCAL_AUTHORITY__ === true;
+
+// PV1-01: Materiais (the PDF -> proposal -> draft -> accept pipeline,
+// relocated from Configurações to its own primary screen) is exclusive to
+// LOCAL_DESKTOP_AUTHORITY — the Companion (a Web/PWA foundation already
+// exists: shell cache + offline agenda snapshot) stays a
+// read-only surface, and REMOTE_AUTHORITY-without-local-authority keeps
+// the existing server endpoints reachable (nothing removed server-side)
+// but never surfaces this as a product screen. This flag is stable for
+// the whole session (set once by the window init script before this
+// module loads), so it's safe to apply it once here rather than on every
+// navigation.
+const materialsNavItem = document.querySelector('[data-screen="materials"]');
+if (materialsNavItem) materialsNavItem.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+
 let databaseAvailable = false;
+// In remote mode, "available" also requires a logged-in session — there is
+// no local schema to fail to open, but every domain call needs an
+// authenticated actor. This is the "distinguish unavailable server from
+// empty data" seam: a reachable-but-unauthenticated server is a distinct,
+// visible state (redirect to login), never rendered as an empty agenda.
+let authenticated = !REMOTE_MODE;
 const dbInit = DB.init()
-  .then(() => {
+  .then(async () => {
     databaseAvailable = true;
+    if (REMOTE_MODE) {
+      const user = await AuthUI.bootstrap();
+      // T40: best-effort — a registration/sync failure here never blocks
+      // boot, same "failure only logs" contract as T30's client wiring.
+      OfflineStore.registerServiceWorker().catch(() => {});
+      // T41: app-wide connectivity indicator + reconnect handling (session
+      // revalidation + resync), mounted once regardless of auth outcome so
+      // it can show "offline" state even for a not-yet-authenticated tab.
+      OfflineUI.mount({ onReconnect: () => { if (authenticated) return renderToday(); } });
+      if (user) {
+        authenticated = true;
+        OfflineStore.syncSnapshot(user.id).catch(() => {});
+      } else if (AuthUI.wasLastBootstrapNetworkError() && OfflineStore.getLastAccountId()) {
+        // Cold offline reopen: the server can't confirm a session, but a
+        // previously-synced account exists on this device — presume it for
+        // read-only offline display. The server remains the sole real
+        // session authority the moment it's reachable again; nothing here
+        // grants any write capability (T41's job to keep it that way).
+        authenticated = true;
+      } else {
+        authenticated = false;
+      }
+    }
     return true;
   })
   .catch((error) => {
@@ -56,8 +311,10 @@ const dbInit = DB.init()
     const banner = document.createElement('div');
     banner.id = 'db-error-banner';
     banner.setAttribute('role', 'alert');
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:.75rem 1rem;font-size:.875rem;text-align:center;';
-    banner.textContent = 'Erro: dados locais não puderam ser lidos. Seus dados estão preservados, mas o app está temporariamente inativo.';
+    banner.className = 'app-banner app-banner--fatal';
+    banner.textContent = REMOTE_MODE
+      ? t('shell.dbError.server')
+      : t('shell.dbError.local');
     document.body.prepend(banner);
     return false;
   });
@@ -93,13 +350,20 @@ function forgetSelection(key) {
   }
 }
 const navigationItems = [...document.querySelectorAll("[data-screen]")];
+const mobileMoreToggle = document.querySelector("#mobile-more-toggle");
+const mobileMoreMenu = document.querySelector("#mobile-more-menu");
 const screenPanels = [...document.querySelectorAll("[data-screen-panel]")];
 const mainContent = document.querySelector(".app-main");
 const subjectSelect = document.querySelector("#subject-select");
-const showSubjectFormButton = document.querySelector("#show-subject-form");
-const newSubjectForm = document.querySelector("#new-subject-form");
-const newSubjectInput = document.querySelector("#new-subject-input");
 const subjectMessage = document.querySelector("#subject-message");
+// Disciplinas, Cadastro and Plano all open this same registration (name + colour): see subject-create-form.js
+const registerSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#new-subject-slot"),
+  ids: { form: "new-subject-form", input: "new-subject-input" },
+  trigger: document.querySelector("#show-subject-form"),
+  report: (text) => setSubjectMessage(text),
+  submit: createSubjectFromRegister,
+});
 const subjectList = document.querySelector("#subject-list");
 const subjectsEmpty = document.querySelector("#subjects-empty");
 const subjectManagerMessage = document.querySelector("#subject-manager-message");
@@ -108,21 +372,31 @@ const studyDateInput = document.querySelector("#study-date");
 const studyContentInput = document.querySelector("#study-content");
 const studySummaryTextarea = document.querySelector("#study-summary");
 const studySourceTextInput = document.querySelector("#study-source-text");
-const sourceMessage = document.querySelector("#source-message");
 const studyList = document.querySelector("#study-list");
 const studiesEmpty = document.querySelector("#studies-empty");
 const studyManagerMessage = document.querySelector("#study-manager-message");
 const studyMessage = document.querySelector("#study-message");
 const todayDateLabel = document.querySelector("#today-date-label");
 const todayEmptyState = document.querySelector("#today-empty-state");
+const todayLoadingState = document.querySelector("#today-loading");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
+const weakBlock = document.querySelector("#block-weak");
+const upcomingBlock = document.querySelector("#block-upcoming");
+const weakList = document.querySelector("#weak-list");
+const weakCount = document.querySelector("#weak-count");
 const reviewDashboard = document.querySelector("#review-dashboard");
+const todayPrimaryAction = document.querySelector("#today-primary-action");
+const todayPrimaryActionText = document.querySelector("#today-primary-action-text");
+const todayPrimaryActionBtn = document.querySelector("#today-primary-action-btn");
+const todayFocusReviewBtn = document.querySelector("#today-focus-review-btn");
 const dailySummaryBtn = document.querySelector("#daily-summary-btn");
 const dailySummaryPanel = document.querySelector("#daily-summary-panel");
 const dailySummaryList = document.querySelector("#daily-summary-list");
 const dailySummaryClose = document.querySelector("#daily-summary-close");
+const postponeBtn = document.querySelector("#postpone-overdue-btn");
+let postponeContext = null; // { tasks, today } of the last Hoje render: what "Adiar vencidas" previews
 const reviewGroups = {
   overdue: document.querySelector("#block-overdue"),
   today: document.querySelector("#block-today"),
@@ -132,27 +406,33 @@ const metricElements = {
   totalQuestions: document.querySelector("#metric-questions"),
   totalCorrect: document.querySelector("#metric-correct"),
   avgScore: document.querySelector("#metric-average"),
-  reviewsDone: document.querySelector("#metric-reviews-done"),
-  reviewsPending: document.querySelector("#metric-reviews-pending"),
-  reviewsOverdue: document.querySelector("#metric-reviews-overdue"),
+  subjects: document.querySelector("#metric-subjects"),
+  subjectsWithData: document.querySelector("#metric-subjects-with-data"),
 };
+const statsBandList = document.querySelector("#stats-band-list");
 const subjectKpiList = document.querySelector("#subject-kpi-list");
 const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
-const statsSubjectSort = document.querySelector("#stats-subject-sort");
+const studyVerdictEl = document.querySelector("#stats-verdict");
+const studyVerdictHeadline = document.querySelector("#stats-verdict-headline");
+const studyVerdictDetail = document.querySelector("#stats-verdict-detail");
+const studyVerdictAttention = document.querySelector("#stats-verdict-attention");
+const studyVerdictAttentionText = document.querySelector("#stats-verdict-attention-text");
+const studyVerdictAttentionBtn = document.querySelector("#stats-verdict-attention-btn");
 const unitStatsList = document.querySelector("#unit-stats-list");
 const unitStatsEmpty = document.querySelector("#unit-stats-empty");
-const statsUnitFilterSubject = document.querySelector("#stats-unit-filter-subject");
-const statsUnitFilterTrend = document.querySelector("#stats-unit-filter-trend");
+const unitDetailPanel = document.querySelector("#unit-detail-panel");
+const unitDetailEmpty = document.querySelector("#unit-detail-empty");
+const unitDetailBody = document.querySelector("#unit-detail-body");
+const contentContextPlate = document.querySelector("#content-context-plate");
+const disciplineSwitchList = document.querySelector("#discipline-switch-list");
+const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
-const statsUnitSort = document.querySelector("#stats-unit-sort");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
-const evolutionFilterPeriod = document.querySelector("#evolution-filter-period");
+const evolutionDescription = document.querySelector("#evolution-svg-description");
+const evolutionCaption = document.querySelector("#evolution-caption");
 const exerciseNotesBody = document.querySelector("#exercise-notes-body");
 const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
-const subjectAveragesBody = document.querySelector("#subject-averages-body");
-const subjectAveragesEmpty = document.querySelector("#subject-averages-empty");
-const evolutionChart = document.querySelector("#evolution-chart");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
 const chooseBackupFileButton = document.querySelector("#choose-backup-file");
@@ -165,31 +445,38 @@ reviewMessage.className = "form-message";
 reviewMessage.setAttribute("role", "status");
 reviewMessage.setAttribute("aria-live", "polite");
 reviewDashboard?.after(reviewMessage);
-const trackingList = document.querySelector("#tracking-list");
-const trackingEmpty = document.querySelector("#tracking-empty");
-const trackingFilterSubject = document.querySelector("#tracking-filter-subject");
-const trackingFilterState = document.querySelector("#tracking-filter-state");
-const trackingFilterPeriod = document.querySelector("#tracking-filter-period");
 const subjectsCatalog = document.querySelector("#subjects-catalog");
 const subjectsCatalogEmpty = document.querySelector("#subjects-catalog-empty");
 const subjectsShowCreateBtn = document.querySelector("#subjects-show-create-btn");
-const subjectsCreateForm = document.querySelector("#subjects-create-form");
-const subjectsNewName = document.querySelector("#subjects-new-name");
-const subjectsNewColorPicker = document.querySelector("#subjects-new-color-picker");
-const subjectsCreateSaveBtn = document.querySelector("#subjects-create-save-btn");
-const subjectsCreateCancelBtn = document.querySelector("#subjects-create-cancel-btn");
-const subjectsCreateMessage = document.querySelector("#subjects-create-message");
+createSubjectCreateForm({
+  slot: document.querySelector("#subjects-create-slot"),
+  ids: { form: "subjects-create-form", input: "subjects-new-name", submit: "subjects-create-save-btn", cancel: "subjects-create-cancel-btn", message: "subjects-create-message" },
+  trigger: subjectsShowCreateBtn,
+  cancellable: true,
+  submit: async (name, color) => {
+    await DB.subjects.create(name, color);
+    await renderDisciplinas();
+  },
+});
 const planList = document.querySelector("#plan-list");
 const planEmpty = document.querySelector("#plan-empty");
+const planEmptyNewBtn = document.querySelector("#plan-empty-new");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
+const planFilterPeriod = document.querySelector("#plan-filter-period");
 const planSort = document.querySelector("#plan-sort");
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
+const planManageSubjectsBtn = document.querySelector("#plan-manage-subjects-btn");
+const planSubjectsPanel = document.querySelector("#plan-subjects-panel");
 const planNewUnitForm = document.querySelector("#plan-new-unit-form");
 const planSubjectSelect = document.querySelector("#plan-subject-select");
-const planShowSubjectForm = document.querySelector("#plan-show-subject-form");
-const planNewSubjectForm = document.querySelector("#plan-new-subject-form");
-const planNewSubjectInput = document.querySelector("#plan-new-subject-input");
+const planSubjectForm = createSubjectCreateForm({
+  slot: document.querySelector("#plan-new-subject-slot"),
+  ids: { form: "plan-new-subject-form", input: "plan-new-subject-input" },
+  trigger: document.querySelector("#plan-show-subject-form"),
+  report: (text, isError) => setPlanFormMessage(text, isError),
+  submit: createSubjectFromPlan,
+});
 const planStudySource = document.querySelector("#plan-study-source");
 const planStudyDate = document.querySelector("#plan-study-date");
 const planStudyTitle = document.querySelector("#plan-study-title");
@@ -197,10 +484,84 @@ const planStudySummary = document.querySelector("#plan-study-summary");
 const planUnitSaveBtn = document.querySelector("#plan-unit-save-btn");
 const planUnitCancelBtn = document.querySelector("#plan-unit-cancel-btn");
 const planUnitFormMessage = document.querySelector("#plan-unit-form-message");
+const resetCard = document.querySelector("#reset-card");
 const resetDatabaseButton = document.querySelector("#reset-database");
 const resetMessage = document.querySelector("#reset-message");
+const migrationCard = document.querySelector("#migration-card");
+const migrationChooseFileButton = document.querySelector("#migration-choose-file");
+const migrationFileInput = document.querySelector("#migration-file-input");
+const migrationMessage = document.querySelector("#migration-message");
+const migrationPreviewPanel = document.querySelector("#migration-preview-panel");
+const migrationCounts = document.querySelector("#migration-counts");
+const migrationWarnings = document.querySelector("#migration-warnings");
+const migrationConflicts = document.querySelector("#migration-conflicts");
+const migrationConfirmBtn = document.querySelector("#migration-confirm-btn");
+const migrationCancelBtn = document.querySelector("#migration-cancel-btn");
+const migrationResultPanel = document.querySelector("#migration-result-panel");
+const migrationResultSummary = document.querySelector("#migration-result-summary");
+const migrationDownloadReportBtn = document.querySelector("#migration-download-report");
+const studyNowSubjectEl = document.querySelector("#study-now-subject");
+const studyNowTitleEl = document.querySelector("#title-study-now");
+const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
+const studyNowSummaryBody = document.querySelector("#study-now-summary-body");
+const studyNowProgress = document.querySelector("#study-now-progress");
+const studyNowQuestionArea = document.querySelector("#study-now-question-area");
+const studyNowQuestionText = document.querySelector("#study-now-question-text");
+const studyNowHintText = document.querySelector("#study-now-hint-text");
+const studyNowRevealBtn = document.querySelector("#study-now-reveal-btn");
+const studyNowAnswerText = document.querySelector("#study-now-answer-text");
+const studyNowExplanationText = document.querySelector("#study-now-explanation-text");
+// The cited source page(s) for the current question, revealed together with the answer.
+const studyNowSourceBox = document.createElement("div");
+studyNowSourceBox.className = "study-now-source-box";
+studyNowSourceBox.hidden = true;
+studyNowExplanationText?.after(studyNowSourceBox);
+const studyNowJudgment = document.querySelector("#study-now-judgment");
+const studyNowMessage = document.querySelector("#study-now-message");
+const studyNowResume = document.querySelector("#study-now-resume");
+const studyNowResumeText = document.querySelector("#study-now-resume-text");
+const studyNowCorrectBtn = document.querySelector("#study-now-correct-btn");
+const studyNowIncorrectBtn = document.querySelector("#study-now-incorrect-btn");
+const studyNowNoExercises = document.querySelector("#study-now-no-exercises");
+const studyNowResultCard = document.querySelector("#study-now-result-card");
+const studyNowResultText = document.querySelector("#study-now-result-text");
+const studyNowNextReviewText = document.querySelector("#study-now-next-review-text");
+const studyNowResultTitle = document.querySelector("#study-now-result-title");
+const studyNowResultNote = document.querySelector("#study-now-result-note");
+const studyNowErrorsSection = document.querySelector("#study-now-errors-section");
+const studyNowErrorsTitle = document.querySelector("#study-now-errors-title");
+const studyNowErrorsList = document.querySelector("#study-now-errors-list");
+const studyNowCorrectedSection = document.querySelector("#study-now-corrected-section");
+const studyNowCorrectedTitle = document.querySelector("#study-now-corrected-title");
+const studyNowCorrectedList = document.querySelector("#study-now-corrected-list");
+const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
+const studyNowEvidenceNote = document.querySelector("#study-now-evidence-note");
+const studyNowEvidenceRetryBtn = document.querySelector("#study-now-evidence-retry-btn");
+const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
+const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
+const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
+const studyNowQuestionFlagHost = document.createElement("div");
+studyNowQuestionFlagHost.className = "study-now-question-flag";
+studyNowQuestionFlagHost.hidden = true;
+studyNowJudgment?.after(studyNowQuestionFlagHost);
+const studyNowFlagsSection = document.createElement("section");
+studyNowFlagsSection.className = "study-result-section study-now-flags-section";
+studyNowFlagsSection.hidden = true;
+const studyNowFlagsTitle = createTextElement("h3", "", QUESTION_FLAG_TEXT.resultTitle);
+studyNowFlagsTitle.id = "study-now-flags-title";
+studyNowFlagsSection.setAttribute("aria-labelledby", studyNowFlagsTitle.id);
+const studyNowFlagsList = document.createElement("ul");
+studyNowFlagsList.className = "study-now-flags-list";
+studyNowFlagsSection.append(studyNowFlagsTitle, studyNowFlagsList);
+studyNowCorrectedSection?.after(studyNowFlagsSection);
+let migrationActivePreview = null;
+let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
+const generationLanguageCard = document.querySelector("#generation-language-card");
+const generationLanguageSelect = document.querySelector("#generation-language-select");
+const generationLanguageSave = document.querySelector("#generation-language-save");
+const generationLanguageMessage = document.querySelector("#generation-language-message");
 const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
 function getLocalDateValue(date = new Date()) {
@@ -213,25 +574,18 @@ function getLocalDateValue(date = new Date()) {
 function formatDate(dateValue, options = {}) {
   if (!dateValue) return "—";
   const date = new Date(`${dateValue.slice(0, 10)}T12:00:00`);
-  return new Intl.DateTimeFormat("pt-BR", {
+  return formatIntlDate(date, {
     day: "2-digit",
     month: "short",
     year: "numeric",
     ...options,
-  }).format(date);
+  });
 }
 
 function getTomorrowValue(today) {
   const date = new Date(`${today}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + 1);
   return date.toISOString().slice(0, 10);
-}
-
-function createTextElement(tagName, className, text) {
-  const element = document.createElement(tagName);
-  element.className = className;
-  element.textContent = text;
-  return element;
 }
 
 function setReviewMessage(message = "", isError = false) {
@@ -242,17 +596,31 @@ function setReviewMessage(message = "", isError = false) {
 function formatPerformanceScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  const rounded = Math.round(number * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace(".", ",")}%`;
+  // same one-decimal policy as the Estatísticas average (formatAverageScore): 2/3 reads 66,7% on both screens
+  return `${formatDecimal(number)}%`;
 }
 
+const PERFORMANCE_BAND_CLASS = {
+  CRITICAL: "performance-badge--critical",
+  ATTENTION: "performance-badge--attention",
+  ADEQUATE: "performance-badge--good",
+  STRONG: "performance-badge--strong",
+};
+
+// Delegates the actual threshold comparison to getState (performance-
+// thresholds.js, already unit-tested) instead of a second independent
+// >= THRESHOLDS.X chain — this file previously had three copies of the
+// exact same 3-cutoff banding logic (this function, getPlanPerfBadge
+// below, and getState itself), a real drift risk if THRESHOLDS ever
+// changed and only some copies were updated. totalQuestions=1 is a
+// sentinel (any truthy value works): this function only ever receives a
+// raw percent, with no question-count context of its own, and the
+// !Number.isFinite guard above already covers the "no real value" case
+// getState's own totalQuestions===0 check exists for.
 function getPerformanceBandClass(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  if (number < THRESHOLDS.ATTENTION) return "performance-badge--critical";
-  if (number < THRESHOLDS.ADEQUATE) return "performance-badge--attention";
-  if (number < THRESHOLDS.STRONG) return "performance-badge--good";
-  return "performance-badge--strong";
+  return PERFORMANCE_BAND_CLASS[getState(number, 1)];
 }
 
 function createPerformanceBadge(value) {
@@ -265,6 +633,11 @@ function createPerformanceBadge(value) {
 function createExerciseRow(exercise) {
   const row = document.createElement("tr");
   row.className = "exercise-row";
+  // Same activate-a-row idiom as unit-stats-list's .matrix-row below
+  // (tabIndex + click/keydown, no role override — a table row's default
+  // `row` role stays correct for a screen reader; this only adds a second
+  // way to activate it, same as a normal clickable table row does).
+  row.tabIndex = 0;
 
   const subjectCell = document.createElement("th");
   subjectCell.scope = "row";
@@ -277,31 +650,138 @@ function createExerciseRow(exercise) {
 
   const questionsCell = document.createElement("td");
   questionsCell.dataset.cell = "q";
+  questionsCell.dataset.prefix = t("statsView.exercises.prefix.q");
   questionsCell.textContent = exercise.questionsCount == null ? "—" : String(exercise.questionsCount);
 
   const correctCell = document.createElement("td");
   correctCell.dataset.cell = "a";
+  correctCell.dataset.prefix = t("statsView.exercises.prefix.a");
   correctCell.textContent = String(exercise.correctCount);
 
   const scoreCell = document.createElement("td");
   scoreCell.dataset.cell = "score";
+  scoreCell.dataset.prefix = t("statsView.exercises.prefix.score");
   scoreCell.append(createPerformanceBadge(exercise.scorePercent));
 
   row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
+  row.addEventListener("click", () => openExerciseDetail(exercise));
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openExerciseDetail(exercise);
+    }
+  });
   return row;
 }
-function getDaysBetween(fromDate, toDate) {
-  const from = new Date(`${fromDate}T00:00:00.000Z`);
-  const to = new Date(`${toDate}T00:00:00.000Z`);
-  return Math.round((to - from) / 86400000);
+
+const OUTCOME_LABEL = {
+  get CORRECT() { return t("statsView.attempt.outcome.correct"); },
+  get INCORRECT() { return t("statsView.attempt.outcome.incorrect"); },
+  get UNKNOWN() { return t("statsView.attempt.outcome.unknown"); },
+};
+const ASSISTANCE_LABEL = {
+  get NONE() { return t("statsView.attempt.assistance.none"); },
+  get HINT() { return t("statsView.attempt.assistance.hint"); },
+  get PARTIAL_SOLUTION() { return t("statsView.attempt.assistance.partial"); },
+  get SOLUTION() { return t("statsView.attempt.assistance.solution"); },
+};
+
+function createAttemptItem(attempt) {
+  const li = document.createElement("li");
+  const outcomeClass = attempt.outcome === "CORRECT" ? "is-correct" : attempt.outcome === "INCORRECT" ? "is-incorrect" : "is-unknown";
+  li.className = `exercise-attempt-item ${outcomeClass}`;
+
+  li.append(createTextElement("p", "exercise-attempt-question", attempt.question ?? "—"));
+  // Only attempts born in a Prova carry what the student typed ("studentAnswer" is absent for study/review).
+  if ("studentAnswer" in attempt) {
+    const mine = createTextElement("p", "exercise-attempt-student", attempt.studentAnswer ? t("statsView.attempt.studentAnswer", { answer: attempt.studentAnswer }) : t("statsView.attempt.studentAnswerEmpty"));
+    if (!attempt.studentAnswer) mine.classList.add("is-empty");
+    li.append(mine);
+  }
+  if (attempt.answer) {
+    li.append(createTextElement("p", "exercise-attempt-answer", t("statsView.attempt.answerKey", { answer: attempt.answer })));
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "exercise-attempt-meta";
+  const outcomeBadge = document.createElement("span");
+  outcomeBadge.className = `exercise-attempt-outcome ${outcomeClass}`;
+  outcomeBadge.textContent = OUTCOME_LABEL[attempt.outcome ?? "UNKNOWN"] ?? OUTCOME_LABEL.UNKNOWN;
+  meta.append(outcomeBadge);
+  const assistance = ASSISTANCE_LABEL[attempt.assistanceUsed];
+  if (assistance) meta.append(createTextElement("span", "exercise-attempt-assistance", assistance));
+  li.append(meta);
+
+  return li;
 }
 
-function getReviewStatusLabel(groupName, task, today) {
-  if (groupName === "doneToday") return "Concluída";
-  if (groupName === "today") return "Vence hoje";
-  const days = getDaysBetween(task.dueDate, today);
-  return days <= 1 ? "Atrasada 1 dia" : `Atrasada ${days} dias`;
+// Whole-row click (per product request: the natural target of tapping a
+// solved-exercise row is opening that attempt, not a small separate
+// button) opens this dialog. `exercise` is one completedExercises item
+// (src/stats.js) — id is the learning_evidence row id, context is
+// REVIEW/INITIAL_PRACTICE/EXTERNAL.
+async function openExerciseDetail(exercise) {
+  const dialog = document.getElementById("exercise-detail-dialog");
+  const eyebrow = document.getElementById("exercise-detail-eyebrow");
+  const title = document.getElementById("exercise-detail-title");
+  const body = document.getElementById("exercise-detail-body");
+  if (!dialog || !body) return;
+
+  eyebrow.textContent = exercise.subjectName ?? "";
+  title.textContent = exercise.title ?? "";
+  body.replaceChildren();
+
+  // EXTERNAL evidence never has an in-app attempt to link — answered
+  // outside the app, by definition — so this is answered locally, honestly,
+  // with no network round-trip and no chance of it ever resolving otherwise.
+  if (exercise.context === "EXTERNAL") {
+    body.append(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      t("statsView.attempt.detail.external"),
+    ));
+    dialog.showModal();
+    return;
+  }
+
+  body.append(createTextElement("p", "exercise-detail-unavailable", t("statsView.attempt.detail.loading")));
+  dialog.showModal();
+
+  let result;
+  try {
+    result = await DB.learningEvidence.getAttempts(exercise.id);
+  } catch (error) {
+    console.error("Falha ao buscar detalhe da tentativa.", error);
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      t("statsView.attempt.detail.loadFailed"),
+    ));
+    return;
+  }
+
+  const attempts = result?.attempts ?? [];
+  if (attempts.length === 0) {
+    body.replaceChildren(createTextElement(
+      "p",
+      "exercise-detail-unavailable",
+      t("statsView.attempt.detail.unavailable"),
+    ));
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "exercise-attempt-list";
+  for (const attempt of attempts) list.append(createAttemptItem(attempt));
+  body.replaceChildren(list);
 }
+
+document.getElementById("exercise-detail-close")?.addEventListener("click", () => {
+  document.getElementById("exercise-detail-dialog")?.close();
+});
+// getDaysBetween/getReviewStatusLabel now live in scheduler.js (pure,
+// unit-tested there — see test/scheduler.test.js) since they have no DOM
+// dependency.
 
 function createScoreInput(task, field, label) {
   const wrapper = document.createElement("label");
@@ -317,16 +797,95 @@ function createScoreInput(task, field, label) {
   input.dataset.field = field;
   input.dataset.reviewId = String(task.id);
   input.dataset.committedValue = String(task[field] ?? "");
-  input.setAttribute("aria-label", `${label} da revisão R${task.reviewNumber}`);
+  input.setAttribute("aria-label", t("today.review.scoreInput.aria", { label, number: task.reviewNumber }));
   wrapper.append(input);
   return wrapper;
 }
 
 function formatReviewScore(value) {
-  return value == null ? "—" : `${Number(value).toFixed(1)}%`;
+  return value == null ? "—" : `${formatDecimal(Number(value))}%`;
 }
 
-function createReviewRow(task, unit, subject, groupName, today, exercises = []) {
+// Several overdue stages of the same unit as ONE card (native <details>, so
+// keyboard and screen readers work without extra code). The stage rows inside
+// are created by the caller, unchanged.
+function createOverdueUnitCard(group, unit, subject, today, collapsed, buildRow) {
+  const card = document.createElement("details");
+  card.className = "overdue-unit";
+  card.dataset.unitId = String(group.unitId);
+  card.dataset.stages = String(group.tasks.length);
+  card.open = !collapsed;
+
+  const summary = document.createElement("summary");
+  summary.className = "overdue-unit-summary";
+  const subjectChip = createTextElement("span", "subject-chip", subject?.name ?? t("stats.noSubject"));
+  subjectChip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
+  const ranges = stageRanges(group.tasks.map((task) => task.reviewNumber))
+    .map(([from, to]) => (from === to
+      ? t("today.overdue.unit.single", { number: from })
+      : t("today.overdue.unit.range", { from, to })))
+    .join(", ");
+  const oldestDays = Math.max(1, getDaysBetween(group.tasks[0].dueDate, today));
+  const meta = t("today.overdue.unit.meta", {
+    stages: tn("today.overdue.unit.stages", group.tasks.length),
+    ranges,
+    oldest: tn("today.overdue.unit.oldest", oldestDays),
+  });
+  summary.append(
+    subjectChip,
+    createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent")),
+    createTextElement("p", "review-meta", meta),
+  );
+
+  const stages = document.createElement("div");
+  stages.className = "overdue-unit-stages";
+  for (const task of group.tasks) stages.append(buildRow(task));
+  card.append(summary, stages);
+  return card;
+}
+
+// Hoje lists show their first items and fold the rest behind "Ver mais N" (H-01: 18 overdue + 12 done reached ~7000 px).
+// Folded items stay in the DOM with `hidden`, so nothing is dropped; the button is a native <button> with aria-expanded, so
+// keyboard and screen readers work. `keep` items (the "Começar agora" target, cards the student opened) are never folded.
+const expandedHojeLists = new Set();
+function appendFoldedList(list, groupName, items) {
+  const folded = foldedFlags(items.map((item) => item.keep), VISIBLE_LIMIT[groupName]);
+  const foldedCount = folded.filter(Boolean).length;
+  const expanded = expandedHojeLists.has(groupName);
+  items.forEach((item, i) => {
+    if (folded[i]) {
+      item.el.dataset.folded = "true";
+      item.el.hidden = !expanded;
+    }
+    list.append(item.el);
+  });
+  if (foldedCount === 0) return;
+  const showLabel = groupName === "overdue"
+    ? tn("today.more.show.contents", foldedCount)
+    : tn("today.more.show.reviews", foldedCount);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-button review-list-more";
+  button.dataset.foldToggle = groupName;
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? t("today.more.hide") : showLabel;
+  button.addEventListener("click", () => {
+    const expand = button.getAttribute("aria-expanded") !== "true";
+    for (const el of list.querySelectorAll('[data-folded="true"]')) el.hidden = !expand;
+    if (expand) expandedHojeLists.add(groupName); else expandedHojeLists.delete(groupName);
+    button.setAttribute("aria-expanded", String(expand));
+    button.textContent = expand ? t("today.more.hide") : showLabel;
+  });
+  list.append(button);
+}
+
+// A review that is looked up by id (Começar agora, coming back from a redo) may sit in a folded part of its list: unfold it.
+function revealFolded(el) {
+  const folded = el?.closest('[data-folded="true"]');
+  if (folded?.hidden) folded.closest(".review-list")?.querySelector("[data-fold-toggle]")?.click();
+}
+
+function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set(), questionFlags = new Map()) {
   const row = document.createElement("article");
   row.className = "review-row";
   row.dataset.reviewId = String(task.id);
@@ -339,16 +898,16 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
   const marker = createTextElement("span", "review-marker", `R${task.reviewNumber}`);
   marker.classList.add(`is-${groupName === "doneToday" ? "done" : groupName}`);
-  marker.setAttribute("aria-label", `Revisão número ${task.reviewNumber}`);
+  marker.setAttribute("aria-label", t("today.review.marker.aria", { number: task.reviewNumber }));
 
   const heading = document.createElement("div");
   heading.className = "review-row-heading";
   const subjectChip = document.createElement("span");
   subjectChip.className = "subject-chip";
-  subjectChip.textContent = subject?.name ?? "Sem disciplina";
+  subjectChip.textContent = subject?.name ?? t("stats.noSubject");
   subjectChip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
   heading.append(subjectChip);
-  heading.append(createTextElement("h3", "review-content", unit?.title ?? "Conteúdo indisponível"));
+  heading.append(createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent")));
   heading.append(
     createTextElement(
       "p",
@@ -367,6 +926,17 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   scorePill.dataset.scoreFor = String(task.id);
   scorePill.setAttribute("aria-hidden", "true");
   tags.append(statusBadge, scorePill);
+  // At-a-glance retention cue (visible while the row is still collapsed): how
+  // many of this review's items were wrong last time and not yet judged here.
+  {
+    const judgedIds = new Set(judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId));
+    const toReinforce = [...priorWrong].filter((id) => !judgedIds.has(id)).length;
+    if (toReinforce > 0) {
+      const reinforce = createTextElement("span", "study-now-chip review-reinforce-chip", t("shell.toReinforce", { count: toReinforce }));
+      reinforce.title = t("today.review.toReinforce.title");
+      tags.append(reinforce);
+    }
+  }
 
   header.append(marker, heading, tags);
 
@@ -380,9 +950,11 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   reviewDoneInput.type = "checkbox";
   reviewDoneInput.checked = task.reviewDone;
   reviewDoneInput.dataset.action = "review-done";
+  // Several rows say "Revisão feita": the name must tell a screen reader WHICH review (it still starts with the visible label).
+  reviewDoneInput.setAttribute("aria-label", t("today.review.done.aria", { title: unit?.title ?? t("today.review.done.fallbackTitle"), number: task.reviewNumber }));
   reviewDoneInput.dataset.reviewId = String(task.id);
   reviewDoneInput.dataset.committedChecked = String(task.reviewDone);
-  reviewDoneLabel.append(reviewDoneInput, document.createTextNode("Revisão feita"));
+  reviewDoneLabel.append(reviewDoneInput, document.createTextNode(t("today.review.done.label")));
 
   const hasScoreData =
     task.questionsDone ||
@@ -390,67 +962,110 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     task.correctCount != null ||
     (task.comment ?? "") !== "";
 
-  const expandButton = document.createElement("button");
-  expandButton.type = "button";
-  expandButton.className = "review-expand";
-  expandButton.dataset.action = "expand";
-  expandButton.setAttribute("aria-expanded", String(hasScoreData));
-  expandButton.textContent = "Ver desempenho";
+  // Collapsible detail: questions-done toggle, free-form score inputs,
+  // comment. None of these have a server-mode equivalent (T20/heritage.md:
+  // the new model records evidence atomically via the exercises Q&A flow
+  // or the external-exercises form below, never a free-standing manual
+  // patch of questionsDone/score/comment) — showing controls that would
+  // fail on every use is worse than not showing them, so remote mode
+  // simply omits this panel rather than rendering a broken one.
+  const detail = document.createElement("div");
+  detail.className = "review-row-detail";
+  detail.hidden = true;
+
+  let expandButton = null;
+  if (!REMOTE_MODE) {
+    expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "review-expand";
+    expandButton.dataset.action = "expand";
+    expandButton.setAttribute("aria-expanded", String(hasScoreData));
+    expandButton.textContent = t("today.review.viewPerformance");
+    detail.hidden = !hasScoreData;
+
+    const questionsDoneLabel = document.createElement("label");
+    questionsDoneLabel.className = "check-control review-toggle";
+    const questionsDoneInput = document.createElement("input");
+    questionsDoneInput.type = "checkbox";
+    questionsDoneInput.checked = task.questionsDone;
+    questionsDoneInput.dataset.action = "questions-done";
+    questionsDoneInput.dataset.reviewId = String(task.id);
+    questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
+    questionsDoneLabel.append(questionsDoneInput, document.createTextNode(t("today.review.questionsDone")));
+
+    const scoreInputs = document.createElement("div");
+    scoreInputs.className = "review-score-inputs";
+    const live = document.createElement("div");
+    live.className = "review-score-live";
+    live.append(createTextElement("span", "review-field-label", t("today.review.performance")));
+    const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
+    score.dataset.scoreFor = String(task.id);
+    score.setAttribute("aria-label", t("today.review.performance.aria"));
+    live.append(score);
+    scoreInputs.append(
+      createScoreInput(task, "questionsCount", t("today.review.questions")),
+      createScoreInput(task, "correctCount", t("today.review.correct")),
+      live,
+    );
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "comment-control review-note";
+    commentLabel.append(createTextElement("span", "review-field-label", t("today.review.comment")));
+    const commentInput = document.createElement("textarea");
+    commentInput.rows = 2;
+    commentInput.maxLength = 500;
+    commentInput.value = task.comment ?? "";
+    commentInput.placeholder = t("today.review.comment.placeholder");
+    commentInput.dataset.action = "comment";
+    commentInput.dataset.reviewId = String(task.id);
+    commentInput.dataset.committedValue = task.comment ?? "";
+    commentInput.setAttribute("aria-label", t("today.review.comment.aria", { number: task.reviewNumber }));
+    commentLabel.append(commentInput);
+
+    detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  }
 
   const externalBtn = document.createElement("button");
   externalBtn.type = "button";
   externalBtn.className = "review-expand";
   externalBtn.dataset.action = "toggle-external";
   externalBtn.setAttribute("aria-expanded", "false");
-  externalBtn.textContent = "Exercícios externos";
+  externalBtn.textContent = t("today.review.external");
 
-  primary.append(reviewDoneLabel, expandButton, externalBtn);
+  // Progressive disclosure (Hoje = ação, não dashboard — master build plan
+  // §21): a collapsed row shows only what's needed to decide/act (identity,
+  // status, score-at-a-glance, mark-done). Resumo/exercícios/detalhe/
+  // externos open on demand instead of every card rendering fully expanded.
+  const toggleRowBtn = document.createElement("button");
+  toggleRowBtn.type = "button";
+  toggleRowBtn.className = "review-row-toggle";
+  toggleRowBtn.dataset.action = "toggle-row";
+  toggleRowBtn.setAttribute("aria-expanded", "false");
+  toggleRowBtn.textContent = t("shell.action.viewContent");
 
-  // Collapsible detail: questions, score, comment
-  const detail = document.createElement("div");
-  detail.className = "review-row-detail";
-  detail.hidden = !hasScoreData;
+  primary.append(reviewDoneLabel);
+  if (task.reviewDone) {
+    // J02: a review marked by mistake can be taken back with a button that says so (the same audited reopen as clearing the box)
+    const undoBtn = document.createElement("button");
+    undoBtn.type = "button";
+    undoBtn.className = "small-button review-undo";
+    undoBtn.textContent = t("today.review.undo");
+    undoBtn.setAttribute("aria-label", t("today.review.undo.aria", { title: unit?.title ?? t("today.review.done.fallbackTitle"), number: task.reviewNumber }));
+    undoBtn.addEventListener("click", () => {
+      reviewDoneInput.checked = false;
+      reviewDoneInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    primary.append(undoBtn);
+  }
+  primary.append(toggleRowBtn);
 
-  const questionsDoneLabel = document.createElement("label");
-  questionsDoneLabel.className = "check-control review-toggle";
-  const questionsDoneInput = document.createElement("input");
-  questionsDoneInput.type = "checkbox";
-  questionsDoneInput.checked = task.questionsDone;
-  questionsDoneInput.dataset.action = "questions-done";
-  questionsDoneInput.dataset.reviewId = String(task.id);
-  questionsDoneInput.dataset.committedChecked = String(task.questionsDone);
-  questionsDoneLabel.append(questionsDoneInput, document.createTextNode("Questões feitas"));
+  const secondaryControls = document.createElement("div");
+  secondaryControls.className = "review-row-secondary-controls";
+  secondaryControls.append(...(expandButton ? [expandButton] : []), externalBtn);
 
-  const scoreInputs = document.createElement("div");
-  scoreInputs.className = "review-score-inputs";
-  const live = document.createElement("div");
-  live.className = "review-score-live";
-  live.append(createTextElement("span", "review-field-label", "Aproveitamento"));
-  const score = createTextElement("span", "score-value review-score-value", formatReviewScore(initialScoreValues.scorePercent));
-  score.dataset.scoreFor = String(task.id);
-  score.setAttribute("aria-label", "Percentual de acertos");
-  live.append(score);
-  scoreInputs.append(
-    createScoreInput(task, "questionsCount", "Questões"),
-    createScoreInput(task, "correctCount", "Acertos"),
-    live,
-  );
-
-  const commentLabel = document.createElement("label");
-  commentLabel.className = "comment-control review-note";
-  commentLabel.append(createTextElement("span", "review-field-label", "Comentário"));
-  const commentInput = document.createElement("textarea");
-  commentInput.rows = 2;
-  commentInput.maxLength = 500;
-  commentInput.value = task.comment ?? "";
-  commentInput.placeholder = "Anote uma dúvida ou ponto importante";
-  commentInput.dataset.action = "comment";
-  commentInput.dataset.reviewId = String(task.id);
-  commentInput.dataset.committedValue = task.comment ?? "";
-  commentInput.setAttribute("aria-label", `Comentário da revisão R${task.reviewNumber}`);
-  commentLabel.append(commentInput);
-
-  detail.append(questionsDoneLabel, scoreInputs, commentLabel);
+  const body = document.createElement("div");
+  body.className = "review-row-body";
+  body.hidden = true;
 
   // External exercises section
   const externalSection = document.createElement("div");
@@ -462,7 +1077,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
   const extQLabel = document.createElement("label");
   extQLabel.className = "number-control review-number-control";
-  extQLabel.append(createTextElement("span", "review-field-label", "Questões feitas"));
+  extQLabel.append(createTextElement("span", "review-field-label", t("today.review.questionsDone")));
   const extQInput = document.createElement("input");
   extQInput.type = "number";
   extQInput.min = "1";
@@ -474,7 +1089,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
   const extALabel = document.createElement("label");
   extALabel.className = "number-control review-number-control";
-  extALabel.append(createTextElement("span", "review-field-label", "Acertos"));
+  extALabel.append(createTextElement("span", "review-field-label", t("today.review.correct")));
   const extAInput = document.createElement("input");
   extAInput.type = "number";
   extAInput.min = "0";
@@ -490,7 +1105,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   extSubmitBtn.dataset.action = "submit-external";
   extSubmitBtn.dataset.reviewId = String(task.id);
   extSubmitBtn.dataset.unitId = String(unit?.id ?? "");
-  extSubmitBtn.textContent = "Registrar";
+  extSubmitBtn.textContent = t("shell.action.register");
 
   const extMsg = createTextElement("p", "field-message external-form-message", "");
   extMsg.setAttribute("role", "status");
@@ -498,7 +1113,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
 
   extForm.append(extQLabel, extALabel, extSubmitBtn, extMsg);
   externalSection.append(
-    createTextElement("p", "review-field-label", "Registrar exercícios externos"),
+    createTextElement("p", "review-field-label", t("today.review.external.register")),
     extForm,
   );
 
@@ -506,15 +1121,24 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   const summarySection = document.createElement("div");
   summarySection.className = "review-row-summary";
 
-  const summaryDisplayText = unit?.summaryBody ?? unit?.title ?? "";
-  const summaryDisplay = createTextElement("p", "review-summary-text", summaryDisplayText);
+  const summaryHasBody = Boolean(unit?.summaryBody);
+  const summaryDisplay = renderSummary(createTextElement("div", "review-summary-text", ""), unit?.summaryBody ?? "");
   summaryDisplay.dataset.summaryDisplay = String(task.id);
+  summaryDisplay.hidden = !summaryHasBody;
+
+  const summaryPlaceholder = createTextElement(
+    "p",
+    "review-summary-placeholder",
+    t("today.review.summary.empty"),
+  );
+  summaryPlaceholder.hidden = summaryHasBody;
 
   const editSummaryButton = document.createElement("button");
   editSummaryButton.type = "button";
   editSummaryButton.className = "text-button review-edit-summary";
   editSummaryButton.dataset.action = "edit-summary";
-  editSummaryButton.textContent = "Editar Resumo";
+  editSummaryButton.setAttribute("aria-expanded", "false"); // the editor below opens and closes: expose its state
+  editSummaryButton.textContent = t("today.review.summary.edit");
 
   const summaryEditArea = document.createElement("div");
   summaryEditArea.className = "review-summary-edit";
@@ -523,22 +1147,23 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
   const summaryTextarea = document.createElement("textarea");
   summaryTextarea.rows = 6;
   summaryTextarea.value = unit?.summaryBody ?? "";
-  summaryTextarea.placeholder = "Escreva o resumo do conteúdo estudado...";
+  summaryTextarea.placeholder = t("today.review.summary.placeholder");
   summaryTextarea.dataset.summaryEdit = String(task.id);
-  summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
+  summaryTextarea.setAttribute("aria-label", t("shell.summaryMaster"));
 
   const saveSummaryButton = document.createElement("button");
   saveSummaryButton.type = "button";
   saveSummaryButton.className = "primary-button review-save-summary";
   saveSummaryButton.dataset.action = "save-summary";
-  saveSummaryButton.textContent = "Salvar";
+  saveSummaryButton.textContent = t("shell.action.save");
 
   const summaryMessage = createTextElement("p", "field-message review-summary-message", "");
   summaryMessage.setAttribute("role", "status");
   summaryMessage.setAttribute("aria-live", "polite");
 
-  summaryEditArea.append(summaryTextarea, saveSummaryButton, summaryMessage);
-  summarySection.append(summaryDisplay, editSummaryButton, summaryEditArea);
+  const hojeAuthoring = createSummaryAuthoring(summaryTextarea);
+  summaryEditArea.append(hojeAuthoring.bar, summaryTextarea, hojeAuthoring.preview, saveSummaryButton, summaryMessage);
+  summarySection.append(summaryDisplay, summaryPlaceholder, editSummaryButton, summaryEditArea);
 
   // Exercises section (Q→reveal-A→Acertei/Errei in the review context)
   if (exercises.length > 0) {
@@ -548,13 +1173,21 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
     exercisesReviewSection.dataset.exercisesAnswered = "0";
     exercisesReviewSection.dataset.exercisesCorrect = "0";
 
-    const exercisesTitle = createTextElement("p", "review-exercises-title", `Exercícios (${exercises.length})`);
+    const exercisesTitle = createTextElement("p", "review-exercises-title", t("shell.exercises.title", { count: exercises.length }));
     exercisesReviewSection.append(exercisesTitle);
+
+    const judgmentByExercise = new Map(
+      judgments.filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => [j.exerciseId, j]),
+    );
+    let restoredAnswered = 0;
+    let restoredCorrect = 0;
 
     for (const exercise of exercises) {
       const exItem = document.createElement("div");
       exItem.className = "review-exercise-item";
       exItem.dataset.exerciseAnswered = "false";
+      exItem.dataset.exerciseId = String(exercise.id);
+      exItem.dataset.reviewTaskId = String(task.id);
 
       const qEl = createTextElement("p", "review-exercise-question", exercise.questionText);
 
@@ -562,9 +1195,13 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       revealBtn.type = "button";
       revealBtn.className = "text-button review-exercise-reveal";
       revealBtn.dataset.action = "reveal-answer";
-      revealBtn.textContent = "Ver resposta";
+      revealBtn.textContent = t("shell.action.viewAnswer");
 
       const answerEl = createTextElement("p", "review-exercise-answer", exercise.answerText);
+      // The WHY (AI-generated exercises): revealed together with the answer it explains; absent otherwise.
+      if (exercise.explanationText) {
+        answerEl.append(createTextElement("span", "review-exercise-explanation", t("shell.exercise.why", { text: exercise.explanationText })));
+      }
       answerEl.hidden = true;
 
       const judgmentRow = document.createElement("div");
@@ -576,45 +1213,372 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = []) 
       acerteiBtn.className = "small-button exercise-correct-btn";
       acerteiBtn.dataset.action = "exercise-acertei";
       acerteiBtn.dataset.reviewId = String(task.id);
-      acerteiBtn.textContent = "Acertei";
+      acerteiBtn.textContent = t("today.review.exercise.correct");
 
       const erreiBtn = document.createElement("button");
       erreiBtn.type = "button";
       erreiBtn.className = "small-button exercise-wrong-btn";
       erreiBtn.dataset.action = "exercise-errei";
       erreiBtn.dataset.reviewId = String(task.id);
-      erreiBtn.textContent = "Errei";
+      erreiBtn.textContent = t("today.review.exercise.wrong");
 
       judgmentRow.append(acerteiBtn, erreiBtn);
 
       if (exercise.hintText) {
-        const hintEl = createTextElement("p", "review-exercise-hint", `Dica: ${exercise.hintText}`);
+        const hintEl = createTextElement("p", "review-exercise-hint", t("shell.exercise.hint", { text: exercise.hintText }));
         exItem.append(qEl, hintEl, revealBtn, answerEl, judgmentRow);
       } else {
         exItem.append(qEl, revealBtn, answerEl, judgmentRow);
       }
+      // Back to the material: the cited source page, shown with the answer (CSS hides it while the answer is hidden).
+      const sourceBlocks = citationDetails(exercise.citations);
+      if (sourceBlocks.length) {
+        const sourceBox = document.createElement("div");
+        sourceBox.className = "review-exercise-source";
+        sourceBox.append(...sourceBlocks);
+        answerEl.after(sourceBox);
+      }
+      // Retention cue from the longitudinal ledger: the last time this item was
+      // answered it was wrong and no correct answer has followed.
+      if (priorWrong.has(exercise.id) && !judgmentByExercise.has(exercise.id)) {
+        exItem.prepend(createTextElement("span", "study-now-chip review-exercise-prior", t("shell.exercise.priorWrong")));
+      }
+      const restored = judgmentByExercise.get(exercise.id);
+      if (restored) {
+        const wasCorrect = restored.outcome === "CORRECT";
+        exItem.dataset.exerciseAnswered = "true";
+        exItem.dataset.attemptId = String(restored.attemptId);
+        exItem.classList.add(wasCorrect ? "is-correct" : "is-wrong");
+        answerEl.hidden = false;
+        revealBtn.textContent = t("shell.action.hideAnswer");
+        judgmentRow.hidden = false;
+        acerteiBtn.disabled = true;
+        erreiBtn.disabled = true;
+        (wasCorrect ? acerteiBtn : erreiBtn).classList.add("is-selected");
+        (wasCorrect ? acerteiBtn : erreiBtn).setAttribute("aria-pressed", "true");
+        if (restored.retest) {
+          const redoCorrect = restored.retest.outcome === "CORRECT";
+          exItem.dataset.retest = restored.retest.outcome;
+          exItem.append(createTextElement("span", `study-now-chip${redoCorrect ? " is-corrected" : ""}`, redoCorrect ? t("today.review.retest.fixed") : t("today.review.retest.stillWrong")));
+        }
+        restoredAnswered += 1;
+        if (wasCorrect) restoredCorrect += 1;
+      }
+      exItem.append(createQuestionFlagControls(exercise, {
+        flag: questionFlags.get(exercise.id) ?? null,
+        attemptId: restored?.attemptId ?? judgedQuestionAttemptIds.get(exercise.id) ?? null,
+        visible: Boolean(restored) || judgedQuestionExerciseIds.has(exercise.id),
+      }));
       exercisesReviewSection.append(exItem);
     }
+    exercisesReviewSection.dataset.exercisesAnswered = String(restoredAnswered);
+    exercisesReviewSection.dataset.exercisesCorrect = String(restoredCorrect);
 
-    row.append(header, summarySection, exercisesReviewSection, primary, detail, externalSection);
+    const blockResult = document.createElement("div");
+    blockResult.className = "review-block-result";
+    blockResult.setAttribute("role", "status");
+    blockResult.hidden = true;
+    exercisesReviewSection.append(blockResult);
+    reviewBlockExercises.set(exercisesReviewSection, exercises);
+
+    // Retrieval first (product intent I.4): the questions come BEFORE the Resumo
+    // Mestre, so the student tries to recall, then consults the summary to see
+    // what was missing -- not the other way round.
+    body.append(exercisesReviewSection, summarySection, secondaryControls, detail, externalSection);
   } else {
-    row.append(header, summarySection, primary, detail, externalSection);
+    body.append(summarySection, secondaryControls, detail, externalSection);
   }
+  row.append(header, primary, body);
+  const restoredSection = row.querySelector("[data-exercises-total]");
+  if (restoredSection && Number(restoredSection.dataset.exercisesAnswered) > 0) {
+    const total = Number(restoredSection.dataset.exercisesTotal);
+    const answered = Number(restoredSection.dataset.exercisesAnswered);
+    if (answered === total) {
+      const scorePercent = (Number(restoredSection.dataset.exercisesCorrect) / total) * 100;
+      for (const el of row.querySelectorAll("[data-score-for]")) {
+        el.textContent = `${formatDecimal(scorePercent)}%`;
+        el.classList.remove("is-empty");
+      }
+      restoredSection.dataset.allAnswered = "true";
+    }
+    updateReviewBlockResult(restoredSection);
+    // The student already worked this block: come back to it open, with the
+    // result and "Refazer erros" in view, not folded behind "Ver conteúdo".
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggleRowBtn.setAttribute("aria-expanded", "true");
+    toggleRowBtn.textContent = t("shell.action.collapse");
+  }
+  syncReviewProgress(row);
   return row;
 }
 
+/** A stage with questions part answered shows "x de y respondidas" on its card (visible while collapsed): it stays pending until all are answered. */
+function syncReviewProgress(row) {
+  const section = row.querySelector("[data-exercises-total]");
+  if (!section) return;
+  const total = Number(section.dataset.exercisesTotal);
+  const answered = Number(section.dataset.exercisesAnswered);
+  const concluded = row.querySelector('[data-action="review-done"]')?.checked;
+  let chip = row.querySelector(".review-progress-chip");
+  if (concluded || answered === 0 || answered >= total) { chip?.remove(); return; }
+  if (!chip) {
+    chip = createTextElement("span", "study-now-chip review-progress-chip", "");
+    row.querySelector(".review-row-tags")?.append(chip);
+  }
+  chip.textContent = t("appReview.progress", { answered, total });
+}
+
+let pendingTodayReturnReviewId = null;
+
+// Exercises of a Hoje review block, kept out of the DOM so "Refazer erros"
+// can hand the exact wrong items to the shared retest flow.
+const reviewBlockExercises = new WeakMap();
+
+function updateReviewBlockResult(section) {
+  const result = section.querySelector(".review-block-result");
+  if (!result) return;
+  const total = Number(section.dataset.exercisesTotal);
+  const answered = Number(section.dataset.exercisesAnswered);
+  if (answered < total) {
+    result.hidden = true;
+    result.replaceChildren();
+    return;
+  }
+  const correct = Number(section.dataset.exercisesCorrect);
+  const wrong = total - correct;
+  const redone = section.querySelectorAll(".review-exercise-item.is-wrong[data-retest]").length;
+  const fixed = section.querySelectorAll('.review-exercise-item.is-wrong[data-retest="CORRECT"]').length;
+  const pending = wrong - fixed;
+  const summary = document.createElement("div");
+  summary.className = "review-block-summary";
+  summary.append(createTextElement("p", "review-block-score", t("today.review.block.score", { correct, total })));
+  if (redone > 0) summary.append(createTextElement("p", "review-block-note", wrong === 1 ? t("today.review.block.retest.one", { fixed, wrong }) : t("today.review.block.retest.other", { fixed, wrong })));
+  if (wrong > 0 && pending === 0) summary.append(createTextElement("p", "review-block-note", t("today.review.block.allFixed")));
+  result.replaceChildren(summary);
+  if (pending > 0) {
+    const retest = document.createElement("button");
+    retest.type = "button";
+    retest.className = "primary-button review-block-retest";
+    retest.dataset.action = "retest-block";
+    retest.textContent = redone > 0 ? t("shell.retest.remaining", { count: pending }) : t("shell.retest.all", { count: pending });
+    result.append(retest);
+  }
+  result.hidden = false;
+}
+
+// T40: read-only fallback for "cold offline reopen after prior sync
+// displays the app/agenda". Deliberately renders plain text rows, not
+// createReviewRow's interactive complete/reveal actions — those require a
+// live server round-trip that offline-by-definition cannot make (T41
+// disables mutation UI explicitly; this predates that, so it just never
+// offers the action at all rather than offering one that would silently
+// fail). Only overdue/today buckets are shown: T39's snapshot excludes
+// already-completed tasks, so "done today" has no offline equivalent.
+// T-F4-08 adds the read-only "Próximas revisões" block (dueDate > today).
+function renderOfflineUpcoming(upcoming, nothingDueToday) {
+  const groupsHost = upcomingBlock.querySelector("#upcoming-groups");
+  const note = upcomingBlock.querySelector("#upcoming-note");
+  const more = upcomingBlock.querySelector("#upcoming-more");
+  groupsHost.replaceChildren();
+  upcomingBlock.hidden = upcoming.total === 0;
+  upcomingBlock.querySelector("#upcoming-count").textContent = String(upcoming.total);
+  note.hidden = !nothingDueToday;
+  more.hidden = upcoming.remaining === 0;
+  more.textContent = upcoming.remaining === 1
+    ? t("today.upcoming.more.one", { count: upcoming.remaining })
+    : t("today.upcoming.more.other", { count: upcoming.remaining });
+  for (const group of upcoming.groups) {
+    const day = document.createElement("div");
+    day.className = "upcoming-day";
+    const heading = document.createElement("h3");
+    heading.textContent = formatDate(group.date, { weekday: "long", day: "2-digit", month: "long", year: undefined });
+    const list = document.createElement("ul");
+    for (const item of group.items) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+    day.append(heading, list);
+    groupsHost.append(day);
+  }
+}
+
+async function renderOfflineToday(accountId) {
+  if (todayLoadingState) todayLoadingState.hidden = true;
+  postponeContext = null; // the read-only snapshot cannot move dates
+  if (postponeBtn) postponeBtn.hidden = true;
+  const snapshot = await OfflineStore.loadSnapshot(accountId);
+  const today = getLocalDateValue();
+
+  let banner = document.querySelector("#offline-banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "offline-banner";
+    banner.setAttribute("role", "status");
+    banner.className = "app-banner";
+    mainContent?.prepend(banner);
+  }
+  banner.hidden = false;
+  banner.textContent = snapshot
+    ? t("today.offline.synced", { date: formatIntlDate(snapshot.syncedAt, { dateStyle: "short", timeStyle: "short" }) })
+    : t("today.offline.noSnapshot");
+
+  const overdue = (snapshot?.items ?? []).filter((i) => i.dueDate < today);
+  const dueToday = (snapshot?.items ?? []).filter((i) => i.dueDate === today);
+  const groups = { overdue, today: dueToday, doneToday: [] };
+
+  for (const [groupName, tasks] of Object.entries(groups)) {
+    const block = reviewGroups[groupName];
+    const list = block.querySelector(`[data-review-list="${groupName}"]`);
+    const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    list.replaceChildren();
+    count.textContent = String(tasks.length);
+    block.hidden = tasks.length === 0;
+    for (const item of tasks) {
+      const row = document.createElement("li");
+      row.className = "review-row review-row-offline";
+      row.dataset.reviewTaskId = String(item.reviewTaskId);
+      row.textContent = `${item.unitTitle} — ${item.subjectName}`;
+      list.append(row);
+    }
+  }
+
+  // Suggestions come from the live server; never show stale ones from the last online render.
+  weakRenderSeq += 1; // also cancels an online render still in flight
+  if (weakBlock) weakBlock.hidden = true;
+  todayEmptyState.hidden = true;
+  const upcoming = groupUpcomingReviews(snapshot?.items, today);
+  renderOfflineUpcoming(upcoming, overdue.length === 0 && dueToday.length === 0);
+  // "Tudo em dia" only when nothing is due AND nothing is coming up: with future items the upcoming list is the content.
+  todaySuccessState.hidden = !(overdue.length === 0 && dueToday.length === 0 && upcoming.total === 0);
+  todayTomorrow.hidden = true;
+  if (todayLoadSummary) {
+    const parts = [];
+    if (overdue.length > 0) parts.push(tn("today.load.overdue", overdue.length));
+    if (dueToday.length > 0) parts.push(t("today.load.today", { count: dueToday.length }));
+    if (upcoming.total > 0) parts.push(tn("today.load.upcoming", upcoming.total));
+    todayLoadSummary.hidden = parts.length === 0;
+    todayLoadSummary.textContent = parts.join(" · ");
+  }
+  todayDateLabel.textContent = formatIntlDate(new Date(), { weekday: "long", day: "2-digit", month: "long" });
+}
+
+// "Vale reforçar": optional suggestions from the server's explainable priorities
+// (units NOT already due, weak by observed recent evidence and/or with items still
+// wrong). Extra signal only — a failure or local mode just hides the block.
+let weakRenderSeq = 0;
+async function renderWeakPractice(today) {
+  if (!weakBlock) return;
+  const seq = ++weakRenderSeq;
+  let suggestions = [];
+  if (REMOTE_MODE && DB.priorities?.get) {
+    try {
+      suggestions = (await DB.priorities.get(today)).weakPractice ?? [];
+    } catch (error) {
+      console.warn("Falha ao carregar sugestões de reforço.", error);
+    }
+  }
+  if (seq !== weakRenderSeq) return; // a newer render already owns the block
+  weakList.replaceChildren();
+  weakCount.textContent = String(suggestions.length);
+  weakBlock.hidden = suggestions.length === 0;
+  for (const item of suggestions) {
+    const row = document.createElement("article");
+    row.className = "weak-practice-row";
+    row.dataset.unitId = String(item.unitId);
+    const text = document.createElement("div");
+    text.className = "weak-practice-text";
+    text.append(
+      createTextElement("span", "weak-practice-title", item.unitTitle),
+      createTextElement("span", "weak-practice-meta", `${item.subjectName} · ${weakPracticeReason(item)}`),
+    );
+    const open = createTextElement("button", "small-button", t("shell.action.viewInPlan"));
+    open.type = "button";
+    open.addEventListener("click", () => {
+      pendingPlanFocusUnitId = item.unitId;
+      showScreen("plan");
+    });
+    row.append(text, open);
+    weakList.append(row);
+  }
+}
+
+// Hoje renders are async and can overlap (login, saving a unit, the nav click). Only the NEWEST render may write to the screen: a render
+// that started earlier but finishes later used to overwrite fresh data with stale data (CI_STABLE, e2e/priorities-hoje.spec.js).
+let todayRenderSeq = 0;
+// EXPERIMENTAL return-to-source record: the app tells the server only that the original was opened (remote mode; best effort).
+if (REMOTE_MODE) setSourceOpeningRecorder((opening) => apiRequest("/v1/source-openings", { method: "POST", body: opening }));
+
+// EXPERIMENTAL panel on Hoje (see experimental-obligations-ui.js): only when the student turned the switch on in Configurações.
+function refreshExperimentPanel() {
+  const host = document.querySelector("#experiment-host");
+  if (!host) return;
+  if (isExperimentOn()) void renderObligationsPanel(host, { onPractice: practiceObligation });
+  else host.replaceChildren();
+}
+const experimentSwitch = document.querySelector("#experiment-switch");
+if (experimentSwitch) {
+  experimentSwitch.checked = isExperimentOn();
+  experimentSwitch.addEventListener("change", () => { setExperiment(experimentSwitch.checked); refreshExperimentPanel(); });
+}
+
 export async function renderToday() {
+  const renderId = ++todayRenderSeq;
+  refreshExperimentPanel();
+  const existingOfflineBanner = document.querySelector("#offline-banner");
+  // LOCAL-01A: navigator.onLine tracks the OS network adapter, which says
+  // nothing about a loopback backend's reachability — Desktop must not
+  // treat "no Wi-Fi/internet" as "no authority" (STATE.md's ARCHITECTURE
+  // SUPERSESSION §3). This read-only snapshot fallback stays REMOTE_MODE
+  // (non-local) territory only.
+  if (REMOTE_MODE && !LOCAL_AUTHORITY && !navigator.onLine) {
+    const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+    return renderOfflineToday(accountId);
+  }
+
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  const [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
-    await Promise.all([
-      DB.reviewTasks.getForToday(today),
-      DB.reviewTasks.getOverdue(today),
-      DB.reviewTasks.getCompletedToday(today),
-      DB.reviewTasks.getTomorrow(tomorrow),
-      DB.learningUnits.getAll(),
-      DB.subjects.getAll(),
-    ]);
+  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects;
+  try {
+    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
+      await Promise.all([
+        DB.reviewTasks.getForToday(today),
+        DB.reviewTasks.getOverdue(today),
+        DB.reviewTasks.getCompletedToday(today),
+        DB.reviewTasks.getTomorrow(tomorrow),
+        DB.learningUnits.getAll(),
+        DB.subjects.getAll(),
+      ]);
+    if (todayLoadingState) todayLoadingState.hidden = true;
+  } catch (error) {
+    if (todayLoadingState) todayLoadingState.hidden = true; // a failure speaks through the error banner, not through "loading" or "empty"
+    // T42 fix (AC-24): navigator.onLine only reflects the OS network
+    // adapter's link state, not whether the SmartLearn server itself is
+    // reachable — a dead/restarting/firewalled server with Wi-Fi otherwise
+    // up never flips navigator.onLine, so the check above alone can't catch
+    // it. A NetworkError here means fetch() itself never got a response
+    // (api-client.js's own distinction) — route it through the same
+    // read-only snapshot path as a known-offline cold start. Any other
+    // error (a real HTTP response, auth, etc.) is a different failure and
+    // must keep propagating, not get silently reinterpreted as "offline".
+    // LOCAL-01A: a local backend that's down is a real, explicit failure
+    // (item E of LOCAL-01A's discriminating tests) — it must surface as an
+    // error, never get silently reinterpreted as "offline, show the last
+    // snapshot" the way a genuinely unreachable REMOTE cloud server does.
+    if (REMOTE_MODE && !LOCAL_AUTHORITY && error instanceof NetworkError) {
+      const accountId = AuthUI.getCurrentUser()?.id ?? OfflineStore.getLastAccountId();
+      return renderOfflineToday(accountId);
+    }
+    throw error;
+  }
+  if (renderId !== todayRenderSeq) return; // a newer render started: its data wins
+  if (existingOfflineBanner) existingOfflineBanner.hidden = true;
+  if (upcomingBlock) upcomingBlock.hidden = true; // offline-only block: online Hoje has its own "Amanhã" line
+  const questionFlags = await loadQuestionFlags();
+  if (renderId !== todayRenderSeq) return;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
   const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = {
@@ -622,6 +1586,9 @@ export async function renderToday() {
     today: pendingToday,
     doneToday: completedToday,
   };
+  // "Adiar vencidas" (HG-09): offered whenever something is overdue; the dialog previews the plan from exactly this list.
+  postponeContext = { tasks: overdueReviews, today };
+  if (postponeBtn) postponeBtn.hidden = overdueReviews.length === 0;
 
   // Load exercises for all learning units visible in the review groups
   const visibleUnitIds = new Set([
@@ -640,30 +1607,129 @@ export async function renderToday() {
     }),
   );
 
+  if (renderId !== todayRenderSeq) return;
+  // Judgments already given in still-open reviews live on the server (each
+  // Acertei/Errei submits a real attempt). Restore them so leaving Hoje or
+  // reloading never silently drops a block the student already answered.
+  const judgmentsByTaskId = new Map();
+  const priorWrongByTaskId = new Map();
+  if (REMOTE_MODE && DB.attempts?.listForReviews) {
+    // Completed-today reviews too: marking a review done must not wipe its
+    // errors (and "Refazer erros") from view by re-rendering fresh exercises.
+    const openWithExercises = [...overdueReviews, ...pendingToday, ...completedToday]
+      .filter((t) => (exercisesByUnitId.get(t.unitId) ?? []).length > 0)
+      .map((t) => t.id);
+    try {
+      const { attemptsByReviewTask, priorWrongByReviewTask } = await DB.attempts.listForReviews(openWithExercises);
+      for (const [taskId, judgments] of Object.entries(attemptsByReviewTask)) judgmentsByTaskId.set(Number(taskId), judgments);
+      for (const [taskId, ids] of Object.entries(priorWrongByReviewTask ?? {})) priorWrongByTaskId.set(Number(taskId), new Set(ids));
+    } catch (error) {
+      console.error("Falha ao restaurar julgamentos das revisões.", error);
+    }
+  }
+  if (renderId !== todayRenderSeq) return;
+
+  // Overdue before today (protocol kept), but never a review with nothing to
+  // retrieve while another one has exercises / items to reinforce. Picked before
+  // the lists are built because the card that holds it must start open.
+  const contextOf = (task) => ({
+    exerciseIds: (exercisesByUnitId.get(task.unitId) ?? []).map((e) => e.id),
+    judgedIds: new Set((judgmentsByTaskId.get(task.id) ?? []).filter((j) => j.outcome === "CORRECT" || j.outcome === "INCORRECT").map((j) => j.exerciseId)),
+    priorWrongIds: priorWrongByTaskId.get(task.id) ?? new Set(),
+  });
+  const pick = pickPrimaryReview(overdueReviews, pendingToday, contextOf);
+
   for (const [groupName, tasks] of Object.entries(groups)) {
     const block = reviewGroups[groupName];
     const list = block.querySelector(`[data-review-list="${groupName}"]`);
     const count = block.querySelector(`[data-count-for="${groupName}"]`);
+    // Re-renders (e.g. after "Revisão feita") must not fold a unit card the student had open.
+    const openUnitIds = new Set([...list.querySelectorAll("details.overdue-unit[open]")].map((d) => d.dataset.unitId));
+    // The unit of the "Começar agora" review is where the student goes next: it never starts folded.
+    if (groupName === "overdue" && pick?.group === "overdue") openUnitIds.add(String(pick.task.unitId));
     list.replaceChildren();
     count.textContent = String(tasks.length);
     block.hidden = tasks.length === 0;
 
-    for (const task of tasks) {
+    const buildRow = (task) => {
       const unit = unitsById.get(task.unitId);
       const subject = subjectsById.get(unit?.subjectId);
       const exercises = exercisesByUnitId.get(task.unitId) ?? [];
-      list.append(createReviewRow(task, unit, subject, groupName, today, exercises));
+      return createReviewRow(task, unit, subject, groupName, today, exercises, judgmentsByTaskId.get(task.id) ?? [], priorWrongByTaskId.get(task.id) ?? new Set(), questionFlags);
+    };
+
+    // What the list shows, in order; `keep` = must stay visible when the list is folded (see appendFoldedList).
+    const items = [];
+    if (groupName !== "overdue") {
+      for (const task of tasks) items.push({ el: buildRow(task), keep: false });
+    } else {
+      // Vencidas: one card per unit. A unit with a single overdue stage keeps
+      // its plain row; a unit with several becomes an expandable card whose
+      // stages are the very same rows (each keeps its own "Revisão feita").
+      const unitGroups = groupOverdueByUnit(tasks);
+      const collapse = shouldCollapseOverdue(tasks.length);
+      if (unitGroups.length < tasks.length) {
+        count.textContent = t("today.overdue.count", {
+          stages: tn("today.overdue.count.stages", tasks.length),
+          units: tn("today.overdue.count.units", unitGroups.length),
+        });
+      }
+      for (const group of unitGroups) {
+        const keep = openUnitIds.has(String(group.unitId));
+        if (group.tasks.length === 1) {
+          items.push({ el: buildRow(group.tasks[0]), keep });
+          continue;
+        }
+        const unit = unitsById.get(group.unitId);
+        items.push({ el: createOverdueUnitCard(group, unit, subjectsById.get(unit?.subjectId), today, collapse && !keep, buildRow), keep });
+      }
+    }
+    appendFoldedList(list, groupName, items);
+  }
+
+  renderWeakPractice(today).catch(console.error); // not awaited: suggestions must never delay Hoje
+
+  // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
+  // with data already fetched above — no new scheduler, no change to the
+  // 16-review schedule. Priority: overdue (oldest first, already the
+  // server's own sort order) > today > (tomorrow/none handled by the
+  // existing todayTomorrow/todaySuccessState elements below, which
+  // already communicate those two cases adequately).
+  if (todayPrimaryAction && todayPrimaryActionText && todayPrimaryActionBtn) {
+    const primaryTask = pick?.task ?? null;
+    if (primaryTask) {
+      const lead = overdueReviews.length > 0
+        ? (overdueReviews.length === 1 ? t("today.primary.overdue.one", { count: overdueReviews.length }) : t("today.primary.overdue.other", { count: overdueReviews.length }))
+        : (pendingToday.length === 1 ? t("today.primary.today.one", { count: pendingToday.length }) : t("today.primary.today.other", { count: pendingToday.length }));
+      const unitTitle = unitsById.get(primaryTask.unitId)?.title;
+      todayPrimaryActionText.textContent = unitTitle
+        ? (pick.reinforce > 0
+          ? t("today.primary.startReinforce", { lead, title: unitTitle, count: pick.reinforce })
+          : t("today.primary.start", { lead, title: unitTitle }))
+        : lead;
+      todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
+      // "Revisar uma por vez" opens the questions of this review one at a time; only offered while some are still unanswered.
+      if (todayFocusReviewBtn) {
+        const { exerciseIds, judgedIds } = contextOf(primaryTask);
+        todayFocusReviewBtn.dataset.reviewId = String(primaryTask.id);
+        todayFocusReviewBtn.hidden = !exerciseIds.some((id) => !judgedIds.has(id));
+      }
+      todayPrimaryAction.hidden = false;
+    } else {
+      todayPrimaryAction.hidden = true;
+      if (todayFocusReviewBtn) todayFocusReviewBtn.hidden = true;
     }
   }
 
   // Load summary above fold
   if (todayLoadSummary) {
     const parts = [];
-    if (overdueReviews.length > 0) parts.push(`${overdueReviews.length} vencida${overdueReviews.length !== 1 ? "s" : ""}`);
-    if (pendingToday.length > 0) parts.push(`${pendingToday.length} hoje`);
-    if (tomorrowReviews.length > 0) parts.push(`${tomorrowReviews.length} amanhã`);
-    if (completedToday.length > 0) parts.push(`${completedToday.length} feita${completedToday.length !== 1 ? "s" : ""}`);
-    todayLoadSummary.hidden = parts.length === 0;
+    if (overdueReviews.length > 0) parts.push(tn("today.load.overdue", overdueReviews.length));
+    if (pendingToday.length > 0) parts.push(t("today.load.today", { count: pendingToday.length }));
+    if (tomorrowReviews.length > 0) parts.push(t("today.load.tomorrow", { count: tomorrowReviews.length }));
+    if (completedToday.length > 0) parts.push(tn("today.load.done", completedToday.length));
+    // one figure only repeats the banner and the "Para hoje" count below
+    todayLoadSummary.hidden = parts.length < 2;
     todayLoadSummary.textContent = parts.join(" · ");
   }
 
@@ -673,19 +1739,18 @@ export async function renderToday() {
   todaySuccessState.hidden = !(hasData && pendingCount === 0);
 
   if (tomorrowReviews.length > 0) {
-    const label = tomorrowReviews.length === 1 ? "1 revisão" : `${tomorrowReviews.length} revisões`;
-    todayTomorrow.textContent = `Amanhã: ${label}.`;
+    todayTomorrow.textContent = tn("today.tomorrow", tomorrowReviews.length);
     todayTomorrow.hidden = false;
   } else {
     todayTomorrow.textContent = "";
     todayTomorrow.hidden = true;
   }
 
-  todayDateLabel.textContent = new Intl.DateTimeFormat("pt-BR", {
+  todayDateLabel.textContent = formatIntlDate(new Date(), {
     weekday: "long",
     day: "2-digit",
     month: "long",
-  }).format(new Date());
+  });
 
   // Show/hide daily summary button based on studies with study_date === today
   const todayStudies = learningUnits.filter((u) => u.studyDate === today);
@@ -696,7 +1761,46 @@ export async function renderToday() {
   if (dailySummaryPanel) {
     dailySummaryPanel.hidden = true;
   }
+
+  // Coming back from a redo started inside a review block: land on that block,
+  // not at the top of Hoje. Only consumed once Hoje is actually the visible
+  // screen (the redo's own finish also re-renders while still on Estudar).
+  if (pendingTodayReturnReviewId != null && document.querySelector("#screen-today")?.hidden === false) {
+    const target = reviewDashboard.querySelector(`.review-row[data-review-id="${pendingTodayReturnReviewId}"]`);
+    pendingTodayReturnReviewId = null;
+    revealFolded(target);
+    const anchor = target?.querySelector(".review-block-result:not([hidden])") ?? target;
+    anchor?.scrollIntoView({ block: "center" });
+  }
 }
+
+// SLICE 2 (Stats Visual Intelligence): performance and volume are two
+// different questions ("how well" vs "how much") and must never share a
+// bar or a color scale — a short green bar (little practice, good score)
+// must never look like a short red one (lots of practice, bad score).
+function createComparisonBar(fillPercent, state) {
+  const bar = document.createElement("div");
+  bar.className = "subject-compare-bar";
+  const fill = document.createElement("div");
+  fill.className = "subject-compare-bar-fill";
+  fill.dataset.state = state;
+  fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
+  bar.append(fill);
+  return bar;
+}
+
+function createComparisonCell(valueText, bar) {
+  const cell = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "subject-compare-cell";
+  const value = document.createElement("span");
+  value.className = "subject-compare-value";
+  value.textContent = valueText;
+  wrap.append(value, bar);
+  cell.append(wrap);
+  return cell;
+}
+
 
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
@@ -705,13 +1809,8 @@ export async function renderStats() {
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
+  // The exercise list below is a ledger of finished exercises, not a period-bound indicator.
   const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
-  metricElements.totalQuestions.textContent = String(stats.totalQuestions);
-  metricElements.totalCorrect.textContent = String(stats.totalCorrect);
-  metricElements.avgScore.textContent = `${stats.avgScore.toFixed(1).replace(".", ",")}%`;
-  metricElements.reviewsDone.textContent = String(stats.reviewsDone);
-  metricElements.reviewsPending.textContent = String(stats.reviewsPending);
-  metricElements.reviewsOverdue.textContent = String(stats.reviewsOverdue);
 
   exerciseNotesBody.replaceChildren();
   exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
@@ -719,61 +1818,26 @@ export async function renderStats() {
     exerciseNotesBody.append(createExerciseRow(exercise));
   }
 
-  subjectAveragesBody.replaceChildren();
-  subjectAveragesEmpty.hidden = stats.avgBySubject.length > 0;
-  for (const subject of stats.avgBySubject) {
-    const row = document.createElement("tr");
-    const name = document.createElement("th");
-    name.scope = "row";
-    name.textContent = subject.subjectName;
-    const average = document.createElement("td");
-    average.dataset.cell = "avg";
-    average.append(createPerformanceBadge(subject.avgScore));
-    const questions = document.createElement("td");
-    questions.textContent = String(subject.totalQuestions);
-    row.append(name, average, questions);
-    subjectAveragesBody.append(row);
-  }
-
-  const dataPoints = evidence
-    .filter((ev) => ev.scorePercent != null && ev.evidenceDate != null)
-    .sort((a, b) => a.evidenceDate.localeCompare(b.evidenceDate))
-    .map((ev) => ({
-      date: ev.evidenceDate,
-      scorePercent: Number(ev.scorePercent),
-    }));
-  const chartRendered = Stats.renderChart(evolutionChart, dataPoints);
-  evolutionChart.hidden = !chartRendered;
-  chartEmpty.hidden = chartRendered;
-  if (!chartRendered) {
-    chartEmpty.textContent = "Sem dados suficientes para o gráfico.";
-  }
+  // Header, table, distribution and chart all derive from the same period evidence (renderStatsBySubject).
   await renderStatsBySubject();
   await renderStatsByUnit();
-  // WP-D3: SVG evolution chart
-  const [allEvidence, allUnits, allSubjects] = await Promise.all([
-    DB.learningEvidence.getAll(),
-    DB.learningUnits.getAll(),
-    DB.subjects.getAll(),
-  ]);
-  // Populate evolution subject filter
   if (evolutionFilterSubject && evolutionFilterSubject.options.length <= 1) {
-    for (const s of allSubjects.filter((s) => s.isActive)) {
+    for (const s of subjects.filter((s) => s.isActive)) {
       const opt = document.createElement("option");
       opt.value = String(s.id);
       opt.textContent = s.name;
       evolutionFilterSubject.append(opt);
     }
+    syncSelect(evolutionFilterSubject);
   }
-  const svgRendered = renderEvolutionSvg(allEvidence, allUnits, allSubjects);
-  chartEmpty.hidden = svgRendered;
+  renderEvolutionSvg(evidence, learningUnits, subjects);
 }
 const TRACKING_STATE_LABELS = {
-  ATRASADO: "Atrasada",
-  SEM_EVIDENCIA: "Sem prática registrada",
-  EM_REVISAO: "Revisar hoje",
-  EM_ESTUDO: "Em estudo",
-  EM_DIA: "Em dia",
+  get ATRASADO() { return t("plan.state.overdue"); },
+  get SEM_EVIDENCIA() { return t("plan.state.noEvidence"); },
+  get EM_REVISAO() { return t("plan.state.reviewToday"); },
+  get EM_ESTUDO() { return t("plan.state.studying"); },
+  get EM_DIA() { return t("plan.state.onTrack"); },
 };
 
 function getPlanStateBadge(state) {
@@ -784,12 +1848,8 @@ function getPlanStateBadge(state) {
   return span;
 }
 
-function getNextReview(unitId, allTasks) {
-  const pending = allTasks
-    .filter((t) => t.unitId === unitId && !t.reviewDone)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  return pending.length > 0 ? pending[0].dueDate : null;
-}
+// getNextReview itself now lives in scheduler.js (pure, unit-tested there —
+// see test/scheduler.test.js) since it has no DOM dependency.
 
 function getPlanPerfBadge(evidence) {
   const total = evidence.reduce((s, e) => s + e.questionsCount, 0);
@@ -798,26 +1858,62 @@ function getPlanPerfBadge(evidence) {
   const pct = (correct / total) * 100;
   const span = document.createElement("span");
   span.className = "performance-badge";
-  if (pct >= THRESHOLDS.STRONG) span.dataset.perf = "strong";
-  else if (pct >= THRESHOLDS.ADEQUATE) span.dataset.perf = "adequate";
-  else if (pct >= THRESHOLDS.ATTENTION) span.dataset.perf = "attention";
-  else span.dataset.perf = "critical";
-  span.textContent = `${pct.toFixed(0)}%`;
+  // getState's states (STRONG/ADEQUATE/ATTENTION/CRITICAL) match dataset.perf's
+  // own lowercase vocabulary exactly — see getPerformanceBandClass above for
+  // why this delegates to getState instead of an independent threshold chain.
+  span.dataset.perf = getState(pct, total).toLowerCase();
+  span.textContent = formatPerformanceScore(pct);
   return span;
 }
 
-let planCurrentSubjectFilter = "";
-let planCurrentStateFilter = "";
+
+// "Para reforçar": exercises still wrong at their last attempt, by unit. Only the server
+// keeps item-level attempts; without it (or if it fails) the callers just show no cue —
+// it is an extra signal, never a reason to fail a whole screen.
+async function loadReinforcementByUnit() {
+  if (!REMOTE_MODE || !DB.attempts?.reinforcement) return {};
+  try {
+    return await DB.attempts.reinforcement();
+  } catch (error) {
+    console.warn("Falha ao carregar itens para reforçar.", error);
+    return {};
+  }
+}
+
+// Set by Estatísticas ("Ver no Plano"); consumed once by the next renderPlan, which opens that unit.
+let pendingPlanFocusUnitId = null;
+// set by Plano's "Editar questões": the Cadastro screen opens that unit's question list once it has drawn
+let pendingRegisterFocusUnitId = null;
+
+/**
+ * Plano with one lesson open (its Resumo and "Estudar agora"): the one way every shortcut to a lesson gets there. It goes only where the lesson
+ * still exists; otherwise it opens nothing and answers false, so the caller says so instead of leaving a dead button.
+ */
+async function openLessonInPlan(unitId) {
+  const units = await DB.learningUnits.getAll().catch(() => []);
+  const lesson = findLesson(units, unitId);
+  if (!lesson) return false;
+  pendingPlanFocusUnitId = lesson.id;
+  showScreen("plan", { focus: true });
+  return true;
+}
+
+// Plano can be refreshed from several independent actions (navigation, exam finalization,
+// study completion, subject edits). Only the newest async render may publish DOM.
+let planRenderSeq = 0;
 
 export async function renderPlan() {
   if (!planList) return;
+  const renderId = ++planRenderSeq;
   const today = getLocalDateValue();
-  const [learningUnits, subjects, allTasks, allEvidence] = await Promise.all([
+  const [learningUnits, subjects, allTasks, allEvidence, reinforcementByUnit] = await Promise.all([
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
     DB.reviewTasks.getAll(),
     DB.learningEvidence.getAll(),
+    loadReinforcementByUnit(),
   ]);
+  if (renderId !== planRenderSeq) return;
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
   const evidenceByUnitId = new Map();
   for (const ev of allEvidence) {
@@ -837,6 +1933,7 @@ export async function renderPlan() {
       }
     }),
   );
+  if (renderId !== planRenderSeq) return;
 
   // Populate subject dropdowns (filter + new-unit form)
   const activeSubjects = subjects.filter((s) => s.isActive);
@@ -851,6 +1948,7 @@ export async function renderPlan() {
       select.append(opt);
     }
     if (currentValue) select.value = currentValue;
+    syncSelect(select);
   }
   syncPlanSubjectOptions(planFilterSubject, planFilterSubject?.value);
   syncPlanSubjectOptions(planSubjectSelect, planSubjectSelect?.value);
@@ -880,16 +1978,44 @@ export async function renderPlan() {
     sorted = [...learningUnits].sort((a, b) => b.studyDate.localeCompare(a.studyDate));
   }
 
+  // A requested unit ("Ver no Plano") must be on screen: a subject/state filter left over from an
+  // earlier visit would hide its row and nothing would open, so such a filter is cleared first.
+  if (pendingPlanFocusUnitId != null) {
+    const focusUnit = learningUnits.find((unit) => unit.id === pendingPlanFocusUnitId);
+    if (focusUnit) {
+      const hiddenBySubject = Boolean(planFilterSubject?.value) && planFilterSubject.value !== String(focusUnit.subjectId);
+      const hiddenByState = Boolean(planFilterState?.value)
+        && getTrackingState(focusUnit.id, allTasks, allEvidence, today) !== planFilterState.value;
+      if (hiddenBySubject && planFilterSubject) {
+        planFilterSubject.value = "";
+        syncSelect(planFilterSubject);
+      }
+      if (hiddenByState && planFilterState) {
+        planFilterState.value = "";
+        syncSelect(planFilterState);
+      }
+    }
+  }
+
   // Apply filters
   const subjectFilter = planFilterSubject?.value ?? "";
   const stateFilter = planFilterState?.value ?? "";
+  const periodFilter = planFilterPeriod?.value ?? "";
+  const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
   const filtered = sorted.filter((unit) => {
     if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
     if (stateFilter && getTrackingState(unit.id, allTasks, allEvidence, today) !== stateFilter) return false;
+    if (periodCutoff && unit.studyDate < periodCutoff) return false;
     return true;
   });
 
   planEmpty.hidden = filtered.length > 0;
+  // no lessons at all: the way to start sits in the body too, not only in the heading
+  if (planEmptyNewBtn) planEmptyNewBtn.hidden = filtered.length > 0 || learningUnits.length > 0;
+  // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
+  planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
+    ? t("plan.empty.withMaterials")
+    : t("plan.empty");
   planList.replaceChildren();
 
   for (const unit of filtered) {
@@ -909,7 +2035,7 @@ export async function renderPlan() {
 
     const subjectChip = document.createElement("span");
     subjectChip.className = "subject-chip";
-    subjectChip.textContent = subject?.name ?? "Sem disciplina";
+    subjectChip.textContent = subject?.name ?? t("stats.noSubject");
     subjectChip.style.setProperty(
       "--subject-color",
       `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`,
@@ -923,9 +2049,11 @@ export async function renderPlan() {
     meta.className = "plan-unit-meta";
     const parts = [formatDate(unit.studyDate)];
     if (unit.sourceText) parts.push(unit.sourceText);
-    if (exerciseCount > 0) parts.push(`${exerciseCount} ex.`);
-    parts.push(unit.summaryBody ? "Resumo ✓" : "Resumo —");
-    if (nextReview) parts.push(`Próx. ${formatDate(nextReview)}`);
+    if (exerciseCount > 0) parts.push(t("plan.row.exercises", { count: exerciseCount }));
+    parts.push(unit.summaryBody ? t("plan.row.summary.yes") : t("plan.row.summary.no"));
+    const unitTasks = allTasks.filter((task) => task.unitId === unit.id);
+    if (unitTasks.length > 0) parts.push(t("tracking.card.reviews", { done: unitTasks.filter((task) => task.reviewDone).length, total: unitTasks.length }));
+    if (nextReview) parts.push(t("plan.row.next", { date: formatDate(nextReview) }));
     meta.textContent = parts.join(" · ");
 
     const badges = document.createElement("span");
@@ -933,13 +2061,16 @@ export async function renderPlan() {
     badges.append(getPlanStateBadge(state));
     const perfBadge = getPlanPerfBadge(evidence);
     if (perfBadge) badges.append(perfBadge);
+    const reinforceIds = new Set(reinforcementByUnit[unit.id] ?? []);
+    if (reinforceIds.size > 0) {
+      badges.append(createTextElement("span", "study-now-chip plan-reinforce-chip", t("shell.toReinforce", { count: reinforceIds.size })));
+    }
 
     const expandBtn = document.createElement("button");
     expandBtn.className = "plan-expand-btn";
     expandBtn.type = "button";
     expandBtn.setAttribute("aria-expanded", "false");
-    expandBtn.setAttribute("aria-label", "Expandir detalhes");
-    expandBtn.textContent = "▸";
+    expandBtn.setAttribute("aria-label", t("plan.row.expand", { title: titleSpan.textContent }));
 
     compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
 
@@ -951,40 +2082,54 @@ export async function renderPlan() {
     expandBtn.addEventListener("click", async () => {
       const isExpanded = expandBtn.getAttribute("aria-expanded") === "true";
       expandBtn.setAttribute("aria-expanded", String(!isExpanded));
-      expandBtn.textContent = isExpanded ? "▸" : "▾";
+      expandBtn.setAttribute("aria-label", isExpanded ? t("plan.row.expand", { title: titleSpan.textContent }) : t("plan.row.collapse", { title: titleSpan.textContent }));
       detail.hidden = isExpanded;
 
       if (!isExpanded && !detail.dataset.loaded) {
         detail.dataset.loaded = "1";
         detail.replaceChildren();
 
+        // The shortcut Acompanhar used to give: a review due today (or overdue) is done on Hoje, where it is waiting.
+        const dueReview = unitTasks.filter((task) => !task.reviewDone && task.dueDate <= today).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+        if (dueReview) {
+          const goToReviewBtn = createTextElement("button", "small-button plan-go-to-review", t("tracking.card.goToReview"));
+          goToReviewBtn.type = "button";
+          goToReviewBtn.dataset.action = "plan-go-to-review";
+          goToReviewBtn.addEventListener("click", () => {
+            showScreen("today");
+            renderToday().then(() => {
+              setTimeout(() => document.querySelector(`[data-review-id="${dueReview.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+            }).catch(console.error);
+          });
+          detail.append(goToReviewBtn);
+        }
+
         // Summary Mestre — always editable in Plan detail
         const summarySection = document.createElement("div");
         summarySection.className = "plan-detail-section plan-summary-section";
         summarySection.dataset.unitId = unit.id;
         const summaryHeading = document.createElement("h3");
-        summaryHeading.textContent = "Resumo Mestre";
+        summaryHeading.textContent = t("shell.summaryMaster");
         summarySection.append(summaryHeading);
+        appendSummarySources(summarySection, unit.id);
 
         let currentSummary = unit.summaryBody ?? "";
 
         const summaryDisplayWrap = document.createElement("div");
         summaryDisplayWrap.className = "plan-summary-display-wrap";
 
-        const summaryText = document.createElement("p");
-        summaryText.className = "plan-summary-body";
-        summaryText.textContent = currentSummary;
+        const summaryText = renderSummary(createTextElement("div", "plan-summary-body", ""), currentSummary);
         summaryText.hidden = !currentSummary;
 
         const summaryPlaceholder = document.createElement("p");
         summaryPlaceholder.className = "plan-summary-placeholder";
-        summaryPlaceholder.textContent = "Nenhum resumo. Clique em Editar para adicionar.";
+        summaryPlaceholder.textContent = t("plan.detail.summary.empty");
         summaryPlaceholder.hidden = !!currentSummary;
 
         const editSummaryBtn = document.createElement("button");
         editSummaryBtn.type = "button";
         editSummaryBtn.className = "text-button plan-edit-summary-btn";
-        editSummaryBtn.textContent = currentSummary ? "Editar resumo" : "Adicionar Resumo Mestre";
+        editSummaryBtn.textContent = currentSummary ? t("plan.detail.summary.edit") : t("plan.detail.summary.add");
 
         const summaryEditArea = document.createElement("div");
         summaryEditArea.className = "plan-summary-edit-area";
@@ -992,18 +2137,18 @@ export async function renderPlan() {
         const summaryTextarea = document.createElement("textarea");
         summaryTextarea.className = "plan-summary-textarea";
         summaryTextarea.rows = 6;
-        summaryTextarea.setAttribute("aria-label", "Resumo Mestre");
+        summaryTextarea.setAttribute("aria-label", t("shell.summaryMaster"));
         summaryTextarea.value = currentSummary;
         const summaryActions = document.createElement("div");
         summaryActions.className = "plan-summary-edit-actions";
         const saveSummaryBtn = document.createElement("button");
         saveSummaryBtn.type = "button";
         saveSummaryBtn.className = "primary-button";
-        saveSummaryBtn.textContent = "Salvar";
+        saveSummaryBtn.textContent = t("shell.action.save");
         const cancelSummaryBtn = document.createElement("button");
         cancelSummaryBtn.type = "button";
         cancelSummaryBtn.className = "text-button";
-        cancelSummaryBtn.textContent = "Cancelar";
+        cancelSummaryBtn.textContent = t("shell.action.cancel");
         const summaryMsg = document.createElement("p");
         summaryMsg.className = "form-message";
         summaryMsg.setAttribute("role", "status");
@@ -1013,6 +2158,7 @@ export async function renderPlan() {
 
         editSummaryBtn.addEventListener("click", () => {
           summaryTextarea.value = currentSummary;
+          planAuthoring.reloadVisual?.();
           summaryDisplayWrap.hidden = true;
           editSummaryBtn.hidden = true;
           summaryEditArea.hidden = false;
@@ -1024,26 +2170,32 @@ export async function renderPlan() {
           summaryEditArea.hidden = true;
         });
         saveSummaryBtn.addEventListener("click", async () => {
+          planAuthoring.flushVisual?.();
           const newBody = summaryTextarea.value.trim() || null;
-          summaryMsg.textContent = "Salvando…";
+          summaryMsg.textContent = t("shell.saving");
           try {
             await DB.learningUnits.update(unit.id, { summaryBody: newBody });
             currentSummary = newBody ?? "";
-            summaryText.textContent = currentSummary;
+            renderSummary(summaryText, currentSummary);
             summaryText.hidden = !currentSummary;
             summaryPlaceholder.hidden = !!currentSummary;
-            editSummaryBtn.textContent = currentSummary ? "Editar resumo" : "Adicionar Resumo Mestre";
+            editSummaryBtn.textContent = currentSummary ? t("plan.detail.summary.edit") : t("plan.detail.summary.add");
             summaryDisplayWrap.hidden = false;
             editSummaryBtn.hidden = false;
             summaryEditArea.hidden = true;
             summaryMsg.textContent = "";
             unit.summaryBody = newBody;
           } catch (err) {
-            summaryMsg.textContent = "Erro ao salvar: " + err.message;
+            summaryMsg.textContent = t("plan.detail.summary.saveError", { message: err.message });
           }
         });
 
         summaryDisplayWrap.append(summaryText, summaryPlaceholder);
+        const planAuthoring = createSummaryAuthoring(summaryTextarea, { visual: true });
+        summaryEditArea.prepend(planAuthoring.modeSwitch);
+        summaryEditArea.prepend(planAuthoring.bar);
+        summaryTextarea.after(planAuthoring.preview);
+        summaryTextarea.after(planAuthoring.visualHost);
         summarySection.append(summaryDisplayWrap, editSummaryBtn, summaryEditArea);
         detail.append(summarySection);
 
@@ -1053,13 +2205,69 @@ export async function renderPlan() {
           const exSection = document.createElement("div");
           exSection.className = "plan-detail-section";
           const exHeading = document.createElement("h3");
-          exHeading.textContent = `Exercícios (${exs.length})`;
+          exHeading.textContent = t("shell.exercises.title", { count: exs.length });
           exSection.append(exHeading);
           for (const ex of exs) {
             const item = document.createElement("div");
             item.className = "plan-exercise-item";
-            item.textContent = ex.questionText;
+            if (reinforceIds.has(ex.id)) {
+              item.classList.add("is-reinforce");
+              item.append(
+                createTextElement("span", "plan-exercise-text", ex.questionText),
+                createTextElement("span", "study-now-chip plan-exercise-prior", t("shell.exercise.priorWrong")),
+              );
+            } else {
+              item.textContent = ex.questionText;
+            }
             exSection.append(item);
+          }
+          const actions = document.createElement("div");
+          actions.className = "plan-exercise-actions";
+          exSection.append(actions);
+          // First active-recall pass on demand. Offered only until the unit has
+          // its INITIAL_PRACTICE evidence: that is exactly what this flow
+          // records, so a second on-demand pass would be mislabeled (later
+          // retrieval belongs to the scheduled reviews, not to massed repeats).
+          // An exam's evidence has the same type but is NOT a study pass: it must not hide "Estudar agora".
+          if (!evidence.some((ev) => ev.context === "INITIAL_PRACTICE" && ev.origin !== "EXAM")) {
+            const startBtn = document.createElement("button");
+            startBtn.type = "button";
+            startBtn.className = "primary-button plan-study-now";
+            startBtn.dataset.action = "plan-study-now";
+            startBtn.textContent = t("plan.detail.studyNow");
+            startBtn.addEventListener("click", () => startStudyNow(unit, subject?.name));
+            actions.append(startBtn);
+          }
+          // B03: question authoring lives on the Cadastro screen (nav-hidden); this is the entry from the unit the student is looking at.
+          const editQuestionsBtn = document.createElement("button");
+          editQuestionsBtn.type = "button";
+          editQuestionsBtn.className = "secondary-button plan-edit-questions";
+          editQuestionsBtn.dataset.action = "plan-edit-questions";
+          editQuestionsBtn.textContent = t("plan.detail.editQuestions");
+          editQuestionsBtn.addEventListener("click", () => {
+            pendingRegisterFocusUnitId = unit.id;
+            showScreen("register", { focus: true });
+          });
+          actions.append(editQuestionsBtn);
+          // Modo Prova: measure first, teach after (nothing is revealed until the student submits).
+          if (REMOTE_MODE && DB.exams) {
+            const examBtn = document.createElement("button");
+            examBtn.type = "button";
+            examBtn.className = "secondary-button plan-exam";
+            examBtn.dataset.action = "plan-exam";
+            examBtn.textContent = t("plan.detail.takeExam");
+            examBtn.addEventListener("click", () => startExam(unit, subject?.name));
+            actions.append(examBtn);
+            if (subject && DB.exams.startSubject) {
+              const subjectExamBtn = document.createElement("button");
+              subjectExamBtn.type = "button";
+              subjectExamBtn.className = "secondary-button plan-subject-exam";
+              subjectExamBtn.dataset.action = "plan-subject-exam";
+              subjectExamBtn.textContent = t("shell.exam.subject");
+              subjectExamBtn.title = t("plan.detail.subjectExam.title", { subject: subject.name });
+              subjectExamBtn.addEventListener("click", () => startSubjectExam(subject));
+              actions.append(subjectExamBtn);
+            }
           }
           detail.append(exSection);
         }
@@ -1069,14 +2277,15 @@ export async function renderPlan() {
           const evSection = document.createElement("div");
           evSection.className = "plan-detail-section";
           const evHeading = document.createElement("h3");
-          evHeading.textContent = "Histórico de desempenho";
+          evHeading.textContent = t("plan.detail.history");
           evSection.append(evHeading);
           const evList = document.createElement("ul");
           evList.className = "plan-evidence-list";
           for (const ev of [...evidence].sort((a, b) => b.evidenceDate.localeCompare(a.evidenceDate))) {
             const li = document.createElement("li");
-            const ctx = { INITIAL_PRACTICE: "Prática inicial", REVIEW: "Revisão", EXTERNAL: "Externo" };
-            li.textContent = `${formatDate(ev.evidenceDate)} — ${ctx[ev.context] ?? ev.context}: ${ev.correctCount}/${ev.questionsCount} (${ev.scorePercent.toFixed(0)}%)`;
+            const ctx = { INITIAL_PRACTICE: t("plan.detail.history.initialPractice"), REVIEW: t("plan.detail.history.review"), EXTERNAL: t("plan.detail.history.external") };
+            const label = ev.origin === "EXAM" ? t("plan.detail.history.exam") : (ctx[ev.context] ?? ev.context);
+            li.textContent = t("plan.detail.history.entry", { date: formatDate(ev.evidenceDate), label, correct: ev.correctCount, questions: ev.questionsCount, percent: formatDecimal(ev.scorePercent) });
             evList.append(li);
           }
           evSection.append(evList);
@@ -1086,7 +2295,7 @@ export async function renderPlan() {
         if (!detail.children.length) {
           const empty = document.createElement("p");
           empty.className = "plan-detail-empty";
-          empty.textContent = "Nenhum detalhe disponível.";
+          empty.textContent = t("plan.detail.empty");
           detail.append(empty);
         }
       }
@@ -1095,296 +2304,328 @@ export async function renderPlan() {
     row.append(compact, detail);
     planList.append(row);
   }
+
+  if (pendingPlanFocusUnitId != null) {
+    const target = planList.querySelector(`.plan-row[data-unit-id="${pendingPlanFocusUnitId}"]`);
+    pendingPlanFocusUnitId = null;
+    if (target) {
+      target.querySelector(".plan-expand-btn")?.click();
+      target.scrollIntoView({ block: "center" });
+    }
+  }
 }
 
-function createTrendBadge(direction) {
+const TREND_ARROWS = {
+  IMPROVING: "M6 10V2M6 2L2.5 5.5M6 2l3.5 3.5",
+  DECLINING: "M6 2v8M6 10L2.5 6.5M6 10l3.5-3.5",
+  STABLE: "M2 6h8M10 6L6.5 2.5M10 6L6.5 9.5",
+  INSUFFICIENT: "M3 6h6",
+};
+
+// Trend in percentage points. The comparison windows are named in the tooltip; an insufficient
+// sample says so instead of showing a number or a "stable" it cannot support.
+function createTrendBadge(trend, kind = "subject") {
+  const { direction, delta, olderAccuracy, recentAccuracy, olderQuestions, recentQuestions } = trend;
   const span = document.createElement("span");
   span.className = "trend-badge";
   span.dataset.direction = direction;
-  const labels = { IMPROVING: "↑ Melhorando", DECLINING: "↓ Caindo", STABLE: "→ Estável", INSUFFICIENT: "— Insuficiente" };
-  span.textContent = labels[direction] ?? direction;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("trend-arrow");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", TREND_ARROWS[direction] ?? TREND_ARROWS.INSUFFICIENT);
+  svg.append(path);
+  const points = delta == null ? 0 : Math.round(delta * 100);
+  const label = document.createElement("span");
+  label.textContent = direction === "INSUFFICIENT" ? t("statsView.trend.insufficient")
+    : points === 0 || direction === "STABLE" ? t("statsView.trend.stable")
+    : t(points > 0 ? "statsView.trend.up" : "statsView.trend.down", { points: Math.abs(points) });
+  span.append(svg, label);
+  span.title = direction === "INSUFFICIENT"
+    ? t(kind === "unit" ? "statsView.trend.title.unit.insufficient" : "statsView.trend.title.subject.insufficient", { days: TREND_WINDOW_DAYS })
+    : t(kind === "unit" ? "statsView.trend.title.unit" : "statsView.trend.title.subject", {
+      days: TREND_WINDOW_DAYS,
+      from: Math.round(olderAccuracy),
+      to: Math.round(recentAccuracy),
+      olderQuestions,
+      recentQuestions,
+    });
   return span;
 }
 
-function createStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "performance-state-badge";
-  span.dataset.state = state;
-  const labels = { NO_EVIDENCE: "Sem evidência", CRITICAL: "Crítico", ATTENTION: "Atenção", ADEQUATE: "Adequado", STRONG: "Forte" };
-  span.textContent = labels[state] ?? state;
-  return span;
+// Header-click sorting (approved pattern — no separate sort dropdown when a
+// table column can sort itself). One {key,dir} state per table; ascending
+// "performance" is the existing worst-first default in both tables.
+const subjectSortState = { key: "performance", dir: "asc" };
+const unitSortState = { key: "performance", dir: "asc" };
+
+// The global período control (screen heading) selects the evidence period (90 days at first) for the header,
+// both tables, the distribution and the chart; analytics.js owns that selection (evidenceInPeriod) and sortMatrixRows.
+
+// P0-3 (revised): Recência shares the exact same single Prática button
+// instead of a second stacked button — a visually-stacked version briefly
+// existed and was reverted (it changed the header cell's content shape at
+// every width, including the phone breakpoint commit ff7dec2 had already
+// fixed and locked, silently re-breaking it). One button, one line, zero
+// header-geometry change at any width: clicking it steps through this
+// fixed cycle instead.
+const PRACTICE_RECENCY_CYCLE = [
+  { key: "practice", dir: "asc" },
+  { key: "practice", dir: "desc" },
+  { key: "recency", dir: "asc" },
+  { key: "recency", dir: "desc" },
+];
+
+function updateSortHeaderUI(theadRow, state) {
+  if (!theadRow) return;
+  for (const th of theadRow.querySelectorAll("th")) {
+    const buttons = th.querySelectorAll(".th-sort-btn");
+    if (buttons.length === 0) continue;
+    let anyActive = false;
+    for (const btn of buttons) {
+      if (btn.classList.contains("th-sort-btn-practice-recency")) {
+        // This one button represents two sort dimensions; its label and
+        // data-sort-key follow whichever is currently engaged, defaulting
+        // back to its original "Prática" identity when neither is active
+        // (some other header is the current sort) — same idle appearance
+        // this button always had before Recência existed.
+        const engaged = state.key === "practice" || state.key === "recency";
+        const effectiveKey = engaged ? state.key : "practice";
+        btn.dataset.sortKey = effectiveKey;
+        const label = effectiveKey === "recency" ? t("statsView.sort.recency") : t("statsView.sort.practice");
+        if (btn.firstChild && btn.firstChild.nodeType === Node.TEXT_NODE) {
+          btn.firstChild.textContent = label;
+        }
+        btn.setAttribute("aria-label", effectiveKey === "recency" ? t("statsView.sort.recency.aria") : t("statsView.sort.practice.aria"));
+        if (engaged) anyActive = true;
+        btn.classList.toggle("is-active", engaged);
+        btn.dataset.dir = engaged ? state.dir : "";
+        continue;
+      }
+      const isActive = btn.dataset.sortKey === state.key;
+      if (isActive) anyActive = true;
+      btn.classList.toggle("is-active", isActive);
+      btn.dataset.dir = isActive ? state.dir : "";
+    }
+    th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
+  }
 }
+
+function wireSortableHeaders(rowId, state, onChange) {
+  const row = document.querySelector(`#${rowId}`);
+  if (!row || row.dataset.sortWired) return;
+  row.dataset.sortWired = "true";
+  row.addEventListener("click", (event) => {
+    const btn = event.target.closest(".th-sort-btn");
+    if (!btn) return;
+    if (btn.classList.contains("th-sort-btn-practice-recency")) {
+      const currentIndex = PRACTICE_RECENCY_CYCLE.findIndex((s) => s.key === state.key && s.dir === state.dir);
+      const next = PRACTICE_RECENCY_CYCLE[(currentIndex + 1 + PRACTICE_RECENCY_CYCLE.length) % PRACTICE_RECENCY_CYCLE.length];
+      state.key = next.key;
+      state.dir = next.dir;
+    } else {
+      const key = btn.dataset.sortKey;
+      state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
+      state.key = key;
+    }
+    updateSortHeaderUI(row, state);
+    onChange();
+  });
+}
+
+// "Meu estudo está funcionando?" — plain text from observable evidence (see studyVerdict).
+// It ignores the period filter on purpose: a trend is a comparison over time, not a slice.
+async function renderStudyVerdict(subjectRows, unitRows) {
+  if (!studyVerdictEl) return;
+  const verdict = Analytics.studyVerdict(subjectRows, unitRows, await loadReinforcementByUnit());
+  const text = verdictText(verdict);
+  studyVerdictEl.dataset.state = verdict.state;
+  studyVerdictHeadline.textContent = text.headline;
+  studyVerdictDetail.textContent = text.detail;
+  studyVerdictEl.hidden = false;
+
+  const a = verdict.attention;
+  studyVerdictAttention.hidden = a == null;
+  if (a == null) return;
+  const pct = (n) => `${Math.round(n)}%`;
+  const items = a.reinforceCount > 0 ? tn("statsView.attention.reinforce", a.reinforceCount) : "";
+  studyVerdictAttentionText.textContent = a.reason === "DECLINING"
+    ? `${t("statsView.attention.declining", { title: a.unitTitle, subject: a.subjectName, from: pct(a.olderAccuracy), to: pct(a.recentAccuracy) })}${items ? ` ${items}` : ""}`
+    : (a.reinforceCount > 0
+      ? tn("statsView.attention.has", a.reinforceCount, { title: a.unitTitle, subject: a.subjectName })
+      : t("statsView.attention.hasItems", { title: a.unitTitle, subject: a.subjectName }));
+  studyVerdictAttentionBtn.onclick = () => {
+    pendingPlanFocusUnitId = a.unitId;
+    showScreen("plan");
+  };
+}
+
+const BAND_LABELS = {
+  get CRITICAL() { return t("statsView.band.CRITICAL"); },
+  get ATTENTION() { return t("statsView.band.ATTENTION"); },
+  get ADEQUATE() { return t("statsView.band.ADEQUATE"); },
+  get STRONG() { return t("statsView.band.STRONG"); },
+  get NO_EVIDENCE() { return t("statsView.band.NO_EVIDENCE"); },
+};
+
+function bandRange(state) {
+  return t(`statsView.band.range.${state}`, { attention: THRESHOLDS.ATTENTION, adequate: THRESHOLDS.ADEQUATE, strong: THRESHOLDS.STRONG });
+}
+
+// Indicators line: the same rows the table shows, so questions and subjects always reconcile.
+function renderStatsHeader(summary) {
+  metricElements.avgScore.textContent = formatAverageScore(summary.average);
+  metricElements.avgScore.dataset.state = getState(summary.average, summary.totalQuestions);
+  metricElements.totalQuestions.textContent = formatNumber(summary.totalQuestions);
+  metricElements.totalCorrect.textContent = formatNumber(summary.totalCorrect);
+  metricElements.subjects.textContent = formatNumber(summary.subjectCount);
+  metricElements.subjectsWithData.textContent = formatNumber(summary.withEvidence);
+}
+
+function renderStatsDistribution(rows) {
+  if (!statsBandList) return;
+  statsBandList.replaceChildren();
+  for (const band of performanceDistribution(rows)) {
+    const item = document.createElement("li");
+    item.className = "band-row";
+    item.dataset.state = band.state;
+    item.title = bandRange(band.state);
+    const name = document.createElement("span");
+    name.className = "band-name";
+    name.textContent = BAND_LABELS[band.state];
+    const bar = createComparisonBar(band.percent, band.state);
+    const figures = document.createElement("span");
+    figures.className = "band-figures";
+    figures.textContent = t("statsView.band.figures", { percent: band.percent, count: tn("statsView.band.subjects", band.count) });
+    item.append(name, bar, figures);
+    statsBandList.append(item);
+  }
+}
+
+// Estatísticas can be refreshed by navigation, period changes and row activation at
+// the same time. Only the newest async snapshot may publish DOM; otherwise an older
+// response can detach the detail action while the student is clicking it.
+let statsSubjectRenderSeq = 0;
+let statsUnitRenderSeq = 0;
 
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
+  const renderId = ++statsSubjectRenderSeq;
   const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.bySubject(evidence, units, subjects, today);
-
-  const sortValue = statsSubjectSort?.value ?? "worst-first";
-  if (sortValue === "best-first") {
-    results = [...results].sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return b.weightedAccuracy - a.weightedAccuracy;
-    });
-  } else if (sortValue === "volume") {
-    results = [...results].sort((a, b) => b.totalQuestions - a.totalQuestions);
-  } else if (sortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = [...results].sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  }
-  // "worst-first" is default from Analytics.bySubject sort
+  if (renderId !== statsSubjectRenderSeq) return;
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  // "Is my study working?" compares periods over time, so it uses all valid history, not the period slice.
+  const history = validEvidence(evidence);
+  await renderStudyVerdict(Analytics.bySubject(history, units, subjects, today), Analytics.byUnit(history, units, subjects));
+  let results = periodSubjectRows(evidence, units, subjects, { periodValue, today });
+  renderStatsHeader(periodSummary(results));
+  renderStatsDistribution(results);
+  results = sortMatrixRows(results, subjectSortState);
+  wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
+  updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
 
   const hasAny = results.some((r) => r.totalQuestions > 0);
-  subjectKpiEmpty.hidden = hasAny || results.length > 0;
+  subjectKpiEmpty.hidden = hasAny;
+  subjectKpiEmpty.textContent = t(results.length === 0 ? "screens.stats.subject.empty" : "statsView.period.empty");
   subjectKpiList.replaceChildren();
 
+  // Matrix row: identity (subject-cell) | performance (% + band bar, never a number without evidence)
+  // | evidence (real question count) | trend (points between named windows). Activating a row opens its
+  // contents; the evolution filter follows it (see openSubjectContents).
   for (const r of results) {
-    const card = document.createElement("article");
-    card.className = "subject-kpi";
-    card.dataset.state = r.state;
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.subjectId = String(r.subjectId);
 
-    const header = document.createElement("div");
-    header.className = "subject-kpi-header";
-
+    const identityCell = document.createElement("td");
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
+    // At narrower widths the chip can be truncated (ellipsis); the native tooltip keeps the full name.
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+    identityCell.append(chip);
 
-    const badges = document.createElement("div");
-    badges.className = "subject-kpi-badges";
-    badges.append(createStateBadge(r.state), createTrendBadge(r.trend.direction));
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
+    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
+    perfCell.dataset.state = r.state;
 
-    header.append(chip, badges);
-
-    const metrics = document.createElement("div");
-    metrics.className = "subject-kpi-metrics";
-
-    const accEl = document.createElement("div");
-    accEl.className = "subject-kpi-acc";
-    // AC-EST1-05: sem evidência ≠ 0% — show neutral, never red
-    // AC-EST1-07: always show % + n questões
-    if (r.weightedAccuracy == null) {
-      accEl.textContent = "Sem evidência";
-      accEl.classList.add("is-no-evidence");
-    } else {
-      accEl.textContent = `${r.weightedAccuracy.toFixed(1).replace(".", ",")}%`;
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = hasEvidence ? tn("statsView.evidence.questions", r.totalQuestions, { count: formatNumber(r.totalQuestions) }) : t("statsView.evidence.none");
+    practiceCell.append(practiceMain);
+    if (r.lastEvidence) {
+      const last = document.createElement("div");
+      last.className = "practice-recent";
+      last.textContent = t("statsView.evidence.last", { date: formatIntlDate(new Date(`${String(r.lastEvidence.evidenceDate).slice(0, 10)}T12:00:00`), { day: "2-digit", month: "2-digit", year: "2-digit" }) });
+      practiceCell.append(last);
     }
 
-    const qEl = document.createElement("div");
-    qEl.className = "subject-kpi-questions";
-    qEl.textContent = `${r.totalQuestions} questões · ${r.totalCorrect} acertos`;
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend));
 
-    const recentEl = document.createElement("div");
-    recentEl.className = "subject-kpi-recent";
-    recentEl.textContent = `Últimos 30d: ${r.recentQuestions} questões`;
-
-    metrics.append(accEl, qEl, recentEl);
-    card.append(header, metrics);
-    subjectKpiList.append(card);
-  }
-}
-
-function createTrackingStateBadge(state) {
-  const span = document.createElement("span");
-  span.className = "tracking-state-badge";
-  span.dataset.state = state;
-  span.textContent = TRACKING_STATE_LABELS[state] ?? state;
-  return span;
-}
-
-export async function renderTracking() {
-  if (!trackingList) return;
-  const today = getLocalDateValue();
-  const [units, subjects, allTasks, allEvidence] = await Promise.all([
-    DB.learningUnits.getAll(),
-    DB.subjects.getAll(),
-    DB.reviewTasks.getAll(),
-    DB.learningEvidence.getAll(),
-  ]);
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-  const evidenceByUnitId = new Map();
-  for (const ev of allEvidence) {
-    if (!evidenceByUnitId.has(ev.unitId)) evidenceByUnitId.set(ev.unitId, []);
-    evidenceByUnitId.get(ev.unitId).push(ev);
-  }
-
-  // Populate subject filter
-  if (trackingFilterSubject && trackingFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      trackingFilterSubject.append(opt);
-    }
-  }
-
-  const subjFilter = trackingFilterSubject?.value ?? "";
-  const stateFilter = trackingFilterState?.value ?? "";
-  const periodFilter = trackingFilterPeriod?.value ?? "";
-  const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
-
-  let filtered = units.filter((u) => {
-    if (subjFilter && String(u.subjectId) !== subjFilter) return false;
-    if (stateFilter && getTrackingState(u.id, allTasks, allEvidence, today) !== stateFilter) return false;
-    if (periodCutoff && u.studyDate < periodCutoff) return false;
-    return true;
-  });
-  filtered.sort((a, b) => b.studyDate.localeCompare(a.studyDate));
-
-  trackingEmpty.hidden = filtered.length > 0;
-  trackingList.replaceChildren();
-
-  for (const unit of filtered) {
-    const subject = subjectsById.get(unit.subjectId);
-    const state = getTrackingState(unit.id, allTasks, allEvidence, today);
-    const evidence = evidenceByUnitId.get(unit.id) ?? [];
-    const tasks = allTasks.filter((t) => t.unitId === unit.id);
-    const doneTasks = tasks.filter((t) => t.reviewDone);
-    const pendingTasks = tasks.filter((t) => !t.reviewDone);
-
-    const totalQ = evidence.reduce((s, e) => s + e.questionsCount, 0);
-    const totalC = evidence.reduce((s, e) => s + e.correctCount, 0);
-    const accText = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
-
-    const card = document.createElement("article");
-    card.className = "tracking-card";
-
-    const header = document.createElement("div");
-    header.className = "tracking-card-header";
-
-    const chip = document.createElement("span");
-    chip.className = "subject-chip";
-    chip.textContent = subject?.name ?? "Sem disciplina";
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
-
-    const title = document.createElement("span");
-    title.className = "tracking-unit-title";
-    title.textContent = unit.title;
-
-    header.append(chip, title, createTrackingStateBadge(state));
-
-    const meta = document.createElement("div");
-    meta.className = "tracking-card-meta";
-    const parts = [formatDate(unit.studyDate)];
-    if (unit.sourceText) parts.push(unit.sourceText);
-    parts.push(unit.summaryBody ? "Resumo ✓" : "Resumo —");
-    if (accText) parts.push(`${accText} · ${totalQ} q`);
-    parts.push(`${doneTasks.length}/${tasks.length} revisões`);
-
-    const nextPending = pendingTasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-    if (nextPending) parts.push(`Próx. ${formatDate(nextPending.dueDate)}`);
-
-    meta.textContent = parts.join(" · ");
-
-    // AC-ACOMP-05: quick actions — open unit (Plano), add Resumo, go to pending review
-    const actions = document.createElement("div");
-    actions.className = "tracking-card-actions";
-
-    const goToPlanBtn = document.createElement("button");
-    goToPlanBtn.className = "small-button";
-    goToPlanBtn.type = "button";
-    goToPlanBtn.textContent = "Ver no Plano";
-    goToPlanBtn.addEventListener("click", () => {
-      showScreen("plan");
-      // after render, expand this unit
-      renderPlan().then(() => {
-        const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-        if (row) {
-          row.scrollIntoView({ behavior: "smooth", block: "center" });
-          const expandBtn = row.querySelector(".plan-expand-btn");
-          if (expandBtn && !row.classList.contains("is-expanded")) expandBtn.click();
-        }
-      }).catch(console.error);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => openSubjectContents(r.subjectId));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openSubjectContents(r.subjectId);
+      }
     });
+    subjectKpiList.append(row);
+  }
+  syncSelectedSubjectRow();
+}
 
-    actions.append(goToPlanBtn);
-
-    if (!unit.summaryBody) {
-      const addSummaryBtn = document.createElement("button");
-      addSummaryBtn.className = "small-button";
-      addSummaryBtn.type = "button";
-      addSummaryBtn.textContent = "+ Resumo Mestre";
-      addSummaryBtn.addEventListener("click", () => {
-        showScreen("plan");
-        renderPlan().then(() => {
-          const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-          if (!row) return;
-          row.scrollIntoView({ behavior: "smooth", block: "center" });
-          const expandBtn = row.querySelector(".plan-expand-btn");
-          if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
-          setTimeout(() => {
-            const editBtn = row.querySelector(".plan-edit-summary-btn");
-            if (editBtn) {
-              editBtn.scrollIntoView({ behavior: "smooth", block: "nearest" });
-              editBtn.click();
-            }
-          }, 350);
-        }).catch(console.error);
-      });
-      actions.append(addSummaryBtn);
-    }
-
-    if (nextPending) {
-      const goToReviewBtn = document.createElement("button");
-      goToReviewBtn.className = "small-button";
-      goToReviewBtn.type = "button";
-      goToReviewBtn.textContent = `Ir para revisão`;
-      goToReviewBtn.addEventListener("click", () => {
-        if (nextPending.dueDate <= today) {
-          // Overdue or due today: visible on Hoje screen.
-          showScreen("today");
-          renderToday().then(() => {
-            setTimeout(() => {
-              const reviewRow = document.querySelector(`[data-review-id="${nextPending.id}"]`);
-              if (reviewRow) reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 300);
-          }).catch(console.error);
-        } else {
-          // Due tomorrow or future: not on Hoje. Navigate to Plano and expand the unit.
-          showScreen("plan");
-          renderPlan().then(() => {
-            const row = document.querySelector(`[data-unit-id="${unit.id}"]`);
-            if (!row) return;
-            row.scrollIntoView({ behavior: "smooth", block: "center" });
-            const expandBtn = row.querySelector(".plan-expand-btn");
-            if (expandBtn && expandBtn.getAttribute("aria-expanded") !== "true") expandBtn.click();
-          }).catch(console.error);
-        }
-      });
-      actions.append(goToReviewBtn);
-    }
-
-    card.append(header, meta, actions);
-    trackingList.append(card);
+function syncSelectedSubjectRow() {
+  const selected = evolutionFilterSubject?.value ?? "";
+  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", selected !== "" && tr.dataset.subjectId === selected);
   }
 }
 
-function buildColorPicker(container, selectedKey, onSelect) {
-  if (!container) return;
-  container.replaceChildren();
-  for (const key of SUBJECT_COLOR_KEYS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "color-swatch";
-    btn.dataset.colorKey = key;
-    btn.style.setProperty("--swatch-color", `var(${colorVarForKey(key)})`);
-    btn.setAttribute("aria-label", key.replace("DISC-", "").toLowerCase());
-    if (key === selectedKey) btn.classList.add("is-selected");
-    btn.addEventListener("click", () => {
-      for (const b of container.querySelectorAll(".color-swatch")) b.classList.remove("is-selected");
-      btn.classList.add("is-selected");
-      onSelect(key);
-    });
-    container.append(btn);
+function selectSubjectForEvolution(subjectId) {
+  if (evolutionFilterSubject) {
+    evolutionFilterSubject.value = String(subjectId);
+    syncSelect(evolutionFilterSubject);
+    evolutionFilterSubject.dispatchEvent(new Event("change"));
   }
+  syncSelectedSubjectRow();
+}
+
+// Single semantic action for "activate a discipline row in Por disciplina":
+// used identically by click, Enter and Space so mouse and keyboard never
+// diverge. Restores the pre-regression behavior (row activation used to
+// switch to Por conteúdo) while keeping the newer evolution-chart sync,
+// which is still legitimate/useful on its own.
+function openSubjectContents(subjectId) {
+  // 1) keep discipline selection in sync — same mechanism the evolution
+  // chart already used (dropdown value + row highlight in Por disciplina).
+  selectSubjectForEvolution(subjectId);
+  // 2) drive Por conteúdo to the same discipline.
+  selectedUnitSubjectId = subjectId;
+  // 3) activate the Por conteúdo tab (shared setStatsView, same path a real
+  // tab click uses — no parallel tab-activation logic).
+  const unitTab = document.querySelector("#tab-stats-unit");
+  if (unitTab) setStatsView(unitTab);
+  // 4) re-render Por conteúdo (updates the matrix rows AND, via
+  // renderContentContext inside it, the context-switcher trigger/menu).
+  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  // 5) focus/ARIA coherence: move focus to the now-selected tab, matching
+  // the tablist's own roving-tabindex state (setStatsView already put
+  // tabindex=0 only on this tab) instead of leaving focus stranded on a
+  // row that just disappeared into the other, now-hidden panel.
+  unitTab?.focus();
 }
 
 export async function renderDisciplinas() {
@@ -1413,11 +2654,12 @@ export async function renderDisciplinas() {
     const subjectEvidence = units.flatMap((u) => evidenceByUnit.get(u.id) ?? []);
     const totalQ = subjectEvidence.reduce((s, e) => s + e.questionsCount, 0);
     const totalC = subjectEvidence.reduce((s, e) => s + e.correctCount, 0);
-    const acc = totalQ > 0 ? `${((totalC / totalQ) * 100).toFixed(0)}%` : null;
+    const acc = totalQ > 0 ? formatPerformanceScore((totalC / totalQ) * 100) : null;
 
     const card = document.createElement("article");
     card.className = `subject-catalog-card${subj.isActive ? "" : " is-archived"}`;
     card.dataset.subjectId = String(subj.id);
+    card.style.setProperty("--subject-color", `var(${colorVarForKey(subj.color ?? "DISC-BLUE")})`);
 
     const chipRow = document.createElement("div");
     chipRow.className = "subject-catalog-chip-row";
@@ -1429,15 +2671,15 @@ export async function renderDisciplinas() {
 
     const archiveLabel = document.createElement("span");
     archiveLabel.className = "subject-archive-label";
-    archiveLabel.textContent = subj.isActive ? "" : "Arquivada";
+    archiveLabel.textContent = subj.isActive ? "" : t("subjects.card.archived");
     archiveLabel.hidden = subj.isActive;
 
     chipRow.append(chip, archiveLabel);
 
     const metaEl = document.createElement("div");
     metaEl.className = "subject-catalog-meta";
-    const metaParts = [`${units.length} aula${units.length !== 1 ? "s" : ""}`];
-    if (acc) metaParts.push(`${acc} média`);
+    const metaParts = [units.length === 1 ? t("subjects.card.lessons.one", { count: units.length }) : t("subjects.card.lessons.other", { count: units.length })];
+    if (acc) metaParts.push(t("subjects.card.average", { accuracy: acc }));
     metaEl.textContent = metaParts.join(" · ");
 
     // Edit form (inline, initially hidden)
@@ -1450,6 +2692,7 @@ export async function renderDisciplinas() {
     nameInput.className = "subject-edit-name";
     nameInput.value = subj.name;
     nameInput.maxLength = 100;
+    nameInput.setAttribute("aria-label", t("screens.subjects.form.name"));
 
     let editColor = subj.color ?? "DISC-BLUE";
     const colorPickerEl = document.createElement("div");
@@ -1464,12 +2707,12 @@ export async function renderDisciplinas() {
     const saveEditBtn = document.createElement("button");
     saveEditBtn.className = "small-button is-primary";
     saveEditBtn.type = "button";
-    saveEditBtn.textContent = "Salvar";
+    saveEditBtn.textContent = t("shell.action.save");
 
     const cancelEditBtn = document.createElement("button");
     cancelEditBtn.className = "small-button";
     cancelEditBtn.type = "button";
-    cancelEditBtn.textContent = "Cancelar";
+    cancelEditBtn.textContent = t("shell.action.cancel");
 
     const editActions = document.createElement("div");
     editActions.className = "form-actions";
@@ -1478,7 +2721,7 @@ export async function renderDisciplinas() {
 
     saveEditBtn.addEventListener("click", async () => {
       const newName = nameInput.value.trim();
-      const editNameErr = validateNamingField(newName, "o nome da disciplina");
+      const editNameErr = validateNamingField(newName, t("shell.field.subjectName"));
       if (editNameErr) { editMessage.textContent = editNameErr; nameInput.focus(); return; }
       try {
         await DB.subjects.update(subj.id, { name: newName, color: editColor });
@@ -1488,9 +2731,14 @@ export async function renderDisciplinas() {
           renderToday().catch(console.error);
         }
         renderPlan().catch(console.error);
-      } catch { editMessage.textContent = "Erro ao salvar."; }
+      } catch { editMessage.textContent = t("subjects.card.saveError"); }
     });
     cancelEditBtn.addEventListener("click", () => { editForm.hidden = true; });
+    // Same keyboard contract as the other inline editors: Enter saves, Esc cancels (found by the native UI test: only the buttons worked).
+    nameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); saveEditBtn.click(); }
+      else if (event.key === "Escape") { event.preventDefault(); cancelEditBtn.click(); }
+    });
 
     // Action buttons
     const actions = document.createElement("div");
@@ -1499,7 +2747,7 @@ export async function renderDisciplinas() {
     const editBtn = document.createElement("button");
     editBtn.className = "small-button";
     editBtn.type = "button";
-    editBtn.textContent = "Editar";
+    editBtn.textContent = t("shell.action.edit");
     editBtn.addEventListener("click", () => {
       editForm.hidden = false;
       nameInput.focus();
@@ -1508,31 +2756,39 @@ export async function renderDisciplinas() {
     const archiveBtn = document.createElement("button");
     archiveBtn.className = "small-button";
     archiveBtn.type = "button";
-    archiveBtn.textContent = subj.isActive ? "Arquivar" : "Reativar";
+    archiveBtn.textContent = subj.isActive ? t("subjects.card.archive") : t("subjects.card.reactivate");
     archiveBtn.addEventListener("click", async () => {
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.update(subj.id, { isActive: !subj.isActive });
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao arquivar/reativar disciplina.", error);
+        if (msg) msg.textContent = t("subjects.card.archiveError");
+      }
     });
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "small-button is-danger";
     deleteBtn.type = "button";
-    deleteBtn.textContent = "Excluir";
+    deleteBtn.textContent = t("shell.action.delete");
     deleteBtn.addEventListener("click", async () => {
       // AC-DISC-04: hard delete only when no learning_units
       if (units.length > 0) {
         const msg = card.querySelector(".subject-catalog-delete-msg");
-        if (msg) msg.textContent = "Não é possível excluir: há aulas nesta disciplina. Arquive-a primeiro.";
+        if (msg) msg.textContent = t("subjects.card.deleteBlocked");
         return;
       }
-      const confirmed = await showConfirm(`Excluir disciplina "${subj.name}"? Essa ação não pode ser desfeita.`);
+      const confirmed = await showConfirm(t("subjects.card.deleteConfirm", { name: subj.name }));
       if (!confirmed) return;
+      const msg = card.querySelector(".subject-catalog-delete-msg");
       try {
         await DB.subjects.delete(subj.id);
         await renderDisciplinas();
-      } catch { }
+      } catch (error) {
+        console.error("Falha ao excluir disciplina.", error);
+        if (msg) msg.textContent = t("subjects.card.deleteError");
+      }
     });
 
     const deleteMsg = document.createElement("p");
@@ -1576,282 +2832,343 @@ function buildSparkline(scores, width = 60, height = 24) {
   return svg;
 }
 
+let selectedUnitSubjectId = null;
+
+function formatContentContextMeta(row) {
+  if (!row || row.totalQuestions <= 0) return t("statsView.context.noEvidence");
+  const pct = formatDecimal(row.weightedAccuracy, 1, { trim: true });
+  return t("statsView.context.meta", { percent: pct, questions: row.totalQuestions });
+}
+
+// Context switcher aprovado: trigger mostra a disciplina atual; o menu que
+// ele abre nunca repete essa disciplina, só mostra as alternativas.
+function renderContentContext(activeSubjectRows, currentSubjectId) {
+  if (!contentContextPlate || !disciplineSwitchList) return;
+  const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
+
+  contentContextPlate.textContent = current?.subjectName ?? t("stats.noSubject");
+  contentContextPlate.title = current?.subjectName ?? t("stats.noSubject");
+  contentContextPlate.style.setProperty(
+    "--subject-fill",
+    `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
+  );
+  if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
+
+  disciplineSwitchList.replaceChildren();
+  let optionIndex = 0;
+  for (const row of activeSubjectRows) {
+    if (row.subjectId === currentSubjectId) continue;
+    const item = document.createElement("li");
+    // Menu Button pattern (DESIGN.md): this widget performs an action
+    // ("switch to this discipline"), it is not a value picker with a
+    // selection state — menuitem, never option/aria-selected.
+    item.setAttribute("role", "menuitem");
+    // Stable per-render id + tabIndex=-1: same roving-focus contract as
+    // select-ui.js's own Menu popup (see wireListboxKeyboard in
+    // src/select-ui.js) — real DOM focus stays on the list itself,
+    // individual items are only ever visually marked via .is-focused.
+    item.id = `discipline-switch-opt-${optionIndex++}`;
+    item.tabIndex = -1;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "subject-cell";
+    btn.textContent = row.subjectName;
+    btn.title = row.subjectName;
+    btn.dataset.subjectId = String(row.subjectId);
+    btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
+    item.append(btn);
+    disciplineSwitchList.append(item);
+  }
+}
+
 export async function renderStatsByUnit() {
   if (!unitStatsList) return;
+  const renderId = ++statsUnitRenderSeq;
+  const today = getLocalDateValue();
   const [evidence, units, subjects] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
   ]);
-  let results = Analytics.byUnit(evidence, units, subjects);
+  if (renderId !== statsUnitRenderSeq) return;
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  let results = Analytics.byUnit(evidenceInPeriod(evidence, periodValue, today), units, subjects);
   const subjectsById = new Map(subjects.map((s) => [s.id, s]));
 
-  // Populate subject filter
-  if (statsUnitFilterSubject && statsUnitFilterSubject.options.length <= 1) {
-    for (const s of subjects.filter((s) => s.isActive)) {
-      const opt = document.createElement("option");
-      opt.value = String(s.id);
-      opt.textContent = s.name;
-      statsUnitFilterSubject.append(opt);
-    }
+  // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
+  // trigger = disciplina atual, menu = só as alternativas) em vez de um
+  // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
+  // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
+  // reaproveitado aqui, não recalculado.
+  const activeSubjectRows = periodSubjectRows(evidence, units, subjects, { periodValue, today }).filter(
+    (r) => subjectsById.get(r.subjectId)?.isActive,
+  );
+  if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
+    selectedUnitSubjectId = activeSubjectRows[0]?.subjectId ?? null;
   }
+  renderContentContext(activeSubjectRows, selectedUnitSubjectId);
 
   // Apply filters (AC-EST2-04)
-  const subjFilter = statsUnitFilterSubject?.value ?? "";
-  const trendFilter = statsUnitFilterTrend?.value ?? "";
-  const unitPeriodFilter = statsUnitFilterPeriod?.value ?? "";
-  if (subjFilter) results = results.filter((r) => String(r.subjectId) === subjFilter);
-  if (trendFilter) results = results.filter((r) => r.trend.direction === trendFilter);
-  if (unitPeriodFilter) {
-    const days = unitPeriodFilter === "last-30" ? 30 : unitPeriodFilter === "last-90" ? 90 : 365;
-    const cutoff = subtractDays(today, days);
-    results = results.filter((r) => r.lastEvidence?.evidenceDate != null && r.lastEvidence.evidenceDate >= cutoff);
-  }
+  if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
+  if (periodValue) results = results.filter((r) => r.totalQuestions > 0);
 
-  // Sort (AC-EST2-05)
-  const unitSortValue = statsUnitSort?.value ?? "worst-first";
-  if (unitSortValue === "trend") {
-    const trendOrder = { DECLINING: 0, INSUFFICIENT: 1, STABLE: 2, IMPROVING: 3 };
-    results = results.sort((a, b) => (trendOrder[a.trend.direction] ?? 1) - (trendOrder[b.trend.direction] ?? 1));
-  } else if (unitSortValue === "volume") {
-    results = results.sort((a, b) => b.evidenceCount - a.evidenceCount);
-  } else if (unitSortValue === "subject") {
-    results = results.sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? "") || (a.unitTitle ?? "").localeCompare(b.unitTitle ?? ""));
-  } else if (unitSortValue === "last-activity") {
-    results = results.sort((a, b) => {
-      const da = a.lastEvidence?.evidenceDate;
-      const db = b.lastEvidence?.evidenceDate;
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return db.localeCompare(da);
-    });
-  } else {
-    // worst-first (default): worst recent score → best
-    results = results.sort((a, b) => {
-      if (a.weightedAccuracy == null && b.weightedAccuracy == null) return 0;
-      if (a.weightedAccuracy == null) return 1;
-      if (b.weightedAccuracy == null) return -1;
-      return a.weightedAccuracy - b.weightedAccuracy;
-    });
-  }
+  // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
+  results = sortMatrixRows(results, unitSortState);
+  wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
+  updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
 
-  const hasData = results.some((r) => r.evidenceCount > 0);
   unitStatsEmpty.hidden = results.length > 0;
   unitStatsList.replaceChildren();
+  if (unitDetailEmpty && unitDetailBody) {
+    unitDetailEmpty.hidden = false;
+    unitDetailBody.hidden = true;
+    unitDetailBody.replaceChildren();
+  }
 
+  // Matriz por conteúdo — mesma gramática da matriz por disciplina (mesmas
+  // 4 colunas), só a entidade muda. Identidade aqui é chip da disciplina
+  // (compacto) + título do conteúdo, porque esta lista cruza disciplinas
+  // (é filtro, não um drill-down já dentro de uma disciplina) — sem a cor
+  // a varredura visual entre disciplinas se perde. Sparkline/data completos
+  // ficam no painel de detalhe ao selecionar a linha, não espremidos na
+  // matriz.
   for (const r of results) {
-    const subject = subjectsById.get(r.subjectId);
-    const row = document.createElement("article");
-    row.className = "unit-stats-row";
+    const row = document.createElement("tr");
+    row.className = "matrix-row";
+    row.tabIndex = 0;
+    row.dataset.unitId = String(r.unitId ?? r.id ?? "");
 
-    const header = document.createElement("div");
-    header.className = "unit-stats-header";
-
+    const identityCell = document.createElement("td");
+    identityCell.className = "unit-identity-cell";
     const chip = document.createElement("span");
-    chip.className = "subject-chip";
+    chip.className = "subject-cell subject-cell--compact";
     chip.textContent = r.subjectName;
-    chip.style.setProperty("--subject-color", `var(${colorVarForKey(r.color)})`);
-
+    chip.title = r.subjectName;
+    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
     const title = document.createElement("span");
-    title.className = "unit-stats-title";
+    title.className = "unit-title";
     title.textContent = r.unitTitle;
+    title.title = r.unitTitle;
+    identityCell.append(chip, title);
 
-    header.append(chip, title);
+    const hasEvidence = r.weightedAccuracy != null;
+    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
+    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
+    perfCell.dataset.state = r.state;
 
-    const body = document.createElement("div");
-    body.className = "unit-stats-body";
-
-    const sparkEl = buildSparkline(r.scoresSequence);
-    if (sparkEl) body.append(sparkEl);
-
-    const meta = document.createElement("div");
-    meta.className = "unit-stats-meta";
-
-    const accText = r.weightedAccuracy != null
-      ? `${r.weightedAccuracy.toFixed(1).replace(".", ",")}% · ${r.totalQuestions} q`
-      : "Sem evidência";
-    meta.textContent = accText;
+    const practiceCell = document.createElement("td");
+    practiceCell.className = "practice-cell";
+    const practiceMain = document.createElement("div");
+    practiceMain.className = "practice-compact";
+    practiceMain.textContent = hasEvidence ? t("statsView.unit.practice", { questions: r.totalQuestions }) : t("statsView.unit.noPractice");
+    practiceCell.append(practiceMain);
     if (r.lastEvidence) {
-      const lastDate = document.createElement("span");
-      lastDate.className = "unit-stats-last";
-      lastDate.textContent = ` · ${formatDate(r.lastEvidence.evidenceDate)}`;
-      meta.append(lastDate);
+      const lastDate = document.createElement("div");
+      lastDate.className = "practice-recent";
+      lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
+      lastDate.title = formatDate(r.lastEvidence.evidenceDate);
+      practiceCell.append(lastDate);
     }
 
-    const trendBadge = createTrendBadge(r.trend.direction);
+    const trendCell = document.createElement("td");
+    trendCell.append(createTrendBadge(r.trend, "unit"));
 
-    body.append(meta, trendBadge);
-    row.append(header, body);
+    row.append(identityCell, perfCell, practiceCell, trendCell);
+    row.addEventListener("click", () => showUnitDetail(r));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showUnitDetail(r);
+      }
+    });
     unitStatsList.append(row);
   }
 }
 
+// Painel de detalhe do conteúdo selecionado — reaproveita exatamente os
+// mesmos campos que a linha da matriz já carregava (nada novo é calculado
+// aqui), só muda a representação: sparkline completa + data por extenso.
+function showUnitDetail(r) {
+  if (!unitDetailPanel) return;
+  for (const tr of unitStatsList.querySelectorAll("tr.matrix-row")) {
+    tr.classList.toggle("is-selected", tr.dataset.unitId === String(r.unitId ?? r.id ?? ""));
+  }
+  unitDetailEmpty.hidden = true;
+  unitDetailBody.hidden = false;
+  unitDetailBody.replaceChildren();
+
+  const heading = document.createElement("div");
+  heading.className = "unit-detail-heading";
+  const chip = document.createElement("span");
+  chip.className = "subject-cell";
+  chip.textContent = r.subjectName;
+  chip.title = r.subjectName;
+  chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
+  const title = document.createElement("h3");
+  title.className = "unit-detail-title";
+  title.textContent = r.unitTitle;
+  heading.append(chip, title);
+
+  const score = document.createElement("div");
+  score.className = "unit-detail-score";
+  score.textContent = r.weightedAccuracy != null
+    ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
+    : t("statsView.unit.noEvidence");
+
+  const trend = createTrendBadge(r.trend, "unit");
+
+  unitDetailBody.append(heading, score, trend);
+
+  if (r.lastEvidence) {
+    const last = document.createElement("p");
+    last.className = "unit-detail-last";
+    last.textContent = t("statsView.unit.lastPractice", { date: formatDate(r.lastEvidence.evidenceDate) });
+    unitDetailBody.append(last);
+  }
+
+  const sparkEl = buildSparkline(r.scoresSequence, 260, 64);
+  if (sparkEl) {
+    sparkEl.classList.add("unit-detail-spark");
+    unitDetailBody.append(sparkEl);
+  }
+
+  // The weak spot is the lesson the row is about (the row comes from that lesson): one click opens it in Plano, with its Resumo and "Estudar agora"
+  if (r.unitId != null) {
+    const study = document.createElement("button");
+    study.type = "button";
+    study.className = "secondary-button unit-detail-study";
+    study.dataset.action = "study-unit";
+    study.textContent = t("statsView.unit.study");
+    const gone = createTextElement("p", "form-message is-error", "");
+    gone.setAttribute("role", "status");
+    study.addEventListener("click", async () => {
+      gone.textContent = (await openLessonInPlan(r.unitId)) ? "" : t("plan.openLesson.missing");
+    });
+    unitDetailBody.append(study, gone);
+  }
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgElement(name, attributes = {}) {
+  const el = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attributes)) el.setAttribute(key, String(value));
+  return el;
+}
+
+const shortDate = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+// General evolution of the CURRENT period and subject filter, from the same evidence as the header and
+// table. X is proportional to calendar time; an interval without questions is not a point and breaks the
+// line, so a silent stretch is never drawn as a steady trend.
 function renderEvolutionSvg(evidence, units, subjects) {
   if (!evolutionSvg) return false;
-  const subjectFilter = evolutionFilterSubject?.value ?? "";
-  const periodMonths = Number(evolutionFilterPeriod?.value ?? "6");
   const today = getLocalDateValue();
-  const cutoff = periodMonths > 0
-    ? (() => { const d = new Date(`${today}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - periodMonths); return d.toISOString().slice(0, 7); })()
-    : "0000-01";
-
-  // Map unitId → subjectId
-  const unitToSubject = new Map(units.map((u) => [u.id, u.subjectId]));
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-
-  // Group evidence by month + subject, compute weighted_accuracy per month per subject
-  const dataBySubject = new Map();
-  for (const ev of evidence) {
-    const month = ev.evidenceDate.slice(0, 7);
-    if (month < cutoff) continue;
-    const subjectId = unitToSubject.get(ev.unitId);
-    if (!subjectId) continue;
-    if (subjectFilter && String(subjectId) !== subjectFilter) continue;
-    if (!dataBySubject.has(subjectId)) dataBySubject.set(subjectId, new Map());
-    const monthMap = dataBySubject.get(subjectId);
-    if (!monthMap.has(month)) monthMap.set(month, { q: 0, c: 0 });
-    const m = monthMap.get(month);
-    m.q += ev.questionsCount;
-    m.c += ev.correctCount;
+  const periodValue = statsUnitFilterPeriod?.value ?? "";
+  const filter = evolutionFilterSubject?.value ?? "";
+  const rows = periodSubjectRows(evidence, units, subjects, { periodValue, today });
+  const subjectIds = new Set(rows.filter((r) => !filter || String(r.subjectId) === filter).map((r) => r.subjectId));
+  const series = evolutionSeries(evidence, units, { periodValue, today, subjectIds });
+  chartEmpty.hidden = series.points.length > 0;
+  // SVGElement has no `hidden` property (only the attribute), unlike the HTML elements around it.
+  evolutionSvg.toggleAttribute("hidden", series.points.length === 0);
+  if (evolutionCaption) evolutionCaption.hidden = series.points.length === 0;
+  if (series.points.length === 0) {
+    chartEmpty.textContent = t("screens.stats.evolution.empty");
+    if (evolutionDescription) evolutionDescription.textContent = "";
+    return false;
   }
 
-  if (dataBySubject.size === 0) { evolutionSvg.hidden = true; return false; }
-
-  // Collect all months and sort
-  const allMonths = [...new Set(
-    [...dataBySubject.values()].flatMap((mm) => [...mm.keys()])
-  )].sort();
-
-  if (allMonths.length < 1) { evolutionSvg.hidden = true; return false; }
-
-  // Build series per subject
-  const series = [];
-  for (const [subjectId, monthMap] of dataBySubject) {
-    const subject = subjectsById.get(subjectId);
-    const points = allMonths.map((m) => {
-      const d = monthMap.get(m);
-      return d && d.q > 0 ? (d.c / d.q) * 100 : null;
-    });
-    series.push({ subject, points, subjectId });
-  }
-
-  // SVG layout
-  const W = 320, H = 160, padL = 36, padR = 12, padT = 10, padB = 28;
+  const W = 360, H = 200, padL = 36, padR = 14, padT = 12, padB = 26;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
+  const xOf = (offset) => padL + (series.spanDays > 1 ? (offset / (series.spanDays - 1)) * chartW : chartW / 2);
+  const yOf = (pct) => padT + chartH * (1 - pct / 100);
 
   evolutionSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  evolutionSvg.setAttribute("width", "100%");
-  evolutionSvg.setAttribute("height", H);
   evolutionSvg.replaceChildren();
 
-  const ns = "http://www.w3.org/2000/svg";
-
-  // Y axis labels 0 / 50 / 100
-  for (const pct of [0, 50, 100]) {
-    const y = padT + chartH * (1 - pct / 100);
-    const text = document.createElementNS(ns, "text");
-    text.setAttribute("x", padL - 4);
-    text.setAttribute("y", y + 4);
-    text.setAttribute("text-anchor", "end");
-    text.setAttribute("font-size", "9");
-    text.setAttribute("fill", "currentColor");
-    text.setAttribute("opacity", "0.5");
-    text.textContent = `${pct}%`;
-    evolutionSvg.append(text);
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", padL);
-    line.setAttribute("x2", W - padR);
-    line.setAttribute("y1", y);
-    line.setAttribute("y2", y);
-    line.setAttribute("stroke", "currentColor");
-    line.setAttribute("stroke-width", "0.5");
-    line.setAttribute("opacity", "0.2");
-    evolutionSvg.append(line);
+  for (const pct of [0, 25, 50, 75, 100]) {
+    evolutionSvg.append(svgElement("line", { class: "evo-grid", x1: padL, x2: W - padR, y1: yOf(pct), y2: yOf(pct) }));
+    const label = svgElement("text", { class: "evo-axis", x: padL - 6, y: yOf(pct) + 3.5, "text-anchor": "end" });
+    label.textContent = `${pct}%`;
+    evolutionSvg.append(label);
   }
-
-  // X axis labels (month abbreviations)
-  const xStep = allMonths.length > 1 ? chartW / (allMonths.length - 1) : chartW;
-  for (let i = 0; i < allMonths.length; i++) {
-    const x = padL + i * xStep;
-    const [year, month] = allMonths[i].split("-");
-    const label = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(`${allMonths[i]}-15T12:00:00`));
-    const text = document.createElementNS(ns, "text");
-    text.setAttribute("x", x);
-    text.setAttribute("y", H - padB + 14);
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "9");
-    text.setAttribute("fill", "currentColor");
-    text.setAttribute("opacity", "0.6");
-    text.textContent = label;
-    evolutionSvg.append(text);
-  }
-
-  // Lines per subject
-  const palette = ["#3b82f6", "#16a34a", "#7c3aed", "#ea580c", "#dc2626", "#0d9488", "#db2777", "#4338ca"];
-  series.forEach(({ points, subject }, idx) => {
-    const color = palette[idx % palette.length];
-    const pts = [];
-    for (let i = 0; i < points.length; i++) {
-      if (points[i] == null) continue;
-      const x = padL + i * xStep;
-      const y = padT + chartH * (1 - points[i] / 100);
-      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-    }
-    if (pts.length < 1) return;
-    if (pts.length === 1) {
-      const [x, y] = pts[0].split(",");
-      const circle = document.createElementNS(ns, "circle");
-      circle.setAttribute("cx", x);
-      circle.setAttribute("cy", y);
-      circle.setAttribute("r", "3");
-      circle.setAttribute("fill", color);
-      evolutionSvg.append(circle);
-    } else {
-      const polyline = document.createElementNS(ns, "polyline");
-      polyline.setAttribute("points", pts.join(" "));
-      polyline.setAttribute("fill", "none");
-      polyline.setAttribute("stroke", color);
-      polyline.setAttribute("stroke-width", "2");
-      polyline.setAttribute("stroke-linejoin", "round");
-      polyline.setAttribute("stroke-linecap", "round");
-      evolutionSvg.append(polyline);
-    }
-    // Legend label
-    if (subject) {
-      const lastPt = pts[pts.length - 1];
-      const [lx, ly] = lastPt.split(",");
-      const text = document.createElementNS(ns, "text");
-      text.setAttribute("x", Number(lx) + 3);
-      text.setAttribute("y", Number(ly) + 4);
-      text.setAttribute("font-size", "8");
-      text.setAttribute("fill", color);
-      text.textContent = subject.name;
-      evolutionSvg.append(text);
-    }
+  const last = series.spanDays - 1;
+  [0, last / 2, last].forEach((offset, index) => {
+    const label = svgElement("text", { class: "evo-axis", x: xOf(offset), y: H - 8, "text-anchor": index === 0 ? "start" : index === 2 ? "end" : "middle" });
+    label.textContent = shortDate(subtractDays(series.from, -Math.round(offset)));
+    evolutionSvg.append(label);
   });
 
-  evolutionSvg.hidden = false;
+  for (const segment of series.segments) {
+    if (segment.length < 2) continue;
+    evolutionSvg.append(svgElement("polyline", { class: "evo-line", points: segment.map((p) => `${xOf(p.offset).toFixed(1)},${yOf(p.accuracy).toFixed(1)}`).join(" ") }));
+  }
+  for (const p of series.points) {
+    const dot = svgElement("circle", { class: "evo-dot", cx: xOf(p.offset).toFixed(1), cy: yOf(p.accuracy).toFixed(1), r: 3.6 });
+    const title = svgElement("title");
+    title.textContent = t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) });
+    dot.append(title);
+    evolutionSvg.append(dot);
+  }
+
+  if (evolutionCaption) evolutionCaption.textContent = t("statsView.evolution.caption", { days: series.bucketDays });
+  if (evolutionDescription) {
+    evolutionDescription.textContent = series.points
+      .map((p) => t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) }))
+      .join("; ");
+  }
   return true;
 }
 
 export async function renderSettings() {
   const settings = await DB.settings.get();
-  lastBackupLabel.textContent = settings?.lastBackupAt
-    ? `Último backup: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.lastBackupAt))}`
-    : "Nenhum backup exportado.";
+  // Language preference has real server authority only. Never present an inert selector in legacy local mode.
+  if (generationLanguageCard) generationLanguageCard.hidden = !REMOTE_MODE;
+  if (REMOTE_MODE && generationLanguageSelect) {
+    generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? DEFAULT_LOCALE;
+    syncSelect(generationLanguageSelect);
+  }
+  const lastBackupAt = readLastBackupAt(AuthUI.getCurrentUser()?.id) ?? settings?.lastBackupAt ?? null;
+  lastBackupLabel.textContent = lastBackupAt
+    ? t("appBackup.last", { date: formatIntlDate(lastBackupAt, { dateStyle: "medium", timeStyle: "short" }) })
+    : t("appBackup.none");
+
+  // T22: importAll/clearAll are explicitly NOT_YET_SUPPORTED in remote
+  // mode (T20) — restoring a snapshot into the server, and a full-account
+  // wipe, are real operations the migration phase (T25+) and an explicit
+  // future owned-reset endpoint must define deliberately, not something a
+  // client-only local-DB affordance can honestly offer against someone
+  // else's data authority. Rather than leave buttons that fail every
+  // click, this is the "safe explanatory state" tasks.md T22 asks for:
+  // hidden buttons, a plain-language reason in their place.
+  if (chooseBackupFileButton) chooseBackupFileButton.hidden = REMOTE_MODE;
+  if (resetDatabaseButton) resetDatabaseButton.hidden = REMOTE_MODE;
+  // The whole "Apagar base local" card is offered only where it works (this device's own database); against the server it is not shown at all.
+  if (resetCard) resetCard.hidden = REMOTE_MODE;
+  if (REMOTE_MODE) {
+    setResetMessage(t("appBackup.resetUnsupported"));
+  }
+  // T28: legacy-import migration only exists against the real server
+  // (T25-T27) — no local-only equivalent, so it's REMOTE_MODE-only,
+  // mirroring how import/reset are REMOTE_MODE-only in the opposite
+  // direction above.
+  if (migrationCard) migrationCard.hidden = !REMOTE_MODE;
+  // The card's own sentence promises the removal; with the button gone only the reason below it stays.
+  const resetBody = document.querySelector("#reset-body");
+  if (resetBody) resetBody.hidden = REMOTE_MODE;
 }
 
 function hasTauriRuntime() {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__?.invoke);
 }
 
-// Salva o JSON em disco. No runtime Tauri (desktop/Android) usa o diálogo
-// nativo + fs; o WebView do Android ignora <a download>, então o caminho
-// nativo é obrigatório lá. No navegador (modo dev) cai no <a download>.
+// Salva o JSON em disco. O wrapper remoto não recebe diálogo/FS nativos:
+// nele, exportar permanece um download do próprio WebView. O caminho nativo
+// fica restrito ao legado local, onde as permissões correspondentes existem.
 async function saveBackupFile(filename, contents) {
-  if (hasTauriRuntime()) {
+  if (hasTauriRuntime() && !REMOTE_MODE) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({
@@ -1890,12 +3207,25 @@ export async function exportBackup() {
       return; // exportação cancelada pelo usuário
     }
 
-    await DB.settings.update({ lastBackupAt: new Date().toISOString() });
+    // Best-effort bookkeeping only — the export itself already succeeded
+    // and was saved, so a failure here must never turn an already-successful
+    // export into a reported failure. The date belongs to THIS device's file
+    // export: it is kept client-side per account (the server settings contract
+    // has no lastBackupAt field), and also in the legacy local database.
+    const exportedAt = new Date().toISOString();
+    writeLastBackupAt(AuthUI.getCurrentUser()?.id, exportedAt);
+    if (!REMOTE_MODE) {
+      try {
+        await DB.settings.update({ lastBackupAt: exportedAt });
+      } catch (metaError) {
+        console.warn("Não foi possível registrar a data do último backup.", metaError);
+      }
+    }
     await renderSettings();
-    backupMessage.textContent = "Backup exportado com sucesso.";
+    backupMessage.textContent = t("appBackup.exported");
   } catch (error) {
     backupMessage.classList.add("is-error");
-    backupMessage.textContent = "Não foi possível exportar o backup.";
+    backupMessage.textContent = t("appBackup.exportFailed");
     console.error("Falha ao exportar backup.", error);
   } finally {
     exportBackupButton.disabled = false;
@@ -1916,6 +3246,1203 @@ function setResetMessage(message = "", isError = false) {
   resetMessage.textContent = message;
 }
 
+function setMigrationMessage(message = "", isError = false) {
+  if (!migrationMessage) return;
+  migrationMessage.classList.toggle("is-error", isError);
+  migrationMessage.textContent = message;
+}
+
+function resetMigrationPanels() {
+  migrationActivePreview = null;
+  migrationLastReport = null;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  if (migrationCounts) migrationCounts.replaceChildren();
+  if (migrationWarnings) migrationWarnings.replaceChildren();
+  if (migrationConflicts) migrationConflicts.replaceChildren();
+}
+
+function renderMigrationPreview(preview) {
+  migrationActivePreview = preview;
+  if (migrationCounts) {
+    migrationCounts.replaceChildren();
+    for (const [key, value] of Object.entries(preview.counts ?? {})) {
+      const dt = document.createElement("dt");
+      dt.textContent = MigrationUI.entityLabel(key);
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      migrationCounts.append(dt, dd);
+    }
+  }
+  if (migrationWarnings) {
+    migrationWarnings.replaceChildren();
+    for (const warning of preview.warnings ?? []) {
+      const li = document.createElement("li");
+      li.textContent = MigrationUI.warningText(warning);
+      migrationWarnings.append(li);
+    }
+  }
+  const hasConflicts = (preview.conflicts ?? []).length > 0;
+  if (migrationConflicts) {
+    migrationConflicts.replaceChildren();
+    for (const conflict of preview.conflicts ?? []) {
+      const li = document.createElement("li");
+      li.textContent = t(conflict.reason === 'ARCHIVED_HOMONYM' ? "appBackup.conflict.archived" : "appBackup.conflict.exists", { name: conflict.name });
+      migrationConflicts.append(li);
+    }
+  }
+  if (migrationConfirmBtn) migrationConfirmBtn.disabled = hasConflicts;
+  if (migrationPreviewPanel) migrationPreviewPanel.hidden = false;
+  if (migrationResultPanel) migrationResultPanel.hidden = true;
+  setMigrationMessage(t(hasConflicts ? "appBackup.preview.hasConflicts" : "appBackup.preview.review"));
+}
+
+migrationChooseFileButton?.addEventListener("click", () => {
+  migrationFileInput?.click();
+});
+
+migrationFileInput?.addEventListener("change", async () => {
+  const [file] = migrationFileInput.files ?? [];
+  if (!file) return;
+  resetMigrationPanels();
+  setMigrationMessage(t("appBackup.reading"));
+  try {
+    const rawSource = JSON.parse(await readFileText(file));
+    const result = await MigrationUI.previewImport(rawSource);
+    if (!result.ok) {
+      setMigrationMessage(result.message || t("appBackup.previewFailed"), true);
+      return;
+    }
+    renderMigrationPreview(result.preview);
+  } catch (error) {
+    setMigrationMessage(
+      t(error instanceof SyntaxError ? "appBackup.invalidJson" : "appBackup.unreadable"),
+      true,
+    );
+    console.error("Falha ao gerar prévia de migração.", error);
+  } finally {
+    migrationFileInput.value = "";
+  }
+});
+
+migrationCancelBtn?.addEventListener("click", () => {
+  resetMigrationPanels();
+  setMigrationMessage(t("appBackup.cancelled"));
+});
+
+migrationConfirmBtn?.addEventListener("click", async () => {
+  if (!migrationActivePreview) return;
+  const confirmed = await showConfirm(t("appBackup.confirmPrompt"));
+  if (!confirmed) return;
+
+  migrationConfirmBtn.disabled = true;
+  setMigrationMessage(t("appBackup.committing"));
+  try {
+    const result = await MigrationUI.commitImportPreview(migrationActivePreview.id);
+    if (!result.ok) {
+      setMigrationMessage(result.message || t("appBackup.commitFailed"), true);
+      migrationConfirmBtn.disabled = false; // still on the preview panel — must stay clickable to retry
+      return;
+    }
+    migrationLastReport = MigrationUI.buildMigrationReport({ preview: migrationActivePreview, commit: result.commit });
+    if (migrationPreviewPanel) migrationPreviewPanel.hidden = true;
+    if (migrationResultPanel) migrationResultPanel.hidden = false;
+    if (migrationResultSummary) {
+      const parts = Object.entries(result.commit.counts ?? {})
+        .map(([key, value]) => `${MigrationUI.entityLabel(key)}: ${value}`);
+      migrationResultSummary.textContent = t(result.commit.kind === "LOGICAL_RESTORE" ? "appBackup.done.restore" : "appBackup.done.import", { parts: parts.join(", ") });
+    }
+    setMigrationMessage("");
+    // Deliberately NOT re-enabling migrationConfirmBtn here: the preview
+    // panel is now hidden, so its own enabled/disabled state is moot until
+    // the next previewImport() explicitly sets it — resetting it here on a
+    // delay (after these renders) could otherwise race a fresh preview the
+    // user already started uploading and silently re-enable a
+    // conflict-blocked confirm underneath them.
+    await Promise.all([renderSubjects(), renderStudies(), renderToday(), renderStats()]);
+  } catch (error) {
+    setMigrationMessage(t("appBackup.commitFailed"), true);
+    migrationConfirmBtn.disabled = false;
+    console.error("Falha ao confirmar migração.", error);
+  }
+});
+
+migrationDownloadReportBtn?.addEventListener("click", async () => {
+  if (!migrationLastReport) return;
+  await saveBackupFile(
+    `smartlearn-migracao-${getLocalDateValue()}.json`,
+    JSON.stringify(migrationLastReport, null, 2),
+  );
+});
+
+// Where an AI-generated unit's Resumo Mestre came from: the presentation lives in source-details-ui.js; only the remote
+// learning-units API (none in the offline store) is wired in here.
+function appendSummarySources(container, unitId) {
+  return appendSummarySourcesFrom(container, unitId, REMOTE_MODE ? DB.learningUnits : null);
+}
+
+configureMaterialsUI({
+  listActiveSubjects: () => DB.subjects.getActive(),
+  getLocalDateValue,
+  startStudyNow,
+  openSummary: openLessonInPlan,
+  refreshAfterAccept: () => Promise.all([renderSubjects(), renderStudies(), renderToday()]),
+});
+
+// PV1-01: the first learning journey's focused study surface — reachable
+// via "Estudar agora" right after accepting a draft, not necessarily a
+// permanent nav item (task's own wording). Reuses the existing
+// DB.attempts/DB.exercises/DB.learningEvidence contracts exactly as the
+// Hoje review UI does (see ensureAttemptStarted above) — the one real
+// difference is deliberate: no reviewTaskId is ever passed (this is
+// INITIAL_PRACTICE, not a scheduled review), and no review_task is ever
+// created or completed by this flow. One question at a time, per spec.
+let studyNowState = null;
+let studyNowLastBlock = null;
+// The INITIAL_PRACTICE evidence of the block just finished, kept until the server has it: the answers are already on the
+// server (each judgment was accepted first), but the aggregate row that feeds Estatisticas is a separate request that can fail.
+let pendingStudyEvidence = null;
+
+// "initial" = the block the student just practiced (writes the aggregate
+// INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
+// questions that block got wrong: each redo is a NEW server attempt (the
+// original attempts stay untouched), but deliberately writes NO aggregate
+// learning_evidence row -- a correct answer given right after reading the
+// gabarito shows recovery, not performance, and must not inflate the
+// unit's accuracy or volume in Estatisticas.
+function newStudyNowState(mode, unitId, exercises) {
+  return {
+    mode,
+    unitId,
+    exercises,
+    index: 0,
+    attemptId: null,
+    attemptIds: [],
+    correctCount: 0,
+    answeredCount: 0,
+    wrongExercises: [],
+    correctedExercises: [],
+    judgedExercises: [],
+    lastJudged: null,
+  };
+}
+
+function resetStudyNowResult() {
+  studyNowResultCard.hidden = true;
+  studyNowResultTitle.textContent = t("appStudyNow.result");
+  studyNowResultText.textContent = "";
+  studyNowResultNote.hidden = true;
+  studyNowResultNote.textContent = "";
+  studyNowEvidenceNote.hidden = true;
+  studyNowEvidenceNote.textContent = "";
+  studyNowEvidenceRetryBtn.hidden = true;
+  pendingStudyEvidence = null;
+  studyNowNextReviewText.textContent = "";
+  studyNowErrorsSection.hidden = true;
+  studyNowErrorsList.replaceChildren();
+  studyNowCorrectedSection.hidden = true;
+  studyNowCorrectedList.replaceChildren();
+  studyNowFlagsSection.hidden = true;
+  studyNowFlagsList.replaceChildren();
+  studyNowQuestionFlagHost.hidden = true;
+  studyNowQuestionFlagHost.replaceChildren();
+  studyNowRetestBtn.hidden = true;
+  studyNowPracticeCard.hidden = false;
+}
+
+const STUDY_PROVENANCE_KEY = {
+  MANUAL: "appStudyNow.origin.manual",
+  SOURCE: "appStudyNow.origin.source",
+  AI_GENERATED: "appStudyNow.origin.ai",
+};
+
+// The summary contains the very answers being retrieved: while questions are on the screen it stays out of sight, and returns with the result.
+// (Set to false to show it above the questions again, as before.)
+const STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING = true;
+
+async function startStudyNow(unit, subjectName) {
+  if (!unit) return;
+  studyNowSubjectEl.textContent = subjectName ?? "";
+  studyNowTitleEl.textContent = unit.title ?? "";
+  if (unit.summaryBody) {
+    studyNowSummaryCard.hidden = STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING;
+    renderSummary(studyNowSummaryBody, unit.summaryBody);
+    studyNowSummaryCard.querySelector(":scope > .summary-source")?.remove();
+    appendSummarySources(studyNowSummaryCard, unit.id);
+  } else {
+    studyNowSummaryCard.hidden = true;
+    studyNowSummaryBody.textContent = "";
+  }
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("initial", unit.id, []);
+  // Nothing of a previous lesson's question (or an empty one) is shown while this lesson's questions are on their way.
+  studyNowQuestionArea.hidden = true;
+  studyNowResume.hidden = true;
+  setStudyNowNotice("screens.studyNow.noExercises");
+  studyNowNoExercises.hidden = true;
+  showScreen("study-now", { focus: true });
+
+  try {
+    studyNowState.exercises = await DB.exercises.getAll(unit.id);
+    await loadQuestionFlags();
+  } catch (error) {
+    // "Could not load" is not "this lesson has no exercises": say which one it is, and leave nothing to tap.
+    console.error("Falha ao carregar exercícios da unidade.", error);
+    studyNowState = null;
+    setStudyNowNotice("appStudyNow.loadFailed");
+    studyNowNoExercises.hidden = false;
+    return;
+  }
+  // a lesson with no questions has nothing to hide the summary from: reading is all this screen can do for it
+  if (studyNowState.exercises.length === 0 && unit.summaryBody) studyNowSummaryCard.hidden = false;
+  const snapshot = readStudySnapshot(unit.id, studyNowState.exercises);
+  if (snapshot) {
+    // Interrupted earlier: offer to continue instead of silently repeating what was already answered.
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = true;
+    studyNowProgress.textContent = "";
+    studyNowResumeText.textContent = t(snapshot.correctCount === 1 ? "appStudyNow.resume.one" : "appStudyNow.resume.other", {
+      answered: snapshot.answeredCount,
+      total: snapshot.exerciseIds.length,
+      correct: snapshot.correctCount,
+    });
+    studyNowResume.hidden = false;
+    studyNowResumeSnapshot = snapshot;
+    studyNowResume.querySelector("#study-now-resume-continue").focus();
+    return;
+  }
+  studyNowResume.hidden = true;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion();
+}
+
+/** The one notice of the study screen that stands in for the question: no exercises, or the exercises could not be loaded. */
+function setStudyNowNotice(key) {
+  studyNowNoExercises.dataset.i18n = key;
+  studyNowNoExercises.textContent = t(key);
+}
+
+/** Keyboard/screen-reader users start on the first action of the question ("Ver resposta"), not on the page container. */
+function focusStudyNowQuestion() {
+  if (studyNowState && studyNowState.exercises.length > 0 && !studyNowQuestionArea.hidden) studyNowRevealBtn.focus();
+}
+
+// -- Estudar agora: resume an interrupted pass ----------------------------------------------------------------
+// The minimal state of an "initial" pass is mirrored on the device after every judgment the server accepted, so
+// closing/reloading the tab does not restart from question 1. Every access is guarded (storage may be blocked) and
+// the snapshot is discarded when the pass ends, when the exercises changed, or after a week.
+let studyNowResumeSnapshot = null;
+const STUDY_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const studySnapshotKey = (unitId) => `smartlearn.studynow.${unitId}`;
+
+function persistStudySnapshot(state) {
+  if (!state || state.mode !== "initial") return;
+  try {
+    if (state.index <= 0 || state.index >= state.exercises.length) { localStorage.removeItem(studySnapshotKey(state.unitId)); return; }
+    localStorage.setItem(studySnapshotKey(state.unitId), JSON.stringify({
+      savedAt: Date.now(),
+      exerciseIds: state.exercises.map((e) => e.id),
+      index: state.index,
+      attemptIds: state.attemptIds,
+      answeredCount: state.answeredCount,
+      correctCount: state.correctCount,
+      wrongIds: state.wrongExercises.map((e) => e.id),
+      correctedIds: state.correctedExercises.map((e) => e.id),
+    }));
+  } catch { /* storage unavailable: the pass just cannot be resumed */ }
+}
+
+function clearStudySnapshot(unitId) {
+  try { localStorage.removeItem(studySnapshotKey(unitId)); } catch { /* ignore */ }
+}
+
+function readStudySnapshot(unitId, exercises) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(studySnapshotKey(unitId)) ?? "null");
+    if (!raw || Date.now() - raw.savedAt > STUDY_SNAPSHOT_MAX_AGE_MS) return null;
+    const same = Array.isArray(raw.exerciseIds) && raw.exerciseIds.length === exercises.length && raw.exerciseIds.every((id, i) => id === exercises[i].id);
+    if (!same || !(raw.index > 0 && raw.index < exercises.length)) return null;
+    return raw;
+  } catch { return null; }
+}
+
+studyNowResume?.querySelector("#study-now-resume-continue")?.addEventListener("click", () => {
+  const state = studyNowState;
+  const snap = studyNowResumeSnapshot;
+  if (!state || !snap) return;
+  const byId = new Map(state.exercises.map((e) => [e.id, e]));
+  state.index = snap.index;
+  state.attemptIds = snap.attemptIds.slice();
+  state.answeredCount = snap.answeredCount;
+  state.correctCount = snap.correctCount;
+  state.wrongExercises = snap.wrongIds.map((id) => byId.get(id)).filter(Boolean);
+  state.correctedExercises = snap.correctedIds.map((id) => byId.get(id)).filter(Boolean);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
+});
+
+studyNowResume?.querySelector("#study-now-resume-restart")?.addEventListener("click", () => {
+  if (studyNowState) clearStudySnapshot(studyNowState.unitId);
+  studyNowResume.hidden = true;
+  studyNowResumeSnapshot = null;
+  renderStudyNowQuestion();
+  focusStudyNowQuestion(); // the button that was just pressed disappeared
+});
+
+function renderStudyNowQuestion() {
+  if (studyNowResume) studyNowResume.hidden = true;
+  const state = studyNowState;
+  if (!state) return;
+  if (studyNowMessage) studyNowMessage.textContent = "";
+
+  if (state.exercises.length === 0) {
+    studyNowQuestionArea.hidden = true;
+    studyNowNoExercises.hidden = false;
+    studyNowProgress.textContent = "";
+    return;
+  }
+
+  if (state.index >= state.exercises.length) {
+    finishStudyNowSession();
+    return;
+  }
+
+  studyNowNoExercises.hidden = true;
+  studyNowQuestionArea.hidden = false;
+
+  const exercise = state.exercises[state.index];
+  studyNowQuestionFlagHost.replaceChildren();
+  if (state.lastJudged) {
+    studyNowQuestionFlagHost.append(
+      createTextElement("p", "question-flag-previous", QUESTION_FLAG_TEXT.previous),
+      createQuestionFlagControls(state.lastJudged.exercise, {
+        flag: questionFlagsByExerciseId.get(state.lastJudged.exercise.id) ?? null,
+        attemptId: state.lastJudged.attemptId,
+        visible: true,
+      }),
+    );
+    studyNowQuestionFlagHost.hidden = false;
+  } else {
+    studyNowQuestionFlagHost.hidden = true;
+  }
+  studyNowQuestionText.textContent = exercise.questionText;
+  studyNowAnswerText.textContent = exercise.answerText;
+  studyNowAnswerText.hidden = true;
+  studyNowExplanationText.textContent = exercise.explanationText ? t("appStudyNow.why", { text: exercise.explanationText }) : "";
+  studyNowExplanationText.hidden = true;
+  studyNowSourceBox.replaceChildren(...citationDetails(exercise.citations));
+  studyNowSourceBox.hidden = true;
+  if (exercise.hintText) {
+    // Honest reuse, not invention: shown unconditionally exactly like the
+    // Hoje review UI already does (a hint the learner can already see is
+    // truthfully "available", not a fabricated NONE for it).
+    studyNowHintText.textContent = exercise.hintText;
+    studyNowHintText.hidden = false;
+  } else {
+    studyNowHintText.hidden = true;
+    studyNowHintText.textContent = "";
+  }
+  studyNowJudgment.hidden = true;
+  studyNowRevealBtn.hidden = false;
+  studyNowRevealBtn.textContent = t("appStudyNow.reveal");
+  const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review" }[state.mode] ?? "appStudyNow.progress.question";
+  const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
+  studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
+  studyNowPracticeTitle.textContent = t(titleKey);
+  // The Resumo Mestre contains the very answers being retrieved: showing it
+  // above a redo question would turn retrieval practice into reading.
+  if (state.mode === "retest" || state.mode === "review") studyNowSummaryCard.hidden = true;
+  state.attemptId = null;
+  state.pendingReveal = null;
+  delete studyNowQuestionArea.dataset.attemptId;
+}
+
+async function finishStudyNowSession() {
+  const state = studyNowState;
+  if (!state) return;
+  const isRetest = state.mode === "retest";
+  studyNowQuestionArea.hidden = true;
+  studyNowProgress.textContent = "";
+
+  const { unitId, answeredCount, correctCount, attemptIds } = state;
+  const isReview = state.mode === "review";
+  // A review that was partly judged inside its Hoje row counts those answers too: the review closes with the whole block.
+  const totalAnswered = answeredCount + (isReview ? state.restored.answered : 0);
+  const totalCorrect = correctCount + (isReview ? state.restored.correct : 0);
+  if (answeredCount > 0 && !isRetest) {
+    pendingStudyEvidence = isReview
+      ? { reviewTaskId: state.reviewTaskId, obligationUnitId: state.obligationUnitId ?? null, questionsCount: totalAnswered, correctCount: totalCorrect }
+      : {
+        unitId,
+        context: "INITIAL_PRACTICE",
+        questionsCount: answeredCount,
+        correctCount,
+        evidenceDate: getLocalDateValue(),
+        attemptIds,
+      };
+    await recordStudyEvidence();
+  }
+
+  if (isRetest) {
+    studyNowResultTitle.textContent = t("appStudyNow.result.retest");
+    studyNowResultText.textContent = t("appStudyNow.score.retest", { correct: correctCount, answered: answeredCount });
+    studyNowResultNote.hidden = false;
+    studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
+  } else if (isReview) {
+    const pct = totalAnswered > 0 ? formatDecimal((totalCorrect / totalAnswered) * 100) : formatDecimal(0);
+    studyNowResultTitle.textContent = t("appStudyNow.result.review");
+    studyNowResultText.textContent = t("appStudyNow.score.review", { correct: totalCorrect, answered: totalAnswered, percent: pct });
+  } else {
+    const pct = answeredCount > 0 ? formatDecimal((correctCount / answeredCount) * 100) : formatDecimal(0);
+    studyNowResultTitle.textContent = t("appStudyNow.result");
+    studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
+  }
+
+  try {
+    const tasks = await DB.reviewTasks.getByUnit(unitId);
+    const next = getNextReview(unitId, tasks);
+    // An earliest pending review dated before today is overdue, not "next": say so instead of printing a past date as the next review (J04).
+    const nextIsOverdue = next && next < getLocalDateValue();
+    studyNowNextReviewText.textContent = next
+      ? t(nextIsOverdue ? "appStudyNow.nextReview.overdue" : "appStudyNow.nextReview", { date: formatDate(next) })
+      : t("appStudyNow.nextReview.none");
+  } catch (error) {
+    console.error("Falha ao buscar próxima revisão.", error);
+    studyNowNextReviewText.textContent = "";
+  }
+
+  // The block never ends on a bare score: every wrong item is shown with
+  // its gabarito (feedback is per BLOCK, never per question mid-session),
+  // and the one obvious next action is redoing exactly those items. The
+  // product is self-report (no typed answer exists), so what is shown is
+  // "you marked wrong" + the correct answer -- never an invented reason.
+  studyNowErrorsList.replaceChildren();
+  if (state.wrongExercises.length > 0) {
+    studyNowErrorsTitle.textContent = t(isRetest ? "appStudyNow.errors.retest" : "appStudyNow.errors.initial", { count: state.wrongExercises.length });
+    for (const wrong of state.wrongExercises) studyNowErrorsList.append(createStudyErrorItem(wrong));
+    studyNowErrorsSection.hidden = false;
+    studyNowRetestBtn.hidden = false;
+    studyNowRetestBtn.textContent = t(isRetest ? "appStudyNow.redo.retest" : "appStudyNow.redo.initial", { count: state.wrongExercises.length });
+  } else {
+    studyNowErrorsSection.hidden = true;
+    studyNowRetestBtn.hidden = true;
+  }
+
+  studyNowCorrectedList.replaceChildren();
+  if (isRetest && state.correctedExercises.length > 0) {
+    studyNowCorrectedTitle.textContent = t("appStudyNow.corrected.title", { count: state.correctedExercises.length });
+    for (const fixed of state.correctedExercises) {
+      const li = document.createElement("li");
+      li.className = "study-now-corrected-item";
+      li.append(
+        createTextElement("span", "study-now-chip is-corrected", t("appStudyNow.corrected.chip")),
+        createTextElement("span", "study-now-corrected-question", fixed.questionText),
+      );
+      studyNowCorrectedList.append(li);
+    }
+    studyNowCorrectedSection.hidden = false;
+  } else {
+    studyNowCorrectedSection.hidden = true;
+  }
+
+  studyNowLastBlock = { unitId, wrong: state.wrongExercises.slice() };
+  renderStudyNowFlagResults(state.judgedExercises);
+  studyNowQuestionFlagHost.hidden = true;
+  studyNowQuestionFlagHost.replaceChildren();
+  studyNowSummaryCard.hidden = studyNowSummaryBody.textContent === "";
+  studyNowPracticeCard.hidden = true;
+  studyNowResultCard.hidden = false;
+  studyNowResultTitle.focus();
+  studyNowState = null;
+  renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+  renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+}
+
+/** Sends the pending evidence; on failure tells the student and offers to send it again. An earlier try that did reach the server counts as recorded. */
+async function recordStudyEvidence() {
+  const evidence = pendingStudyEvidence;
+  if (!evidence) return;
+  try {
+    if (evidence.obligationUnitId != null) await apiRequest(`/v1/review-obligations/${evidence.obligationUnitId}/complete`, { method: "POST", body: { profile: "DECIDED", questionsCount: evidence.questionsCount, correctCount: evidence.correctCount } });
+    else if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
+    else await DB.learningEvidence.create(evidence);
+  } catch (error) {
+    // an earlier try that did reach the server (its reply was lost) already recorded it: sending it again is refused as such
+    const alreadyRecorded = error?.msgCode === "ATTEMPT_IN_OTHER_EVIDENCE" || error?.code === "ALREADY_COMPLETED";
+    if (!alreadyRecorded) {
+      console.error("Falha ao registrar evidência de prática inicial.", error);
+      studyNowEvidenceNote.classList.add("is-error");
+      studyNowEvidenceNote.textContent = t("appStudyNow.evidenceFailed");
+      studyNowEvidenceNote.hidden = false;
+      studyNowEvidenceRetryBtn.hidden = false;
+      return;
+    }
+  }
+  const wasRetry = !studyNowEvidenceNote.hidden;
+  pendingStudyEvidence = null;
+  studyNowEvidenceRetryBtn.hidden = true;
+  studyNowEvidenceNote.classList.remove("is-error");
+  studyNowEvidenceNote.textContent = wasRetry ? t("appStudyNow.evidenceSaved") : "";
+  studyNowEvidenceNote.hidden = !wasRetry;
+  if (wasRetry) {
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  }
+}
+
+studyNowEvidenceRetryBtn?.addEventListener("click", async () => {
+  studyNowEvidenceRetryBtn.disabled = true;
+  try { await recordStudyEvidence(); } finally { studyNowEvidenceRetryBtn.disabled = false; }
+  (studyNowEvidenceRetryBtn.hidden ? studyNowDoneBtn : studyNowEvidenceRetryBtn).focus();
+});
+
+function createStudyErrorItem(exercise) {
+  const li = document.createElement("li");
+  li.className = "study-now-error-item";
+  li.append(
+    createTextElement("p", "study-now-error-question", exercise.questionText),
+    createTextElement("span", "study-now-chip", t("appStudyNow.error.markedWrong")),
+  );
+  const answer = document.createElement("div");
+  answer.className = "study-now-error-answer-block";
+  answer.append(
+    createTextElement("p", "study-now-error-label", t("appStudyNow.error.correctAnswer")),
+    createTextElement("p", "study-now-error-answer", exercise.answerText),
+  );
+  li.append(answer);
+  if (exercise.explanationText) {
+    li.append(createTextElement("p", "study-now-error-label", t("appStudyNow.whyLabel")), createTextElement("p", "study-now-error-why", exercise.explanationText));
+  }
+  if (exercise.hintText) li.append(createTextElement("p", "study-now-error-meta", t("appStudyNow.hint", { text: exercise.hintText })));
+  const originKey = STUDY_PROVENANCE_KEY[exercise.provenance];
+  if (originKey) li.append(createTextElement("p", "study-now-error-meta", t(originKey)));
+  // The only explanation the product really holds: the exact source page the
+  // question was drafted from (frozen at acceptance). Shown as evidence, not
+  // paraphrased -- and absent (nothing invented) for manual exercises.
+  li.append(...citationDetails(exercise.citations));
+  return li;
+}
+
+function renderStudyNowFlagResults(items = []) {
+  studyNowFlagsList.replaceChildren();
+  studyNowFlagsSection.hidden = items.length === 0;
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "study-now-flag-item";
+    li.append(
+      createTextElement("p", "study-now-flag-question", item.exercise.questionText),
+      createTextElement("span", "study-now-chip", item.outcome === "CORRECT" ? t("screens.studyNow.correct") : t("screens.studyNow.incorrect")),
+      createQuestionFlagControls(item.exercise, {
+        flag: questionFlagsByExerciseId.get(item.exercise.id) ?? null,
+        attemptId: item.attemptId,
+        visible: true,
+      }),
+    );
+    studyNowFlagsList.append(li);
+  }
+}
+
+studyNowRetestBtn?.addEventListener("click", () => {
+  const block = studyNowLastBlock;
+  if (!block || block.wrong.length === 0) return;
+  resetStudyNowResult();
+  studyNowState = newStudyNowState("retest", block.unitId, block.wrong.slice());
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+});
+
+studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));
+
+// ── Modo Prova (EXAM-1) ─────────────────────────────────────────────────────────────────────────
+// The server returns ONLY the questions and the student's own answers while the exam is in progress;
+// nothing here can show a gabarito, explanation, hint or score because none is ever received.
+const examEls = {
+  unit: document.querySelector("#exam-unit"),
+  title: document.querySelector("#title-exam"),
+  message: document.querySelector("#exam-message"),
+  taking: document.querySelector("#exam-taking"),
+  progress: document.querySelector("#exam-progress"),
+  question: document.querySelector("#exam-question-text"),
+  answer: document.querySelector("#exam-answer-input"),
+  prev: document.querySelector("#exam-prev-btn"),
+  next: document.querySelector("#exam-next-btn"),
+  nav: document.querySelector("#exam-nav"),
+  submit: document.querySelector("#exam-submit-btn"),
+  confirm: document.querySelector("#exam-submit-confirm-btn"),
+  cancel: document.querySelector("#exam-submit-cancel-btn"),
+  warning: document.querySelector("#exam-submit-warning"),
+  submitted: document.querySelector("#exam-submitted"),
+  submittedTitle: document.querySelector("#exam-submitted-title"),
+  submittedText: document.querySelector("#exam-submitted-text"),
+  resultScore: document.querySelector("#exam-result-score"),
+  counts: document.querySelector("#exam-counts"),
+  reviewList: document.querySelector("#exam-review-list"),
+  finalNote: document.querySelector("#exam-final-note"),
+  finalize: document.querySelector("#exam-finalize-btn"),
+  retest: document.querySelector("#exam-retest-btn"),
+  today: document.querySelector("#exam-today-btn"),
+  back: document.querySelector("#exam-back-btn"),
+};
+let examState = null; // { exam, index, dirty }
+
+async function startSubjectExam(subject) {
+  if (!subject) return;
+  await openExam(() => DB.exams.startSubject(subject.id), { subjectName: subject.name, fallbackTitle: subject.name });
+}
+
+async function startExam(unit, subjectName) {
+  if (!unit) return;
+  await openExam(() => DB.exams.start(unit.id), { subjectName, fallbackTitle: unit.title });
+}
+
+async function openExam(begin, { subjectName, fallbackTitle }) {
+  try {
+    const { exam } = await begin();
+    const title = exam.title ?? fallbackTitle ?? "";
+    examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
+    restoreExamPending(examState);
+    examEls.unit.textContent = exam.scope === "SUBJECT" ? t("appExam.scope.subject") : (subjectName ?? "");
+    examEls.title.textContent = t("appExam.title", { title });
+    examEls.message.textContent = "";
+    showScreen("exam", { focus: true });
+    if (exam.status === "IN_PROGRESS") {
+      examEls.submitted.hidden = true;
+      examEls.taking.hidden = false;
+      renderExamQuestion();
+    } else {
+      // already submitted and waiting for its correction: continue where the student stopped
+      renderExamSubmitted();
+    }
+  } catch (error) {
+    console.error("Falha ao iniciar a prova.", error);
+    setPlanFormMessage?.(t("appExam.startFailed") + " " + (error?.message ?? ""), true);
+  }
+}
+
+function currentExamItem() {
+  return examState?.exam.items[examState.index] ?? null;
+}
+
+function renderExamQuestion() {
+  if (!examState) return;
+  const { exam, index } = examState;
+  const item = exam.items[index];
+  examEls.progress.textContent = t("appExam.progress", { current: index + 1, total: exam.items.length });
+  examEls.question.textContent = item.question;
+  examEls.answer.value = item.studentAnswer ?? "";
+  examEls.prev.disabled = index === 0;
+  examEls.next.disabled = index === exam.items.length - 1;
+  examEls.nav.replaceChildren();
+  exam.items.forEach((it, i) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = String(i + 1);
+    b.dataset.index = String(i);
+    b.setAttribute("aria-label", t(it.studentAnswer ? "appExam.goTo.answered" : "appExam.goTo", { n: i + 1 }));
+    if (it.studentAnswer && it.studentAnswer.trim()) b.classList.add("is-answered");
+    if (i === index) b.setAttribute("aria-current", "true");
+    li.append(b);
+    examEls.nav.append(li);
+  });
+  resetExamSubmitConfirm();
+}
+
+// Pending (unsaved) answers are mirrored in the browser so they survive closing/reloading the tab while the
+// connection is down. Only what the student typed (never anything from the server); every access is guarded, so
+// the exam works exactly as before when storage is unavailable.
+const examPendingKey = (examId) => `smartlearn.exam.pending.${examId}`;
+
+function persistExamPending() {
+  if (!examState) return;
+  try {
+    const key = examPendingKey(examState.exam.id);
+    if (examState.unsaved.size === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(Object.fromEntries(examState.unsaved)));
+  } catch { /* storage unavailable: memory-only, as before */ }
+}
+
+/** Merges pending answers typed in an earlier tab over what the server returned, and retries sending them. */
+function restoreExamPending(state) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(examPendingKey(state.exam.id)) ?? "null"); } catch { saved = null; }
+  if (!saved || state.exam.status !== "IN_PROGRESS") return;
+  for (const [itemId, text] of Object.entries(saved)) {
+    const item = state.exam.items.find((it) => String(it.id) === itemId);
+    if (!item || typeof text !== "string") continue;
+    item.studentAnswer = text.trim() === "" ? null : text;
+    state.unsaved.set(item.id, text);
+  }
+  if (state.unsaved.size > 0) {
+    examEls.message.textContent = t("appExam.recovered");
+    flushExamAnswers().then((ok) => { if (ok && examState === state) examEls.message.textContent = ""; });
+  }
+}
+
+// An answer that failed to reach the server stays in `examState.unsaved` (itemId -> text) and is retried on the
+// next save / navigation / submit: it is never dropped, and submitting is blocked until nothing is pending.
+async function pushExamAnswer(itemId, text) {
+  try {
+    await DB.exams.saveAnswer(examState.exam.id, itemId, text);
+    examState.unsaved.delete(itemId);
+    persistExamPending();
+    return true;
+  } catch (error) {
+    console.error("Falha ao guardar a resposta.", error);
+    examState.unsaved.set(itemId, text);
+    persistExamPending();
+    examEls.message.textContent = t("appExam.saveFailed");
+    return false;
+  }
+}
+
+async function saveExamAnswer() {
+  const item = currentExamItem();
+  if (!examState || !item) return true;
+  examState.unsaved ??= new Map();
+  const typed = examEls.answer.value;
+  if ((item.studentAnswer ?? "") !== typed) item.studentAnswer = typed.trim() === "" ? null : typed;
+  else if (!examState.unsaved.has(item.id)) return true;
+  const ok = await pushExamAnswer(item.id, typed);
+  return ok;
+}
+
+/** Retries every answer still pending; true only when the server has them all. */
+async function flushExamAnswers() {
+  if (!examState?.unsaved) return true;
+  for (const [itemId, text] of [...examState.unsaved]) await pushExamAnswer(itemId, text);
+  return examState.unsaved.size === 0;
+}
+
+async function goToExamQuestion(index) {
+  if (!examState || index < 0 || index >= examState.exam.items.length) return;
+  await saveExamAnswer();
+  examState.index = index;
+  renderExamQuestion();
+  examEls.answer.focus();
+}
+
+function resetExamSubmitConfirm() {
+  examEls.submit.hidden = false;
+  examEls.confirm.hidden = true;
+  examEls.cancel.hidden = true;
+  examEls.warning.hidden = true;
+  examEls.warning.textContent = "";
+}
+
+examEls.answer?.addEventListener("blur", () => { saveExamAnswer(); });
+// Typing is mirrored on the device as it happens (closing the tab before the box loses focus must not lose it);
+// a successful save clears it again.
+examEls.answer?.addEventListener("input", () => {
+  const item = currentExamItem();
+  if (!examState || !item) return;
+  examState.unsaved ??= new Map();
+  examState.unsaved.set(item.id, examEls.answer.value);
+  persistExamPending();
+});
+examEls.prev?.addEventListener("click", () => goToExamQuestion(examState.index - 1));
+examEls.next?.addEventListener("click", () => goToExamQuestion(examState.index + 1));
+examEls.nav?.addEventListener("click", (event) => {
+  const b = event.target.closest("button[data-index]");
+  if (b) goToExamQuestion(Number(b.dataset.index));
+});
+examEls.submit?.addEventListener("click", async () => {
+  await saveExamAnswer();
+  if (!(await flushExamAnswers())) {
+    const n = examState.unsaved.size;
+    examEls.warning.hidden = false;
+    examEls.warning.textContent = t(n === 1 ? "appExam.unsaved.one" : "appExam.unsaved.other", { count: n });
+    return;
+  }
+  const unanswered = examState.exam.items.filter((it) => !it.studentAnswer || !it.studentAnswer.trim()).length;
+  examEls.warning.hidden = false;
+  examEls.warning.textContent = unanswered > 0
+    ? t(unanswered === 1 ? "appExam.unanswered.one" : "appExam.unanswered.other", { count: unanswered })
+    : t("appExam.submitWarning");
+  examEls.submit.hidden = true;
+  examEls.confirm.hidden = false;
+  examEls.cancel.hidden = false;
+  examEls.confirm.focus();
+});
+examEls.cancel?.addEventListener("click", () => { resetExamSubmitConfirm(); examEls.answer.focus(); });
+examEls.confirm?.addEventListener("click", async () => {
+  examEls.confirm.disabled = true;
+  try {
+    if (!(await flushExamAnswers())) {
+      examEls.message.textContent = t("appExam.stillUnsaved");
+      return;
+    }
+    const submitted = await DB.exams.submit(examState.exam.id);
+    examState.exam = submitted;
+    renderExamSubmitted();
+  } catch (error) {
+    console.error("Falha ao submeter a prova.", error);
+    examEls.message.textContent = t("appExam.submitFailed");
+  } finally {
+    examEls.confirm.disabled = false;
+  }
+});
+examEls.back?.addEventListener("click", () => { examState = null; showScreen("plan", { focus: true }); });
+
+// After submitting: the correction. Everything the student needs to learn from the exam is here — their
+// answer next to the gabarito, the WHY, the source — and only now. Right and wrong are judged by the
+// student (open-response questions), item by item; the score exists once every item is judged.
+function renderExamSubmitted({ focusHeading = true } = {}) {
+  const { exam } = examState;
+  examEls.taking.hidden = true;
+  examEls.submitted.hidden = false;
+  const answered = exam.items.filter((it) => it.studentAnswer && it.studentAnswer.trim()).length;
+  const judged = exam.items.filter((it) => it.outcome).length;
+  examEls.submittedText.textContent = t(judged < exam.items.length ? "appExam.submitted.pending" : "appExam.submitted.complete", { answered, total: exam.items.length, judged });
+
+  if (exam.score) {
+    const pct = formatDecimal(exam.score.percent);
+    examEls.resultScore.textContent = t("appExam.score", { correct: exam.score.correct, total: exam.score.total, percent: pct });
+    examEls.resultScore.hidden = false;
+    examEls.counts.textContent = t("appExam.counts", { correct: exam.score.correct, wrong: exam.score.total - exam.score.correct });
+    examEls.counts.hidden = false;
+  } else {
+    examEls.resultScore.hidden = true;
+    examEls.counts.hidden = true;
+  }
+
+  examEls.reviewList.replaceChildren();
+  const OUTCOME_LABEL = { CORRECT: t("appExam.outcome.correct"), INCORRECT: t("appExam.outcome.incorrect") };
+  for (const it of exam.items) {
+    const li = document.createElement("li");
+    li.className = "exam-review-item";
+    li.dataset.itemId = String(it.id);
+    li.dataset.outcome = it.outcome ?? "";
+    li.append(createTextElement("p", "exam-review-q", `${it.position + 1}. ${it.question}`));
+    if (exam.scope === "SUBJECT" && it.unitTitle) li.append(createTextElement("p", "exam-review-unit", t("appExam.unit", { title: it.unitTitle })));
+    li.append(createTextElement("span", "study-now-chip exam-review-chip", it.outcome ? OUTCOME_LABEL[it.outcome] : t("appExam.outcome.pending")));
+    li.append(createTextElement("p", "exam-review-label", t("appExam.yourAnswer")));
+    const mine = createTextElement("p", "exam-review-text exam-review-student", it.studentAnswer && it.studentAnswer.trim() ? it.studentAnswer : t("appExam.noAnswer"));
+    if (!it.studentAnswer || !it.studentAnswer.trim()) mine.classList.add("is-empty");
+    li.append(mine);
+    li.append(createTextElement("p", "exam-review-label", t("appExam.correctAnswer")), createTextElement("p", "exam-review-text exam-review-correct", it.answer ?? ""));
+    if (it.explanation) li.append(createTextElement("p", "exam-review-label", t("appExam.why")), createTextElement("p", "exam-review-text exam-review-why", it.explanation));
+    const sources = (it.citations ?? []).filter((c) => c.pageText);
+    if (sources.length > 0) {
+      li.append(createSourceDetails(
+        t(sources.length > 1 ? "appExam.citation.other" : "appExam.citation.one", { source: sources[0].sourceName, pages: formatPageList(sources.map((c) => c.pageIndex)) }),
+        sources.map((c) => ({ pageIndex: c.pageIndex, text: c.pageText })),
+      ));
+    }
+    const judge = document.createElement("div");
+    judge.className = "exam-judge";
+    for (const [outcome, label, cls] of [["CORRECT", t("appExam.judge.correct"), "exam-correct-btn"], ["INCORRECT", t("appExam.judge.incorrect"), "exam-wrong-btn"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `secondary-button ${cls}`;
+      b.dataset.action = "exam-judge";
+      b.dataset.itemId = String(it.id);
+      b.dataset.outcome = outcome;
+      b.setAttribute("aria-pressed", String(it.outcome === outcome));
+      // "Acertei" x N tells a screen reader nothing: name the question each button refers to
+      b.setAttribute("aria-label", t("appExam.judge.aria", { label, n: it.position + 1 }));
+      b.textContent = label;
+      judge.append(b);
+    }
+    li.append(judge);
+    examEls.reviewList.append(li);
+  }
+  // Closing the loop: once every item is judged the student registers the result (one evidence row); after
+  // that the result is FINAL and leads on — the wrong items go straight into the existing redo flow.
+  const corrected = exam.status === "CORRECTED";
+  const allJudged = judged === exam.items.length;
+  examEls.finalize.hidden = corrected || !allJudged;
+  for (const b of examEls.reviewList.querySelectorAll('[data-action="exam-judge"]')) b.disabled = corrected;
+  for (const j of examEls.reviewList.querySelectorAll(".exam-judge")) j.hidden = corrected;
+  const wrong = exam.items.filter((it) => it.outcome === "INCORRECT");
+  examEls.retest.hidden = !corrected || wrong.length === 0;
+  examEls.retest.textContent = t("appExam.redo", { count: wrong.length });
+  examEls.finalNote.hidden = !corrected;
+  examEls.finalNote.textContent = corrected
+    ? [
+      exam.scope === "SUBJECT"
+        ? t("appExam.final.byUnit", { correct: exam.score.correct, total: exam.score.total, units: (exam.evidenceIds ?? []).length })
+        : t("appExam.final", { correct: exam.score.correct, total: exam.score.total }),
+      wrong.length > 0 ? t("appExam.final.reinforce") : "",
+    ].filter(Boolean).join(" ")
+    : "";
+  if (focusHeading) examEls.submittedTitle.focus();
+}
+
+examEls.finalize?.addEventListener("click", async () => {
+  if (!examState) return;
+  examEls.finalize.disabled = true;
+  try {
+    examState.exam = await DB.exams.finalize(examState.exam.id, getLocalDateValue());
+    renderExamSubmitted({ focusHeading: false });
+    (examEls.retest.hidden ? examEls.back : examEls.retest).focus();
+    // the result is now part of the history: refresh what reads it
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+  } catch (error) {
+    console.error("Falha ao concluir a correção.", error);
+    examEls.message.textContent = t("appExam.finalizeFailed");
+  } finally {
+    examEls.finalize.disabled = false;
+  }
+});
+
+examEls.retest?.addEventListener("click", async () => {
+  if (!examState) return;
+  const wrongIds = new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.exerciseId));
+  try {
+    // a discipline exam's wrong items live in several units: load each unit that has one
+    const unitIds = [...new Set(examState.exam.items.filter((it) => it.outcome === "INCORRECT").map((it) => it.unitId ?? examState.exam.unitId))];
+    const all = (await Promise.all(unitIds.map((id) => DB.exercises.getAll(id)))).flat();
+    const wrong = all.filter((e) => wrongIds.has(e.id));
+    if (wrong.length === 0) return;
+    startRetestBlock({
+      returnReviewId: null,
+      unitId: unitIds[0] ?? examState.exam.unitId,
+      subjectName: examState.subjectName ?? "",
+      unitTitle: examState.unitTitle ?? examState.exam.unitTitle ?? "",
+      exercises: wrong,
+    });
+  } catch (error) {
+    console.error("Falha ao abrir o reteste dos erros da prova.", error);
+    examEls.message.textContent = t("appExam.retestFailed");
+  }
+});
+
+examEls.today?.addEventListener("click", () => { examState = null; showScreen("today", { focus: true }); });
+
+examEls.reviewList?.addEventListener("click", async (event) => {
+  const b = event.target.closest('[data-action="exam-judge"]');
+  if (!b || !examState) return;
+  const itemId = Number(b.dataset.itemId);
+  const outcome = b.dataset.outcome;
+  b.disabled = true;
+  try {
+    examState.exam = await DB.exams.judge(examState.exam.id, itemId, outcome);
+    renderExamSubmitted({ focusHeading: false });
+    examEls.reviewList.querySelector(`[data-action="exam-judge"][data-item-id="${itemId}"][data-outcome="${outcome}"]`)?.focus();
+  } catch (error) {
+    console.error("Falha ao registrar a correção.", error);
+    examEls.message.textContent = t("appExam.judgeFailed");
+    b.disabled = false;
+  }
+});
+
+// Entry used by a Hoje review block: same retest engine as "Estudar agora",
+// just started from the wrong items of the block the student already judged.
+function startRetestBlock({ returnReviewId, unitId, subjectName, unitTitle, exercises }) {
+  pendingTodayReturnReviewId = returnReviewId;
+  resetStudyNowResult();
+  studyNowSubjectEl.textContent = subjectName;
+  studyNowTitleEl.textContent = unitTitle;
+  studyNowState = newStudyNowState("retest", unitId, exercises.slice());
+  showScreen("study-now", { focus: true });
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+}
+
+/**
+ * "Revisar uma por vez": the unanswered questions of a Hoje review, one at a time in the study screen. Each answer is accepted by the
+ * server (as an attempt of that review) before the next one; the review closes with the whole block, answers already given inside the
+ * row included. The row itself is untouched, so nothing is lost if the student goes back.
+ */
+async function startFocusedReview(reviewId, { obligationUnitId = null } = {}) {
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  const section = row?.querySelector("[data-exercises-total]");
+  if (!row || !section) return false;
+  const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  const answeredIds = new Set([...section.querySelectorAll('.review-exercise-item[data-exercise-answered="true"]')].map((el) => Number(el.dataset.exerciseId)));
+  const pending = (reviewBlockExercises.get(section) ?? []).filter((exercise) => !answeredIds.has(exercise.id));
+  if (pending.length === 0) return false;
+  pendingTodayReturnReviewId = Number(reviewId);
+  resetStudyNowResult();
+  studyNowSubjectEl.textContent = row.querySelector(".subject-chip")?.textContent ?? "";
+  studyNowTitleEl.textContent = row.querySelector(".review-content")?.textContent ?? "";
+  studyNowSummaryCard.hidden = true;
+  studyNowSummaryBody.textContent = "";
+  studyNowState = newStudyNowState("review", Number(row.dataset.unitId), pending);
+  studyNowState.reviewTaskId = Number(reviewId);
+  studyNowState.obligationUnitId = obligationUnitId; // set when the experimental panel started it: the stage is then concluded through the experimental route
+  studyNowState.restored = { answered: Number(section.dataset.exercisesAnswered), correct: Number(section.dataset.exercisesCorrect) };
+  // What was already marked wrong inside the row belongs to the same block: it is listed with its answer and can be redone with the rest.
+  const wrongInRow = new Set([...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)));
+  studyNowState.wrongExercises = (reviewBlockExercises.get(section) ?? []).filter((exercise) => wrongInRow.has(exercise.id));
+  showScreen("study-now", { focus: true });
+  renderStudyNowQuestion();
+  studyNowRevealBtn.focus();
+  if (unsent > 0) studyNowMessage.textContent = t(unsent === 1 ? "appReview.unsentRetest.one" : "appReview.unsentRetest.other", { count: unsent });
+  return true;
+}
+
+/** The experimental panel's "Fazer a revisão" on a unit with questions: opens the practice of the stage it requires. False = nothing to open. */
+async function practiceObligation(unit) {
+  try { return await startFocusedReview(unit.required.id, { obligationUnitId: unit.unitId }); }
+  catch (error) { console.error("Falha ao abrir a revisão.", error); return false; }
+}
+
+// "Adiar vencidas" (HG-09): confirm (how many, to when, how many per day), then the store moves the overdue reviews to future days. They stay
+// pending: nothing is completed, no evidence is created. Failing leaves every date as it was.
+postponeBtn?.addEventListener("click", async () => {
+  if (!postponeContext || postponeContext.tasks.length === 0) return;
+  const { tasks, today } = postponeContext;
+  const perDay = await askPostpone({ tasks, today, formatDay: (day) => formatDate(day) });
+  if (perDay === null) { postponeBtn.focus(); return; }
+  postponeBtn.disabled = true;
+  try {
+    const result = await DB.reviewTasks.postponeOverdue(today, { perDay });
+    setReviewMessage();
+    await renderToday();
+    setReviewMessage(result.postponed === 0 ? t("today.postpone.none") : tn("today.postpone.done", result.postponed));
+    if (todayPrimaryAction && !todayPrimaryAction.hidden) todayPrimaryActionBtn.focus({ preventScroll: true });
+  } catch (error) {
+    setReviewMessage(t("today.postpone.failed"), true);
+    console.error("Falha ao adiar as revisões vencidas.", error);
+    postponeBtn.focus();
+  } finally {
+    postponeBtn.disabled = false;
+  }
+});
+
+todayFocusReviewBtn?.addEventListener("click", () => {
+  const reviewId = todayFocusReviewBtn.dataset.reviewId;
+  if (reviewId) startFocusedReview(reviewId).catch((error) => console.error("Falha ao abrir a revisão.", error));
+});
+
+studyNowRevealBtn?.addEventListener("click", async () => {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+  const exercise = state.exercises[state.index];
+
+  studyNowAnswerText.hidden = false;
+  studyNowExplanationText.hidden = !studyNowExplanationText.textContent;
+  studyNowSourceBox.hidden = studyNowSourceBox.children.length === 0;
+  studyNowJudgment.hidden = false;
+  studyNowRevealBtn.hidden = true;
+  // The focused button just disappeared: keep keyboard users in the flow.
+  studyNowCorrectBtn.focus();
+
+  if (REMOTE_MODE && DB.attempts) {
+    // Kept on the state so a judgment tapped right away waits for it (see judgeStudyNow): an attempt that is already SUBMITTED
+    // refuses the reveal, and the ledger would then say the solution was seen with no help.
+    state.pendingReveal = recordStudyNowReveal(state, exercise);
+    await state.pendingReveal;
+  }
+});
+
+/** Starts the server attempt for this question and records the hint and the reveal on it. Never rejects: failures are logged. */
+async function recordStudyNowReveal(state, exercise) {
+  try {
+    // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
+    const attempt = await DB.attempts.start(exercise.id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
+    state.attemptId = attempt.id;
+    // Real, observable signal (same idiom as ensureAttemptStarted's
+    // exItem.dataset.attemptId above) — lets tests confirm a real
+    // server-owned attempt exists without a dedicated listing endpoint.
+    studyNowQuestionArea.dataset.attemptId = String(attempt.id);
+    if (exercise.hintText) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (error) { console.error("Falha ao registrar uso de dica (prática inicial).", error); }
+    }
+    await DB.attempts.revealSolution(attempt.id);
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa (prática inicial).", error);
+  }
+}
+
+async function judgeStudyNow(isCorrect) {
+  const state = studyNowState;
+  if (!state || state.index >= state.exercises.length) return;
+
+  if (state.judging) return; // a double tap must not judge the same question twice
+  const tapped = isCorrect ? "CORRECT" : "INCORRECT";
+  let adoptedOutcome = null; // set when the server already held an earlier tap (see the submit below)
+  // The server hears the judgment FIRST. If it cannot be registered (dropped connection) the student stays on
+  // this question with the same buttons and a plain message: nothing advances or is counted that the server
+  // does not have, so the result, the evidence and "para reforçar" always agree.
+  if (REMOTE_MODE && DB.attempts) {
+    state.judging = true;
+    // Visible while the server is answering (slow connection): both buttons look off, so the student can see the tap was
+    // taken and does not tap the other one believing it would replace it (state.judging ignores it anyway). aria-disabled,
+    // not disabled: a disabled button drops keyboard focus and leaves the screen with nothing focusable.
+    studyNowCorrectBtn.setAttribute("aria-disabled", "true");
+    studyNowIncorrectBtn.setAttribute("aria-disabled", "true");
+    studyNowJudgment.setAttribute("aria-busy", "true");
+    studyNowMessage.textContent = t("appStudyNow.saving");
+    try {
+      // The reveal of this question may still be on its way to the server: judge only after it, never before.
+      await state.pendingReveal;
+      if (!state.attemptId) {
+        // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
+        // or the screen would show progress the server does not have.
+        const started = await DB.attempts.start(state.exercises[state.index].id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
+        state.attemptId = started.id;
+        studyNowQuestionArea.dataset.attemptId = String(started.id);
+        try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
+      }
+      let outcome = isCorrect ? "CORRECT" : "INCORRECT";
+      try {
+        await DB.attempts.submit(state.attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+      } catch (error) {
+        // The reply to an earlier tap was lost AFTER the server had recorded it: the attempt is already SUBMITTED
+        // with what that tap said. That outcome stands (an attempt is never rewritten); adopt it instead of leaving
+        // the student stuck on a question the server already holds.
+        const earlier = state.unconfirmed;
+        if (error?.code === "ALREADY_SUBMITTED" && earlier && earlier.attemptId === state.attemptId) {
+          adoptedOutcome = earlier.outcome;
+          outcome = earlier.outcome;
+        } else {
+          state.unconfirmed = { attemptId: state.attemptId, outcome }; // unknown whether the server received it
+          throw error;
+        }
+      }
+      state.unconfirmed = null;
+      isCorrect = outcome === "CORRECT";
+      // Collected only after a successful submit — an attempt that never reached SUBMITTED must never be handed
+      // to learningEvidence.create's attemptIds (the server rejects any id that isn't already SUBMITTED).
+      state.attemptIds.push(Number(state.attemptId));
+    } catch (error) {
+      console.error("Falha ao registrar resultado (prática inicial).", error);
+      studyNowMessage.textContent = t("appStudyNow.judgeFailed");
+      return;
+    } finally {
+      state.judging = false;
+      studyNowCorrectBtn.removeAttribute("aria-disabled");
+      studyNowIncorrectBtn.removeAttribute("aria-disabled");
+      studyNowJudgment.removeAttribute("aria-busy");
+    }
+  }
+  studyNowMessage.textContent = "";
+
+  const judgedExercise = state.exercises[state.index];
+  const judgedItem = { exercise: judgedExercise, attemptId: state.attemptId, outcome: isCorrect ? "CORRECT" : "INCORRECT" };
+  state.judgedExercises.push(judgedItem);
+  state.lastJudged = judgedItem;
+  state.answeredCount += 1;
+  if (isCorrect) {
+    state.correctCount += 1;
+    state.correctedExercises.push(state.exercises[state.index]);
+  } else {
+    // Slice 2 (SMARTLEARN_PRODUCT_FIRST_V1): keep the exact question/answer
+    // this session already has in memory — no new fetch, no new quiz
+    // mechanism, just remembering what was already shown so the result
+    // screen can offer "Revisar meus erros" instead of ending on a bare score.
+    state.wrongExercises.push(state.exercises[state.index]);
+  }
+
+  state.index += 1;
+  persistStudySnapshot(state);
+  renderStudyNowQuestion();
+  if (state.index < state.exercises.length) studyNowRevealBtn.focus();
+  if (adoptedOutcome && adoptedOutcome !== tapped) {
+    studyNowMessage.textContent = t(adoptedOutcome === "CORRECT" ? "appStudyNow.adopted.correct" : "appStudyNow.adopted.incorrect");
+  }
+}
+
+studyNowCorrectBtn?.addEventListener("click", () => judgeStudyNow(true));
+studyNowIncorrectBtn?.addEventListener("click", () => judgeStudyNow(false));
+
 export async function importBackup(file) {
   backupMessage.classList.remove("is-error");
   backupMessage.textContent = "";
@@ -1924,13 +4451,11 @@ export async function importBackup(file) {
     await DB.importAll(data);
     await renderSubjects();
     await Promise.all([renderToday(), renderStats(), renderSettings()]);
-    backupMessage.textContent = "Backup importado com sucesso.";
+    backupMessage.textContent = t("appBackup.imported");
     showScreen("today", { focus: true });
   } catch (error) {
     backupMessage.classList.add("is-error");
-    backupMessage.textContent = error instanceof SyntaxError
-      ? "O arquivo selecionado não contém JSON válido."
-      : "O backup é inválido ou não pôde ser importado.";
+    backupMessage.textContent = t(error instanceof SyntaxError ? "appBackup.invalidJson" : "appBackup.invalidBackup");
     console.error("Falha ao importar backup.", error);
   }
 }
@@ -1955,16 +4480,6 @@ function setSubjectManagerMessage(message = "") {
   subjectManagerMessage.textContent = message;
 }
 
-function setSubjectFormVisible(visible) {
-  newSubjectForm.hidden = !visible;
-  showSubjectFormButton.setAttribute("aria-expanded", String(visible));
-  setSubjectMessage();
-
-  if (visible) {
-    newSubjectInput.focus();
-  }
-}
-
 function setStudyManagerMessage(message = "") {
   studyManagerMessage.textContent = message;
 }
@@ -1976,16 +4491,25 @@ function resetRegisterState() {
   studyForm.reset();
   studyDateInput.value = getLocalDateValue();
   if (studySourceTextInput) studySourceTextInput.value = "";
-  newSubjectForm.reset();
-  setSubjectFormVisible(false);
+  registerSubjectForm.reset();
+  registerSubjectForm.hide();
+  setSubjectMessage();
   setSubjectManagerMessage();
   setStudyManagerMessage();
   studyMessage.classList.remove("is-error");
   studyMessage.textContent = "";
 }
 
-function pluralize(value, singular, plural) {
-  return value === 1 ? singular : plural;
+async function openPendingRegisterUnit() {
+  const unitId = pendingRegisterFocusUnitId;
+  pendingRegisterFocusUnitId = null;
+  if (unitId == null) return;
+  const row = studyList.querySelector(`.study-row[data-study-id="${unitId}"]`);
+  const toggle = row?.querySelector('[data-action="toggle-exercises"]');
+  if (!row || !toggle) return;
+  toggle.click();
+  row.scrollIntoView({ block: "start" });
+  toggle.focus({ preventScroll: true });
 }
 
 async function renderStudies() {
@@ -2018,7 +4542,7 @@ async function renderStudies() {
       form.className = "study-edit-grid";
 
       const sourceLabel = document.createElement("label");
-      sourceLabel.textContent = "Fonte";
+      sourceLabel.textContent = t("appRegister.field.source");
       const sourceInput = document.createElement("input");
       sourceInput.type = "text";
       sourceInput.className = "study-edit-source";
@@ -2028,16 +4552,17 @@ async function renderStudies() {
       sourceLabel.append(sourceInput);
 
       const dateLabel = document.createElement("label");
-      dateLabel.textContent = "Data";
+      dateLabel.textContent = t("appRegister.field.date");
       const dateInput = document.createElement("input");
       dateInput.type = "date";
       dateInput.className = "study-edit-date";
       dateInput.dataset.studyField = "studyDate";
       dateInput.value = record.studyDate;
+      dateInput.dataset.original = record.studyDate;
       dateLabel.append(dateInput);
 
       const contentLabel = document.createElement("label");
-      contentLabel.textContent = "Conteúdo";
+      contentLabel.textContent = t("appRegister.field.content");
       const contentInput = document.createElement("textarea");
       contentInput.className = "study-edit-content";
       contentInput.rows = 3;
@@ -2057,17 +4582,17 @@ async function renderStudies() {
       saveButton.className = "small-button is-primary";
       saveButton.type = "button";
       saveButton.dataset.action = "save-study";
-      saveButton.textContent = "Salvar";
+      saveButton.textContent = t("appRegister.save");
 
       const cancelButton = document.createElement("button");
       cancelButton.className = "small-button";
       cancelButton.type = "button";
       cancelButton.dataset.action = "cancel-study";
-      cancelButton.textContent = "Cancelar";
+      cancelButton.textContent = t("appRegister.cancel");
 
       actions.append(saveButton, cancelButton);
     } else {
-      info.append(createTextElement("p", "study-title", subject?.name ?? "Sem disciplina"));
+      info.append(createTextElement("p", "study-title", subject?.name ?? t("appRegister.noSubject")));
 
       const meta = document.createElement("div");
       meta.className = "study-meta";
@@ -2076,13 +4601,13 @@ async function renderStudies() {
         createTextElement("span", "study-date-tag", formatDate(record.studyDate)),
       );
       info.append(meta);
-      info.append(createTextElement("p", "study-content", record.title || "Conteúdo indisponível"));
+      info.append(createTextElement("p", "study-content", record.title || t("appRegister.contentUnavailable")));
 
       const editButton = document.createElement("button");
       editButton.className = "small-button";
       editButton.type = "button";
       editButton.dataset.action = "edit-study";
-      editButton.textContent = "Editar";
+      editButton.textContent = t("appRegister.edit");
       actions.append(editButton);
     }
 
@@ -2100,40 +4625,52 @@ async function renderStudies() {
     exerciseAddForm.className = "exercise-add-form";
 
     const qLabel = document.createElement("label");
-    qLabel.textContent = "Enunciado";
+    qLabel.textContent = t("appRegister.exercise.question");
     const qInput = document.createElement("textarea");
     qInput.rows = 2;
     qInput.className = "exercise-question-input";
-    qInput.placeholder = "Enunciado da questão (obrigatório)";
+    qInput.placeholder = t("appRegister.exercise.questionPlaceholder");
     qLabel.append(qInput);
 
     const aLabel = document.createElement("label");
-    aLabel.textContent = "Resposta";
+    aLabel.textContent = t("appRegister.exercise.answer");
     const aInput = document.createElement("textarea");
     aInput.rows = 2;
     aInput.className = "exercise-answer-input";
-    aInput.placeholder = "Resposta esperada";
+    aInput.placeholder = t("appRegister.exercise.answerPlaceholder");
     aLabel.append(aInput);
 
     const hLabel = document.createElement("label");
-    hLabel.textContent = "Dica (opcional)";
+    hLabel.textContent = t("appRegister.exercise.hint");
     const hInput = document.createElement("input");
     hInput.type = "text";
     hInput.className = "exercise-hint-input";
-    hInput.placeholder = "Dica (opcional)";
+    hInput.placeholder = t("appRegister.exercise.hint");
     hLabel.append(hInput);
+
+    // "Por quê" only where the store can keep it (the server); the local store has no such column.
+    let wLabel = null;
+    if (REMOTE_MODE) {
+      wLabel = document.createElement("label");
+      wLabel.textContent = t("appRegister.exercise.why");
+      const wInput = document.createElement("textarea");
+      wInput.rows = 2;
+      wInput.className = "exercise-why-input";
+      wInput.placeholder = t("appRegister.exercise.whyPlaceholder");
+      wLabel.append(wInput);
+    }
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "small-button is-primary";
     addBtn.dataset.action = "add-exercise";
     addBtn.dataset.studyId = String(record.id);
-    addBtn.textContent = "Adicionar exercício";
+    addBtn.textContent = t("appRegister.exercise.add");
 
     const exerciseFormMsg = createTextElement("p", "field-message exercise-form-message", "");
     exerciseFormMsg.setAttribute("role", "status");
 
-    exerciseAddForm.append(qLabel, aLabel, hLabel, addBtn, exerciseFormMsg);
+    exerciseAddForm.append(qLabel, aLabel, hLabel, ...(wLabel ? [wLabel] : []), addBtn, exerciseFormMsg);
     exercisesSection.append(exerciseList, exerciseAddForm);
 
     const toggleExercisesBtn = document.createElement("button");
@@ -2141,7 +4678,7 @@ async function renderStudies() {
     toggleExercisesBtn.className = "small-button";
     toggleExercisesBtn.dataset.action = "toggle-exercises";
     toggleExercisesBtn.dataset.studyId = String(record.id);
-    toggleExercisesBtn.textContent = "Exercícios";
+    toggleExercisesBtn.textContent = t("appRegister.exercise.toggle");
 
     actions.append(toggleExercisesBtn);
 
@@ -2165,7 +4702,11 @@ async function renderExerciseList(unitId) {
 
     const qEl = createTextElement("p", "exercise-question", exercise.questionText);
     const aEl = createTextElement("p", "exercise-answer", exercise.answerText);
-    const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", `Dica: ${exercise.hintText}`) : null;
+    const hEl = exercise.hintText ? createTextElement("p", "exercise-hint", t("appStudyNow.hint", { text: exercise.hintText })) : null;
+    const wEl = exercise.explanationText ? createTextElement("p", "exercise-why", t("appStudyNow.why", { text: exercise.explanationText })) : null;
+    // the raw values travel with the elements: the inline editor must not parse them back out of the translated sentence
+    if (hEl) hEl.dataset.text = exercise.hintText;
+    if (wEl) wEl.dataset.text = exercise.explanationText;
 
     const itemActions = document.createElement("div");
     itemActions.className = "exercise-item-actions";
@@ -2176,7 +4717,7 @@ async function renderExerciseList(unitId) {
     editExBtn.dataset.action = "edit-exercise";
     editExBtn.dataset.exerciseId = String(exercise.id);
     editExBtn.dataset.studyId = String(unitId);
-    editExBtn.textContent = "Editar";
+    editExBtn.textContent = t("appRegister.edit");
 
     const delExBtn = document.createElement("button");
     delExBtn.type = "button";
@@ -2184,12 +4725,118 @@ async function renderExerciseList(unitId) {
     delExBtn.dataset.action = "delete-exercise";
     delExBtn.dataset.exerciseId = String(exercise.id);
     delExBtn.dataset.studyId = String(unitId);
-    delExBtn.textContent = "Remover";
+    delExBtn.textContent = t("appRegister.remove");
 
     itemActions.append(editExBtn, delExBtn);
-    if (hEl) item.append(qEl, aEl, hEl, itemActions);
-    else item.append(qEl, aEl, itemActions);
+    item.append(qEl, aEl, ...[hEl, wEl].filter(Boolean), itemActions);
     list.append(item);
+  }
+}
+
+// The "add exercise" form under a study: validates the question, creates the exercise, clears the form and reports the outcome
+// in the form's own message line. `section` is the study's exercises section; `button` is the form's Add button.
+async function addExerciseFromForm(section, studyId, button) {
+  const qInput = section?.querySelector(".exercise-question-input");
+  const aInput = section?.querySelector(".exercise-answer-input");
+  const hInput = section?.querySelector(".exercise-hint-input");
+  const wInput = section?.querySelector(".exercise-why-input");
+  const msgEl = section?.querySelector(".exercise-form-message");
+  const questionText = qInput?.value.trim() ?? "";
+  if (!questionText) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.questionRequired"); }
+    qInput?.focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    await DB.exercises.create(studyId, {
+      questionText,
+      answerText: aInput?.value.trim() ?? "",
+      hintText: hInput?.value.trim() || null,
+      ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
+      provenance: 'MANUAL',
+    });
+    if (qInput) qInput.value = "";
+    if (aInput) aInput.value = "";
+    if (hInput) hInput.value = "";
+    if (wInput) wInput.value = "";
+    if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = t("appRegister.exercise.added"); }
+    await renderExerciseList(studyId);
+  } catch (error) {
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appRegister.exercise.saveFailed"); }
+    console.error("Falha ao salvar exercício.", error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// The inline editor that replaces an exercise row; its Save / Cancel buttons are handled by the study-list click dispatcher.
+function createExerciseEditForm({ exerciseId, studyId, question, answer, hint, why }) {
+  const form = document.createElement("div");
+  form.className = "exercise-item exercise-item-edit";
+
+  const questionInput = document.createElement("textarea");
+  questionInput.rows = 2; questionInput.value = question; questionInput.className = "exercise-question-input";
+  const answerInput = document.createElement("textarea");
+  answerInput.rows = 2; answerInput.value = answer; answerInput.className = "exercise-answer-input";
+  const hintInput = document.createElement("input");
+  hintInput.type = "text"; hintInput.value = hint; hintInput.placeholder = t("appRegister.exercise.hint"); hintInput.className = "exercise-hint-input";
+  let whyInput = null;
+  if (REMOTE_MODE) {
+    whyInput = document.createElement("textarea");
+    whyInput.rows = 2; whyInput.value = why; whyInput.placeholder = t("appRegister.exercise.why"); whyInput.className = "exercise-why-input";
+    whyInput.setAttribute("aria-label", t("appRegister.exercise.why"));
+  }
+
+  const saveButton = document.createElement("button");
+  saveButton.type = "button"; saveButton.className = "small-button is-primary";
+  saveButton.dataset.action = "save-exercise-edit";
+  saveButton.dataset.exerciseId = String(exerciseId);
+  saveButton.dataset.studyId = String(studyId);
+  saveButton.textContent = t("appRegister.save");
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button"; cancelButton.className = "small-button";
+  cancelButton.dataset.action = "cancel-exercise-edit";
+  cancelButton.dataset.studyId = String(studyId);
+  cancelButton.textContent = t("appRegister.cancel");
+
+  form.append(questionInput, answerInput, hintInput, ...(whyInput ? [whyInput] : []), saveButton, cancelButton);
+  return { form, questionInput };
+}
+
+// Saves the exercise open in the inline editor built by createExerciseEditForm: validates the question, updates the exercise and
+// re-renders the list; on failure the editor stays open with its own error line. `button` is the editor's Save button.
+async function saveExerciseEdit(button, studyId) {
+  const exerciseId = Number(button.dataset.exerciseId);
+  if (!exerciseId) return;
+  const item = button.closest(".exercise-item-edit");
+  const eq = item?.querySelector(".exercise-question-input");
+  const ea = item?.querySelector(".exercise-answer-input");
+  const eh = item?.querySelector(".exercise-hint-input");
+  const ew = item?.querySelector(".exercise-why-input");
+  const questionText = eq?.value.trim() ?? "";
+  if (!questionText) { eq?.focus(); return; }
+  button.disabled = true;
+  try {
+    await DB.exercises.update(exerciseId, {
+      questionText,
+      answerText: ea?.value.trim() ?? "",
+      hintText: eh?.value.trim() || null,
+      ...(ew ? { explanationText: ew.value.trim() || null } : {}),
+    });
+    await renderExerciseList(studyId);
+  } catch (error) {
+    button.disabled = false;
+    console.error("Falha ao salvar exercício.", error);
+    const item = button.closest(".exercise-item-edit");
+    let errMsg = item?.querySelector(".exercise-edit-error");
+    if (!errMsg && item) {
+      errMsg = document.createElement("span");
+      errMsg.className = "exercise-edit-error form-error";
+      item.appendChild(errMsg);
+    }
+    if (errMsg) errMsg.textContent = t("appRegister.exercise.editSaveFailed");
   }
 }
 
@@ -2198,7 +4845,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
     DB.subjects.getActive(),
     DB.subjects.getAll(),
   ]);
-  subjectSelect.replaceChildren(new Option("Selecione...", ""));
+  subjectSelect.replaceChildren(new Option(t("screens.form.select"), ""));
 
   for (const subject of activeSubjects) {
     subjectSelect.add(new Option(subject.name, String(subject.id)));
@@ -2214,6 +4861,7 @@ async function renderSubjects(selectedId = subjectSelect.value) {
       subjectSelect.value = remembered;
     }
   }
+  syncSelect(subjectSelect);
 
   renderSubjectList(allSubjects);
 }
@@ -2243,7 +4891,7 @@ function renderSubjectList(subjects) {
       input.className = "inline-edit-input";
       input.value = subject.name;
       input.id = `subject-edit-input-${subject.id}`;
-      input.setAttribute("aria-label", "Novo nome da disciplina");
+      input.setAttribute("aria-label", t("appRegister.subject.newNameLabel"));
       input.setAttribute("autocomplete", "off");
 
       const error = document.createElement("span");
@@ -2256,39 +4904,39 @@ function renderSubjectList(subjects) {
       saveBtn.className = "small-button is-primary";
       saveBtn.type = "button";
       saveBtn.dataset.action = "save-subject";
-      saveBtn.textContent = "Salvar";
+      saveBtn.textContent = t("appRegister.save");
 
       const cancelBtn = document.createElement("button");
       cancelBtn.className = "small-button";
       cancelBtn.type = "button";
       cancelBtn.dataset.action = "cancel-subject";
-      cancelBtn.textContent = "Cancelar";
+      cancelBtn.textContent = t("appRegister.cancel");
 
       actions.append(saveBtn, cancelBtn);
     } else {
       // Modo visualização
       info.append(createTextElement("p", "subject-name", subject.name));
-      info.append(createTextElement("span", "subject-status", subject.isActive ? "Ativa" : "Desativada"));
+      info.append(createTextElement("span", "subject-status", t(subject.isActive ? "appRegister.subject.active" : "appRegister.subject.inactive")));
 
       const editButton = document.createElement("button");
       editButton.className = "small-button";
       editButton.type = "button";
       editButton.dataset.action = "edit-subject";
       editButton.dataset.subjectName = subject.name;
-      editButton.textContent = "Editar";
+      editButton.textContent = t("appRegister.edit");
 
       const toggleButton = document.createElement("button");
       toggleButton.className = "small-button";
       toggleButton.type = "button";
       toggleButton.dataset.action = subject.isActive ? "deactivate-subject" : "activate-subject";
-      toggleButton.textContent = subject.isActive ? "Desativar" : "Ativar";
+      toggleButton.textContent = t(subject.isActive ? "appRegister.subject.deactivate" : "appRegister.subject.activate");
 
       const deleteButton = document.createElement("button");
       deleteButton.className = "small-button is-danger";
       deleteButton.type = "button";
       deleteButton.dataset.action = "delete-subject";
       deleteButton.dataset.subjectName = subject.name;
-      deleteButton.textContent = "Excluir";
+      deleteButton.textContent = t("appRegister.subject.delete");
 
       actions.append(editButton, toggleButton, deleteButton);
     }
@@ -2302,18 +4950,145 @@ function isKnownScreen(screenId) {
   return screenPanels.some((panel) => panel.dataset.screenPanel === screenId);
 }
 
-export function showScreen(screenId, { focus = false } = {}) {
-  const nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+const DATA_SCREENS = new Set(["today", "stats", "plan", "settings", "materials", "study-now", "exam"]);
 
-  for (const panel of screenPanels) {
-    panel.hidden = panel.dataset.screenPanel !== nextScreen;
+// T22: "register" (#screen-register, "Cadastro") was removed from the NAV
+// in a prior decision (P1-2), but is NOT dead — it is the only UI in the
+// app that manages exercises (add/edit/delete), a real product capability
+// with no other entry point today (confirmed by hands-on verification:
+// Plano's own unit rows have no exercise-authoring section at all). An
+// earlier version of this comment/redirect wrongly assumed it was a
+// redundant duplicate of Plano's create-unit flow and redirected #register
+// away, which would have made exercise management completely
+// unreachable — reverted before landing. Preserving required entry
+// behavior (per tasks.md T22) means leaving #register reachable exactly
+// as P1-2 left it: nav-hidden, but a direct/bookmarked hash still works.
+// A real fix (surfacing exercise management from Plano/Hoje instead of
+// this legacy screen) is future UI work, not a T22 redirect decision.
+
+/** The disciplines of the student live in a panel of Plano: opening it draws the catalog, closing it only hides it. */
+function setSubjectsPanel(open) {
+  if (!planSubjectsPanel || !planManageSubjectsBtn) return;
+  planSubjectsPanel.hidden = !open;
+  planManageSubjectsBtn.setAttribute("aria-expanded", String(open));
+  if (open) {
+    // one panel at a time: both open stacked pushed the lesson list ~1,300 px down
+    if (planNewUnitForm && !planNewUnitForm.hidden) setPlanFormVisible(false);
+    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
+    planSubjectsPanel.scrollIntoView({ block: "nearest" });
   }
+}
+
+planManageSubjectsBtn?.addEventListener("click", () => setSubjectsPanel(planSubjectsPanel?.hidden !== false));
+
+/**
+ * Runs the render of a data screen and tells the student when it could not load (it used to reach only the console, leaving an
+ * empty or stale screen with no way forward). The panel is aria-busy while it loads; the message offers to try again.
+ */
+function runScreenRender(screenId, render) {
+  const panel = document.querySelector(`#screen-${screenId}`);
+  const clear = () => panel?.querySelector(":scope > .screen-load-error")?.remove();
+  clear();
+  panel?.setAttribute("aria-busy", "true");
+  return Promise.resolve()
+    .then(render)
+    .then(clear)
+    .catch((error) => {
+      console.error("Falha ao carregar a tela.", screenId, error);
+      clear();
+      if (!panel) return;
+      const box = document.createElement("div");
+      box.className = "screen-load-error";
+      box.setAttribute("role", "alert");
+      const retry = createTextElement("button", "small-button", t("shell.retry"));
+      retry.type = "button";
+      retry.addEventListener("click", () => runScreenRender(screenId, render));
+      box.append(createTextElement("p", "", t("shell.loadFailed")), retry);
+      panel.querySelector(":scope > .screen-heading")?.after(box);
+    })
+    .finally(() => panel?.removeAttribute("aria-busy"));
+}
+
+function clearTransientMessages(panel) {
+  for (const el of panel.querySelectorAll(".form-message:not(.is-error):not([hidden]), .field-message:not(.is-error):not([hidden])")) {
+    el.textContent = "";
+  }
+}
+
+// Phone only: Configurações and Conta live behind "Mais" so the bottom bar keeps four large targets. On desktop the
+// group is an ordinary part of the sidebar and the toggle is hidden, so none of this state is ever set there.
+function closeMobileMore({ restoreFocus = false } = {}) {
+  const wasOpen = Boolean(mobileMoreMenu?.classList.contains("is-open"));
+  mobileMoreMenu?.classList.remove("is-open");
+  mobileMoreToggle?.classList.remove("is-open");
+  mobileMoreToggle?.setAttribute("aria-expanded", "false");
+  if (restoreFocus && wasOpen) mobileMoreToggle?.focus();
+}
+
+export function showScreen(screenId, { focus = false } = {}) {
+  closeMobileMore();
+  if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
+  const wantsSubjectsPanel = screenId === "subjects"; // so was Disciplinas, as the "Gerenciar disciplinas" panel of Plano
+  if (wantsSubjectsPanel) screenId = "plan";
+  let nextScreen = isKnownScreen(screenId) ? screenId : DEFAULT_SCREEN;
+
+  // Remote mode: a data screen with no authenticated session is a login
+  // requirement, not empty data — redirect to Conta rather than attempting
+  // (and failing 401 on) a render.
+  if (REMOTE_MODE && databaseAvailable && !authenticated && DATA_SCREENS.has(nextScreen)) {
+    nextScreen = "account";
+  }
+
+  // PV1-01: Materiais is exclusive to LOCAL_DESKTOP_AUTHORITY — a direct/
+  // bookmarked #materials hash must not expose the screen under plain
+  // REMOTE_AUTHORITY (no local backend), even though the nav item is
+  // already hidden for that case (hiding the nav button alone doesn't
+  // stop a direct hash navigation).
+  if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
+    nextScreen = DEFAULT_SCREEN;
+  }
+
+  // The study and exam screens only exist while their in-memory session does. After a reload (or a stale link) there is
+  // nothing to show: an empty card with a "Ver resposta" that does nothing is worse than starting over from Plano, where
+  // an interrupted "Estudar agora" offers to continue and a started exam is reopened from where it stopped.
+  if ((nextScreen === "study-now" && !studyNowState && studyNowResultCard.hidden) || (nextScreen === "exam" && !examState)) {
+    nextScreen = "plan";
+  }
+
+  // A redo's "return to the block" intent only lives until the student is
+  // back on Hoje; wandering elsewhere drops it instead of surprising them later.
+  if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
+
+  let leftStudyResultUnsent = false;
+  for (const panel of screenPanels) {
+    const leaving = !panel.hidden && panel.dataset.screenPanel !== nextScreen;
+    panel.hidden = panel.dataset.screenPanel !== nextScreen;
+    // A passing status ("saved", "copied", "nothing to show") belongs to the moment it was said: it must not greet the student
+    // again when they come back. Errors stay until the student acts, and hidden notes keep their own lifecycle.
+    if (leaving) clearTransientMessages(panel);
+    if (leaving && panel.dataset.screenPanel === "study-now" && pendingStudyEvidence) leftStudyResultUnsent = true;
+  }
+  // The "send again" control lives only on the result screen: a result left unsent (H-T04) is sent once more on the way out, not dropped.
+  if (leftStudyResultUnsent) recordStudyEvidence().catch((error) => console.error("Falha ao registrar o resultado ao sair.", error));
+
+  // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4/5: found in a real manual journey
+  // — the scrollable container (.app-main) kept whatever scroll offset the
+  // PREVIOUS screen had, so switching screens after scrolling down landed
+  // mid-content on the new screen instead of at its top (observed
+  // navigating a scrolled Conta into Materiais — arrived mid-paragraph,
+  // not at the "Materiais" heading). showScreen() is the one place every
+  // real screen switch goes through; a same-screen re-click scrolling
+  // back to top is reasonable, not a regression.
+  if (mainContent) mainContent.scrollTop = 0;
 
   for (const item of navigationItems) {
     const isActive = item.dataset.screen === nextScreen;
     item.classList.toggle("is-active", isActive);
     item.setAttribute("aria-current", isActive ? "page" : "false");
   }
+  const moreIsCurrent = Boolean(mobileMoreMenu?.querySelector(`[data-screen="${nextScreen}"]`));
+  mobileMoreToggle?.classList.toggle("is-active", moreIsCurrent);
+  mobileMoreToggle?.setAttribute("aria-current", moreIsCurrent ? "page" : "false");
 
   if (window.location.hash !== `#${nextScreen}`) {
     window.history.replaceState(null, "", `#${nextScreen}`);
@@ -2324,52 +5099,86 @@ export function showScreen(screenId, { focus = false } = {}) {
   }
 
   if (nextScreen === "today" && databaseAvailable) {
-    renderToday().catch((error) => console.error("Falha ao atualizar a tela Hoje.", error));
+    runScreenRender("today", renderToday);
   }
 
   if (nextScreen === "stats" && databaseAvailable) {
-    renderStats().catch((error) => console.error("Falha ao atualizar as estatísticas.", error));
+    runScreenRender("stats", renderStats);
   }
   if (nextScreen === "plan" && databaseAvailable) {
-    renderPlan().catch((error) => console.error("Falha ao carregar plano.", error));
+    // Never leave an interactive stale Plano on screen while its authoritative refresh
+    // is in flight. A fast click on an old row could otherwise expand stale closures
+    // just before the fresh render replaced that row (CI EXAM-4 regression).
+    planList?.replaceChildren();
+    runScreenRender("plan", renderPlan);
   }
-  if (nextScreen === "tracking" && databaseAvailable) {
-    renderTracking().catch((error) => console.error("Falha ao carregar acompanhamento.", error));
-  }
-  if (nextScreen === "subjects" && databaseAvailable) {
-    renderDisciplinas().catch((error) => console.error("Falha ao carregar disciplinas.", error));
-  }
+  if (nextScreen === "plan" && wantsSubjectsPanel) setSubjectsPanel(true);
   if (nextScreen === "settings" && databaseAvailable) {
-    renderSettings().catch((error) => console.error("Falha ao carregar configurações.", error));
+    runScreenRender("settings", renderSettings);
+  }
+  // T22: "register" (Cadastro, nav-hidden since P1-2) never had its own
+  // list populated on plain navigation — renderStudies() only ran after a
+  // submission through this same form, leaving units created elsewhere
+  // (e.g. Plano) invisible here even though the underlying data is the
+  // same. Exercise management lives exclusively on this screen (no other
+  // entry point exists), so a unit not appearing here means its
+  // exercises are unmanageable — a real, previously-silent gap, fixed by
+  // wiring this screen's list to the same on-navigate pattern every
+  // other screen already uses.
+  if (nextScreen === "register" && databaseAvailable) {
+    renderStudies()
+      .then(openPendingRegisterUnit)
+      .catch((error) => console.error("Falha ao carregar estudos.", error));
+  }
+  if (nextScreen === "account") {
+    renderAccount().catch((error) => console.error("Falha ao carregar conta.", error));
   }
 }
 
 let currentThemePreference = getStoredThemePreference();
+let quickToggleMemory = readQuickToggleMemory();
 
 function renderThemePicker(preference = currentThemePreference) {
   if (!themePicker) return;
 
   themePicker.replaceChildren();
 
-  for (const option of THEME_OPTIONS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "theme-option";
-    button.setAttribute("role", "radio");
-    button.dataset.themeOption = option.id;
-    button.setAttribute("aria-checked", "false");
+  const select = document.createElement("select");
+  select.className = "theme-select";
+  select.id = "theme-select";
+  select.setAttribute("aria-label", t("theme.selectLabel"));
 
-    const label = document.createElement("span");
-    label.className = "theme-option-label";
-    label.textContent = option.label;
+  const groups = [
+    { key: "system", options: THEME_OPTIONS.filter((option) => option.mode === "auto") },
+    { key: "light", options: THEME_OPTIONS.filter((option) => option.mode === "light") },
+    { key: "dark", options: THEME_OPTIONS.filter((option) => option.mode === "dark") },
+  ];
 
-    const description = document.createElement("span");
-    description.className = "theme-option-description";
-    description.textContent = option.description;
-
-    button.append(label, description);
-    themePicker.append(button);
+  for (const group of groups) {
+    if (!group.options.length) continue;
+    const optionGroup = document.createElement("optgroup");
+    optionGroup.label = t(`theme.group.${group.key}`);
+    for (const option of group.options) {
+      const item = document.createElement("option");
+      item.value = option.id;
+      item.textContent = option.label;
+      optionGroup.append(item);
+    }
+    select.append(optionGroup);
   }
+
+  const preview = document.createElement("div");
+  preview.className = "theme-live-preview";
+  preview.setAttribute("role", "status");
+  preview.setAttribute("aria-live", "polite");
+  const swatch = document.createElement("span");
+  swatch.className = "theme-live-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  const previewLabel = document.createElement("span");
+  previewLabel.className = "theme-live-label";
+  preview.append(swatch, previewLabel);
+
+  themePicker.append(select, preview);
 
   syncThemePicker(preference);
 }
@@ -2377,12 +5186,11 @@ function renderThemePicker(preference = currentThemePreference) {
 // Destaca o tema ativo na tela de Configurações.
 function syncThemePicker(preference) {
   if (!themePicker) return;
-
-  for (const button of themePicker.querySelectorAll("[data-theme-option]")) {
-    const isActive = button.dataset.themeOption === preference;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-checked", isActive ? "true" : "false");
-  }
+  const select = themePicker.querySelector(".theme-select");
+  const previewLabel = themePicker.querySelector(".theme-live-label");
+  const option = THEME_OPTIONS.find((item) => item.id === preference) ?? THEME_OPTIONS.find((item) => item.id === "auto");
+  if (select && option) select.value = option.id;
+  if (previewLabel && option) previewLabel.textContent = `${t("theme.preview")} · ${option.label}`;
 }
 
 function setThemePreference(preference) {
@@ -2399,15 +5207,17 @@ renderThemePicker(currentThemePreference);
 applyThemePreference(currentThemePreference);
 
 themeToggle.addEventListener("click", () => {
-  const effectiveThemeId = resolveThemePreference(currentThemePreference, prefersDarkScheme.matches);
-  const next = effectiveThemeId === "night" || effectiveThemeId === "contrast" ? "paper" : "night";
-  setThemePreference(next);
+  // Antes: passava um booleano onde resolveThemePreference espera "dark"/"light" (com "Sistema" escuro o 1º clique não mudava nada)
+  // e sempre caía em Papel/Noite, apagando a escolha do usuário. Agora vira o modo e lembra a escolha de cada modo.
+  const { target, memory } = quickToggleTarget(currentThemePreference, prefersDarkScheme.matches ? "dark" : "light", quickToggleMemory);
+  quickToggleMemory = memory;
+  writeQuickToggleMemory(memory);
+  setThemePreference(target);
 });
 
-themePicker?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-theme-option]");
-  if (!button) return;
-  setThemePreference(button.dataset.themeOption);
+themePicker?.addEventListener("change", (event) => {
+  if (!(event.target instanceof HTMLSelectElement)) return;
+  setThemePreference(event.target.value);
 });
 
 // No modo automático, acompanha mudanças de tema do sistema em tempo real.
@@ -2428,51 +5238,53 @@ for (const item of navigationItems) {
   });
 }
 
+mobileMoreToggle?.addEventListener("click", () => {
+  const open = !mobileMoreMenu.classList.contains("is-open");
+  mobileMoreMenu.classList.toggle("is-open", open);
+  mobileMoreToggle.classList.toggle("is-open", open);
+  mobileMoreToggle.setAttribute("aria-expanded", String(open));
+  if (open) mobileMoreMenu.querySelector(".nav-item:not([hidden])")?.focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && mobileMoreMenu?.classList.contains("is-open")) {
+    event.preventDefault();
+    closeMobileMore({ restoreFocus: true });
+  }
+});
+function closeMobileMoreOnOutside(event) {
+  if (!mobileMoreMenu?.classList.contains("is-open")) return;
+  if (!mobileMoreMenu.contains(event.target) && !mobileMoreToggle?.contains(event.target)) closeMobileMore();
+}
+document.addEventListener("pointerdown", closeMobileMoreOnOutside);
+document.addEventListener("focusin", closeMobileMoreOnOutside);
+window.matchMedia("(max-width: 47.99rem)").addEventListener("change", () => closeMobileMore());
+
 window.addEventListener("hashchange", () => {
   showScreen(window.location.hash.slice(1));
 });
 
-showSubjectFormButton.addEventListener("click", () => {
-  setSubjectFormVisible(newSubjectForm.hidden);
-});
+let pendingSubjectCreate = null;
 
-newSubjectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = newSubjectInput.value.trim();
-  const nameValidationError = validateNamingField(name, "o nome da disciplina");
-  if (nameValidationError) {
-    setSubjectMessage(nameValidationError);
-    newSubjectInput.focus();
-    return;
-  }
-
+// Cadastro's door to the one registration of a discipline. The save of a study waits for `pendingSubjectCreate` (see saving a study).
+async function createSubjectFromRegister(name, color) {
   // AC-05: preserve draft values before re-render
   const draftDate = studyDateInput.value;
   const draftContent = studyContentInput.value;
   const draftSummary = studySummaryTextarea.value;
   const draftSource = studySourceTextInput ? studySourceTextInput.value : "";
 
-  try {
-    const subject = await DB.subjects.create(name);
+  pendingSubjectCreate = (async () => {
+    const subject = await DB.subjects.create(name, color);
     await renderSubjects(subject.id);
-    newSubjectForm.reset();
-    setSubjectFormVisible(false);
+  })();
+  await pendingSubjectCreate;
 
-    // AC-05: restore draft values after re-render
-    studyDateInput.value = draftDate;
-    studyContentInput.value = draftContent;
-    studySummaryTextarea.value = draftSummary;
-    if (studySourceTextInput) studySourceTextInput.value = draftSource;
-  } catch (error) {
-    const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectMessage(
-      isDuplicate
-        ? "Essa disciplina já está cadastrada."
-        : "Não foi possível adicionar a disciplina. Tente novamente.",
-    );
-    newSubjectInput.focus();
-  }
-});
+  // AC-05: restore draft values after re-render, but never over what the user typed while the request was in flight
+  if (!studyDateInput.value) studyDateInput.value = draftDate;
+  if (!studyContentInput.value) studyContentInput.value = draftContent;
+  if (!studySummaryTextarea.value) studySummaryTextarea.value = draftSummary;
+  if (studySourceTextInput && !studySourceTextInput.value) studySourceTextInput.value = draftSource;
+}
 
 subjectList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
@@ -2503,7 +5315,7 @@ subjectList.addEventListener("click", async (event) => {
     const errorEl = row.querySelector(".inline-edit-error");
     const newName = input?.value?.trim() ?? "";
     if (!newName) {
-      if (errorEl) errorEl.textContent = "Informe o nome da disciplina.";
+      if (errorEl) errorEl.textContent = t("appRegister.subject.nameRequired");
       input?.focus();
       return;
     }
@@ -2516,9 +5328,7 @@ subjectList.addEventListener("click", async (event) => {
     } catch (saveError) {
       const isDuplicate = /unique|duplicate/i.test(String(saveError));
       if (errorEl) {
-        errorEl.textContent = isDuplicate
-          ? "Essa disciplina já está cadastrada."
-          : "Não foi possível renomear a disciplina.";
+        errorEl.textContent = t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.renameFailed");
       }
       input?.focus();
     }
@@ -2535,9 +5345,7 @@ subjectList.addEventListener("click", async (event) => {
     }
 
     if (action === "delete-subject") {
-      const confirmed = await showConfirm(
-        `Confirma a exclusão de "${currentName}"? Esta ação não pode ser desfeita.`,
-      );
+      const confirmed = await showConfirm(t("appRegister.subject.deleteConfirm", { name: currentName }));
       if (!confirmed) return;
       await DB.subjects.deleteIfEmpty(subjectId);
     }
@@ -2549,11 +5357,7 @@ subjectList.addEventListener("click", async (event) => {
     );
   } catch (error) {
     const isDuplicate = /unique|duplicate/i.test(String(error));
-    setSubjectManagerMessage(
-      isDuplicate
-        ? "Essa disciplina já está cadastrada."
-        : "Não foi possível alterar a disciplina.",
-    );
+    setSubjectManagerMessage(t(isDuplicate ? "appRegister.subject.exists" : "appRegister.subject.changeFailed"));
     console.error("Falha ao alterar disciplina.", error);
   }
 });
@@ -2594,36 +5398,7 @@ studyList.addEventListener("click", async (event) => {
   }
 
   if (action === "add-exercise") {
-    const section = row.querySelector(`[data-exercises-for="${studyId}"]`);
-    const qInput = section?.querySelector(".exercise-question-input");
-    const aInput = section?.querySelector(".exercise-answer-input");
-    const hInput = section?.querySelector(".exercise-hint-input");
-    const msgEl = section?.querySelector(".exercise-form-message");
-    const questionText = qInput?.value.trim() ?? "";
-    if (!questionText) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o enunciado do exercício."; }
-      qInput?.focus();
-      return;
-    }
-    button.disabled = true;
-    try {
-      await DB.exercises.create(studyId, {
-        questionText,
-        answerText: aInput?.value.trim() ?? "",
-        hintText: hInput?.value.trim() || null,
-        provenance: 'MANUAL',
-      });
-      if (qInput) qInput.value = "";
-      if (aInput) aInput.value = "";
-      if (hInput) hInput.value = "";
-      if (msgEl) { msgEl.classList.remove("is-error"); msgEl.textContent = "Exercício adicionado."; }
-      await renderExerciseList(studyId);
-    } catch (error) {
-      if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível salvar o exercício."; }
-      console.error("Falha ao salvar exercício.", error);
-    } finally {
-      button.disabled = false;
-    }
+    await addExerciseFromForm(row.querySelector(`[data-exercises-for="${studyId}"]`), studyId, button);
     return;
   }
 
@@ -2646,70 +5421,21 @@ studyList.addEventListener("click", async (event) => {
     if (!exerciseId) return;
     const item = button.closest(".exercise-item");
     if (!item) return;
-    // Replace item with inline edit form
-    const currentQ = item.querySelector(".exercise-question")?.textContent ?? "";
-    const currentA = item.querySelector(".exercise-answer")?.textContent ?? "";
-    const hintEl = item.querySelector(".exercise-hint");
-    const currentH = hintEl ? hintEl.textContent.replace(/^Dica:\s*/, "") : "";
-
-    const editForm = document.createElement("div");
-    editForm.className = "exercise-item exercise-item-edit";
-
-    const eq = document.createElement("textarea");
-    eq.rows = 2; eq.value = currentQ; eq.className = "exercise-question-input";
-    const ea = document.createElement("textarea");
-    ea.rows = 2; ea.value = currentA; ea.className = "exercise-answer-input";
-    const eh = document.createElement("input");
-    eh.type = "text"; eh.value = currentH; eh.placeholder = "Dica (opcional)"; eh.className = "exercise-hint-input";
-
-    const saveEx = document.createElement("button");
-    saveEx.type = "button"; saveEx.className = "small-button is-primary";
-    saveEx.dataset.action = "save-exercise-edit";
-    saveEx.dataset.exerciseId = String(exerciseId);
-    saveEx.dataset.studyId = String(studyId);
-    saveEx.textContent = "Salvar";
-
-    const cancelEx = document.createElement("button");
-    cancelEx.type = "button"; cancelEx.className = "small-button";
-    cancelEx.dataset.action = "cancel-exercise-edit";
-    cancelEx.dataset.studyId = String(studyId);
-    cancelEx.textContent = "Cancelar";
-
-    editForm.append(eq, ea, eh, saveEx, cancelEx);
-    item.replaceWith(editForm);
-    eq.focus();
+    const { form, questionInput } = createExerciseEditForm({
+      exerciseId,
+      studyId,
+      question: item.querySelector(".exercise-question")?.textContent ?? "",
+      answer: item.querySelector(".exercise-answer")?.textContent ?? "",
+      hint: item.querySelector(".exercise-hint")?.dataset.text ?? "",
+      why: item.querySelector(".exercise-why")?.dataset.text ?? "",
+    });
+    item.replaceWith(form);
+    questionInput.focus();
     return;
   }
 
   if (action === "save-exercise-edit") {
-    const exerciseId = Number(button.dataset.exerciseId);
-    if (!exerciseId) return;
-    const item = button.closest(".exercise-item-edit");
-    const eq = item?.querySelector(".exercise-question-input");
-    const ea = item?.querySelector(".exercise-answer-input");
-    const eh = item?.querySelector(".exercise-hint-input");
-    const questionText = eq?.value.trim() ?? "";
-    if (!questionText) { eq?.focus(); return; }
-    button.disabled = true;
-    try {
-      await DB.exercises.update(exerciseId, {
-        questionText,
-        answerText: ea?.value.trim() ?? "",
-        hintText: eh?.value.trim() || null,
-      });
-      await renderExerciseList(studyId);
-    } catch (error) {
-      button.disabled = false;
-      console.error("Falha ao salvar exercício.", error);
-      const item = button.closest(".exercise-item-edit");
-      let errMsg = item?.querySelector(".exercise-edit-error");
-      if (!errMsg && item) {
-        errMsg = document.createElement("span");
-        errMsg.className = "exercise-edit-error form-error";
-        item.appendChild(errMsg);
-      }
-      if (errMsg) errMsg.textContent = "Erro ao salvar. Tente novamente.";
-    }
+    await saveExerciseEdit(button, studyId);
     return;
   }
 
@@ -2744,22 +5470,61 @@ studyList.addEventListener("click", async (event) => {
     const content = String(contentInput?.value ?? "").trim();
 
     if (!studyDate || !content) {
-      if (errorEl) errorEl.textContent = "Data e conteúdo são obrigatórios.";
+      if (errorEl) errorEl.textContent = t("appRegister.study.required");
       if (!studyDate) dateInput?.focus();
       else contentInput?.focus();
       return;
     }
 
     try {
-      await DB.learningUnits.update(studyId, { sourceText, studyDate, title: content });
+      // The date goes along only when the student changed it: the server refuses any studyDate (correcting it would have to
+      // reproject the pending reviews), so sending an unchanged one made every edit fail in server mode.
+      const changes = { sourceText, title: content };
+      if (studyDate !== dateInput.dataset.original) changes.studyDate = studyDate;
+      await DB.learningUnits.update(studyId, changes);
       activeStudyEditId = null;
       setStudyManagerMessage();
       await Promise.all([renderStudies(), renderToday(), renderStats()]);
     } catch (error) {
-      if (errorEl) errorEl.textContent = "Não foi possível salvar o estudo.";
+      if (errorEl) errorEl.textContent = t("appRegister.study.saveFailed");
       console.error("Falha ao salvar estudo.", error);
     }
   }
+});
+
+todayPrimaryActionBtn?.addEventListener("click", () => {
+  const reviewId = todayPrimaryActionBtn.dataset.reviewId;
+  if (!reviewId) return;
+  const row = reviewDashboard.querySelector(`.review-row[data-review-id="${reviewId}"]`);
+  if (!row) return;
+  revealFolded(row);
+  // The review may sit inside a collapsed per-unit card on Vencidas.
+  const unitCard = row.closest("details.overdue-unit");
+  if (unitCard) unitCard.open = true;
+  const body = row.querySelector(".review-row-body");
+  const toggle = row.querySelector('[data-action="toggle-row"]');
+  if (body && body.hidden) {
+    body.hidden = false;
+    row.classList.add("is-open");
+    toggle?.setAttribute("aria-expanded", "true");
+    if (toggle) toggle.textContent = t("shell.action.collapse");
+  }
+  row.scrollIntoView({ behavior: "smooth", block: "start" });
+  row.classList.add("is-highlighted");
+  setTimeout(() => row.classList.remove("is-highlighted"), 2000);
+});
+
+reviewDashboard.addEventListener("click", (event) => {
+  const button = event.target.closest('[data-action="toggle-row"]');
+  if (!button) return;
+  const row = button.closest(".review-row");
+  const body = row?.querySelector(".review-row-body");
+  if (!body) return;
+  const expanded = body.hidden;
+  body.hidden = !expanded;
+  row.classList.toggle("is-open", expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = t(expanded ? "shell.action.collapse" : "shell.action.viewContent");
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -2786,12 +5551,12 @@ reviewDashboard.addEventListener("click", async (event) => {
   const questionsCount = Number(qInput?.value);
   const correctCount = Number(aInput?.value ?? 0);
   if (!questionsCount || questionsCount < 1) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Informe o número de questões (mínimo 1)."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.questionsRequired"); }
     qInput?.focus();
     return;
   }
   if (correctCount > questionsCount) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Acertos não pode ser maior que questões."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.overflow"); }
     aInput?.focus();
     return;
   }
@@ -2809,14 +5574,15 @@ reviewDashboard.addEventListener("click", async (event) => {
     if (aInput) aInput.value = "";
     if (msgEl) {
       msgEl.classList.remove("is-error");
-      const pct = ((correctCount / questionsCount) * 100).toFixed(1).replace(".", ",");
-      msgEl.textContent = `Registrado: ${questionsCount} questões, ${correctCount} acertos (${pct}%).`;
+      const pct = formatDecimal((correctCount / questionsCount) * 100);
+      msgEl.textContent = t("appReview.external.recorded", { questions: questionsCount, correct: correctCount, percent: pct });
     }
   } catch (error) {
-    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = "Não foi possível registrar os exercícios."; }
+    if (msgEl) { msgEl.classList.add("is-error"); msgEl.textContent = t("appReview.external.failed"); }
     console.error("Falha ao registrar exercícios externos.", error);
   } finally {
     button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   }
 });
 
@@ -2830,21 +5596,102 @@ reviewDashboard.addEventListener("click", (event) => {
   detail.hidden = !expanded;
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+// T30: lazily starts a server-owned attempt the first time an exercise's
+// answer is revealed in this review, then records the reveal itself as an
+// attributable action. REMOTE_MODE-only (no local equivalent, same pattern
+// as migration-ui.js) and best-effort: a failure here never blocks the
+// existing reveal/judge UI or the aggregate evidence this review already
+// saves — item-level tracking is additive, not a dependency of the save path.
+async function ensureAttemptStarted(exItem) {
+  if (!REMOTE_MODE || !DB.attempts || !exItem) return null;
+  if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
+  const exerciseId = Number(exItem.dataset.exerciseId);
+  if (!Number.isInteger(exerciseId)) return null;
+  const reviewTaskId = Number(exItem.dataset.reviewTaskId);
+  try {
+    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
+    exItem.dataset.attemptId = String(attempt.id);
+    judgedQuestionAttemptIds.set(exerciseId, attempt.id);
+    // The hint (when this exercise has one) is already visible in the DOM
+    // unconditionally, not gated behind its own action — so the truthful
+    // observation is that assistance was available from the start, not a
+    // fabricated NONE for a hint the learner could already see.
+    if (exItem.querySelector(".review-exercise-hint")) {
+      try { await DB.attempts.useHint(attempt.id); }
+      catch (hintError) { console.error("Falha ao registrar uso de dica (item-level tracking).", hintError); }
+    }
+    return exItem.dataset.attemptId;
+  } catch (error) {
+    console.error("Falha ao iniciar tentativa de exercício (item-level tracking).", error);
+    return null;
+  }
+}
+
+/** Sends the remembered outcome of one Hoje item to the attempt ledger. True once the server has it. */
+async function flushPendingAttempt(exItem) {
+  const outcome = exItem.dataset.pendingOutcome;
+  if (!outcome) return true;
+  try {
+    await pendingReviewReveals.get(exItem); // the reveal of this item may still be on its way: judge only after it
+    const attemptId = exItem.dataset.attemptId || await ensureAttemptStarted(exItem);
+    if (!attemptId) return false;
+    await DB.attempts.submit(attemptId, { outcome, assessmentMethod: "SELF_REPORT" });
+    delete exItem.dataset.pendingOutcome;
+    return true;
+  } catch (error) {
+    // An earlier send of THIS outcome reached the server and only its reply was lost: the attempt is already
+    // SUBMITTED with exactly that outcome (the item's buttons are locked, so it cannot differ). It is not unsent.
+    if (error?.code === "ALREADY_SUBMITTED" && exItem.dataset.attemptId) {
+      delete exItem.dataset.pendingOutcome;
+      return true;
+    }
+    console.error("Falha ao registrar resultado da tentativa (item-level tracking).", error);
+    return false;
+  }
+}
+
+/** Retries every pending item under `container`; returns how many the server still does not have. */
+async function flushPendingAttempts(container) {
+  let remaining = 0;
+  for (const exItem of container?.querySelectorAll(".review-exercise-item[data-pending-outcome]") ?? []) {
+    if (!(await flushPendingAttempt(exItem))) remaining += 1;
+  }
+  return remaining;
+}
+
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="reveal-answer"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
   const answerEl = button.nextElementSibling;
   if (!answerEl) return;
+  const wasHidden = answerEl.hidden;
   answerEl.hidden = !answerEl.hidden;
-  button.textContent = answerEl.hidden ? "Ver resposta" : "Ocultar resposta";
+  button.textContent = t(answerEl.hidden ? "shell.action.viewAnswer" : "shell.action.hideAnswer");
   if (!answerEl.hidden && exItem && exItem.dataset.exerciseAnswered !== "true") {
     const judgment = exItem.querySelector(".exercise-judgment");
     if (judgment) judgment.hidden = false;
   }
+  if (wasHidden && !answerEl.hidden) {
+    // Kept per item so a judgment tapped right away waits for it (see flushPendingAttempt): judging first would start a second
+    // attempt for the same question, or submit this one before the reveal reaches the server, which then refuses it.
+    const reveal = recordReviewReveal(exItem);
+    pendingReviewReveals.set(exItem, reveal);
+    await reveal;
+  }
 });
 
-reviewDashboard.addEventListener("click", (event) => {
+const pendingReviewReveals = new WeakMap();
+
+/** Starts the server attempt for a review exercise (when it has none yet) and records the reveal on it. Never rejects. */
+async function recordReviewReveal(exItem) {
+  const attemptId = await ensureAttemptStarted(exItem);
+  if (!attemptId) return;
+  try { await DB.attempts.revealSolution(attemptId); }
+  catch (error) { console.error("Falha ao registrar revelação de resposta (item-level tracking).", error); }
+}
+
+reviewDashboard.addEventListener("click", async (event) => {
   const button = event.target.closest('[data-action="exercise-acertei"], [data-action="exercise-errei"]');
   if (!button) return;
   const exItem = button.closest(".review-exercise-item");
@@ -2853,10 +5700,22 @@ reviewDashboard.addEventListener("click", (event) => {
   const isCorrect = button.dataset.action === "exercise-acertei";
   exItem.dataset.exerciseAnswered = "true";
   exItem.classList.add(isCorrect ? "is-correct" : "is-wrong");
+
+  if (REMOTE_MODE && DB.attempts) {
+    // The local judgment stays the primary record of the review (it feeds the review's own evidence); the item-level
+    // attempt is what "para reforçar" reads. If it cannot be sent now it is remembered and retried when the review is
+    // completed or the redo starts, so the two cannot silently disagree.
+    exItem.dataset.pendingOutcome = isCorrect ? "CORRECT" : "INCORRECT";
+    judgedQuestionExerciseIds.add(Number(exItem.dataset.exerciseId));
+    revealQuestionFlagControls(exItem);
+    await flushPendingAttempt(exItem);
+  }
+  revealQuestionFlagControls(exItem);
   for (const btn of exItem.querySelectorAll(".exercise-judgment button")) {
     btn.disabled = true;
   }
   button.classList.add("is-selected");
+  button.setAttribute("aria-pressed", "true");
 
   const section = exItem.closest("[data-exercises-total]");
   if (!section) return;
@@ -2871,11 +5730,61 @@ reviewDashboard.addEventListener("click", (event) => {
   if (answered === total && row) {
     const scorePercent = total > 0 ? (correct / total) * 100 : 0;
     for (const el of row.querySelectorAll("[data-score-for]")) {
-      el.textContent = `${scorePercent.toFixed(1).replace(".", ",")}%`;
+      el.textContent = `${formatDecimal(scorePercent)}%`;
       el.classList.remove("is-empty");
     }
     section.dataset.allAnswered = "true";
   }
+  updateReviewBlockResult(section);
+  if (row) syncReviewProgress(row);
+
+  // The judged button was just disabled, which drops keyboard focus to <body>:
+  // hand it to the next actionable control (next question, or the redo action
+  // when the block just ended with errors).
+  const nextOpen = section.querySelector('.review-exercise-item[data-exercise-answered="false"] [data-action="reveal-answer"]');
+  (nextOpen ?? section.querySelector(".review-block-retest"))?.focus();
+
+  // The last answer concludes the stage by itself (one rule, see review-completion.js): no second "Revisão feita".
+  const box = row?.querySelector('[data-action="review-done"]');
+  if (row && box && !box.checked && !box.disabled && reviewConclusion({ total, answered }).kind === "EVIDENCE") {
+    box.disabled = true;
+    try {
+      await concludeReviewWithEvidence(Number(box.dataset.reviewId), section, { retestFirst: true });
+    } catch (error) {
+      if (error?.code === "ALREADY_COMPLETED") {
+        await renderToday().catch((refreshError) => console.error("Falha ao atualizar Hoje.", refreshError));
+        return;
+      }
+      // nothing was concluded: the box stays as the way to try again
+      box.disabled = false;
+      setReviewMessage(t("appReview.saveFailed"), true);
+      console.error("Falha ao concluir a revisão.", error);
+    }
+  }
+});
+
+reviewDashboard.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="retest-block"]');
+  if (!button) return;
+  const section = button.closest("[data-exercises-total]");
+  const row = section?.closest(".review-row");
+  if (!section || !row) return;
+  const wrongIds = new Set(
+    [...section.querySelectorAll('.review-exercise-item.is-wrong:not([data-retest="CORRECT"])')].map((el) => Number(el.dataset.exerciseId)),
+  );
+  const wrong = (reviewBlockExercises.get(section) ?? []).filter((e) => wrongIds.has(e.id));
+  if (wrong.length === 0) return;
+  // The redo pairs with the original error on the server: send what could not be sent during the review first. If it
+  // still fails the redo opens anyway (studying is never blocked by the ledger) and the student is told.
+  const unsent = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  startRetestBlock({
+    returnReviewId: Number(row.dataset.reviewId),
+    unitId: Number(row.dataset.unitId),
+    subjectName: row.querySelector(".subject-chip")?.textContent ?? "",
+    unitTitle: row.querySelector(".review-content")?.textContent ?? "",
+    exercises: wrong,
+  });
+  if (unsent > 0) studyNowMessage.textContent = t(unsent === 1 ? "appReview.unsentRetest.one" : "appReview.unsentRetest.other", { count: unsent });
 });
 
 reviewDashboard.addEventListener("click", (event) => {
@@ -2886,6 +5795,7 @@ reviewDashboard.addEventListener("click", (event) => {
   const editArea = row.querySelector(".review-summary-edit");
   if (!editArea) return;
   editArea.hidden = !editArea.hidden;
+  button.setAttribute("aria-expanded", String(!editArea.hidden));
   if (!editArea.hidden) {
     editArea.querySelector("textarea")?.focus();
   }
@@ -2902,6 +5812,7 @@ reviewDashboard.addEventListener("click", async (event) => {
   const textarea = row.querySelector(".review-summary-edit textarea");
   const messageEl = row.querySelector(".review-summary-message");
   const displayEl = row.querySelector(".review-summary-text");
+  const placeholderEl = row.querySelector(".review-summary-placeholder");
   if (!textarea) return;
 
   const newSummaryBody = textarea.value.trim() || null;
@@ -2909,25 +5820,64 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const updated = await DB.learningUnits.update(unitId, { summaryBody: newSummaryBody });
     if (displayEl && updated) {
-      displayEl.textContent = updated.summaryBody ?? updated.title ?? "";
+      renderSummary(displayEl, updated.summaryBody ?? "");
+      displayEl.hidden = !updated.summaryBody;
+      if (placeholderEl) placeholderEl.hidden = Boolean(updated.summaryBody);
     }
     textarea.value = newSummaryBody ?? "";
     if (messageEl) {
       messageEl.classList.remove("is-error");
-      messageEl.textContent = "Resumo salvo.";
+      messageEl.textContent = t("appReview.summary.saved");
       setTimeout(() => { messageEl.textContent = ""; }, 2000);
     }
     row.querySelector(".review-summary-edit").hidden = true;
+    // the editor closed with the focused button inside it: focus goes back to the button that opened it
+    const opener = row.querySelector('[data-action="edit-summary"]');
+    opener?.setAttribute("aria-expanded", "false");
+    opener?.focus();
   } catch (error) {
     if (messageEl) {
       messageEl.classList.add("is-error");
-      messageEl.textContent = "Não foi possível salvar o resumo.";
+      messageEl.textContent = t("appReview.summary.saveFailed");
     }
     console.error("Falha ao salvar resumo.", error);
+    button.disabled = false;
+    button.focus({ preventScroll: true }); // a disabled button drops keyboard focus
   } finally {
     button.disabled = false;
   }
 });
+
+/**
+ * Completing (or undoing) a review re-renders Hoje and the row moves to another group, so the checkbox the keyboard
+ * was on no longer exists. Put focus on the same review's checkbox in its new place (its state is now committed and
+ * it can be undone from there); if that row is gone, on the page heading.
+ */
+function refocusReviewDone(taskId, { retestFirst = false } = {}) {
+  const retest = retestFirst ? reviewDashboard.querySelector(`.review-row[data-review-id="${taskId}"] .review-block-retest`) : null;
+  const again = retest ?? reviewDashboard.querySelector(`[data-action="review-done"][data-review-id="${taskId}"]`);
+  if (again) { again.focus({ preventScroll: true }); return; }
+  const heading = document.querySelector("#title-today");
+  if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+}
+
+/**
+ * Concludes a stage whose questions are ALL answered (the one conclusion rule, review-completion.js): items whose attempt could not be
+ * sent earlier get another try, the answers are recorded as the stage's evidence, and Hoje is redrawn with focus back on the same review.
+ * Throws when the server refuses, leaving the stage as it was.
+ */
+async function concludeReviewWithEvidence(taskId, section, { retestFirst = false } = {}) {
+  const unsentItems = REMOTE_MODE && DB.attempts ? await flushPendingAttempts(section) : 0;
+  await DB.completeReviewWithEvidence({
+    taskId,
+    questionsCount: Number(section.dataset.exercisesAnswered),
+    correctCount: Number(section.dataset.exercisesCorrect),
+  });
+  setReviewMessage();
+  await renderToday();
+  refocusReviewDone(taskId, { retestFirst });
+  if (unsentItems > 0) setReviewMessage(t(unsentItems === 1 ? "appReview.unsentReview.one" : "appReview.unsentReview.other", { count: unsentItems }), true);
+}
 
 reviewDashboard.addEventListener("change", async (event) => {
   const input = event.target.closest('[data-action="review-done"]');
@@ -2940,37 +5890,79 @@ reviewDashboard.addEventListener("change", async (event) => {
     const exercisesSection = row?.querySelector("[data-exercises-total]");
 
     if (input.checked && exercisesSection) {
-      const total = Number(exercisesSection.dataset.exercisesTotal);
-      const answered = Number(exercisesSection.dataset.exercisesAnswered);
-      const correct = Number(exercisesSection.dataset.exercisesCorrect);
-      if (total > 0 && answered > 0) {
-        await DB.completeReviewWithEvidence({ taskId, questionsCount: answered, correctCount: correct });
-        setReviewMessage();
-        await renderToday();
+      const rule = reviewConclusion({ total: Number(exercisesSection.dataset.exercisesTotal), answered: Number(exercisesSection.dataset.exercisesAnswered) });
+      if (rule.kind === "PRACTICE_PENDING") {
+        // A stage with questions is not concluded by reading nor by a part of them: it stays pending.
+        input.checked = false;
+        input.disabled = false;
+        input.focus({ preventScroll: true });
+        setReviewMessage(t(rule.remaining === 1 ? "appReview.practicePending.one" : "appReview.practicePending.other", { count: rule.remaining }), true);
+        return;
+      }
+      if (rule.kind === "EVIDENCE") {
+        await concludeReviewWithEvidence(taskId, exercisesSection);
         return;
       }
     }
 
+    // reading: only a stage without questions gets here (or undoing a conclusion); it records "lida" and never a score
     await DB.reviewTasks.update(taskId, {
       reviewDone: input.checked,
       completedAt: input.checked ? new Date().toISOString() : null,
     });
     setReviewMessage();
     await renderToday();
+    refocusReviewDone(taskId);
   } catch (error) {
+    // An earlier tap reached the server and only its reply was lost: the review IS completed (what the server holds
+    // stands, including any score it recorded). Showing "could not save" for that, forever, would be false.
+    // (the same for undoing it: "not completed" means the first undo already took effect)
+    if ((error?.code === "ALREADY_COMPLETED" && input.checked) || (error?.code === "NOT_COMPLETED" && !input.checked)) {
+      try {
+        setReviewMessage();
+        await renderToday();
+        refocusReviewDone(taskId);
+        return;
+      } catch (refreshError) {
+        console.error("Falha ao atualizar Hoje após revisão já concluída.", refreshError);
+      }
+    }
     input.checked = input.dataset.committedChecked === "true";
     input.disabled = false;
-    setReviewMessage("Não foi possível salvar a revisão.", true);
+    input.focus({ preventScroll: true });
+    setReviewMessage(t("appReview.saveFailed"), true);
     console.error("Falha ao atualizar a revisão.", error);
+  }
+});
+
+generationLanguageSave?.addEventListener('click', async () => {
+  if (!REMOTE_MODE || !generationLanguageSelect) return;
+  generationLanguageSave.disabled = true;
+  if (generationLanguageMessage) {
+    generationLanguageMessage.classList.remove('is-error');
+    generationLanguageMessage.textContent = '';
+  }
+  try {
+    const chosen = generationLanguageSelect.value;
+    const updated = await DB.settings.update({ generationLocale: chosen });
+    generationLanguageSelect.value = updated.generationLocale ?? chosen;
+    syncSelect(generationLanguageSelect);
+    if (generationLanguageMessage) generationLanguageMessage.textContent = t("appBackup.language.saved");
+  } catch (error) {
+    if (generationLanguageMessage) {
+      generationLanguageMessage.classList.add('is-error');
+      generationLanguageMessage.textContent = t("appBackup.language.saveFailed");
+    }
+    console.error('Falha ao atualizar o idioma de geração.', error);
+  } finally {
+    generationLanguageSave.disabled = false;
   }
 });
 
 exportBackupButton.addEventListener("click", exportBackup);
 
 resetDatabaseButton.addEventListener("click", async () => {
-  const confirmed = await showConfirm(
-    "Apagar toda a base local? Exporte um backup antes se quiser guardar os dados atuais.",
-  );
+  const confirmed = await showConfirm(t("appBackup.reset.confirm"));
   if (!confirmed) return;
 
   resetDatabaseButton.disabled = true;
@@ -2985,9 +5977,9 @@ resetDatabaseButton.addEventListener("click", async () => {
       renderStats(),
       renderSettings(),
     ]);
-    setResetMessage("Base local apagada.");
+    setResetMessage(t("appBackup.reset.done"));
   } catch (error) {
-    setResetMessage("Não foi possível apagar a base local.", true);
+    setResetMessage(t("appBackup.reset.failed"), true);
     console.error("Falha ao apagar a base local.", error);
   } finally {
     resetDatabaseButton.disabled = false;
@@ -3001,7 +5993,7 @@ chooseBackupFileButton.addEventListener("click", () => {
 importBackupInput.addEventListener("change", async () => {
   const [file] = importBackupInput.files;
   if (!file) return;
-  const confirmed = await showConfirm("Isso substituirá todos os dados atuais. Continuar?");
+  const confirmed = await showConfirm(t("appBackup.import.confirmReplace"));
   if (confirmed) await importBackup(file);
   importBackupInput.value = "";
 });
@@ -3017,9 +6009,7 @@ dailySummaryBtn?.addEventListener("click", async () => {
     const title = document.createElement("p");
     title.className = "daily-summary-title";
     title.textContent = record.title;
-    const body = document.createElement("p");
-    body.className = "daily-summary-body";
-    body.textContent = record.summaryBody ?? record.title;
+    const body = renderSummary(createTextElement("div", "daily-summary-body", ""), record.summaryBody ?? record.title);
     item.append(title, body);
     dailySummaryList.append(item);
   }
@@ -3047,7 +6037,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
     setReviewMessage();
   } catch (error) {
     input.value = previousValue;
-    setReviewMessage("Não foi possível salvar o comentário.", true);
+    setReviewMessage(t("appReview.comment.saveFailed"), true);
     console.error("Falha ao salvar comentário.", error);
   }
 });
@@ -3068,7 +6058,7 @@ function getScoreState(card) {
 
 function updateScoreDisplay(card) {
   const { values } = getScoreState(card);
-  const text = values.scorePercent == null ? "—" : `${values.scorePercent.toFixed(1)}%`;
+  const text = values.scorePercent == null ? "—" : `${formatDecimal(values.scorePercent)}%`;
   for (const element of card.querySelectorAll("[data-score-for]")) {
     element.textContent = text;
     element.classList.toggle("is-empty", values.scorePercent == null);
@@ -3105,7 +6095,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
   updateScoreDisplay(row);
 
   if (values.isOverflow) {
-    setReviewMessage("Acertos não pode ser maior que Questões.", true);
+    setReviewMessage(t("validation.review.overflow"), true);
     correctInput.reportValidity();
     setTimeout(() => correctInput.focus(), 0);
     return;
@@ -3117,7 +6107,7 @@ reviewDashboard.addEventListener("focusout", async (event) => {
     setReviewMessage();
   } catch (error) {
     restoreCommittedScoreInputs(row);
-    setReviewMessage("Não foi possível salvar questões e acertos.", true);
+    setReviewMessage(t("appReview.score.saveFailed"), true);
     console.error("Falha ao salvar questões e acertos.", error);
   }
 });
@@ -3141,7 +6131,7 @@ reviewDashboard.addEventListener("change", async (event) => {
     setReviewMessage();
   } catch (error) {
     input.checked = previousChecked;
-    setReviewMessage("Não foi possível salvar o status das questões.", true);
+    setReviewMessage(t("appReview.questionsStatus.saveFailed"), true);
     console.error("Falha ao salvar status das questões.", error);
   }
 });
@@ -3150,6 +6140,9 @@ studyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   studyMessage.classList.remove("is-error");
   studyMessage.textContent = "";
+
+  // a subject being created right now is the one the user just picked: wait for it instead of reporting "no subject"
+  if (pendingSubjectCreate) await pendingSubjectCreate.catch(() => {});
 
   const subjectId = Number(subjectSelect.value);
   const sourceText = studySourceTextInput ? studySourceTextInput.value.trim() : "";
@@ -3160,18 +6153,18 @@ studyForm.addEventListener("submit", async (event) => {
   if (!subjectId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
     if (!subjectId) {
-      studyMessage.textContent = "Selecione uma disciplina.";
+      studyMessage.textContent = t("appRegister.form.subjectRequired");
       subjectSelect.focus();
     } else if (!studyDate) {
-      studyMessage.textContent = "Informe a data da aula.";
+      studyMessage.textContent = t("appRegister.form.dateRequired");
       studyDateInput.focus();
     } else {
-      studyMessage.textContent = "Informe o conteúdo estudado.";
+      studyMessage.textContent = t("appRegister.form.contentRequired");
       studyContentInput.focus();
     }
     return;
   }
-  const studyTitleError = validateTitleField(content, "o conteúdo estudado");
+  const studyTitleError = validateTitleField(content, t("shell.field.studyContent"));
   if (studyTitleError) {
     studyMessage.classList.add("is-error");
     studyMessage.textContent = studyTitleError;
@@ -3186,47 +6179,116 @@ studyForm.addEventListener("submit", async (event) => {
       studyDate,
       title: content,
       summaryBody,
+      operationKey: studySaveOperation.key,
     });
+    studySaveOperation.renew();
     rememberSelection(LAST_SUBJECT_KEY, subjectId);
     await renderStudies();
     studyContentInput.value = "";
     studySummaryTextarea.value = "";
     if (studySourceTextInput) studySourceTextInput.value = "";
-    studyMessage.textContent = "Estudo salvo. 16 revisões criadas.";
+    studyMessage.textContent = t("appRegister.form.studySaved");
     studyContentInput.focus();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof NetworkError)) studySaveOperation.renew();
     studyMessage.classList.add("is-error");
-    studyMessage.textContent = "Não foi possível salvar o estudo. Tente novamente.";
+    studyMessage.textContent = t("appRegister.form.studySaveFailed");
   }
 });
 
 studyDateInput.value = getLocalDateValue();
 await dbInit;
-if (databaseAvailable) {
+if (databaseAvailable && authenticated) {
   await renderSubjects();
   await renderToday();
 }
 
-statsSubjectSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsBySubject().catch(console.error);
-});
-statsUnitFilterSubject?.addEventListener("change", () => {
+// Estatísticas: duas profundidades do mesmo instrumento, não duas telas —
+// alternar não recarrega dados, só troca qual workspace-grid fica visível.
+const statsViewTabs = [
+  { tab: document.querySelector("#tab-stats-subject"), panel: document.querySelector("#view-stats-subject") },
+  { tab: document.querySelector("#tab-stats-unit"), panel: document.querySelector("#view-stats-unit") },
+];
+function setStatsView(activeTab) {
+  for (const { tab, panel } of statsViewTabs) {
+    if (!tab || !panel) continue;
+    const isActive = tab === activeTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    panel.classList.toggle("is-hidden", !isActive);
+  }
+}
+for (const { tab } of statsViewTabs) {
+  tab?.addEventListener("click", () => setStatsView(tab));
+}
+
+// Global select/combobox standardization: the discipline context switcher
+// is a LOCKED, already-approved pattern (trigger = current discipline,
+// menu = alternatives only, subject-cell chip identity preserved) — never
+// redesigned here — but it used to only support click + Escape, missing
+// the arrow-key/Home-End/typeahead roving focus every select-ui.js
+// consumer already has. It now shares the exact same keyboard mechanics
+// (wireListboxKeyboard, src/select-ui.js) as every other select in the
+// app, instead of a hand-rolled subset.
+function isContentContextOpen() {
+  return disciplineSwitchList?.hidden === false;
+}
+function openContentContextMenu() {
+  if (!contentContextPlate || !disciplineSwitchList || isContentContextOpen()) return;
+  contentContextPlate.setAttribute("aria-expanded", "true");
+  disciplineSwitchList.hidden = false;
+  contentContextListKeyboard.setActiveFirst();
+  disciplineSwitchList.tabIndex = 0;
+  disciplineSwitchList.focus({ preventScroll: true });
+}
+function closeContentContextMenu(returnFocus) {
+  if (!contentContextPlate || !disciplineSwitchList || !isContentContextOpen()) return;
+  disciplineSwitchList.hidden = true;
+  contentContextPlate.setAttribute("aria-expanded", "false");
+  if (returnFocus) contentContextPlate.focus();
+}
+function commitContentContextItem(item) {
+  const btn = item?.querySelector("button[data-subject-id]");
+  if (!btn) return;
+  selectedUnitSubjectId = Number(btn.dataset.subjectId);
+  closeContentContextMenu(true);
   if (databaseAvailable) renderStatsByUnit().catch(console.error);
+}
+const contentContextListKeyboard = disciplineSwitchList
+  ? wireListboxKeyboard(disciplineSwitchList, {
+      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=menuitem]")),
+      onCommit: commitContentContextItem,
+      onEscape: () => closeContentContextMenu(true),
+      onTabAway: () => closeContentContextMenu(false),
+    })
+  : null;
+
+contentContextPlate?.addEventListener("click", () => {
+  if (isContentContextOpen()) closeContentContextMenu(true);
+  else openContentContextMenu();
 });
-statsUnitFilterTrend?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+contentContextPlate?.addEventListener("keydown", (event) => {
+  if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openContentContextMenu();
+  }
+});
+disciplineSwitchList?.addEventListener("click", (event) => {
+  const item = event.target.closest("li[role=menuitem]");
+  if (!item) return;
+  commitContentContextItem(item);
+});
+document.addEventListener("click", (event) => {
+  if (!contentContextPlate || !isContentContextOpen()) return;
+  if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
+  closeContentContextMenu(false);
 });
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
+  syncSelectedSubjectRow();
   const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
-  const ok = renderEvolutionSvg(ev, units, subjs);
-  chartEmpty.hidden = ok;
-});
-evolutionFilterPeriod?.addEventListener("change", async () => {
-  if (!databaseAvailable) return;
-  const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
-  const ok = renderEvolutionSvg(ev, units, subjs);
-  chartEmpty.hidden = ok;
+  renderEvolutionSvg(ev, units, subjs);
 });
 
 planFilterSubject?.addEventListener("change", () => {
@@ -3239,67 +6301,24 @@ planSort?.addEventListener("change", () => {
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 
-trackingFilterSubject?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
-});
-trackingFilterState?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
-});
-trackingFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderTracking().catch(console.error);
+planFilterPeriod?.addEventListener("change", () => {
+  if (databaseAvailable) renderPlan().catch(console.error);
 });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-});
-statsUnitSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
+  if (!databaseAvailable) return;
+  renderStats().catch(console.error);
 });
 
-let newSubjectColor = "DISC-BLUE";
-
-subjectsShowCreateBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = false;
-  subjectsNewName.value = "";
-  subjectsCreateMessage.textContent = "";
-  newSubjectColor = "DISC-BLUE";
-  buildColorPicker(subjectsNewColorPicker, newSubjectColor, (k) => { newSubjectColor = k; });
-  subjectsNewName.focus();
-});
-subjectsCreateCancelBtn?.addEventListener("click", () => {
-  subjectsCreateForm.hidden = true;
-  subjectsCreateMessage.textContent = "";
-});
-subjectsCreateSaveBtn?.addEventListener("click", async () => {
-  const name = subjectsNewName?.value.trim() ?? "";
-  const nameErr = validateNamingField(name, "o nome da disciplina");
-  if (nameErr) { subjectsCreateMessage.textContent = nameErr; subjectsNewName?.focus(); return; }
-  try {
-    await DB.subjects.create(name, newSubjectColor);
-    subjectsCreateForm.hidden = true;
-    subjectsCreateMessage.textContent = "";
-    await renderDisciplinas();
-  } catch (error) {
-    subjectsCreateMessage.textContent = String(error?.message ?? '').toLowerCase().includes('unique')
-      ? "Já existe uma disciplina com esse nome."
-      : "Erro ao criar disciplina.";
-  }
-});
 function setPlanFormVisible(visible) {
   if (!planNewUnitForm) return;
   planNewUnitForm.hidden = !visible;
   planNewUnitBtn.setAttribute("aria-expanded", String(visible));
   if (visible) {
+    if (planSubjectsPanel && !planSubjectsPanel.hidden) setSubjectsPanel(false);
     if (!planStudyDate.value) planStudyDate.value = getLocalDateValue();
     planStudyTitle.focus();
   }
-}
-
-function setPlanSubjectSubformVisible(visible) {
-  if (!planNewSubjectForm) return;
-  planNewSubjectForm.hidden = !visible;
-  planShowSubjectForm.setAttribute("aria-expanded", String(visible));
-  if (visible) planNewSubjectInput.focus();
 }
 
 function setPlanFormMessage(msg = "", isError = false) {
@@ -3308,41 +6327,59 @@ function setPlanFormMessage(msg = "", isError = false) {
   planUnitFormMessage.classList.toggle("is-error", isError);
 }
 
+// T23: one operation key per save INTENT, not per click/request. A
+// double-click or a retry after a lost response reuses the same key, so
+// the server's idempotency guard (T15) returns the original result
+// instead of creating a second unit. Only renew() on an actual new
+// intent (a prior save succeeded, or the user explicitly cancels) — never
+// on a failed attempt, since a retry of the same typed data IS the same
+// intent.
+function createOperationKeyTracker() {
+  let key = crypto.randomUUID();
+  return {
+    get key() { return key; },
+    renew() { key = crypto.randomUUID(); },
+  };
+}
+const planSaveOperation = createOperationKeyTracker();
+const studySaveOperation = createOperationKeyTracker();
+
 planNewUnitBtn?.addEventListener("click", () => {
   setPlanFormVisible(planNewUnitForm.hidden);
+});
+planEmptyNewBtn?.addEventListener("click", () => setPlanFormVisible(true));
+
+// "Pular para o conteúdo": the hash router owns location.hash, so the link moves focus itself instead of navigating.
+document.querySelector(".skip-link")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  document.querySelector(".app-main")?.focus();
+});
+
+// First run (empty Hoje): the two ways to start. "Enviar um PDF" exists only where Materiais does.
+const firstUploadBtn = todayEmptyState?.querySelector('[data-action="first-upload"]');
+const firstCreateBtn = todayEmptyState?.querySelector('[data-action="first-create"]');
+if (firstUploadBtn) firstUploadBtn.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+firstUploadBtn?.addEventListener("click", () => showScreen("materials", { focus: true }));
+firstCreateBtn?.addEventListener("click", () => {
+  showScreen("plan", { focus: false });
+  setPlanFormVisible(true);
 });
 
 planUnitCancelBtn?.addEventListener("click", () => {
   setPlanFormVisible(false);
-  setPlanSubjectSubformVisible(false);
+  planSubjectForm?.hide();
+  planSubjectForm?.reset();
   setPlanFormMessage();
-  if (planNewSubjectInput) planNewSubjectInput.value = "";
+  planSaveOperation.renew();
 });
 
-planShowSubjectForm?.addEventListener("click", () => {
-  setPlanSubjectSubformVisible(planNewSubjectForm.hidden);
-});
-
-planNewSubjectForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = planNewSubjectInput.value.trim();
-  const nameError = validateNamingField(name, "o nome da disciplina");
-  if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput.focus(); return; }
-  try {
-    const newSubject = await DB.subjects.create(name, "DISC-BLUE");
-    await renderPlan();
-    if (planSubjectSelect) planSubjectSelect.value = String(newSubject.id);
-    setPlanSubjectSubformVisible(false);
-    planNewSubjectInput.value = "";
-    planStudyTitle.focus();
-  } catch (error) {
-    const msg = String(error?.message ?? '').toLowerCase().includes('unique')
-      ? "Já existe uma disciplina com esse nome."
-      : "Não foi possível criar a disciplina.";
-    setPlanFormMessage(msg, true);
-    console.error("Falha ao criar disciplina no plano.", error);
-  }
-});
+// Plano's door to the one registration of a discipline: the new discipline is created now, listed and picked for the lesson being typed
+async function createSubjectFromPlan(name, color) {
+  const newSubject = await DB.subjects.create(name, color);
+  await renderPlan();
+  if (planSubjectSelect) { planSubjectSelect.value = String(newSubject.id); syncSelect(planSubjectSelect); }
+  planStudyTitle.focus();
+}
 
 planUnitSaveBtn?.addEventListener("click", async () => {
   setPlanFormMessage();
@@ -3351,19 +6388,17 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   const studyDate = planStudyDate?.value ?? "";
 
   // Validate unit fields first — before creating any discipline
-  if (!studyDate) { setPlanFormMessage("Informe a data da aula.", true); planStudyDate?.focus(); return; }
-  const titleError = validateTitleField(title, "o conteúdo estudado");
+  if (!studyDate) { setPlanFormMessage(t("plan.unit.dateRequired"), true); planStudyDate?.focus(); return; }
+  const titleError = validateTitleField(title, t("shell.field.studyContent"));
   if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
 
   // Resolve discipline: capture new name to include in atomic save, or use selected existing ID
   let newSubjectName = null;
-  if (planNewSubjectForm && !planNewSubjectForm.hidden) {
-    const pendingName = planNewSubjectInput?.value.trim();
-    if (pendingName) {
-      const nameError = validateNamingField(pendingName, "o nome da disciplina");
-      if (nameError) { setPlanFormMessage(nameError, true); planNewSubjectInput?.focus(); return; }
-      newSubjectName = pendingName;
-    }
+  const pendingName = planSubjectForm?.pendingName();
+  if (pendingName) {
+    const nameError = validateNamingField(pendingName, t("shell.field.subjectName"));
+    if (nameError) { setPlanFormMessage(nameError, true); planSubjectForm.input.focus(); return; }
+    newSubjectName = pendingName;
   }
 
   const sourceText = planStudySource?.value.trim() ?? "";
@@ -3372,25 +6407,28 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   let subjectId;
   if (!newSubjectName) {
     subjectId = Number(planSubjectSelect?.value);
-    if (!subjectId) { setPlanFormMessage("Selecione uma disciplina.", true); planSubjectSelect?.focus(); return; }
+    if (!subjectId) { setPlanFormMessage(t("plan.unit.subjectRequired"), true); planSubjectSelect?.focus(); return; }
   }
 
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: 'DISC-BLUE', sourceText, studyDate, title, summaryBody }
-      : { subjectId, sourceText, studyDate, title, summaryBody };
+      ? { newSubjectName, newSubjectColor: planSubjectForm.color, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
+      : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
-    // Save succeeded — clear draft immediately; render failures below must NOT re-submit
+    // Save succeeded (or an idempotent retry returned the original result)
+    // — this intent is done, the next save is a genuinely new one.
+    planSaveOperation.renew();
+    // Clear draft immediately; render failures below must NOT re-submit
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
-    if (planNewSubjectInput) planNewSubjectInput.value = "";
-    setPlanSubjectSubformVisible(false);
-    setPlanFormMessage("Aula salva. 16 revisões criadas.");
+    planSubjectForm?.reset();
+    planSubjectForm?.hide();
+    setPlanFormMessage(t("plan.unit.saved"));
     try {
       await renderPlan();
-      if (planSubjectSelect) planSubjectSelect.value = String(saved.subjectId);
+      if (planSubjectSelect) { planSubjectSelect.value = String(saved.subjectId); syncSelect(planSubjectSelect); }
       // AC-014: clear subject filter if it would hide the newly saved unit
       if (planFilterSubject && planFilterSubject.value && planFilterSubject.value !== String(saved.subjectId)) {
         planFilterSubject.value = '';
@@ -3400,10 +6438,18 @@ planUnitSaveBtn?.addEventListener("click", async () => {
       setPlanFormMessage();
       await renderToday();
     } catch {
-      setPlanFormMessage("Aula salva. Recarregue para ver o resultado.");
+      setPlanFormMessage(t("plan.unit.savedReload"));
     }
-  } catch {
-    setPlanFormMessage("Não foi possível salvar a aula. Tente novamente.", true);
+  } catch (error) {
+    // Only a NetworkError (we genuinely don't know whether the server
+    // committed) keeps the same key, so a retry of the same draft
+    // resolves as an idempotent replay rather than a duplicate. A
+    // definitive rejection (validation, subject conflict) renews it —
+    // the user is expected to change something before retrying, and
+    // reusing the key there would misreport an edited resubmission as an
+    // idempotency conflict instead of validating it fresh.
+    if (!(error instanceof NetworkError)) planSaveOperation.renew();
+    setPlanFormMessage(t("plan.unit.saveFailed"), true);
   } finally {
     planUnitSaveBtn.disabled = false;
   }
@@ -3421,4 +6467,133 @@ if (import.meta.env?.DEV) {
   };
 }
 
+// T11: minimal account experience. Independent of the BrowserStore-backed
+// learning screens above — see auth-ui.js header comment. Session expiry
+// here never clears any of the learning-form drafts managed elsewhere.
+const accountLoggedOutView = document.querySelector("#account-logged-out-view");
+const accountLoggedInView = document.querySelector("#account-logged-in-view");
+const accountLoginForm = document.querySelector("#account-login-form");
+const accountRegisterForm = document.querySelector("#account-register-form");
+const accountPasswordForm = document.querySelector("#account-password-form");
+const accountPasswordDetails = document.querySelector("#account-password-details");
+const accountLogoutBtn = document.querySelector("#account-logout-btn");
+const accountLoggedInAs = document.querySelector("#account-logged-in-as");
+
+function setAccountMessage(formId, text = "", isError = false) {
+  const el = document.querySelector(`#${formId}-message`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
+
+async function renderAccount() {
+  const user = await AuthUI.bootstrap();
+  const loggedIn = !!user;
+  if (accountLoggedOutView) accountLoggedOutView.hidden = loggedIn;
+  if (accountLoggedInView) accountLoggedInView.hidden = !loggedIn;
+  // a signed-in screen never leaves the password fields open for typing: they stay behind the button
+  if (!loggedIn || !accountLoggedInView) accountPasswordDetails?.removeAttribute("open");
+  if (loggedIn && accountLoggedInAs) {
+    accountLoggedInAs.textContent = t("account.connectedAs", { email: user.emailDisplay });
+  }
+}
+
+document.querySelector("#account-show-register")?.addEventListener("click", () => {
+  accountLoginForm.hidden = true;
+  accountRegisterForm.hidden = false;
+});
+document.querySelector("#account-show-login")?.addEventListener("click", () => {
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+});
+
+accountLoginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-login");
+  const email = accountLoginForm.email.value.trim();
+  const password = accountLoginForm.password.value;
+  const result = await AuthUI.login(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-login", result.message, true);
+    return; // draft (email/password fields) stays as typed on failure
+  }
+  accountLoginForm.reset();
+  await renderAccount();
+  // Stays on Conta (matches the existing T11 login UX: "Conectado como X")
+  // rather than auto-navigating — only the auth-gate state changes, so a
+  // manual click on any data screen now works instead of bouncing back here.
+  if (REMOTE_MODE) {
+    authenticated = true;
+    const user = AuthUI.getCurrentUser();
+    if (user) OfflineStore.syncSnapshot(user.id).catch(() => {});
+  }
+});
+
+accountRegisterForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-register");
+  const email = accountRegisterForm.email.value.trim();
+  const password = accountRegisterForm.password.value;
+  const result = await AuthUI.register(email, password);
+  if (!result.ok) {
+    setAccountMessage("account-register", result.message, true);
+    return;
+  }
+  setAccountMessage("account-register");
+  accountRegisterForm.reset();
+  accountRegisterForm.hidden = true;
+  accountLoginForm.hidden = false;
+  // the register form is hidden now: the success text goes where the student is looking (the login form)
+  setAccountMessage("account-login", t("account.registered"));
+});
+
+accountPasswordForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setAccountMessage("account-password");
+  const currentPassword = accountPasswordForm.currentPassword.value;
+  const newPassword = accountPasswordForm.newPassword.value;
+  const result = await AuthUI.changePassword(currentPassword, newPassword);
+  if (!result.ok) {
+    setAccountMessage("account-password", result.message, true);
+    return;
+  }
+  setAccountMessage("account-password", t("auth.success.passwordChanged"));
+  accountPasswordForm.reset();
+  accountPasswordDetails?.removeAttribute("open");
+});
+
+accountLogoutBtn?.addEventListener("click", async () => {
+  await AuthUI.logout();
+  if (REMOTE_MODE) {
+    authenticated = false;
+    // AC-23: the next account to log in on this device must never be able
+    // to read this account's cached agenda snapshot.
+    await OfflineStore.purgeAllAccounts();
+  }
+  await renderAccount();
+});
+
+// T41: a 401 mid-session (server-side expiry/revocation — see
+// api-client.js's handleResponse) locks protected operations and clears
+// stale identity. NOT a logout: the cached offline snapshot legitimately
+// still belongs to this same account, so it is deliberately NOT purged —
+// only OfflineStore.purgeAllAccounts() (an explicit logout/account-switch)
+// does that. Re-confirms with the server (rather than trusting the
+// dispatched event alone) before actually clearing local state.
+if (REMOTE_MODE) {
+  OfflineUI.onUnauthenticated(async () => {
+    const user = await AuthUI.bootstrap();
+    if (user) return; // a stray/transient 401 — the session is actually still valid
+    const wasOnDataScreen = DATA_SCREENS.has(window.location.hash.slice(1));
+    authenticated = false;
+    await renderAccount();
+    if (wasOnDataScreen) {
+      showScreen("account");
+      // Without this the student is thrown onto a bare login form with no idea why (the form clears it on the next attempt).
+      setAccountMessage("account-login", t("account.sessionExpired"), true);
+    }
+  });
+}
+
+enhanceAllSelects();
 showScreen(window.location.hash.slice(1) || DEFAULT_SCREEN);

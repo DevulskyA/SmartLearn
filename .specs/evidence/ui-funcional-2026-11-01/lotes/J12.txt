@@ -1,0 +1,13 @@
+# keep-going
+click Configurações
+select css:#theme-select paper
+select css:#theme-select sepia
+select css:#theme-select night
+select css:#theme-select contrast
+select css:#theme-select auto
+select css:#generation-language-select English
+click css:#generation-language-save
+select css:#generation-language-select "Português (Brasil)"
+click css:#generation-language-save
+click "Apagar base local"
+snap

@@ -1,10 +1,50 @@
 import { getReviewScoreValues } from "./review-score.js";
+import { compareText, formatDecimal } from "./i18n/format.js";
+import { t } from "./i18n/index.js";
 
 function getLocalDateValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Pure geometry of the evolution chart's X axis. The axis is TIME-proportional
+ * (a 25-day gap looks 25 days long; several points on the same day share one
+ * x), not index-proportional -- equal spacing for unequal gaps reads as a
+ * steadier or faster trend than the data supports. Date labels are unique and
+ * never closer than `minLabelGap` px, so they cannot overlap.
+ * If every point is on the same day the points fall back to index spacing.
+ */
+export function layoutEvolutionChart(dataPoints, plotWidth, minLabelGap = 46) {
+  const day = (date) => Date.UTC(...date.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n)))) / DAY_MS;
+  const first = day(dataPoints[0].date);
+  const span = day(dataPoints[dataPoints.length - 1].date) - first;
+  const points = dataPoints.map((point, index) => ({
+    ...point,
+    x: span > 0 ? ((day(point.date) - first) / span) * plotWidth : (index / Math.max(1, dataPoints.length - 1)) * plotWidth,
+  }));
+  const labels = [];
+  const seen = new Set();
+  for (const point of points) {
+    if (seen.has(point.date)) continue;
+    seen.add(point.date);
+    const [, month, dayOfMonth] = point.date.split("-");
+    const label = { x: point.x, text: `${dayOfMonth}/${month}` };
+    const last = labels[labels.length - 1];
+    if (!last || label.x - last.x >= minLabelGap) labels.push(label);
+    else if (point === points[points.length - 1] || point.date === dataPoints[dataPoints.length - 1].date) labels[labels.length - 1] = label;
+  }
+  return { points, labels };
+}
+
+/** "71,4%" for a real average; "—" when there is no evidence yet (null), never "0,0%". */
+export function formatAverageScore(avgScore) {
+  if (avgScore == null || !Number.isFinite(Number(avgScore))) return "—";
+  return `${formatDecimal(Number(avgScore))}%`;
 }
 
 export const Stats = {
@@ -22,16 +62,16 @@ export const Stats = {
         return {
           ...ev,
           ...values,
-          subjectName: subject?.name ?? "Sem disciplina",
-          title: unit?.title ?? "Conteúdo indisponível",
+          subjectName: subject?.name ?? t("stats.noSubject"),
+          title: unit?.title ?? t("stats.unavailableContent"),
           completedAt: ev.completedAt ?? "",
         };
       })
       .filter((ev) => !ev.isOverflow)
       .sort((a, b) => {
-        const subjectComparison = a.subjectName.localeCompare(b.subjectName, "pt-BR");
+        const subjectComparison = compareText(a.subjectName, b.subjectName);
         if (subjectComparison !== 0) return subjectComparison;
-        const titleComparison = a.title.localeCompare(b.title, "pt-BR");
+        const titleComparison = compareText(a.title, b.title);
         if (titleComparison !== 0) return titleComparison;
         return b.completedAt.localeCompare(a.completedAt);
       });
@@ -44,7 +84,8 @@ export const Stats = {
       (total, item) => total + item.correctCount,
       0,
     );
-    const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
+    // No answered question is NO evidence, not a 0% average (Charter P-03/D-03).
+    const avgScore = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : null;
 
     const scoresBySubject = new Map();
     for (const item of completedExercises) {
@@ -64,7 +105,7 @@ export const Stats = {
         totalQuestions: item.totalQuestions,
         avgScore: item.totalQuestions > 0 ? (item.totalCorrect / item.totalQuestions) * 100 : 0,
       }))
-      .sort((a, b) => a.avgScore - b.avgScore || a.subjectName.localeCompare(b.subjectName, "pt-BR"));
+      .sort((a, b) => a.avgScore - b.avgScore || compareText(a.subjectName, b.subjectName));
 
     return {
       totalQuestions,
@@ -78,72 +119,5 @@ export const Stats = {
       ).length,
       reviewsOverdue: reviewTasks.filter((task) => !task.reviewDone && task.dueDate < today).length,
     };
-  },
-
-  renderChart(canvas, dataPoints) {
-    if (!canvas || dataPoints.length < 2) return false;
-    const width = Math.max(260, Math.floor(canvas.parentElement?.clientWidth ?? 720) - 40);
-    const height = 280;
-    const margin = { top: 20, right: 18, bottom: 52, left: 46 };
-    const plotWidth = width - margin.left - margin.right;
-    const plotHeight = height - margin.top - margin.bottom;
-    const context = canvas.getContext("2d");
-    if (!context) return false;
-
-    const styles = getComputedStyle(canvas);
-    const gridColor = styles.getPropertyValue("--color-border").trim() || "#dbe3ee";
-    const labelColor = styles.getPropertyValue("--color-muted").trim() || "#64748b";
-    const lineColor = styles.getPropertyValue("--color-primary").trim() || "#0b5bd3";
-
-    canvas.width = width;
-    canvas.height = height;
-    context.clearRect(0, 0, width, height);
-    context.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    context.lineWidth = 1;
-    context.textBaseline = "middle";
-
-    for (const score of [0, 25, 50, 75, 100]) {
-      const y = margin.top + plotHeight - (score / 100) * plotHeight;
-      context.beginPath();
-      context.strokeStyle = gridColor;
-      context.moveTo(margin.left, y);
-      context.lineTo(width - margin.right, y);
-      context.stroke();
-      context.fillStyle = labelColor;
-      context.textAlign = "right";
-      context.fillText(`${score}%`, margin.left - 8, y);
-    }
-
-    const points = dataPoints.map((point, index) => ({
-      x: margin.left + (index / (dataPoints.length - 1)) * plotWidth,
-      y: margin.top + plotHeight - (Math.min(100, Math.max(0, Number(point.scorePercent))) / 100) * plotHeight,
-      ...point,
-    }));
-
-    context.beginPath();
-    context.strokeStyle = lineColor;
-    context.lineWidth = 2.5;
-    points.forEach((point, index) => {
-      if (index === 0) context.moveTo(point.x, point.y);
-      else context.lineTo(point.x, point.y);
-    });
-    context.stroke();
-
-    const labelEvery = Math.max(1, Math.ceil(points.length / 6));
-    points.forEach((point, index) => {
-      context.beginPath();
-      context.fillStyle = lineColor;
-      context.arc(point.x, point.y, 4, 0, Math.PI * 2);
-      context.fill();
-
-      if (index % labelEvery === 0 || index === points.length - 1) {
-        const [, month, day] = point.date.split("-");
-        context.fillStyle = labelColor;
-        context.textAlign = "center";
-        context.fillText(`${day}/${month}`, point.x, height - 24);
-      }
-    });
-
-    return true;
   },
 };

@@ -1,0 +1,7 @@
+# keep-going
+select css:select[aria-label=Disciplina] Farmacologia
+fill label:Fonte "Aula 1 Farmacologia"
+fill "label:Conteúdo estudado" "Farmacocinetica basica"
+click "Salvar aula"
+expect "Aula criada"
+snap
