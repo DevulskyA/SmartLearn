@@ -3,7 +3,7 @@
 # Why this exists: a desktop shortcut once opened an old release .exe (07/09) and a whole validation round was lost on a build
 # that was not the one under test. This launcher always resolves the worktree it lives in, refuses to run from any other
 # branch, rebuilds the frontend/backend resources when they are older than the sources, stamps the build identity
-# (commit, mode, provider) so the app can show it, and opens the Tauri DEV window for THIS worktree - never a release.
+# (commit, mode, provider) so the app can show it, and opens the local desktop executable for THIS worktree.
 #
 # ASCII only on purpose: Windows PowerShell 5.1 reads BOM-less files as ANSI.
 param(
@@ -106,7 +106,13 @@ $env:SMARTLEARN_WINDOW_TITLE = "SmartLearn DEV - v$($identity.version) - $head$d
 # DEV only: the signed-in session survives closing the app until "Sair". The server refuses this flag in production.
 $env:SMARTLEARN_DEV_PERSISTENT_SESSION = 'true'
 
-$devExe = Join-Path $root 'src-tauri\target\debug\smartlearn.exe'
+$devExe = Join-Path $root 'src-tauri\target\release\smartlearn.exe'
+if (-not $NoBuild) {
+  Write-Host 'Compilando o executavel local...'
+  npm run build:exe | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fail 'A compilacao do executavel local falhou. Veja o console.' }
+}
+if (-not (Test-Path $devExe)) { Fail "Executavel local ausente: $devExe" }
 Write-Host "SMARTLEARN DEV"
 Write-Host "Executable: $devExe"
 Write-Host "Database: $devDb"
@@ -131,4 +137,4 @@ while ((Get-Date) -lt `$deadline) {
 "@
 Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @('-NoProfile', '-Command', $watcher) | Out-Null
 $host.UI.RawUI.WindowTitle = "SmartLearn DEV $head - feche esta janela para encerrar"
-npm run tauri dev
+Start-Process -WindowStyle Hidden -FilePath $devExe | Out-Null

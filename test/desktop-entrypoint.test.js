@@ -4,18 +4,19 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// DESKTOP ENTRYPOINT: one canonical way for a human to open the Desktop, always THIS worktree's DEV build — never a release
-// .exe found in a stale shortcut. The scripts are PowerShell; the contract is what they must (not) contain and that they parse.
+// DESKTOP ENTRYPOINT: one canonical way for a human to open the local Desktop from THIS worktree.
+// The script uses the same compiled app path used for a normal local run; there is no separate Vite UI.
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), 'utf8');
 const launcher = read('scripts/launch-desktop-dev.ps1');
 const installer = read('scripts/install-dev-shortcut.ps1');
 
-test('the launcher resolves its own worktree, guards the branch and opens the DEV window (never a release build)', () => {
+test('the launcher resolves its own worktree, guards the branch and opens the local compiled app', () => {
   assert.match(launcher, /Split-Path -Parent \$PSScriptRoot/);
   assert.match(launcher, /claude\/smartlearn-v1-complete/);
-  assert.match(launcher, /npm run tauri dev/);
-  assert.doesNotMatch(launcher, /target\release|tauri build|AppData\Local\SmartLearn/i);
+  assert.match(launcher, /npm run build:exe/);
+  assert.match(launcher, /target\\release\\smartlearn\.exe/);
+  assert.doesNotMatch(launcher, /npm run tauri dev/);
 });
 
 test('the launcher stamps the build identity the app displays (commit, mode, provider) and keeps consent explicit', () => {
@@ -72,7 +73,7 @@ test('the Tauri backend honours the pinned datastore (SMARTLEARN_DB_PATH / SMART
 
 test('the launcher announces exactly which instance it opens (executable, database, sources, version, HEAD, branch) and verifies the running path', () => {
   for (const label of ['SMARTLEARN DEV', 'Executable:', 'Database:', 'Sources:', 'App version:', 'Git HEAD:', 'Branch:']) assert.ok(launcher.includes(label), `missing log line ${label}`);
-  assert.ok(launcher.includes(['src-tauri', 'target', 'debug', 'smartlearn.exe'].join('\\')));
+  assert.ok(launcher.includes(['src-tauri', 'target', 'release', 'smartlearn.exe'].join('\\')));
   assert.match(launcher, /last-launch\.json/);
   assert.match(launcher, /pathVerified/);
 });
@@ -96,7 +97,7 @@ test('the launcher takes (and prints) a verified snapshot of the DEV datastore b
   assert.match(launcher, /scripts\/dev-snapshot\.mjs/);
   assert.match(launcher, /Write-Host \$snapshotOutput/);
   const at = (needle) => launcher.indexOf(needle);
-  assert.ok(at('scripts/dev-snapshot.mjs') > 0 && at('scripts/dev-snapshot.mjs') < at('npm run tauri dev'), 'the snapshot comes before the app is opened');
+  assert.ok(at('scripts/dev-snapshot.mjs') > 0 && at('scripts/dev-snapshot.mjs') < at('Start-Process -WindowStyle Hidden'), 'the snapshot comes before the app is opened');
   assert.match(launcher, /dev-snapshot\.mjs[^\n]*\n[^\n]*LASTEXITCODE/, 'a snapshot that could not be verified stops the launch');
 });
 
