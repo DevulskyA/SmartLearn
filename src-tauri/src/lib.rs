@@ -120,6 +120,13 @@ fn local_backend_env(app_data_dir: &Path, port: u16, static_dir: &Path) -> Vec<(
             "SMARTLEARN_ALLOWED_ORIGINS".to_string(),
             format!("http://{LOCAL_BACKEND_HOST}:{port}"),
         ),
+        // The packaged desktop must select the real local provider instead of
+        // silently falling back to the deterministic FAKE provider. Consent
+        // remains a separate inherited setting and is never granted here.
+        (
+            "SMARTLEARN_AI_PROVIDER".to_string(),
+            std::env::var("SMARTLEARN_AI_PROVIDER").unwrap_or_else(|_| "CODEX".to_string()),
+        ),
     ]
     // Deliberately NOT NODE_ENV=production: that would ask app.js's server
     // for a Secure/__Host- cookie, which no plain-HTTP loopback origin can
