@@ -105,6 +105,10 @@ Princípio: uma prova por risco, na camada mais barata que a falsifica; o Deskto
 - Isso explica algo como 40% da diferença. Os cerca de 80 s restantes não foram atribuídos (candidatos: `draft-autosave.spec.js` com 183 s, `summary-visual-editor`, 7 testes novos). Não há duração por spec de 03/11 para fechar a conta.
 - Conclusão: o aumento é majoritariamente cobertura nova e desejada (temas WCAG), não lentidão do produto. Não é regressão.
 
+### Resultado das sondas de N3 (2026-11-07, `server/test/creator-routes-concurrency.test.js`)
+
+Duas chamadas simultâneas idênticas, banco descartável: `POST /subjects` seguro (200 e 409, 1 linha); `POST /exams` seguro (201 e 200, retoma, 1 exame); `POST /learning-units/:id/exercises` DUPLICA (201 e 201, 2 linhas); `POST /learning-evidence` EXTERNAL DUPLICA (201 e 201, 2 linhas). O caminho INITIAL_PRACTICE da evidência é protegido no cliente por `attemptIds` (`ATTEMPT_IN_OTHER_EVIDENCE`). Os dois casos que duplicam estão como testes `todo` (esperam o mesmo `operationKey` = 1 linha) e passam a verdes quando as rotas aceitarem a chave. Rotas com fixtures (`/generation-jobs`, `/proposals/:id/drafts`, `/drafts/:id/accept`, `/imports/:id/commit`, `/sources`) ainda não sondadas.
+
 ## 7. Limites desta análise
 
 - Não executei `cargo test`, nem sondas de concorrência nas rotas do N3, nem axe de acessibilidade além do que o E2E completo já rodou.

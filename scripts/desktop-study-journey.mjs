@@ -2,9 +2,8 @@
 // simulation: the window under test is src-tauri's smartlearn.exe, which starts its own bundled Node/Fastify/SQLite backend.
 //
 // DATA RULE: everything lives in a throwaway directory under the OS temp dir (database, sources dir, WebView2 profile). The script
-// refuses to start if that directory would be the human DEV datastore. NO model is called and NO AI provider is configured: the
-// lesson draft is produced by the server's own deterministic fake provider (server/src/ai/fake-provider.js), which is what the
-// server uses when SMARTLEARN_AI_PROVIDER is unset (the same path e2e/draft-acceptance.spec.js exercises). The PDF is a real,
+// refuses to start if that directory would be the human DEV datastore. The configured provider is inherited from the environment;
+// this journey sets explicit consent and verifies the actual provider/model recorded for the generated draft. The PDF is a real,
 // parseable PDF built in code (server/test/pdf-fixtures/build-fixture-pdf.js).
 //
 // Prerequisites (the repo's own commands, with SMARTLEARN_BUILD_MODE=DEV): `npm run build`, `npm run package:standalone`, `cargo build`
@@ -56,14 +55,16 @@ const baseEnv = {
   SMARTLEARN_BUILD_HEAD: head,
   SMARTLEARN_BUILD_CONTENT: identity.inputsHash,
   SMARTLEARN_BUILD_MODE: 'DEV',
+  SMARTLEARN_AI_PROVIDER: 'CODEX',
+  SMARTLEARN_AI_CONSENT: 'true',
   SMARTLEARN_WINDOW_TITLE: expectedTitle,
   SMARTLEARN_DEV_PERSISTENT_SESSION: 'true',
   WEBVIEW2_USER_DATA_FOLDER: join(work, 'webview2'),
 };
-for (const key of ['SMARTLEARN_AI_PROVIDER', 'SMARTLEARN_AI_CONSENT', 'SMARTLEARN_AI_API_KEY', 'SMARTLEARN_AI_MODEL', 'SMARTLEARN_AI_API_URL']) delete baseEnv[key];
 
 const result = { head, expectedTitle, exe, workDirKind: 'throwaway under OS temp, removed at the end', steps: [] };
 const consoleErrors = [];
+const http401 = [];
 const password = 'a genuinely long test password 1';
 const email = `journey-${Date.now()}@example.com`;
 const SUBJECT = 'Farmacologia Desktop';
@@ -157,6 +158,8 @@ async function launch({ place = true } = {}) {
   const tag = () => (closing ? '[while closing] ' : '');
   page.on('pageerror', (error) => consoleErrors.push(`${tag()}pageerror: ${error.message}`));
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`${tag()}console.error: ${msg.text()}`); });
+  // which requests answer 401: a browser "401 (Unauthorized)" console line names no URL (OBS-J1). Kept apart from consoleErrors.
+  page.on('response', (response) => { if (response.status() === 401) http401.push(`${tag()}${response.request().method()} ${response.url().replace(/\?.*$/, '')}`); });
   await page.waitForLoadState('networkidle');
   if (process.env.SL_JOURNEY_NO_INTERNET) {
     const reached = await page.evaluate(() => fetch('https://example.com/', { mode: 'no-cors' }).then(() => true, () => false));
@@ -211,6 +214,25 @@ const api = (method, path, body) => page.evaluate(async ({ method, path, body })
   if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${text}`);
   return text ? JSON.parse(text) : null;
 }, { method, path, body });
+
+/** Waits for the server's observable generation state, not for an arbitrary UI delay. */
+async function waitForGenerationJob(proposalId, { timeoutMs = 5 * 60 * 1000 } = {}) {
+  const transitions = [];
+  let last = null;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const jobs = (await api('GET', `/v1/generation-jobs?proposalId=${encodeURIComponent(proposalId)}`)).jobs ?? [];
+    const job = jobs[0] ?? null;
+    const marker = job ? `${job.state}:${job.phase ?? ''}` : 'MISSING';
+    if (marker !== last) {
+      transitions.push({ at: new Date().toISOString(), state: job?.state ?? 'MISSING', phase: job?.phase ?? null, lastActivityAt: job?.lastActivityAt ?? null });
+      last = marker;
+    }
+    if (job && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(job.state)) return { job, transitions };
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`generation watchdog timeout after ${timeoutMs}ms: ${JSON.stringify(transitions)}`);
+}
 
 async function signIn() {
   await page.locator('[data-screen="account"]:visible').first().click();
@@ -298,7 +320,7 @@ try {
     });
     expect(info.readyStatus === 200, `/health/ready ${info.readyStatus}`);
     expect(info.build.head === head && info.build.content === identity.inputsHash && info.build.mode === 'DEV', `backend identity ${JSON.stringify(info.build)}`);
-    expect(info.build.provider === null, `an AI provider is configured: ${info.build.provider}`);
+    expect(info.build.provider === 'CODEX', `unexpected AI provider: ${info.build.provider}`);
     expect(info.localAuthority, 'window is not in LOCAL_AUTHORITY');
     const staged = join(dirname(exe), 'dist-runtime', 'build-info.json');
     const stagedInfo = existsSync(staged) ? JSON.parse(readFileSync(staged, 'utf8')) : null;
@@ -334,15 +356,28 @@ try {
     return { message, source: { name: sources.sources[0].originalFilename ?? sources.sources[0].filename ?? sources.sources[0].name, bytes: sources.sources[0].sizeBytes ?? sources.sources[0].size ?? null }, proposals: await page.locator('.source-proposal-item').count() };
   });
 
-  await step(5, 'create a lesson draft from CONTROLLED data without any model call (server fake provider)', async () => {
-    await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
-    await page.locator('.lesson-editor').waitFor({ state: 'visible', timeout: 30000 });
+  await step(5, 'create a lesson draft from controlled data with the real CODEX provider', async () => {
+    const generationStartedAt = Date.now();
+    const proposalItem = page.locator('.source-proposal-item').first();
+    const proposalId = Number(await proposalItem.getAttribute('data-proposal-id'));
+    expect(Number.isInteger(proposalId) && proposalId > 0, `invalid proposal id: ${proposalId}`);
+    await proposalItem.locator('[data-action="generate-draft"]').click();
+    const generation = await waitForGenerationJob(proposalId);
+    const terminalJob = generation.job;
+    expect(terminalJob?.state === 'SUCCEEDED', `CODEX generation job ended in ${JSON.stringify(terminalJob)}`);
+    await page.locator('.lesson-editor').waitFor({ state: 'visible', timeout: 15000 });
+    const uiElapsedMs = Date.now() - generationStartedAt;
     ctx.draftId = await page.locator('.lesson-editor').getAttribute('data-draft-id');
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
-    expect(String(draft.modelVersion ?? '').startsWith('fake'), `draft was not made by the fake provider: ${draft.modelVersion}`);
+    expect(String(draft.modelVersion ?? '').startsWith('codex:'), `draft was not made by the CODEX provider: ${draft.modelVersion}`);
+    const jobs = (await api('GET', '/v1/generation-jobs')).jobs;
+    const job = jobs.find((entry) => String(entry.id) === String(terminalJob.id)) ?? terminalJob;
+    expect(job?.provider === 'CODEX' && job.state === 'SUCCEEDED', `CODEX generation job: ${JSON.stringify(job ?? jobs)}`);
+    const jobElapsedMs = Date.parse(job.finishedAt) - Date.parse(job.startedAt);
+    expect(Number.isFinite(jobElapsedMs) && jobElapsedMs > 0, `invalid provider job timing: ${JSON.stringify({ startedAt: job.startedAt, finishedAt: job.finishedAt })}`);
     ctx.draftQuestions = draft.questions?.length ?? 0;
     expect(ctx.draftQuestions >= 2, `need at least 2 drafted questions, got ${ctx.draftQuestions}`);
-    return { draftId: ctx.draftId, status: draft.status, modelVersion: draft.modelVersion, questions: ctx.draftQuestions, summaryHead: squash(draft.summary).slice(0, 80) };
+    return { draftId: ctx.draftId, status: draft.status, provider: job.provider, modelVersion: draft.modelVersion, timing: { generationJobMs: jobElapsedMs, clickToDraftVisibleMs: uiElapsedMs, startedAt: job.startedAt, finishedAt: job.finishedAt, transitions: generation.transitions }, questions: ctx.draftQuestions, summaryHead: squash(draft.summary).slice(0, 80) };
   });
 
   await step(6, 'open Resumo and Questões', async () => {
@@ -1106,6 +1141,7 @@ try {
 }
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
+result.http401 = http401;
 result.steps.sort((a, b) => a.step - b.step);
 // Nothing outside the throwaway directory was used: database, sources, WebView2 profile and the app's own data all live under `work` (below the OS temp
 // dir), the script refused to start otherwise, and the human DEV datastore was never opened, listed or copied.
