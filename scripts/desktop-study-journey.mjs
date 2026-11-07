@@ -984,6 +984,9 @@ try {
     const taskAttempts = (await api('GET', `/v1/review-tasks/${reviewId}/attempts`)).attempts;
     expect(taskAttempts.length === cases.length && taskAttempts.map((t) => t.outcome).join() === 'CORRECT,INCORRECT' && taskAttempts.every((t) => t.maxAssistance === 'SOLUTION'), `review task attempts via API: ${JSON.stringify(taskAttempts)}`);
     ctx.reviewId = reviewId;
+    // the real model decides how many questions a lesson has (3 in one run, 4 in another): the rest of the journey follows the REAL count
+    ctx.reviewTotal = await page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`).count();
+    expect(ctx.reviewTotal >= 3, `the review needs at least 3 questions to prove the partial-review guard, got ${ctx.reviewTotal}`);
     return { primaryAction: primaryText, reviewId, delayedWrites: delayed, startRequests: starts.length, judged: ctx.hoje, reviewTaskAttemptsViaApi: taskAttempts.map((t) => ({ exerciseId: t.exerciseId, outcome: t.outcome, maxAssistance: t.maxAssistance })) };
   });
 
@@ -1001,10 +1004,13 @@ try {
     // before answering the remaining exercise, then finish the stage honestly.
     await sleep(1000);
     expect(await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).isChecked() === false, 'a partial review was incorrectly completed');
-    const remaining = page.locator(`.review-row[data-review-id="${id}"] .review-exercise-item`).nth(2);
-    await remaining.getByRole('button', { name: 'Ver resposta' }).click();
-    await remaining.getByRole('button', { name: 'Acertei' }).click();
-    await page.waitForFunction(({ id: rid }) => document.querySelectorAll(`.review-row[data-review-id="${rid}"] .review-exercise-item`)[2]?.dataset.attemptId, { id }, { timeout: 10000 });
+    for (let i = 2; i < ctx.reviewTotal; i += 1) {
+      const remaining = page.locator(`.review-row[data-review-id="${id}"] .review-exercise-item`).nth(i);
+      await remaining.getByRole('button', { name: 'Ver resposta' }).click();
+      await remaining.getByRole('button', { name: 'Acertei' }).click();
+      await page.waitForFunction(({ id: rid, idx }) => document.querySelectorAll(`.review-row[data-review-id="${rid}"] .review-exercise-item`)[idx]?.dataset.attemptId, { id, idx: i }, { timeout: 10000 });
+    }
+    const expectedCorrect = 2 + (ctx.reviewTotal - 2); // the first was right, the second wrong (step 14), every remaining one right
     await page.waitForFunction((rid) => document.querySelector(`[data-action="review-done"][data-review-id="${rid}"]`)?.checked === true, id, { timeout: 15000 });
     const tasks = (await api('GET', '/v1/review-tasks')).reviewTasks;
     const done = tasks.find((t) => String(t.id) === String(id));
@@ -1016,7 +1022,7 @@ try {
     const evidenceAfter = (await api('GET', '/v1/learning-evidence')).evidence;
     const added = evidenceAfter.filter((e) => !evidenceBefore.some((b) => b.id === e.id));
     expect(added.length === 1 && added[0].type === 'REVIEW', `evidence added: ${JSON.stringify(added.map((e) => [e.type, e.questionsCount, e.correctCount]))}`);
-    expect(added[0].questionsCount === 3 && added[0].correctCount === 2, `the evidence must carry all three judged questions (3 questions, 2 right): ${added[0].questionsCount}/${added[0].correctCount}`);
+    expect(added[0].questionsCount === ctx.reviewTotal && added[0].correctCount === expectedCorrect, `the evidence must carry every judged question (${ctx.reviewTotal} questions, ${expectedCorrect} right): ${added[0].questionsCount}/${added[0].correctCount}`);
     // the same checkbox again: what does the student get? (observed, not assumed)
     await page.locator(`[data-action="review-done"][data-review-id="${id}"]`).click();
     await sleep(2500);
@@ -1077,7 +1083,7 @@ try {
     expect(hojeRows.length === 2 && hojeRows.map((a) => a.outcome).join() === 'CORRECT,INCORRECT', `DB Hoje rows ${JSON.stringify(hojeRows)}`);
     const perExercise = {};
     for (const a of snapshotBefore.attempts.filter((x) => String(x.reviewTaskId) === String(ctx.reviewId))) perExercise[a.exerciseId] = (perExercise[a.exerciseId] ?? 0) + 1;
-    expect(Object.keys(perExercise).length === 3 && Object.values(perExercise).every((n) => n === 1), `DB: attempts per exercise inside the Hoje review ${JSON.stringify(perExercise)} (expected 3 exercises, 1 attempt each)`);
+    expect(Object.keys(perExercise).length === ctx.reviewTotal && Object.values(perExercise).every((n) => n === 1), `DB: attempts per exercise inside the Hoje review ${JSON.stringify(perExercise)} (expected ${ctx.reviewTotal} exercises, 1 attempt each)`);
     ctx.hojePerExercise = perExercise;
     await launch({ place: false });
     const rectAfter = windowRect(app.pid);
