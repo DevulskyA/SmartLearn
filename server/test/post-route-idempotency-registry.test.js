@@ -4,6 +4,8 @@
 //
 //   KEY       accepts an optional operationKey; same key + same payload returns the first result (asserted by its own test).
 //   STATE     naturally idempotent by state or uniqueness (asserted in creator-routes-concurrency.test.js or a unique index).
+//             By code reading (not a probe): drafts/accept returns the frozen acceptance_result_json; generation-jobs returns the ACTIVE job of the proposal;
+//             imports/preview reuses the row of the same checksum; imports/commit returns commit_result_json once committed_at is set; sources POST dedups by checksum.
 //   ACTION    acts on an existing record or session and a repeat is harmless. A review judgement, NOT individually probed.
 //   UNPROBED  creates or changes records and has NOT been probed for a duplicate yet. This is the open debt, listed on purpose.
 import { test } from 'node:test';
@@ -35,11 +37,11 @@ const REGISTRY = {
   'generated-drafts.js POST /proposals/:id/drafts': 'UNPROBED',
   'generated-drafts.js POST /drafts/:id/questions': 'UNPROBED',
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
-  'generated-drafts.js POST /drafts/:id/accept': 'UNPROBED',
-  'generation-jobs.js POST /generation-jobs': 'UNPROBED',
+  'generated-drafts.js POST /drafts/:id/accept': 'STATE',
+  'generation-jobs.js POST /generation-jobs': 'STATE',
   'generation-jobs.js POST /generation-jobs/:id/cancel': 'ACTION',
-  'imports.js POST /imports/preview': 'UNPROBED',
-  'imports.js POST /imports/:id/commit': 'UNPROBED',
+  'imports.js POST /imports/preview': 'STATE',
+  'imports.js POST /imports/:id/commit': 'STATE',
   'learning-units.js POST /learning-units': 'KEY',
   'question-flags.js POST /attempts/:id/flag': 'ACTION',
   'question-flags.js POST /exercises/:exerciseId/unflag': 'ACTION',
@@ -49,7 +51,7 @@ const REGISTRY = {
   'reviews.js POST /review-tasks/:id/reopen': 'ACTION',
   'reviews.js POST /review-tasks/postpone-overdue': 'ACTION',
   'sources.js POST /source-openings': 'KEY',
-  'sources.js POST /sources': 'UNPROBED',
+  'sources.js POST /sources': 'STATE',
   'sources.js POST /sources/:id/extract': 'ACTION',
   'subjects.js POST /subjects': 'STATE',
   'subjects.js POST /subjects/reorder': 'ACTION',
