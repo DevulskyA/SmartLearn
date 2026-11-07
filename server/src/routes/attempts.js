@@ -1,10 +1,15 @@
 import * as attempts from '../services/attempts.js';
+import { IdempotencyConflictError } from '../services/idempotency.js';
 
 function handleError(err, reply) {
   if (err instanceof attempts.AttemptError) {
     const statusByCode = { VALIDATION_FAILED: 400, NOT_FOUND: 404, ALREADY_SUBMITTED: 409 };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
+  }
+  if (err instanceof IdempotencyConflictError) {
+    reply.status(409);
+    return { error: { code: err.code } };
   }
   throw err;
 }
@@ -13,14 +18,14 @@ export function registerAttemptRoutes(app, db) {
   app.post('/exercises/:exerciseId/attempts', {
     schema: {
       params: { type: 'object', required: ['exerciseId'], properties: { exerciseId: { type: 'string' } } },
-      body: { type: 'object', properties: { competencyId: { type: 'integer' }, reviewTaskId: { type: 'integer' } } },
+      body: { type: 'object', properties: { competencyId: { type: 'integer' }, reviewTaskId: { type: 'integer' }, operationKey: { type: 'string', maxLength: 128 } } },
     },
   }, async (request, reply) => {
     const exerciseId = Number(request.params.exerciseId);
     if (!Number.isInteger(exerciseId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       reply.status(201);
-      return { attempt: attempts.start(db, request.actor.userId, { exerciseId, competencyId: request.body?.competencyId ?? null, reviewTaskId: request.body?.reviewTaskId ?? null }) };
+      return { attempt: attempts.start(db, request.actor.userId, { exerciseId, competencyId: request.body?.competencyId ?? null, reviewTaskId: request.body?.reviewTaskId ?? null, operationKey: request.body?.operationKey ?? null }) };
     } catch (err) { return handleError(err, reply); }
   });
 

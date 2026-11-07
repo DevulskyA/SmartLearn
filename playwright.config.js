@@ -11,11 +11,15 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: suite ? SUITES[suite].map((name) => `**/${name}.spec.js`) : undefined,
   outputDir: process.env.E2E_RUN_ID ? `./test-results/${process.env.E2E_RUN_ID}` : './test-results',
+  // Circuit breaker, not an assertion: 30 s cut off healthy tests that take 30-40 s alone (accessibility axe, draft-autosave) and any test
+  // under 3-4 workers. Progress is judged by the watchdogs and the per-step waits, so a real hang still fails within a minute.
+  timeout: 60000,
   fullyParallel: false,
   workers: Number(process.env.E2E_WORKERS || 1),
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${VITE_PORT}`,
+    headless: true,
     trace: 'retain-on-failure',
   },
   webServer: {

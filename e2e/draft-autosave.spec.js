@@ -150,6 +150,9 @@ const summaryIndicator = (editor) => editor.locator('[data-panel="summary"] .sav
 const questionIndicator = (editor) => editor.locator('.lesson-qeditor .save-indicator');
 
 test('the summary saves itself 2.5 s after the last keystroke, not before, and then needs no confirmation to leave', async ({ page }) => {
+  // Measured 2026-11-07: the whole test takes ~39 s (draft setup plus 4.5 s of typing plus the 2.5 s idle), so the 30 s default
+  // cut it off while the product was behaving. The budget is the circuit breaker, not the assertion.
+  test.setTimeout(75000);
   const editor = await startWith(page, 'Base.');
   const input = editor.locator('.lesson-summary-input');
   const patches = patchCounter(page, /\/summary$/);

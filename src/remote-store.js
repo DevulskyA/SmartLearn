@@ -293,8 +293,10 @@ const exercises = {
 // (AC-16), so no caller here can claim independence after using a hint.
 
 const attempts = {
-  async start(exerciseId, { competencyId, reviewTaskId } = {}) {
+  async start(exerciseId, { competencyId, reviewTaskId, operationKey } = {}) {
     const body = {};
+    // One key per logical attempt: a double tap or a retry after a lost reply returns the attempt the server already created.
+    if (operationKey != null) body.operationKey = operationKey;
     if (competencyId != null) body.competencyId = competencyId;
     if (reviewTaskId != null) body.reviewTaskId = reviewTaskId;
     const { attempt } = await apiRequest(`/v1/exercises/${exerciseId}/attempts`, { method: 'POST', body });

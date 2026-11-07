@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
+import { timedStep, waitForProgress } from './support/progress-watchdog.js';
 
 // T30: proves the item-level attempt ledger (T29's schema, T30's service
 // wired into the existing review-exercise reveal/judge UI) is populated by
@@ -22,13 +23,15 @@ let serverProcess;
 let dbDir;
 
 test.beforeAll(async () => {
-  dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-hoje-block-'));
-  const dbPath = join(dbDir, 'e2e.db');
-  serverProcess = spawn(process.execPath, [MAIN_JS], {
-    env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
-    stdio: 'ignore',
+  await timedStep(test, 'fixture: iniciar API isolada', async () => {
+    dbDir = mkdtempSync(join(tmpdir(), 'sl-e2e-hoje-block-'));
+    const dbPath = join(dbDir, 'e2e.db');
+    serverProcess = spawn(process.execPath, [MAIN_JS], {
+      env: { ...process.env, SMARTLEARN_DB_PATH: dbPath, PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
+      stdio: 'ignore',
+    });
+    await waitForServerReady(API_BASE, { label: 'practice E2E' });
   });
-  await waitForServerReady(API_BASE, { label: 'practice E2E' });
 });
 
 test.afterAll(async () => {
@@ -38,96 +41,154 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
+  // The limit must be set before the hook starts: cold Vite/browser startup
+  // belongs to the fixture, not to the test body. It is a circuit breaker;
+  // progress watchdogs below decide whether the application is advancing.
+  test.setTimeout(60000);
   await page.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
   const email = `practice-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = 'a genuinely long test password 1';
-  await signInRegistered(page, { email: email, password: password });
+  await timedStep(test, 'fixture: autenticar sessão (isolada)', async () => {
+    await signInRegistered(page, { email, password });
+  });
 });
 
-test('Hoje block: judgments survive leaving/reloading, the block ends with errors + "Refazer erros", the redo never touches the review evidence', async ({ page }) => {
-  await page.goto('/#register');
-  await page.waitForLoadState('networkidle');
-  await page.locator('#show-subject-form').click();
-  await page.locator('#new-subject-input').fill('Bloco Subject');
-  await page.locator('#new-subject-form button[type="submit"]').click();
-  await page.locator('#study-date').fill('2020-01-01');
-  await page.locator('#study-content').fill('Bloco Unit');
-  await page.locator('#study-form button[type="submit"]').click();
-  await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
-  const studyRow = page.locator('.study-row', { hasText: 'Bloco Unit' });
-  await studyRow.getByRole('button', { name: 'Exercícios' }).click();
-  for (const [q, a] of [['Pergunta A?', 'Resposta A'], ['Pergunta B?', 'Resposta B']]) {
-    await studyRow.locator('.exercise-question-input').fill(q);
-    await studyRow.locator('.exercise-answer-input').fill(a);
-    await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
-    await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
-  }
-
-  await page.locator('[data-screen="today"]').click();
-  const primaryAction = page.locator('#today-primary-action-btn');
-  await expect(primaryAction).toBeVisible({ timeout: 5000 });
-  await primaryAction.click();
-  const reviewId = await primaryAction.getAttribute('data-review-id');
-  const item = (q) => page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`, { hasText: q });
-  const blockResult = page.locator(`.review-row[data-review-id="${reviewId}"] .review-block-result`);
-  // Retrieval first: the questions come before the Resumo Mestre in the review body.
-  const exercisesBeforeSummary = await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-body`).evaluate((el) => {
-    const ex = el.querySelector('.review-row-exercises');
-    const su = el.querySelector('.review-row-summary');
-    return Boolean(ex.compareDocumentPosition(su) & Node.DOCUMENT_POSITION_FOLLOWING);
+test('Hoje block: judgments survive leaving/reloading, the block ends with errors + "Refazer erros", the redo never touches the review evidence', async ({ page }, testInfo) => {
+  await timedStep(test, 'setup: criar unidade e exercícios', async () => {
+    await page.goto('/#register');
+    await page.waitForLoadState('networkidle');
+    await page.locator('#show-subject-form').click();
+    await page.locator('#new-subject-input').fill('Bloco Subject');
+    await page.locator('#new-subject-form button[type="submit"]').click();
+    await page.locator('#study-date').fill('2020-01-01');
+    await page.locator('#study-content').fill('Bloco Unit');
+    await page.locator('#study-form button[type="submit"]').click();
+    await expect(page.locator('#study-message')).toContainText('salvo', { timeout: 5000 });
+    const studyRow = page.locator('.study-row', { hasText: 'Bloco Unit' });
+    await studyRow.getByRole('button', { name: 'Exercícios' }).click();
+    for (const [q, a] of [['Pergunta A?', 'Resposta A'], ['Pergunta B?', 'Resposta B']]) {
+      await studyRow.locator('.exercise-question-input').fill(q);
+      await studyRow.locator('.exercise-answer-input').fill(a);
+      await studyRow.getByRole('button', { name: 'Adicionar exercício' }).click();
+      await expect(studyRow.getByText(q)).toBeVisible({ timeout: 5000 });
+    }
   });
-  expect(exercisesBeforeSummary).toBe(true);
 
-  await item('Pergunta A?').getByRole('button', { name: 'Ver resposta' }).click();
-  await item('Pergunta A?').getByRole('button', { name: 'Errei' }).click();
-  await expect(blockResult).toBeHidden();                      // block not finished yet
-  await expect(item('Pergunta B?').getByRole('button', { name: 'Ver resposta' })).toBeFocused();   // keyboard flow continues
-  await item('Pergunta B?').getByRole('button', { name: 'Ver resposta' }).click();
-  await item('Pergunta B?').getByRole('button', { name: 'Acertei' }).click();
-  await expect(blockResult).toBeVisible();
-  await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
-  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
-  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeFocused();   // ...and lands on the next action
+  let reviewId;
+  let item;
+  let blockResult;
+  await timedStep(test, 'review: julgar exercícios e fechar o bloco', async () => {
+    await page.locator('[data-screen="today"]').click();
+    const primaryAction = page.locator('#today-primary-action-btn');
+    await expect(primaryAction).toBeVisible({ timeout: 5000 });
+    await primaryAction.click();
+    reviewId = await primaryAction.getAttribute('data-review-id');
+    item = (q) => page.locator(`.review-row[data-review-id="${reviewId}"] .review-exercise-item`, { hasText: q });
+    blockResult = page.locator(`.review-row[data-review-id="${reviewId}"] .review-block-result`);
+    // Retrieval first: the questions come before the Resumo Mestre in the review body.
+    const exercisesBeforeSummary = await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-body`).evaluate((el) => {
+      const ex = el.querySelector('.review-row-exercises');
+      const su = el.querySelector('.review-row-summary');
+      return Boolean(ex.compareDocumentPosition(su) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(exercisesBeforeSummary).toBe(true);
+
+    await item('Pergunta A?').getByRole('button', { name: 'Ver resposta' }).click();
+    await item('Pergunta A?').getByRole('button', { name: 'Errei' }).click();
+    await expect(blockResult).toBeHidden();                      // block not finished yet
+    await expect(item('Pergunta B?').getByRole('button', { name: 'Ver resposta' })).toBeFocused();   // keyboard flow continues
+    await item('Pergunta B?').getByRole('button', { name: 'Ver resposta' }).click();
+    await item('Pergunta B?').getByRole('button', { name: 'Acertei' }).click();
+    await expect(blockResult).toBeVisible();
+    await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+    await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+    await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeFocused();   // ...and lands on the next action
 
   // The verdict is a mark and a state, not only a colour (screen review X-02).
-  const pseudo = (q, name) => item(q).getByRole('button', { name }).evaluate((el) => getComputedStyle(el, '::before').content);
-  expect(await pseudo('Pergunta A?', 'Errei')).toContain('✕');
-  expect(await pseudo('Pergunta B?', 'Acertei')).toContain('✓');
-  await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(item('Pergunta B?').getByRole('button', { name: 'Acertei' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(item('Pergunta A?').getByRole('button', { name: 'Acertei' })).not.toHaveAttribute('aria-pressed', 'true');
-  if (process.env.SCREENSHOT_DIR) await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-exercises`).screenshot({ path: join(process.env.SCREENSHOT_DIR, '1280-hoje-veredito-marcado.png') });
+    const pseudo = (q, name) => item(q).getByRole('button', { name }).evaluate((el) => getComputedStyle(el, '::before').content);
+    expect(await pseudo('Pergunta A?', 'Errei')).toContain('✕');
+    expect(await pseudo('Pergunta B?', 'Acertei')).toContain('✓');
+    await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(item('Pergunta B?').getByRole('button', { name: 'Acertei' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(item('Pergunta A?').getByRole('button', { name: 'Acertei' })).not.toHaveAttribute('aria-pressed', 'true');
+    if (process.env.SCREENSHOT_DIR) await page.locator(`.review-row[data-review-id="${reviewId}"] .review-row-exercises`).screenshot({ path: join(process.env.SCREENSHOT_DIR, '1280-hoje-veredito-marcado.png') });
+  });
 
   // Leaving Hoje and coming back must NOT drop the judgments.
-  await page.locator('[data-screen="plan"]').click();
-  await page.locator('[data-screen="today"]').click();
-  await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
-  await expect(item('Pergunta B?')).toHaveClass(/is-correct/);
-  await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toBeDisabled();
-  await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
+  await timedStep(test, 'persistência: sair, voltar e recarregar Hoje', async () => {
+    await page.locator('[data-screen="plan"]').click();
+    await page.locator('[data-screen="today"]').click();
+    await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
+    await expect(item('Pergunta B?')).toHaveClass(/is-correct/);
+    await expect(item('Pergunta A?').getByRole('button', { name: 'Errei' })).toBeDisabled();
+    await expect(blockResult).toContainText('Bloco concluído: 1/2 corretas');
 
-  // ...nor does a full reload.
-  await page.reload();
-  await page.waitForLoadState('networkidle');
-  await page.locator('[data-screen="today"]').click();
-  await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
-  await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+    // ...nor does a full reload.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.locator('[data-screen="today"]').click();
+    await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });
+    await expect(blockResult.getByRole('button', { name: 'Refazer erros (1)' })).toBeVisible();
+  });
 
   // Redo only the wrong item, through the shared retest flow.
-  await blockResult.getByRole('button', { name: 'Refazer erros (1)' }).click();
-  await expect(page.locator('#screen-study-now')).toBeVisible();
-  await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
-  await expect(page.locator('#study-now-question-text')).toHaveText('Pergunta A?');
-  await expect(page.locator('#study-now-summary-card')).toBeHidden();
-  await page.locator('#study-now-reveal-btn').click();
-  await page.locator('#study-now-correct-btn').click();
-  await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');
-  await page.locator('#study-now-done-btn').click();
-  // Continuity: the student lands back ON the block being worked, not at the top of Hoje.
-  await expect(blockResult).toBeInViewport({ ratio: 1, timeout: 5000 });
+  await timedStep(test, 'reteste: revelar, julgar e retornar ao bloco', async () => {
+    await blockResult.getByRole('button', { name: 'Refazer erros (1)' }).click();
+    await expect(page.locator('#screen-study-now')).toBeVisible();
+    await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+    await expect(page.locator('#study-now-question-text')).toHaveText('Pergunta A?');
+    await expect(page.locator('#study-now-summary-card')).toBeHidden();
+    await page.locator('#study-now-reveal-btn').click();
+    await waitForProgress({
+      label: 'reteste: resposta revelada',
+      readState: async () => ({
+        progress: await page.locator('#study-now-progress').textContent(),
+        correctVisible: await page.locator('#study-now-correct-btn').isVisible(),
+      }),
+      isComplete: (state) => state.correctVisible,
+      timeoutMs: 10_000,
+      quietMs: 3_000,
+      onProgress: ({ label, elapsedMs, state }) => console.log(`[e2e-progress] ${label}: ${elapsedMs}ms ${JSON.stringify(state)}`),
+      onFailure: async (details) => {
+        await page.screenshot({ path: testInfo.outputPath('watchdog-reveal-stall.png'), fullPage: true }).catch(() => {});
+        console.error(`[e2e-watchdog] ${JSON.stringify(details)}`);
+      },
+    });
+    await page.locator('#study-now-correct-btn').click();
+    await waitForProgress({
+      label: 'reteste: resultado registrado',
+      readState: async () => ({ text: await page.locator('#study-now-result-text').textContent() }),
+      isComplete: (state) => state.text?.includes('1/1 erros corrigidos'),
+      timeoutMs: 10_000,
+      quietMs: 3_000,
+      onProgress: ({ label, elapsedMs, state }) => console.log(`[e2e-progress] ${label}: ${elapsedMs}ms ${JSON.stringify(state)}`),
+      onFailure: async (details) => {
+        await page.screenshot({ path: testInfo.outputPath('watchdog-result-stall.png'), fullPage: true }).catch(() => {});
+        console.error(`[e2e-watchdog] ${JSON.stringify(details)}`);
+      },
+    });
+    await page.locator('#study-now-done-btn').click();
+    // Continuity: the student lands back ON the block being worked, not at the top of Hoje.
+    await waitForProgress({
+      label: 'reteste: retorno ao bloco',
+      readState: async () => ({
+        studyNowVisible: await page.locator('#screen-study-now').isVisible(),
+        blockVisible: await blockResult.isVisible(),
+      }),
+      isComplete: (state) => !state.studyNowVisible && state.blockVisible,
+      timeoutMs: 10_000,
+      quietMs: 3_000,
+      onProgress: ({ label, elapsedMs, state }) => console.log(`[e2e-progress] ${label}: ${elapsedMs}ms ${JSON.stringify(state)}`),
+      onFailure: async (details) => {
+        await page.screenshot({ path: testInfo.outputPath('watchdog-return-stall.png'), fullPage: true }).catch(() => {});
+        console.error(`[e2e-watchdog] ${JSON.stringify(details)}`);
+      },
+    });
+    await expect(blockResult).toBeInViewport({ ratio: 1, timeout: 5000 });
+  });
 
   // Back on Hoje: the ORIGINAL judgment is still what the review recorded.
   await expect(item('Pergunta A?')).toHaveClass(/is-wrong/, { timeout: 5000 });

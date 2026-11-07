@@ -33,6 +33,7 @@
     "test:e2e:materials": "node scripts/e2e.mjs --suite materials",
     "test:e2e:smoke": "node scripts/e2e.mjs --suite smoke",
     "test:e2e:summary": "node scripts/e2e.mjs --suite summary",
+    "test:ui:fast": "playwright test e2e/ui-fast-pilot.spec.js --workers=1 --retries=0 --reporter=dot",
     "build:installer": "tauri build --ci"
   },
   "repository": {

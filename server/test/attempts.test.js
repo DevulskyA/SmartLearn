@@ -472,3 +472,66 @@ test('a redo answered CORRECT right after the error writes no learning_evidence 
     assert.equal(rd.review_task_id, null);
   } finally { cleanup(); }
 });
+
+test('start is idempotent under a repeated operationKey (lost reply / double click); a different key or no key is a genuinely new attempt', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'start-idem@example.com');
+    const unit = makeUnit(db, userId);
+    const exercise = makeExercise(db, userId, unit.id);
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM exercise_attempts WHERE unit_id = ?').get(unit.id).n;
+
+    const first = attempts.start(db, userId, { exerciseId: exercise.id, operationKey: 'start-1' });
+    const replay = attempts.start(db, userId, { exerciseId: exercise.id, operationKey: 'start-1' });
+    assert.equal(replay.id, first.id, 'a repeated same-key start returns the same attempt');
+    assert.equal(count(), 1, 'a repeated same-key start must not insert a second row');
+
+    const redo = attempts.start(db, userId, { exerciseId: exercise.id, operationKey: 'start-2' });
+    assert.notEqual(redo.id, first.id, 'a different key is a genuine new attempt (retest)');
+    const unkeyed = attempts.start(db, userId, { exerciseId: exercise.id });
+    assert.notEqual(unkeyed.id, redo.id, 'without a key every call stays a new attempt (back-compatible)');
+    assert.equal(count(), 3);
+
+    const other = makeExercise(db, userId, unit.id, { question: 'Outra pergunta?' });
+    assert.throws(
+      () => attempts.start(db, userId, { exerciseId: other.id, operationKey: 'start-1' }),
+      (err) => err.code === 'IDEMPOTENCY_CONFLICT',
+    );
+    assert.equal(count(), 3, 'a conflicting key creates nothing');
+  } finally { cleanup(); }
+});
+
+test('HTTP: two simultaneous starts with the same operationKey create ONE attempt; a conflicting reuse is 409, not 500', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sl-attempts-start-http-'));
+  const db = openDb(join(dir, 'test.db'));
+  runMigrations(db, MIGRATIONS_DIR);
+  const app = await buildApp(db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN] });
+  try {
+    const email = 'startidem-http@example.com';
+    const password = 'a genuinely long test password 1';
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+    const loginRes = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password } });
+    const cookie = loginRes.headers['set-cookie'].split(';')[0];
+    const csrfToken = JSON.parse((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } })).body).csrfToken;
+    const headers = { origin: TEST_ORIGIN, cookie, 'x-csrf-token': csrfToken };
+    const unitId = JSON.parse((await app.inject({ method: 'POST', url: '/v1/learning-units', headers, payload: { newSubjectName: 'Idem', title: 'Aula', studyDate: '2026-01-01' } })).body).unit.id;
+    const makeEx = async (question) => JSON.parse((await app.inject({ method: 'POST', url: `/v1/learning-units/${unitId}/exercises`, headers, payload: { question, answer: 'R', provenance: 'MANUAL' } })).body).exercise.id;
+    const [e1, e2] = [await makeEx('Q1?'), await makeEx('Q2?')];
+    const start = (exerciseId, operationKey) => app.inject({ method: 'POST', url: `/v1/exercises/${exerciseId}/attempts`, headers, payload: { operationKey } });
+
+    const [a, b] = await Promise.all([start(e1, 'k-1'), start(e1, 'k-1')]);
+    assert.equal(a.statusCode, 201);
+    assert.equal(b.statusCode, 201);
+    assert.equal(JSON.parse(a.body).attempt.id, JSON.parse(b.body).attempt.id);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM exercise_attempts WHERE unit_id = ?').get(unitId).n, 1);
+
+    const conflict = await start(e2, 'k-1');
+    assert.equal(conflict.statusCode, 409);
+    assert.equal(JSON.parse(conflict.body).error.code, 'IDEMPOTENCY_CONFLICT');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM exercise_attempts WHERE unit_id = ?').get(unitId).n, 1);
+  } finally {
+    await app.close();
+    db.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

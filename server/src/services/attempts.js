@@ -60,7 +60,7 @@ function attemptDto(row) {
  * version, T17) can never retroactively change what an in-flight or past
  * attempt was scored against (AC-18).
  */
-export function start(db, userId, { exerciseId, competencyId = null, reviewTaskId = null }, now = () => new Date()) {
+export function start(db, userId, { exerciseId, competencyId = null, reviewTaskId = null, operationKey = null }, now = () => new Date()) {
   const found = findOwnedExerciseWithVersion(db, userId, exerciseId);
   if (!found || !found.version) throw new AttemptError('NOT_FOUND', dm('EXERCISE_NOT_FOUND'));
   if (found.exercise.archived_at) throw new AttemptError('VALIDATION_FAILED', dm('EXERCISE_ARCHIVED'));
@@ -78,18 +78,27 @@ export function start(db, userId, { exerciseId, competencyId = null, reviewTaskI
     if (!owned) throw new AttemptError('NOT_FOUND', dm('REVIEW_IN_UNIT_NOT_FOUND'));
   }
 
-  const nowIso = now().toISOString();
-  const result = db.prepare(`
-    INSERT INTO exercise_attempts (user_id, unit_id, competency_id, exercise_version_id, review_task_id, status, max_assistance, started_at)
-    VALUES (?, ?, ?, ?, ?, 'STARTED', 'NONE', ?)
-  `).run(userId, found.exercise.unit_id, competencyId, found.version.id, reviewTaskId, nowIso);
+  // Opt-in idempotency: a repeated key (double tap, or a retry after the reply was lost) returns the attempt it
+  // already created instead of inserting a second STARTED row. Without a key every call is a new attempt.
+  const check = checkIdempotency(db, { userId, operation: 'start-attempt', operationKey, payload: { exerciseId, competencyId, reviewTaskId } });
+  if (check.cached) return check.result;
 
-  return {
-    ...attemptDto(findOwnedAttempt(db, userId, result.lastInsertRowid)),
-    question: found.version.question,
-    hint: found.version.hint,
-    maxAssistanceAvailable: maxAssistanceAvailable(found.version),
-  };
+  const run = db.transaction(() => {
+    const nowIso = now().toISOString();
+    const result = db.prepare(`
+      INSERT INTO exercise_attempts (user_id, unit_id, competency_id, exercise_version_id, review_task_id, status, max_assistance, started_at)
+      VALUES (?, ?, ?, ?, ?, 'STARTED', 'NONE', ?)
+    `).run(userId, found.exercise.unit_id, competencyId, found.version.id, reviewTaskId, nowIso);
+    const dto = {
+      ...attemptDto(findOwnedAttempt(db, userId, result.lastInsertRowid)),
+      question: found.version.question,
+      hint: found.version.hint,
+      maxAssistanceAvailable: maxAssistanceAvailable(found.version),
+    };
+    recordIdempotency(db, { userId, operation: 'start-attempt', operationKey, payloadHash: check.payloadHash, result: dto });
+    return dto;
+  });
+  return run();
 }
 
 function requireOpenAttempt(db, userId, attemptId) {

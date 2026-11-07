@@ -123,8 +123,40 @@ test('partial or empty practice never concludes a stage that has questions: it s
   await page.reload();
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="today"]').click();
-  await expect(page.locator(`.review-row[data-review-id="${reviewId}"] .review-progress-chip`)).toHaveText('1 de 3 respondidas', { timeout: 8000 });
+  await expect(async () => {
+    if ((await row.locator('.review-row-toggle').getAttribute('aria-expanded')) !== 'true') await row.locator('.review-row-toggle').click();
+    await expect(row.locator('.review-exercise-item').first()).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 10000 });
+  await expect(row.locator('.review-progress-chip')).toHaveText('1 de 3 respondidas', { timeout: 8000 });
   expect(await completedTasks(page, unit.id)).toHaveLength(0);
+
+  // second of three answered: the same guard must still refuse completion and persist the 2/3 progress.
+  await answer(row, 'pergunta 2?', 'Acertei');
+  await expect(row.locator('.review-progress-chip')).toHaveText('2 de 3 respondidas');
+  await box.click();
+  await expect(box).not.toBeChecked();
+  await expect(page.locator('#review-dashboard-message')).toContainText('1 questão');
+  expect(await completedTasks(page, unit.id)).toHaveLength(0);
+  expect(await reviewEvidence(page)).toHaveLength(0);
+
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-screen="today"]').click();
+  await expect(async () => {
+    if ((await row.locator('.review-row-toggle').getAttribute('aria-expanded')) !== 'true') await row.locator('.review-row-toggle').click();
+    await expect(row.locator('.review-exercise-item').first()).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 10000 });
+  await expect(row.locator('.review-progress-chip')).toHaveText('2 de 3 respondidas', { timeout: 8000 });
+  expect(await completedTasks(page, unit.id)).toHaveLength(0);
+
+  // third answer: only now may the stage conclude and persist one REVIEW evidence row.
+  await answer(row, 'pergunta 3?', 'Errei');
+  const done = page.locator(`[data-review-list="doneToday"] .review-row[data-review-id="${reviewId}"]`);
+  await expect(done).toBeVisible({ timeout: 8000 });
+  expect(await completedTasks(page, unit.id)).toHaveLength(1);
+  const evidence = await reviewEvidence(page);
+  expect(evidence).toHaveLength(1);
+  expect([evidence[0].questionsCount, evidence[0].correctCount]).toEqual([3, 2]);
 });
 
 test('reading concludes only a stage without questions: records "lida", no score and no evidence', async ({ page }) => {

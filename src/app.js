@@ -4331,11 +4331,22 @@ studyNowRevealBtn?.addEventListener("click", async () => {
   }
 });
 
+/**
+ * Start options for one question of one study-now session. The key is per (session, question): the reveal and a later
+ * judgment fallback share it, so a start the server already received but whose reply was lost is not created twice.
+ * A new session (e.g. the redo of the wrong answers) gets new keys, so a genuine retest is still a new attempt.
+ */
+function studyNowStartOptions(state, exerciseId) {
+  state.startKeys ??= new Map();
+  if (!state.startKeys.has(exerciseId)) state.startKeys.set(exerciseId, crypto.randomUUID());
+  return { operationKey: state.startKeys.get(exerciseId), ...(state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {}) };
+}
+
 /** Starts the server attempt for this question and records the hint and the reveal on it. Never rejects: failures are logged. */
 async function recordStudyNowReveal(state, exercise) {
   try {
     // No reviewTaskId: this is INITIAL_PRACTICE, never a scheduled review.
-    const attempt = await DB.attempts.start(exercise.id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
+    const attempt = await DB.attempts.start(exercise.id, studyNowStartOptions(state, exercise.id));
     state.attemptId = attempt.id;
     // Real, observable signal (same idiom as ensureAttemptStarted's
     // exItem.dataset.attemptId above) — lets tests confirm a real
@@ -4376,7 +4387,7 @@ async function judgeStudyNow(isCorrect) {
       if (!state.attemptId) {
         // Revealing could not start the attempt (connection dropped then): start it now. Never judge without one,
         // or the screen would show progress the server does not have.
-        const started = await DB.attempts.start(state.exercises[state.index].id, state.mode === "review" ? { reviewTaskId: state.reviewTaskId } : {});
+        const started = await DB.attempts.start(state.exercises[state.index].id, studyNowStartOptions(state, state.exercises[state.index].id));
         state.attemptId = started.id;
         studyNowQuestionArea.dataset.attemptId = String(started.id);
         try { await DB.attempts.revealSolution(started.id); } catch (error) { console.error("Falha ao registrar a revelação (prática inicial).", error); }
@@ -5602,14 +5613,25 @@ reviewDashboard.addEventListener("click", (event) => {
 // as migration-ui.js) and best-effort: a failure here never blocks the
 // existing reveal/judge UI or the aggregate evidence this review already
 // saves — item-level tracking is additive, not a dependency of the save path.
-async function ensureAttemptStarted(exItem) {
-  if (!REMOTE_MODE || !DB.attempts || !exItem) return null;
-  if (exItem.dataset.attemptId) return exItem.dataset.attemptId;
+const attemptStartsInFlight = new WeakMap();
+function ensureAttemptStarted(exItem) {
+  if (!REMOTE_MODE || !DB.attempts || !exItem) return Promise.resolve(null);
+  if (exItem.dataset.attemptId) return Promise.resolve(exItem.dataset.attemptId);
+  // Two taps before the first reply share one start; the key also makes a retry after a lost reply return the same attempt.
+  if (!attemptStartsInFlight.has(exItem)) {
+    const pending = startAttemptForItem(exItem).finally(() => attemptStartsInFlight.delete(exItem));
+    attemptStartsInFlight.set(exItem, pending);
+  }
+  return attemptStartsInFlight.get(exItem);
+}
+
+async function startAttemptForItem(exItem) {
   const exerciseId = Number(exItem.dataset.exerciseId);
   if (!Number.isInteger(exerciseId)) return null;
   const reviewTaskId = Number(exItem.dataset.reviewTaskId);
+  exItem.dataset.attemptKey ||= crypto.randomUUID();
   try {
-    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null });
+    const attempt = await DB.attempts.start(exerciseId, { reviewTaskId: Number.isInteger(reviewTaskId) ? reviewTaskId : null, operationKey: exItem.dataset.attemptKey });
     exItem.dataset.attemptId = String(attempt.id);
     judgedQuestionAttemptIds.set(exerciseId, attempt.id);
     // The hint (when this exercise has one) is already visible in the DOM
