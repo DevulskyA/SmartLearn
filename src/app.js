@@ -3681,6 +3681,8 @@ async function finishStudyNowSession() {
         correctCount,
         evidenceDate: getLocalDateValue(),
         attemptIds,
+        // one key per block of practice: every resend of this pending evidence is the same intent (E-021 class)
+        operationKey: crypto.randomUUID(),
       };
     await recordStudyEvidence();
   }

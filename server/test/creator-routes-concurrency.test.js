@@ -96,3 +96,40 @@ test('POST /learning-evidence (EXTERNAL): the same operationKey twice records ON
     assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 2, 'no key keeps the old behaviour: every call records');
   });
 });
+
+test('POST /learning-evidence (INITIAL_PRACTICE, no attemptIds): same key = ONE record, different keys = two legitimate records', async () => {
+  await withSignedInApp(async ({ post, count, unit }) => {
+    const payload = { unitId: unit.id, type: 'INITIAL_PRACTICE', questionsCount: 5, correctCount: 4, evidenceDate: '2026-01-01', operationKey: 'k-initial-1' };
+    const [a, b] = await Promise.all([post('/learning-evidence', payload), post('/learning-evidence', payload)]);
+    assert.equal(a.statusCode, 201);
+    assert.equal(b.statusCode, 201);
+    assert.equal(JSON.parse(a.body).evidence.id, JSON.parse(b.body).evidence.id);
+    assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 1);
+
+    const conflict = await post('/learning-evidence', { ...payload, correctCount: 5 });
+    assert.equal(conflict.statusCode, 409);
+    assert.equal(JSON.parse(conflict.body).error.code, 'IDEMPOTENCY_CONFLICT');
+
+    const another = await post('/learning-evidence', { ...payload, operationKey: 'k-initial-2' });
+    assert.equal(another.statusCode, 201);
+    assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 2, 'a second real block of practice (new key) is a new record');
+  });
+});
+
+test('POST /learning-evidence (INITIAL_PRACTICE, with attemptIds): the retry returns the first record instead of being refused', async () => {
+  await withSignedInApp(async ({ post, count, unit }) => {
+    const exercise = JSON.parse((await post(`/learning-units/${unit.id}/exercises`, { question: 'Defina taquicardia.', answer: 'FC acima de 100 bpm', provenance: 'MANUAL' })).body).exercise;
+    const attempt = JSON.parse((await post(`/exercises/${exercise.id}/attempts`, {})).body).attempt;
+    const submitted = await post(`/attempts/${attempt.id}/submit`, { outcome: 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+    assert.equal(submitted.statusCode, 200);
+    const payload = { unitId: unit.id, type: 'INITIAL_PRACTICE', questionsCount: 1, correctCount: 1, evidenceDate: '2026-01-01', attemptIds: [attempt.id], operationKey: 'k-initial-attempts' };
+    const first = await post('/learning-evidence', payload);
+    assert.equal(first.statusCode, 201);
+    const retry = await post('/learning-evidence', payload);
+    assert.equal(retry.statusCode, 201, 'a replay of the same intent is answered from the stored result');
+    assert.equal(JSON.parse(retry.body).evidence.id, JSON.parse(first.body).evidence.id);
+    assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 1);
+    const withoutKey = await post('/learning-evidence', { ...payload, operationKey: undefined });
+    assert.equal(withoutKey.statusCode, 400, 'without a key the old protection stays: an attempt already linked cannot be linked again');
+  });
+});

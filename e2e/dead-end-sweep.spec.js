@@ -16,6 +16,8 @@ const SERVER_PORT = serverPort(13947);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
 const SCREENS = ['today', 'plan', 'register', 'stats', 'settings', 'account'];
+// study-now and exam only exist while their in-memory session does (src/app.js showScreen): a stale link must land on Plano, not on an empty card.
+const SESSION_ONLY_SCREENS = ['study-now', 'exam'];
 
 let serverProcess;
 let dbDir;
@@ -56,6 +58,11 @@ test('DEADEND-1: a brand-new account finds a visible action on every screen', as
     } catch {
       deadEnds.push(screen);
     }
+  }
+  for (const screen of SESSION_ONLY_SCREENS) {
+    await page.goto(`/#${screen}`);
+    await expect(page.locator('[data-screen-panel="plan"]')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('[data-screen-panel="${screen}"]')).toBeHidden();
   }
   console.log(`DEADEND time to first visible action (ms): ${JSON.stringify(timings)}`);
   expect(deadEnds, 'screens with no visible action for a new account').toEqual([]);
