@@ -291,6 +291,18 @@ async function step(n, name, fn) {
       overdueIds: a.overdue.map((x) => x.id), todayIds: a.today.map((x) => x.id), doneTodayIds: a.completedToday.map((x) => x.id),
       completedTaskIds: t.reviewTasks.filter((x) => x.completedAt).map((x) => x.id), taskCount: t.reviewTasks.length, dates: t.reviewTasks.slice(0, 6).map((x) => [x.id, x.dueDate]),
     })).catch((e) => String(e).slice(0, 120));
+    // the review being concluded: the counters the handler decides on (answered/total), the box state and the message the student saw
+    entry.reviewRow = await page?.evaluate((rid) => {
+      const row = document.querySelector(`.review-row[data-review-id="${rid}"]`);
+      const section = row?.querySelector('[data-exercises-total]');
+      const box = row?.querySelector('[data-action="review-done"]');
+      return row ? {
+        total: section?.dataset.exercisesTotal, answered: section?.dataset.exercisesAnswered, correct: section?.dataset.exercisesCorrect, allAnswered: section?.dataset.allAnswered,
+        box: { checked: box?.checked, disabled: box?.disabled },
+        items: [...row.querySelectorAll('.review-exercise-item')].map((i) => ({ answered: i.dataset.exerciseAnswered, attemptId: i.dataset.attemptId ?? null, cls: i.className })),
+        message: document.querySelector('#review-message')?.innerText?.slice(0, 160) ?? null,
+      } : null;
+    }, ctx.reviewId).catch(() => null);
     entry.screen = await page?.evaluate(() => ({
       hash: location.hash, primary: document.querySelector('#today-primary-action-text')?.innerText?.slice(0, 120) ?? null,
       counters: [...document.querySelectorAll('[data-count-for]')].map((c) => [c.dataset.countFor, c.textContent.trim()]),
