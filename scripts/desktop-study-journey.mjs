@@ -139,11 +139,16 @@ async function launch({ place = true } = {}) {
   const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}${offline}` };
   app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
   const placement = place ? placeWindowOnSmallDisplay(app.pid) : Promise.resolve({ moved: false, reason: 'window restore check: the app must place itself' });
-  const deadline = Date.now() + 90000;
+  // A real start answers on the CDP port within seconds. Past 30 s the instrument is wrong (wrong exe, no WebView2 flag, a dialog), so fail
+  // with what is known instead of waiting 90 s, and say once every 10 s that it is still waiting and why that may be.
+  const startedAt = Date.now();
+  let lastNote = startedAt;
   for (;;) {
     try { if ((await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok) break; } catch { /* not yet */ }
-    if (app.exitCode !== null) throw new Error(`smartlearn.exe exited early (${app.exitCode})`);
-    if (Date.now() > deadline) throw new Error('CDP endpoint did not come up in 90 s');
+    if (app.exitCode !== null) throw new Error(`${exe} exited early (${app.exitCode})`);
+    const waited = Date.now() - startedAt;
+    if (waited > 30000) throw new Error(`CDP endpoint did not come up in 30 s: pid ${app.pid} still running, port ${cdpPort}, exe ${exe}. Check that this is the Tauri exe and that WebView2 accepted --remote-debugging-port.`);
+    if (Date.now() - lastNote >= 10000) { lastNote = Date.now(); console.error(`[journey] waiting for CDP on ${cdpPort} (${Math.round(waited / 1000)} s, pid ${app.pid} alive)`); }
     await sleep(300);
   }
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
