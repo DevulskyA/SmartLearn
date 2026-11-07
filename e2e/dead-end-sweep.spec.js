@@ -67,3 +67,53 @@ test('DEADEND-1: a brand-new account finds a visible action on every screen', as
   console.log(`DEADEND time to first visible action (ms): ${JSON.stringify(timings)}`);
   expect(deadEnds, 'screens with no visible action for a new account').toEqual([]);
 });
+
+// Same sweep with realistic data (a subject, two lessons, exercises): the screens that now hold content must still offer a next action,
+// and "Hoje" must lead the student to something to study (time to first value, printed as a number).
+test('DEADEND-2: with realistic study data every screen still offers an action and Plano reaches "Estudar agora"', async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+  }, API_BASE);
+  await signInRegistered(page, { email: `deadend2-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
+  const api = (path, body) => page.evaluate(async ({ base, path, body }) => {
+    const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+    const res = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrfToken }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+    return res.json();
+  }, { base: API_BASE, path, body });
+  const today = new Date().toISOString().slice(0, 10);
+  let subjectId = null;
+  for (const [title, qa] of [
+    ['Fármacos anti-hipertensivos', [['Qual é o mecanismo dos inibidores da ECA?', 'Bloqueiam a conversão de angiotensina I em II'], ['Qual efeito colateral típico dos IECA?', 'Tosse seca']]],
+    ['Insuficiência cardíaca', [['O que define fração de ejeção reduzida?', 'FEVE abaixo de 40%']]],
+  ]) {
+    const { unit } = await api('/v1/learning-units', subjectId ? { subjectId, title, studyDate: today } : { newSubjectName: 'Cardiologia', title, studyDate: today });
+    subjectId = unit.subjectId ?? unit.subject_id ?? subjectId;
+    for (const [question, answer] of qa) await api(`/v1/learning-units/${unit.id}/exercises`, { question, answer, provenance: 'MANUAL' });
+  }
+
+  const timings = {};
+  const deadEnds = [];
+  for (const screen of SCREENS) {
+    const started = Date.now();
+    await page.goto(`/#${screen}`);
+    const panel = page.locator(`[data-screen-panel="${screen}"]`);
+    await expect(panel).toBeVisible({ timeout: 8000 });
+    try {
+      await expect(panel.locator('button:visible:not([disabled]), a[href]:visible, input:visible:not([disabled]), select:visible:not([disabled]), textarea:visible:not([disabled])').first()).toBeVisible({ timeout: 5000 });
+      timings[screen] = Date.now() - started;
+    } catch { deadEnds.push(screen); }
+  }
+  console.log(`DEADEND2 time to first visible action with data (ms): ${JSON.stringify(timings)}`);
+  expect(deadEnds, 'screens with no visible action for an account with data').toEqual([]);
+
+  const started = Date.now();
+  await page.goto('/#plan');
+  const row = page.locator('.plan-row', { hasText: 'Fármacos anti-hipertensivos' });
+  await expect(row).toBeVisible({ timeout: 8000 });
+  await row.locator('.plan-expand-btn').click();
+  await row.locator('[data-action="plan-study-now"]').click();
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 2');
+  console.log(`DEADEND2 time from opening Plano to the first question (ms): ${Date.now() - started}`);
+});
