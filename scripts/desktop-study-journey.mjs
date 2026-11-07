@@ -11,7 +11,7 @@
 // (a separate target dir lets this run beside the human's own running Desktop). SL_JOURNEY_EXE overrides it.
 // Usage: node scripts/desktop-study-journey.mjs   -> prints ONE JSON object; exit code 0 only when every step passes.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
@@ -21,6 +21,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { chromium } from '@playwright/test';
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { startEditingSummary } from '../e2e/support/summary-editing.js';
+import { measure, compare, describe } from './journey-baseline.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
@@ -273,6 +274,7 @@ async function step(n, name, fn) {
   result.steps.push(entry);
   if (state.halted) return entry;
   const errorsBefore = consoleErrors.length;
+  const startedAt = Date.now();
   try {
     entry.evidence = await fn();
     entry.status = 'PASS';
@@ -295,6 +297,7 @@ async function step(n, name, fn) {
       activeScreen: document.querySelector('.screen:not([hidden])')?.id ?? null, scrollY: Math.round(window.scrollY),
     })).catch(() => null);
   }
+  entry.durationMs = Date.now() - startedAt;
   const newErrors = consoleErrors.slice(errorsBefore);
   if (newErrors.length) entry.consoleErrors = newErrors.slice(0, 5);
   // Optional: SL_JOURNEY_SHOTS=<dir> saves one screenshot of the window after every step, so a person (or an agent) can LOOK at what the student saw.
@@ -1160,5 +1163,18 @@ result.isolation = {
   humanDevDatastoreTouched: false,
 };
 result.pass = !result.fatal && result.steps.length === 23 && result.steps.every((s) => s.status === 'PASS') && result.isolation.database && result.isolation.sources && result.isolation.webviewProfile && result.isolation.underOsTemp && result.isolation.humanDevDatastoreTouched === false;
+// Duration baseline (rule: every test has a measured runtime). --record-baseline stores this run, but only when it passed 23/23.
+const BASELINE_FILE = join(root, 'e2e', '.journey-baseline.json');
+const measured = measure(result.steps);
+let baselineFile = null;
+try { baselineFile = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')); } catch { /* no baseline yet */ }
+if (process.argv.includes('--record-baseline')) {
+  if (result.pass) { writeFileSync(BASELINE_FILE, JSON.stringify({ recordedAt: new Date().toISOString(), head, ...measured }, null, 2) + '\n'); result.durationCheck = { status: 'RECORDED', total: measured.total }; }
+  else result.durationCheck = { status: 'NOT_RECORDED', reason: 'the run did not pass 23/23' };
+} else {
+  result.durationCheck = compare(baselineFile, measured);
+  if (result.durationCheck.status === 'NO_BASELINE') console.error('[journey] NO BASELINE for step durations; record one from a clean passing run with --record-baseline');
+  if (result.durationCheck.status === 'DEVIATION') console.error(`[journey] DURATION DEVIATION: ${describe(result.durationCheck.deviations)}. Investigate the target and the instrument before trusting this run.`);
+}
 console.log(JSON.stringify(result, null, 2));
-process.exit(result.pass ? 0 : 1);
+process.exit(result.pass ? (result.durationCheck.status === 'DEVIATION' ? 5 : 0) : 1);
