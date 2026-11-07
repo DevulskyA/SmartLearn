@@ -235,3 +235,16 @@ test('HTTP: POST /drafts/:id/questions adds, PATCH /drafts/:id/questions/order r
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+test('addQuestion twice with the same content (a retry) leaves ONE question and the same revision (E-021 class)', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'add-retry@example.com');
+    const { draftId } = await lessonOf(db, sourcesDir, userId, ['A', 'B']);
+    const first = drafts.addQuestion(db, userId, draftId, newQuestion('D'));
+    const second = drafts.addQuestion(db, userId, draftId, newQuestion('D'));
+    assert.equal(second.questions.length, first.questions.length);
+    assert.equal(second.revision, first.revision);
+    assert.deepEqual(second.questions.map((q) => q.id), first.questions.map((q) => q.id));
+  } finally { cleanup(); }
+});

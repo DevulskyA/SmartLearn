@@ -844,6 +844,10 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
   if (validated.quarantinedCount > 0 || validated.questions.length !== 1) {
     throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'sourceSpans');
   }
+  // A retried request (reply lost, button pressed again) must not append the same question twice: identical content is already there.
+  if (current.questions.some((q) => questionText(q) === questionText(validated.questions[0]))) {
+    return toDraftDto(draftRow, { db, userId });
+  }
   const added = { ...validated.questions[0], id: `q${current.questionSeq + 1}`, status: 'PROPOSED', version: 1, origin: 'HUMAN_ADDED', generatedBy: null, editedAt: null };
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,

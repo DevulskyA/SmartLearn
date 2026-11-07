@@ -5,6 +5,7 @@
 //   KEY       accepts an optional operationKey; same key + same payload returns the first result (asserted by its own test).
 //   STATE     naturally idempotent by state or uniqueness (asserted in creator-routes-concurrency.test.js or a unique index).
 //             By code reading (not a probe): drafts/accept returns the frozen acceptance_result_json; generation-jobs returns the ACTIVE job of the proposal;
+//             hint/reveal only raise max_assistance (monotonic); exams/submit changes status once; sources/proposals re-chunks by replacement; sources/scopes dedups by spans; proposals/drafts reuses the valid draft; drafts/questions skips identical content (probed, lesson-add-reorder.test.js).
 //             imports/preview reuses the row of the same checksum; imports/commit returns commit_result_json once committed_at is set; sources POST dedups by checksum.
 //   ACTION    acts on an existing record or session and a repeat is harmless. A review judgement, NOT individually probed.
 //   UNPROBED  creates or changes records and has NOT been probed for a duplicate yet. This is the open debt, listed on purpose.
@@ -19,23 +20,23 @@ const ROUTES_DIR = fileURLToPath(new URL('../src/routes', import.meta.url));
 const REGISTRY = {
   'attempts.js POST /exercises/:exerciseId/attempts': 'KEY',
   'attempts.js POST /attempts/:id/submit': 'KEY',
-  'attempts.js POST /attempts/:id/hint': 'UNPROBED',
-  'attempts.js POST /attempts/:id/reveal-solution': 'UNPROBED',
+  'attempts.js POST /attempts/:id/hint': 'ACTION',
+  'attempts.js POST /attempts/:id/reveal-solution': 'ACTION',
   'auth.js POST /auth/register': 'STATE',
   'auth.js POST /auth/login': 'ACTION',
   'auth.js POST /auth/logout': 'ACTION',
   'auth.js POST /auth/password': 'ACTION',
   'auth.js POST /auth/reset-password': 'ACTION',
-  'content-proposals.js POST /sources/:id/proposals': 'UNPROBED',
-  'content-proposals.js POST /sources/:id/scopes': 'UNPROBED',
+  'content-proposals.js POST /sources/:id/proposals': 'STATE',
+  'content-proposals.js POST /sources/:id/scopes': 'STATE',
   'evidence.js POST /learning-evidence': 'KEY',
   'exams.js POST /exams': 'STATE',
   'exams.js POST /exams/:id/finalize': 'ACTION',
-  'exams.js POST /exams/:id/submit': 'UNPROBED',
+  'exams.js POST /exams/:id/submit': 'STATE',
   'exercises.js POST /learning-units/:unitId/exercises': 'KEY',
   'exercises.js POST /learning-units/:unitId/exercises/reorder': 'ACTION',
-  'generated-drafts.js POST /proposals/:id/drafts': 'UNPROBED',
-  'generated-drafts.js POST /drafts/:id/questions': 'UNPROBED',
+  'generated-drafts.js POST /proposals/:id/drafts': 'STATE',
+  'generated-drafts.js POST /drafts/:id/questions': 'STATE',
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
   'generated-drafts.js POST /drafts/:id/accept': 'STATE',
   'generation-jobs.js POST /generation-jobs': 'STATE',
