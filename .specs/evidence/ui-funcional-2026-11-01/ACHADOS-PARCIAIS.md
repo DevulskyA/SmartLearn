@@ -176,3 +176,43 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Causa: o CI novo nunca tinha rodado; o `npm audit` não foi verificado antes do merge (declarado como não verificado no parecer).
 - Correção: katex 0.19.1 em 6eff76a (integração); 36 testes unitários e 13 E2E de matemática passam. Falta publicar na main (decisão do dono).
 - Classe do erro (regra de auditoria de erro próprio): 3, sem regra que cobrisse "um gate novo que nunca rodou deve rodar localmente antes do merge". Guarda: rodar `npm audit --omit=dev` e `npm audit` do servidor antes de qualquer merge que traga CI.
+
+## Estabilização 2026-11-07 (HEAD 37b17e7 + alterações locais)
+
+### E-021 — `attempts.start()` não era idempotente (REPRODUZIDO e CORRIGIDO)
+- Onde: `server/src/services/attempts.js` `start()`; cliente `src/app.js` `ensureAttemptStarted`, `recordStudyNowReveal`, `judgeStudyNow`; `src/remote-store.js` `attempts.start`.
+- Esperado: resposta de `start` perdida e repetida devolve a mesma tentativa. Observado: segunda linha `STARTED` órfã (teste de serviço vermelho; E2E com a chave removida: 2 linhas, `STARTED` + `SUBMITTED`).
+- Gravidade: média (tentativa órfã suja o ledger; não altera evidência agregada).
+- Correção: `operationKey` opcional via `idempotency.js` na mesma transação do INSERT (409 em reuso conflitante); chave por (sessão de estudo, questão) e Promise compartilhada por item no Hoje. Provas: `server/test/attempts.test.js` 20/20 (inclui corrida HTTP); `e2e/study-retest-network.spec.js` RETESTNET-1 (3) + RETESTNET-2 novo, mutação sem chave falha como esperado.
+- Reproduzir: `cd server && node --test test/attempts.test.js`.
+
+### E-025 — `draft-autosave.spec.js:152` estourava os 30 s (INSTRUMENTO, não produto)
+- Observado: passa sozinho com 90 s (39,1 s no total); com 30 s o tempo acaba no laço de digitação. Esperado: limite > 2x o tempo medido.
+- Classificação (regra "Own errors"): 2 — a regra "limite > 2x o tempo sozinho" (registro de 2026-11-03) existia, mas não varre testes que nunca tiveram o tempo medido. Correção: `test.setTimeout(75000)` com o tempo medido no comentário; arquivo todo 17/17 (3,6 min).
+- Guarda pendente: baseline por teste (`--record-baseline`) para os specs sem tempo registrado.
+
+### E-026 — `draft-acceptance:79` e `content-quality-flow:130` estouram sob carga (3-4 workers)
+- Observado: nas suítes `materials@3w` falharam por timeout de 30 s; sozinhos passam (33,7 s e 35,7 s no total, ou seja, já acima do limite padrão). Status: não reproduzido isolado; sensível a carga. Ação: ver rodada completa e medir baseline.
+
+### REG-01 — "regressões" de PDF, editor, temas e i18n relatadas pelo dono
+- Evidência (A): `~/SmartLearn-DevData/last-launch.json` aponta para `C:\Users\Ariel\smartlearn-open-20261105`, branch `claude/smartlearn-v1-complete`, HEAD `ed15172` (5 temas, 8 telas, 1 locale). O HEAD atual tem 24 opções de tema, `src/i18n` com 28 arquivos pt-BR, `pdf-crop-dialog`, `summary-visual-editor`, e zero arquivos removidos de `src`, `shared`, `server/src` contra `ed15172`.
+- Inferência (B): o app aberto era o código antigo, por causa do guardrail `require-work-branch.mjs`. Falta confirmação do dono.
+
+### Fechamento 2026-11-07
+- E-026: `draft-acceptance:79`, `content-quality-flow:130`, `account-password-hint:5` e `accessibility:116` passam sozinhos e com 3 workers sob o timeout de 60 s (27/27). Causa: limite de 30 s curto para testes saudáveis de 30-40 s e máquina disputada por outro agente (dois `npm test` simultâneos vistos). Correção: `timeout: 60000` em `playwright.config.js`.
+- E2E completo: 439 ok, 2 puladas, 2 falhas de timeout, 887 s contra baseline 702 s (+26%); desvio reportado, explicado por contenção, não por defeito. Sem baseline para smoke/summary/materials/completo.
+- Instrumento: um `npm test --silent | grep` do servidor ficou pendurado sem saída; a mesma suíte direta (`node --test`) deu 1230/1230 em 123 s. Causa não investigada além de "invólucro"; mesma classe de E-024 se repetir: guarda = rodar direto com tempo esperado.
+
+### Rodada final 2026-11-07 (17:14-17:38)
+- E2E: smoke 10/10 (62 s), summary 105/105 (269 s), materials 67/67 (238 s), completo 441 ok / 0 falhas / 2 puladas (894 s). Baselines gravados em `e2e/.duration-baseline.json`; `full@3w` passou de 702 (425 testes) para 895 (441 testes). Desvio de +27% com +4% de testes: contenção de outro agente na máquina (dois `npm test` ociosos vistos); re-gravar com a máquina livre.
+- Erro MEU de instrumento (classe 1, regra "Instrument integrity": o laço de espera deve casar só a linha final): meu `grep "E2E passed.*[0-9]{3} s"` casou linhas de suítes anteriores e encerrou a espera cedo; percebido pelo relógio e corrigido para casar `baseline full`. Sem efeito no resultado.
+
+## Jornada Desktop real 2026-11-07 (autorizada pelo owner)
+- Alvo: exe debug construído do HEAD 3575715 em CARGO_TARGET_DIR=C:/Projetos/SmartLearn-journey-target; dados descartáveis em temp; humanDevDatastoreTouched=false.
+- Resultado: 23/23 PASS com CODEX real (provider CODEX, modelo codex:default, 3 questões, geração 70 s). Inclui E-021 no fluxo Estudar agora/Hoje, reabertura, editor visual, autosave, figuras.
+- OBS-J1 (baixa, não investigada): 5 `console.error` "401 Unauthorized" (passos 1, 2, 22, 23). Prováveis sondas pré-sessão/pós-kill do autosave; passos passaram. Reproduzir: rodar a jornada e ler consoleErrorSample. Status: aberto.
+- Instrumento: `npm run build` foi bloqueado pelo guardrail SMARTLEARN_WRONG_WORKTREE (branch codex/restore-pdf-parity); dist usado era de 17:31, posterior à edição de src/app.js (15:59) e contém attemptKey (verificado). Exe antigo (05/11) não servia: sem E-021.
+
+## Rodada 2026-11-07 (noite): classe E-021 e teste instável
+- E-028 (média, corrigido): `POST /learning-units/:id/exercises` e `POST /learning-evidence` (EXTERNAL) duplicavam sob chamada simultânea (2 linhas). Achado pela sonda `server/test/creator-routes-concurrency.test.js`. Correção: `operationKey` opcional (idempotência no mesmo `db.transaction`, como `attempts.start`); sem chave o comportamento é o antigo; reuso com payload diferente = 409. `subjects` e `exams` já eram seguros por estado. Rotas ainda não sondadas (exigem fixtures): `/generation-jobs`, `/proposals/:id/drafts`, `/drafts/:id/accept`, `/imports/:id/commit`, `/sources`. O cliente ainda NÃO envia a chave nessas duas rotas (próximo passo: `src/remote-store.js`).
+- E-029 (baixa, corrigido): `server/test/process-smoke.test.js` "restart on same DB after graceful stop retains a written marker" falhou 2 em 4 rodadas com `waitFor timed out` (5,2 s). Causa: timeout de 5 s para subir um servidor real enquanto `node --test` roda outros arquivos em paralelo (instrumento, não produto). Correção: 15 s; depois 3 rodadas completas seguidas 1234/1234. Classe 3 das regras de erro meu/instrumento (nenhuma regra cobria; guarda é o próprio timeout dimensionado e o comentário no código).
