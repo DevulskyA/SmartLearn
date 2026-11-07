@@ -1,4 +1,5 @@
 import { dm, splitMessage } from '../api-error-messages.js';
+import { checkIdempotency, recordIdempotency } from './idempotency.js';
 
 const PROVENANCE_VALUES = new Set(['MANUAL', 'SOURCE', 'AI_GENERATED']);
 
@@ -114,9 +115,15 @@ export function getById(db, userId, id) {
 }
 
 /** Creates an exercise and its first immutable version in one transaction. */
-export function create(db, userId, { unitId, question, answer, explanation, hint, provenance }) {
+export function create(db, userId, { unitId, question, answer, explanation, hint, provenance, operationKey = null }) {
   if (!findOwnedUnit(db, userId, unitId)) throw new ExerciseError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
   validateQuestionAndProvenance({ question, provenance });
+
+  // Opt-in idempotency (E-021 class): the same operationKey with the same payload returns the exercise already created,
+  // so a retry after a lost reply or a double submit leaves ONE exercise. No key = unchanged behaviour.
+  const operation = 'create-exercise';
+  const check = checkIdempotency(db, { userId, operation, operationKey, payload: { unitId, question, answer, explanation, hint, provenance } });
+  if (check.cached) return check.result;
 
   const run = db.transaction(() => {
     const now = new Date().toISOString();
@@ -132,10 +139,12 @@ export function create(db, userId, { unitId, question, answer, explanation, hint
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(userId, exerciseId, question, answer ?? null, explanation ?? null, hint ?? null, provenance, now);
 
-    return exerciseId;
+    const dto = getById(db, userId, exerciseId);
+    recordIdempotency(db, { userId, operation, operationKey, payloadHash: check.payloadHash, result: dto });
+    return dto;
   });
 
-  return getById(db, userId, run());
+  return run();
 }
 
 /**

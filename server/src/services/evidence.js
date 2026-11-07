@@ -1,4 +1,5 @@
 import { dm, splitMessage } from '../api-error-messages.js';
+import { checkIdempotency, recordIdempotency } from './idempotency.js';
 
 const DIRECT_TYPES = new Set(['INITIAL_PRACTICE', 'EXTERNAL']);
 
@@ -80,7 +81,7 @@ function toDto(row) {
  * claimed — a bad id is rejected, never silently dropped, so a caller can't
  * end up with fewer linked attempts than it thinks it asked for.
  */
-export function create(db, userId, { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds }, now = () => new Date()) {
+export function create(db, userId, { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds, operationKey = null }, now = () => new Date()) {
   if (!DIRECT_TYPES.has(type)) {
     throw new EvidenceError('VALIDATION_FAILED', 'type deve ser INITIAL_PRACTICE ou EXTERNAL. Evidência REVIEW só é criada ao concluir uma revisão.', 'type');
   }
@@ -103,6 +104,14 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
   }
 
   const ids = Array.isArray(attemptIds) ? [...new Set(attemptIds)] : [];
+
+  // Opt-in idempotency (E-021 class): the same operationKey with the same payload returns the evidence already
+  // recorded, so a retry after a lost reply or a double submit leaves ONE row in the immutable ledger. Checked before
+  // the attempt links are validated, because on a replay those attempts are legitimately linked already.
+  const operation = 'create-evidence';
+  const check = checkIdempotency(db, { userId, operation, operationKey, payload: { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds: [...ids].sort((a, b) => a - b) } });
+  if (check.cached) return check.result;
+
   if (ids.length > 0) {
     if (type !== 'INITIAL_PRACTICE') {
       throw new EvidenceError('VALIDATION_FAILED', 'attemptIds só é aceito para type INITIAL_PRACTICE.', 'attemptIds');
@@ -131,10 +140,12 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
     const linkAttempt = db.prepare('UPDATE exercise_attempts SET evidence_id = ? WHERE user_id = ? AND id = ?');
     for (const attemptId of ids) linkAttempt.run(evidenceId, userId, attemptId);
 
-    return evidenceId;
+    const dto = toDto(db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? AND id = ?').get(userId, evidenceId));
+    recordIdempotency(db, { userId, operation, operationKey, payloadHash: check.payloadHash, result: dto });
+    return dto;
   });
 
-  return toDto(db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? AND id = ?').get(userId, run()));
+  return run();
 }
 
 /**
