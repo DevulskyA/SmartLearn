@@ -53,7 +53,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
 |---|---|---|
 | Unitários do cliente, `shared/` e scripts | `test/*.test.js` | `npm test` |
 | Servidor | `server/test/*.test.js` | `npm --prefix server test` |
-| Ponta a ponta | `e2e/*.spec.js` | `npm run test:e2e` (≈ 8 min; rodar em segundo plano) |
+| Ponta a ponta | `e2e/*.spec.js` | `npm run test:e2e` (≈ 14 min, medido em 2026-11-07 com 3 workers e máquina ociosa; rodar em segundo plano) |
 | Descoberta de testes | todos | `npm run test:inventory` falha se um teste estiver fora dessas pastas |
 | Lint | tudo | `npm run lint` (zero avisos) |
 | Estado do projeto | `.specs` | `npm run context:check` |
