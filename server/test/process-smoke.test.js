@@ -34,7 +34,9 @@ function startServer({ dbPath, port, cwd }) {
   };
 }
 
-async function waitFor(fn, { timeout = 5000, interval = 150 } = {}) {
+// 15 s, not 5 s: this file boots real server processes while `node --test` runs the other files in parallel; under that
+// load a cold start was seen to take over 5 s (flaky "waitFor timed out", 2026-11-07). The happy path still returns at once.
+async function waitFor(fn, { timeout = 15000, interval = 150 } = {}) {
   const start = Date.now();
   let lastErr;
   while (Date.now() - start < timeout) {
