@@ -262,11 +262,10 @@ const exercises = {
   // Matches src/db.js's real signature: (unitId, fields) — two args, not
   // one merged object. app.js's actual call sites (add-exercise) rely on
   // this exact shape.
-  async create(unitId, { questionText, answerText, hintText, explanationText, provenance } = {}) {
-    const { exercise } = await apiRequest(`/v1/learning-units/${unitId}/exercises`, {
-      method: 'POST',
-      body: { question: questionText, answer: answerText, hint: hintText, explanation: explanationText, provenance },
-    });
+  async create(unitId, { questionText, answerText, hintText, explanationText, provenance, operationKey } = {}) {
+    const body = { question: questionText, answer: answerText, hint: hintText, explanation: explanationText, provenance };
+    if (operationKey) body.operationKey = operationKey;
+    const { exercise } = await apiRequest(`/v1/learning-units/${unitId}/exercises`, { method: 'POST', body });
     return mapExercise(exercise);
   },
   // explanationText: undefined keeps the current "Por quê"; null clears it (server: undefined = keep).
@@ -382,12 +381,13 @@ const learningEvidence = {
     const { evidence } = await apiRequest(`/v1/learning-evidence?unitId=${encodeURIComponent(unitId)}`);
     return evidence.map(mapEvidence);
   },
-  async create({ unitId, context, questionsCount, correctCount, evidenceDate, attemptIds }) {
+  async create({ unitId, context, questionsCount, correctCount, evidenceDate, attemptIds, operationKey }) {
     if (context === 'REVIEW') {
       throw new RemoteStoreError('UNSUPPORTED_DIRECT_REVIEW_EVIDENCE', t('store.error.unsupportedDirectReviewEvidence'));
     }
     const body = { unitId, type: context, questionsCount, correctCount, evidenceDate };
     if (Array.isArray(attemptIds) && attemptIds.length > 0) body.attemptIds = attemptIds;
+    if (operationKey) body.operationKey = operationKey;
     const { evidence } = await apiRequest('/v1/learning-evidence', { method: 'POST', body });
     return mapEvidence(evidence);
   },

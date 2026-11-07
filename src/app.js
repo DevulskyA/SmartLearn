@@ -4744,6 +4744,19 @@ async function renderExerciseList(unitId) {
   }
 }
 
+// One idempotency key per LOGICAL creation (E-021 class): a retry of the same form content after a lost reply reuses the key
+// and the server returns the row it already made; changed content is a new creation and gets a new key. Cleared on success.
+const pendingCreateKeys = new WeakMap();
+function createKeyFor(host, signature) {
+  if (!host) return crypto.randomUUID();
+  let entry = pendingCreateKeys.get(host);
+  if (!entry || entry.signature !== signature) {
+    entry = { signature, key: crypto.randomUUID() };
+    pendingCreateKeys.set(host, entry);
+  }
+  return entry.key;
+}
+
 // The "add exercise" form under a study: validates the question, creates the exercise, clears the form and reports the outcome
 // in the form's own message line. `section` is the study's exercises section; `button` is the form's Add button.
 async function addExerciseFromForm(section, studyId, button) {
@@ -4760,13 +4773,15 @@ async function addExerciseFromForm(section, studyId, button) {
   }
   button.disabled = true;
   try {
-    await DB.exercises.create(studyId, {
+    const fields = {
       questionText,
       answerText: aInput?.value.trim() ?? "",
       hintText: hInput?.value.trim() || null,
       ...(wInput ? { explanationText: wInput.value.trim() || null } : {}),
       provenance: 'MANUAL',
-    });
+    };
+    await DB.exercises.create(studyId, { ...fields, operationKey: createKeyFor(section, JSON.stringify([studyId, fields])) });
+    pendingCreateKeys.delete(section);
     if (qInput) qInput.value = "";
     if (aInput) aInput.value = "";
     if (hInput) hInput.value = "";
@@ -5575,12 +5590,14 @@ reviewDashboard.addEventListener("click", async (event) => {
   try {
     const today = getLocalDateValue();
     await DB.learningEvidence.create({
+      operationKey: createKeyFor(row, JSON.stringify([unitId, today, questionsCount, correctCount])),
       unitId,
       evidenceDate: today,
       context: "EXTERNAL",
       questionsCount,
       correctCount,
     });
+    if (row) pendingCreateKeys.delete(row);
     if (qInput) qInput.value = "";
     if (aInput) aInput.value = "";
     if (msgEl) {
