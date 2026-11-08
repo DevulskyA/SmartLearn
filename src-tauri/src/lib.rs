@@ -321,6 +321,13 @@ fn spawn_local_backend(resource_dir: &Path, app_data_dir: &Path) -> Result<Local
         .envs(env)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // The Desktop is a windowless GUI process; without this flag Windows gives the console-subsystem node.exe its own visible console window.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
 
     let mut child = command.spawn().map_err(|e| {
         format!("failed to spawn local backend (program: {}): {e}", node_program.display())
