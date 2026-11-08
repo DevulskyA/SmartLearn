@@ -207,7 +207,15 @@ test('only scripts/launch-desktop-dev.ps1 assigns SMARTLEARN_AI_CONSENT among ev
     return assigns.test(readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|#)/.test(l) && !/^\s*\/\*/.test(l)).join('\n'));
   }).map((f) => relative(REPO_ROOT, f).split(sep).join('/'));
   // scripts/inspect-package.mjs only LISTS the name (to look for it in the artifact); it never assigns it.
-  assert.deepEqual(assigning, ['scripts/launch-desktop-dev.ps1']);
+  // Owner decision 2026-11-08: the isolated Homologacao launcher may also give consent, but only for the real CODEX provider (asserted below).
+  assert.deepEqual(assigning, ['scripts/launch-desktop-dev.ps1', 'scripts/launch-homologacao.ps1']);
+});
+
+test('the Homologacao launcher gives AI consent only for the CODEX provider and never for the free one', () => {
+  const launcher = readFileSync(join(REPO_ROOT, 'scripts', 'launch-homologacao.ps1'), 'utf8');
+  const lines = launcher.split(/\r?\n/).filter((l) => /SMARTLEARN_AI_CONSENT/.test(l) && !/^\s*#/.test(l));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /^if \(\$Provider -eq 'CODEX'\) \{ \$env:SMARTLEARN_AI_CONSENT = 'true' \} else \{ Remove-Item Env:SMARTLEARN_AI_CONSENT/);
 });
 
 test('the DEV launcher is the DEV build: it stamps mode DEV, refuses to run outside the work branch and never builds an installer', () => {

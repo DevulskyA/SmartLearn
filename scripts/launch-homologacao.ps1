@@ -75,7 +75,8 @@ $env:SMARTLEARN_SOURCES_DIR = $sourcesDir
 $env:SMARTLEARN_WEBVIEW_DATA_DIR = $webviewDir
 $env:SMARTLEARN_LOCAL_AUTHORITY = 'true'
 $env:SMARTLEARN_AI_PROVIDER = $Provider
-$env:SMARTLEARN_AI_CONSENT = 'true'
+# Consent for paid AI is given only when the owner opens this shortcut with the real CODEX provider; the free provider never gets it.
+if ($Provider -eq 'CODEX') { $env:SMARTLEARN_AI_CONSENT = 'true' } else { Remove-Item Env:SMARTLEARN_AI_CONSENT -ErrorAction SilentlyContinue }
 $env:SMARTLEARN_CODEX_TIMEOUT_MS = '1200000'
 $env:SMARTLEARN_BUILD_MODE = 'DEV'
 $env:SMARTLEARN_BUILD_HEAD = [string]$manifest.commit
