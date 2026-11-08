@@ -38,4 +38,10 @@ Run each step only after the previous one passes. Stop at the first failure and 
 ## D. Known residual risk
 
 - E-039 (one 29.8 s stall at step 6 in 1 of 5 real runs) is not reproduced and has no proven cause. See `.specs/evidence/ui-funcional-2026-11-01/ACHADOS-PARCIAIS.md`.
-- On the non-experimental review path, `ALREADY_COMPLETED` is treated as recorded and review evidence is held in memory only.
+- Review evidence (E-042, verified, no defect): judgments are restored from the server on reload and the conclusion is one transaction; the only thing lost if the app closes before an unsent judgment is retried is that one answer, which the student gives again. No partial or duplicated evidence.
+
+## E. Isolated check of the corrected executable (no human data, no paid generation)
+
+- Identity of the binary: `node scripts/desktop-identity.mjs <exe> --expected <inputsHash from scripts/build-identity.mjs>` (exit 0 = serves the expected content).
+- Backend served and data path: `SL_JOURNEY_EXE=<exe> SL_JOURNEY_PROVIDER=FAKE node scripts/desktop-study-journey.mjs` (step 2 checks the window title, backend build identity, that the backend child runs from the binary's own folder, that no Node console window exists, and that the data lives in a throwaway directory; 23/23 expected).
+- The launcher `scripts/launch-desktop-dev.ps1` now also refuses an exe that serves other content. It opens the human DEV datastore, so it is NOT run by the agent. The shortcuts Oficial and DEV are unchanged until the owner authorizes it.

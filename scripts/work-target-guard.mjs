@@ -17,10 +17,10 @@ export function branchAllowed(branch, allowed) {
 }
 
 /** Pure decision. env: process.env-like. Returns { ok, code, message }. Fails closed on any unreadable input. */
-export function evaluate({ env, toplevel, branch, root, allowed }) {
+export function evaluate({ env, toplevel, branch, root, allowed, rootIsRepo = true }) {
   const ci = env.GITHUB_ACTIONS === 'true' || ['true', '1'].includes(String(env.CI ?? '').trim().toLowerCase());
   if (ci) return { ok: true, code: 'CI' };
-  if (!toplevel) return { ok: true, code: 'NOT_A_GIT_REPO' };
+  if (!toplevel) return rootIsRepo ? { ok: false, code: 'OUTSIDE_CHECKOUT', message: `Command runs outside any git checkout but its scripts live in the checkout ${root}. Run it from inside that checkout.` } : { ok: true, code: 'NOT_A_GIT_REPO' };
   const same = (a, b) => { try { return realpathSync(a).toLowerCase() === realpathSync(b).toLowerCase(); } catch { return false; } };
   if (!same(toplevel, root)) return { ok: false, code: 'WRONG_EXECUTION_ROOT', message: `Command runs in ${toplevel} but its scripts live in ${root}. Run it from the checkout that holds the scripts.` };
   if (!Array.isArray(allowed) || allowed.length === 0) return { ok: false, code: 'NO_ALLOWED_BRANCHES', message: 'scripts/work-branches.json has no allowed branches.' };
@@ -35,7 +35,9 @@ function main() {
   try { toplevel = git(['rev-parse', '--show-toplevel']); branch = git(['branch', '--show-current']); } catch { toplevel = null; }
   let allowed = [];
   try { allowed = JSON.parse(readFileSync(resolve(scriptRoot, 'scripts', 'work-branches.json'), 'utf8')).allowed ?? []; } catch { allowed = []; }
-  const r = evaluate({ env: process.env, toplevel, branch, root: scriptRoot, allowed });
+  let rootIsRepo = true;
+  try { execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: scriptRoot, stdio: 'ignore' }); } catch { rootIsRepo = false; }
+  const r = evaluate({ env: process.env, toplevel, branch, root: scriptRoot, allowed, rootIsRepo });
   console.log(`SMARTLEARN_ROOT=${toplevel ?? '(none)'}`);
   console.log(`SMARTLEARN_BRANCH=${branch || '(detached HEAD)'}`);
   if (!r.ok) { console.error(`\nSMARTLEARN_WRONG_WORKTREE ${r.code}\n${r.message}`); process.exit(1); }

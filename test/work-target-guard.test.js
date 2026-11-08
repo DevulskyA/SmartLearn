@@ -70,5 +70,15 @@ test('CI (GitHub Actions or CI=true/1) skips the check; CI=false/0 does not', ()
 
 test('fails closed: empty allowed list refuses; no git repo is not a decision', () => {
   assert.equal(evaluate({ env: {}, toplevel: process.cwd(), branch: 'x', root: process.cwd(), allowed: [] }).ok, false);
-  assert.equal(evaluate({ env: {}, toplevel: null, branch: '', root: process.cwd(), allowed: ALLOWED }).code, 'NOT_A_GIT_REPO');
+  assert.equal(evaluate({ env: {}, toplevel: null, branch: '', root: process.cwd(), allowed: ALLOWED, rootIsRepo: false }).code, 'NOT_A_GIT_REPO');
+  assert.equal(evaluate({ env: {}, toplevel: null, branch: '', root: process.cwd(), allowed: ALLOWED, rootIsRepo: true }).code, 'OUTSIDE_CHECKOUT');
 });
+
+test('running the scripts of a checkout from a directory outside any repository is refused', () => withRepos([['candidate/x']], (r) => {
+  const outside = mkdtempSync(join(tmpdir(), 'sl-outside-'));
+  try {
+    const out = run(outside, r);
+    assert.equal(out.status, 1, out.output);
+    assert.match(out.output, /OUTSIDE_CHECKOUT/);
+  } finally { rmSync(outside, { recursive: true, force: true }); }
+}));
