@@ -291,6 +291,21 @@ async function step(n, name, fn) {
     entry.dom = await page?.evaluate(() => [...document.querySelectorAll('.review-row')].slice(0, 20).map((r) => ({
       id: r.dataset.reviewId, shown: r.offsetParent !== null, done: r.classList.contains('is-done') || r.dataset.done || null, text: r.innerText.replace(/\s+/g, ' ').slice(0, 70),
     }))).catch(() => null);
+    // the lesson editor as it was on screen (structure only, no student text beyond 200 chars per node) and the draft the server holds, so a failure
+    // with a real model's draft can be diagnosed without paying for a second run
+    entry.editorDom = await page?.evaluate(() => {
+      const editor = document.querySelector('.lesson-editor');
+      if (!editor) return null;
+      return {
+        tabs: [...editor.querySelectorAll('[role="tab"]')].map((t) => ({ name: t.innerText.trim().slice(0, 30), selected: t.getAttribute('aria-selected') })),
+        items: [...editor.querySelectorAll('.lesson-qitem')].map((b) => ({ qid: b.dataset.qid, current: b.getAttribute('aria-current'), text: b.innerText.replace(/\s+/g, ' ').slice(0, 60) })),
+        qeditorHtml: (editor.querySelector('.lesson-qeditor')?.outerHTML ?? '(no .lesson-qeditor)').slice(0, 2500),
+        textareas: editor.querySelectorAll('.lesson-qeditor textarea').length,
+      };
+    }).catch(() => null);
+    entry.draftSnapshot = ctx.draftId ? await api('GET', `/v1/drafts/${ctx.draftId}`).then((r) => ({
+      status: r.draft.status, questions: (r.draft.questions ?? []).map((q) => ({ id: q.id, idType: typeof q.id, type: q.questionType ?? null, status: q.status, spans: (q.sourceSpans ?? []).length, lens: [String(q.question ?? '').length, String(q.answer ?? '').length, String(q.explanation ?? '').length] })),
+    })).catch(() => null) : null;
     // ...and what the server and the persisted state said at the same instant: three views of one moment (database state via API, DOM, screen counters)
     entry.apiState = await Promise.all([api('GET', '/v1/agenda'), api('GET', '/v1/review-tasks')]).then(([a, t]) => ({
       overdueIds: a.overdue.map((x) => x.id), todayIds: a.today.map((x) => x.id), doneTodayIds: a.completedToday.map((x) => x.id),
