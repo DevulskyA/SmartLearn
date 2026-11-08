@@ -117,6 +117,9 @@ if (-not $NoBuild) {
   if ($LASTEXITCODE -ne 0) { Fail 'A compilacao do executavel local falhou. Veja o console.' }
 }
 if (-not (Test-Path $devExe)) { Fail "Executavel local ausente: $devExe" }
+# The exe serves the copy that sits NEXT TO IT, not the staging folder checked above: refuse an exe whose served content is not the current one.
+$served = (node scripts/desktop-identity.mjs $devExe --expected $identity.inputsHash 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "O executavel nao serve o conteudo atual. $served Nada foi aberto." }
 Write-Host "SMARTLEARN DEV"
 Write-Host "Executable: $devExe"
 Write-Host "Database: $devDb"

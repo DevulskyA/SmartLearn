@@ -371,6 +371,9 @@ try {
   await step(2, 'confirm frontend, backend and database (title, health, version)', async () => {
     const title = ps(`(Get-Process -Id ${app.pid}).MainWindowTitle`);
     expect(title === expectedTitle, `native window title "${title}" != "${expectedTitle}"`);
+    // The Node backend must not own a console window (it was a black "node.exe" window at every start): its main window handle must be 0.
+    const backendWindows = ps(`Get-CimInstance Win32_Process -Filter "ParentProcessId=${app.pid} AND Name='node.exe'" | ForEach-Object { (Get-Process -Id $_.ProcessId).MainWindowHandle }`).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    expect(backendWindows.length >= 1 && backendWindows.every((h) => h === '0'), `the Node backend owns a visible window (handles: ${backendWindows.join(',') || 'no node child found'})`);
     const info = await page.evaluate(async () => {
       const ready = await fetch('/health/ready');
       const build = await (await fetch('/health/build')).json();
