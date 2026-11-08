@@ -1010,7 +1010,7 @@ try {
       await remaining.getByRole('button', { name: 'Acertei' }).click();
       await page.waitForFunction(({ id: rid, idx }) => document.querySelectorAll(`.review-row[data-review-id="${rid}"] .review-exercise-item`)[idx]?.dataset.attemptId, { id, idx: i }, { timeout: 10000 });
     }
-    const expectedCorrect = 2 + (ctx.reviewTotal - 2); // the first was right, the second wrong (step 14), every remaining one right
+    const expectedCorrect = 1 + (ctx.reviewTotal - 2); // the first was right, the second wrong (step 14), every remaining one right
     await page.waitForFunction((rid) => document.querySelector(`[data-action="review-done"][data-review-id="${rid}"]`)?.checked === true, id, { timeout: 15000 });
     const tasks = (await api('GET', '/v1/review-tasks')).reviewTasks;
     const done = tasks.find((t) => String(t.id) === String(id));
