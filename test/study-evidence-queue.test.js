@@ -130,3 +130,34 @@ test('review intents can remain in memory without gaining a durable replay lifec
   await setup(async (item) => sent.push(item), { data: state.data }).queue.flush();
   assert.deepEqual(sent, [{ operationKey: 'practice', context: 'INITIAL_PRACTICE' }]);
 });
+
+test('a slow send of an old block does not make the flush of a newer block wait for it', async () => {
+  let release;
+  const sent = [];
+  const { queue } = setup(async (item) => {
+    sent.push(item.operationKey);
+    if (item.operationKey === 'slow') await new Promise((resolve) => { release = resolve; });
+  });
+  queue.enqueue({ operationKey: 'slow' });
+  const slow = queue.flush();
+  queue.enqueue({ operationKey: 'fast' });
+  await queue.flush(); // resolves while 'slow' is still unanswered
+  assert.deepEqual(sent, ['slow', 'fast']);
+  assert.equal(queue.pendingCount(), 1);
+  release();
+  await slow;
+  assert.equal(queue.pendingCount(), 0);
+});
+
+test('an item that keeps failing does not hide the ones behind it, and the failure is still reported', async () => {
+  const sent = [];
+  const { queue } = setup(async (item) => {
+    if (item.operationKey === 'bad') throw new Error('rejected');
+    sent.push(item.operationKey);
+  });
+  queue.enqueue({ operationKey: 'bad' });
+  queue.enqueue({ operationKey: 'good' });
+  await assert.rejects(queue.flush(), /rejected/);
+  assert.deepEqual(sent, ['good']);
+  assert.equal(queue.pendingCount(), 1);
+});

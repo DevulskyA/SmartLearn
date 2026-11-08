@@ -2,7 +2,7 @@
 // retries keep the original payload/key, and only an acknowledged item is removed.
 export function createStudyEvidenceQueue({ getScope, storage, send, shouldPersist = () => true }) {
   const queues = new Map();
-  const flights = new Map();
+  const sending = new Set();
   const prefix = (scope) => `smartlearn.pending-study-evidence.${encodeURIComponent(scope)}.`;
   const intentId = (evidence) => evidence.operationKey ?? JSON.stringify([evidence.reviewTaskId, evidence.obligationUnitId]);
   function queueFor(scope) {
@@ -38,23 +38,34 @@ export function createStudyEvidenceQueue({ getScope, storage, send, shouldPersis
       const scope = getScope();
       return scope == null ? 0 : queueFor(scope).size;
     },
-    flush() {
+    // Sends every item not already being sent. An item whose send is slow or lost must not hold back the others (the result of a new
+    // block waits for its own send only), and a failing item must not hide the ones behind it: the first failure is rethrown at the end.
+    async flush() {
       const scope = getScope();
-      if (scope == null) return Promise.resolve();
-      if (flights.has(scope)) return flights.get(scope);
+      if (scope == null) return;
       const items = queueFor(scope);
-      const flight = (async () => {
-        while (items.size && getScope() === scope) {
-          const [id, evidence] = items.entries().next().value;
+      const tried = new Set();
+      let failure = null;
+      for (;;) {
+        if (getScope() !== scope) break;
+        const next = [...items].find(([id]) => !tried.has(id) && !sending.has(scope + id));
+        if (!next) break;
+        const [id, evidence] = next;
+        tried.add(id);
+        sending.add(scope + id);
+        try {
           await send(evidence);
           items.delete(id);
           if (shouldPersist(evidence)) {
             try { storage.removeItem(prefix(scope) + id); } catch { /* A replay remains safe if storage is unavailable. */ }
           }
+        } catch (error) {
+          failure ??= { error };
+        } finally {
+          sending.delete(scope + id);
         }
-      })();
-      flights.set(scope, flight);
-      return flight.finally(() => { flights.delete(scope); });
+      }
+      if (failure) throw failure.error;
     },
   };
 }

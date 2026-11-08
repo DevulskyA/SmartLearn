@@ -6588,6 +6588,8 @@ accountLoginForm?.addEventListener("submit", async (event) => {
     authenticated = true;
     const user = AuthUI.getCurrentUser();
     if (user) OfflineStore.syncSnapshot(user.id).catch(() => {});
+    // evidence this account left unsent (another student may have used the screen since) goes out now, under this account
+    if (pendingStudyEvidence.pendingCount()) recordStudyEvidence().catch((error) => console.error("Falha ao registrar o resultado pendente.", error));
   }
 });
 
