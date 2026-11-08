@@ -9,6 +9,7 @@ import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { verifyServedIdentity } from './desktop-identity.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
@@ -23,6 +24,11 @@ const freePort = () => new Promise((ok, fail) => { const s = createServer(); s.l
 
 const instrument = (message) => { console.error(`INSTRUMENT: ${message}`); process.exit(2); };
 if (!existsSync(exe)) instrument(`debug executable missing: ${exe}`);
+// the exe serves the frontend beside it: it must be the CURRENT content (scripts/desktop-identity.mjs), or this sweep would prove an older build
+// SL_EXPECTED_INPUTS_HASH: only for an exe built from ANOTHER checkout of the same content (this sweep may run from a candidate worktree whose sources differ).
+// /health/build is NOT evidence of the content served: the backend echoes the SMARTLEARN_BUILD_* variables this script sets itself.
+const served = verifyServedIdentity({ exe, expected: process.env.SL_EXPECTED_INPUTS_HASH ?? identity.inputsHash });
+if (!served.ok) instrument(`wrong build under test: ${served.reason}`);
 const running = ps('Get-Process -Name smartlearn -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }').split(/\r?\n/).map((p) => p.trim().toLowerCase()).filter(Boolean);
 if (running.includes(exe.toLowerCase())) instrument(`${exe} is already running (someone else's Desktop instance)`);
 const work = mkdtempSync(join(tmpdir(), 'sl-desktop-n7-'));
