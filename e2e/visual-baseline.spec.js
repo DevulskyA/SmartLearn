@@ -81,6 +81,11 @@ test('capture every main screen at 390 px and 1280 px', async ({ page }) => {
       await expect(page).toHaveURL(new RegExp(`#.*${screen.id}`));
       await page.waitForTimeout(400);
       await page.screenshot({ path: join(OUT, `${size.width}-${screen.name}.png`), fullPage: true });
+      // a viewport-only shot too: a fullPage shot repeats fixed bars in the middle of the image, which is not a defect
+      await page.screenshot({ path: join(OUT, `${size.width}-${screen.name}-viewport.png`) });
+      // elements whose text is wider than their box (clipped) on this screen, for the report
+      const clipped = await page.evaluate(() => [...document.querySelectorAll('.screen:not([hidden]) *')].filter((el) => el.children.length === 0 && el.textContent.trim() && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible').map((el) => `${el.tagName.toLowerCase()}.${el.className}: "${el.textContent.trim().slice(0, 30)}"`).slice(0, 10));
+      if (clipped.length) console.log(`CLIPPED [${size.width} ${screen.name}] ${clipped.join(' | ')}`);
     }
   }
 });
