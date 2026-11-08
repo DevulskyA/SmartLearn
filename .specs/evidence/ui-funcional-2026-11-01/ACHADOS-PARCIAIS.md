@@ -298,3 +298,9 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Severity: medium (a protection test fails; consent for paid AI is an owner control). Not fixed yet: weakening the test or removing the consent line is the owner decision.
 - Class: 1 (a rule existed: run adjacent checks proportional to risk; I skipped the server suite). Guard: run both suites before every commit that adds a script.
 - Status: FIXED 2026-11-08 by owner decision "permit only it": the launcher gives consent only for provider CODEX (removes it otherwise); the test lists both launchers and a new test pins that single conditional line. Server suite and free proof (22/22, FAKE, no consent) re-run after the change.
+
+## E-048 (2026-11-08) asked the owner for a PDF that ARTIFACTS.md A-01 already registers
+- Where: my reply about real material. Expected: use A-01 (Costanzo, sha256 recorded, "NAO pedir outro PDF"). Observed: I asked which PDF to use and offered a personal folder.
+- Severity: low (time lost, owner frustrated). Class: 1 (a rule existed in ARTIFACTS.md and I did not read it before asking). Guard: memory feedback_use_registered_artifacts_verify_fidelity; read ARTIFACTS.md before asking for any input.
+- Related rule recorded: homologation with real material must use the minimum pages and must check the summary against the source for lost content, not only that the run passes.
+- Status: FIXED (rule recorded; no code change needed)

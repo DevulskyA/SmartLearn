@@ -110,6 +110,13 @@ function backendOf(pid) {
   return rows.split(/\r?\n/).filter(Boolean).map((r) => { const [p, path, handle] = r.split('|'); return { pid: Number(p), path, handle }; });
 }
 
+// Independent of MainWindowHandle (0 for a console app even when its console IS on screen): enumerate EVERY visible top-level window of the system
+// and keep the ones owned by the backend, or by a console host (conhost/OpenConsole) the backend is the parent of.
+function consoleWindowsOf(backendPids) {
+  const rows = ps(`& '${join(ROOT, 'scripts', 'list-visible-windows.ps1').replace(/'/g, "''")}' -Match 'node|conhost|OpenConsole|cmd|WindowsTerminal'`).split(/\r?\n/).filter(Boolean);
+  return rows.filter((r) => { const [pid, , , , ppid] = r.split('|'); return backendPids.includes(Number(pid)) || backendPids.includes(Number(ppid.replace('ppid=', ''))); });
+}
+
 async function backendPort(nodePid, scratchDir = scratch) {
   // The app remembers its backend port next to the database (stable origin for the WebView's localStorage). Process-to-socket ownership is not
   // reliable from a sandboxed shell (owner 0), so the port comes from that file and the identity is then proven over HTTP (/health/build).
@@ -185,6 +192,8 @@ async function main() {
   const backend = backendOf(app.pid);
   check('backend is the installed node-runtime child', backend.length >= 1 && backend.every((b) => lc(b.path).startsWith(lc(join(dest, 'app')))), backend.map((b) => b.path));
   check('NO visible Node console: every backend window handle is 0', backend.length >= 1 && backend.every((b) => b.handle === '0'), backend.map((b) => b.handle));
+  const consoles1 = consoleWindowsOf(backend.map((b) => b.pid));
+  check('NO console window on screen for the backend (all visible windows of the system enumerated)', consoles1.length === 0, consoles1.length ? consoles1 : 'none');
   const port = await backendPort(backend[0].pid);
   const base = `http://127.0.0.1:${port}`;
   check('backend ready', await waitReady(base), base);
@@ -213,6 +222,8 @@ async function main() {
   app = await openThroughShortcut(scratch);
   const backend2 = backendOf(app.pid);
   check('second open: still no visible Node console', backend2.length >= 1 && backend2.every((b) => b.handle === '0'), backend2.map((b) => b.handle));
+  const consoles2 = consoleWindowsOf(backend2.map((b) => b.pid));
+  check('second open: NO console window on screen for the backend (all visible windows enumerated)', consoles2.length === 0, consoles2.length ? consoles2 : 'none');
   const base2 = `http://127.0.0.1:${await backendPort(backend2[0].pid)}`;
   check('second open: backend ready', await waitReady(base2), base2);
   const api2 = client(base2);
