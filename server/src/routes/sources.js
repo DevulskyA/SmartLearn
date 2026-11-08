@@ -3,6 +3,7 @@ import { extractSource, SourceExtractionError } from '../services/source-extract
 import { config } from '../config.js';
 import { join, dirname } from 'node:path';
 import * as sourceOpenings from '../services/source-openings.js';
+import { IdempotencyConflictError } from '../services/idempotency.js';
 
 function handleError(err, reply) {
   if (err instanceof sourceStorage.SourceError || err instanceof SourceExtractionError) {
@@ -63,6 +64,10 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
     try {
       return sourceOpenings.record(db, request.actor.userId, request.body);
     } catch (err) {
+      if (err instanceof IdempotencyConflictError) {
+        reply.status(409);
+        return { error: { code: err.code, message: err.message } };
+      }
       if (err instanceof sourceOpenings.SourceOpeningError) {
         reply.status(err.code === 'NOT_FOUND' ? 404 : 400);
         return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };

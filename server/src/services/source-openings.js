@@ -1,4 +1,5 @@
 import { dm, splitMessage } from '../api-error-messages.js';
+import { IdempotencyConflictError } from './idempotency.js';
 
 const CONTEXTS = new Set(['STUDY', 'REVIEW', 'EDITOR', 'PLAN', 'OTHER']);
 
@@ -28,7 +29,12 @@ export function record(db, userId, { sourceId, pageIndex, context, operationKey 
     }
   }
   const existing = db.prepare('SELECT * FROM source_openings WHERE user_id = ? AND operation_key = ?').get(userId, operationKey);
-  if (existing) return { ...dto(existing), duplicate: true };
+  if (existing) {
+    if (existing.source_id !== sourceId || existing.page_index !== (pageIndex ?? null) || existing.context !== context) {
+      throw new IdempotencyConflictError();
+    }
+    return { ...dto(existing), duplicate: true };
+  }
   const info = db.prepare('INSERT INTO source_openings (user_id, source_id, page_index, context, opened_at, operation_key) VALUES (?, ?, ?, ?, ?, ?)')
     .run(userId, sourceId, pageIndex ?? null, context, now().toISOString(), operationKey);
   return { ...dto(db.prepare('SELECT * FROM source_openings WHERE id = ?').get(info.lastInsertRowid)), duplicate: false };

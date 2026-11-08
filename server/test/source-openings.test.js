@@ -25,8 +25,8 @@ const makeUser = (db, email) => {
   return db.prepare(`INSERT INTO users (email, email_display, password_hash, password_salt, password_algorithm, password_params, created_at, updated_at)
     VALUES (?, ?, 'h', 's', 'scrypt', '{}', ?, ?)`).run(email, email, now, now).lastInsertRowid;
 };
-const makeSource = (db, userId) => db.prepare(`INSERT INTO sources (user_id, filename, original_name, content_type, byte_size, checksum, status, created_at, page_count)
-  VALUES (?, 'f.pdf', 'Costanzo.pdf', 'application/pdf', 100, 'abc', 'UPLOADED', ?, 12)`).run(userId, new Date().toISOString()).lastInsertRowid;
+const makeSource = (db, userId, checksum = 'abc') => db.prepare(`INSERT INTO sources (user_id, filename, original_name, content_type, byte_size, checksum, status, created_at, page_count)
+  VALUES (?, 'f.pdf', 'Costanzo.pdf', 'application/pdf', 100, ?, 'UPLOADED', ?, 12)`).run(userId, checksum, new Date().toISOString()).lastInsertRowid;
 const evidenceRows = (db) => db.prepare('SELECT COUNT(*) AS n FROM learning_events').get().n + db.prepare('SELECT COUNT(*) AS n FROM learning_evidence').get().n;
 
 test('record(): stores only the opening (source, page, context); the same operation key is ONE fact; it is never evidence', () => {
@@ -86,8 +86,23 @@ test('HTTP: POST /v1/source-openings is owner-only and idempotent; GET lists the
     assert.equal((await post(alice, { ...body, context: 'INVENTED' })).statusCode, 400);
     assert.equal(JSON.parse((await post(alice, body)).body).duplicate, false);
     assert.equal(JSON.parse((await post(alice, body)).body).duplicate, true);
+    const anotherSourceId = makeSource(db, aliceId, 'another-source');
+    for (const changed of [{ sourceId: anotherSourceId }, { pageIndex: 3 }, { pageIndex: null }, { context: 'STUDY' }]) {
+      const conflict = await post(alice, { ...body, ...changed });
+      assert.equal(conflict.statusCode, 409, JSON.stringify(changed));
+      assert.equal(conflict.json().error.code, 'IDEMPOTENCY_CONFLICT');
+    }
+    const bobId = db.prepare("SELECT id FROM users WHERE email = 'bob@example.com'").get().id;
+    const bobSourceId = makeSource(db, bobId);
+    assert.equal((await post(bob, { ...body, sourceId: bobSourceId })).json().duplicate, false, 'keys are scoped to the owner');
+    const noPage = { sourceId, context: 'STUDY', operationKey: 'no-page' };
+    const first = (await post(alice, noPage)).json();
+    const replay = (await post(alice, { ...noPage, pageIndex: null })).json();
+    assert.equal(replay.duplicate, true);
+    assert.equal(replay.id, first.id, 'omitted and null page are equivalent');
+    assert.equal((await post(alice, body)).json().duplicate, true, 'conflict leaves the original replay intact');
     const listed = JSON.parse((await app.inject({ method: 'GET', url: `/v1/source-openings?sourceId=${sourceId}`, headers: { cookie: alice.cookie } })).body);
-    assert.equal(listed.openings.length, 1);
+    assert.equal(listed.openings.length, 2);
     assert.equal(JSON.parse((await app.inject({ method: 'GET', url: `/v1/source-openings?sourceId=${sourceId}`, headers: { cookie: bob.cookie } })).body).openings.length, 0);
   } finally { await app.close(); cleanup(); }
 });
