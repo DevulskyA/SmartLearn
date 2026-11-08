@@ -74,7 +74,9 @@ for (const dir of [serverRuntimeDir, sharedDir, distRuntimeDir, nodeRuntimeDir])
 for (const entry of ['src', 'migrations', 'node_modules', 'package.json']) {
   const from = join(SERVER_DIR, entry);
   if (!existsSync(from)) fail(`${from} missing -- cannot stage server-runtime.`);
-  cpSync(from, join(serverRuntimeDir, entry), { recursive: true });
+  // dereference: server/node_modules may itself be a link (a worktree sharing another checkout's dependencies); the staged copy must hold the FILES,
+  // not a link into somebody else's checkout, or tauri skips it and the exe dies at start with "Cannot find package 'better-sqlite3'" (exit 101)
+  cpSync(from, join(serverRuntimeDir, entry), { recursive: true, dereference: true });
 }
 
 // shared/: several server/src/services/*.js import from repo-root
