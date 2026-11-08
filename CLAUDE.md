@@ -35,7 +35,7 @@ Frente "Clean Code moderno + internacionalização" (pedido do usuário, 2026-10
 ## Recuperação após /clear ou sessão nova
 
 Objetivo: posição + outcome ativo + próximo passo + bloqueios em ~15 linhas, e só então os trechos do outcome ativo.
-1. `git worktree list`, `git status`, `git log --oneline -5`. O Git vence qualquer texto. Em `main`: não desenvolver; ir para a worktree de `claude/smartlearn-v1-complete`.
+1. `git worktree list`, `git status`, `git log --oneline -5`. O Git vence qualquer texto. Em `main`: não desenvolver; ir para a worktree da branch de trabalho ativa (a que `git worktree list` e `.specs/STATE.md` apontam; em 2026-11-08 é `candidate/combinada-2026-11-08`). Atenção: a trava `scripts/require-work-branch.mjs` e o launcher ainda exigem o NOME `claude/smartlearn-v1-complete`, cuja worktree está vazia; qual branch ou identidade eles devem exigir é decisão do dono (proposta: `.specs/proposals/launcher-served-identity.md`). Não contorne a trava sem ordem do dono.
 2. `npm run context:resume`: cockpit DERIVADO (nunca autoridade).
 3. Ler SOMENTE o bloco da tarefa ativa em `tasks.md` (busca pelo ID), a seção do mesmo ID em `validation.md`, os requisitos que o bloco cita em `spec.md` e o código necessário. Ampliar só se surgir dependência ou conflito.
 4. Mapa de leitura: `.specs/EXECUTION.md`; o que vive fora do Git: `.specs/ARTIFACTS.md`. `npm run context:check` deve passar.
