@@ -304,3 +304,8 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Severity: low (time lost, owner frustrated). Class: 1 (a rule existed in ARTIFACTS.md and I did not read it before asking). Guard: memory feedback_use_registered_artifacts_verify_fidelity; read ARTIFACTS.md before asking for any input.
 - Related rule recorded: homologation with real material must use the minimum pages and must check the summary against the source for lost content, not only that the run passes.
 - Status: FIXED (rule recorded; no code change needed)
+
+## E-049 (2026-11-08) console-window proof was weak: MainWindowHandle 0 does not prove no console
+- Where: scripts/homologation-proof.mjs (and the journey step 2) asserted "no visible Node console" only from the backend MainWindowHandle. For a console app the handle can be 0 while its console is on screen.
+- Observed: owner reported "Node keeps opening". The Homologacao shortcut shows none (all visible windows of the system enumerated: only the Tauri window); the owner may be opening the Oficial/DEV shortcuts, whose exe predates the CREATE_NO_WINDOW fix and were left untouched on purpose.
+- Class: 2 (rule "the instrument is code and can be wrong" followed, but the check was imprecise). Fix: scripts/list-visible-windows.ps1 + two checks in the proof (24/24). Status: FIXED for the Homologacao; Oficial/DEV repoint needs owner authorization.
