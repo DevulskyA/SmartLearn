@@ -10,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
+import { THEME_OPTIONS } from '../src/theme.js';
 
 // A11Y-1: an automated accessibility audit (axe-core, WCAG 2.0/2.1 A + AA) of every main screen, on the REAL
 // server and UI, at phone and desktop width. It fails on any critical or serious violation; the few findings
@@ -106,7 +107,7 @@ async function seed(page) {
 const summarize = (violations) => violations.map((v) => `${v.impact} ${v.id} (${v.nodes.length}): ${v.help} :: ${v.nodes.slice(0, 4).map(detail).join(' | ')}`);
 
 // all 23 concrete themes (THEME_OPTIONS minus "auto"); test/theme-contrast.test.js covers them by arithmetic, axe checks the computed colors
-const THEMES = ['paper', 'sepia', 'ocean', 'forest', 'night', 'contrast', 'dusk', 'dracula', 'catppuccin', 'onedark', 'gruvbox', 'neon', 'premium', 'tokyo', 'midnight', 'forest-serenity', 'sunset', 'cyberpunk', 'catppuccin-latte', 'gruvbox-light', 'solarized-light', 'dracula-light', 'tokyo-day'];
+const THEMES = THEME_OPTIONS.map((option) => option.id).filter((id) => id !== 'auto'); // derived, so a new theme is audited without editing this list
 const CASES = [
   ...THEMES.map((theme) => ({ theme, width: 1280, height: 800 })),
   { theme: 'paper', width: 375, height: 812 },
