@@ -24,6 +24,7 @@ src/  (navegador / Tauri)  ──HTTP /v1──▶  server/src/  (Node, SQLite) 
 | `src/remote-store.js` | Mesmo formato `DB` de `src/db.js`, mas contra o servidor |
 | `src/db.js` | Armazenamento local legado (DDL canônico compartilhado com o Rust) |
 | `src/offline-store.js` | Cache offline versionado da agenda |
+| `src/study-evidence-queue.js` | Resultados de estudo pendentes por API/conta; preserva payload e chave nos reenvios |
 | `src/analytics.js` | Contrato de tendência: só histórico observável conta |
 | `src/lesson-view-model.js` + `src/lesson-editor-ui.js` | Editor de lição: o primeiro decide O QUE mostrar (puro), o segundo desenha |
 | `src/materials-ui.js`, `src/draft-review-ui.js`, `src/generation-jobs-ui.js`, `src/auth-ui.js` | Telas de materiais, revisão de rascunho, jobs de geração, autenticação |

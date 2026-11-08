@@ -2,6 +2,7 @@
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError, apiRequest } from "./api-client.js";
+import { createStudyEvidenceQueue } from "./study-evidence-queue.js";
 import { Stats, formatAverageScore } from "./stats.js";
 import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
 import { getReviewScoreValidationMessage, getReviewScoreValues } from "./review-score.js";
@@ -3401,7 +3402,28 @@ let studyNowState = null;
 let studyNowLastBlock = null;
 // The INITIAL_PRACTICE evidence of the block just finished, kept until the server has it: the answers are already on the
 // server (each judgment was accepted first), but the aggregate row that feeds Estatisticas is a separate request that can fail.
-let pendingStudyEvidence = null;
+const pendingStudyEvidence = createStudyEvidenceQueue({
+  getScope: () => REMOTE_MODE
+    ? (AuthUI.getCurrentUser()?.id == null ? null : JSON.stringify([window.__SMARTLEARN_API_BASE__ || location.origin, AuthUI.getCurrentUser().id]))
+    : "local",
+  storage: {
+    get length() { return localStorage.length; },
+    key: (index) => localStorage.key(index),
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+    removeItem: (key) => localStorage.removeItem(key),
+  },
+  shouldPersist: (evidence) => evidence.context === "INITIAL_PRACTICE",
+  send: async (evidence) => {
+    try {
+      if (evidence.obligationUnitId != null) await apiRequest(`/v1/review-obligations/${evidence.obligationUnitId}/complete`, { method: "POST", body: { profile: "DECIDED", expectedReviewTaskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount } });
+      else if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
+      else await DB.learningEvidence.create(evidence);
+    } catch (error) {
+      if (error?.msgCode !== "ATTEMPT_IN_OTHER_EVIDENCE" && error?.code !== "ALREADY_COMPLETED") throw error;
+    }
+  },
+});
 
 // "initial" = the block the student just practiced (writes the aggregate
 // INITIAL_PRACTICE evidence row, as before). "retest" = a redo of only the
@@ -3436,7 +3458,6 @@ function resetStudyNowResult() {
   studyNowEvidenceNote.hidden = true;
   studyNowEvidenceNote.textContent = "";
   studyNowEvidenceRetryBtn.hidden = true;
-  pendingStudyEvidence = null;
   studyNowNextReviewText.textContent = "";
   studyNowErrorsSection.hidden = true;
   studyNowErrorsList.replaceChildren();
@@ -3462,6 +3483,7 @@ const STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING = true;
 
 async function startStudyNow(unit, subjectName) {
   if (!unit) return;
+  recordStudyEvidence().catch((error) => console.error("Falha ao reenviar evidência pendente.", error));
   studyNowSubjectEl.textContent = subjectName ?? "";
   studyNowTitleEl.textContent = unit.title ?? "";
   if (unit.summaryBody) {
@@ -3672,7 +3694,7 @@ async function finishStudyNowSession() {
   const totalAnswered = answeredCount + (isReview ? state.restored.answered : 0);
   const totalCorrect = correctCount + (isReview ? state.restored.correct : 0);
   if (answeredCount > 0 && !isRetest) {
-    pendingStudyEvidence = isReview
+    pendingStudyEvidence.enqueue(isReview
       ? { reviewTaskId: state.reviewTaskId, obligationUnitId: state.obligationUnitId ?? null, questionsCount: totalAnswered, correctCount: totalCorrect }
       : {
         unitId,
@@ -3683,7 +3705,7 @@ async function finishStudyNowSession() {
         attemptIds,
         // one key per block of practice: every resend of this pending evidence is the same intent (E-021 class)
         operationKey: crypto.randomUUID(),
-      };
+      });
     await recordStudyEvidence();
   }
 
@@ -3764,26 +3786,21 @@ async function finishStudyNowSession() {
 
 /** Sends the pending evidence; on failure tells the student and offers to send it again. An earlier try that did reach the server counts as recorded. */
 async function recordStudyEvidence() {
-  const evidence = pendingStudyEvidence;
-  if (!evidence) return;
+  if (!pendingStudyEvidence.pendingCount()) return;
   try {
-    if (evidence.obligationUnitId != null) await apiRequest(`/v1/review-obligations/${evidence.obligationUnitId}/complete`, { method: "POST", body: { profile: "DECIDED", questionsCount: evidence.questionsCount, correctCount: evidence.correctCount } });
-    else if (evidence.reviewTaskId != null) await DB.completeReviewWithEvidence({ taskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount });
-    else await DB.learningEvidence.create(evidence);
+    await pendingStudyEvidence.flush();
   } catch (error) {
-    // an earlier try that did reach the server (its reply was lost) already recorded it: sending it again is refused as such
-    const alreadyRecorded = error?.msgCode === "ATTEMPT_IN_OTHER_EVIDENCE" || error?.code === "ALREADY_COMPLETED";
-    if (!alreadyRecorded) {
+    if (pendingStudyEvidence.pendingCount()) {
       console.error("Falha ao registrar evidência de prática inicial.", error);
       studyNowEvidenceNote.classList.add("is-error");
       studyNowEvidenceNote.textContent = t("appStudyNow.evidenceFailed");
       studyNowEvidenceNote.hidden = false;
       studyNowEvidenceRetryBtn.hidden = false;
-      return;
     }
+    return;
   }
+  if (pendingStudyEvidence.pendingCount()) return;
   const wasRetry = !studyNowEvidenceNote.hidden;
-  pendingStudyEvidence = null;
   studyNowEvidenceRetryBtn.hidden = true;
   studyNowEvidenceNote.classList.remove("is-error");
   studyNowEvidenceNote.textContent = wasRetry ? t("appStudyNow.evidenceSaved") : "";
@@ -3798,6 +3815,10 @@ studyNowEvidenceRetryBtn?.addEventListener("click", async () => {
   studyNowEvidenceRetryBtn.disabled = true;
   try { await recordStudyEvidence(); } finally { studyNowEvidenceRetryBtn.disabled = false; }
   (studyNowEvidenceRetryBtn.hidden ? studyNowDoneBtn : studyNowEvidenceRetryBtn).focus();
+});
+
+window.addEventListener("online", () => {
+  recordStudyEvidence().catch((error) => console.error("Falha ao reenviar evidência pendente.", error));
 });
 
 function createStudyErrorItem(exercise) {
@@ -5094,7 +5115,7 @@ export function showScreen(screenId, { focus = false } = {}) {
     // A passing status ("saved", "copied", "nothing to show") belongs to the moment it was said: it must not greet the student
     // again when they come back. Errors stay until the student acts, and hidden notes keep their own lifecycle.
     if (leaving) clearTransientMessages(panel);
-    if (leaving && panel.dataset.screenPanel === "study-now" && pendingStudyEvidence) leftStudyResultUnsent = true;
+    if (leaving && panel.dataset.screenPanel === "study-now" && pendingStudyEvidence.pendingCount()) leftStudyResultUnsent = true;
   }
   // The "send again" control lives only on the result screen: a result left unsent (H-T04) is sent once more on the way out, not dropped.
   if (leftStudyResultUnsent) recordStudyEvidence().catch((error) => console.error("Falha ao registrar o resultado ao sair.", error));

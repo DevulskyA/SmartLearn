@@ -272,3 +272,80 @@ test('H-T04: leaving the result with evidence unsent does not lose it', async ({
     expect(recorded || stillOffered, 'the unsent result must be sent on the way out or still be offered').toBe(true);
   }).toPass({ timeout: 4000 });
 });
+
+async function openStudyFromPlan(page, title) {
+  await page.locator('[data-screen="plan"]').click();
+  const row = page.locator('.plan-row', { hasText: title });
+  await expect(row).toBeVisible();
+  const start = row.locator('[data-action="plan-study-now"]');
+  if (!await start.isVisible()) await row.locator('.plan-expand-btn').click();
+  await start.click();
+}
+
+test('EVIDENCE-RECOVERY: a new block preserves a failed result without blocking study', async ({ page }) => {
+  const sent = [];
+  const unit = await studyOnce(page, 'Pending original', async () => {
+    await page.route('**/v1/learning-evidence', (route) => {
+      if (!isEvidencePost(route)) return route.continue();
+      sent.push(route.request().postDataJSON());
+      return route.abort();
+    });
+  });
+  const { unit: other } = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Other evidence', title: 'Other pending lesson', studyDate: '2030-01-01' });
+  await apiCall(page, `/v1/learning-units/${other.id}/exercises`, { question: 'Other?', answer: 'Yes', provenance: 'MANUAL' });
+  await openStudyFromPlan(page, other.title);
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 1');
+  await expect(page.locator('#study-now-reveal-btn')).toBeVisible();
+  await page.locator('#study-now-reveal-btn').click();
+  await page.locator('#study-now-incorrect-btn').click();
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  await expect(page.locator('#study-now-result-card')).toBeVisible();
+  expect(sent.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(sent.map((body) => body.operationKey)).size).toBe(1);
+  expect(sent.every((body) => body.unitId === unit.id)).toBe(true);
+  await page.unroute('**/v1/learning-evidence');
+  await page.locator('#study-now-evidence-retry-btn').click();
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();
+  const originalRows = await evidenceRows(page, unit.id);
+  const otherRows = await evidenceRows(page, other.id);
+  expect(originalRows.length).toBe(1);
+  expect(otherRows.length).toBe(1);
+  expect(originalRows[0].correctCount).toBe(1);
+  expect(otherRows[0].correctCount).toBe(0);
+});
+
+test('EVIDENCE-RECOVERY: reload retains a failed result and a lost reply replays once', async ({ page }) => {
+  let original;
+  const unit = await studyOnce(page, 'Pending reload', async () => {
+    await page.route('**/v1/learning-evidence', (route) => {
+      if (!isEvidencePost(route)) return route.continue();
+      original = route.request().postDataJSON();
+      return route.abort();
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-screen="plan"]')).toBeVisible();
+  await openStudyFromPlan(page, unit.title);
+  await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 1');
+  await expect(page.locator('#study-now-evidence-note')).toHaveJSProperty('hidden', false);
+  await page.unroute('**/v1/learning-evidence');
+  const replayed = [];
+  let lost = false;
+  await page.route('**/v1/learning-evidence', async (route) => {
+    if (!isEvidencePost(route)) return route.continue();
+    replayed.push(route.request().postDataJSON());
+    if (!lost) { lost = true; await route.fetch(); return route.abort(); }
+    return route.continue();
+  });
+  const failedAcknowledgement = page.waitForEvent('console', { predicate: (message) => message.type() === 'error' && message.text().startsWith('Falha ao registrar evidência de prática inicial.') });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await failedAcknowledgement;
+  await expect.poll(async () => (await evidenceRows(page, unit.id)).length).toBe(1);
+  // Wait until the failed acknowledgement has left the item queued before retrying.
+  await expect(page.locator('#study-now-evidence-note')).toHaveJSProperty('hidden', false);
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('smartlearn.pending-study-evidence.')).length)).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('smartlearn.pending-study-evidence.')).length)).toBe(0);
+  expect(replayed).toEqual([original, original]);
+  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+});

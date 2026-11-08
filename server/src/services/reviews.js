@@ -1,4 +1,4 @@
-import { checkIdempotency, recordIdempotency } from './idempotency.js';
+import { checkIdempotency, recordIdempotency, IdempotencyConflictError } from './idempotency.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 import { get as getSettings } from './settings.js';
 import { deriveObligations, RECOVERY } from '../../../shared/review-obligation.js';
@@ -180,16 +180,26 @@ export const PROFILES = Object.freeze({
  * The completion itself is the existing complete() (same rules, same evidence rules: without questions it is activity, not evidence).
  * Disposable databases only until the student integrates migration 034.
  */
-export function completeObligation(db, userId, unitId, { date, timezoneOverride, profile, recovery: recoveryArg, anchor: anchorArg, questionsCount, correctCount, operationKey } = {}, now = () => new Date()) {
+export function completeObligation(db, userId, unitId, { date, timezoneOverride, profile, recovery: recoveryArg, anchor: anchorArg, questionsCount, correctCount, operationKey, expectedReviewTaskId } = {}, now = () => new Date()) {
   if (profile !== undefined && !Object.hasOwn(PROFILES, profile)) throw new ReviewError('VALIDATION_FAILED', 'profile não é reconhecido.', 'profile');
   const recovery = recoveryArg ?? PROFILES[profile ?? 'V1'].recovery;
   const anchor = anchorArg ?? PROFILES[profile ?? 'V1'].anchor;
   if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
   if (!Object.values(ANCHORS).includes(anchor)) throw new ReviewError('VALIDATION_FAILED', 'anchor não é reconhecido.', 'anchor');
+  if (expectedReviewTaskId !== undefined && (!Number.isInteger(expectedReviewTaskId) || expectedReviewTaskId < 1)) throw new ReviewError('VALIDATION_FAILED', dm('REVIEW_NOT_FOUND'), 'expectedReviewTaskId');
   const run = db.transaction(() => {
+    // An uncertain reply must remain bound to the stage practiced, even if another stage is now due.
+    const expected = expectedReviewTaskId === undefined ? null : db.prepare('SELECT * FROM review_tasks WHERE user_id = ? AND unit_id = ? AND id = ?').get(userId, unitId, expectedReviewTaskId);
+    if (expectedReviewTaskId !== undefined && !expected) throw new ReviewError('NOT_FOUND', dm('REVIEW_NOT_FOUND'));
     const view = obligations(db, userId, { date, timezoneOverride, recovery });
     const entry = view.units.find((u) => u.unitId === unitId);
     const base = { profile: profile ?? null, recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [], ...(entry?.paused ? { reason: 'PAUSED' } : {}) };
+    if (expected?.completed_at) {
+      const evidence = db.prepare('SELECT id, questions_count, correct_count FROM learning_evidence WHERE user_id = ? AND unit_id = ? AND review_task_id = ? AND created_at = ? ORDER BY id DESC LIMIT 1').get(userId, unitId, expected.id, expected.completed_at);
+      if ((evidence?.questions_count ?? null) !== (questionsCount ?? null) || (evidence?.correct_count ?? null) !== (correctCount ?? null)) throw new IdempotencyConflictError();
+      return { ...base, completedId: expected.id, completedAt: expected.completed_at, reviewOnly: !evidence, evidenceId: evidence?.id ?? null };
+    }
+    if (expected && entry?.required?.id !== expected.id) throw new IdempotencyConflictError();
     if (!entry?.required) return base;
     // One conclusion rule: a stage with questions is concluded by their evidence, never by a bare "done" (reading is for stages without questions).
     if (entry.exerciseCount > 0 && (questionsCount === undefined || questionsCount === null)) {

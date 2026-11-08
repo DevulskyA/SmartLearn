@@ -130,6 +130,33 @@ test('POST /v1/review-obligations/:unitId/complete: owner only, parameters valid
     assert.equal(ok.statusCode, 200);
     const body = JSON.parse(ok.body);
     assert.ok(body.completedId && body.supersededIds.length > 0 && body.rescheduled.length > 0, JSON.stringify(body).slice(0, 300));
+
+    const guarded = learningUnits.create(db, aliceId, { newSubjectName: 'Guarded', title: 'Original stage', studyDate: '2026-01-01' }).unit;
+    const original = tasks(db, guarded.id)[0];
+    const intent = { date: TODAY, profile: 'DECIDED', expectedReviewTaskId: original.id, questionsCount: 2, correctCount: 1 };
+    const first = await post(alice, intent, guarded.id);
+    assert.equal(first.statusCode, 200);
+    const recorded = first.json();
+    const afterFirst = JSON.stringify(tasks(db, guarded.id));
+    const reschedules = JSON.stringify(db.prepare('SELECT * FROM review_task_reschedules ORDER BY id').all());
+    const replay = await post(alice, { ...intent, date: '2026-10-24' }, guarded.id);
+    assert.equal(replay.statusCode, 200);
+    assert.equal(replay.json().completedId, original.id);
+    assert.equal(replay.json().evidenceId, recorded.evidenceId);
+    assert.equal(JSON.stringify(tasks(db, guarded.id)), afterFirst, 'lost-reply replay must leave the later stage pending');
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM review_task_reschedules ORDER BY id').all()), reschedules, 'replay must not re-anchor the calendar');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?').get(guarded.id).n, 1);
+    assert.equal((await post(alice, { ...intent, correctCount: 2 }, guarded.id)).statusCode, 409, 'different original evidence is not an acknowledgement');
+
+    const pending = tasks(db, guarded.id).filter((task) => !task.done);
+    const stale = await post(alice, { ...intent, date: '2026-10-24', expectedReviewTaskId: pending[1].id }, guarded.id);
+    assert.equal(stale.statusCode, 409, 'the expected task must be the current required task');
+    assert.equal((await post(alice, { ...intent, expectedReviewTaskId: 0 }, guarded.id)).statusCode, 400);
+    assert.equal((await post(alice, intent, unit.id)).statusCode, 404, 'a task of another unit is not the original intent');
+    const otherOwner = makeUser(db, 'guard-other@example.com');
+    const otherUnit = learningUnits.create(db, otherOwner, { newSubjectName: 'Foreign', title: 'Foreign stage', studyDate: '2026-01-01' }).unit;
+    assert.equal((await post(alice, { ...intent, expectedReviewTaskId: tasks(db, otherUnit.id)[0].id }, guarded.id)).statusCode, 404, 'another owner cannot be acknowledged');
+    assert.equal(JSON.stringify(tasks(db, guarded.id)), afterFirst, 'conflicts leave both stages and dates unchanged');
   } finally { await app.close(); cleanup(); }
 });
 

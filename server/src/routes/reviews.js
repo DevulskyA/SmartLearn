@@ -92,6 +92,7 @@ export function registerReviewRoutes(app, db) {
           date: { type: 'string' }, timezone: { type: 'string', maxLength: 64 },
           profile: { type: 'string' }, recovery: { type: 'string' }, anchor: { type: 'string' },
           questionsCount: { type: 'integer' }, correctCount: { type: 'integer' }, operationKey: { type: 'string' },
+          expectedReviewTaskId: { type: 'integer', minimum: 1 },
         },
       },
     },
