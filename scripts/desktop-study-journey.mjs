@@ -1115,7 +1115,7 @@ try {
     snapshotBefore = dbSnapshot();
     // The Hoje review has two judgments in step 14 and the final exercise in
     // step 20; the latter is also a real persisted attempt before restart.
-    expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 2, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 completion judgment + 1 retest`);
+    expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 2, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 completion judgment + 1 retest; attempts: ${JSON.stringify(snapshotBefore.attempts)}; study ids ${JSON.stringify(ctx.studyNow.map((s) => s.id))}; hoje ids ${JSON.stringify(ctx.hoje.map((h) => h.id))}`);
     const submitted = snapshotBefore.attempts.filter((a) => a.status === 'SUBMITTED');
     expect(submitted.length === snapshotBefore.attempts.length && submitted.every((a) => a.maxAssistance === 'SOLUTION' && a.assistanceUsed === 'SOLUTION'), `DB attempts not all SUBMITTED with SOLUTION assistance: ${JSON.stringify(snapshotBefore.attempts)}`);
     const outcomes = snapshotBefore.attempts.map((a) => a.outcome);
