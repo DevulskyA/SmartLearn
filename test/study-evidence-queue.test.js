@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStudyEvidenceQueue } from '../src/study-evidence-queue.js';
 
-function setup(send, { scope = 'api/alice', data = new Map(), shouldPersist } = {}) {
+function setup(send, { scope = 'api/alice', data = new Map(), shouldPersist, isRejected, onRejected } = {}) {
   let active = scope;
   const storage = { get length() { return data.size; }, key: (index) => [...data.keys()][index] ?? null, getItem: (key) => data.get(key), setItem: (key, value) => data.set(key, value), removeItem: (key) => data.delete(key) };
-  return { queue: createStudyEvidenceQueue({ getScope: () => active, storage, send, shouldPersist }), switchTo: (value) => { active = value; }, data };
+  return { queue: createStudyEvidenceQueue({ getScope: () => active, storage, send, shouldPersist, isRejected, onRejected }), switchTo: (value) => { active = value; }, data };
 }
 
 test('failed evidence survives the next block and reload with its original payload and key', async () => {
@@ -159,5 +159,28 @@ test('an item that keeps failing does not hide the ones behind it, and the failu
   queue.enqueue({ operationKey: 'good' });
   await assert.rejects(queue.flush(), /rejected/);
   assert.deepEqual(sent, ['good']);
+  assert.equal(queue.pendingCount(), 1);
+});
+
+test('an item the server says can never be applied leaves the queue (and storage) once, is reported, and does not hide the ones behind it', async () => {
+  const sent = [];
+  const rejected = [];
+  const { queue, data } = setup(async (item) => {
+    if (item.operationKey === 'stale') { const error = new Error('conflict'); error.rejected = true; throw error; }
+    sent.push(item.operationKey);
+  }, { isRejected: (error) => error.rejected === true, onRejected: (item) => rejected.push(item.operationKey) });
+  queue.enqueue({ operationKey: 'stale', context: 'INITIAL_PRACTICE' });
+  queue.enqueue({ operationKey: 'fine', context: 'INITIAL_PRACTICE' });
+  await queue.flush(); // does not throw: nothing here is worth another try
+  assert.deepEqual(rejected, ['stale']);
+  assert.deepEqual(sent, ['fine']);
+  assert.equal(queue.pendingCount(), 0);
+  assert.equal(data.size, 0, 'nothing is left in storage to be sent again after a reload');
+});
+
+test('an error that is not a rejection (network, server error) keeps the item queued', async () => {
+  const { queue } = setup(async () => { throw new Error('offline'); }, { isRejected: () => false });
+  queue.enqueue({ operationKey: 'keep' });
+  await assert.rejects(queue.flush(), /offline/);
   assert.equal(queue.pendingCount(), 1);
 });

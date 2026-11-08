@@ -482,3 +482,73 @@ test('EVIDENCE-RECOVERY: reload retains a failed result and a lost reply replays
   expect(replayed).toEqual([original, original]);
   expect((await evidenceRows(page, unit.id)).length).toBe(1);
 });
+
+// A review concluded through the experimental panel carries the stage it practised (expectedReviewTaskId). When the server already holds a
+// DIFFERENT conclusion of that stage (another window, another device), the same result can never be applied: it answers 409 IDEMPOTENCY_CONFLICT.
+// That pending item must not stay in the queue asking for "send again" forever, nor be dropped without telling the student, nor be counted twice.
+test('REJECTED-1: a review result the server can no longer apply is shown as such, leaves the queue, and is not counted twice', async ({ page }) => {
+  const unit = await reviewDueToday(page, 'Aula rejeitada a', 3);
+  await page.locator('[data-screen="settings"]').click();
+  await page.locator('#experiment-switch').check();
+  await page.locator('[data-screen="today"]').click();
+  const panel = page.locator('#experiment-host .experiment-panel');
+  await expect(panel).toBeVisible({ timeout: 10000 });
+  let offline = true;
+  const attempts = [];
+  await page.route('**/v1/review-obligations/*/complete', (route) => {
+    attempts.push(route.request().postDataJSON());
+    return offline ? route.abort() : route.continue();
+  });
+  await panel.locator('li', { hasText: 'Aula rejeitada a' }).getByRole('button', { name: 'Fazer a revisão' }).click();
+  for (const judge of ['#study-now-correct-btn', '#study-now-correct-btn', '#study-now-correct-btn']) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(judge).click();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible({ timeout: 8000 });
+  expect(attempts.length).toBeGreaterThan(0);
+  // meanwhile the server receives another conclusion of the same stage, with other numbers (3 questions, 1 correct)
+  offline = false;
+  await page.unroute('**/v1/review-obligations/*/complete');
+  await apiCall(page, `/v1/review-obligations/${unit.id}/complete`, { profile: 'DECIDED', questionsCount: 3, correctCount: 1 });
+  await page.locator('#study-now-evidence-retry-btn').click();
+  await expect(page.locator('#study-now-evidence-retry-btn'), 'a result that can never be applied must not keep asking to be sent again').toBeHidden({ timeout: 8000 });
+  await expect(page.locator('#study-now-evidence-note'), 'the student is told why, not left with a silent drop').toBeVisible();
+  await expect(page.locator('#study-now-evidence-note')).not.toHaveClass(/is-error/);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('smartlearn.pending-study-evidence.')).length)).toBe(0);
+  const rows = await evidenceRows(page, unit.id);
+  expect(rows.length, 'the server keeps the one conclusion it already had').toBe(1);
+  expect(rows[0].correctCount).toBe(1);
+});
+
+test('REJECTED-2: a review result whose reply was lost after the server recorded it is recognised on retry, once, and counted once', async ({ page }) => {
+  const unit = await reviewDueToday(page, 'Aula rejeitada b', 3);
+  await page.locator('[data-screen="settings"]').click();
+  await page.locator('#experiment-switch').check();
+  await page.locator('[data-screen="today"]').click();
+  const panel = page.locator('#experiment-host .experiment-panel');
+  await expect(panel).toBeVisible({ timeout: 10000 });
+  let lostOnce = false;
+  const bodies = [];
+  await page.route('**/v1/review-obligations/*/complete', async (route) => {
+    bodies.push(route.request().postDataJSON());
+    if (!lostOnce) { lostOnce = true; await route.fetch(); return route.abort(); } // the server wrote it; the reply never arrives
+    return route.continue();
+  });
+  await panel.locator('li', { hasText: 'Aula rejeitada b' }).getByRole('button', { name: 'Fazer a revisão' }).click();
+  for (const judge of ['#study-now-correct-btn', '#study-now-incorrect-btn', '#study-now-correct-btn']) {
+    await page.locator('#study-now-reveal-btn').click();
+    await page.locator(judge).click();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible({ timeout: 8000 });
+  expect((await evidenceRows(page, unit.id)).length, 'the server DID record it').toBe(1);
+  await page.locator('#study-now-evidence-retry-btn').click();
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden({ timeout: 8000 });
+  await expect(page.locator('#study-now-evidence-note')).toContainText('Resultado registrado');
+  const rows = await evidenceRows(page, unit.id);
+  expect(rows.length, 'counted once').toBe(1);
+  expect([rows[0].questionsCount, rows[0].correctCount]).toEqual([3, 2]);
+  expect(new Set(bodies.map((b) => JSON.stringify(b))).size, 'every send is the same operation').toBe(1);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('smartlearn.pending-study-evidence.')).length)).toBe(0);
+});

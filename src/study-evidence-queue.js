@@ -1,6 +1,8 @@
 // A failed aggregate must survive another study block and reload. Each API/account has its own queue;
 // retries keep the original payload/key, and only an acknowledged item is removed.
-export function createStudyEvidenceQueue({ getScope, storage, send, shouldPersist = () => true }) {
+// `isRejected(error)` marks an answer that says the item can NEVER be applied (the server already holds a different conclusion of that stage): the
+// item then leaves the queue instead of asking to be sent again forever, and `onRejected(evidence, error)` is told so it can say it to the student.
+export function createStudyEvidenceQueue({ getScope, storage, send, shouldPersist = () => true, isRejected = () => false, onRejected = () => {} }) {
   const queues = new Map();
   const sending = new Set();
   const prefix = (scope) => `smartlearn.pending-study-evidence.${encodeURIComponent(scope)}.`;
@@ -53,14 +55,17 @@ export function createStudyEvidenceQueue({ getScope, storage, send, shouldPersis
         const [id, evidence] = next;
         tried.add(id);
         sending.add(scope + id);
-        try {
-          await send(evidence);
+        const forget = () => {
           items.delete(id);
           if (shouldPersist(evidence)) {
             try { storage.removeItem(prefix(scope) + id); } catch { /* A replay remains safe if storage is unavailable. */ }
           }
+        };
+        try {
+          await send(evidence);
+          forget();
         } catch (error) {
-          failure ??= { error };
+          if (isRejected(error)) { forget(); onRejected(evidence, error); } else failure ??= { error };
         } finally {
           sending.delete(scope + id);
         }

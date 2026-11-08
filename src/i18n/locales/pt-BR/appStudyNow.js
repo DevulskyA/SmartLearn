@@ -40,6 +40,7 @@ export default {
   'appStudyNow.result.review': 'Resultado da revisão',
   'appStudyNow.score.review': '{correct}/{answered} corretas na revisão — {percent}%',
   'appStudyNow.evidenceFailed': 'Suas respostas foram guardadas, mas o resultado deste bloco ainda não entrou nas suas estatísticas. Verifique a conexão e toque em "Registrar resultado de novo".',
+  'appStudyNow.evidenceRejected': 'Suas respostas foram guardadas, mas esta etapa da revisão já foi concluída com outro resultado, que é o que vale. O resultado deste bloco não foi somado às estatísticas, para não contar a mesma revisão duas vezes. Veja a revisão de hoje.',
   'appStudyNow.evidenceRetry': 'Registrar resultado de novo',
   'appStudyNow.evidenceSaved': 'Resultado registrado nas suas estatísticas.',
   'appStudyNow.loadFailed': 'Não foi possível carregar as questões desta aula. Verifique a conexão e abra a aula de novo.',

@@ -3402,6 +3402,7 @@ let studyNowState = null;
 let studyNowLastBlock = null;
 // The INITIAL_PRACTICE evidence of the block just finished, kept until the server has it: the answers are already on the
 // server (each judgment was accepted first), but the aggregate row that feeds Estatisticas is a separate request that can fail.
+let evidenceRejectedByServer = false;
 const pendingStudyEvidence = createStudyEvidenceQueue({
   getScope: () => REMOTE_MODE
     ? (AuthUI.getCurrentUser()?.id == null ? null : JSON.stringify([window.__SMARTLEARN_API_BASE__ || location.origin, AuthUI.getCurrentUser().id]))
@@ -3414,6 +3415,12 @@ const pendingStudyEvidence = createStudyEvidenceQueue({
     removeItem: (key) => localStorage.removeItem(key),
   },
   shouldPersist: (evidence) => evidence.context === "INITIAL_PRACTICE",
+  // the server holds a different conclusion of that stage: this result can never be applied, so it leaves the queue and the student is told
+  isRejected: (error) => error?.status === 409 && error?.code === "IDEMPOTENCY_CONFLICT",
+  onRejected: (evidence, error) => {
+    console.warn("Resultado de revisão não aplicado: o servidor já tem outra conclusão desta etapa.", { reviewTaskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount }, error);
+    evidenceRejectedByServer = true;
+  },
   send: async (evidence) => {
     try {
       if (evidence.obligationUnitId != null) await apiRequest(`/v1/review-obligations/${evidence.obligationUnitId}/complete`, { method: "POST", body: { profile: "DECIDED", expectedReviewTaskId: evidence.reviewTaskId, questionsCount: evidence.questionsCount, correctCount: evidence.correctCount } });
@@ -3787,6 +3794,7 @@ async function finishStudyNowSession() {
 /** Sends the pending evidence; on failure tells the student and offers to send it again. An earlier try that did reach the server counts as recorded. */
 async function recordStudyEvidence() {
   if (!pendingStudyEvidence.pendingCount()) return;
+  evidenceRejectedByServer = false;
   try {
     await pendingStudyEvidence.flush();
   } catch (error) {
@@ -3800,6 +3808,16 @@ async function recordStudyEvidence() {
     return;
   }
   if (pendingStudyEvidence.pendingCount()) return;
+  if (evidenceRejectedByServer) {
+    // not an error to retry: the result cannot be applied, and saying so is what keeps it from being dropped silently
+    studyNowEvidenceRetryBtn.hidden = true;
+    studyNowEvidenceNote.classList.remove("is-error");
+    studyNowEvidenceNote.textContent = t("appStudyNow.evidenceRejected");
+    studyNowEvidenceNote.hidden = false;
+    renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
+    renderToday().catch((error) => console.error("Falha ao atualizar Hoje.", error));
+    return;
+  }
   const wasRetry = !studyNowEvidenceNote.hidden;
   studyNowEvidenceRetryBtn.hidden = true;
   studyNowEvidenceNote.classList.remove("is-error");
