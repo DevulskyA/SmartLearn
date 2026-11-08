@@ -1,0 +1,38 @@
+/* V-01 candidate (NOT applied to the product; Estatisticas is a protected surface, ADR-0001: needs the owner's authorization).
+   Problem: at phone width "Por disciplina" turns each row into a card (src/styles.css, "Por disciplina at phone width"), but the cells keep the
+   desktop-table rules "white-space: nowrap; overflow: hidden; text-overflow: ellipsis" and a 3rd grid column sized "auto", so the values
+   ("Sem evidencia", "Sem questoes", "Amostra insuficiente") are cut to "Sem evi..." and collide, and the sort label "DESEMPENHO" is cut mid-letter.
+   Fix: in the card layout, let text wrap, use two equal columns, and give the trend its own full-width line. Scoped to .matrix-table--cards at < 48rem,
+   so desktop (>= 48rem) is untouched. Append this block after the last phone block of src/styles.css if approved. */
+@media (max-width: 47.999rem) {
+  .matrix-table--cards thead th,
+  .matrix-table--cards .th-sort-btn {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  /* the header cells keep percentage widths from #view-stats-subject (34/22/21/23%), too narrow for their label + sort arrow: size them to the content */
+  #view-stats-subject .matrix-table--cards thead th:nth-child(n) {
+    flex: none;
+    width: auto;
+  }
+
+  .matrix-table--cards tbody tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .matrix-table--cards tbody td:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+
+  .matrix-table--cards .practice-compact,
+  .matrix-table--cards .practice-recent,
+  .matrix-table--cards .subject-compare-value,
+  .matrix-table--cards .trend-badge {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

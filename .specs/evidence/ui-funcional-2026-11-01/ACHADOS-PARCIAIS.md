@@ -243,3 +243,33 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Hoje a 390 px: sem corte nem sobreposição visível na área capturada.
 - V-01 CONFIRMADO (2026-11-08, duas observações independentes: captura só da viewport `390-estatisticas-viewport.png` e medida no DOM). A 390 px, em Estatísticas, `span.subject-compare-value` ("Sem evidência") e `div.practice-compact` ("Sem questões") têm texto mais largo que a caixa e ficam cortados; o cabeçalho "DESEMPENHO" aparece como "DESEMPENHC". A 1280 px nada fora os rótulos visually-hidden (esperado). Superfície protegida (ADR-0001): correção exige decisão do dono. Severidade média. O spec agora imprime `CLIPPED [...]` por tela e salva também a captura de viewport.
 - Editor da aula capturado (2026-11-08): 4 abas (Resumo, Questões, Fonte, Revisão) x 390 e 1280 px, em `.specs/evidence/visual-baseline-2026-11-08/*-editor-*-viewport.png`. Olhadas as de 390 px (Questões, Revisão): sem corte nem sobreposição. Observação de design, não defeito: a 390 px as 4 abas quebram em 2 linhas ("Revisão" sozinha na segunda). Sem achado novo.
+
+## N7 nativo focado (2026-11-08, HEAD da1d852)
+
+- Instrumento novo: `scripts/desktop-nav-n7.mjs` (6 checagens, ~10 s, instância isolada, dados descartáveis, sem provedor de IA, sem Computer Use). Não repete os 23 passos da jornada nem gera com o Codex.
+- Resultado 6/6 PASS no exe `SmartLearn-journey-target\debug\smartlearn.exe`: identidade (título, build), conta sintética, layout largo (1280 px) Materiais -> Configurações -> Conta -> volta com tema e endereço preservados, layout de celular nativo (janela redimensionada para 420x860, 404 px úteis) com o menu "Mais" (abre, Escape fecha, escolha fecha, "Mais" marca página atual em Configurações/Conta), volta para Hoje pela barra, zero erro de console e zero 401 depois do login.
+- E-031 (instrumento, minha): 1a versão esperava `history.back()` voltar a Configurações. O roteador usa `history.replaceState` (src/app.js `showScreen`), então não há entrada de histórico: "voltar" é navegar de novo. Asserção corrigida para o comportamento real; não é defeito do produto. Classe 3 (nenhuma regra cobria; a guarda está no próprio script, com comentário).
+- E-032 (instrumento, minha): esperei o atributo `aria-current` ausente; o produto escreve `"false"`. Corrigido.
+- E-033 (instrumento, minha): o console do navegador registra um 401 antes do login (início deslogado). Passei a rastrear por resposta HTTP (tolerado antes do login, falha depois), como a jornada já faz (OBS-J1).
+- Limite honesto: a janela nativa não foi aberta no tamanho de um celular real nem com toque; o layout de celular foi provado por redimensionamento da janela real. Leitor de tela, Android e banco real seguem com o dono.
+
+## Stop hook "preso em Sem mudança" (2026-11-08)
+
+- Observado: o agente foi bloqueado 9 vezes seguidas ao tentar encerrar, repetindo "Sem mudança".
+- Hooks inspecionados: global `~/.claude/settings.json` (Stop e SubagentStop: `idle-hibernate/hook.mjs` e `impeccable ... hook`) e do projeto `.claude/settings.local.json` (Stop: `impeccable hook`). Provados com entrada simulada (`stop_hook_active` true e false): todos saem com código 0 e sem nenhuma saída, ou seja, nenhum emite `decision: block`. `idle-hibernate/hook.mjs` só grava estado e declara "Never blocks, always exits 0".
+- Causa: o texto "Stop hook feedback: [Completar o sistema]: A condição exige..." vem do avaliador do `/goal` (condição "Completar o sistema"), não de um hook de arquivo. Esse avaliador é do harness; não há script do projeto para corrigir e o limite CLAUDE_CODE_STOP_HOOK_BLOCK_CAP não foi alterado. A recursão aparece quando a condição do goal não é satisfazível sem ação humana e o agente responde ao bloqueio com texto em vez de encerrar.
+- Mitigação sem tocar configuração global: o novo `/goal` tem condição de parada que admite bloqueio documentado, e a regra operacional é encerrar com um relatório consolidado quando só restam dependências humanas (AGENTS.md, item 6, "Long-running"). Nenhum patch de hook é necessário.
+
+## Axe nos 23 temas no HEAD final (2026-11-08)
+
+- Primeira rodada (da1d852): 27 passou, 1 falhou: `theme solarized-light` com `registering ... failed with 429: RATE_LIMITED`. É a segunda ocorrência de E-030 (mesma classe) -> regra "mesma classe duas vezes = guarda no código".
+- Causa provada: `e2e/accessibility.spec.js` usava 1 servidor por arquivo para 28 testes; `/auth/register` limita 20 por IP em 15 min (`server/src/routes/auth.js` `DEFAULT_REGISTER_IP_MAX_ATTEMPTS`). Defeito do instrumento, não de acessibilidade nem do produto.
+- Guarda: servidor novo por teste (`beforeEach`/`afterEach`), com comentário que cita o limite. Isso zera o limitador e o banco a cada caso.
+- Segunda rodada (com a guarda): 28/28 PASS (23 temas a 1280 px + paper a 375 px + 4 casos do editor), 375 s. Zero violação crítica/séria.
+- `PERF DEVIATION full@3w+args: 375 s vs baseline 48 s`: ruído esperado de chave de runner compartilhada (a baseline de 48 s é de outra seleção de casos); não há baseline própria desta spec. Registrado, não investigado como regressão.
+- Classificação do erro meu: classe 1 não; E-030 foi tratado como flake na 1a vez em vez de corrigido na causa. Regra existia ("Same error class twice" só dispara na 2a vez; a 1a registrei, a 2a corrigi). Sem mudança de regra.
+
+## V-01 preparado para decisão (2026-11-08)
+- Causa e correção candidata isoladas (produto intocado): `.specs/proposals/V-01-stats-390.md` + `.css`; prova `e2e/visual-v01-candidate.spec.js` (antes: defeito reproduzido a 390 e 360 px; depois: 0 corte e 0 colisão; 1280 px idêntico).
+- E-034 (instrumento, minha): a 1a medição marcou `.visually-hidden` (texto só para leitor de tela, cortado de propósito, também a 1280 px) como corte; ficou de fora. E-035: a 1a versão do spec empurrava `overlaps.push()` vazio, então a colisão de cabeçalhos não era medida; corrigido e o "antes" agora mostra os cabeçalhos largos demais.
+- Estatísticas continua protegida: nada foi integrado.
