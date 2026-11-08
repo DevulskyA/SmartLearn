@@ -122,7 +122,7 @@ function auditUnits(units, text, scope) {
 // NEGATION AND QUALIFIERS (per language). Cues are matched as whole words on accent-free lower case text.
 const CUES = {
   negation: {
-    en: ['not', 'no', 'never', 'neither', 'nor', 'without', 'cannot', 'none', 'nothing', 'unable', 'absent', 'absence', 'lack', 'lacks', 'prevents', 'prevent', 'impermeable', 'fails'],
+    en: ['not', 'no', 'never', 'neither', 'nor', 'without', 'cannot', 'none', 'nothing', 'unable', 'absent', 'absence', 'lack', 'lacks', 'prevents', 'prevent', 'impermeable', 'fails', 'unaffected', 'unchanged', 'unaltered'],
     pt: ['nao', 'nunca', 'nem', 'sem', 'nenhum', 'nenhuma', 'nada', 'incapaz', 'ausente', 'ausencia', 'falta', 'impede', 'impedem', 'impedindo', 'impermeavel', 'falha', 'jamais', 'evita', 'bloqueia'],
     es: ['no', 'nunca', 'ni', 'sin', 'ningun', 'ninguno', 'ninguna', 'nada', 'incapaz', 'ausente', 'ausencia', 'falta', 'impide', 'impiden', 'impermeable', 'jamas', 'evita', 'bloquea'],
   },
@@ -138,7 +138,7 @@ const CUES = {
 const ABSOLUTES = new Set(['ONLY', 'ALWAYS', 'NEVER']);
 const NEVER_CUES = new Set(['never', 'nunca', 'jamais', 'jamas']);
 // negation-like verbs and adjectives: they have faithful non-negated paraphrases, so they never prove a flipped negation
-const WEAK_NEGATION = new Set(['prevents', 'prevent', 'fails', 'lack', 'lacks', 'impermeable', 'falha', 'falta', 'impede', 'impedem', 'impedindo', 'impermeavel', 'evita', 'bloqueia', 'impide', 'impiden', 'bloquea']);
+const WEAK_NEGATION = new Set(['unaffected', 'unchanged', 'unaltered', 'prevents', 'prevent', 'fails', 'lack', 'lacks', 'impermeable', 'falha', 'falta', 'impede', 'impedem', 'impedindo', 'impermeavel', 'evita', 'bloqueia', 'impide', 'impiden', 'bloquea']);
 
 function cueSets(lang) {
   return {

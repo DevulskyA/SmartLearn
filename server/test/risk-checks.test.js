@@ -86,6 +86,13 @@ test('same language works the same way (pt source, pt draft)', () => {
   assert.deepEqual(issues(auditRisk(lost, { segments: [source] })), ['QUALIFIER_LOST']);
 });
 
+test('NEGATION_ADDED: an implicit English negator ("unaffected") faithfully rendered as "não ..." is not flagged (E-050)', () => {
+  const tail = ' in this experiment, which is the condition described by the source text of this lesson, written for first-year medical students who study renal physiology.';
+  const source = segment(`The neutral molecules were unaffected by the negative charges on the pores of the glomerular basement membrane${tail}`);
+  const draft = { summary: 'As moléculas neutras não sofreram efeito das cargas negativas dos poros da membrana basal glomerular, nesse experimento, que é a condição descrita pelo texto de origem desta aula, escrito para estudantes de medicina do primeiro ano que estudam a fisiologia renal.', questions: [] };
+  assert.deepEqual(issues(auditRisk(draft, { segments: [source] })).filter((i) => i.startsWith('NEGATION')), []);
+});
+
 test('NEGATION_LOST / NEGATION_ADDED: a contraindication that reads as an indication (and the reverse) is HIGH; the faithful draft is clean', () => {
   const tail = ', e esta é a conduta recomendada pelo texto de origem desta aula, que foi escrito para os estudantes de medicina do primeiro ano da faculdade e que serve para o estudo da farmacologia clínica.';
   const sentence = (neg) => `A metformina ${neg}deve ser iniciada quando a filtração glomerular estiver reduzida em pacientes com insuficiência renal grave${tail}`;
