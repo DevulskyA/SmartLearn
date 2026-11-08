@@ -5,7 +5,7 @@
 // explicit opt-in for the flow that needs the API server. Spawns both
 // processes directly by their JS entry point (never through a shell), so
 // it behaves the same on Windows and POSIX without quoting landmines.
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -14,20 +14,9 @@ import { devDbPaths, snapshotDevDbIfNeeded, assertDevLockFree } from './dev-data
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SERVER_DIR = path.join(ROOT, 'server');
 const VITE_ENTRY = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
-const WORK_BRANCH = 'claude/smartlearn-v1-complete';
 
-function git(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-}
-
-const branch = git(['branch', '--show-current'], ROOT);
-console.log(`SMARTLEARN_ROOT=${ROOT}`);
-console.log(`SMARTLEARN_BRANCH=${branch || '(detached HEAD)'}`);
-if (branch !== WORK_BRANCH) {
-  console.error('\nSMARTLEARN_WRONG_WORKTREE');
-  console.error(`Development must run from ${WORK_BRANCH}.`);
-  process.exit(1);
-}
+// Same identity guard as the npm pre-scripts: right checkout (execution root) AND an allowed line of work (scripts/work-branches.json).
+if (spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'work-target-guard.mjs')], { stdio: 'inherit' }).status !== 0) process.exit(1);
 
 // Small fixed range covers Vite's automatic port fallback when 5173 is busy.
 const DEV_ORIGINS = [5173, 5174, 5175, 5176, 5177]

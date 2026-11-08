@@ -13,26 +13,15 @@
 // invariants as that existing guard: only runs when import.meta.env.DEV
 // (never in a production build), and only when the store is genuinely
 // empty (never overwrites real data). See db.js for the exact guard.
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const VITE_ENTRY = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
-const WORK_BRANCH = 'claude/smartlearn-v1-complete';
 
-function git(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-}
-
-const branch = git(['branch', '--show-current'], ROOT);
-console.log(`SMARTLEARN_ROOT=${ROOT}`);
-console.log(`SMARTLEARN_BRANCH=${branch || '(detached HEAD)'}`);
-if (branch !== WORK_BRANCH) {
-  console.error('\nSMARTLEARN_WRONG_WORKTREE');
-  console.error(`Development must run from ${WORK_BRANCH}.`);
-  process.exit(1);
-}
+// Same identity guard as the npm pre-scripts: right checkout (execution root) AND an allowed line of work (scripts/work-branches.json).
+if (spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'work-target-guard.mjs')], { stdio: 'inherit' }).status !== 0) process.exit(1);
 
 console.log(
   '\n[dev:uat] Seeding the rich ~9-discipline UAT dataset on first load ' +

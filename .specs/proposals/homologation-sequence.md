@@ -31,7 +31,7 @@ Run each step only after the previous one passes. Stop at the first failure and 
 
 - Integrate the combined branch (HG-10).
 - Backup and authorization of migrations 035 to 041 on the real datastore (steps 2 to 5).
-- Launcher and branch guard criterion: identity instead of branch name (`.specs/proposals/launcher-served-identity.md`). Until decided, `scripts/require-work-branch.mjs` still requires the name `claude/smartlearn-v1-complete`.
+- Branch guard criterion: DECIDED 2026-11-08 by the owner. `scripts/work-target-guard.mjs` (identity of the checkout plus `scripts/work-branches.json`) replaced the name-only guard in every npm pre-script and dev script. The old DEV launcher and the Oficial/DEV shortcuts are untouched; the separate "SmartLearn Homologacao" shortcut is described in section F.
 - V-01 (Estatisticas at 390 px, `.specs/proposals/V-01-stats-390.md`), T-F4-01 and VALID-8.
 - Any further paid Codex run.
 
