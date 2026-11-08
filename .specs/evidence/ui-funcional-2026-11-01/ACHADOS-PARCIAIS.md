@@ -316,3 +316,9 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Omitted from the summary (secondary): ultrafiltrate similar to interstitial fluid; the four theoretical Starling pressures; locations of the fixed negative charges; the dextran experiment (only in question 13); the definition of net ultrafiltration pressure as the algebraic sum of the three pressures (only in questions).
 - Defects: (a) question 4 explanation ends with a nonsensical clause ("sem as concentracoes arterial e venosa renais, os resultados sao efetivos"), real, generation quality, P2. (b) the deterministic negation check raised 3 HIGH findings (questions 4, 6, 13); 6 and 13 are false positives ("unaffected" vs "nao sofreram esse efeito"; "does not permit" vs an affirmative sentence with the same meaning), P2 reviewer noise. Both OPEN, no fix (would need paid reruns to validate).
 - Not a medical validation: clinical review stays with T-F4-01 / VALID-8.
+
+### E-050 update (2026-11-08): negation false positive FIXED
+- Where: `server/src/ai/risk-checks.js` (CUES.negation en, WEAK_NEGATION). Real run: "unaffected" -> "nao sofreram" raised NEGATION_ADDED (question 12).
+- Fix: "unaffected/unchanged/unaltered" count as a source negation but never prove a lost one. Test `risk-checks.test.js` fails without the fix. `AUDIT_RULES_VERSION` = audit-rules-12 (commit 96028d3).
+- Not changed on purpose: question 3 (draft says "sem as concentracoes ... os resultados sao efetivos", garbled) and question 5 (negation dropped) are genuine generation defects; the findings stay. Garbled generation (question 3/4) is OPEN and needs a generation change, which needs a paid run to prove.
+- Class: 3 (no rule covered it); guard is the test.
