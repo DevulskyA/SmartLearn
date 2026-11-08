@@ -250,7 +250,7 @@ try {
     const how = await signIn();
     const keysAfter = await snapshotKeys();
     await openStudyNow();
-    const resumeVisible = await page.locator('#study-now-resume').isVisible();
+    const resumeVisible = await page.locator('#study-now-resume').waitFor({ state: 'visible', timeout: 6000 }).then(() => true, () => false);
     const resumeText = resumeVisible ? squash(await page.locator('#study-now-resume-text').innerText()) : null;
     expect(resumeVisible, `no "continue" offer after the native restart (origin before ${ctx.originBefore}, after ${ctx.originAfter}; resume keys on device before: ${JSON.stringify(ctx.keysBefore)}, after: ${JSON.stringify(keysAfter)})`);
     expect(/2 de 3/.test(resumeText), `resume text: ${resumeText}`);
