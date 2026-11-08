@@ -453,11 +453,22 @@ try {
     return { summaryChars: summary.length, questionsListed: questions };
   });
 
+  // The editor hides the answer of a question the automatic check did not flag (author mode); whether a question is flagged depends on the
+  // model's content (E-041: real Codex run 1 and 4 failed here because the answer textarea did not exist). The student presses "Mostrar resposta".
+  const answerField = (editor) => {
+    const hidden = editor.locator('[data-part="answer-hidden"] [data-action="reveal-answer"]');
+    return {
+      async prepare() { if (await hidden.count()) await hidden.click(); return editor.locator('.lesson-qeditor textarea').nth(1); },
+      async fill(value) { await (await this.prepare()).fill(value); },
+      async inputValue() { return (await this.prepare()).inputValue(); },
+    };
+  };
+
   await step(7, 'edit, save, reload, verify (summary + one question)', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Questões/ }).click();
     await editor.locator('.lesson-qitem').nth(1).click();
-    await editor.locator('.lesson-qeditor textarea').nth(1).fill(ANSWER_EDIT);
+    await answerField(editor).fill(ANSWER_EDIT);
     await editor.locator('[data-action="save-question"]').click();
     await editor.locator('.lesson-qeditor .lesson-message').getByText('Questão salva').waitFor({ timeout: 10000 });
     await editor.getByRole('tab', { name: /Resumo/ }).click();
@@ -508,7 +519,7 @@ try {
     expect(summaryAfter === ctx.summaryFinal, `summary after reload: ${summaryAfter}`);
     await editor.getByRole('tab', { name: /Questões/ }).click();
     await editor.locator('.lesson-qitem').nth(1).click();
-    const answerAfter = await editor.locator('.lesson-qeditor textarea').nth(1).inputValue();
+    const answerAfter = await answerField(editor).inputValue();
     expect(answerAfter === ANSWER_EDIT, `answer after reload: ${answerAfter}`);
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
     expect(draft.summary === ctx.summaryFinal, 'server draft summary differs');
