@@ -1124,9 +1124,10 @@ try {
     await sleep(1500);
     const closing = await shutdown({ graceful: true });
     snapshotBefore = dbSnapshot();
-    // The Hoje review has two judgments in step 14 and the final exercise in
-    // step 20; the latter is also a real persisted attempt before restart.
-    expect(snapshotBefore.attempts.length === ctx.studyNow.length + ctx.hoje.length + 2, `DB attempts ${snapshotBefore.attempts.length} != ${ctx.studyNow.length} study + ${ctx.hoje.length} hoje + 1 completion judgment + 1 retest; attempts: ${JSON.stringify(snapshotBefore.attempts)}; study ids ${JSON.stringify(ctx.studyNow.map((s) => s.id))}; hoje ids ${JSON.stringify(ctx.hoje.map((h) => h.id))}`);
+    // Expected attempts follow the REAL question count (E-040: a 4-question lesson legitimately gave 9, not 8): every study question,
+    // 1 retest, and one attempt per exercise of the Hoje review (2 judged in step 14, the other reviewTotal-2 judged in step 20).
+    const expectedAttempts = ctx.studyNow.length + 1 + ctx.reviewTotal;
+    expect(snapshotBefore.attempts.length === expectedAttempts, `DB attempts ${snapshotBefore.attempts.length} != ${expectedAttempts} (${ctx.studyNow.length} study + 1 retest + ${ctx.reviewTotal} Hoje review exercises); attempts: ${JSON.stringify(snapshotBefore.attempts)}; study ids ${JSON.stringify(ctx.studyNow.map((s) => s.id))}; hoje ids ${JSON.stringify(ctx.hoje.map((h) => h.id))}`);
     const submitted = snapshotBefore.attempts.filter((a) => a.status === 'SUBMITTED');
     expect(submitted.length === snapshotBefore.attempts.length && submitted.every((a) => a.maxAssistance === 'SOLUTION' && a.assistanceUsed === 'SOLUTION'), `DB attempts not all SUBMITTED with SOLUTION assistance: ${JSON.stringify(snapshotBefore.attempts)}`);
     const outcomes = snapshotBefore.attempts.map((a) => a.outcome);
