@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
+import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 
 // Visual baseline: one full-page PNG per main screen at phone (390 px) and desktop (1280 px) width, on the real server and UI with
 // realistic data. It is a capture tool, not an assertion suite: it only runs when SCREENSHOT_DIR is set, and fails only if a screen
@@ -86,6 +87,34 @@ test('capture every main screen at 390 px and 1280 px', async ({ page }) => {
       // elements whose text is wider than their box (clipped) on this screen, for the report
       const clipped = await page.evaluate(() => [...document.querySelectorAll('.screen:not([hidden]) *')].filter((el) => el.children.length === 0 && el.textContent.trim() && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible').map((el) => `${el.tagName.toLowerCase()}.${el.className}: "${el.textContent.trim().slice(0, 30)}"`).slice(0, 10));
       if (clipped.length) console.log(`CLIPPED [${size.width} ${screen.name}] ${clipped.join(' | ')}`);
+    }
+  }
+});
+
+test('capture the lesson editor tabs at 390 px and 1280 px', async ({ page }) => {
+  await page.addInitScript((base) => {
+    window.__SMARTLEARN_API_BASE__ = base;
+    window.__SMARTLEARN_REMOTE_MODE__ = true;
+    window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
+  }, API_BASE);
+  await signInRegistered(page, { email: `visual-editor-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
+  await page.setViewportSize(SIZES[0]);
+  const materials = page.locator('[data-screen="materials"]:visible').first();
+  await expect(materials).toBeVisible();
+  await materials.click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'editor.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos']) });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
+  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  const editor = page.locator('.lesson-editor');
+  await expect(editor).toBeVisible({ timeout: 10000 });
+  for (const size of SIZES) {
+    await page.setViewportSize(size);
+    for (const tab of ['Resumo', 'Questões', 'Fonte', 'Revisão']) {
+      const button = editor.getByRole('tab', { name: new RegExp(tab) });
+      if (await button.count()) await button.click();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: join(OUT, `${size.width}-editor-${tab.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}-viewport.png`) });
     }
   }
 });
