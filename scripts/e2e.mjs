@@ -8,6 +8,7 @@ import { openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { SUITE_WORKERS } from '../e2e/support/suites.js';
 
@@ -76,6 +77,35 @@ async function blockFree(offset, free, workers = 1) {
   return true;
 }
 
+// ---- duration baseline identity ----
+// A baseline is only a fair comparison for the SAME selection of tests on the SAME configuration. The key is the suite and workers, plus a short hash
+// of the selection (spec files and the flags that change which tests run) when the caller passed any. Spelling does not matter (file order, path
+// separators, -g/--grep, the reporter); the tests do. --changed and --failed select from the working tree / the last run, so they have no baseline.
+const FLAG_ALIAS = { '-g': '--grep', '-j': '--workers', '-c': '--config' };
+const VALUE_FLAGS = new Set(['--grep', '--grep-invert', '--project', '--repeat-each', '--retries', '--workers', '--timeout', '--shard', '--reporter', '--output', '--config', '--tag', '--max-failures']);
+const NOT_PART_OF_SELECTION = new Set(['--reporter', '--output']);
+
+export function baselineIdentity({ suite, workers, args = [] }) {
+  if (args.includes('--only-changed') || args.includes('--changed')) return { key: null, reason: '--changed selects the specs that differ from HEAD (the working tree), so two runs rarely select the same tests' };
+  if (args.includes('--last-failed') || args.includes('--failed')) return { key: null, reason: '--failed selects what failed in the last run, so two runs rarely select the same tests' };
+  const base = `${suite || 'full'}@${workers}w`;
+  const files = [];
+  const flags = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (!arg.startsWith('-')) { files.push(arg.replaceAll('\\', '/')); continue; }
+    const eq = arg.indexOf('=');
+    const name = FLAG_ALIAS[eq < 0 ? arg : arg.slice(0, eq)] ?? (eq < 0 ? arg : arg.slice(0, eq));
+    let value = eq < 0 ? undefined : arg.slice(eq + 1);
+    if (value === undefined && VALUE_FLAGS.has(name)) { value = args[i + 1] ?? ''; i += 1; }
+    if (NOT_PART_OF_SELECTION.has(name)) continue;
+    flags.push(`${name}=${value ?? ''}`);
+  }
+  if (!files.length && !flags.length) return { key: base };
+  const selection = JSON.stringify({ files: files.sort(), flags: flags.sort() });
+  return { key: `${base}+sel-${createHash('sha1').update(selection).digest('hex').slice(0, 10)}`, selection };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2);
   const env = { ...process.env };
@@ -96,24 +126,25 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   // --changed = only the specs whose files differ from HEAD (Playwright --only-changed); --failed = re-run last failures only
   for (const [flag, pw] of [['--changed', '--only-changed'], ['--failed', '--last-failed']]) { const k = args.indexOf(flag); if (k >= 0) args[k] = pw; }
   // token-cheap output by default: only failures and one summary line; E2E_VERBOSE=1 or an explicit --reporter keeps Playwright's own
-  const userArgs = args.length; // the baseline key counts the caller's arguments, not the reporter added below
+  const identity = baselineIdentity({ suite: env.E2E_SUITE, workers, args: [...args] }); // the caller's arguments, not the reporter added below
   if (!env.E2E_VERBOSE && !args.some((a) => a === '--reporter' || a.startsWith('--reporter='))) args.push(`--reporter=${fileURLToPath(new URL('../e2e/support/quiet-reporter.js', import.meta.url))}`);
   // run Playwright's CLI directly: no npx/npm "notice" lines, no shell quoting
   const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
   const child = spawn(process.execPath, [cli, 'test', ...args], { env, stdio: 'inherit' });
   const t0 = Date.now();
-  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: `${env.E2E_SUITE || 'full'}@${workers}w${userArgs ? '+args' : ''}`, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
+  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: identity.key, reason: identity.reason, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
   process.on('SIGINT', () => { release(); process.exit(130); });
 }
 
 // every run has a measured baseline: a full-suite duration far from the recorded one means a slow target, a broken runner or skipped tests (exit 5 if the run was otherwise green)
-function checkDuration({ seconds, key, code, record }) {
-  const file = new URL('../e2e/.duration-baseline.json', import.meta.url);
+export function checkDuration({ seconds, key, reason, code, record, file = new URL('../e2e/.duration-baseline.json', import.meta.url), log = console.log }) {
+  // a run whose selection has no stable identity (--changed, --failed) is neither compared nor recorded: any "deviation" would only mean "other tests"
+  if (!key) { log(`[e2e] no comparable baseline: ${reason}${record ? '; --record-baseline ignored, nothing recorded' : ''}`); return; }
   let all = {};
   try { all = JSON.parse(readFileSync(file, 'utf8')); } catch { /* none yet */ }
-  if (record && code === 0) { all[key] = Math.round(seconds); writeFileSync(file, JSON.stringify(all, null, 2) + '\n'); console.log(`[e2e] baseline ${key} = ${Math.round(seconds)} s recorded`); return; }
+  if (record && code === 0) { all[key] = Math.round(seconds); writeFileSync(file, JSON.stringify(all, null, 2) + '\n'); log(`[e2e] baseline ${key} = ${Math.round(seconds)} s recorded`); return; }
   const base = all[key];
-  if (!base) { console.log(`[e2e] NO BASELINE for ${key} (${Math.round(seconds)} s); record one from a clean run with --record-baseline`); return; }
+  if (!base) { log(`[e2e] NO BASELINE for ${key} (${Math.round(seconds)} s); record one from a clean run with --record-baseline`); return; }
   const dev = (seconds - base) / base;
-  if (Math.abs(dev) > 0.3) { console.log(`[e2e] PERF DEVIATION ${key}: ${Math.round(seconds)} s vs baseline ${base} s (${dev > 0 ? '+' : ''}${Math.round(dev * 100)}%): investigate runner/target before trusting the result`); return true; }
+  if (Math.abs(dev) > 0.3) { log(`[e2e] PERF DEVIATION ${key}: ${Math.round(seconds)} s vs baseline ${base} s (${dev > 0 ? '+' : ''}${Math.round(dev * 100)}%): investigate runner/target before trusting the result`); return true; }
 }
