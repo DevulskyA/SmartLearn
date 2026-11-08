@@ -21,7 +21,7 @@ const SHORTCUT_NAME = `SmartLearn Homologa${'\u00e7\u00e3'}o.lnk`;
 const RUNTIME_DIRS = ['dist-runtime', 'server-runtime', 'node-runtime', 'shared'];
 
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8' }).trim();
+const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8' }).trim();
 
 function main() {
   const exeArg = arg('--exe') ?? die('--exe <path to smartlearn.exe> is required');
@@ -88,6 +88,7 @@ $s.IconLocation = '${join(live, 'smartlearn.exe').replace(/'/g, "''")},0'
 $s.Description = 'SmartLearn candidato isolado para homologacao (dados proprios)'
 $s.Save()
 Write-Output $path`);
+    if (!shortcut) die('the shortcut could not be created');
     if (shortcut === 'FOREIGN') die(`a shortcut named ${SHORTCUT_NAME} already exists and is not this install's. Nothing overwritten.`);
   }
   console.log(JSON.stringify({ ok: true, installDir: dest, executable: join(live, 'smartlearn.exe'), exeSha256: copiedSha, inputsHash: identity.inputsHash, commit: head, shortcut }, null, 2));

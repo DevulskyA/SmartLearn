@@ -680,7 +680,7 @@ mod tests {
     }
 
     use super::{
-        window_title, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
+        window_title, webview_data_dir, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
         pick_free_local_port, pick_stable_local_port, backend_port_file, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
         strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
         TransactionStatement, LOCAL_BACKEND_HOST,

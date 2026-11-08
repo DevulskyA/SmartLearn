@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24 }).trim();
+const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24 }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
@@ -110,14 +110,19 @@ function backendOf(pid) {
   return rows.split(/\r?\n/).filter(Boolean).map((r) => { const [p, path, handle] = r.split('|'); return { pid: Number(p), path, handle }; });
 }
 
-async function backendPort(nodePid) {
-  const until = Date.now() + 30000;
+async function backendPort(nodePid, scratchDir = scratch) {
+  // The app remembers its backend port next to the database (stable origin for the WebView's localStorage). Process-to-socket ownership is not
+  // reliable from a sandboxed shell (owner 0), so the port comes from that file and the identity is then proven over HTTP (/health/build).
+  const portFile = join(scratchDir, 'smartlearn-homologacao.port');
+  const until = Date.now() + 45000;
   while (Date.now() < until) {
-    const port = ps(`Get-NetTCPConnection -State Listen -OwningProcess ${nodePid} -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty LocalPort`);
-    if (port) return Number(port);
-    await sleep(400);
+    try {
+      const port = Number(readFileSync(portFile, 'utf8').trim());
+      if (Number.isInteger(port) && port > 0 && (await fetch(`http://127.0.0.1:${port}/health/live`)).ok) return port;
+    } catch { /* not written / not up yet */ }
+    await sleep(500);
   }
-  throw new Error('the backend never listened');
+  throw new Error(`the backend (pid ${nodePid}) did not answer on the port recorded in ${portFile}`);
 }
 
 async function waitReady(base) {
