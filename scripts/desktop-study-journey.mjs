@@ -274,6 +274,24 @@ function dbSnapshot() {
 const stripVolatile = (value) => JSON.parse(JSON.stringify(value, (key, v) => (/^(exportedAt|generatedAt)$/.test(key) ? undefined : v)));
 
 const state = { halted: false };
+// Probe for a page that stops answering (seen twice with a REAL model draft: ~30 s lost right after the draft opens, once ending in a step timeout).
+// Every second it asks the page for a trivial value; a round trip over 2 s is recorded with the busiest processes at that moment. It only observes.
+const stallProbe = { stop: false, stalls: [] };
+const startedJourneyAt = Date.now();
+(async () => {
+  while (!stallProbe.stop) {
+    await sleep(1000);
+    if (!page || state.halted) continue;
+    const t0 = Date.now();
+    const answered = await Promise.race([page.evaluate(() => performance.now()).then(() => true, () => false), sleep(40000).then(() => null)]);
+    const took = Date.now() - t0;
+    if (took > 2000) {
+      let busiest = null;
+      try { busiest = ps(`Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 | ForEach-Object { $_.ProcessName + ':' + [int]$_.CPU }`).split(/\r?\n/).map((l) => l.trim()).filter(Boolean); } catch { /* observation only */ }
+      stallProbe.stalls.push({ atMs: Date.now() - startedJourneyAt, tookMs: took, answered, lastStep: result.steps.at(-1)?.step ?? null, busiest });
+    }
+  }
+})();
 async function step(n, name, fn) {
   const entry = { step: n, name, status: 'NOT_RUN', evidence: null };
   result.steps.push(entry);
@@ -420,6 +438,9 @@ try {
     return { draftId: ctx.draftId, status: draft.status, provider: job.provider, modelVersion: draft.modelVersion, timing: { generationJobMs: jobElapsedMs, clickToDraftVisibleMs: uiElapsedMs, startedAt: job.startedAt, finishedAt: job.finishedAt, transitions: generation.transitions }, questions: ctx.draftQuestions, summaryHead: squash(draft.summary).slice(0, 80) };
   });
 
+  // diagnosis only: a real draft takes 50-100 s to arrive with nobody touching the machine; this lets an offline run wait the same time, to tell a
+  // product stall from the window being occluded/throttled while the display idles
+  if (process.env.SL_JOURNEY_IDLE_AFTER_STEP5_MS) await sleep(Number(process.env.SL_JOURNEY_IDLE_AFTER_STEP5_MS));
   await step(6, 'open Resumo and Questões', async () => {
     const editor = page.locator('.lesson-editor');
     await editor.getByRole('tab', { name: /Resumo/ }).click();
@@ -1185,6 +1206,8 @@ try {
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 });
 }
+stallProbe.stop = true;
+result.pageStalls = stallProbe.stalls; // round trips to the page that took over 2 s, with the busiest processes at that moment
 result.totalConsoleErrors = consoleErrors.length;
 result.consoleErrorSample = consoleErrors.slice(0, 5);
 result.http401 = http401;
