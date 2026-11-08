@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const exe = join(root, 'src-tauri', 'target', 'debug', 'smartlearn.exe');
+const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(root, 'src-tauri', 'target', 'debug', 'smartlearn.exe')); // same override as the other native scripts
 const head = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const version = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8' })).version;
 const expectedTitle = `SmartLearn DEV - v${version} - ${head}`;
