@@ -36,7 +36,10 @@ const ACCEPTED = {};
 let serverProcess;
 let dataDir;
 
-test.beforeAll(async () => {
+// One server PER TEST, not per file: every test registers an account, and /auth/register allows 20 per IP per 15 minutes
+// (server/src/routes/auth.js DEFAULT_REGISTER_IP_MAX_ATTEMPTS). 28 tests on one server hit RATE_LIMITED intermittently (E-030, twice).
+// A fresh process also gives every test a clean limiter and an empty database. Tests in one file run serially, so the fixed port is safe.
+test.beforeEach(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-a11y-'));
   serverProcess = spawn(process.execPath, [MAIN_JS], {
     env: {
@@ -53,7 +56,7 @@ test.beforeAll(async () => {
   await waitForServerReady(API_BASE, { label: 'accessibility E2E' });
 });
 
-test.afterAll(async () => {
+test.afterEach(async () => {
   serverProcess?.kill();
   await new Promise((r) => setTimeout(r, 300));
   rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
