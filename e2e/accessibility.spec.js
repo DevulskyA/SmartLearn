@@ -105,8 +105,8 @@ async function seed(page) {
 
 const summarize = (violations) => violations.map((v) => `${v.impact} ${v.id} (${v.nodes.length}): ${v.help} :: ${v.nodes.slice(0, 4).map(detail).join(' | ')}`);
 
-// the four base themes, plus the eight whose tokens were corrected to WCAG AA (test/theme-contrast.test.js covers all 23 by arithmetic; axe checks the computed colors)
-const THEMES = ['paper', 'sepia', 'night', 'contrast', 'ocean', 'gruvbox', 'midnight', 'catppuccin-latte', 'gruvbox-light', 'solarized-light', 'dracula-light', 'tokyo-day'];
+// all 23 concrete themes (THEME_OPTIONS minus "auto"); test/theme-contrast.test.js covers them by arithmetic, axe checks the computed colors
+const THEMES = ['paper', 'sepia', 'ocean', 'forest', 'night', 'contrast', 'dusk', 'dracula', 'catppuccin', 'onedark', 'gruvbox', 'neon', 'premium', 'tokyo', 'midnight', 'forest-serenity', 'sunset', 'cyberpunk', 'catppuccin-latte', 'gruvbox-light', 'solarized-light', 'dracula-light', 'tokyo-day'];
 const CASES = [
   ...THEMES.map((theme) => ({ theme, width: 1280, height: 800 })),
   { theme: 'paper', width: 375, height: 812 },
