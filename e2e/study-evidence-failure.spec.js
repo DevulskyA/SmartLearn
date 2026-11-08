@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, request as pwRequest } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,6 +32,7 @@ test.afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
+let creds;
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;
@@ -39,6 +40,7 @@ test.beforeEach(async ({ page }) => {
   }, API_BASE);
   const email = `evidencefail-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const password = 'a genuinely long test password 1';
+  creds = { email, password };
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await expect(async () => {
@@ -273,6 +275,134 @@ test('H-T04: leaving the result with evidence unsent does not lose it', async ({
   }).toPass({ timeout: 4000 });
 });
 
+// Lote 2026-11-08, item 1: the evidence of a finished block is the only copy of "this block was practiced" until the server has it. It used to live in ONE
+// variable that startStudyNow() (via resetStudyNowResult) wiped, and that a late reply of an earlier send cleared again. These tests start another study
+// after a failure, with the reply lost, with a slow earlier send, and across accounts. The request body carries the operationKey: it must be the same on
+// every resend of one block (that is what makes a resend harmless), and different between blocks.
+const bodyOf = (route) => route.request().postDataJSON() ?? {};
+const keysFor = (sent, unitId) => sent.filter((s) => s.unitId === unitId).map((s) => s.key);
+
+async function loginAs(page, { email, password }) {
+  await page.locator('[data-screen="account"]:visible').first().click();
+  if (await page.locator('#account-logged-in-view').isVisible()) {
+    await page.locator('#account-logout-btn').click();
+    await expect(page.locator('#account-login-form')).toBeVisible({ timeout: 10000 });
+  }
+  await page.locator('#account-login-email').fill(email);
+  await page.locator('#account-login-password').fill(password);
+  await page.locator('#account-login-form button[type="submit"]').click();
+  await expect(page.locator('#account-logged-in-view')).toBeVisible({ timeout: 15000 });
+}
+
+test('LOSS-1: evidence that failed BEFORE the write survives leaving and studying another lesson, and is recorded once under its original key', async ({ page }) => {
+  const sent = [];
+  let offline = true;
+  await page.route('**/v1/learning-evidence', async (route) => {
+    if (!isEvidencePost(route)) return route.continue();
+    sent.push({ unitId: bodyOf(route).unitId, key: bodyOf(route).operationKey });
+    return offline ? route.abort() : route.continue();
+  });
+  const a = await studyOnce(page, 'Aula perda a', async () => {});
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  await page.locator('#study-now-done-btn').click(); // the send on the way out fails too
+  offline = false; // the connection is back; the student starts another lesson (this is what used to wipe the pending evidence of A)
+  const b = await studyOnce(page, 'Aula perda b', async () => {});
+  await expect(async () => { expect((await evidenceRows(page, a.id)).length, 'the first block was recorded after the connection came back').toBe(1); }).toPass({ timeout: 8000 });
+  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  const keysA = keysFor(sent, a.id);
+  expect(keysA.length, 'A was sent more than once').toBeGreaterThan(1);
+  expect(new Set(keysA).size, 'every resend of A carries the same operationKey').toBe(1);
+  expect(keysA[0]).toBeTruthy();
+  expect(keysFor(sent, b.id)[0]).not.toBe(keysA[0]);
+});
+
+test('LOSS-2: evidence recorded by the server whose REPLY was lost is not duplicated by the later resend', async ({ page }) => {
+  const sent = [];
+  let firstA = true;
+  let offline = true;
+  await page.route('**/v1/learning-evidence', async (route) => {
+    if (!isEvidencePost(route)) return route.continue();
+    const { unitId, operationKey } = bodyOf(route);
+    sent.push({ unitId, key: operationKey });
+    if (firstA) { firstA = false; await route.fetch(); return route.abort(); } // recorded, reply lost
+    return offline ? route.abort() : route.continue();
+  });
+  const a = await studyOnce(page, 'Aula perda c', async () => {});
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  expect((await evidenceRows(page, a.id)).length, 'the server DID record it').toBe(1);
+  await page.locator('#study-now-done-btn').click();
+  offline = false;
+  const b = await studyOnce(page, 'Aula perda d', async () => {});
+  await expect(async () => { expect(keysFor(sent, a.id).length, 'A was sent again after the lost reply').toBeGreaterThan(1); }).toPass({ timeout: 8000 });
+  expect((await evidenceRows(page, a.id)).length, 'no duplicate row').toBe(1);
+  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  expect(new Set(keysFor(sent, a.id)).size).toBe(1);
+});
+
+test('LOSS-3: a late reply of an earlier send does not clear the pending evidence of a newer block', async ({ page }) => {
+  let releaseA;
+  const gateA = new Promise((resolve) => { releaseA = resolve; });
+  let aUnit = null;
+  let aAttempts = 0;
+  let bOffline = true;
+  await page.route('**/v1/learning-evidence', async (route) => {
+    if (!isEvidencePost(route)) return route.continue();
+    const { unitId } = bodyOf(route);
+    // A's unit id is only known after studyOnce() created it: the first send of A (aUnit still null) is treated like any offline send
+    if (aUnit === null) return route.abort();
+    if (unitId === aUnit) {
+      aAttempts += 1;
+      await gateA; // the send of A on the way out is slow: it answers only after B has finished
+      return route.continue();
+    }
+    return bOffline ? route.abort() : route.continue();
+  });
+  const unitA = await studyOnce(page, 'Aula perda e', async () => {});
+  aUnit = unitA.id;
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  await page.locator('#study-now-done-btn').click(); // exit send of A: held by the gate
+  const unitB = await studyOnce(page, 'Aula perda f', async () => {});
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible(); // B failed
+  releaseA(); // A's slow send now succeeds and answers
+  await expect(async () => { expect((await evidenceRows(page, unitA.id)).length).toBe(1); }).toPass({ timeout: 8000 });
+  await expect(page.locator('#study-now-evidence-retry-btn'), "A's late reply must not hide the retry of B").toBeVisible();
+  bOffline = false;
+  await page.locator('#study-now-evidence-retry-btn').click();
+  await expect(async () => { expect((await evidenceRows(page, unitB.id)).length, 'B was recorded by the retry').toBe(1); }).toPass({ timeout: 8000 });
+  expect((await evidenceRows(page, unitA.id)).length).toBe(1);
+  expect(aAttempts).toBeGreaterThan(0);
+});
+
+test('LOSS-4: pending evidence is never sent under another account, and is sent when its own account is back', async ({ page }) => {
+  const first = { ...creds };
+  const sent = [];
+  let offline = true;
+  await page.route('**/v1/learning-evidence', async (route) => {
+    if (!isEvidencePost(route)) return route.continue();
+    sent.push({ unitId: bodyOf(route).unitId, key: bodyOf(route).operationKey });
+    return offline ? route.abort() : route.continue();
+  });
+  const a = await studyOnce(page, 'Aula perda g', async () => {});
+  await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
+  const second = { email: `evidencefail-2-${Date.now()}@example.com`, password: first.password };
+  // a request context of its own: page.request would carry the signed-in first student's cookies (and be refused)
+  const anonymous = await pwRequest.newContext();
+  const registered = await anonymous.post(`${API_BASE}/v1/auth/register`, { data: second, headers: { Origin: VITE_ORIGIN } });
+  const registeredText = await registered.text();
+  await anonymous.dispose();
+  expect(registered.ok(), `registering the second student: ${registered.status()} ${registeredText}`).toBeTruthy();
+  await loginAs(page, second); // still offline
+  const sentBeforeSecondStudy = sent.length;
+  offline = false;
+  const b = await studyOnce(page, 'Aula perda h', async () => {});
+  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  expect(keysFor(sent.slice(sentBeforeSecondStudy), a.id), "the first student's evidence was sent under the second account").toEqual([]);
+  // the first student comes back: their pending evidence is sent without studying again
+  await loginAs(page, first);
+  await expect(async () => { expect((await evidenceRows(page, a.id)).length).toBe(1); }).toPass({ timeout: 8000 });
+});
+
+
 async function openStudyFromPlan(page, title) {
   await page.locator('[data-screen="plan"]').click();
   const row = page.locator('.plan-row', { hasText: title });
@@ -300,9 +430,12 @@ test('EVIDENCE-RECOVERY: a new block preserves a failed result without blocking 
   await page.locator('#study-now-incorrect-btn').click();
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
   await expect(page.locator('#study-now-result-card')).toBeVisible();
-  expect(sent.length).toBeGreaterThanOrEqual(2);
-  expect(new Set(sent.map((body) => body.operationKey)).size).toBe(1);
-  expect(sent.every((body) => body.unitId === unit.id)).toBe(true);
+  // the original block was sent again when the new one started, always under its first key; the new block is attempted too (a failing
+  // item does not hold back the one behind it)
+  const ofOriginal = sent.filter((body) => body.unitId === unit.id);
+  expect(ofOriginal.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(ofOriginal.map((body) => body.operationKey)).size).toBe(1);
+  expect(sent.some((body) => body.unitId === other.id)).toBe(true);
   await page.unroute('**/v1/learning-evidence');
   await page.locator('#study-now-evidence-retry-btn').click();
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();

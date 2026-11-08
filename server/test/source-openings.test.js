@@ -106,3 +106,47 @@ test('HTTP: POST /v1/source-openings is owner-only and idempotent; GET lists the
     assert.equal(JSON.parse((await app.inject({ method: 'GET', url: `/v1/source-openings?sourceId=${sourceId}`, headers: { cookie: bob.cookie } })).body).openings.length, 0);
   } finally { await app.close(); cleanup(); }
 });
+
+test('record(): the same key with the same payload replays the original; a different source, page or context under that key conflicts and writes nothing', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'conflict@example.com');
+    const sourceId = makeSource(db, userId);
+    const otherSourceId = makeSource(db, userId, 'other');
+    const first = openings.record(db, userId, { sourceId, pageIndex: 3, context: 'STUDY', operationKey: 'same' });
+    const replay = openings.record(db, userId, { sourceId, pageIndex: 3, context: 'STUDY', operationKey: 'same' });
+    assert.equal(replay.duplicate, true);
+    assert.deepEqual({ ...replay, duplicate: undefined }, { ...first, duplicate: undefined }, 'the replay is the ORIGINAL record (same id and openedAt)');
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM source_openings').get().n;
+    const before = count();
+    for (const changed of [{ sourceId: otherSourceId }, { pageIndex: 4 }, { pageIndex: null }, { pageIndex: undefined }, { context: 'REVIEW' }]) {
+      assert.throws(
+        () => openings.record(db, userId, { sourceId, pageIndex: 3, context: 'STUDY', operationKey: 'same', ...changed }),
+        (error) => error.code === 'IDEMPOTENCY_CONFLICT',
+        `changed ${JSON.stringify(changed)} must conflict`,
+      );
+    }
+    assert.equal(count(), before, 'a conflict writes nothing');
+    // "no page" is one intent however it is spelled: absent, undefined and null are the same payload
+    openings.record(db, userId, { sourceId, context: 'OTHER', operationKey: 'nopage' });
+    assert.equal(openings.record(db, userId, { sourceId, pageIndex: null, context: 'OTHER', operationKey: 'nopage' }).duplicate, true);
+    assert.equal(openings.record(db, userId, { sourceId, pageIndex: undefined, context: 'OTHER', operationKey: 'nopage' }).duplicate, true);
+  } finally { cleanup(); }
+});
+
+test('record(): operation keys are per user: another user reusing the same key with another payload is not a conflict', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const alice = makeUser(db, 'iso-a@example.com');
+    const bob = makeUser(db, 'iso-b@example.com');
+    const aliceSource = makeSource(db, alice);
+    const bobSource = makeSource(db, bob);
+    const a = openings.record(db, alice, { sourceId: aliceSource, pageIndex: 1, context: 'STUDY', operationKey: 'shared-key' });
+    const b = openings.record(db, bob, { sourceId: bobSource, pageIndex: 2, context: 'EDITOR', operationKey: 'shared-key' });
+    assert.equal(b.duplicate, false);
+    assert.notEqual(a.id, b.id);
+    assert.equal(openings.list(db, alice).length, 1);
+    assert.equal(openings.list(db, bob).length, 1);
+  } finally { cleanup(); }
+});
+
