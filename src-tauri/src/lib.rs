@@ -354,6 +354,16 @@ fn window_title(requested: Option<&str>) -> String {
     }
 }
 
+/// Own WebView2 profile folder for an isolated install. Only an absolute path is honoured; blank or relative values are ignored
+/// (the default profile is then used, exactly as before).
+fn webview_data_dir(requested: Option<&str>) -> Option<PathBuf> {
+    requested
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
 fn configured_app_url(origin: Option<&str>) -> Result<tauri::Url, String> {
     let raw_origin = origin
         .filter(|value| !value.trim().is_empty())
@@ -610,15 +620,20 @@ pub fn run() {
                 "window.__SMARTLEARN_REMOTE_MODE__ = true;".to_string()
             };
 
-            let window = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
+            let mut window_builder = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::External(app_url))
                 .title(window_title(std::env::var("SMARTLEARN_WINDOW_TITLE").ok().as_deref()))
                 // first run only (no saved window yet): a comfortable page, centred; every later start restores the last place and size
                 .inner_size(1280.0, 820.0)
                 .center()
                 .resizable(true)
                 .initialization_script(init_script)
-                .visible(false) // shown only after the remembered position is applied: no flash on the wrong monitor
-                .build()?;
+                .visible(false); // shown only after the remembered position is applied: no flash on the wrong monitor
+            // An isolated install (SmartLearn Homologacao) keeps its own WebView2 profile (cookies, storage, cache): the default profile folder is
+            // named after the app identifier and would be shared with the Oficial and DEV apps, whose 127.0.0.1 cookies it would also overwrite.
+            if let Some(dir) = webview_data_dir(std::env::var("SMARTLEARN_WEBVIEW_DATA_DIR").ok().as_deref()) {
+                window_builder = window_builder.data_directory(dir);
+            }
+            let window = window_builder.build()?;
 
             // Remember the window (position, size, maximized -> also which monitor) next to the data it belongs to.
             let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
@@ -2197,6 +2212,15 @@ mod tests {
         assert_eq!(window_title(None), "SmartLearn");
         assert_eq!(window_title(Some("   ")), "SmartLearn");
         assert_eq!(window_title(Some(&"x".repeat(121))), "SmartLearn");
+    }
+
+    #[test]
+    fn webview_profile_folder_is_opt_in_and_must_be_absolute() {
+        assert_eq!(webview_data_dir(None), None);
+        assert_eq!(webview_data_dir(Some("   ")), None);
+        assert_eq!(webview_data_dir(Some("relative\\webview")), None);
+        let absolute = std::env::temp_dir().join("sl-webview-profile");
+        assert_eq!(webview_data_dir(Some(absolute.to_str().unwrap())), Some(absolute));
     }
 
     #[test]
