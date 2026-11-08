@@ -210,13 +210,14 @@ test('only scripts/launch-desktop-dev.ps1 assigns SMARTLEARN_AI_CONSENT among ev
   assert.deepEqual(assigning, ['scripts/launch-desktop-dev.ps1']);
 });
 
-test('the DEV launcher is the DEV build: it stamps mode DEV, refuses to run outside the work branch and never builds a release', () => {
+test('the DEV launcher is the DEV build: it stamps mode DEV, refuses to run outside the work branch and never builds an installer', () => {
   const launcher = readFileSync(join(REPO_ROOT, 'scripts', 'launch-desktop-dev.ps1'), 'utf8');
   assert.match(launcher, /\$env:SMARTLEARN_AI_CONSENT\s*=\s*'true'/);
   assert.match(launcher, /SMARTLEARN_BUILD_MODE\s*=\s*'DEV'/);
   assert.match(launcher, /\$env:SMARTLEARN_DEV_PERSISTENT_SESSION\s*=\s*'true'/);
   assert.match(launcher, /claude\/smartlearn-v1-complete/);
-  assert.doesNotMatch(launcher, /tauri build|target\\release/i);
+  assert.match(launcher, /npm run build:exe/);
+  assert.doesNotMatch(launcher, /build:installer/i);
   // The consent line sits with the other DEV-only settings, after the work-branch guard.
   assert.ok(launcher.indexOf('claude/smartlearn-v1-complete') < launcher.indexOf("$env:SMARTLEARN_AI_CONSENT"));
 });
