@@ -30,6 +30,11 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 const head = git('rev-parse', '--short', 'HEAD');
 const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const expectedTitle = `SmartLearn DEV - v${identity.version} - ${head}`;
+// CODEX (default) is the real, PAID model. FAKE is the deterministic offline provider: no model is called, so it proves every step of the journey
+// except the quality of a real model's draft (that stays a human, authorised run).
+const PROVIDER = (process.env.SL_JOURNEY_PROVIDER ?? 'CODEX').trim().toUpperCase();
+if (!['CODEX', 'FAKE'].includes(PROVIDER)) throw new Error(`SL_JOURNEY_PROVIDER must be CODEX or FAKE, not ${PROVIDER}`);
+const modelVersionOk = (value) => (PROVIDER === 'CODEX' ? String(value ?? '').startsWith('codex:') : String(value ?? '').startsWith('fake'));
 
 const freePort = () => new Promise((ok, fail) => {
   const s = createServer();
@@ -56,14 +61,14 @@ const baseEnv = {
   SMARTLEARN_BUILD_HEAD: head,
   SMARTLEARN_BUILD_CONTENT: identity.inputsHash,
   SMARTLEARN_BUILD_MODE: 'DEV',
-  SMARTLEARN_AI_PROVIDER: 'CODEX',
+  SMARTLEARN_AI_PROVIDER: PROVIDER,
   SMARTLEARN_AI_CONSENT: 'true',
   SMARTLEARN_WINDOW_TITLE: expectedTitle,
   SMARTLEARN_DEV_PERSISTENT_SESSION: 'true',
   WEBVIEW2_USER_DATA_FOLDER: join(work, 'webview2'),
 };
 
-const result = { head, expectedTitle, exe, workDirKind: 'throwaway under OS temp, removed at the end', steps: [] };
+const result = { head, expectedTitle, exe, provider: PROVIDER, simulatedModelStep: PROVIDER !== 'CODEX', realCodexStep5: PROVIDER === 'CODEX' ? 'EXECUTED' : 'NOT_RUN (offline FAKE provider; this run is a simulation of step 5, NOT equivalent proof of it)', workDirKind: 'throwaway under OS temp, removed at the end', steps: [] };
 const consoleErrors = [];
 const http401 = [];
 const password = 'a genuinely long test password 1';
@@ -340,7 +345,7 @@ try {
     });
     expect(info.readyStatus === 200, `/health/ready ${info.readyStatus}`);
     expect(info.build.head === head && info.build.content === identity.inputsHash && info.build.mode === 'DEV', `backend identity ${JSON.stringify(info.build)}`);
-    expect(info.build.provider === 'CODEX', `unexpected AI provider: ${info.build.provider}`);
+    expect(info.build.provider === PROVIDER, `unexpected AI provider: ${info.build.provider}`);
     expect(info.localAuthority, 'window is not in LOCAL_AUTHORITY');
     const staged = join(dirname(exe), 'dist-runtime', 'build-info.json');
     const stagedInfo = existsSync(staged) ? JSON.parse(readFileSync(staged, 'utf8')) : null;
@@ -389,10 +394,10 @@ try {
     const uiElapsedMs = Date.now() - generationStartedAt;
     ctx.draftId = await page.locator('.lesson-editor').getAttribute('data-draft-id');
     const draft = (await api('GET', `/v1/drafts/${ctx.draftId}`)).draft;
-    expect(String(draft.modelVersion ?? '').startsWith('codex:'), `draft was not made by the CODEX provider: ${draft.modelVersion}`);
+    expect(modelVersionOk(draft.modelVersion), `draft was not made by the ${PROVIDER} provider: ${draft.modelVersion}`);
     const jobs = (await api('GET', '/v1/generation-jobs')).jobs;
     const job = jobs.find((entry) => String(entry.id) === String(terminalJob.id)) ?? terminalJob;
-    expect(job?.provider === 'CODEX' && job.state === 'SUCCEEDED', `CODEX generation job: ${JSON.stringify(job ?? jobs)}`);
+    expect(job?.provider === PROVIDER && job.state === 'SUCCEEDED', `${PROVIDER} generation job: ${JSON.stringify(job ?? jobs)}`);
     const jobElapsedMs = Date.parse(job.finishedAt) - Date.parse(job.startedAt);
     expect(Number.isFinite(jobElapsedMs) && jobElapsedMs > 0, `invalid provider job timing: ${JSON.stringify({ startedAt: job.startedAt, finishedAt: job.finishedAt })}`);
     ctx.draftQuestions = draft.questions?.length ?? 0;
@@ -1186,11 +1191,16 @@ const BASELINE_FILE = join(root, 'e2e', '.journey-baseline.json');
 const measured = measure(result.steps);
 let baselineFile = null;
 try { baselineFile = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')); } catch { /* no baseline yet */ }
-if (process.argv.includes('--record-baseline')) {
+// The recorded baseline is a CODEX run. Step 5 (the model call) is the only step whose duration depends on the provider, so a FAKE run compares every
+// other step and the total without it, and never records a baseline (that would replace the real-model one with an offline number).
+const withoutModelStep = (m) => ({ total: m.total - (m.steps['5'] ?? 0), steps: Object.fromEntries(Object.entries(m.steps).filter(([k]) => k !== '5')) });
+if (process.argv.includes('--record-baseline') && PROVIDER !== 'CODEX') {
+  result.durationCheck = { status: 'NOT_RECORDED', reason: `the baseline is recorded with the CODEX provider, not ${PROVIDER}` };
+} else if (process.argv.includes('--record-baseline')) {
   if (result.pass) { writeFileSync(BASELINE_FILE, JSON.stringify({ recordedAt: new Date().toISOString(), head, ...measured }, null, 2) + '\n'); result.durationCheck = { status: 'RECORDED', total: measured.total }; }
   else result.durationCheck = { status: 'NOT_RECORDED', reason: 'the run did not pass 23/23' };
 } else {
-  result.durationCheck = compare(baselineFile, measured);
+  result.durationCheck = PROVIDER === 'CODEX' ? compare(baselineFile, measured) : compare(baselineFile && baselineFile.steps ? withoutModelStep(baselineFile) : baselineFile, withoutModelStep(measured));
   if (result.durationCheck.status === 'NO_BASELINE') console.error('[journey] NO BASELINE for step durations; record one from a clean passing run with --record-baseline');
   if (result.durationCheck.status === 'DEVIATION') console.error(`[journey] DURATION DEVIATION: ${describe(result.durationCheck.deviations)}. Investigate the target and the instrument before trusting this run.`);
 }
