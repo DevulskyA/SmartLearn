@@ -170,3 +170,18 @@ test('DELETE /sources/:id takes the unaccepted drafts and unused crops with it a
     assert.deepEqual(history, [{ id: jobId, draft_id: null }], 'the finished job stays as history without the pointer');
   } finally { await t.cleanup(); }
 });
+
+test('DELETE /sources/:id removes a source the student has already opened, together with its append-only opening records', async () => {
+  const t = await boot();
+  try {
+    const alice = await t.login('alice@example.com');
+    const id = await t.upload(alice, buildFixturePdf(['pagina um', 'pagina dois']));
+    assert.equal((await t.mutate(alice, 'POST', `/v1/sources/${id}/extract`)).statusCode, 200);
+    const opened = await t.mutate(alice, 'POST', '/v1/source-openings', { sourceId: id, pageIndex: 1, context: 'STUDY', operationKey: 'opened-before-removal' });
+    assert.equal(opened.statusCode, 200);
+    const removed = await t.mutate(alice, 'DELETE', `/v1/sources/${id}`);
+    assert.equal(removed.statusCode, 200, `removing an opened source answered ${removed.statusCode} ${removed.body}`);
+    assert.equal(t.sources(id), 0);
+    assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM source_openings WHERE source_id = ?').get(id).n, 0, 'its opening records go with it');
+  } finally { await t.cleanup(); }
+});

@@ -150,3 +150,15 @@ test('record(): operation keys are per user: another user reusing the same key w
   } finally { cleanup(); }
 });
 
+
+test('the opening records stay append-only while their source exists: a direct UPDATE or DELETE is refused and the record is untouched', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'append-only@example.com');
+    const sourceId = makeSource(db, userId);
+    const first = openings.record(db, userId, { sourceId, pageIndex: 2, context: 'STUDY', operationKey: 'append-only-1' });
+    assert.throws(() => db.prepare('UPDATE source_openings SET page_index = 3 WHERE id = ?').run(first.id), /append-only/);
+    assert.throws(() => db.prepare('DELETE FROM source_openings WHERE id = ?').run(first.id), /append-only/);
+    assert.deepEqual(openings.list(db, userId, { sourceId }).map((o) => [o.id, o.pageIndex]), [[first.id, 2]]);
+  } finally { cleanup(); }
+});

@@ -206,14 +206,16 @@ export function remove(db, userId, id, { sourcesDir, mediaDir }) {
   if (running > 0) throw new SourceError('SOURCE_GENERATION_RUNNING', dm('SOURCE_GENERATION_RUNNING'));
 
   db.transaction(() => {
+    // the append-only opening records reference the source: its row goes first (foreign keys checked at commit), then they may be deleted
+    db.pragma('defer_foreign_keys = ON');
     db.prepare(`UPDATE generation_jobs SET draft_id = NULL WHERE user_id = ? AND draft_id IN (SELECT id FROM generated_drafts WHERE user_id = ? AND proposal_id IN ${proposals})`).run(userId, userId, userId, id);
     db.prepare(`DELETE FROM generated_drafts WHERE user_id = ? AND proposal_id IN ${proposals}`).run(userId, userId, id);
     db.prepare('DELETE FROM content_proposals WHERE user_id = ? AND source_id = ?').run(userId, id);
     db.prepare('DELETE FROM source_pages WHERE user_id = ? AND source_id = ?').run(userId, id);
     db.prepare('DELETE FROM source_outline WHERE user_id = ? AND source_id = ?').run(userId, id);
-    db.prepare('DELETE FROM source_openings WHERE user_id = ? AND source_id = ?').run(userId, id);
     db.prepare('DELETE FROM visual_assets WHERE user_id = ? AND source_id = ?').run(userId, id);
     db.prepare('DELETE FROM sources WHERE user_id = ? AND id = ?').run(userId, id);
+    db.prepare('DELETE FROM source_openings WHERE user_id = ? AND source_id = ?').run(userId, id);
   })();
 
   for (const a of assets) rmSync(join(mediaDir, basename(a.filename)), { force: true });

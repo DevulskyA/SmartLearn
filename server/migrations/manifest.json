@@ -198,5 +198,10 @@
     "version": 40,
     "name": "exercise-flag-events",
     "checksum": "f4c6dbb03510932d3882974ebd4d5b9aa708792a42031ee0d1933abcd63e1531"
+  },
+  {
+    "version": 41,
+    "name": "source-openings-removable-with-source",
+    "checksum": "5a463f50d02104adb453b8ff8e2b130e78b2d42da8ed3d3a1a5e80649c0ea5df"
   }
 ]
