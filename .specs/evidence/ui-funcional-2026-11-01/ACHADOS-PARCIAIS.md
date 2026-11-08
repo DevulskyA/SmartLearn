@@ -236,3 +236,8 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Lacuna fechada: `e2e/accessibility.spec.js` rodava axe em 12 dos 23 temas concretos (THEME_OPTIONS menos "auto"). Agora cobre os 23 em 1280 px mais paper em 375 px (24 casos). Resultado: 24/24 sem violação critical/serious.
 - E-030 (baixa, instrumento, classe 3): 1 dos 24 casos falhou na primeira rodada com `registering ... over HTTP failed with 429 RATE_LIMITED` (24 registros de usuário em ~5 min com 3 workers batem no limitador do servidor). Não é acessibilidade. Reexecutado isolado: passou. Se voltar, o caso deve semear o usuário sem passar pelo limitador ou o teste deve ser dividido em lotes.
 - PERF DEVIATION do runner (336 s contra baseline 48 s) é esperado: o número de casos dobrou; a baseline `full@3w+args` pertence a outra seleção. Não é regressão.
+
+## Baseline visual 390/1280 (2026-11-08)
+- Capturado por `e2e/visual-baseline.spec.js` (só roda com `SCREENSHOT_DIR`): 6 telas x 2 larguras em `.specs/evidence/visual-baseline-2026-11-08/` (12 PNG, 572 KB), servidor real, dados realistas (2 disciplinas, 6 exercícios), banco descartável. Headless; o banco humano não foi tocado.
+- V-01 (média, CANDIDATO, a confirmar com captura só da viewport): Estatísticas a 390 px, tabela "Desempenho por disciplina": o cabeçalho "DESEMPENHO" aparece cortado ("DESEMPENHC") e, na linha da disciplina, "Sem evi…", "Sem que…" e "Amostra insuficiente" se sobrepõem. A barra inferior aparece no meio da imagem por ser captura fullPage (artefato do instrumento, não defeito). Estatísticas é superfície protegida (ADR-0001): só registrar, correção exige decisão do dono.
+- Hoje a 390 px: sem corte nem sobreposição visível na área capturada.
