@@ -3715,6 +3715,7 @@ function renderStudyNowQuestion() {
   const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review" }[state.mode] ?? "appStudyNow.progress.question";
   const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
   studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
+  studyNowProgress.style.setProperty("--p", String((state.index + 1) / state.exercises.length));
   studyNowPracticeTitle.textContent = t(titleKey);
   // The Resumo Mestre contains the very answers being retrieved: showing it
   // above a redo question would turn retrieval practice into reading.
