@@ -27,7 +27,7 @@ Decisões a responder antes (ver `DECISIONS_BRIEF.md`, seção 0): R1 qual PDF e
 2. **Desktop fechado.** `Get-Process smartlearn` deve retornar vazio. O launcher encerra à força qualquer `smartlearn.exe` da worktree (`Stop-Process -Force`, LIDO no script): NUNCA rode `npm run dev:desktop` com o app aberto.
 3. **Abrir pelo único caminho oficial:** `npm run dev:desktop`. Ele confere a branch, recompila se o conteúdo mudou, exige que o banco `smartlearn-dev.db` exista, tira o snapshot verificado do dia (se houver migração pendente, um `pre-migrate` antes) e abre a janela DEV.
 4. **Conferir a janela.** O título deve ser `SmartLearn DEV - v0.1.0 - <hash>` com o hash do passo 1 (INFERIDO do formato montado no launcher e na jornada). Configurações > "Sobre o SmartLearn": versão, canal DEV, commit, servidor com o provedor `CODEX`. Se o hash ou o provedor não bate, PARE (defeito P0, ver seção E).
-5. **Conta (decisão R4, recomendada: conta nova).** Menu "Conta" > "Sair" (`#account-logout-btn`) > "Ainda não tem conta? Criar uma" > e-mail e senha de no mínimo 15 caracteres > "Criar conta" > "Entrar" com a conta nova. A conta sintética não é apagada. A sessão fica persistente (flag DEV).
+5. **Conta (decisão R4, recomendada: conta nova).** Menu "Conta" > "Sair" (`#account-logout-btn`) > "Ainda não tem conta? Criar uma" > e-mail e senha de no mínimo 8 caracteres > "Criar conta" > "Entrar" com a conta nova. A conta sintética não é apagada. A sessão fica persistente (flag DEV).
 6. **Relato da sessão** (preencha à mão, seção F): data, hash, provedor, PDF, páginas, hora de início e de fim do estudo.
 
 ---

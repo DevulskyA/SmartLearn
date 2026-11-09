@@ -70,7 +70,7 @@ Você NÃO precisa responder agora: D-T2 (migração 034), D-T3 (compromisso ant
 **Fatos (LIDO).**
 - Dado sintético e real não têm marca no esquema; o que os separa é a conta, o texto e `created_at` (`telemetry-audit.md` TG-10; `scripts/seed-dev.mjs` usa a API pública, sem flag).
 - Todas as tabelas de estudo filtram por `user_id` (ex.: `reviews.js` `TASK_SELECT ... WHERE rt.user_id = ?`). Duas contas no mesmo banco não veem os dados uma da outra. Isolamento no banco vivo: NÃO testado por mim.
-- O cadastro de conta está aberto na tela Conta ("Ainda não tem conta? Criar uma"; senha com no mínimo 15 caracteres).
+- O cadastro de conta está aberto na tela Conta ("Ainda não tem conta? Criar uma"; senha com no mínimo 8 caracteres).
 - O launcher se recusa a abrir se `smartlearn-dev.db` não existir ("não cria banco vazio no lugar dele"; `launch-desktop-dev.ps1`). Criar um datastore novo não tem comando documentado: exigiria script novo (mudança de código, proibida agora).
 - O launcher tira snapshot verificado diário e, se houver migração pendente, um snapshot `pre-migrate` antes (LIDO: `server/src/main.js:55-69`, `dev-snapshot.js:116`).
 
