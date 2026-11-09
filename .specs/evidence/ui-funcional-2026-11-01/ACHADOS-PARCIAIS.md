@@ -342,3 +342,6 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Onde: `scripts/homologation-dev.mjs` (commit 6bbcf09). Esperado: login pela tela funcionar. Observado: o site chama `http://localhost:3000` direto (`src/auth-ui.js` API_BASE) e a API estava na 3100; o dono só acertou na terceira tentativa. Severidade: média (bloqueia o uso).
 - Causa: assumi o proxy relativo do Vite sem conferir o endereço real usado pelo front; provei o login só pela API, não pela tela.
 - Correção: API na 3000. Classe 3 (nenhuma regra cobria "testar pela porta de entrada real do usuário, não só pela API"); guarda: o teste de fumaça do lançador deve logar pela tela antes de entregar.
+
+## A-13 — fechado por observação (2026-11-09)
+Na Homologação em código vivo (6bbcf09+), a tela Conta logada mostra "Conectado como <e-mail>", "Alterar senha" como botão recolhido (`#account-password-details > summary`, coberto por `e2e/sweep-fixes.spec.js` "Conta > Alterar senha") e "Sair". Sem campos de senha abertos. Prova: captura da tela + teste existente. Status: corrigido antes; registro estava defasado.
