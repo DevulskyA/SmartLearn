@@ -1,28 +1,40 @@
 #!/usr/bin/env node
-// Real-use proof of the installed "SmartLearn Homologacao" shortcut, with free test data and no paid AI.
+// Real-use proof of the installed "SmartLearn Homologacao", with free test data and no paid AI, WITHOUT touching its real data.
 //
 //   node scripts/homologation-proof.mjs snapshot <file>            metadata of every existing SmartLearn shortcut, its target and the human data (stat only)
-//   node scripts/homologation-proof.mjs run --before <file> [--dest C:\Projetos\SmartLearn-Homologacao]
+//   node scripts/homologation-proof.mjs run --before <file> [--dest C:\Projetos\SmartLearn-Homologacao] [--exe <source exe>] [--scratch <dir>]
 //
-// `run` opens the app THROUGH the .lnk (provider FAKE, data in a scratch folder the launcher checks like the default one), then checks:
-// window title, exe + served content = the manifest, no visible Node console, backend ready, data only in the homologation folder,
-// create + read data over the real HTTP API, graceful close, reopen THROUGH the shortcut, the data is still there, the database file itself
-// holds it, and nothing the snapshot listed changed. It never opens, reads or writes a human database: it only stats files.
+// The installed exe opens ISOLATED by itself: it reads app\homologation.json (read-only, next to it), which PREVAILS over the environment.
+// Running the real install would therefore open and pollute the owner's real homologation data. So `run`:
+//   1. checks the REAL install statically (never opens it): the shortcut starts the exe directly (no launcher, no arguments, read-only);
+//      app\homologation.json is read-only and its db/sources/webviewDir are outside every human folder; launch.ps1 -CheckOnly (hash/identity);
+//   2. installs a DISPOSABLE COPY with the real installer (scripts/homologation-install.mjs --dest <scratch>\inst --no-shortcut --provider FAKE,
+//      data folder in scratch via SMARTLEARN_HOMOLOGACAO_DATA_DIR), outside SmartLearn-Homologacao, SmartLearn-DevData and com.devulsky.smartlearn;
+//   3. opens <scratch>\inst\app\smartlearn.exe DIRECTLY (no launcher, no shortcut, no SMARTLEARN_* variable in its environment) and checks:
+//      window title, exe + served content = the manifest, no visible Node console, backend ready, data only in the scratch folder (so the
+//      file, not the environment, decided it), create + read data over the real HTTP API, graceful close, reopen, the data is still there,
+//      the database file itself holds it;
+//   4. fail closed: a second copy WITHOUT app\homologation.json (but with ..\manifest.json) must refuse to open: no app window, no backend,
+//      no data. The exe reports the refusal in a message box (lib.rs report_startup_refusal); the probe closes it and expects exit code 1;
+//   5. nothing the snapshot listed changed, the real install (exe, homologation.json, manifest, launcher, shortcut) is byte-identical, and the
+//      scratch folder is deleted.
+// It never opens, reads or writes a human database or the real homologation data: it only stats files. The decisions live in
+// scripts/homologation-proof-lib.mjs (unit-tested without windows by test/homologation-proof.test.js).
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { failClosedProblems, homologationFileProblems, humanRootsOf, inside, installerArgs, installerEnv, lc, scratchLayout, scratchRootProblems, shortcutProblems, withoutSmartlearnEnv } from './homologation-proof-lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24 }).trim();
+const ps = (script, env) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24, ...(env ? { env } : {}) }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-const lc = (p) => resolve(p).toLowerCase();
-const inside = (p, root) => lc(p) === lc(root) || lc(p).startsWith(`${lc(root)}\\`);
+const readOnlyFile = (file) => (statSync(file).mode & 0o200) === 0;
 const OWN_SHORTCUT = /Homologa/i;
 
 // ---------- snapshot of everything that must NOT change ----------
@@ -36,6 +48,8 @@ function walk(dir, out = []) {
   return out;
 }
 
+const humanRoots = humanRootsOf({ home: homedir(), appData: process.env.APPDATA, localAppData: process.env.LOCALAPPDATA });
+
 function takeSnapshot() {
   const shortcuts = JSON.parse(ps(`
 $shell = New-Object -ComObject WScript.Shell
@@ -45,8 +59,7 @@ $out = foreach ($d in $dirs) { if ($d -and (Test-Path $d)) { Get-ChildItem $d -F
   [pscustomobject]@{ path = $_.FullName; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(); target = $s.TargetPath; arguments = $s.Arguments; workingDirectory = $s.WorkingDirectory } } } }
 ConvertTo-Json -InputObject @($out) -Depth 3`) || '[]').filter((s) => !OWN_SHORTCUT.test(s.path));
   const targets = shortcuts.filter((s) => /\.exe$/i.test(s.target) && existsSync(s.target)).map((s) => ({ target: s.target, size: statSync(s.target).size, sha256: sha256(s.target) }));
-  const humanDirs = [join(homedir(), 'SmartLearn-DevData'), join(process.env.APPDATA ?? '', 'com.devulsky.smartlearn'), join(process.env.LOCALAPPDATA ?? '', 'com.devulsky.smartlearn')];
-  return { takenAt: new Date().toISOString(), shortcuts, targets, humanData: Object.fromEntries(humanDirs.map((d) => [d, walk(d)])) };
+  return { takenAt: new Date().toISOString(), shortcuts, targets, humanData: Object.fromEntries(humanRoots.map((d) => [d, walk(d)])) };
 }
 
 function diffSnapshots(before, after) {
@@ -79,30 +92,64 @@ const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: Boolean(ok), detail: detail ?? null }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail === undefined ? '' : ` :: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`}`); return ok; };
 
 const manifest = JSON.parse(readFileSync(join(dest, 'manifest.json'), 'utf8'));
-const exe = join(dest, 'app', 'smartlearn.exe');
+const realApp = join(dest, 'app');
+const realExe = join(realApp, 'smartlearn.exe');
+const realCfgPath = join(realApp, 'homologation.json');
+const sourceExe = resolve(arg('--exe') ?? realExe);
 const shortcutPath = ps(`Join-Path ([Environment]::GetFolderPath('Desktop')) ('SmartLearn Homologa' + [char]0xE7 + [char]0xE3 + 'o.lnk')`);
-const scratch = join(homedir(), 'SmartLearn-Homologacao-Prova');  // inside the profile like the default; removed at the end
-const humanRoots = [join(homedir(), 'SmartLearn-DevData'), join(process.env.APPDATA ?? '', 'com.devulsky.smartlearn'), join(process.env.LOCALAPPDATA ?? '', 'com.devulsky.smartlearn')];
+const L = scratchLayout(resolve(arg('--scratch') ?? join(homedir(), 'SmartLearn-Prova-Descartavel')));  // removed at the end, never the real data
+const instApp = join(L.inst, 'app');
+const instExe = join(instApp, 'smartlearn.exe');
+const noFileExe = join(L.instNoFile, 'app', 'smartlearn.exe');
 
-function appProcess() {
-  const out = ps(`Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq '${exe.replace(/'/g, "''")}' } | Select-Object -First 1 | ForEach-Object { "$($_.Id)|$($_.MainWindowTitle)|$($_.MainWindowHandle)" }`);
+function readJson(file) { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; } }
+const realCfg = readJson(realCfgPath);
+// The real install is never opened or deleted; the scratch root must not overlap it, its data, or any human folder.
+const protectedPaths = [dest, join(homedir(), 'SmartLearn-Homologacao-Data'), realCfg?.db ? dirname(realCfg.db) : null, realCfg?.webviewDir ? dirname(realCfg.webviewDir) : null];
+const rootProblems = scratchRootProblems(L.root, humanRoots, protectedPaths);
+if (rootProblems.length) { console.error(`PROOF REFUSED: ${rootProblems.join('; ')}`); process.exit(2); }
+
+/** Deletes the scratch root (read-only flags removed first). Guarded again here: it is the only recursive delete of the proof. */
+function wipeScratch() {
+  if (scratchRootProblems(L.root, humanRoots, protectedPaths).length) throw new Error(`refusing to delete ${L.root}`);
+  if (!existsSync(L.root)) return;
+  try { execFileSync('attrib', ['-R', join(L.root, '*'), '/S', '/D'], { stdio: 'ignore' }); } catch { /* nothing read-only */ }
+  rmSync(L.root, { recursive: true, force: true });
+}
+
+/** sha256 of everything that makes up the REAL install and its shortcut: the proof must leave all of it byte-identical. */
+function realInstallFingerprint() {
+  const files = [realExe, realCfgPath, join(dest, 'manifest.json'), join(dest, 'launch.ps1'), shortcutPath];
+  return Object.fromEntries(files.map((f) => [f, existsSync(f) ? sha256(f) : 'absent']));
+}
+
+function appProcess(exePath) {
+  const out = ps(`Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq '${exePath.replace(/'/g, "''")}' } | Select-Object -First 1 | ForEach-Object { "$($_.Id)|$($_.MainWindowTitle)|$($_.MainWindowHandle)" }`);
   if (!out) return null;
   const [pid, title, handle] = out.split('|');
   return { pid: Number(pid), title, handle };
 }
 
-async function openThroughShortcut(dataDir) {
-  if (appProcess()) throw new Error('the Homologacao is already open; close it before the proof');
-  const env = { ...process.env, SMARTLEARN_AI_PROVIDER: 'FAKE', SMARTLEARN_HOMOLOGACAO_DATA_DIR: dataDir };
-  delete env.SMARTLEARN_DEV_DATA_DIR; delete env.SMARTLEARN_DB_PATH; delete env.SMARTLEARN_SOURCES_DIR;
-  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${shortcutPath.replace(/'/g, "''")}'`], { env, stdio: 'ignore', windowsHide: true }).unref();
+/** Starts the exe itself: no launcher, no shortcut, and not one SMARTLEARN_* variable, so homologation.json alone decides. */
+function startDirect(exePath) {
+  const env = withoutSmartlearnEnv(process.env);
+  const child = spawn(exePath, [], { cwd: dirname(dirname(exePath)), env, stdio: 'ignore' });
+  const state = { exited: false, exitCode: null };
+  child.on('exit', (code) => { state.exited = true; state.exitCode = code; });
+  child.on('error', () => { state.exited = true; });
+  return { child, state, smartlearnEnvVars: Object.keys(env).filter((k) => /^smartlearn_/i.test(k)) };
+}
+
+async function openDirect(exePath) {
+  if (appProcess(exePath)) throw new Error(`the disposable copy is already open: ${exePath}`);
+  const started = startDirect(exePath);
   const until = Date.now() + 60000;
   let app = null;
-  while (Date.now() < until && !(app = appProcess())) await sleep(500);
-  if (!app) throw new Error('the shortcut did not start the installed executable within 60 s');
+  while (Date.now() < until && !(app = appProcess(exePath))) await sleep(500);
+  if (!app) throw new Error('the disposable copy did not start within 60 s (a refusal message box would still show a process)');
   const untilWindow = Date.now() + 30000;
-  while (Date.now() < untilWindow && (!app.title || app.handle === '0')) { await sleep(500); app = appProcess() ?? app; }
-  return app;
+  while (Date.now() < untilWindow && (!app.title || app.handle === '0')) { await sleep(500); app = appProcess(exePath) ?? app; }
+  return { app, started };
 }
 
 function backendOf(pid) {
@@ -110,17 +157,20 @@ function backendOf(pid) {
   return rows.split(/\r?\n/).filter(Boolean).map((r) => { const [p, path, handle] = r.split('|'); return { pid: Number(p), path, handle }; });
 }
 
+function visibleWindows(match) {
+  return ps(`& '${join(ROOT, 'scripts', 'list-visible-windows.ps1').replace(/'/g, "''")}' -Match '${match}'`).split(/\r?\n/).filter(Boolean);
+}
+
 // Independent of MainWindowHandle (0 for a console app even when its console IS on screen): enumerate EVERY visible top-level window of the system
 // and keep the ones owned by the backend, or by a console host (conhost/OpenConsole) the backend is the parent of.
 function consoleWindowsOf(backendPids) {
-  const rows = ps(`& '${join(ROOT, 'scripts', 'list-visible-windows.ps1').replace(/'/g, "''")}' -Match 'node|conhost|OpenConsole|cmd|WindowsTerminal'`).split(/\r?\n/).filter(Boolean);
-  return rows.filter((r) => { const [pid, , , , ppid] = r.split('|'); return backendPids.includes(Number(pid)) || backendPids.includes(Number(ppid.replace('ppid=', ''))); });
+  return visibleWindows('node|conhost|OpenConsole|cmd|WindowsTerminal').filter((r) => { const [pid, , , , ppid] = r.split('|'); return backendPids.includes(Number(pid)) || backendPids.includes(Number(ppid.replace('ppid=', ''))); });
 }
 
-async function backendPort(nodePid, scratchDir = scratch) {
+async function backendPort(nodePid, dataDir) {
   // The app remembers its backend port next to the database (stable origin for the WebView's localStorage). Process-to-socket ownership is not
   // reliable from a sandboxed shell (owner 0), so the port comes from that file and the identity is then proven over HTTP (/health/build).
-  const portFile = join(scratchDir, 'smartlearn-homologacao.port');
+  const portFile = join(dataDir, 'smartlearn-homologacao.port');
   const until = Date.now() + 45000;
   while (Date.now() < until) {
     try {
@@ -155,12 +205,12 @@ function client(base) {
   return { call, async login(email, password) { await call('POST', '/v1/auth/login', { email, password }); csrf = (await call('GET', '/v1/auth/me')).csrfToken; } };
 }
 
-async function closeGracefully(app) {
+async function closeGracefully(app, exePath) {
   const children = backendOf(app.pid).map((c) => c.pid);
   try { execFileSync('taskkill', ['/PID', String(app.pid)], { stdio: 'ignore' }); } catch { /* window may refuse */ }
   const until = Date.now() + 25000;
-  while (Date.now() < until && appProcess()) await sleep(400);
-  const how = appProcess() ? 'forced' : 'graceful';
+  while (Date.now() < until && appProcess(exePath)) await sleep(400);
+  const how = appProcess(exePath) ? 'forced' : 'graceful';
   if (how === 'forced') { try { execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
   await sleep(2500);
   const left = children.filter((p) => ps(`Get-Process -Id ${p} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }`));
@@ -168,44 +218,118 @@ async function closeGracefully(app) {
   return { how, backendChildren: children.length, leftoversKilled: left.length };
 }
 
+/**
+ * Fail-closed probe: opens the copy that has ..\manifest.json but NO app\homologation.json and records what happens for up to ~15 s.
+ * Safety net: if the guard were broken the app would fall back to the Oficial/DEV behaviour, so the data variables point into the scratch
+ * folder (the guard refuses before reading them, so a correct build never sees them). The probe always ends with the process gone.
+ */
+async function probeFailClosed(exePath, dataDir) {
+  const env = withoutSmartlearnEnv(process.env, { SMARTLEARN_DB_PATH: join(dataDir, 'smartlearn-homologacao.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), SMARTLEARN_WEBVIEW_DATA_DIR: join(dataDir, 'webview'), SMARTLEARN_AI_PROVIDER: 'FAKE' });
+  const child = spawn(exePath, [], { cwd: dirname(dirname(exePath)), env, stdio: 'ignore' });
+  const state = { exited: false, exitCode: null };
+  child.on('exit', (code) => { state.exited = true; state.exitCode = code; });
+  child.on('error', () => { state.exited = true; });
+  const obs = { sawAppWindow: false, sawBackend: false, messageBox: false, windows: [], polls: 0 };
+  const until = Date.now() + 15000;
+  while (Date.now() < until && !state.exited) {
+    const app = appProcess(exePath);
+    if (app) {
+      obs.polls += 1;
+      const rows = visibleWindows('smartlearn').filter((r) => Number(r.split('|')[0]) === app.pid);
+      for (const r of rows) {
+        const title = r.split('|').find((p) => p.startsWith('title='))?.slice(6) ?? '';
+        if (!obs.windows.includes(title)) obs.windows.push(title);
+        if (/^SmartLearn HOMOLOGACAO - /.test(title)) obs.sawAppWindow = true;
+        if (title === 'SmartLearn Homologacao') obs.messageBox = true;
+      }
+      if (backendOf(app.pid).length) obs.sawBackend = true;
+    }
+    await sleep(400);
+  }
+  // end the probe: close the refusal box like a person would (WM_CLOSE); anything still there afterwards survived its refusal
+  obs.wasAliveAfterWindow = !state.exited;
+  if (!state.exited) {
+    try { execFileSync('taskkill', ['/PID', String(child.pid)], { stdio: 'ignore' }); } catch { /* already gone */ }
+    const closeBy = Date.now() + 10000;
+    while (Date.now() < closeBy && !state.exited) await sleep(300);
+  }
+  obs.stillAliveAfterClose = !state.exited;
+  if (obs.stillAliveAfterClose) { try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } await sleep(1500); }
+  obs.exitCode = state.exitCode;
+  obs.dataCreated = existsSync(dataDir) ? walk(dataDir).map((f) => f.file) : [];
+  if (existsSync(dataDir) && !obs.dataCreated.length) obs.dataCreated = [`${dataDir} (folder)`];
+  return obs;
+}
+
 async function main() {
   const before = beforeFile ? JSON.parse(readFileSync(beforeFile, 'utf8')) : null;
-  check('shortcut exists with its own target and working directory', existsSync(shortcutPath), shortcutPath);
-  const sc = JSON.parse(ps(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${shortcutPath.replace(/'/g, "''")}'); ConvertTo-Json @{ target = $s.TargetPath; arguments = $s.Arguments; wd = $s.WorkingDirectory }`));
-  check('shortcut points to the installed launcher, working dir is the install dir', sc.arguments.toLowerCase().includes(join(dest, 'launch.ps1').toLowerCase()) && lc(sc.wd) === lc(dest), sc);
+  const realBefore = realInstallFingerprint();
 
-  // default data location, from the launcher itself: nothing is started, nothing is created
-  const defaults = JSON.parse(ps(`& '${join(dest, 'launch.ps1').replace(/'/g, "''")}' -CheckOnly`));
-  check('default datastore is its own folder and no human data path is inside or contains it', [defaults.database, defaults.sources, defaults.dataDir].every((p) => !humanRoots.some((h) => inside(p, h) || inside(h, p))), { dataDir: defaults.dataDir });
-  check('launcher check: exe hash and served content equal the manifest', defaults.exeSha256 === manifest.exeSha256 && defaults.inputsHash === manifest.inputsHash, { exeSha256: defaults.exeSha256.slice(0, 12), content: defaults.inputsHash.slice(0, 12) });
+  // ---- (1) the REAL install, statically: nothing of it is opened ----
+  check('shortcut exists', existsSync(shortcutPath), shortcutPath);
+  const sc = existsSync(shortcutPath)
+    ? JSON.parse(ps(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${shortcutPath.replace(/'/g, "''")}'); ConvertTo-Json @{ target = $s.TargetPath; arguments = $s.Arguments; wd = $s.WorkingDirectory }`))
+    : { target: null, arguments: null, wd: null };
+  sc.readOnly = existsSync(shortcutPath) ? readOnlyFile(shortcutPath) : false;
+  const scProblems = shortcutProblems(sc, { dest, exe: realExe });
+  check('real shortcut starts the installed exe directly: target = <dest>\\app\\smartlearn.exe, no arguments, working dir = dest, read-only', scProblems.length === 0, scProblems.length ? scProblems : sc);
 
-  rmSync(scratch, { recursive: true, force: true });
+  const cfgProblems = realCfg
+    ? homologationFileProblems(realCfg, { humanRoots, appDir: realApp, manifest, readOnly: readOnlyFile(realCfgPath) })
+    : [`${realCfgPath} is missing or not valid JSON`];
+  check('real app\\homologation.json is read-only, matches the manifest, and its db/sources/webviewDir are outside every human folder (no database opened)', cfgProblems.length === 0, cfgProblems.length ? cfgProblems : { db: realCfg.db, sources: realCfg.sources, webviewDir: realCfg.webviewDir, provider: realCfg.provider });
+
+  // the launcher stays as hash/identity verifier: nothing is started, nothing is created; env cleaned so its defaults are the real ones
+  const defaults = JSON.parse(ps(`& '${join(dest, 'launch.ps1').replace(/'/g, "''")}' -CheckOnly`, withoutSmartlearnEnv(process.env)));
+  check('launcher default datastore is its own folder and no human data path is inside or contains it', [defaults.database, defaults.sources, defaults.dataDir].every((p) => !humanRoots.some((h) => inside(p, h) || inside(h, p))), { dataDir: defaults.dataDir });
+  check('launcher check (-CheckOnly): exe hash and served content equal the manifest', defaults.exeSha256 === manifest.exeSha256 && defaults.inputsHash === manifest.inputsHash, { exeSha256: defaults.exeSha256.slice(0, 12), content: defaults.inputsHash.slice(0, 12) });
+
+  // ---- (2) the disposable copies, installed by the real installer ----
+  wipeScratch();
+  const install = spawnSync(process.execPath, installerArgs({ script: join(ROOT, 'scripts', 'homologation-install.mjs'), exe: sourceExe, dest: L.inst }), { cwd: ROOT, encoding: 'utf8', env: installerEnv(process.env, L.data), timeout: 300000 });
+  if (install.status !== 0) throw new Error(`the installer refused the disposable copy: ${install.stdout}${install.stderr}`);
+  const scratchCfg = readJson(join(instApp, 'homologation.json'));
+  const scratchManifest = readJson(join(L.inst, 'manifest.json'));
+  const scratchProblems = [
+    ...(scratchCfg ? homologationFileProblems(scratchCfg, { humanRoots, appDir: instApp, manifest: scratchManifest, readOnly: readOnlyFile(join(instApp, 'homologation.json')) }) : ['scratch homologation.json missing']),
+    ...(scratchCfg?.provider !== 'FAKE' || scratchCfg?.consent ? [`provider ${scratchCfg?.provider} consent ${scratchCfg?.consent}: must be FAKE without consent`] : []),
+    ...(scratchCfg && ![scratchCfg.db, scratchCfg.sources, scratchCfg.webviewDir].every((p) => inside(p, L.data)) ? ['scratch datastore is not inside the scratch data folder'] : []),
+    ...(scratchManifest?.inputsHash !== manifest.inputsHash ? [`scratch content ${scratchManifest?.inputsHash} != real install ${manifest.inputsHash}`] : []),
+    ...(sha256(instExe) !== sha256(sourceExe) ? ['scratch exe differs from its source'] : []),
+  ];
+  check('disposable copy installed by the real installer: own folder, FAKE provider without consent, data in scratch, same exe and content as the source', scratchProblems.length === 0, scratchProblems.length ? scratchProblems : { dest: L.inst, data: L.data });
+  // second copy for the fail-closed probe, made BEFORE anything ever ran: same files, minus the isolation file
+  cpSync(L.inst, L.instNoFile, { recursive: true });
+  try { execFileSync('attrib', ['-R', join(L.instNoFile, 'app', 'homologation.json')], { stdio: 'ignore' }); } catch { /* not there */ }
+  rmSync(join(L.instNoFile, 'app', 'homologation.json'), { force: true });
+
   const email = `prova-${Date.now()}@homologacao.test`;
   const password = 'a genuinely long test password 1';
   let subjectId;
 
-  // first open, through the shortcut
-  let app = await openThroughShortcut(scratch);
+  // ---- (3) first open, DIRECTLY ----
+  const first = await openDirect(instExe);
+  let app = first.app;
   const t0 = Date.now();
-  check('opened THROUGH the shortcut: process path is the installed executable', lc(exe) === lc(ps(`(Get-Process -Id ${app.pid}).Path`)), { pid: app.pid });
-  check('window title names the Homologacao build', /^SmartLearn HOMOLOGACAO - v\S+ - \S+$/.test(app.title), app.title);
+  check('opened DIRECTLY (no launcher, no shortcut, no SMARTLEARN_* in its environment): process path is the disposable exe', lc(instExe) === lc(ps(`(Get-Process -Id ${app.pid}).Path`)) && first.started.smartlearnEnvVars.length === 0, { pid: app.pid, smartlearnEnvVars: first.started.smartlearnEnvVars });
+  check('window title names the Homologacao build, as homologation.json says', /^SmartLearn HOMOLOGACAO - v\S+ - \S+$/.test(app.title) && app.title === scratchCfg.windowTitle, app.title);
   const backend = backendOf(app.pid);
-  check('backend is the installed node-runtime child', backend.length >= 1 && backend.every((b) => lc(b.path).startsWith(lc(join(dest, 'app')))), backend.map((b) => b.path));
+  check('backend is the installed node-runtime child', backend.length >= 1 && backend.every((b) => lc(b.path).startsWith(lc(instApp))), backend.map((b) => b.path));
   check('NO visible Node console: every backend window handle is 0', backend.length >= 1 && backend.every((b) => b.handle === '0'), backend.map((b) => b.handle));
   const consoles1 = consoleWindowsOf(backend.map((b) => b.pid));
   check('NO console window on screen for the backend (all visible windows of the system enumerated)', consoles1.length === 0, consoles1.length ? consoles1 : 'none');
-  const port = await backendPort(backend[0].pid);
+  const port = await backendPort(backend[0].pid, L.data);
   const base = `http://127.0.0.1:${port}`;
   check('backend ready', await waitReady(base), base);
   const build = await (await fetch(`${base}/health/build`)).json();
-  check('served build = installed manifest (content hash and commit)', build.content === manifest.inputsHash && String(build.head) === manifest.commit, { content: String(build.content).slice(0, 12), head: build.head, mode: build.mode, provider: build.provider });
-  check('provider is the free FAKE one (no paid call possible)', build.provider === 'FAKE', build.provider);
-  const staged = JSON.parse(readFileSync(join(dest, 'app', 'dist-runtime', 'build-info.json'), 'utf8'));
+  check('served build = installed manifest (content hash and commit)', build.content === scratchManifest.inputsHash && build.content === manifest.inputsHash && String(build.head) === scratchManifest.commit, { content: String(build.content).slice(0, 12), head: build.head, mode: build.mode, provider: build.provider });
+  check('provider is the free FAKE one, from homologation.json alone (no paid call possible)', build.provider === 'FAKE', build.provider);
+  const staged = JSON.parse(readFileSync(join(instApp, 'dist-runtime', 'build-info.json'), 'utf8'));
   check('bundled frontend identity = manifest', staged.inputsHash === manifest.inputsHash, staged.inputsHash.slice(0, 12));
-  const dbFile = join(scratch, 'smartlearn-homologacao.db');
-  check('database created in the homologation data folder, none anywhere human', existsSync(dbFile) && existsSync(join(scratch, 'sources')), dbFile);
-  const profileFiles = walk(join(scratch, 'webview')).length;
-  check('own WebView2 profile (cookies, storage) lives in the homologation folder, not in the Oficial/DEV one', profileFiles > 0, { files: profileFiles });
+  const dbFile = join(L.data, 'smartlearn-homologacao.db');
+  check('database created in the scratch data folder named by homologation.json (no env was set), none anywhere human', existsSync(dbFile) && existsSync(join(L.data, 'sources')), dbFile);
+  const profileFiles = walk(join(L.data, 'webview')).length;
+  check('own WebView2 profile (cookies, storage) lives in the homologation data folder, not in the Oficial/DEV one', profileFiles > 0, { files: profileFiles });
 
   const api = client(base);
   await api.call('POST', '/v1/auth/register', { email, password });
@@ -215,22 +339,22 @@ async function main() {
   const list1 = await api.call('GET', '/v1/subjects');
   check('create + read over the real API', list1.subjects.some((s) => s.id === subjectId && s.name === 'Farmacologia'), { subjectId });
 
-  const closed1 = await closeGracefully(app);
+  const closed1 = await closeGracefully(app, instExe);
   check('app closes by itself and leaves no backend behind', closed1.how === 'graceful' && closed1.leftoversKilled === 0, closed1);
 
-  // second open, through the shortcut again
-  app = await openThroughShortcut(scratch);
+  // ---- second open, DIRECTLY again ----
+  app = (await openDirect(instExe)).app;
   const backend2 = backendOf(app.pid);
   check('second open: still no visible Node console', backend2.length >= 1 && backend2.every((b) => b.handle === '0'), backend2.map((b) => b.handle));
   const consoles2 = consoleWindowsOf(backend2.map((b) => b.pid));
   check('second open: NO console window on screen for the backend (all visible windows enumerated)', consoles2.length === 0, consoles2.length ? consoles2 : 'none');
-  const base2 = `http://127.0.0.1:${await backendPort(backend2[0].pid)}`;
+  const base2 = `http://127.0.0.1:${await backendPort(backend2[0].pid, L.data)}`;
   check('second open: backend ready', await waitReady(base2), base2);
   const api2 = client(base2);
   await api2.login(email, password);
   const list2 = await api2.call('GET', '/v1/subjects');
   check('data created before the restart is still there', list2.subjects.some((s) => s.id === subjectId && s.name === 'Farmacologia'), list2.subjects.map((s) => s.name));
-  const closed2 = await closeGracefully(app);
+  const closed2 = await closeGracefully(app, instExe);
   check('second close is clean', closed2.how === 'graceful' && closed2.leftoversKilled === 0, closed2);
 
   // the file itself
@@ -238,18 +362,39 @@ async function main() {
   const db = new Database(dbFile, { readonly: true, fileMustExist: true });
   const rows = { users: db.prepare('SELECT COUNT(*) n FROM users').get().n, subjects: db.prepare("SELECT COUNT(*) n FROM subjects WHERE name = 'Farmacologia'").get().n, version: db.prepare('SELECT MAX(version) v FROM schema_migrations').get().v, integrity: db.pragma('integrity_check', { simple: true }) };
   db.close();
-  check('the homologation database file holds the data (v41, integrity ok)', rows.users === 1 && rows.subjects === 1 && rows.integrity === 'ok' && rows.version >= 41, rows);
+  check('the scratch database file holds the data (v41, integrity ok)', rows.users === 1 && rows.subjects === 1 && rows.integrity === 'ok' && rows.version >= 41, rows);
 
-  // nothing existing changed
+  // ---- (4) fail closed: manifest.json present, homologation.json absent ----
+  const layoutOk = existsSync(join(L.instNoFile, 'manifest.json')) && !existsSync(join(L.instNoFile, 'app', 'homologation.json'));
+  const probe = await probeFailClosed(noFileExe, L.dataNoFile);
+  const closedProblems = [...(layoutOk ? [] : ['probe layout wrong: needs ..\\manifest.json and no app\\homologation.json']), ...failClosedProblems(probe)];
+  check('fail closed: a copy WITHOUT app\\homologation.json (but with ..\\manifest.json) refuses to open: no app window, no backend, no data, exits with code 1 once its refusal box is closed', closedProblems.length === 0, closedProblems.length ? { problems: closedProblems, ...probe } : { messageBox: probe.messageBox, windows: probe.windows, exitCode: probe.exitCode, exitedOnItsOwn: !probe.wasAliveAfterWindow });
+
+  // ---- (5) nothing existing changed ----
   if (before) {
     const changes = diffSnapshots(before, takeSnapshot());
     check('Oficial/DEV shortcuts, their targets and the human data are unchanged (stat + hash)', changes.length === 0, changes.length ? changes : { shortcuts: before.shortcuts.length, humanFiles: Object.values(before.humanData).reduce((n, f) => n + f.length, 0) });
   } else check('before-snapshot supplied', false, 'pass --before <file>');
+  const realAfter = realInstallFingerprint();
+  const touched = Object.keys(realBefore).filter((f) => realBefore[f] !== realAfter[f]);
+  check('the REAL install (exe, homologation.json, manifest, launcher, shortcut) is byte-identical after the proof', touched.length === 0, touched.length ? touched : Object.keys(realBefore).length);
 
-  rmSync(scratch, { recursive: true, force: true });
+  wipeScratch();
+  check('disposable copies and their data are deleted', !existsSync(L.root), L.root);
   const failed = results.filter((r) => !r.ok);
   console.log(JSON.stringify({ result: failed.length ? 'FAIL' : 'PASS', checks: results.length, failed: failed.map((f) => f.name), seconds: Math.round((Date.now() - t0) / 1000) }));
   process.exit(failed.length ? 1 : 0);
 }
 
-main().catch((error) => { console.error(`PROOF ERROR: ${error.stack ?? error}`); try { const a = appProcess(); if (a) execFileSync('taskkill', ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ } process.exit(2); });
+function killScratchProcesses() {
+  for (const exePath of [instExe, noFileExe]) {
+    try { const a = appProcess(exePath); if (a) execFileSync('taskkill', ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ }
+  }
+}
+
+main().catch((error) => {
+  console.error(`PROOF ERROR: ${error.stack ?? error}`);
+  killScratchProcesses();
+  try { wipeScratch(); } catch (cleanup) { console.error(`scratch cleanup failed: ${cleanup.message}`); }
+  process.exit(2);
+});
