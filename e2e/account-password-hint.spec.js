@@ -6,7 +6,7 @@ test('change-password form states the 8-character minimum and links it to the fi
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   const field = page.locator('#account-new-password');
-  await expect(field).toHaveAttribute('minlength', '15');
+  await expect(field).toHaveAttribute('minlength', '8');
   await expect(field).toHaveAttribute('aria-describedby', 'account-new-password-hint');
   await expect(page.locator('#account-new-password-hint')).toHaveText(/8 caracteres/);
 });
