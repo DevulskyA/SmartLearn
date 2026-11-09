@@ -2154,8 +2154,9 @@ h1 {
 /* Layers on Hoje: page < group card < item inside the group. Derived from the active theme's own tokens, so every theme keeps its hue
    and the three levels stay separable (the dark themes used to blend them). */
 :root {
-  --color-surface-raised: color-mix(in oklab, var(--color-surface), var(--color-text) 7%);
-  --color-border-strong: color-mix(in oklab, var(--color-border), var(--color-text) 16%);
+  /* light themes keep the exact previous colors (axe contrast was proven on them); only dark themes get the extra layer */
+  --color-surface-raised: light-dark(var(--color-surface), color-mix(in oklab, var(--color-surface), var(--color-text) 7%));
+  --color-border-strong: light-dark(var(--color-border), color-mix(in oklab, var(--color-border), var(--color-text) 16%));
 }
 .overdue-unit .review-card,
 .overdue-unit .review-row {
