@@ -20,7 +20,7 @@ import {
   readQuickToggleMemory,
   writeQuickToggleMemory,
 } from "./theme.js";
-import { colorVarForKey, getState, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, getState, THRESHOLDS, MIN_SAMPLE_QUESTIONS } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
 import { searchPlanUnits, paginatePlanUnits } from "./plan-list-model.js";
@@ -2565,7 +2565,7 @@ function renderStatsAttentionMap(evidence, units, subjects, periodValue, today) 
   const host = document.querySelector("#stats-attention-list");
   const note = document.querySelector("#stats-attention-note");
   if (!host || !note) return;
-  const sampleFloor = 10; // Same approved MIN_SAMPLE_QUESTIONS contract as getState display.
+  const sampleFloor = MIN_SAMPLE_QUESTIONS;
   const periodEvidence = evidenceInPeriod(evidence, periodValue, today);
   const unitRows = Analytics.byUnit(periodEvidence, units, subjects);
   const subjectRows = periodSubjectRows(evidence, units, subjects, { periodValue, today });
