@@ -609,6 +609,17 @@ fn is_within(path: &Path, root: &Path) -> bool {
     path.len() >= root.len() && path[..root.len()] == root[..]
 }
 
+/// The folders that hold the owner's real data: the Oficial app data (Roaming), its Local twin and the persistent DEV datastore.
+/// Derived from the Roaming app data dir (`<profile>\AppData\Roaming\<id>`), so it needs no environment access.
+fn human_data_dirs(app_data_dir: &Path) -> Vec<PathBuf> {
+    let mut dirs = vec![app_data_dir.to_path_buf()];
+    if let (Some(id), Some(profile)) = (app_data_dir.file_name(), app_data_dir.ancestors().nth(3)) {
+        dirs.push(profile.join("AppData").join("Local").join(id));
+        dirs.push(profile.join("SmartLearn-DevData"));
+    }
+    dirs
+}
+
 fn homologation_path(label: &str, raw: &str, exe_dir: &Path, app_data_dir: &Path) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw);
     if raw.trim().is_empty() || !path.is_absolute() {
@@ -622,8 +633,10 @@ fn homologation_path(label: &str, raw: &str, exe_dir: &Path, app_data_dir: &Path
     if unsafe_part {
         return Err(format!("\"{label}\" must be a plain absolute path (no \"..\", \".\" or \\\\?\\ prefix), got \"{raw}\""));
     }
-    if is_within(&path, app_data_dir) || is_within(app_data_dir, &path) {
-        return Err(format!("\"{label}\" ({raw}) coincides with the Oficial app data ({})", app_data_dir.display()));
+    for human in human_data_dirs(app_data_dir) {
+        if is_within(&path, &human) || is_within(&human, &path) {
+            return Err(format!("\"{label}\" ({raw}) coincides with the human data folder {}", human.display()));
+        }
     }
     // A reinstall replaces the whole app folder: data kept inside it would be destroyed.
     if is_within(&path, exe_dir) {
@@ -2532,6 +2545,25 @@ mod tests {
         let sibling = PathBuf::from(format!("{}-homolog", app_data.display()));
         let json = homolog_json(&data, json!({ "db": sibling.join("x.db") }));
         assert!(parse_homologation(&json, &exe_dir, &app_data).is_ok());
+    }
+
+    #[test]
+    fn homologation_refuses_the_local_twin_and_the_dev_datastore_of_the_owner() {
+        let (exe_dir, _, data) = homolog_dirs();
+        // the real layout: <profile>\AppData\Roaming\<id>
+        let profile = std::env::temp_dir().join("sl-homolog-profile");
+        let roaming = profile.join("AppData").join("Roaming").join("com.devulsky.smartlearn");
+        let human = [
+            profile.join("AppData").join("Local").join("com.devulsky.smartlearn").join("x.db"),
+            profile.join("SmartLearn-DevData").join("smartlearn-dev.db"),
+            profile.join("SmartLearn-DevData"),
+        ];
+        for key in ["db", "sources", "webviewDir"] {
+            for path in &human {
+                let json = homolog_json(&data, json!({ key: path }));
+                assert!(parse_homologation(&json, &exe_dir, &roaming).is_err(), "{key}={} must be refused", path.display());
+            }
+        }
     }
 
     #[test]
