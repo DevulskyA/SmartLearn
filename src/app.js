@@ -23,6 +23,7 @@ import {
 import { colorVarForKey, getState, THRESHOLDS } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
+import { searchPlanUnits, paginatePlanUnits } from "./plan-list-model.js";
 import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
@@ -460,6 +461,13 @@ createSubjectCreateForm({
   },
 });
 const planList = document.querySelector("#plan-list");
+const planSearchInput = document.querySelector("#plan-search-input");
+const planResultsStatus = document.querySelector("#plan-results-status");
+const planPagination = document.querySelector("#plan-pagination");
+const planPagePrevious = document.querySelector("#plan-page-previous");
+const planPageNext = document.querySelector("#plan-page-next");
+const planPageSelect = document.querySelector("#plan-page-select");
+const planPagePosition = document.querySelector("#plan-page-position");
 const planEmpty = document.querySelector("#plan-empty");
 const planEmptyNewBtn = document.querySelector("#plan-empty-new");
 const planFilterSubject = document.querySelector("#plan-filter-subject");
@@ -1902,6 +1910,30 @@ async function openLessonInPlan(unitId) {
 // Plano can be refreshed from several independent actions (navigation, exam finalization,
 // study completion, subject edits). Only the newest async render may publish DOM.
 let planRenderSeq = 0;
+let planCurrentPage = 1;
+let planSearchTimer = null;
+function updatePlanPageControls(pageData) {
+  if (planResultsStatus) {
+    planResultsStatus.textContent = pageData.total
+      ? `Mostrando ${pageData.from}–${pageData.to} de ${pageData.total} aulas`
+      : "Nenhuma aula corresponde à busca e aos filtros.";
+  }
+  if (!planPagination) return;
+  planPagination.hidden = pageData.pageCount <= 1;
+  planPagePrevious.disabled = pageData.page <= 1;
+  planPageNext.disabled = pageData.page >= pageData.pageCount;
+  planPagePosition.textContent = `de ${pageData.pageCount}`;
+  if (planPageSelect) {
+    const options = Array.from({ length: pageData.pageCount }, (_, index) => {
+      const option = document.createElement("option");
+      option.value = String(index + 1);
+      option.textContent = String(index + 1);
+      return option;
+    });
+    planPageSelect.replaceChildren(...options);
+    planPageSelect.value = String(pageData.page);
+  }
+}
 
 export async function renderPlan() {
   if (!planList) return;
@@ -1922,20 +1954,7 @@ export async function renderPlan() {
     evidenceByUnitId.get(ev.unitId).push(ev);
   }
 
-  // Load exercise counts in parallel
-  const exerciseCountByUnitId = new Map();
-  await Promise.all(
-    learningUnits.map(async (unit) => {
-      try {
-        const exs = await DB.exercises.getAll(unit.id);
-        exerciseCountByUnitId.set(unit.id, exs.length);
-      } catch {
-        exerciseCountByUnitId.set(unit.id, 0);
-      }
-    }),
-  );
-  if (renderId !== planRenderSeq) return;
-
+  // Exercise counts are resolved after filtering, for visible lessons only.
   // Populate subject dropdowns (filter + new-unit form)
   const activeSubjects = subjects.filter((s) => s.isActive);
   function syncPlanSubjectOptions(select, currentValue = "") {
@@ -1995,6 +2014,17 @@ export async function renderPlan() {
         planFilterState.value = "";
         syncSelect(planFilterState);
       }
+      // A link from Estatísticas must find its lesson, even after search/period filtering.
+      const periodValue = planFilterPeriod?.value ?? "";
+      const cutoff = periodValue ? subtractDays(today, periodValue === "last-30" ? 30 : periodValue === "last-90" ? 90 : 365) : null;
+      if (cutoff && focusUnit.studyDate < cutoff && planFilterPeriod) {
+        planFilterPeriod.value = "";
+        syncSelect(planFilterPeriod);
+      }
+      const names = new Map(subjects.map((subject) => [subject.id, subject.name]));
+      if (planSearchInput?.value && searchPlanUnits([focusUnit], planSearchInput.value, names).length === 0) {
+        planSearchInput.value = "";
+      }
     }
   }
 
@@ -2010,16 +2040,32 @@ export async function renderPlan() {
     return true;
   });
 
-  planEmpty.hidden = filtered.length > 0;
-  // no lessons at all: the way to start sits in the body too, not only in the heading
-  if (planEmptyNewBtn) planEmptyNewBtn.hidden = filtered.length > 0 || learningUnits.length > 0;
-  // an empty Plano (no lessons at all) says how to start; a filter that matches nothing keeps the plain text
+  const names = new Map(subjects.map((subject) => [subject.id, subject.name]));
+  const matching = searchPlanUnits(filtered, planSearchInput?.value ?? "", names);
+  const pageData = paginatePlanUnits(matching, planCurrentPage, pendingPlanFocusUnitId);
+  planCurrentPage = pageData.page;
+
+  // Only the visible page needs exercise metadata: 25 calls rather than 200.
+  const exerciseCountByUnitId = new Map();
+  await Promise.all(pageData.items.map(async (unit) => {
+    try {
+      const exs = await DB.exercises.getAll(unit.id);
+      exerciseCountByUnitId.set(unit.id, exs.length);
+    } catch {
+      exerciseCountByUnitId.set(unit.id, 0);
+    }
+  }));
+  if (renderId !== planRenderSeq) return;
+  updatePlanPageControls(pageData);
+  planEmpty.hidden = matching.length > 0;
+  if (planEmptyNewBtn) planEmptyNewBtn.hidden = learningUnits.length > 0;
   planEmpty.textContent = learningUnits.length === 0 && REMOTE_MODE && LOCAL_AUTHORITY
     ? t("plan.empty.withMaterials")
+    : learningUnits.length > 0 ? "Nenhuma aula corresponde aos filtros ou à busca."
     : t("plan.empty");
   planList.replaceChildren();
 
-  for (const unit of filtered) {
+  for (const unit of pageData.items) {
     const subject = subjectsById.get(unit.subjectId);
     const evidence = evidenceByUnitId.get(unit.id) ?? [];
     const state = getTrackingState(unit.id, allTasks, allEvidence, today);
@@ -6371,17 +6417,32 @@ evolutionFilterSubject?.addEventListener("change", async () => {
   renderEvolutionSvg(ev, units, subjs);
 });
 
-planFilterSubject?.addEventListener("change", () => {
+function refreshPlanFromFirstPage() {
+  planCurrentPage = 1;
+  if (databaseAvailable) renderPlan().catch(console.error);
+}
+planFilterSubject?.addEventListener("change", refreshPlanFromFirstPage);
+planFilterState?.addEventListener("change", refreshPlanFromFirstPage);
+planSort?.addEventListener("change", refreshPlanFromFirstPage);
+planFilterPeriod?.addEventListener("change", refreshPlanFromFirstPage);
+planSearchInput?.addEventListener("input", () => {
+  planCurrentPage = 1;
+  if (planSearchTimer !== null) clearTimeout(planSearchTimer);
+  planSearchTimer = setTimeout(() => {
+    planSearchTimer = null;
+    if (databaseAvailable) renderPlan().catch(console.error);
+  }, 180);
+});
+planPagePrevious?.addEventListener("click", () => {
+  planCurrentPage = Math.max(1, planCurrentPage - 1);
   if (databaseAvailable) renderPlan().catch(console.error);
 });
-planFilterState?.addEventListener("change", () => {
+planPageNext?.addEventListener("click", () => {
+  planCurrentPage += 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
-planSort?.addEventListener("change", () => {
-  if (databaseAvailable) renderPlan().catch(console.error);
-});
-
-planFilterPeriod?.addEventListener("change", () => {
+planPageSelect?.addEventListener("change", () => {
+  planCurrentPage = Number(planPageSelect.value) || 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 
