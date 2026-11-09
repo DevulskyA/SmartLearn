@@ -17,7 +17,7 @@ export const SCRYPT_PARAMS = Object.freeze({
   maxmem: 256 * 1024 * 1024,
 });
 
-export const PASSWORD_MIN_CODEPOINTS = 15;
+export const PASSWORD_MIN_CODEPOINTS = 8;
 export const PASSWORD_MAX_UTF8_BYTES = 1024;
 
 // Bound parallel hashing: scrypt with these params is CPU/memory heavy.

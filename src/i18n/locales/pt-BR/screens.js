@@ -157,7 +157,7 @@ export default {
   'screens.account.password': 'Senha',
   'screens.account.toRegister': 'Ainda não tem conta? Criar uma',
   'screens.account.register': 'Criar conta',
-  'screens.account.passwordHint': 'Mínimo de 15 caracteres.',
+  'screens.account.passwordHint': 'Mínimo de 8 caracteres.',
   'screens.account.toLogin': 'Já tem conta? Entrar',
   'screens.account.changePassword': 'Alterar senha',
   'screens.account.currentPassword': 'Senha atual',

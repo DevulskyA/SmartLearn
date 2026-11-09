@@ -5,7 +5,7 @@ export default {
   'auth.register.title': 'Criar conta',
   'auth.email.label': 'E-mail',
   'auth.password.label': 'Senha',
-  'auth.password.hint': 'Mínimo de 15 caracteres.',
+  'auth.password.hint': 'Mínimo de 8 caracteres.',
   'auth.newPassword.label': 'Nova senha',
   'auth.currentPassword.label': 'Senha atual',
   'auth.submit.login': 'Entrar',

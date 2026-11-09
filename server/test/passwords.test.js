@@ -30,7 +30,7 @@ test('stores algorithm and params for forward-readable rehash', async () => {
   assert.equal(params.p, SCRYPT_PARAMS.p);
 });
 
-test('long Unicode passphrase (>15 codepoints, multi-byte) survives round trip', async () => {
+test('long Unicode passphrase (>8 codepoints, multi-byte) survives round trip', async () => {
   const passphrase = 'senha longa com acentuação médica β-bloqueador 12345';
   assert.equal(validatePasswordShape(passphrase), null);
   const stored = await hashPassword(passphrase);
@@ -52,7 +52,7 @@ test('password is never trimmed, normalized, or truncated', async () => {
 
 test('validatePasswordShape rejects too-short password', () => {
   const msg = validatePasswordShape('short');
-  assert.match(msg, /ao menos 15/);
+  assert.match(msg, /ao menos 8/);
 });
 
 test('validatePasswordShape rejects over-1024-byte password', () => {
