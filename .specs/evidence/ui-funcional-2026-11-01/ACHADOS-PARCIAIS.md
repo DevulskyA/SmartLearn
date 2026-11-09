@@ -322,3 +322,14 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Fix: "unaffected/unchanged/unaltered" count as a source negation but never prove a lost one. Test `risk-checks.test.js` fails without the fix. `AUDIT_RULES_VERSION` = audit-rules-12 (commit 96028d3).
 - Not changed on purpose: question 3 (draft says "sem as concentracoes ... os resultados sao efetivos", garbled) and question 5 (negation dropped) are genuine generation defects; the findings stay. Garbled generation (question 3/4) is OPEN and needs a generation change, which needs a paid run to prove.
 - Class: 3 (no rule covered it); guard is the test.
+
+## 2026-11-08 (noite) — achados da retomada
+
+- **E-051 (meu, classe 1)**: abri o app para testar o console quando o dono só pedira o caminho do atalho; regra existente: avisar antes de teste nativo. Instrumento falhou antes de abrir (nome acentuado). Corrigido: script removido, aviso antes.
+- **E-052 (meu, classe 1)**: atalho `SmartLearn Oficial.dev-backup.lnk`, criado por mim em sessão anterior, abria uma janela Node. Arquivado em `C:\Users\Ariel\SmartLearn-Atalhos-Arquivados\`. Resíduo de build/atalho antigo = fonte de confusão; inventário feito; 3 pastas temporárias arquivadas em `C:\Projetos\_ARQUIVO-20261108\`.
+- **E-053 (instrumento)**: `build:exe` sozinho não reempacota `dist-runtime`/`server-runtime` e o exe serve conteúdo antigo. Sequência correta: `npm run build` → `npm run package:standalone` → `npm run build:exe`.
+- **E-054 (produto, corrigido)**: login não persistia no Desktop; cookie de sessão sem Max-Age descartado pelo WebView2 ao fechar. Correção no servidor (`resolveSessionPolicy`), commit e0ec771; falta validação com a janela real (logar, fechar, reabrir).
+- **E-055 (teste, corrigido)**: `e2e/dead-end-sweep.spec.js` DEADEND-2 semeava aulas com a data UTC; entre 21:00 e 24:00 (Brasil) "Hoje" fica sem ação. Reproduzido e provado com data local. Commit 051d38c.
+- **E-056 (instável)**: `lesson-editor.spec.js:438` falhou uma vez na suíte completa e passou isolado. Não reproduzido; observar.
+- **E-057 (achado)**: banco real já estava na migração 41 (aplicada 2026-11-08 21:03 local), não por mim; origem provável: atalho aberto pelo dono. Pendência "migrar 035–041" deve ser reconferida.
+- **Lacuna de produto**: senha esquecida só tem recuperação por operador (token). Cartão Planban "AUTH — Recuperação por e-mail com MFA". Política exige 15+ caracteres.
