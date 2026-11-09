@@ -16,7 +16,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DATA_DIR = process.env.SMARTLEARN_HOMOLOGATION_DATA || path.join(homedir(), 'SmartLearn-Homologacao-Data');
 const DB_PATH = path.join(DATA_DIR, 'smartlearn-homologacao.db');
 const SOURCES_DIR = path.join(DATA_DIR, 'sources');
-const API_PORT = 3100;
+const API_PORT = 3000; // the front end calls http://localhost:3000 directly (src/auth-ui.js API_BASE)
 const WEB_PORT = 5183;
 const EXE = path.join('C:', 'Projetos', 'SmartLearn-Homologacao', 'app', 'smartlearn.exe');
 

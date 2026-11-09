@@ -2145,10 +2145,22 @@ h1 {
 /* Vencidas: several overdue stages of one unit as a single expandable card.
    Native <details>: keyboard, focus and screen-reader semantics come for free. */
 .overdue-unit {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: 1rem;
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
+}
+
+/* Layers on Hoje: page < group card < item inside the group. Derived from the active theme's own tokens, so every theme keeps its hue
+   and the three levels stay separable (the dark themes used to blend them). */
+:root {
+  --color-surface-raised: color-mix(in oklab, var(--color-surface), var(--color-text) 7%);
+  --color-border-strong: color-mix(in oklab, var(--color-border), var(--color-text) 16%);
+}
+.overdue-unit .review-card,
+.overdue-unit .review-row {
+  background: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 /* a folded item ("Ver mais") must stay hidden even though .review-row / .overdue-unit set their own display */
