@@ -6130,3 +6130,174 @@ label.select-control:has(> .ui-select) {
     align-items: start;
   }
 }
+
+
+/* SmartLearn | Refinamento do ambiente de estudo.
+   Mantem DOM, fluxos, filtros, tabelas, identidade das disciplinas e temas.
+   Um unico CSS de apresentacao sobre a versao funcional original. */
+
+/* Ritmo editorial de um aplicativo de estudo, sem transformar telas em banners. */
+@media (min-width: 48rem) {
+  .app-nav {
+    gap: 0.2rem;
+    padding: 1.45rem 0.9rem;
+  }
+  .app-nav .nav-item {
+    min-height: 3.05rem;
+    padding: 0.65rem 0.85rem;
+    gap: 0.75rem;
+    border-radius: 0.68rem;
+    font-size: 0.94rem;
+  }
+  .app-nav .nav-item.is-active {
+    font-weight: 710;
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 13%, transparent);
+  }
+  .app-main {
+    padding: clamp(1.5rem, 3vw, 3rem);
+    background: linear-gradient(160deg, color-mix(in oklch, var(--color-primary-soft) 20%, var(--color-bg)) 0, var(--color-bg) 18rem);
+  }
+  .screen-heading { margin-bottom: 1.5rem; }
+  .screen-heading h1 { font-size: clamp(1.9rem, 2.75vw, 2.55rem); }
+}
+
+.screen-heading h1 {
+  font-weight: 795;
+  letter-spacing: -0.043em;
+}
+.screen-heading .eyebrow { letter-spacing: 0.075em; }
+
+/* Acoes reais recebem acabamento e foco; status mantem a propria paleta. */
+.primary-button, .secondary-button, .small-button {
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.primary-button:hover:not(:disabled) {
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--color-primary) 19%, transparent);
+}
+.secondary-button:hover:not(:disabled), .small-button:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--color-primary) 42%, var(--color-border));
+}
+
+/* Hoje: destacar o proximo passo e manter as revisoes operacionalmente densas. */
+#screen-today .primary-action-banner {
+  padding: 1.15rem 1.35rem;
+  border-radius: 1rem;
+  background: linear-gradient(115deg, var(--color-primary-soft), color-mix(in oklch, var(--color-primary-soft) 35%, var(--color-surface)));
+}
+#screen-today .review-row {
+  border-radius: 0.82rem;
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--color-text) 6%, transparent);
+}
+#screen-today .review-row:focus-within {
+  border-color: color-mix(in oklch, var(--color-primary) 55%, var(--color-border));
+}
+
+/* Plano: 200 aulas sao linhas de trabalho, nao 200 cartoes promocionais.
+   O JS original continua criando, filtrando, ordenando e expandindo registros. */
+#screen-plan .plan-filters {
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.8rem;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: 0.85rem;
+  margin-bottom: 1.1rem;
+}
+#screen-plan .plan-filters select {
+  min-height: 2.45rem;
+  padding: 0.48rem 0.67rem;
+  border-radius: 0.55rem;
+  max-width: 100%;
+}
+#screen-plan .plan-list:not(:empty) {
+  border: 1px solid var(--color-border);
+  border-radius: 0.95rem;
+  background: var(--color-surface);
+  box-shadow: 0 2px 10px color-mix(in oklch, var(--color-text) 4%, transparent);
+}
+#screen-plan .plan-row {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 140ms ease;
+}
+#screen-plan .plan-row + .plan-row { border-top: 1px solid var(--color-border); }
+#screen-plan .plan-row:hover { background: color-mix(in oklch, var(--color-primary-soft) 23%, var(--color-surface)); }
+#screen-plan .plan-row:focus-within { background: color-mix(in oklch, var(--color-primary-soft) 39%, var(--color-surface)); }
+#screen-plan .plan-row-compact { padding: 0.75rem 1.05rem; row-gap: 0.27rem; }
+#screen-plan .plan-unit-title { font-size: 0.95rem; font-weight: 675; letter-spacing: -0.012em; line-height: 1.45; }
+#screen-plan .plan-unit-meta { line-height: 1.5; font-size: 0.79rem; }
+#screen-plan .plan-expand-btn {
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 0.6rem;
+}
+#screen-plan .plan-expand-btn:hover { border-color: var(--color-primary); }
+#screen-plan .plan-row-detail {
+  background: color-mix(in oklch, var(--color-primary-soft) 16%, var(--color-surface));
+  padding: 1.1rem 1.2rem;
+}
+
+/* Estatisticas: a tabela e a ferramenta de navegacao e diagnostico. */
+#screen-stats .stats-kpis {
+  gap: 0.9rem 2.2rem;
+  padding: 1.1rem 1.3rem;
+  box-shadow: 0 2px 12px color-mix(in oklch, var(--color-text) 4%, transparent);
+}
+#screen-stats .stats-panel {
+  border-radius: 0.95rem;
+  box-shadow: 0 2px 9px color-mix(in oklch, var(--color-text) 3%, transparent);
+}
+#screen-stats .stats-table thead th {
+  background: var(--color-surface-sunken);
+  border-bottom-color: color-mix(in oklch, var(--color-primary) 18%, var(--color-border));
+}
+#screen-stats .stats-table tbody td { font-variant-numeric: tabular-nums; }
+@media (min-width: 48rem) {
+  #screen-stats .stats-table tbody tr:not(.is-selected):nth-child(even) {
+    background: color-mix(in oklch, var(--color-surface-sunken) 31%, var(--color-surface));
+  }
+  #screen-stats .matrix-table tbody tr.matrix-row:hover {
+    background: color-mix(in oklch, var(--color-primary-soft) 52%, var(--color-surface));
+  }
+  #screen-stats .th-sort-btn { min-height: 2rem; }
+}
+#screen-stats .table-scroll { scrollbar-color: var(--color-border) transparent; }
+
+/* Materiais, estudo e prova continuam sendo paginas de trabalho e leitura. */
+#screen-materials #sources-card { border-radius: 1rem; }
+#screen-materials .source-existing-item {
+  border-radius: 0.7rem;
+  padding: 0.7rem 0.85rem;
+  background: color-mix(in oklch, var(--color-surface-sunken) 22%, var(--color-surface));
+}
+#screen-materials .source-existing-item:focus-within {
+  border-color: var(--color-primary);
+}
+#screen-study-now #study-now-practice-card,
+#screen-exam #exam-taking {
+  border-radius: 1rem;
+  border-color: color-mix(in oklch, var(--color-primary) 22%, var(--color-border));
+}
+#screen-study-now #study-now-question-text,
+#screen-exam #exam-question-text { line-height: 1.65; }
+
+/* Formularios administrativos e de cadastro compartilham o mesmo acabamento. */
+#screen-register .form-card,
+#screen-plan .form-card,
+#screen-settings .settings-card,
+#screen-account .settings-card { border-radius: 0.95rem; }
+
+@media (max-width: 47.999rem) {
+  #screen-plan .plan-filters { padding: 0.65rem; }
+  #screen-plan .plan-row-compact { padding: 0.78rem 0.88rem; }
+  #screen-plan .plan-row-detail { padding: 0.9rem; }
+  #screen-stats .stats-kpis { padding: 0.85rem 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary-button, .secondary-button, .small-button, #screen-plan .plan-row { transition: none; }
+}
