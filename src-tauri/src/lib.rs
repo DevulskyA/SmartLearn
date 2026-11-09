@@ -571,7 +571,8 @@ const HOMOLOGATION_FILE: &str = "homologation.json";
 const HOMOLOGATION_INSTALL_MARKER: &str = "manifest.json";
 const APP_IDENTIFIER: &str = "com.devulsky.smartlearn";
 /// Human DEV pins and consent inherited from the environment: a homologation file replaces them, it never merges with them.
-const HOMOLOGATION_CLEARED_VARS: [&str; 4] = [
+const HOMOLOGATION_CLEARED_VARS: [&str; 5] = [
+    "SMARTLEARN_MEDIA_DIR",
     "SMARTLEARN_DEV_DATA_DIR",
     "SMARTLEARN_AUTHORIZE_MIGRATIONS",
     "SMARTLEARN_DEV_PERSISTENT_SESSION",

@@ -105,11 +105,12 @@ $desktop = [Environment]::GetFolderPath('Desktop')
 $path = Join-Path $desktop '${name}'
 $shell = New-Object -ComObject WScript.Shell
 if (Test-Path $path) {
-  Set-ItemProperty -LiteralPath $path -Name IsReadOnly -Value $false
-  $old =$shell.CreateShortcut($path)
-  $oursOld = $old.Arguments -like '*${launcher.replace(/'/g, "''")}*'
+  # Ownership is decided BEFORE the read-only flag is touched: a foreign shortcut is refused exactly as it was found.
+  $old = $shell.CreateShortcut($path)
+  $oursOld = $old.Arguments.IndexOf('${launcher.replace(/'/g, "''")}', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
   $oursNew = $old.TargetPath -ieq '${exeInLive.replace(/'/g, "''")}'
   if (-not ($oursOld -or $oursNew)) { Write-Output 'FOREIGN'; exit 0 }
+  Set-ItemProperty -LiteralPath $path -Name IsReadOnly -Value $false
 }
 $s = $shell.CreateShortcut($path)
 $s.TargetPath = '${exeInLive.replace(/'/g, "''")}'
