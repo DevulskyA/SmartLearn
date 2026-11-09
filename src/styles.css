@@ -6397,3 +6397,163 @@ label.select-control:has(> .ui-select) {
     flex: 1 1 9rem;
   }
 }
+
+
+/* Workflow-first refinement: dynamic medical study workspace; scoped to real JS DOM.
+   Preserve existing table sort controls, keyboard navigation, themes and status semantics. */
+#screen-plan .plan-worklist-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: .75rem 1.5rem;
+  flex-wrap: wrap;
+  margin: 0 0 .85rem;
+}
+#screen-plan .plan-search-field {
+  display: grid;
+  gap: .3rem;
+  min-width: min(100%, 18rem);
+  flex: 1 1 18rem;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+#screen-plan #plan-search-input {
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: .7rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: .65rem .9rem;
+  font: inherit;
+  font-size: .92rem;
+}
+#screen-plan #plan-search-input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+#screen-plan .plan-results-status {
+  margin: 0;
+  padding: .5rem 0;
+  font-size: .8rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+#screen-plan .plan-filters {
+  padding: .9rem;
+  border-radius: .9rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  gap: .55rem;
+  margin-bottom: 1.1rem;
+}
+#screen-plan .plan-filters select {
+  min-height: 2.6rem;
+  border-radius: .55rem;
+  padding: .5rem .75rem;
+  font-size: .85rem;
+  max-width: 100%;
+}
+#screen-plan .plan-row {
+  border-radius: .8rem;
+  margin-bottom: .44rem;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+#screen-plan .plan-row:focus-within {
+  border-color: var(--color-primary);
+}
+#screen-plan .plan-row:has(.plan-expand-btn[aria-expanded="true"]) {
+  border-color: color-mix(in oklch, var(--color-primary) 48%, var(--color-border));
+  box-shadow: 0 8px 22px color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+#screen-plan .plan-row-compact { padding: .8rem 1rem; }
+#screen-plan .plan-unit-title { font-size: .95rem; line-height: 1.45; }
+#screen-plan .plan-unit-meta { font-size: .78rem; line-height: 1.55; }
+#screen-plan .plan-row-detail { padding: 1rem 1.15rem 1.25rem; }
+#screen-plan .plan-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: 1.1rem;
+  padding: .75rem;
+  border-radius: .85rem;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+}
+#screen-plan .plan-pagination[hidden] { display: none; }
+#screen-plan .plan-page-select-label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  color: var(--color-muted);
+  font-size: .85rem;
+}
+#screen-plan .plan-page-select-label select {
+  min-width: 4rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: .55rem;
+  padding: .4rem .5rem;
+}
+#screen-plan #plan-page-position { font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--color-muted); }
+
+#screen-stats .stats-attention-panel {
+  margin: 0 0 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: 0 3px 16px color-mix(in oklch, var(--color-primary) 5%, transparent);
+}
+#screen-stats .stats-attention-panel h2 { margin: .12rem 0 .28rem; }
+#screen-stats .stats-attention-panel .eyebrow { margin: 0; }
+#screen-stats #stats-attention-note { line-height: 1.55; color: var(--color-muted); font-size: .79rem; }
+#screen-stats .stats-attention-list { display: grid; gap: .55rem; }
+#screen-stats .stats-attention-group {
+  border: 1px solid var(--color-border);
+  border-radius: .72rem;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+#screen-stats .stats-attention-group summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+  padding: .8rem .9rem;
+  background: var(--color-surface-sunken);
+  cursor: pointer;
+}
+#screen-stats .stats-attention-group summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+#screen-stats .stats-attention-score { color: var(--color-muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+#screen-stats .stats-attention-units { margin: 0; padding: .55rem .85rem .3rem; list-style: none; }
+#screen-stats .stats-attention-units li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem .9rem;
+  padding: .7rem .15rem;
+  border-bottom: 1px solid var(--color-border);
+}
+#screen-stats .stats-attention-units li:last-child { border-bottom: 0; }
+#screen-stats .stats-attention-unit-title { flex: 2 1 12rem; font-weight: 640; overflow-wrap: anywhere; }
+#screen-stats .stats-attention-unit-evidence { font-size: .8rem; color: var(--color-muted); font-variant-numeric: tabular-nums; }
+#screen-stats .stats-attention-open { flex-shrink: 0; }
+#screen-stats .stats-attention-contents { margin: .25rem .85rem .9rem; }
+#screen-stats .stats-attention-empty { margin: .3rem 0; color: var(--color-muted); line-height: 1.6; }
+@media (max-width: 47.99rem) {
+  #screen-plan .plan-worklist-toolbar { align-items: stretch; }
+  #screen-plan .plan-filters { padding: .65rem; }
+  #screen-plan .plan-filters select { flex: 1 1 9rem; min-width: 0; }
+  #screen-stats .stats-attention-panel { padding: .8rem; }
+  #screen-stats .stats-attention-group summary { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #screen-plan .plan-row { transition: none; }
+}
