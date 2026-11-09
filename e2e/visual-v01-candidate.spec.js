@@ -1,33 +1,26 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
-// V-01 candidate check (Estatísticas at phone width). It does NOT change the product: the candidate CSS lives in .specs/proposals/V-01-stats-390.css
-// and is injected into the page here, so the page is measured WITHOUT it (must show the defect) and WITH it (must not), at 390 and 360 px, and at
-// 1280 px the candidate must change nothing (same pixels). Runs only when V01_OUT is set (a folder for the before/after PNGs).
-//   V01_OUT=<dir> node scripts/e2e.mjs e2e/visual-v01-candidate.spec.js
+// V-01 regression (Estatísticas at phone width, fix applied in src/styles.css; see .specs/proposals/V-01-stats-390.md): at 390 and 360 px nothing is cut or overlapping,
+// (desktop is untouched by construction: the fix is scoped to max-width 47.999rem). V01_OUT=<dir> additionally saves the PNGs.
 
 const OUT = process.env.V01_OUT;
 const SERVER_PORT = serverPort(13992);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
-const CANDIDATE_CSS = fileURLToPath(new URL('../.specs/proposals/V-01-stats-390.css', import.meta.url));
-
-test.skip(!OUT, 'set V01_OUT to run the V-01 candidate check');
 
 let serverProcess;
 let dataDir;
 
 test.beforeAll(async () => {
-  if (!OUT) return;
-  mkdirSync(OUT, { recursive: true });
+  if (OUT) mkdirSync(OUT, { recursive: true });
   dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-v01-'));
   serverProcess = spawn(process.execPath, [MAIN_JS], {
     env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
@@ -41,6 +34,9 @@ test.afterAll(async () => {
   await new Promise((r) => setTimeout(r, 300));
   if (dataDir) rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
+
+// relative dates: the default Estatísticas window is the last 90 days, so fixed dates silently age out of it (that hid the numbers in this check once)
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
 async function apiCall(page, path, body) {
   return page.evaluate(async ({ base, path, body }) => {
@@ -77,15 +73,15 @@ const measure = (page) => page.evaluate(() => {
     const btn = th.querySelector('.th-sort-btn');
     if (btn && btn.scrollWidth > th.clientWidth + 1) overlaps.push(`header "${btn.textContent.trim().slice(0, 16)}" wider than its cell`);
   }
-  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps };
+  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps, rows: rows.length };
 });
 
-test('V-01: Estatísticas at 390/360 px is cut and overlapping without the candidate and clean with it; 1280 px is unchanged', async ({ page }) => {
+test('V-01: Estatísticas at 390/360 px has nothing cut or overlapping', async ({ page }) => {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; }, API_BASE);
   await signInRegistered(page, { email: `v01-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
   // realistic data: one discipline with evidence, one without, so both the numbers and "Sem evidência"/"Amostra insuficiente" appear
-  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
-  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: '2026-08-02' });
+  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: daysAgo(10) });
+  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: daysAgo(9) });
   const attemptIds = [];
   for (const [index, i] of [1, 2, 3].entries()) {
     const { exercise } = await apiCall(page, `/v1/learning-units/${a.unit.id}/exercises`, { question: `Pergunta ${i}?`, answer: `Resposta ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
@@ -93,33 +89,21 @@ test('V-01: Estatísticas at 390/360 px is cut and overlapping without the candi
     await apiCall(page, `/v1/attempts/${attempt.id}/submit`, { outcome: index === 2 ? 'INCORRECT' : 'CORRECT', assessmentMethod: 'SELF_REPORT' });
     attemptIds.push(attempt.id);
   }
-  await apiCall(page, '/v1/learning-evidence', { unitId: a.unit.id, type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2, evidenceDate: '2026-08-05', attemptIds });
+  await apiCall(page, '/v1/learning-evidence', { unitId: a.unit.id, type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2, evidenceDate: daysAgo(5), attemptIds });
 
-  const candidate = readFileSync(CANDIDATE_CSS, 'utf8');
   const result = {};
-  const png = {};
-  for (const width of [390, 360, 1280]) {
+  for (const width of [390, 360]) {
     await page.setViewportSize({ width, height: 844 });
-    const more = page.locator('#mobile-more-toggle');
     await page.locator('[data-screen="stats"]:visible').first().click();
     await expect(page.locator('#screen-stats')).toBeVisible();
     await page.waitForTimeout(500);
-    result[`${width}-before`] = await measure(page);
-    png[`${width}-before`] = await page.screenshot({ path: join(OUT, `v01-${width}-before.png`) });
-    const style = await page.addStyleTag({ content: candidate });
-    await page.waitForTimeout(200);
-    result[`${width}-after`] = await measure(page);
-    png[`${width}-after`] = await page.screenshot({ path: join(OUT, `v01-${width}-after.png`) });
-    await style.evaluate((el) => el.remove());
-    void more;
+    result[width] = await measure(page);
+    if (OUT) {
+      await page.screenshot({ path: join(OUT, `v01-${width}.png`) });
+      await page.locator('.matrix-table--cards').first().screenshot({ path: join(OUT, `v01-${width}-table.png`) });
+      console.log(`ROWS ${width} ${JSON.stringify(await page.locator('.matrix-table--cards tbody tr').allInnerTexts())}`);
+    }
+    expect(result[width].rows, `${width} px: the discipline cards are present (instrument check)`).toBeGreaterThan(0);
+    expect({ clipped: result[width].clipped, cut: result[width].cut, overlaps: result[width].overlaps }, `${width} px: nothing cut or overlapping`).toEqual({ clipped: [], cut: [], overlaps: [] });
   }
-  console.log(`V01 ${JSON.stringify(result)}`);
-  for (const width of [390, 360]) {
-    const before = result[`${width}-before`];
-    const after = result[`${width}-after`];
-    expect(before.clipped.length + before.cut.length + before.overlaps.length, `${width} px: the defect is reproduced without the candidate (instrument check)`).toBeGreaterThan(0);
-    expect(after, `${width} px with the candidate: nothing cut or overlapping`).toEqual({ clipped: [], cut: [], overlaps: [] });
-  }
-  const hash = (buf) => createHash('sha256').update(buf).digest('hex');
-  expect(hash(png['1280-after']), '1280 px is pixel-identical with the candidate').toBe(hash(png['1280-before']));
 });

@@ -6130,3 +6130,37 @@ label.select-control:has(> .ui-select) {
     align-items: start;
   }
 }
+
+/* V-01: "Por disciplina" at phone width (390/360 px): wrap text instead of cutting it; see .specs/proposals/V-01-stats-390.md */
+@media (max-width: 47.999rem) {
+  .matrix-table--cards thead th,
+  .matrix-table--cards .th-sort-btn {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  /* the header cells keep percentage widths from #view-stats-subject (34/22/21/23%), too narrow for their label + sort arrow: size them to the content */
+  #view-stats-subject .matrix-table--cards thead th:nth-child(n) {
+    flex: none;
+    width: auto;
+  }
+
+  .matrix-table--cards tbody tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .matrix-table--cards tbody td:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+
+  .matrix-table--cards .practice-compact,
+  .matrix-table--cards .practice-recent,
+  .matrix-table--cards .subject-compare-value,
+  .matrix-table--cards .trend-badge {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

@@ -273,3 +273,5 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 - Causa e correção candidata isoladas (produto intocado): `.specs/proposals/V-01-stats-390.md` + `.css`; prova `e2e/visual-v01-candidate.spec.js` (antes: defeito reproduzido a 390 e 360 px; depois: 0 corte e 0 colisão; 1280 px idêntico).
 - E-034 (instrumento, minha): a 1a medição marcou `.visually-hidden` (texto só para leitor de tela, cortado de propósito, também a 1280 px) como corte; ficou de fora. E-035: a 1a versão do spec empurrava `overlaps.push()` vazio, então a colisão de cabeçalhos não era medida; corrigido e o "antes" agora mostra os cabeçalhos largos demais.
 - Estatísticas continua protegida: nada foi integrado.
+
+- V-01 CORRIGIDO (2026-11-09, autorizado pelo dono: "aprovo tudo em design se pesquisar bem"): bloco CSS aplicado no fim de `src/styles.css`; `e2e/visual-v01-candidate.spec.js` virou regressão direta (390 e 360 px: 0 corte, 0 colisão). `e2e/stats*` + `accessibility` = 63/0. A medida PERF DEVIATION (389 s vs 48 s) é de baseline de outro conjunto de specs, nao regressao. Nao commitado.
