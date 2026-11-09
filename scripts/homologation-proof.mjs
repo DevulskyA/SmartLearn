@@ -27,6 +27,7 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { chromium } from '@playwright/test';
 import { failClosedProblems, homologationFileProblems, humanRootsOf, inside, installerArgs, installerEnv, lc, scratchLayout, scratchRootProblems, shortcutProblems, withoutSmartlearnEnv } from './homologation-proof-lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -131,13 +132,38 @@ function appProcess(exePath) {
 }
 
 /** Starts the exe itself: no launcher, no shortcut, and not one SMARTLEARN_* variable, so homologation.json alone decides. */
+const CDP_PORT = 9347;  // WebView2 debugging endpoint of the DISPOSABLE copy only: lets the proof drive the real login form like a person would
 function startDirect(exePath) {
-  const env = withoutSmartlearnEnv(process.env);
+  const env = { ...withoutSmartlearnEnv(process.env), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}` };
   const child = spawn(exePath, [], { cwd: dirname(dirname(exePath)), env, stdio: 'ignore' });
   const state = { exited: false, exitCode: null };
   child.on('exit', (code) => { state.exited = true; state.exitCode = code; });
   child.on('error', () => { state.exited = true; });
   return { child, state, smartlearnEnvVars: Object.keys(env).filter((k) => /^smartlearn_/i.test(k)) };
+}
+
+
+/** Attaches to the window of the disposable copy through CDP and returns its page; waits until the app UI is up. */
+async function attachWindow() {
+  const until = Date.now() + 45000;
+  let lastError;
+  while (Date.now() < until) {
+    try {
+      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
+      const page = browser.contexts().flatMap((c) => c.pages()).find((p) => /127\.0\.0\.1|localhost/.test(p.url()));
+      if (page) { await page.waitForSelector('[data-screen="account"]', { timeout: 20000 }); return { browser, page }; }
+      await browser.close();
+    } catch (e) { lastError = e; }
+    await sleep(700);
+  }
+  throw new Error(`could not attach to the app window over CDP port ${CDP_PORT}: ${lastError?.message ?? 'no page'}`);
+}
+
+/** Opens Conta in the real window and reports what a person sees: the login form or the logged-in view. */
+async function accountState(page) {
+  await page.locator('[data-screen="account"]:visible').first().click();
+  await page.waitForFunction(() => ['#account-logged-in-view', '#account-login-email'].some((sel) => { const el = document.querySelector(sel); return el && el.getClientRects().length > 0; }), null, { timeout: 15000 });
+  return (await page.locator('#account-logged-in-view').isVisible()) ? 'logged-in' : 'login-form';
 }
 
 async function openDirect(exePath) {
@@ -339,6 +365,20 @@ async function main() {
   const list1 = await api.call('GET', '/v1/subjects');
   check('create + read over the real API', list1.subjects.some((s) => s.id === subjectId && s.name === 'Farmacologia'), { subjectId });
 
+  // the REAL window: a fresh WebView2 profile has no session, so the login form is what a person sees; sign in through it (disposable account)
+  const ui1 = await attachWindow();
+  const stateBefore = await accountState(ui1.page);
+  check('first open, real window: no session yet, the login form is shown', stateBefore === 'login-form', stateBefore);
+  await ui1.page.locator('#account-login-email').fill(email);
+  await ui1.page.locator('#account-login-password').fill(password);
+  await ui1.page.locator('#account-login-form button[type="submit"]').click();
+  await ui1.page.locator('#account-logged-in-view').waitFor({ state: 'visible', timeout: 15000 });
+  check('first open, real window: signed in through the login form', await ui1.page.locator('#account-logged-in-view').isVisible(), email);
+  const cookieMeta = await ui1.page.context().cookies();
+  const sess = cookieMeta.find((c) => /^sl_session/.test(c.name));
+  check('session cookie in the WebView2 profile is persistent (has an expiry), not a session cookie', Boolean(sess) && sess.expires > Date.now() / 1000 + 6 * 86400, sess ? { name: sess.name, expiresInDays: Math.round((sess.expires - Date.now() / 1000) / 864) / 100, httpOnly: sess.httpOnly } : 'no sl_session cookie');
+  await ui1.browser.close();
+
   const closed1 = await closeGracefully(app, instExe);
   check('app closes by itself and leaves no backend behind', closed1.how === 'graceful' && closed1.leftoversKilled === 0, closed1);
 
@@ -350,6 +390,13 @@ async function main() {
   check('second open: NO console window on screen for the backend (all visible windows enumerated)', consoles2.length === 0, consoles2.length ? consoles2 : 'none');
   const base2 = `http://127.0.0.1:${await backendPort(backend2[0].pid, L.data)}`;
   check('second open: backend ready', await waitReady(base2), base2);
+  // the decisive check: after closing and reopening the exe, the window is STILL signed in, with no password typed
+  const ui2 = await attachWindow();
+  const stateAfter = await accountState(ui2.page);
+  check('REOPENED real window: still signed in, no login form, no password typed (session survived the close)', stateAfter === 'logged-in', stateAfter);
+  const meAfter = await ui2.page.evaluate(async () => { const r = await fetch('/v1/auth/me', { credentials: 'include' }); return { status: r.status, body: r.ok ? await r.json() : null }; });
+  check('reopened window: /v1/auth/me answers 200 for the same account', meAfter.status === 200 && JSON.stringify(meAfter.body).includes(email), meAfter.status);
+  await ui2.browser.close();
   const api2 = client(base2);
   await api2.login(email, password);
   const list2 = await api2.call('GET', '/v1/subjects');
