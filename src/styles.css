@@ -197,13 +197,16 @@
 
 .theme-picker {
   display: grid;
-  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  /* the select is as wide as its longest option, nothing more; the swatch sits right next to it */
+  grid-template-columns: max-content max-content;
+  justify-content: start;
   align-items: center;
   gap: 0.9rem;
 }
 
 .theme-select {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   min-height: 2.9rem;
   padding: 0.65rem 2.25rem 0.65rem 0.8rem;
   border: 1px solid var(--color-border);
@@ -243,15 +246,20 @@
   transition: background 220ms ease, box-shadow 220ms ease;
 }
 
+/* the name of the chosen theme is already in the select: the text stays only for screen readers (live region) */
 .theme-live-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
 @media (max-width: 40rem) {
   .theme-picker {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, max-content) max-content;
     gap: 0.65rem;
   }
 }
@@ -4827,24 +4835,77 @@ label.select-control:has(> .ui-select) {
   border-radius: 1rem;
   background: var(--color-surface-sunken);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr)); /* discipline and date side by side; everything else spans the row */
   column-gap: 1rem;
-  row-gap: 0.75rem;
-  align-items: start; /* the new-subject block is taller than the other two fields: they keep their own height instead of stretching to it */
+  row-gap: 0.9rem;
+  align-items: start;
 }
 
-.lesson-accept > :not(.lesson-field) {
+.lesson-accept > * {
   grid-column: 1 / -1;
 }
 
-.lesson-accept > .lesson-field {
-  margin-bottom: 0.5rem;
+.lesson-accept > .lesson-field:not(.lesson-accept-new-subject) {
+  grid-column: auto;
+  margin-bottom: 0;
 }
 
-.lesson-accept > .secondary-button,
-.lesson-accept > .primary-button {
-  justify-self: start;
+/* the new discipline opens as one inset panel under the two fields: name on the left, the colours as an even 6 x 2 grid on the right */
+.lesson-accept-new-subject {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.lesson-accept-new-subject[hidden] {
+  display: none;
+}
+
+.lesson-accept-new-subject .inline-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: minmax(12rem, 20rem) auto;
+  column-gap: 2rem;
+  row-gap: 0.75rem;
+  align-items: start;
+}
+
+.lesson-accept-new-subject .color-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 44px);
+  gap: 0;
+}
+
+.lesson-accept-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.lesson-accept > .lesson-actions:empty {
+  display: none;
+}
+
+.lesson-accept-actions > button {
   padding-inline: 1.5rem;
+}
+
+@media (max-width: 40rem) {
+  .lesson-accept {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lesson-accept-new-subject .inline-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lesson-accept-new-subject .color-picker {
+    grid-template-columns: repeat(auto-fill, 44px);
+  }
 }
 
 .lesson-accept-title {

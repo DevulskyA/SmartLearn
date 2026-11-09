@@ -255,7 +255,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   // A new discipline is the SAME registration as in Disciplinas, Cadastro and Plano (subject-create-form.js): same fields, same colour choice, same
   // validation. Here it is saved together with the lesson, so it has no button of its own; it is unusable once an existing discipline is picked.
   const newSubjectSlot = document.createElement("div");
-  newSubjectSlot.className = "lesson-field";
+  newSubjectSlot.className = "lesson-field lesson-accept-new-subject";
   const newSubject = createSubjectCreateForm({
     slot: newSubjectSlot,
     ids: { form: `${uid}-new-subject`, input: `${uid}-subject-name` },
@@ -288,10 +288,16 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptMessage.classList.add("source-draft-result");
   const afterAccept = document.createElement("div");
   afterAccept.className = "lesson-actions";
-  footer.append(acceptTitle, acceptNote, subjectField, newSubjectSlot, dateField.wrap, previewBtn, previewPanel, ackWrap, acceptBtn, acceptMessage, afterAccept);
+  // Two fields side by side (discipline, date); the new-discipline block opens full width under them; the preview result sits above the two
+  // buttons, which share one row.
+  const acceptActions = document.createElement("div");
+  acceptActions.className = "lesson-accept-actions";
+  acceptActions.append(acceptBtn, previewBtn);
+  footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     newSubject.setEnabled(!picked);
+    newSubjectSlot.hidden = picked;
     if (picked) newSubject.reset();
   });
 
