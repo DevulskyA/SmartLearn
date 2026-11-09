@@ -11,6 +11,7 @@
     "predev": "node scripts/work-target-guard.mjs",
     "dev": "vite",
     "dev:remote": "node scripts/dev-remote.mjs",
+    "homologation:dev": "node scripts/homologation-dev.mjs",
     "dev:uat": "node scripts/dev-uat.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
     "dev:sanitize": "node scripts/dev-sanitize.mjs",

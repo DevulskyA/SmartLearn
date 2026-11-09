@@ -52,3 +52,11 @@ node --input-type=module -e "import {DatabaseSync} from 'node:sqlite'; const db=
 - Faça backup do banco (copiar `.db`, `.db-wal`, `.db-shm` com o app fechado) antes de mexer.
 - Nunca troque senha com o app aberto no mesmo banco.
 - Os scripts não aparecem em chat nem em log: a senha só passa pelo seu terminal.
+
+## Trocar o e-mail de uma conta
+
+Feche o app e rode: `node C:\Projetos\SmartLearn-combinada\scripts\homologation-set-email.mjs <email-atual> <email-novo>`. Recusa e-mail inexistente ou já usado; as sessões da conta continuam válidas.
+
+## Operar a Homologação sem reinstalar (código vivo)
+
+`npm run homologation:dev` (em `C:\Projetos\SmartLearn-combinada`) sobe a API e o site a partir do código-fonte, com o banco e as fontes da Homologação, e recarrega ao salvar. Abra http://localhost:5183. Fecha sozinho o exe instalado (só o caminho exato) para não haver dois processos gravando no mesmo banco. Ctrl+C encerra tudo. Nada é instalado: para remover o modo, apague `scripts/homologation-dev.mjs` e a linha em `package.json`. O exe só é refeito (`build` → `package:standalone` → `build:exe` → `homologation-install.mjs`) quando o lote estiver pronto.
