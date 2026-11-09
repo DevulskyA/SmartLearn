@@ -3161,6 +3161,36 @@ label.select-control:has(> .ui-select) {
   display: none;
 }
 
+/* Yesterday / today / tomorrow: the day, at a glance (the original spreadsheet's centre of gravity). */
+.today-day-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.today-day-strip[hidden] { display: none; }
+.today-day {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.85rem;
+  background: var(--color-surface);
+}
+.today-day.is-today {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+.today-day-name { color: var(--color-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.today-day.is-today .today-day-name { color: var(--color-primary-strong); }
+.today-day-count { font-size: 1.65rem; font-weight: 760; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.today-day-note { color: var(--color-muted); font-size: 0.84rem; }
+@media (max-width: 30rem) {
+  .today-day-strip { gap: 0.5rem; }
+  .today-day { padding: 0.65rem 0.7rem; }
+  .today-day-count { font-size: 1.35rem; }
+}
+
 .today-tomorrow {
   margin: 0;
   padding: 0.85rem 1.1rem;
@@ -5089,8 +5119,8 @@ label.select-control:has(> .ui-select) {
 .about-identity {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.4rem 1.25rem;
-  margin: 0;
+  gap: 0.65rem 1.5rem;
+  margin: 1.1rem 0 1.4rem;
 }
 
 .about-identity dt {
@@ -6038,22 +6068,28 @@ label.select-control:has(> .ui-select) {
 .stats-heading { align-items: center; }
 .stats-lede { margin: 0.3rem 0 0; color: var(--color-muted); font-size: 0.95rem; max-width: 52ch; }
 
+/* Dashboard strip: three tiles of the same weight (the lead metric no longer dwarfs the others). */
 .stats-kpis {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem 2.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
   margin: 0 0 1.25rem;
-  padding: 1rem 1.35rem;
+}
+.stats-kpi {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.9rem 1.1rem;
   border: 1px solid var(--color-border);
-  border-radius: 1rem;
+  border-radius: 0.9rem;
   background: var(--color-surface);
 }
-.stats-kpi { display: grid; gap: 0.2rem; margin: 0; }
+@media (max-width: 40rem) {
+  .stats-kpis { grid-template-columns: minmax(0, 1fr); }
+}
 .stats-kpi dt { color: var(--color-muted); font-size: 0.82rem; font-weight: 650; }
 .stats-kpi dd { display: flex; align-items: baseline; gap: 0.55rem; margin: 0; }
 .stats-kpi strong { font-size: 1.65rem; font-weight: 760; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.stats-kpi--lead strong { font-size: 2.3rem; }
 .stats-kpi-note { color: var(--color-muted); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
 
 #view-stats-subject .workspace-grid { grid-template-columns: minmax(0, 2fr) minmax(17rem, 1fr); }
@@ -6128,6 +6164,8 @@ label.select-control:has(> .ui-select) {
 /* Evolution */
 .evolution-svg { height: auto; }
 .evo-grid { stroke: var(--color-border); stroke-width: 1; }
+.evo-gap { fill: var(--color-surface-sunken); opacity: 0.7; }
+.evo-gap-label { font-style: italic; }
 .evo-axis { fill: var(--color-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .evo-line { fill: none; stroke: var(--color-primary); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
 .evo-dot { fill: var(--color-primary); stroke: var(--color-surface); stroke-width: 1.5; }

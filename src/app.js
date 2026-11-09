@@ -383,6 +383,28 @@ const todayLoadingState = document.querySelector("#today-loading");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
+const todayDayStrip = document.querySelector("#today-day-strip");
+
+// Yesterday / today / tomorrow tiles. `yesterdayDone` is null when yesterday could not be read: that tile is then left out, never shown as 0.
+function renderTodayDayStrip({ yesterdayDone, todoToday, overdue, tomorrow }) {
+  if (!todayDayStrip) return;
+  const tile = (key, count, note, isToday = false) => {
+    const el = document.createElement("div");
+    el.className = `today-day${isToday ? " is-today" : ""}`;
+    const name = document.createElement("span"); name.className = "today-day-name"; name.textContent = t(`today.day.${key}`);
+    const n = document.createElement("strong"); n.className = "today-day-count"; n.textContent = String(count);
+    const small = document.createElement("span"); small.className = "today-day-note"; small.textContent = note;
+    el.append(name, n, small);
+    return el;
+  };
+  const tiles = [];
+  if (yesterdayDone !== null) tiles.push(tile("yesterday", yesterdayDone, tn("today.day.done", yesterdayDone)));
+  tiles.push(tile("today", todoToday, overdue > 0 ? t("today.day.overdueNote", { count: overdue }) : tn("today.day.todo", todoToday), true));
+  tiles.push(tile("tomorrow", tomorrow, tn("today.day.scheduled", tomorrow)));
+  todayDayStrip.style.gridTemplateColumns = `repeat(${tiles.length}, minmax(0, 1fr))`;
+  todayDayStrip.replaceChildren(...tiles);
+  todayDayStrip.hidden = false;
+}
 const weakBlock = document.querySelector("#block-weak");
 const upcomingBlock = document.querySelector("#block-upcoming");
 const weakList = document.querySelector("#weak-list");
@@ -1729,23 +1751,24 @@ export async function renderToday() {
     if (pendingToday.length > 0) parts.push(t("today.load.today", { count: pendingToday.length }));
     if (tomorrowReviews.length > 0) parts.push(t("today.load.tomorrow", { count: tomorrowReviews.length }));
     if (completedToday.length > 0) parts.push(tn("today.load.done", completedToday.length));
-    // one figure only repeats the banner and the "Para hoje" count below
-    todayLoadSummary.hidden = parts.length < 2;
+    // the day strip above carries these figures online; the text line stays for the offline snapshot, which has no strip
+    todayLoadSummary.hidden = true;
     todayLoadSummary.textContent = parts.join(" · ");
   }
+  if (learningUnits.length > 0) {
+    let yesterdayDone = null;
+    try { yesterdayDone = (await DB.reviewTasks.getCompletedToday(subtractDays(today, 1))).length; } catch { /* tile left out */ }
+    renderTodayDayStrip({ yesterdayDone, todoToday: overdueReviews.length + pendingToday.length, overdue: overdueReviews.length, tomorrow: tomorrowReviews.length });
+  } else if (todayDayStrip) todayDayStrip.hidden = true;
 
   const pendingCount = overdueReviews.length + pendingToday.length;
   const hasData = learningUnits.length > 0;
   todayEmptyState.hidden = hasData;
   todaySuccessState.hidden = !(hasData && pendingCount === 0);
 
-  if (tomorrowReviews.length > 0) {
-    todayTomorrow.textContent = tn("today.tomorrow", tomorrowReviews.length);
-    todayTomorrow.hidden = false;
-  } else {
-    todayTomorrow.textContent = "";
-    todayTomorrow.hidden = true;
-  }
+  // tomorrow now lives in the day strip; the old sentence would only repeat it
+  todayTomorrow.textContent = "";
+  todayTomorrow.hidden = true;
 
   todayDateLabel.textContent = formatIntlDate(new Date(), {
     weekday: "long",
@@ -3101,6 +3124,19 @@ function renderEvolutionSvg(evidence, units, subjects) {
     label.textContent = shortDate(subtractDays(series.from, -Math.round(offset)));
     evolutionSvg.append(label);
   });
+
+  // The axis runs to today; when the last question is older than one bucket, say so on the chart instead of leaving an unexplained blank.
+  const lastPoint = series.points[series.points.length - 1];
+  const gapStart = Math.round(lastPoint.offset) + series.bucketDays;
+  if (gapStart < last) {
+    const x0 = xOf(gapStart);
+    evolutionSvg.append(svgElement("rect", { class: "evo-gap", x: x0, y: padT, width: W - padR - x0, height: chartH }));
+    if (W - padR - x0 > 60) {
+      const note = svgElement("text", { class: "evo-axis evo-gap-label", x: (x0 + W - padR) / 2, y: padT + chartH / 2, "text-anchor": "middle" });
+      note.textContent = t("statsView.evolution.gap", { date: shortDate(lastPoint.to) });
+      evolutionSvg.append(note);
+    }
+  }
 
   for (const segment of series.segments) {
     if (segment.length < 2) continue;

@@ -66,6 +66,7 @@ export default {
   'statsView.band.subjects.one': '{count} disciplina',
   'statsView.band.subjects.other': '{count} disciplinas',
   'statsView.band.figures': '{percent}% · {count}',
+  'statsView.evolution.gap': 'Sem questões desde {date}',
   'statsView.evolution.caption': 'Cada ponto reúne as questões de {days} dias. Intervalos sem questões ficam em branco.',
   'statsView.evolution.point': '{from} a {to}: {percent}% em {questions}',
   // end of keys

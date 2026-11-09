@@ -38,6 +38,19 @@ export default {
   'today.offline.synced': 'Modo offline — última sincronização: {date}.',
   'today.offline.noSnapshot': 'Modo offline — nenhuma agenda sincronizada anteriormente.',
 
+  // Day strip: yesterday / today / tomorrow
+  'today.day.label': 'Ontem, hoje e amanhã',
+  'today.day.yesterday': 'Ontem',
+  'today.day.today': 'Hoje',
+  'today.day.tomorrow': 'Amanhã',
+  'today.day.done.one': 'revisão feita',
+  'today.day.done.other': 'revisões feitas',
+  'today.day.todo.one': 'revisão para fazer',
+  'today.day.todo.other': 'revisões para fazer',
+  'today.day.scheduled.one': 'revisão agendada',
+  'today.day.scheduled.other': 'revisões agendadas',
+  'today.day.overdueNote': 'incluindo {count} vencidas',
+
   // Load summary and primary action
   'today.load.overdue.one': '{count} vencida',
   'today.load.overdue.other': '{count} vencidas',

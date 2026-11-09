@@ -348,3 +348,6 @@ Na Homologação em código vivo (6bbcf09+), a tela Conta logada mostra "Conecta
 
 ## E-056 — tentativa de reprodução (2026-11-09, HEAD 13bb95b)
 `lesson-editor.spec.js:438` 10/10 isolado (43 s) e o arquivo inteiro 3x em paralelo, 57/57 (87 s). Não reproduzido. Causa NÃO provada; hipótese (C): carga da suíte completa (mesma classe de E-025/E-026, esperas de 10 s). Nenhuma alteração no teste, pois afrouxar espera sem reprodução esconderia defeito. Status: observar na próxima suíte completa; se repetir, capturar a mensagem e o tempo por etapa.
+
+## E-060 — Sobre o SmartLearn: espaçamento sem harmonia (relatado pelo dono, 2026-11-09)
+Botão "Copiar diagnóstico" colado à última linha da lista (Servidor local); linhas apertadas; ritmo vertical irregular. Cartão Planban `homologacao` criado. Status: aberto.
