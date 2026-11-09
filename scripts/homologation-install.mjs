@@ -61,7 +61,8 @@ function main() {
   renameSync(tmp, live);
   rmSync(join(dest, 'app.old'), { recursive: true, force: true });
 
-  // 5. launcher + manifest
+  // 5. launcher + manifest (read-only after install; unlocked here only so a reinstall can replace them)
+  for (const f of ['launch.ps1', 'manifest.json']) if (existsSync(join(dest, f))) execFileSync('attrib', ['-R', join(dest, f)]);
   copyFileSync(join(ROOT, 'scripts', 'launch-homologacao.ps1'), join(dest, 'launch.ps1'));
   const head = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim();
   const manifest = { schema: 1, version: identity.version, commit: head, inputsHash: identity.inputsHash, exeSha256: copiedSha, sourceExe: exe, installedAt: new Date().toISOString() };
@@ -77,7 +78,8 @@ $desktop = [Environment]::GetFolderPath('Desktop')
 $path = Join-Path $desktop '${name}'
 $shell = New-Object -ComObject WScript.Shell
 if (Test-Path $path) {
-  $old = $shell.CreateShortcut($path)
+  Set-ItemProperty -LiteralPath $path -Name IsReadOnly -Value $false
+  $old =$shell.CreateShortcut($path)
   if ($old.Arguments -notlike '*${launcher.replace(/'/g, "''")}*') { Write-Output 'FOREIGN'; exit 0 }
 }
 $s = $shell.CreateShortcut($path)
@@ -87,10 +89,12 @@ $s.WorkingDirectory = '${dest.replace(/'/g, "''")}'
 $s.IconLocation = '${join(live, 'smartlearn.exe').replace(/'/g, "''")},0'
 $s.Description = 'SmartLearn candidato isolado para homologacao (dados proprios)'
 $s.Save()
+Set-ItemProperty -LiteralPath $path -Name IsReadOnly -Value $true
 Write-Output $path`);
     if (!shortcut) die('the shortcut could not be created');
     if (shortcut === 'FOREIGN') die(`a shortcut named ${SHORTCUT_NAME} already exists and is not this install's. Nothing overwritten.`);
   }
+  for (const f of ['launch.ps1', 'manifest.json']) execFileSync('attrib', ['+R', join(dest, f)]);
   console.log(JSON.stringify({ ok: true, installDir: dest, executable: join(live, 'smartlearn.exe'), exeSha256: copiedSha, inputsHash: identity.inputsHash, commit: head, shortcut }, null, 2));
 }
 
