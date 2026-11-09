@@ -345,3 +345,6 @@ O lote J11 agora confere os valores, não só a presença das telas: depois do J
 
 ## A-13 — fechado por observação (2026-11-09)
 Na Homologação em código vivo (6bbcf09+), a tela Conta logada mostra "Conectado como <e-mail>", "Alterar senha" como botão recolhido (`#account-password-details > summary`, coberto por `e2e/sweep-fixes.spec.js` "Conta > Alterar senha") e "Sair". Sem campos de senha abertos. Prova: captura da tela + teste existente. Status: corrigido antes; registro estava defasado.
+
+## E-056 — tentativa de reprodução (2026-11-09, HEAD 13bb95b)
+`lesson-editor.spec.js:438` 10/10 isolado (43 s) e o arquivo inteiro 3x em paralelo, 57/57 (87 s). Não reproduzido. Causa NÃO provada; hipótese (C): carga da suíte completa (mesma classe de E-025/E-026, esperas de 10 s). Nenhuma alteração no teste, pois afrouxar espera sem reprodução esconderia defeito. Status: observar na próxima suíte completa; se repetir, capturar a mensagem e o tempo por etapa.
