@@ -45,7 +45,8 @@ const me = (app, cookie) => app.inject({ method: 'GET', url: '/v1/auth/me', head
 
 test('policy: production defaults are unchanged and the dev flag is refused in production', () => {
   assert.deepEqual(resolveSessionPolicy({ isProduction: true }), { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: null });
-  assert.deepEqual(resolveSessionPolicy({ isProduction: false }), { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: null });
+  // loopback non-production (the Desktop backend): cookie bounded by the 30-day absolute lifetime, see desktop-persistent-cookie.test.js
+  assert.deepEqual(resolveSessionPolicy({ isProduction: false }), { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: SESSION_ABSOLUTE_LIFETIME_MS / 1000 });
   assert.throws(() => resolveSessionPolicy({ isProduction: true, devPersistent: true }), /production/i);
   const dev = resolveSessionPolicy({ isProduction: false, devPersistent: true });
   assert.equal(dev.absoluteMs, DEV_SESSION_LIFETIME_MS);
@@ -60,7 +61,7 @@ test('buildApp refuses to start in production with the dev persistent session en
   } finally { cleanup(); }
 });
 
-test('WITHOUT the flag: the session cookie is a browser-session cookie (no Max-Age) and the row expires in 30 days', async () => {
+test('WITHOUT the flag: the cookie is bounded by the 30-day policy (not the 10-year DEV value) and the row expires in 30 days', async () => {
   const { db, cleanup } = tmpDb();
   try {
     const app = await buildApp(db, MIGRATIONS_DIR, { allowedOrigins: [ORIGIN] });
@@ -68,7 +69,7 @@ test('WITHOUT the flag: the session cookie is a browser-session cookie (no Max-A
     const res = await login(app);
     const set = cookieOf(res);
     assert.ok(set, 'a session cookie is issued');
-    assert.doesNotMatch(set, /Max-Age|Expires/i);
+    assert.match(set, new RegExp(`Max-Age=${SESSION_ABSOLUTE_LIFETIME_MS / 1000}(;|$)`));
     const row = db.prepare('SELECT issued_at, expires_at FROM sessions ORDER BY id DESC LIMIT 1').get();
     const span = new Date(row.expires_at) - new Date(row.issued_at);
     assert.ok(Math.abs(span - SESSION_ABSOLUTE_LIFETIME_MS) < 5000);

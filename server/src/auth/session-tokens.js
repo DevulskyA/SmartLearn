@@ -41,7 +41,12 @@ export const DEV_SESSION_LIFETIME_MS = 10 * 365 * 24 * 60 * 60 * 1000; // ~10 ye
  */
 export function resolveSessionPolicy({ isProduction, devPersistent = false } = {}) {
   if (devPersistent && isProduction) throw new Error('SMARTLEARN_DEV_PERSISTENT_SESSION cannot be enabled in production.');
-  if (!devPersistent) return { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: null };
+  // Non-production = the loopback backend of the Desktop (src-tauri does not set NODE_ENV=production). Its WebView2 drops a cookie
+  // without Max-Age when the app closes, forcing a login at every launch, so the cookie lives as long as the server row (absolute
+  // lifetime, never longer; the 7-day inactivity window is still enforced server-side). HTTPS production keeps a session cookie.
+  if (!devPersistent) {
+    return { absoluteMs: SESSION_ABSOLUTE_LIFETIME_MS, inactivityMs: SESSION_INACTIVITY_LIFETIME_MS, cookieMaxAgeSeconds: isProduction ? null : SESSION_ABSOLUTE_LIFETIME_MS / 1000 };
+  }
   return { absoluteMs: DEV_SESSION_LIFETIME_MS, inactivityMs: DEV_SESSION_LIFETIME_MS, cookieMaxAgeSeconds: DEV_SESSION_LIFETIME_MS / 1000 };
 }
 
