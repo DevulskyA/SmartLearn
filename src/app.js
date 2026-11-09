@@ -2556,6 +2556,87 @@ function renderStatsDistribution(rows) {
 let statsSubjectRenderSeq = 0;
 let statsUnitRenderSeq = 0;
 
+
+/**
+ * Disciplina -> aula: orientation grounded in recorded questions only.
+ * The original sortable matrices and history remain the full analysis instrument.
+ */
+function renderStatsAttentionMap(evidence, units, subjects, periodValue, today) {
+  const host = document.querySelector("#stats-attention-list");
+  const note = document.querySelector("#stats-attention-note");
+  if (!host || !note) return;
+  const sampleFloor = 10; // Same approved MIN_SAMPLE_QUESTIONS contract as getState display.
+  const periodEvidence = evidenceInPeriod(evidence, periodValue, today);
+  const unitRows = Analytics.byUnit(periodEvidence, units, subjects);
+  const subjectRows = periodSubjectRows(evidence, units, subjects, { periodValue, today });
+  const attentionStates = new Set(["CRITICAL", "ATTENTION"]);
+  const weakUnits = unitRows.filter((row) => row.totalQuestions >= sampleFloor && attentionStates.has(row.state));
+  const weakBySubject = new Map();
+  for (const unit of weakUnits) {
+    if (!weakBySubject.has(unit.subjectId)) weakBySubject.set(unit.subjectId, []);
+    weakBySubject.get(unit.subjectId).push(unit);
+  }
+  const affectedSubjects = subjectRows.filter((row) =>
+    (row.totalQuestions >= sampleFloor && attentionStates.has(row.state)) || weakBySubject.has(row.subjectId));
+  affectedSubjects.sort((a, b) => {
+    const ap = a.totalQuestions >= sampleFloor ? a.weightedAccuracy : 101;
+    const bp = b.totalQuestions >= sampleFloor ? b.weightedAccuracy : 101;
+    return ap - bp || a.subjectName.localeCompare(b.subjectName, "pt-BR");
+  });
+
+  const few = unitRows.filter((row) => row.totalQuestions > 0 && row.totalQuestions < sampleFloor).length;
+  const none = unitRows.filter((row) => row.totalQuestions === 0).length;
+  note.textContent = `No período selecionado, são necessárias ao menos ${sampleFloor} questões por nível para indicar dificuldade. ${few} aulas com amostra pequena; ${none} sem questões registradas.`;
+  host.replaceChildren();
+  if (affectedSubjects.length === 0) {
+    const p = createTextElement("p", "stats-attention-empty",
+      periodEvidence.length === 0
+        ? "Registre exercícios para identificar disciplinas e aulas que merecem reforço."
+        : "Nenhum desempenho baixo confirmado com amostra suficiente neste período. As tabelas abaixo mostram todas as disciplinas e aulas.");
+    host.append(p);
+    return;
+  }
+  for (const [index, subject] of affectedSubjects.entries()) {
+    const group = document.createElement("details");
+    group.className = "stats-attention-group";
+    group.open = index === 0;
+    const head = document.createElement("summary");
+    const label = createTextElement("strong", "stats-attention-subject", subject.subjectName);
+    const score = createTextElement("span", "stats-attention-score",
+      subject.totalQuestions >= sampleFloor
+        ? `${formatDecimal(subject.weightedAccuracy)}% · ${formatNumber(subject.totalQuestions)} questões`
+        : "Amostra insuficiente na disciplina");
+    head.append(label, score);
+    group.append(head);
+    const list = document.createElement("ul");
+    list.className = "stats-attention-units";
+    const weakContent = (weakBySubject.get(subject.subjectId) ?? [])
+      .sort((a, b) => a.weightedAccuracy - b.weightedAccuracy || a.unitTitle.localeCompare(b.unitTitle, "pt-BR"));
+    if (weakContent.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "Dificuldade no conjunto da disciplina; cada aula isolada ainda tem evidência insuficiente. Consulte Por conteúdo.";
+      list.append(li);
+    }
+    for (const unit of weakContent) {
+      const li = document.createElement("li");
+      const title = createTextElement("span", "stats-attention-unit-title", unit.unitTitle);
+      const metric = createTextElement("span", "stats-attention-unit-evidence",
+        `${formatDecimal(unit.weightedAccuracy)}% · ${formatNumber(unit.totalQuestions)} questões`);
+      const open = createTextElement("button", "secondary-button stats-attention-open", "Abrir aula");
+      open.type = "button";
+      open.setAttribute("aria-label", `Abrir ${unit.unitTitle} no Plano`);
+      open.addEventListener("click", () => openLessonInPlan(unit.unitId).catch(console.error));
+      li.append(title, metric, open);
+      list.append(li);
+    }
+    const view = createTextElement("button", "text-button stats-attention-contents", "Ver todos os conteúdos");
+    view.type = "button";
+    view.addEventListener("click", () => openSubjectContents(subject.subjectId));
+    group.append(list, view);
+    host.append(group);
+  }
+}
+
 export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const renderId = ++statsSubjectRenderSeq;
@@ -2570,6 +2651,8 @@ export async function renderStatsBySubject() {
   // "Is my study working?" compares periods over time, so it uses all valid history, not the period slice.
   const history = validEvidence(evidence);
   await renderStudyVerdict(Analytics.bySubject(history, units, subjects, today), Analytics.byUnit(history, units, subjects));
+  if (renderId !== statsSubjectRenderSeq) return;
+  renderStatsAttentionMap(evidence, units, subjects, periodValue, today);
   let results = periodSubjectRows(evidence, units, subjects, { periodValue, today });
   renderStatsHeader(periodSummary(results));
   renderStatsDistribution(results);
