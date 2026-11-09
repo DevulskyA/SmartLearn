@@ -88,7 +88,9 @@ test('the launcher refuses a stale build: the packaged bundle must carry the ide
 test('DEV persistent session is switched on ONLY by the DEV launcher and never by production code paths', () => {
   assert.match(launcher, /SMARTLEARN_DEV_PERSISTENT_SESSION\s*=\s*'true'/);
   const lib = read('src-tauri/src/lib.rs');
-  assert.ok(!lib.includes('SMARTLEARN_DEV_PERSISTENT_SESSION'), 'the packaged Desktop must not enable it by itself');
+  // lib.rs may only NAME it to clear it from the environment of an installed Homologacao (HOMOLOGATION_CLEARED_VARS); it never sets it.
+  const mentions = lib.split(/\r?\n/).filter((l) => l.includes('SMARTLEARN_DEV_PERSISTENT_SESSION') && !/^\s*\/\//.test(l));
+  assert.deepEqual(mentions.map((l) => l.trim()), ['"SMARTLEARN_DEV_PERSISTENT_SESSION",'], 'the packaged Desktop must not enable it by itself');
   const main = read('server/src/main.js');
   assert.match(main, /process\.env\.SMARTLEARN_DEV_PERSISTENT_SESSION === 'true'/);
 });

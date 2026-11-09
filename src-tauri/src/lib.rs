@@ -560,8 +560,191 @@ fn watch_window_state(window: &tauri::WebviewWindow, file: PathBuf) {
 // a capability file doesn't explicitly list, independent of what's
 // registered here. design.md §9: "Remote content receives no generic SQL,
 // shell or filesystem capability."
+// ---------------------------------------------------------------------------------------------------------------------------------
+// SmartLearn Homologacao: an installed candidate that opens ISOLATED when its exe is run directly (no launcher script).
+// `<exe dir>\homologation.json`, written read-only by scripts/homologation-install.mjs, carries the datastore, WebView2 profile, title,
+// provider/consent and build identity; it is turned into the same SMARTLEARN_* variables scripts/launch-homologacao.ps1 sets.
+// Fail closed: an install layout (`<exe dir>\..\manifest.json`) without a valid file opens NOTHING. No layout and no file = the Oficial/DEV
+// behavior, untouched.
+// ---------------------------------------------------------------------------------------------------------------------------------
+const HOMOLOGATION_FILE: &str = "homologation.json";
+const HOMOLOGATION_INSTALL_MARKER: &str = "manifest.json";
+const APP_IDENTIFIER: &str = "com.devulsky.smartlearn";
+/// Human DEV pins and consent inherited from the environment: a homologation file replaces them, it never merges with them.
+const HOMOLOGATION_CLEARED_VARS: [&str; 4] = [
+    "SMARTLEARN_DEV_DATA_DIR",
+    "SMARTLEARN_AUTHORIZE_MIGRATIONS",
+    "SMARTLEARN_DEV_PERSISTENT_SESSION",
+    "SMARTLEARN_AI_CONSENT",
+];
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HomologationFile {
+    db: String,
+    sources: String,
+    webview_dir: String,
+    window_title: String,
+    provider: String,
+    #[serde(default)]
+    consent: bool,
+    codex_timeout_ms: Option<u64>,
+    build_mode: String,
+    build_head: String,
+    build_content: String,
+}
+
+fn path_parts(path: &Path) -> Vec<String> {
+    path.components()
+        .map(|part| {
+            let text = part.as_os_str().to_string_lossy().into_owned();
+            if cfg!(windows) { text.to_lowercase() } else { text }
+        })
+        .collect()
+}
+
+/// True when `path` is `root` or lives under it (lexical, case-insensitive on Windows).
+fn is_within(path: &Path, root: &Path) -> bool {
+    let (path, root) = (path_parts(path), path_parts(root));
+    path.len() >= root.len() && path[..root.len()] == root[..]
+}
+
+fn homologation_path(label: &str, raw: &str, exe_dir: &Path, app_data_dir: &Path) -> Result<PathBuf, String> {
+    let path = PathBuf::from(raw);
+    if raw.trim().is_empty() || !path.is_absolute() {
+        return Err(format!("\"{label}\" must be an absolute path, got \"{raw}\""));
+    }
+    let unsafe_part = path.components().any(|part| match part {
+        std::path::Component::ParentDir | std::path::Component::CurDir => true,
+        std::path::Component::Prefix(prefix) => prefix.kind().is_verbatim(),
+        _ => false,
+    });
+    if unsafe_part {
+        return Err(format!("\"{label}\" must be a plain absolute path (no \"..\", \".\" or \\\\?\\ prefix), got \"{raw}\""));
+    }
+    if is_within(&path, app_data_dir) || is_within(app_data_dir, &path) {
+        return Err(format!("\"{label}\" ({raw}) coincides with the Oficial app data ({})", app_data_dir.display()));
+    }
+    // A reinstall replaces the whole app folder: data kept inside it would be destroyed.
+    if is_within(&path, exe_dir) {
+        return Err(format!("\"{label}\" ({raw}) is inside the install folder {}, which a reinstall replaces", exe_dir.display()));
+    }
+    Ok(path)
+}
+
+/// Pure: validates `homologation.json` and returns the SMARTLEARN_* variables it defines. Touches neither the environment nor the disk.
+fn parse_homologation(json: &str, exe_dir: &Path, app_data_dir: &Path) -> Result<Vec<(String, String)>, String> {
+    if !app_data_dir.is_absolute() {
+        return Err("the Oficial app data folder could not be determined".to_string());
+    }
+    let config: HomologationFile = serde_json::from_str(json).map_err(|error| format!("{HOMOLOGATION_FILE} is invalid: {error}"))?;
+    for (label, value) in [
+        ("windowTitle", &config.window_title),
+        ("provider", &config.provider),
+        ("buildMode", &config.build_mode),
+        ("buildHead", &config.build_head),
+        ("buildContent", &config.build_content),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("\"{label}\" must not be empty"));
+        }
+    }
+    let db = homologation_path("db", &config.db, exe_dir, app_data_dir)?;
+    let sources = homologation_path("sources", &config.sources, exe_dir, app_data_dir)?;
+    let webview = homologation_path("webviewDir", &config.webview_dir, exe_dir, app_data_dir)?;
+    let text = |path: &Path| path.to_string_lossy().into_owned();
+    let mut vars = vec![
+        ("SMARTLEARN_DB_PATH".to_string(), text(&db)),
+        ("SMARTLEARN_SOURCES_DIR".to_string(), text(&sources)),
+        ("SMARTLEARN_WEBVIEW_DATA_DIR".to_string(), text(&webview)),
+        ("SMARTLEARN_WINDOW_TITLE".to_string(), config.window_title.clone()),
+        ("SMARTLEARN_AI_PROVIDER".to_string(), config.provider.clone()),
+    ];
+    // Paid-AI consent exists only for the real CODEX provider, and only because the install file says so. This is the single place
+    // outside the DEV launcher scripts that can grant it (server/test/ai-consent-secrets.test.js pins that).
+    if config.consent {
+        if config.provider != "CODEX" {
+            return Err(format!("\"consent\" is only accepted with provider CODEX, got \"{}\"", config.provider));
+        }
+        vars.push(("SMARTLEARN_AI_CONSENT".to_string(), "true".to_string()));
+    }
+    if let Some(timeout) = config.codex_timeout_ms {
+        vars.push(("SMARTLEARN_CODEX_TIMEOUT_MS".to_string(), timeout.to_string()));
+    }
+    vars.push(("SMARTLEARN_BUILD_MODE".to_string(), config.build_mode));
+    vars.push(("SMARTLEARN_BUILD_HEAD".to_string(), config.build_head));
+    vars.push(("SMARTLEARN_BUILD_CONTENT".to_string(), config.build_content));
+    Ok(vars)
+}
+
+/// Reads `<exe dir>\homologation.json`. Absent file: fine for Oficial/DEV (empty list), an error when the folder is a candidate install.
+fn read_homologation(exe_dir: &Path, app_data_dir: &Path) -> Result<Vec<(String, String)>, String> {
+    match std::fs::read_to_string(exe_dir.join(HOMOLOGATION_FILE)) {
+        Ok(json) => parse_homologation(&json, exe_dir, app_data_dir),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let installed = exe_dir.parent().is_some_and(|install| install.join(HOMOLOGATION_INSTALL_MARKER).is_file());
+            if installed {
+                Err(format!("{HOMOLOGATION_FILE} is missing next to the executable. Reinstall with scripts/homologation-install.mjs"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+        Err(error) => Err(format!("{HOMOLOGATION_FILE} could not be read: {error}")),
+    }
+}
+
+/// Oficial app data folder, computed without a Tauri handle (the identifier is fixed in tauri.conf.json). Empty when it cannot be known.
+fn default_app_data_dir() -> PathBuf {
+    let base = if cfg!(windows) {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local").join("share")))
+    };
+    base.map(|dir| dir.join(APP_IDENTIFIER)).unwrap_or_default()
+}
+
+/// Applies the homologation file (if any) to the process environment, before Tauri or any thread exists.
+fn init_homologation() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|error| format!("cannot locate the executable: {error}"))?;
+    let exe_dir = strip_windows_verbatim_prefix(exe.parent().map(Path::to_path_buf).unwrap_or_default());
+    let vars = read_homologation(&exe_dir, &default_app_data_dir())?;
+    if vars.is_empty() {
+        return Ok(());
+    }
+    // Edition 2021: set_var/remove_var are safe fns; this runs first thing in run(), single-threaded, so nothing can race the environment.
+    for name in HOMOLOGATION_CLEARED_VARS {
+        std::env::remove_var(name);
+    }
+    for (name, value) in &vars {
+        std::env::set_var(name, value);
+    }
+    Ok(())
+}
+
+/// A windowless GUI process has no console: the refusal must be a visible message box (plus stderr for a console run).
+fn report_startup_refusal(message: &str) {
+    eprintln!("SmartLearn Homologacao refused to start: {message}");
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let wide = |text: &str| text.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let body = wide(&format!("{message}\n\nNada foi aberto."));
+        let title = wide("SmartLearn Homologacao");
+        // SAFETY: both buffers are NUL-terminated UTF-16 that outlive the call; a null owner window is allowed.
+        unsafe {
+            MessageBoxW(std::ptr::null_mut(), body.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Err(message) = init_homologation() {
+        report_startup_refusal(&message);
+        std::process::exit(1);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
@@ -682,7 +865,7 @@ mod tests {
     use super::{
         window_title, webview_data_dir, configured_app_url, execute_sqlite_transaction_at_path, http_get_ok, local_backend_env,
         pick_free_local_port, pick_stable_local_port, backend_port_file, resolve_backend_launch, standalone_backend_paths, with_data_overrides,
-        strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend,
+        strip_windows_verbatim_prefix, wait_for_local_backend_ready, LocalBackend, parse_homologation, read_homologation,
         TransactionStatement, LOCAL_BACKEND_HOST,
     };
     use std::io::{Read, Write};
@@ -2238,5 +2421,168 @@ mod tests {
         let default = with_data_overrides(base.clone(), None, Some("  ".into()));
         assert_eq!(get(&default, "SMARTLEARN_DB_PATH"), "appdata/smartlearn.db");
         assert_eq!(get(&default, "SMARTLEARN_SOURCES_DIR"), "appdata/sources");
+    }
+
+    // --- Homologacao: homologation.json -> SMARTLEARN_* variables --------------------------------------------------------------
+
+    fn homolog_dirs() -> (PathBuf, PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join("sl-homolog-unit");
+        (base.join("Homologacao").join("app"), base.join("Roaming").join("com.devulsky.smartlearn"), base.join("HomologData"))
+    }
+
+    fn homolog_json(data: &Path, patch: serde_json::Value) -> String {
+        let mut value = json!({
+            "db": data.join("smartlearn-homologacao.db"),
+            "sources": data.join("sources"),
+            "webviewDir": data.join("webview"),
+            "windowTitle": "SmartLearn HOMOLOGACAO - v0.1.0 - abc1234",
+            "provider": "CODEX",
+            "consent": true,
+            "codexTimeoutMs": 1200000,
+            "buildMode": "DEV",
+            "buildHead": "abc1234",
+            "buildContent": "deadbeef"
+        });
+        for (key, patched) in patch.as_object().expect("patch is an object") {
+            if patched.is_null() { value.as_object_mut().unwrap().remove(key); } else { value[key] = patched.clone(); }
+        }
+        value.to_string()
+    }
+
+    fn var<'a>(vars: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        vars.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn homologation_json_becomes_the_launcher_variables() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        let vars = parse_homologation(&homolog_json(&data, json!({})), &exe_dir, &app_data).expect("valid file");
+        assert_eq!(var(&vars, "SMARTLEARN_DB_PATH"), data.join("smartlearn-homologacao.db").to_str());
+        assert_eq!(var(&vars, "SMARTLEARN_SOURCES_DIR"), data.join("sources").to_str());
+        assert_eq!(var(&vars, "SMARTLEARN_WEBVIEW_DATA_DIR"), data.join("webview").to_str());
+        assert_eq!(var(&vars, "SMARTLEARN_WINDOW_TITLE"), Some("SmartLearn HOMOLOGACAO - v0.1.0 - abc1234"));
+        assert_eq!(var(&vars, "SMARTLEARN_AI_PROVIDER"), Some("CODEX"));
+        assert_eq!(var(&vars, "SMARTLEARN_AI_CONSENT"), Some("true"));
+        assert_eq!(var(&vars, "SMARTLEARN_CODEX_TIMEOUT_MS"), Some("1200000"));
+        assert_eq!(var(&vars, "SMARTLEARN_BUILD_MODE"), Some("DEV"));
+        assert_eq!(var(&vars, "SMARTLEARN_BUILD_HEAD"), Some("abc1234"));
+        assert_eq!(var(&vars, "SMARTLEARN_BUILD_CONTENT"), Some("deadbeef"));
+    }
+
+    #[test]
+    fn homologation_without_consent_or_timeout_defines_neither() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        let json = homolog_json(&data, json!({ "provider": "FAKE", "consent": false, "codexTimeoutMs": null }));
+        let vars = parse_homologation(&json, &exe_dir, &app_data).expect("valid file");
+        assert_eq!(var(&vars, "SMARTLEARN_AI_PROVIDER"), Some("FAKE"));
+        assert_eq!(var(&vars, "SMARTLEARN_AI_CONSENT"), None);
+        assert_eq!(var(&vars, "SMARTLEARN_CODEX_TIMEOUT_MS"), None);
+        // consent omitted entirely behaves as false
+        let json = homolog_json(&data, json!({ "consent": null }));
+        let vars = parse_homologation(&json, &exe_dir, &app_data).expect("valid file");
+        assert_eq!(var(&vars, "SMARTLEARN_AI_CONSENT"), None);
+    }
+
+    #[test]
+    fn homologation_consent_needs_the_codex_provider() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        for provider in ["FAKE", "codex", " CODEX", ""] {
+            let json = homolog_json(&data, json!({ "provider": provider, "consent": true }));
+            assert!(parse_homologation(&json, &exe_dir, &app_data).is_err(), "consent with provider {provider:?} must be refused");
+        }
+    }
+
+    #[test]
+    fn homologation_refuses_relative_and_unclean_paths() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        for key in ["db", "sources", "webviewDir"] {
+            for bad in [
+                "relative\\data".to_string(),
+                String::new(),
+                data.join("..").join("x").to_string_lossy().into_owned(),
+                format!("\\\\?\\{}", data.display()),
+            ] {
+                let json = homolog_json(&data, json!({ key: bad }));
+                assert!(parse_homologation(&json, &exe_dir, &app_data).is_err(), "{key}={bad:?} must be refused");
+            }
+        }
+    }
+
+    #[test]
+    fn homologation_refuses_oficial_app_data_its_parents_and_the_install_folder() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        let human_parent = app_data.parent().unwrap().to_path_buf();
+        let shouting = PathBuf::from(app_data.to_string_lossy().to_uppercase());
+        for key in ["db", "sources", "webviewDir"] {
+            let mut bad = vec![
+                app_data.join("smartlearn-server").join("smartlearn.db"),
+                app_data.clone(),
+                human_parent.clone(),
+                exe_dir.join("data"),
+            ];
+            if cfg!(windows) {
+                bad.push(shouting.join("x"));
+            }
+            for path in bad {
+                let json = homolog_json(&data, json!({ key: path }));
+                assert!(parse_homologation(&json, &exe_dir, &app_data).is_err(), "{key}={} must be refused", path.display());
+            }
+        }
+        // a sibling that only shares a name prefix is NOT inside the human folder
+        let sibling = PathBuf::from(format!("{}-homolog", app_data.display()));
+        let json = homolog_json(&data, json!({ "db": sibling.join("x.db") }));
+        assert!(parse_homologation(&json, &exe_dir, &app_data).is_ok());
+    }
+
+    #[test]
+    fn homologation_refuses_malformed_unknown_and_incomplete_json() {
+        let (exe_dir, app_data, data) = homolog_dirs();
+        for bad in [
+            "".to_string(),
+            "{ not json".to_string(),
+            "[]".to_string(),
+            homolog_json(&data, json!({ "consnet": true })),
+            homolog_json(&data, json!({ "db": null })),
+            homolog_json(&data, json!({ "buildHead": null })),
+            homolog_json(&data, json!({ "windowTitle": "  " })),
+            homolog_json(&data, json!({ "consent": "true" })),
+        ] {
+            assert!(parse_homologation(&bad, &exe_dir, &app_data).is_err(), "{bad} must be refused");
+        }
+        assert!(parse_homologation(&homolog_json(&data, json!({})), &exe_dir, Path::new("relative")).is_err());
+    }
+
+    #[test]
+    fn homologation_file_and_install_marker_decide_whether_the_app_may_open() {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("sl-homolog-fs-{unique}"));
+        let exe_dir = root.join("app");
+        fs::create_dir_all(&exe_dir).unwrap();
+        let (_, app_data, data) = homolog_dirs();
+
+        // no layout, no file: Oficial/DEV, nothing defined
+        assert_eq!(read_homologation(&exe_dir, &app_data), Ok(Vec::new()));
+
+        // install layout (manifest.json beside app\) and no file: refuse
+        fs::write(root.join("manifest.json"), "{}").unwrap();
+        let error = read_homologation(&exe_dir, &app_data).unwrap_err();
+        assert!(error.contains("missing"), "{error}");
+
+        // install layout and an invalid file: refuse
+        fs::write(exe_dir.join("homologation.json"), "{ nope").unwrap();
+        assert!(read_homologation(&exe_dir, &app_data).is_err());
+
+        // install layout and a valid file: the variables
+        fs::write(exe_dir.join("homologation.json"), homolog_json(&data, json!({}))).unwrap();
+        let vars = read_homologation(&exe_dir, &app_data).expect("valid file");
+        assert_eq!(var(&vars, "SMARTLEARN_BUILD_CONTENT"), Some("deadbeef"));
+
+        // no layout but a file: still read (and still refused when invalid)
+        fs::remove_file(root.join("manifest.json")).unwrap();
+        assert!(read_homologation(&exe_dir, &app_data).is_ok());
+        fs::write(exe_dir.join("homologation.json"), "{ nope").unwrap();
+        assert!(read_homologation(&exe_dir, &app_data).is_err());
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

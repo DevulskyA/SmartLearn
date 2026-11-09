@@ -188,7 +188,7 @@ test('an unexpected provider failure is reported and stored as a generic message
 
 // --- SMARTLEARN_AI_CONSENT=true belongs to the DEV launcher only -----------------------------------------
 
-test('only scripts/launch-desktop-dev.ps1 assigns SMARTLEARN_AI_CONSENT among everything the app, the server and the packaging ship or run', () => {
+test('only the DEV launcher, the Homologacao launcher and the Homologacao start-up code in src-tauri/src/lib.rs assign SMARTLEARN_AI_CONSENT among everything the app, the server and the packaging ship or run', () => {
   const roots = ['scripts', 'src', 'server/src', 'src-tauri/src', 'src-tauri/tauri.conf.json', 'package.json', 'server/package.json', 'vite.config.js', 'index.html'];
   const exts = new Set(['.js', '.mjs', '.cjs', '.ps1', '.bat', '.cmd', '.sh', '.json', '.rs', '.toml', '.html']);
   const files = [];
@@ -200,15 +200,16 @@ test('only scripts/launch-desktop-dev.ps1 assigns SMARTLEARN_AI_CONSENT among ev
   for (const r of roots) { try { walk(join(REPO_ROOT, r)); } catch { /* optional root */ } }
   // Assignment forms only: PowerShell, process.env.X =, an env object entry, Rust Command::env, a .env/batch/shell line. Messages that merely
   // mention "SMARTLEARN_AI_CONSENT=true" to the operator are not assignments.
-  const assigns = /\$env:SMARTLEARN_AI_CONSENT\s*=|process\.env\.SMARTLEARN_AI_CONSENT\s*=(?!=)|['"`]SMARTLEARN_AI_CONSENT['"`]\s*:\s*['"`]true|\.env\(\s*["']SMARTLEARN_AI_CONSENT|(^|\n)\s*(set\s+|export\s+)?SMARTLEARN_AI_CONSENT\s*=/i;
+  const assigns = /\$env:SMARTLEARN_AI_CONSENT\s*=|process\.env\.SMARTLEARN_AI_CONSENT\s*=(?!=)|['"`]SMARTLEARN_AI_CONSENT['"`]\s*:\s*['"`]true|\.env\(\s*["']SMARTLEARN_AI_CONSENT|set_var\(\s*"SMARTLEARN_AI_CONSENT"|\(\s*"SMARTLEARN_AI_CONSENT"(\.to_string\(\))?\s*,\s*"true"|(^|\n)\s*(set\s+|export\s+)?SMARTLEARN_AI_CONSENT\s*=/i;
   const assigning = files.filter((f) => {
     const rel = relative(REPO_ROOT, f).split(sep).join('/');
     if (/^(test|server\/test)\//.test(rel) || rel.startsWith('scripts/prompt-lab/') && false) return false;
     return assigns.test(readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|#)/.test(l) && !/^\s*\/\*/.test(l)).join('\n'));
   }).map((f) => relative(REPO_ROOT, f).split(sep).join('/'));
   // scripts/inspect-package.mjs only LISTS the name (to look for it in the artifact); it never assigns it.
-  // Owner decision 2026-11-08: the isolated Homologacao launcher may also give consent, but only for the real CODEX provider (asserted below).
-  assert.deepEqual(assigning, ['scripts/launch-desktop-dev.ps1', 'scripts/launch-homologacao.ps1']);
+  // Owner decision 2026-11-08: the isolated Homologacao may also give consent, but only for the real CODEX provider (asserted below): through its
+  // launcher, and through src-tauri/src/lib.rs, which turns the installed app\homologation.json into variables when the exe is run directly.
+  assert.deepEqual(assigning, ['scripts/launch-desktop-dev.ps1', 'scripts/launch-homologacao.ps1', 'src-tauri/src/lib.rs']);
 });
 
 test('the Homologacao launcher gives AI consent only for the CODEX provider and never for the free one', () => {
@@ -216,6 +217,29 @@ test('the Homologacao launcher gives AI consent only for the CODEX provider and 
   const lines = launcher.split(/\r?\n/).filter((l) => /SMARTLEARN_AI_CONSENT/.test(l) && !/^\s*#/.test(l));
   assert.equal(lines.length, 1);
   assert.match(lines[0], /^if \(\$Provider -eq 'CODEX'\) \{ \$env:SMARTLEARN_AI_CONSENT = 'true' \} else \{ Remove-Item Env:SMARTLEARN_AI_CONSENT/);
+});
+
+test('the Homologacao start-up code (lib.rs) grants AI consent in one place: only from homologation.json, only when consent is true, only for provider CODEX', () => {
+  const production = readFileSync(join(REPO_ROOT, 'src-tauri', 'src', 'lib.rs'), 'utf8').split(/\r?\n/).join('\n').split('#[cfg(test)]')[0];
+  const code = production.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  // every mention of the variable in shipped Rust: the one grant, plus the list of inherited variables a homologation file clears
+  const mentions = code.split('\n').filter((l) => /SMARTLEARN_AI_CONSENT/.test(l));
+  assert.equal(mentions.length, 2, mentions.join('\n'));
+  assert.ok(mentions.some((l) => /^\s*"SMARTLEARN_AI_CONSENT",\s*$/.test(l)), 'the cleared-variables entry');
+  // the grant sits inside parse_homologation, behind "consent is true" and a refusal of any provider other than CODEX
+  assert.match(code, /fn parse_homologation\([^)]*\)[^{]*\{[\s\S]*?if config\.consent \{\s*if config\.provider != "CODEX" \{\s*return Err\([^;]*\);\s*\}\s*vars\.push\(\("SMARTLEARN_AI_CONSENT"\.to_string\(\), "true"\.to_string\(\)\)\);\s*\}/);
+  // the environment is only touched with what parse_homologation returned, and an inherited consent is cleared first (the file prevails)
+  assert.match(code, /read_homologation\(&exe_dir[^\n]*\)\?;[\s\S]*?remove_var\(name\)[\s\S]*?set_var\(name, value\)/);
+  assert.match(code, /const HOMOLOGATION_CLEARED_VARS[^=]*=\s*\[[^\]]*"SMARTLEARN_AI_CONSENT"/);
+  // nothing else in the shipped Rust sets variables
+  assert.equal((code.match(/set_var\(/g) ?? []).length, 1);
+});
+
+test('the installer writes consent: true only for provider CODEX', () => {
+  const installer = readFileSync(join(REPO_ROOT, 'scripts', 'homologation-install.mjs'), 'utf8');
+  const lines = installer.split(/\r?\n/).filter((l) => /\bconsent\b/.test(l) && !/^\s*\/\//.test(l));
+  assert.equal(lines.length, 1, lines.join('\n'));
+  assert.match(lines[0], /^\s*consent: provider === 'CODEX',\s*$/);
 });
 
 test('the DEV launcher is the DEV build: it stamps mode DEV, refuses to run outside the work branch and never builds an installer', () => {

@@ -132,11 +132,19 @@ export function inspectPackage({ resourcesDir, tauriConfPath, libRsPath }) {
       if (keys.includes('NODE_ENV')) add('BACKEND_ENV_KEY', 'lib.rs', 'NODE_ENV is set by the shell; the existing decision is loopback HTTP without Secure cookies');
     }
     // The shell may only ever pass the DEV pin through (with_data_overrides), never invent a DEV variable.
+    // One reviewed exception: parse_homologation turns an INSTALLED app\homologation.json into variables (Homologacao, isolated candidate); it may
+    // define the provider and the CODEX-only consent, no other DEV/AI variable. Everything outside that function is held to the rule above.
+    const parserStart = text.indexOf('fn parse_homologation');
+    const parserLength = parserStart < 0 ? -1 : text.slice(parserStart).search(/\r?\n\}\r?\n/);
+    const parserEnd = parserLength < 0 ? -1 : parserStart + parserLength;
+    const parserBody = parserEnd < 0 ? '' : text.slice(parserStart, parserEnd);
+    const shell = parserEnd < 0 ? text : text.slice(0, parserStart) + text.slice(parserEnd);
+    for (const v of DEV_ENV_VARS) if (v !== 'SMARTLEARN_AI_PROVIDER' && v !== 'SMARTLEARN_AI_CONSENT' && parserBody.includes(`"${v}"`)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the homologation parser, which is reviewed only for the provider and the CODEX consent`);
     for (const v of DEV_ENV_VARS) {
       // The desktop shell deliberately selects the real provider for the
       // packaged app. Consent and credentials remain separate settings.
       if (v === 'SMARTLEARN_AI_PROVIDER') continue;
-      if (new RegExp(`\\.env\\(\\s*"${escapeRe(v)}"`).test(text) || new RegExp(`"${escapeRe(v)}"\\.to_string\\(\\)\\s*,`).test(text)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the native shell`);
+      if (new RegExp(`\\.env\\(\\s*"${escapeRe(v)}"`).test(shell) || new RegExp(`"${escapeRe(v)}"\\.to_string\\(\\)\\s*,`).test(shell)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the native shell`);
     }
   }
   return findings;

@@ -99,6 +99,25 @@ test('RED: a shell that sets NODE_ENV, a DEV variable or an unreviewed key is ca
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(libDir, { recursive: true, force: true }); }
 });
 
+test('RED: the homologation parser is reviewed only for the provider and the CODEX consent; any other DEV variable there, or the consent anywhere else, is caught', () => {
+  const dir = fixtureTree();
+  const libDir = mkdtempSync(join(tmpdir(), 'smartlearn-lib-'));
+  try {
+    const original = readFileSync(LIB_RS, 'utf8');
+    const libRs = join(libDir, 'lib.rs');
+    // another DEV variable inside parse_homologation
+    const inParser = original.replace('    let mut vars = vec![', '    let mut vars = vec![\n        ("SMARTLEARN_DEV_DATA_DIR".to_string(), "C:/human".to_string()),');
+    assert.notEqual(inParser, original);
+    writeFileSync(libRs, inParser);
+    assert.ok(inspectPackage({ resourcesDir: dir, libRsPath: libRs }).some((f) => f.kind === 'DEV_VAR_DEFINED' && /SMARTLEARN_DEV_DATA_DIR/.test(f.detail)));
+    // the consent assigned in another function of the shell
+    const elsewhere = original.replace('fn default_app_data_dir()', 'fn leak() -> (String, String) { ("SMARTLEARN_AI_CONSENT".to_string(), "true".to_string()) }\nfn default_app_data_dir()');
+    assert.notEqual(elsewhere, original);
+    writeFileSync(libRs, elsewhere);
+    assert.ok(inspectPackage({ resourcesDir: dir, libRsPath: libRs }).some((f) => f.kind === 'DEV_VAR_DEFINED' && /SMARTLEARN_AI_CONSENT/.test(f.detail)));
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(libDir, { recursive: true, force: true }); }
+});
+
 test('RED: a Tauri config that carries a DEV variable or the fixture password is caught', () => {
   const dir = fixtureTree();
   const confDir = mkdtempSync(join(tmpdir(), 'smartlearn-conf-'));
