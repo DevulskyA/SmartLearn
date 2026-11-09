@@ -82,7 +82,8 @@ test('DEADEND-2: with realistic study data every screen still offers an action a
     if (!res.ok) throw new Error(`${path} -> ${res.status}`);
     return res.json();
   }, { base: API_BASE, path, body });
-  const today = new Date().toISOString().slice(0, 10);
+  // The app's "today" is the student's LOCAL day; a UTC date is tomorrow between 21:00 and 24:00 in Brazil and "Hoje" then has nothing to offer.
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   let subjectId = null;
   for (const [title, qa] of [
     ['Fármacos anti-hipertensivos', [['Qual é o mecanismo dos inibidores da ECA?', 'Bloqueiam a conversão de angiotensina I em II'], ['Qual efeito colateral típico dos IECA?', 'Tosse seca']]],
