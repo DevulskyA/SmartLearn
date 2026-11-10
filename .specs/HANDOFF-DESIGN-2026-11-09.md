@@ -1,4 +1,34 @@
-# Handoff para o agente de design — 2026-11-09
+# LEIA PRIMEIRO (agente de design)
+
+Repositório: https://github.com/DevulskyA/SmartLearn
+Branch para ler: `handoff/design-2026-11-09` (este arquivo é `.specs/HANDOFF-DESIGN-2026-11-09.md`). Commit: ver `git log -1` da branch.
+Esta branch é cópia da linha de trabalho local `codex/restore-pdf-parity`; não é a `main` e nada foi mesclado nem lançado.
+
+## Como a aplicação funciona, de ponta a ponta
+
+Fontes: `CODEMAP.md`, `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` §6–§14, `shared/review-schedule.js`.
+
+**Arquitetura.** Cliente (`src/`, HTML/CSS/JS dentro de uma janela Tauri 2) fala HTTP `/v1` com um servidor Node local (`server/src/`) que guarda tudo em SQLite (`server/migrations/*.sql`). Funções puras compartilhadas ficam em `shared/`. O servidor é a autoridade dos dados; todo `/v1` exige sessão real. O Desktop abre o próprio servidor em loopback e serve o front empacotado.
+
+**Menu lateral** (`index.html`, `data-screen`): Hoje, Materiais, Plano, Estatísticas, Configurações, Conta.
+
+**Fluxo do aluno (a ideia do produto é: "ENVIEI O MATERIAL. AGORA POSSO ESTUDAR."):**
+1. **Materiais → Selecionar PDF.** O servidor guarda uma cópia, extrai texto por página (`server/src/pdf/`) e propõe trechos/unidades a partir do índice do documento. Nada vira aula sozinho.
+2. **Escolher o que estudar.** Três caminhos: (a) **por páginas** (De/até, novo em 28a990e), (b) **por título da seção** (busca) e (c) **Índice do documento** (trechos propostos). Páginas editoriais (capa, prefácio) ficam separadas e não geram conteúdo. Só o texto do escopo aprovado vai à IA (`approveScope` em `server/src/services/content-proposals.js`).
+3. **Gerar rascunho.** Um job chama o provedor de IA (padrão CODEX, `server/src/ai/`) com um prompt fixo e valida o resultado contra um esquema; sensores determinísticos auditam fidelidade à fonte (`draft-audit.js`, `risk-checks.js`). IA produz PROPOSTA, nunca verdade publicada.
+4. **Revisão humana do rascunho.** Editor da aula (`lesson-editor-ui.js`): resumo editável (Tiptap), questões com resposta/explicação/pista e proveniência (página citada). O aluno corrige, rejeita ou regenera.
+5. **Aceitar a aula** (`accept-draft.js`). Uma decisão cria muitos efeitos: unidade de aprendizagem vinculada à disciplina, conteúdo, exercícios e a agenda fixa de 16 revisões (`REVIEW_DAY_OFFSETS` = 1, 7, 15, 30, 60, 90 … 390 dias).
+6. **Estudar agora.** Resumo Mestre → recuperação ativa → questão → dica opcional → revelar resposta → julgamento do aluno → feedback → próxima → resultado e erros. Cada resposta vira evidência imutável (`/v1/evidence`, `attempts`). Sem evidência não é 0%.
+7. **Hoje** mostra o que exige atenção (revisões vencidas, prioridades); **Plano** mostra a agenda; **Estatísticas** (superfície protegida, ADR-0001) mostram estado e evolução só a partir de histórico observável, sem inventar "domínio".
+8. **Prova** (`exams`) e **Revisão** reaproveitam o mesmo ledger de evidências.
+
+**Dados e canais.** Homologação (porta 3000/5183 em modo código vivo, banco `SmartLearn-Homologacao-Data`), DEV persistente (`SmartLearn-DevData`, dados humanos do dono) e testes (bancos descartáveis). Nunca misturar.
+
+**Interface.** Só pt-BR (`src/i18n/locales/pt-BR/`); o único seletor de idioma é o do conteúdo gerado, não o da interface. Textos novos entram no catálogo e o `index.html` repete o texto de reserva (teste `i18n-html` confere).
+
+---
+
+# Estado e mudanças
 
 Branch `codex/restore-pdf-parity`, HEAD `28a990e` (nada enviado ao remoto: sem push, merge, release). Worktree auxiliar `C:\Projetos\SmartLearn-combinada` (`candidate/combinada-2026-11-08`) já foi integrada aqui por `4e23463`.
 
