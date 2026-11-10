@@ -1,4 +1,4 @@
 {
   "comment": "Named lines of work allowed to run the app/build. Exact names, or a prefix ending in /* . Owner decision: edit this list, not the guard code.",
-  "allowed": ["claude/smartlearn-v1-complete", "candidate/*", "codex/restore-pdf-parity", "design/*"]
+  "allowed": ["claude/smartlearn-v1-complete", "candidate/*", "codex/restore-pdf-parity"]
 }
