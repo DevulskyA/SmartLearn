@@ -1,0 +1,409 @@
+diff --git a/e2e/source-proposals.spec.js b/e2e/source-proposals.spec.js
+index d229085..2499b93 100644
+--- a/e2e/source-proposals.spec.js
++++ b/e2e/source-proposals.spec.js
+@@ -202,6 +202,24 @@ test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft
+   expect(order.draftsTop).toBeLessThan(order.searchTop);
+ });
+ 
++test('page range: type "de/até" once instead of picking pages one by one; a reversed range is refused, a valid one opens the draft', async ({ page }) => {
++  await page.locator('[data-screen="materials"]').click();
++  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
++  await page.setInputFiles('#sources-file-input', { name: 'intervalo.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
++  await expect(page.locator('.source-proposal-item')).toHaveCount(2, { timeout: 10000 });
++  // pages come first, title search second
++  const pagesFirst = await page.evaluate(() => Boolean(document.querySelector('#sources-range-form').compareDocumentPosition(document.querySelector('#sources-topic-form')) & Node.DOCUMENT_POSITION_FOLLOWING));
++  expect(pagesFirst).toBe(true);
++  await page.locator('#sources-range-start').fill('2');
++  await page.locator('#sources-range-end').fill('1');
++  await page.locator('#sources-range-form [type="submit"]').click();
++  await expect(page.locator('#sources-message')).toContainText(/não pode vir antes/);
++  await page.locator('#sources-range-start').fill('1');
++  await page.locator('#sources-range-end').fill('2');
++  await page.locator('#sources-range-form [type="submit"]').click();
++  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
++});
++
+ test('F-33: "Salvar título" confirms with "Título salvo" in a role=status next to the field, keeps the focus, and the confirmation clears when the title is edited again', async ({ page }) => {
+   await page.locator('[data-screen="materials"]').click();
+   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+diff --git a/e2e/visual-v01-candidate.spec.js b/e2e/visual-v01-candidate.spec.js
+index 0a9bc33..eab8c2a 100644
+--- a/e2e/visual-v01-candidate.spec.js
++++ b/e2e/visual-v01-candidate.spec.js
+@@ -1,33 +1,26 @@
+ import { test, expect } from '@playwright/test';
+ import { spawn } from 'node:child_process';
+-import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
++import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+ import { join } from 'node:path';
+ import { tmpdir } from 'node:os';
+-import { createHash } from 'node:crypto';
+ import { fileURLToPath } from 'node:url';
+ import { VITE_ORIGIN, serverPort } from './support/ports.js';
+ import { waitForServerReady } from './support/wait-for-server.js';
+ import { signInRegistered } from './support/session.js';
+ 
+-// V-01 candidate check (Estatísticas at phone width). It does NOT change the product: the candidate CSS lives in .specs/proposals/V-01-stats-390.css
+-// and is injected into the page here, so the page is measured WITHOUT it (must show the defect) and WITH it (must not), at 390 and 360 px, and at
+-// 1280 px the candidate must change nothing (same pixels). Runs only when V01_OUT is set (a folder for the before/after PNGs).
+-//   V01_OUT=<dir> node scripts/e2e.mjs e2e/visual-v01-candidate.spec.js
++// V-01 regression (Estatísticas at phone width, fix applied in src/styles.css; see .specs/proposals/V-01-stats-390.md): at 390 and 360 px nothing is cut or overlapping,
++// (desktop is untouched by construction: the fix is scoped to max-width 47.999rem). V01_OUT=<dir> additionally saves the PNGs.
+ 
+ const OUT = process.env.V01_OUT;
+ const SERVER_PORT = serverPort(13992);
+ const API_BASE = `http://localhost:${SERVER_PORT}`;
+ const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+-const CANDIDATE_CSS = fileURLToPath(new URL('../.specs/proposals/V-01-stats-390.css', import.meta.url));
+-
+-test.skip(!OUT, 'set V01_OUT to run the V-01 candidate check');
+ 
+ let serverProcess;
+ let dataDir;
+ 
+ test.beforeAll(async () => {
+-  if (!OUT) return;
+-  mkdirSync(OUT, { recursive: true });
++  if (OUT) mkdirSync(OUT, { recursive: true });
+   dataDir = mkdtempSync(join(tmpdir(), 'sl-e2e-v01-'));
+   serverProcess = spawn(process.execPath, [MAIN_JS], {
+     env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'e2e.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: VITE_ORIGIN },
+@@ -42,6 +35,9 @@ test.afterAll(async () => {
+   if (dataDir) rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+ });
+ 
++// relative dates: the default Estatísticas window is the last 90 days, so fixed dates silently age out of it (that hid the numbers in this check once)
++const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
++
+ async function apiCall(page, path, body) {
+   return page.evaluate(async ({ base, path, body }) => {
+     const me = await (await fetch(`${base}/v1/auth/me`, { credentials: 'include' })).json();
+@@ -77,15 +73,15 @@ const measure = (page) => page.evaluate(() => {
+     const btn = th.querySelector('.th-sort-btn');
+     if (btn && btn.scrollWidth > th.clientWidth + 1) overlaps.push(`header "${btn.textContent.trim().slice(0, 16)}" wider than its cell`);
+   }
+-  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps };
++  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps, rows: rows.length };
+ });
+ 
+-test('V-01: Estatísticas at 390/360 px is cut and overlapping without the candidate and clean with it; 1280 px is unchanged', async ({ page }) => {
++test('V-01: Estatísticas at 390/360 px has nothing cut or overlapping', async ({ page }) => {
+   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; }, API_BASE);
+   await signInRegistered(page, { email: `v01-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
+   // realistic data: one discipline with evidence, one without, so both the numbers and "Sem evidência"/"Amostra insuficiente" appear
+-  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: '2026-08-01' });
+-  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: '2026-08-02' });
++  const a = await apiCall(page, '/v1/learning-units', { newSubjectName: 'Fisiologia Renal', title: 'Filtração glomerular', studyDate: daysAgo(10) });
++  await apiCall(page, '/v1/learning-units', { newSubjectName: 'Cardiologia', title: 'Ciclo cardíaco', studyDate: daysAgo(9) });
+   const attemptIds = [];
+   for (const [index, i] of [1, 2, 3].entries()) {
+     const { exercise } = await apiCall(page, `/v1/learning-units/${a.unit.id}/exercises`, { question: `Pergunta ${i}?`, answer: `Resposta ${i}`, explanation: `Porque ${i}.`, provenance: 'MANUAL' });
+@@ -93,33 +89,21 @@ test('V-01: Estatísticas at 390/360 px is cut and overlapping without the candi
+     await apiCall(page, `/v1/attempts/${attempt.id}/submit`, { outcome: index === 2 ? 'INCORRECT' : 'CORRECT', assessmentMethod: 'SELF_REPORT' });
+     attemptIds.push(attempt.id);
+   }
+-  await apiCall(page, '/v1/learning-evidence', { unitId: a.unit.id, type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2, evidenceDate: '2026-08-05', attemptIds });
++  await apiCall(page, '/v1/learning-evidence', { unitId: a.unit.id, type: 'INITIAL_PRACTICE', questionsCount: 3, correctCount: 2, evidenceDate: daysAgo(5), attemptIds });
+ 
+-  const candidate = readFileSync(CANDIDATE_CSS, 'utf8');
+   const result = {};
+-  const png = {};
+-  for (const width of [390, 360, 1280]) {
++  for (const width of [390, 360]) {
+     await page.setViewportSize({ width, height: 844 });
+-    const more = page.locator('#mobile-more-toggle');
+     await page.locator('[data-screen="stats"]:visible').first().click();
+     await expect(page.locator('#screen-stats')).toBeVisible();
+     await page.waitForTimeout(500);
+-    result[`${width}-before`] = await measure(page);
+-    png[`${width}-before`] = await page.screenshot({ path: join(OUT, `v01-${width}-before.png`) });
+-    const style = await page.addStyleTag({ content: candidate });
+-    await page.waitForTimeout(200);
+-    result[`${width}-after`] = await measure(page);
+-    png[`${width}-after`] = await page.screenshot({ path: join(OUT, `v01-${width}-after.png`) });
+-    await style.evaluate((el) => el.remove());
+-    void more;
+-  }
+-  console.log(`V01 ${JSON.stringify(result)}`);
+-  for (const width of [390, 360]) {
+-    const before = result[`${width}-before`];
+-    const after = result[`${width}-after`];
+-    expect(before.clipped.length + before.cut.length + before.overlaps.length, `${width} px: the defect is reproduced without the candidate (instrument check)`).toBeGreaterThan(0);
+-    expect(after, `${width} px with the candidate: nothing cut or overlapping`).toEqual({ clipped: [], cut: [], overlaps: [] });
++    result[width] = await measure(page);
++    if (OUT) {
++      await page.screenshot({ path: join(OUT, `v01-${width}.png`) });
++      await page.locator('.matrix-table--cards').first().screenshot({ path: join(OUT, `v01-${width}-table.png`) });
++      console.log(`ROWS ${width} ${JSON.stringify(await page.locator('.matrix-table--cards tbody tr').allInnerTexts())}`);
++    }
++    expect(result[width].rows, `${width} px: the discipline cards are present (instrument check)`).toBeGreaterThan(0);
++    expect({ clipped: result[width].clipped, cut: result[width].cut, overlaps: result[width].overlaps }, `${width} px: nothing cut or overlapping`).toEqual({ clipped: [], cut: [], overlaps: [] });
+   }
+-  const hash = (buf) => createHash('sha256').update(buf).digest('hex');
+-  expect(hash(png['1280-after']), '1280 px is pixel-identical with the candidate').toBe(hash(png['1280-before']));
+ });
+diff --git a/index.html b/index.html
+index c7f741f..9e22fff 100644
+--- a/index.html
++++ b/index.html
+@@ -526,10 +526,10 @@
+           <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
+             <div class="section-heading">
+               <p class="eyebrow" data-i18n="screens.settings.language.eyebrow">Preferências de estudo</p>
+-              <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo</h2>
+-              <p data-i18n="screens.settings.language.body">Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.</p>
++              <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo gerado</h2>
++              <p data-i18n="screens.settings.language.body">Vale só para novos resumos, questões, respostas e explicações, independentemente do idioma do livro. Os botões e textos do aplicativo continuam em português. O conteúdo já salvo não será traduzido automaticamente.</p>
+             </div>
+-            <label for="generation-language-select" data-i18n="screens.settings.language.label">Idioma de geração</label>
++            <label for="generation-language-select" data-i18n="screens.settings.language.label">Gerar conteúdo em</label>
+             <select id="generation-language-select" name="generationLocale" aria-describedby="generation-language-hint">
+               <option value="pt-BR">Português (Brasil)</option>
+               <option value="es">Español</option>
+@@ -649,9 +649,22 @@
+               </div>
+               <div class="sources-topic">
+                 <h3 class="sources-subheading" id="sources-topic-title" data-i18n="screens.materials.topic.title">O que você quer estudar?</h3>
+-                <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-topic-title">
++                <form class="sources-range-form" id="sources-range-form" aria-labelledby="sources-range-title">
++                  <p class="sources-choice-label" id="sources-range-title" data-i18n="screens.materials.range.title">Por páginas</p>
++                  <div class="sources-range-fields">
++                    <label for="sources-range-start" data-i18n="screens.materials.range.from">De</label>
++                    <input class="sources-range-input" id="sources-range-start" type="number" min="1" inputmode="numeric" required />
++                    <label for="sources-range-end" data-i18n="screens.materials.range.to">até</label>
++                    <input class="sources-range-input" id="sources-range-end" type="number" min="1" inputmode="numeric" required />
++                    <button class="primary-button" type="submit" data-i18n="screens.materials.range.generate">Gerar destas páginas</button>
++                  </div>
++                  <p class="lesson-hint" data-i18n="screens.materials.range.hint">Números das páginas do PDF. Só o texto desse intervalo será enviado à IA.</p>
++                </form>
++                <p class="sources-or" aria-hidden="true" data-i18n="screens.materials.or">ou</p>
++                <p class="sources-choice-label" id="sources-search-label" data-i18n="screens.materials.topic.byTitle">Por título da seção</p>
++                <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-search-label">
+                   <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Taxa de filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
+-                  <button class="primary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
++                  <button class="secondary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
+                 </form>
+                 <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
+                 <ul class="sources-topic-results" id="sources-topic-results"></ul>
+@@ -743,7 +756,7 @@
+             <div id="study-now-question-area">
+               <p id="study-now-question-text"></p>
+               <p id="study-now-hint-text" class="study-now-hint" hidden></p>
+-              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
++              <button class="primary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
+               <p id="study-now-answer-text" hidden></p>
+               <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
+               <div id="study-now-judgment" class="exercise-judgment" hidden>
+diff --git a/src/app.js b/src/app.js
+index a4c0332..5b1245d 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -3715,6 +3715,7 @@ function renderStudyNowQuestion() {
+   const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review" }[state.mode] ?? "appStudyNow.progress.question";
+   const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
+   studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
++  studyNowProgress.style.setProperty("--p", String((state.index + 1) / state.exercises.length));
+   studyNowPracticeTitle.textContent = t(titleKey);
+   // The Resumo Mestre contains the very answers being retrieved: showing it
+   // above a redo question would turn retrieval practice into reading.
+diff --git a/src/i18n/locales/pt-BR/screens.js b/src/i18n/locales/pt-BR/screens.js
+index e737105..25c748b 100644
+--- a/src/i18n/locales/pt-BR/screens.js
++++ b/src/i18n/locales/pt-BR/screens.js
+@@ -126,9 +126,9 @@ export default {
+   'screens.settings.appearance.title': 'Tema',
+   'screens.settings.appearance.body': 'Escolha uma base de leitura. O ajuste fica salvo neste dispositivo.',
+   'screens.settings.language.eyebrow': 'Preferências de estudo',
+-  'screens.settings.language.title': 'Idioma do conteúdo',
+-  'screens.settings.language.body': 'Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.',
+-  'screens.settings.language.label': 'Idioma de geração',
++  'screens.settings.language.title': 'Idioma do conteúdo gerado',
++  'screens.settings.language.body': 'Vale só para novos resumos, questões, respostas e explicações, independentemente do idioma do livro. Os botões e textos do aplicativo continuam em português. O conteúdo já salvo não será traduzido automaticamente.',
++  'screens.settings.language.label': 'Gerar conteúdo em',
+   'screens.settings.language.hint': 'O idioma selecionado será utilizado nas próximas gerações de conteúdo médico.',
+   'screens.settings.language.save': 'Salvar idioma',
+   'screens.settings.about.eyebrow': 'Sobre',
+@@ -175,6 +175,14 @@ export default {
+   'screens.materials.topic.label': 'Título da seção a buscar',
+   'screens.materials.topic.placeholder': 'Ex.: Taxa de filtração glomerular',
+   'screens.materials.topic.search': 'Buscar',
++  'screens.materials.range.title': 'Por páginas',
++  'screens.materials.or': 'ou',
++  'screens.materials.topic.byTitle': 'Por título da seção',
++  'screens.materials.range.from': 'De',
++  'screens.materials.range.to': 'até',
++  'screens.materials.range.generate': 'Gerar destas páginas',
++  'screens.materials.range.hint': 'Números das páginas do PDF. Só o texto desse intervalo será enviado à IA.',
++  'screens.materials.range.invalid': 'Informe a página inicial e a final (a final não pode vir antes da inicial).',
+   'screens.materials.topic.hint': 'Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.',
+   'screens.materials.generation.label': 'Geração em andamento',
+   'screens.materials.editor.label': 'Aula em edição',
+diff --git a/src/materials-ui.js b/src/materials-ui.js
+index ce7d8df..122234f 100644
+--- a/src/materials-ui.js
++++ b/src/materials-ui.js
+@@ -25,6 +25,9 @@ const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
+ const topicForm = document.querySelector("#sources-topic-form");
+ const topicInput = document.querySelector("#sources-topic-input");
+ const topicResults = document.querySelector("#sources-topic-results");
++const rangeForm = document.querySelector("#sources-range-form");
++const rangeStartInput = document.querySelector("#sources-range-start");
++const rangeEndInput = document.querySelector("#sources-range-end");
+ const draftsBox = document.querySelector("#sources-drafts");
+ const draftsList = document.querySelector("#sources-drafts-list");
+ const indexDetails = document.querySelector("#sources-index");
+@@ -649,6 +652,27 @@ topicResults?.addEventListener("click", async (event) => {
+   await generateFor(approved.proposal);
+ });
+ 
++// One range instead of dozens of clicks: the student types "from page / to page" and the same approveScope({range}) path is used.
++rangeForm?.addEventListener("submit", async (event) => {
++  event.preventDefault();
++  if (!currentSourceId) return;
++  const pageStart = Number.parseInt(rangeStartInput.value, 10);
++  const pageEnd = Number.parseInt(rangeEndInput.value, 10);
++  if (!Number.isInteger(pageStart) || !Number.isInteger(pageEnd) || pageStart < 1 || pageEnd < pageStart) {
++    setSourcesMessage(t("screens.materials.range.invalid"), true);
++    return;
++  }
++  const submit = rangeForm.querySelector('[type="submit"]');
++  submit.disabled = true;
++  const approved = await SourceProposalsUI.approveScope(currentSourceId, { range: { pageStart, pageEnd } });
++  submit.disabled = false;
++  if (!approved.ok) {
++    setSourcesMessage(approved.message || t("materials.topic.approveFailed"), true);
++    return;
++  }
++  await generateFor(approved.proposal);
++});
++
+ // ---- documents already uploaded: reopen instead of sending the same PDF again ------------------------------------------------
+ async function loadExistingSources() {
+   if (!existingBox) return;
+diff --git a/src/styles.css b/src/styles.css
+index c4a9a17..a04dc3c 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -1284,7 +1284,7 @@ h1 {
+ 
+ .stats-panel-heading h2 {
+   margin: 0;
+-  font-size: 1.15rem;
++  font-size: 1.3rem;
+ }
+ 
+ .table-scroll {
+@@ -5067,7 +5067,7 @@ label.select-control:has(> .ui-select) {
+   margin: auto 0 0;
+   padding: 0.5rem 0.75rem;
+   color: var(--color-muted);
+-  font-size: 0.7rem;
++  font-size: 0.75rem;
+   font-variant-numeric: tabular-nums;
+   overflow-wrap: anywhere;
+ }
+@@ -6242,3 +6242,103 @@ label.select-control:has(> .ui-select) {
+     align-items: start;
+   }
+ }
++
++/* Revisão uma por vez: a coluna de leitura da questão (progresso visível, pergunta em corpo de leitura, ação principal clara). */
++#study-now-practice-card {
++  width: min(100%, 46rem);
++}
++
++#study-now-practice-card .section-heading {
++  margin-bottom: 1.5rem;
++}
++
++#study-now-progress {
++  max-width: none;
++  margin: 0.6rem 0 0;
++  color: var(--color-muted);
++  font-size: 0.9rem;
++  font-weight: 600;
++  font-variant-numeric: tabular-nums;
++}
++
++/* O traço mostra quanto da sessão já passou; só aparece quando há texto de progresso. */
++#study-now-progress:not(:empty)::after {
++  content: "";
++  display: block;
++  height: 0.3rem;
++  margin-top: 0.55rem;
++  border-radius: 999px;
++  background: linear-gradient(to right, var(--color-primary) calc(var(--p, 0) * 100%), var(--color-surface-sunken) 0);
++}
++
++#study-now-question-text {
++  max-width: 62ch;
++  margin: 0 0 1.5rem;
++  font-size: clamp(1.2rem, 1.8vw, 1.45rem);
++  font-weight: 620;
++  line-height: 1.45;
++  text-wrap: pretty;
++}
++
++#study-now-answer-text {
++  max-width: 62ch;
++  margin: 0;
++  padding: 0.85rem 1rem;
++  border: 1px solid var(--color-border);
++  border-radius: 0.6rem;
++  background: var(--color-surface-sunken);
++  font-size: 1.05rem;
++  line-height: 1.5;
++}
++
++#study-now-question-area .primary-button,
++#study-now-question-area .secondary-button {
++  min-height: 2.75rem;
++}
++
++#study-now-judgment {
++  margin-top: 1.25rem;
++  gap: 0.75rem;
++}
++
++/* V-01: "Por disciplina" at phone width (390/360 px): wrap text instead of cutting it; see .specs/proposals/V-01-stats-390.md */
++@media (max-width: 47.999rem) {
++  .matrix-table--cards thead th,
++  .matrix-table--cards .th-sort-btn {
++    overflow: visible;
++    text-overflow: clip;
++    white-space: normal;
++  }
++
++  /* the header cells keep percentage widths from #view-stats-subject (34/22/21/23%), too narrow for their label + sort arrow: size them to the content */
++  #view-stats-subject .matrix-table--cards thead th:nth-child(n) {
++    flex: none;
++    width: auto;
++  }
++
++  .matrix-table--cards tbody tr {
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++  }
++
++  .matrix-table--cards tbody td:nth-child(4) {
++    grid-column: 1 / -1;
++  }
++
++  .matrix-table--cards .practice-compact,
++  .matrix-table--cards .practice-recent,
++  .matrix-table--cards .subject-compare-value,
++  .matrix-table--cards .trend-badge {
++    overflow: visible;
++    text-overflow: clip;
++    white-space: normal;
++    overflow-wrap: anywhere;
++  }
++}
++
++/* Materiais: escolher um intervalo de páginas em vez de clicar página a página */
++.sources-range-form { margin: 0.25rem 0 0; }
++.sources-choice-label { margin: 0 0 0.5rem; font-weight: 600; font-size: 0.95rem; }
++.sources-or { margin: 1rem 0; color: var(--color-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 0.75rem; }
++.sources-or::before, .sources-or::after { content: ""; flex: 1; border-top: 1px solid var(--color-border); }
++.sources-range-fields { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
++.sources-range-input { width: 6rem; min-height: 2.75rem; box-sizing: border-box; }
