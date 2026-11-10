@@ -30,7 +30,7 @@ Fontes: `CODEMAP.md`, `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` 
 
 # Estado e mudanças
 
-Branch `codex/restore-pdf-parity`, HEAD `28a990e` (nada enviado ao remoto: sem push, merge, release). Worktree auxiliar `C:\Projetos\SmartLearn-combinada` (`candidate/combinada-2026-11-08`) já foi integrada aqui por `4e23463`.
+Branch `codex/restore-pdf-parity`, com a mudança de código até `28a990e`. Só a branch `handoff/design-2026-11-09` foi enviada ao GitHub (autorizado pelo dono em 2026-11-09); nenhum merge, release ou push em outra branch. Worktree auxiliar `C:\Projetos\SmartLearn-combinada` (`candidate/combinada-2026-11-08`) já foi integrada aqui por `4e23463`.
 
 ## O que mudou (ler estes commits)
 - `28a990e` Materiais: intervalo de páginas ("De ... até ...") primeiro, busca por título depois. Arquivos: `index.html` (bloco `.sources-topic`), `src/materials-ui.js` (handler `#sources-range-form`, usa `SourceProposalsUI.approveScope(id, { range })`), `src/styles.css` (final do arquivo: `.sources-range-*`, `.sources-choice-label`, `.sources-or`), `src/i18n/locales/pt-BR/screens.js` (`screens.materials.range.*`, `screens.materials.or`, `screens.materials.topic.byTitle`), `e2e/source-proposals.spec.js` (teste "page range"). Também sincroniza o texto de reserva do idioma em `index.html` com o catálogo.
