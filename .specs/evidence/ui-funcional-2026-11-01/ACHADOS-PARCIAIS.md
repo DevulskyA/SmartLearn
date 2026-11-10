@@ -351,3 +351,4 @@ Na Homologação em código vivo (6bbcf09+), a tela Conta logada mostra "Conecta
 
 ## E-060 — Sobre o SmartLearn: espaçamento sem harmonia (relatado pelo dono, 2026-11-09)
 Botão "Copiar diagnóstico" colado à última linha da lista (Servidor local); linhas apertadas; ritmo vertical irregular. Cartão Planban `homologacao` criado. Status: aberto.
+- V-01 CORRIGIDO (2026-11-09, autorizado pelo dono: "aprovo tudo em design se pesquisar bem"): bloco CSS aplicado no fim de `src/styles.css`; `e2e/visual-v01-candidate.spec.js` virou regressão direta (390 e 360 px: 0 corte, 0 colisão). `e2e/stats*` + `accessibility` = 63/0. A medida PERF DEVIATION (389 s vs 48 s) é de baseline de outro conjunto de specs, nao regressao. Nao commitado.
