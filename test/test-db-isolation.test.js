@@ -20,6 +20,8 @@ const ALLOWED = new Set([
   'server/test/migration-authorization.test.js', 'server/test/backup-pending-migration.test.js',
   // homologation launcher: passes the human paths as the data dir of a FAKE install in os.tmpdir() to prove the launcher refuses them (-CheckOnly: nothing is opened)
   'test/homologation-launcher.test.js',
+  // homologation proof: pure decisions over a FAKE home (C:\Users\Dono); the protected paths appear only as inputs that must be refused, nothing is opened
+  'test/homologation-proof.test.js',
 ]);
 const FORBIDDEN = [/SmartLearn-DevData/, /com\.devulsky\.smartlearn/, /smartlearn-dev\.db/, /\bdevDbPaths\b/, /\bdevDataDir\b/];
 

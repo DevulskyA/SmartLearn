@@ -6342,3 +6342,78 @@ label.select-control:has(> .ui-select) {
 .sources-or::before, .sources-or::after { content: ""; flex: 1; border-top: 1px solid var(--color-border); }
 .sources-range-fields { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .sources-range-input { width: 6rem; min-height: 2.75rem; box-sizing: border-box; }
+
+/* Materiais: biblioteca de documentos (design 2026-11-10). Só tokens --color-*: vale para todos os temas. */
+.sources-existing-list {
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.source-existing-item {
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  min-height: 4.25rem;
+  padding: 0.85rem 1.1rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+}
+.source-existing-item:last-child { border-bottom: 0; }
+.source-existing-item:hover,
+.source-existing-item:focus-within { box-shadow: inset 3px 0 0 var(--color-primary); } /* barra, não fundo: o fundo mudava o contraste do botão Remover em 4 temas claros */
+.source-existing-name { flex: 1 1 14rem; min-width: 0; }
+.source-existing-pages { font-variant-numeric: tabular-nums; margin-inline-end: 0.35rem; }
+.library-tools {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.6fr) minmax(10rem, 1fr);
+  gap: 0.75rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.library-tools .field-group { margin: 0; }
+.library-count { margin: 0.4rem 0 0.5rem; color: var(--color-muted); font-size: 0.85rem; }
+.library-pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 0.75rem 0 0; color: var(--color-muted); font-size: 0.85rem; }
+.library-pager .small-button { min-height: 2.5rem; }
+.library-pager .small-button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.sources-choice-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; color: var(--color-muted); }
+@media (max-width: 40rem) {
+  .library-tools { grid-template-columns: minmax(0, 1fr); }
+  .source-existing-item { padding: 0.85rem; }
+  .source-existing-name { flex-basis: 100%; }
+  .library-pager .small-button { min-height: 2.75rem; flex: 1; }
+}
+.library-tools input, .library-tools select { min-height: 2.75rem; box-sizing: border-box; width: 100%; }
+
+/* Editor da aula (design 2026-11-10): só leitura e organização; nenhum controle, id ou fluxo muda. Tokens --color-*. */
+.lesson-panel { padding-top: 1.5rem; }
+.lesson-summary-read { font-size: 1.0625rem; line-height: 1.8; }
+.lesson-summary-paragraph { margin-bottom: 1.1rem; }
+.lesson-panel[data-panel="source"] .lesson-facts {
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+.lesson-panel[data-panel="source"] .lesson-fact-label,
+.lesson-panel[data-panel="source"] .lesson-fact-value {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  line-height: 1.55;
+}
+.lesson-panel[data-panel="source"] .lesson-fact-label { background: var(--color-surface-sunken); font-size: 0.9rem; }
+.lesson-panel[data-panel="source"] .lesson-facts > :nth-last-child(-n + 2) { border-bottom: 0; }
+.lesson-panel[data-panel="review"] .lesson-hint,
+.lesson-panel[data-panel="source"] > .lesson-hint { max-width: 75ch; line-height: 1.65; }
+@media (max-width: 40rem) {
+  .lesson-panel[data-panel="source"] .lesson-facts { grid-template-columns: minmax(0, 1fr); }
+  .lesson-panel[data-panel="source"] .lesson-fact-label { padding-bottom: 0.2rem; border-bottom: 0; }
+  .lesson-panel[data-panel="source"] .lesson-fact-value { padding-top: 0.1rem; }
+  .lesson-panel[data-panel="source"] .lesson-facts > :nth-last-child(2) { border-bottom: 0; }
+}
+/* "Remover" na biblioteca: o vermelho fixo de .small-button.is-danger não atingia 4,5:1 sobre a superfície de 4 temas claros (catppuccin-latte, gruvbox-light, solarized-light, dracula-light); escurece com a cor de texto do tema. */
+.source-existing-item .small-button.is-danger { color: color-mix(in oklab, var(--color-danger, #dc2626) 62%, var(--color-text)); }

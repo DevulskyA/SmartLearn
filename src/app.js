@@ -386,7 +386,7 @@ const todayLoadSummary = document.querySelector("#today-load-summary");
 const todayDayStrip = document.querySelector("#today-day-strip");
 
 // Yesterday / today / tomorrow tiles. `yesterdayDone` is null when yesterday could not be read: that tile is then left out, never shown as 0.
-function renderTodayDayStrip({ yesterdayDone, todoToday, overdue, tomorrow }) {
+function renderTodayDayStrip({ yesterdayDone, todoToday, doneToday = 0, overdue, tomorrow }) {
   if (!todayDayStrip) return;
   const tile = (key, count, note, isToday = false) => {
     const el = document.createElement("div");
@@ -399,7 +399,9 @@ function renderTodayDayStrip({ yesterdayDone, todoToday, overdue, tomorrow }) {
   };
   const tiles = [];
   if (yesterdayDone !== null) tiles.push(tile("yesterday", yesterdayDone, tn("today.day.done", yesterdayDone)));
-  tiles.push(tile("today", todoToday, overdue > 0 ? t("today.day.overdueNote", { count: overdue }) : tn("today.day.todo", todoToday), true));
+  // "N feitas" hoje stays visible: the text line that carried it is hidden online now that the strip exists.
+  const todayNote = [overdue > 0 ? t("today.day.overdueNote", { count: overdue }) : tn("today.day.todo", todoToday), doneToday > 0 ? tn("today.load.done", doneToday) : ""].filter(Boolean).join(" · ");
+  tiles.push(tile("today", todoToday, todayNote, true));
   tiles.push(tile("tomorrow", tomorrow, tn("today.day.scheduled", tomorrow)));
   todayDayStrip.style.gridTemplateColumns = `repeat(${tiles.length}, minmax(0, 1fr))`;
   todayDayStrip.replaceChildren(...tiles);
@@ -1746,19 +1748,14 @@ export async function renderToday() {
 
   // Load summary above fold
   if (todayLoadSummary) {
-    const parts = [];
-    if (overdueReviews.length > 0) parts.push(tn("today.load.overdue", overdueReviews.length));
-    if (pendingToday.length > 0) parts.push(t("today.load.today", { count: pendingToday.length }));
-    if (tomorrowReviews.length > 0) parts.push(t("today.load.tomorrow", { count: tomorrowReviews.length }));
-    if (completedToday.length > 0) parts.push(tn("today.load.done", completedToday.length));
-    // the day strip above carries these figures online; the text line stays for the offline snapshot, which has no strip
+    // the day strip above carries these figures online (including "N feitas" in the Hoje tile); the offline snapshot below has its own text line
     todayLoadSummary.hidden = true;
-    todayLoadSummary.textContent = parts.join(" · ");
+    todayLoadSummary.textContent = "";
   }
   if (learningUnits.length > 0) {
     let yesterdayDone = null;
     try { yesterdayDone = (await DB.reviewTasks.getCompletedToday(subtractDays(today, 1))).length; } catch { /* tile left out */ }
-    renderTodayDayStrip({ yesterdayDone, todoToday: overdueReviews.length + pendingToday.length, overdue: overdueReviews.length, tomorrow: tomorrowReviews.length });
+    renderTodayDayStrip({ yesterdayDone, todoToday: overdueReviews.length + pendingToday.length, doneToday: completedToday.length, overdue: overdueReviews.length, tomorrow: tomorrowReviews.length });
   } else if (todayDayStrip) todayDayStrip.hidden = true;
 
   const pendingCount = overdueReviews.length + pendingToday.length;

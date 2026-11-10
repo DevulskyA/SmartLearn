@@ -358,7 +358,10 @@ test('R-4: a new discipline created while accepting a draft gets the colour chos
   for (const name of names) expect(name).toMatch(/^[A-ZÀ-Ý]/);
   const previewBox = await editor.locator('[data-action="preview-accept"]').boundingBox();
   const acceptBox = await editor.locator('[data-action="accept-draft"]').boundingBox();
-  expect(acceptBox.y - (previewBox.y + previewBox.height)).toBeGreaterThanOrEqual(8);
+  // The two buttons may sit stacked or side by side (design d978391 put them on one row): what must hold is a real gap on at least one axis.
+  const gapOnY = Math.max(acceptBox.y - (previewBox.y + previewBox.height), previewBox.y - (acceptBox.y + acceptBox.height));
+  const gapOnX = Math.max(acceptBox.x - (previewBox.x + previewBox.width), previewBox.x - (acceptBox.x + acceptBox.width));
+  expect(Math.max(gapOnY, gapOnX)).toBeGreaterThanOrEqual(8);
   await swatches.nth(3).click();
   const chosen = await swatches.nth(3).evaluate((el) => el.style.getPropertyValue('--swatch-color'));
   await editor.locator('.source-draft-subject-input').fill('Cor Aceite');

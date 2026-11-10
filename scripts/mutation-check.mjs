@@ -49,7 +49,7 @@ export const MUTATIONS = [
     id: 'M2', area: 'sessão (devPersistent)',
     why: 'a flag de sessão persistente DEV seria ignorada: a política voltaria sempre à de produção',
     file: 'server/src/auth/session-tokens.js',
-    find: 'if (!devPersistent) return {', replace: 'if (true) return {',
+    find: 'if (!devPersistent) {', replace: 'if (true) {',
     cwd: 'server', tests: ['test/dev-persistent-session.test.js'],
   },
   {

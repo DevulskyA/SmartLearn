@@ -11,6 +11,7 @@ import { createTextElement } from "./dom-utils.js";
 import { showConfirm } from "./confirm-dialog.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
 import * as GenerationJobsUI from "./generation-jobs-ui.js";
+import { libraryView, LIBRARY_TOOLS_FROM } from "./materials-library.js";
 import {
   elapsedLabel, jobIsActive, latestJobsByProposal, jobPhaseLabel, jobElapsedMs, jobFailureMessage, jobListStatus,
 } from "./lesson-view-model.js";
@@ -674,13 +675,43 @@ rangeForm?.addEventListener("submit", async (event) => {
 });
 
 // ---- documents already uploaded: reopen instead of sending the same PDF again ------------------------------------------------
+// The list the server returned (documents with extracted text), and what the student is looking at: search, order, page.
+let existingSources = [];
+const libraryState = { query: "", sort: "original", page: 1 };
+const libraryTools = document.querySelector("#library-tools");
+const librarySearch = document.querySelector("#library-search");
+const librarySort = document.querySelector("#library-sort");
+const libraryCount = document.querySelector("#library-count");
+const libraryPager = document.querySelector("#library-pager");
+const libraryPrev = document.querySelector("#library-prev");
+const libraryNext = document.querySelector("#library-next");
+const libraryPageLabel = document.querySelector("#library-page-label");
+
 async function loadExistingSources() {
   if (!existingBox) return;
   const result = await SourceProposalsUI.listSources();
   if (!result.ok) return;
-  const ready = result.sources.filter((s) => s.extractionStatus === "EXTRACTED");
+  existingSources = result.sources.filter((s) => s.extractionStatus === "EXTRACTED");
+  renderExistingSources();
+}
+
+function renderExistingSources() {
+  const showTools = existingSources.length >= LIBRARY_TOOLS_FROM;
+  if (!showTools) { libraryState.query = ""; libraryState.sort = "original"; libraryState.page = 1; librarySearch.value = ""; librarySort.value = "original"; }
+  const view = libraryView(existingSources, libraryState);
+  libraryState.page = view.page; // clamped: removing the last item of the last page lands on the new last page
+  libraryTools.hidden = !showTools;
+  libraryCount.hidden = !showTools;
+  libraryPager.hidden = !showTools || view.pageCount <= 1;
+  if (showTools) {
+    const range = { matched: nf.format(view.matched), total: nf.format(view.total), from: nf.format(view.from), to: nf.format(view.to) };
+    libraryCount.textContent = view.matched === 0 ? t("materials.library.none") : t(view.matched === view.total ? "materials.library.countAll" : "materials.library.count", range);
+    libraryPageLabel.textContent = t("materials.library.page", { page: nf.format(view.page), count: nf.format(view.pageCount) });
+    libraryPrev.setAttribute("aria-disabled", String(view.page <= 1));
+    libraryNext.setAttribute("aria-disabled", String(view.page >= view.pageCount));
+  }
   existingList.replaceChildren();
-  for (const source of ready) {
+  for (const source of view.items) {
     const li = document.createElement("li");
     li.className = "source-existing-item";
     li.append(createTextElement("span", "source-existing-name", source.originalName));
@@ -704,8 +735,14 @@ async function loadExistingSources() {
     li.append(document.createTextNode(" "), remove);
     existingList.append(li);
   }
-  existingBox.hidden = ready.length === 0;
+  existingBox.hidden = existingSources.length === 0;
 }
+
+// aria-disabled (not disabled) on the pager buttons: a button that disables itself under the focus would drop the keyboard position.
+librarySearch?.addEventListener("input", () => { libraryState.query = librarySearch.value; libraryState.page = 1; renderExistingSources(); });
+librarySort?.addEventListener("change", () => { libraryState.sort = librarySort.value; libraryState.page = 1; renderExistingSources(); });
+libraryPrev?.addEventListener("click", () => { if (libraryPrev.getAttribute("aria-disabled") === "true") return; libraryState.page -= 1; renderExistingSources(); });
+libraryNext?.addEventListener("click", () => { if (libraryNext.getAttribute("aria-disabled") === "true") return; libraryState.page += 1; renderExistingSources(); });
 
 existingList?.addEventListener("click", async (event) => {
   const removeButton = event.target.closest('[data-action="remove-source"]');

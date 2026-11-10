@@ -8,7 +8,8 @@ Branch: `handoff/design-2026-11-09` (pasta `.specs/handoff-design-2026-11-09/`).
 1. `01-LEIA-PRIMEIRO-fluxo-e-estado.md` — como o app funciona de ponta a ponta, o que mudou, o que foi provado e o que NÃO foi, pendências de design que são suas e os limites do dono.
 2. `02-CODEMAP.md` — onde está cada coisa no código (cliente, servidor, testes).
 3. `patches/design-changes-ccfa81e-to-28a990e.patch` — todas as mudanças de interface (index.html, src/, e2e/) dos commits de design, em um único diff para revisar sem clonar.
-4. `03-folha-de-decisoes-producao.md` — decisões que só o dono toma (banco real, push/merge/release, gasto com IA). Não as tome por ele.
+4. `04-contrato-de-comportamento-para-design.md` — LEIA ANTES DE MEXER EM TELA: o que tem código por trás (intervalo de páginas, faixa de Hoje, progresso da Revisão, Estatísticas) e não pode quebrar; o que é só CSS e o que exige proposta.
+5. `03-folha-de-decisoes-producao.md` — decisões que só o dono toma (banco real, push/merge/release, gasto com IA). Não as tome por ele.
 
 ## Arquivos de interface mais importantes (ver no branch)
 - `index.html`, `src/styles.css` (blocos de Revisão e Materiais no final), `src/materials-ui.js`, `src/i18n/locales/pt-BR/screens.js`.

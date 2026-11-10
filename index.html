@@ -638,7 +638,28 @@
             <div class="sources-existing" id="sources-existing" hidden>
               <h3 class="sources-subheading" id="sources-existing-title" data-i18n="screens.materials.existing.title">Documentos já enviados</h3>
               <p class="field-hint" data-i18n="screens.materials.existing.hint">O SmartLearn guarda uma cópia de cada PDF dentro do próprio app. Mover ou apagar o arquivo original não afeta nada aqui.</p>
+              <div class="library-tools" id="library-tools" hidden>
+                <div class="field-group">
+                  <label for="library-search" data-i18n="screens.materials.library.search">Buscar na biblioteca</label>
+                  <input id="library-search" type="search" autocomplete="off" placeholder="Título do documento" data-i18n-placeholder="screens.materials.library.searchPlaceholder" />
+                </div>
+                <div class="field-group">
+                  <label for="library-sort" data-i18n="screens.materials.library.sort">Organizar</label>
+                  <select id="library-sort">
+                    <option value="original" data-i18n="screens.materials.library.sort.original">Ordem original</option>
+                    <option value="name-asc" data-i18n="screens.materials.library.sort.nameAsc">Nome, A a Z</option>
+                    <option value="name-desc" data-i18n="screens.materials.library.sort.nameDesc">Nome, Z a A</option>
+                    <option value="pages-desc" data-i18n="screens.materials.library.sort.pagesDesc">Mais páginas</option>
+                  </select>
+                </div>
+              </div>
+              <p class="library-count" id="library-count" role="status" aria-live="polite" hidden></p>
               <ul class="sources-existing-list" id="sources-existing-list" aria-labelledby="sources-existing-title"></ul>
+              <nav class="library-pager" id="library-pager" aria-label="Páginas da biblioteca" data-i18n-aria-label="screens.materials.library.pagerLabel" hidden>
+                <button class="small-button" id="library-prev" type="button" data-i18n="screens.materials.library.prev">Anteriores</button>
+                <span id="library-page-label"></span>
+                <button class="small-button" id="library-next" type="button" data-i18n="screens.materials.library.next">Próximos</button>
+              </nav>
             </div>
             <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
             <div id="sources-proposals-panel" hidden>

@@ -3,7 +3,7 @@
 export const SUITES = {
   materials: [
     'content-quality-flow', 'draft-acceptance', 'generation-jobs', 'keyboard-study-materials', 'large-draft-review', 'large-pdf',
-    'lesson-editor', 'materials-a11y', 'source-proposals', 'source-reupload', 'draft-autosave',
+    'lesson-editor', 'materials-a11y', 'materials-library', 'materials-themes', 'source-proposals', 'source-reupload', 'draft-autosave',
   ],
   // the shortest honest check, one shared page and one draft (about a minute): run it after every small change
   smoke: ['smoke'],

@@ -80,6 +80,10 @@ export default {
 
   // Documents already uploaded
   'materials.existing.pages': '{count} páginas',
+  'materials.library.count': '{matched} de {total} documentos · {from} a {to} exibidos',
+  'materials.library.countAll': '{total} documentos · {from} a {to} exibidos',
+  'materials.library.none': 'Nenhum documento corresponde à busca.',
+  'materials.library.page': 'Página {page} de {count}',
   'materials.existing.open': 'Abrir',
   'materials.existing.openLabel': 'Abrir {name}',
   'materials.existing.remove': 'Remover',
