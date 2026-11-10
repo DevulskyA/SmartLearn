@@ -526,10 +526,10 @@
           <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
             <div class="section-heading">
               <p class="eyebrow" data-i18n="screens.settings.language.eyebrow">Preferências de estudo</p>
-              <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo</h2>
-              <p data-i18n="screens.settings.language.body">Escolha o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O conteúdo já salvo não será traduzido automaticamente.</p>
+              <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo gerado</h2>
+              <p data-i18n="screens.settings.language.body">Vale só para novos resumos, questões, respostas e explicações, independentemente do idioma do livro. Os botões e textos do aplicativo continuam em português. O conteúdo já salvo não será traduzido automaticamente.</p>
             </div>
-            <label for="generation-language-select" data-i18n="screens.settings.language.label">Idioma de geração</label>
+            <label for="generation-language-select" data-i18n="screens.settings.language.label">Gerar conteúdo em</label>
             <select id="generation-language-select" name="generationLocale" aria-describedby="generation-language-hint">
               <option value="pt-BR">Português (Brasil)</option>
               <option value="es">Español</option>
@@ -649,9 +649,22 @@
               </div>
               <div class="sources-topic">
                 <h3 class="sources-subheading" id="sources-topic-title" data-i18n="screens.materials.topic.title">O que você quer estudar?</h3>
-                <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-topic-title">
+                <form class="sources-range-form" id="sources-range-form" aria-labelledby="sources-range-title">
+                  <p class="sources-choice-label" id="sources-range-title" data-i18n="screens.materials.range.title">Por páginas</p>
+                  <div class="sources-range-fields">
+                    <label for="sources-range-start" data-i18n="screens.materials.range.from">De</label>
+                    <input class="sources-range-input" id="sources-range-start" type="number" min="1" inputmode="numeric" required />
+                    <label for="sources-range-end" data-i18n="screens.materials.range.to">até</label>
+                    <input class="sources-range-input" id="sources-range-end" type="number" min="1" inputmode="numeric" required />
+                    <button class="primary-button" type="submit" data-i18n="screens.materials.range.generate">Gerar destas páginas</button>
+                  </div>
+                  <p class="lesson-hint" data-i18n="screens.materials.range.hint">Números das páginas do PDF. Só o texto desse intervalo será enviado à IA.</p>
+                </form>
+                <p class="sources-or" aria-hidden="true" data-i18n="screens.materials.or">ou</p>
+                <p class="sources-choice-label" id="sources-search-label" data-i18n="screens.materials.topic.byTitle">Por título da seção</p>
+                <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-search-label">
                   <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Taxa de filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
-                  <button class="primary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
+                  <button class="secondary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
                 </form>
                 <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
                 <ul class="sources-topic-results" id="sources-topic-results"></ul>

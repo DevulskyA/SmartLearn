@@ -25,6 +25,9 @@ const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
 const topicForm = document.querySelector("#sources-topic-form");
 const topicInput = document.querySelector("#sources-topic-input");
 const topicResults = document.querySelector("#sources-topic-results");
+const rangeForm = document.querySelector("#sources-range-form");
+const rangeStartInput = document.querySelector("#sources-range-start");
+const rangeEndInput = document.querySelector("#sources-range-end");
 const draftsBox = document.querySelector("#sources-drafts");
 const draftsList = document.querySelector("#sources-drafts-list");
 const indexDetails = document.querySelector("#sources-index");
@@ -644,6 +647,27 @@ topicResults?.addEventListener("click", async (event) => {
   if (!approved.ok) {
     setSourcesMessage(approved.message || t("materials.topic.approveFailed"), true);
     button.focus({ preventScroll: true });
+    return;
+  }
+  await generateFor(approved.proposal);
+});
+
+// One range instead of dozens of clicks: the student types "from page / to page" and the same approveScope({range}) path is used.
+rangeForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentSourceId) return;
+  const pageStart = Number.parseInt(rangeStartInput.value, 10);
+  const pageEnd = Number.parseInt(rangeEndInput.value, 10);
+  if (!Number.isInteger(pageStart) || !Number.isInteger(pageEnd) || pageStart < 1 || pageEnd < pageStart) {
+    setSourcesMessage(t("screens.materials.range.invalid"), true);
+    return;
+  }
+  const submit = rangeForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  const approved = await SourceProposalsUI.approveScope(currentSourceId, { range: { pageStart, pageEnd } });
+  submit.disabled = false;
+  if (!approved.ok) {
+    setSourcesMessage(approved.message || t("materials.topic.approveFailed"), true);
     return;
   }
   await generateFor(approved.proposal);

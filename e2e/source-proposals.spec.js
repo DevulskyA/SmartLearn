@@ -202,6 +202,24 @@ test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft 
   expect(order.draftsTop).toBeLessThan(order.searchTop);
 });
 
+test('page range: type "de/até" once instead of picking pages one by one; a reversed range is refused, a valid one opens the draft', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'intervalo.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('.source-proposal-item')).toHaveCount(2, { timeout: 10000 });
+  // pages come first, title search second
+  const pagesFirst = await page.evaluate(() => Boolean(document.querySelector('#sources-range-form').compareDocumentPosition(document.querySelector('#sources-topic-form')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  expect(pagesFirst).toBe(true);
+  await page.locator('#sources-range-start').fill('2');
+  await page.locator('#sources-range-end').fill('1');
+  await page.locator('#sources-range-form [type="submit"]').click();
+  await expect(page.locator('#sources-message')).toContainText(/não pode vir antes/);
+  await page.locator('#sources-range-start').fill('1');
+  await page.locator('#sources-range-end').fill('2');
+  await page.locator('#sources-range-form [type="submit"]').click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+});
+
 test('F-33: "Salvar título" confirms with "Título salvo" in a role=status next to the field, keeps the focus, and the confirmation clears when the title is edited again', async ({ page }) => {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });

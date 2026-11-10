@@ -6334,3 +6334,11 @@ label.select-control:has(> .ui-select) {
     overflow-wrap: anywhere;
   }
 }
+
+/* Materiais: escolher um intervalo de páginas em vez de clicar página a página */
+.sources-range-form { margin: 0.25rem 0 0; }
+.sources-choice-label { margin: 0 0 0.5rem; font-weight: 600; font-size: 0.95rem; }
+.sources-or { margin: 1rem 0; color: var(--color-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 0.75rem; }
+.sources-or::before, .sources-or::after { content: ""; flex: 1; border-top: 1px solid var(--color-border); }
+.sources-range-fields { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.sources-range-input { width: 6rem; min-height: 2.75rem; box-sizing: border-box; }
