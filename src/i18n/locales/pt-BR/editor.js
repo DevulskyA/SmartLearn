@@ -144,7 +144,7 @@ export default {
   'editor.accept.newSubject': 'Criar nova disciplina',
   'editor.accept.newSubjectName': 'Nome da nova disciplina',
   'editor.accept.openSummary': 'Abrir Resumo',
-  'editor.accept.date': 'Data da aula',
+  'editor.accept.date': 'Data do estudo',
   'editor.accept.preview': 'Ver o que será criado',
   'editor.accept.previewLabel': 'Pré-visualização do aceite',
   'editor.accept.ack': 'Conferi na fonte os pontos críticos do resumo',

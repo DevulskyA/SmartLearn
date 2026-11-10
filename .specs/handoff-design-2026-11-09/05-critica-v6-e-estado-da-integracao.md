@@ -32,7 +32,7 @@ Mantidos: ids `#sources-*`, ações `open-source`/`remove-source`, i18n (catálo
 8. **Estatísticas V5.** Superfície protegida (ADR-0001); a matemática da prévia difere de `src/analytics.js`. Não tocada.
 9. **`integration/install.cjs`.** Não usado (pin de 3 blobs antigos, cobre só a fase inicial).
 
-10. **Rótulo "Data da aula" no diálogo "Aceitar a aula" está errado em relação ao que grava.** No código nativo esse campo envia `studyDate` (a data de ESTUDO, âncora das 16 revisões), mas o texto é `editor.accept.date: 'Data da aula'` (`src/i18n/locales/pt-BR/editor.js:147`); a pré-visualização também chama de `studyDate`. O dossiê trata data da aula e data de estudo como coisas diferentes. Não renomeei: é semântica de produto. DECISÃO DO DONO: renomear para "Data do estudo" enquanto a data da aula não existe?
+10. **Rótulo "Data da aula" no diálogo "Aceitar a aula" está errado em relação ao que grava.** No código nativo esse campo envia `studyDate` (a data de ESTUDO, âncora das 16 revisões), mas o texto é `editor.accept.date: 'Data da aula'` (`src/i18n/locales/pt-BR/editor.js:147`); a pré-visualização também chama de `studyDate`. O dossiê trata data da aula e data de estudo como coisas diferentes. RESOLVIDO (2026-11-10, dono): renomeado para "Data do estudo" só neste diálogo (`editor.accept.date`); os rótulos `screens.form.lessonDate` dos formulários de plano/estudo ficam como estão até a data da aula existir.
 11. **Aviso do hook de design `flat-type-hierarchy` em `index.html`** (origem desconhecida, anterior a esta sessão): a escala tipográfica global é achatada. Corrigir mexe em todas as telas e na superfície protegida; o dono já havia mandado não tocar na tipografia. Deixado como está.
 
 ## 3. Não verificado
