@@ -5067,7 +5067,7 @@ label.select-control:has(> .ui-select) {
   margin: auto 0 0;
   padding: 0.5rem 0.75rem;
   color: var(--color-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
