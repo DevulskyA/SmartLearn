@@ -11,9 +11,10 @@ const read = (rel) => readFileSync(fileURLToPath(new URL(`../${rel}`, import.met
 const launcher = read('scripts/launch-desktop-dev.ps1');
 const installer = read('scripts/install-dev-shortcut.ps1');
 
-test('the launcher resolves its own worktree, guards the branch and opens the local compiled app', () => {
+test('the launcher resolves its own worktree, guards the served content identity (not a branch name) and opens the local compiled app', () => {
   assert.match(launcher, /Split-Path -Parent \$PSScriptRoot/);
-  assert.match(launcher, /claude\/smartlearn-v1-complete/);
+  assert.doesNotMatch(launcher, /claude\/smartlearn-v1-complete/);
+  assert.match(launcher, /desktop-identity\.mjs/);
   assert.match(launcher, /npm run build:exe/);
   assert.match(launcher, /target\\release\\smartlearn\.exe/);
   assert.doesNotMatch(launcher, /npm run tauri dev/);

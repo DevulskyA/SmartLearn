@@ -242,16 +242,16 @@ test('the installer writes consent: true only for provider CODEX', () => {
   assert.match(lines[0], /^\s*consent: provider === 'CODEX',\s*$/);
 });
 
-test('the DEV launcher is the DEV build: it stamps mode DEV, refuses to run outside the work branch and never builds an installer', () => {
+test('the DEV launcher is the DEV build: it stamps mode DEV, refuses an exe that does not serve the current content and never builds an installer', () => {
   const launcher = readFileSync(join(REPO_ROOT, 'scripts', 'launch-desktop-dev.ps1'), 'utf8');
   assert.match(launcher, /\$env:SMARTLEARN_AI_CONSENT\s*=\s*'true'/);
   assert.match(launcher, /SMARTLEARN_BUILD_MODE\s*=\s*'DEV'/);
   assert.match(launcher, /\$env:SMARTLEARN_DEV_PERSISTENT_SESSION\s*=\s*'true'/);
-  assert.match(launcher, /claude\/smartlearn-v1-complete/);
+  assert.match(launcher, /desktop-identity\.mjs/);
   assert.match(launcher, /npm run build:exe/);
   assert.doesNotMatch(launcher, /build:installer/i);
-  // The consent line sits with the other DEV-only settings, after the work-branch guard.
-  assert.ok(launcher.indexOf('claude/smartlearn-v1-complete') < launcher.indexOf("$env:SMARTLEARN_AI_CONSENT"));
+  // The consent line sits with the other DEV-only settings, after the served-identity guard's staging check.
+  assert.ok(launcher.indexOf('inputsHash -ne $identity.inputsHash') < launcher.indexOf("$env:SMARTLEARN_AI_CONSENT"));
 });
 
 test('production configuration never grants consent by itself: CODEX needs an explicit SMARTLEARN_AI_CONSENT=true', () => {

@@ -20,9 +20,9 @@ function Fail($message) {
   exit 1
 }
 
-$expectedBranch = 'claude/smartlearn-v1-complete'
+# Owner decision 2026-11-10 (folha de decisoes, item 2): what is opened is decided by the CONTENT identity (inputsHash checked below and again
+# against the exe's own dist-runtime), not by a branch name. The folder is this script's own worktree ($PSScriptRoot), so the root is fixed.
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
-if ($branch -ne $expectedBranch) { Fail "Esta pasta esta na branch '$branch', nao em '$expectedBranch'. Nada foi aberto." }
 $head = (git rev-parse --short HEAD).Trim()
 $dirty = if ((git status --porcelain --untracked-files=no | Out-String).Trim()) { '+local' } else { '' }
 
