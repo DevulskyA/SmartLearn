@@ -1,6 +1,6 @@
 // Design preview on :5188 with a REAL local server running on a COPY of the owner's data.
 //
-// Default: copies ~/SmartLearn-DevData (database + WAL + PDFs) into a temp folder and runs server/src/main.js on the copy, so the
+// Default: copies ~/SmartLearn-Homologacao-Data (else ~/SmartLearn-DevData) (database + WAL + PDFs) into a temp folder and runs server/src/main.js on the copy, so the
 // owner signs in with their own account and sees their own subjects, lessons, history and PDFs. The original files are only READ
 // (copied); the server, its migrations and every write happen on the copy, and the copy is deleted when the preview stops.
 // `--seed`: throwaway synthetic data instead (scripts/seed-dev.mjs + 3 demo PDFs); sign in with DEV_ACCOUNT.
@@ -20,14 +20,17 @@ const lanOrigins = LAN ? Object.values(networkInterfaces()).flat().filter((i) =>
 const ORIGIN = `http://localhost:${VITE_PORT}`;
 const API = `http://localhost:${SERVER_PORT}`;
 const root = fileURLToPath(new URL('..', import.meta.url));
-const realDir = join(homedir(), 'SmartLearn-DevData');
-const useSeed = process.argv.includes('--seed') || !existsSync(join(realDir, 'smartlearn-dev.db'));
+// the owner's own account lives in the Homologação store; the DEV store is the fallback
+const candidates = [['SmartLearn-Homologacao-Data', 'smartlearn-homologacao'], ['SmartLearn-DevData', 'smartlearn-dev']].map(([d, b]) => ({ dir: join(homedir(), d), base: b }));
+const real = candidates.find((c) => existsSync(join(c.dir, `${c.base}.db`)));
+const useSeed = process.argv.includes('--seed') || !real;
+const realDir = real?.dir;
 const dataDir = mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
 
 if (!useSeed) {
   // read-only on the original: plain file copies (database, its write-ahead log and shared-memory index, and the stored PDFs)
-  for (const f of ['smartlearn-dev.db', 'smartlearn-dev.db-wal', 'smartlearn-dev.db-shm']) {
-    if (existsSync(join(realDir, f))) cpSync(join(realDir, f), join(dataDir, f.replace('smartlearn-dev', 'preview')));
+  for (const suffix of ['.db', '.db-wal', '.db-shm']) {
+    if (existsSync(join(realDir, real.base + suffix))) cpSync(join(realDir, real.base + suffix), join(dataDir, 'preview' + suffix));
   }
   if (existsSync(join(realDir, 'sources'))) cpSync(join(realDir, 'sources'), join(dataDir, 'sources'), { recursive: true });
   console.log(`[design-preview] copy of ${realDir} -> ${dataDir} (original untouched)`);
