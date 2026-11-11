@@ -36,6 +36,15 @@
         "scripts/design-preview.mjs"
       ],
       "port": 5188
+    },
+    {
+      "name": "design-preview-lan",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/design-preview.mjs",
+        "--lan"
+      ],
+      "port": 5188
     }
   ]
 }

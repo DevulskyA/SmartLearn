@@ -7,7 +7,7 @@
 // Vite proxies /v1 to that server and flags the page as the desktop app (REMOTE_MODE + LOCAL_AUTHORITY).
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitForServerReady } from '../e2e/support/wait-for-server.js';
@@ -15,6 +15,8 @@ import { DEV_ACCOUNT, seedDev } from './seed-dev.mjs';
 
 const SERVER_PORT = 13999;
 const VITE_PORT = 5188;
+const LAN = process.argv.includes('--lan'); // listen on the local network too (the OS firewall prompt is the owner's to answer)
+const lanOrigins = LAN ? Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `http://${i.address}:${VITE_PORT}`) : [];
 const ORIGIN = `http://localhost:${VITE_PORT}`;
 const API = `http://localhost:${SERVER_PORT}`;
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -32,7 +34,7 @@ if (!useSeed) {
 }
 
 const server = spawn(process.execPath, [join(root, 'server/src/main.js')], {
-  env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'preview.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: ORIGIN },
+  env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'preview.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: [ORIGIN, ...lanOrigins].join(',') },
   stdio: 'inherit',
 });
 await waitForServerReady(API, { label: 'design preview' });
@@ -61,7 +63,8 @@ if (useSeed) {
   console.log(`[design-preview] ${ORIGIN}  (sign in with your own account: the data is a copy of ${realDir})`);
 }
 
-const vite = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), '--port', String(VITE_PORT), '--strictPort'], {
+if (LAN) console.log(`[design-preview] LAN: ${lanOrigins.join('  ')}`);
+const vite = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), '--port', String(VITE_PORT), '--strictPort', ...(LAN ? ['--host'] : [])], {
   cwd: root,
   env: { ...process.env, SMARTLEARN_API_PROXY_TARGET: API, SMARTLEARN_PREVIEW_LOCAL: '1' },
   stdio: 'inherit',
