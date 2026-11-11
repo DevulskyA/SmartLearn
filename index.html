@@ -204,11 +204,11 @@
         <section class="screen" id="screen-plan" data-screen-panel="plan" aria-labelledby="title-plan" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow" data-i18n="screens.plan.eyebrow">Conteúdo</p>
+              <p class="eyebrow" data-i18n="screens.plan.eyebrow">Conteúdos e histórico</p>
               <h1 id="title-plan" data-i18n="screens.plan.title">Plano</h1>
               <p class="sl-screen-description" data-i18n="screens.plan.description">Todas as suas aulas, com o contexto de cada estudo.</p>
             </div>
-            <button class="secondary-button" id="plan-manage-subjects-btn" type="button" aria-expanded="false" aria-controls="plan-subjects-panel" data-i18n="screens.plan.manageSubjects">Gerenciar disciplinas</button>
+            <button class="secondary-button" id="plan-manage-subjects-btn" type="button" aria-expanded="false" aria-controls="plan-subjects-panel" data-i18n="screens.plan.manageSubjects">Disciplinas</button>
             <button class="primary-button" id="plan-new-unit-btn" type="button" data-i18n="screens.plan.new">+ Nova aula</button>
           </div>
           <section class="settings-card plan-subjects-panel" id="plan-subjects-panel" aria-labelledby="plan-subjects-title" hidden>
@@ -270,7 +270,11 @@
             <label class="sl-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
               <input type="search" id="plan-search" autocomplete="off" aria-label="Buscar nas aulas" data-i18n-aria-label="screens.plan.search.label" placeholder="Conteúdo, disciplina ou fonte" data-i18n-placeholder="screens.plan.search.placeholder">
             </label>
-            <p class="library-count" id="plan-count" role="status" aria-live="polite" hidden></p>
+            <span class="sl-list-count" id="plan-count" role="status" aria-live="polite" hidden></span>
+            <div class="sl-top-pager" id="plan-top-pager" hidden>
+              <button class="small-button" id="plan-top-prev" type="button" aria-label="Página anterior" data-i18n-aria-label="screens.plan.prevLabel">←</button>
+              <button class="small-button" id="plan-top-next" type="button" aria-label="Próxima página" data-i18n-aria-label="screens.plan.nextLabel">→</button>
+            </div>
           </div>
           <div class="plan-filters" id="plan-filters">
             <select id="plan-filter-subject" aria-label="Filtrar por disciplina" data-i18n-aria-label="screens.filter.subjectLabel">
@@ -293,9 +297,11 @@
             <select id="plan-sort" aria-label="Ordenar por" data-i18n-aria-label="screens.plan.sortLabel">
               <option value="study-date-desc" data-i18n="screens.plan.sort.date">Data (mais recente)</option>
               <option value="subject" data-i18n="screens.form.subject">Disciplina</option>
+              <option value="content" data-i18n="screens.plan.sort.content">Conteúdo (A–Z)</option>
               <option value="next-review" data-i18n="screens.plan.sort.nextReview">Próxima revisão</option>
             </select>
           </div>
+          <div class="sl-plan-heading"><span data-i18n="screens.plan.listTitle">Suas aulas</span><span data-i18n="screens.plan.listHint">Abra uma linha para estudar ou editar</span></div>
           <div class="plan-list" id="plan-list" aria-live="polite"></div>
           <nav class="sl-pagination" id="plan-pager" aria-label="Páginas do plano" data-i18n-aria-label="screens.plan.pagerLabel" hidden>
             <span class="sl-pagination-actions">

@@ -473,6 +473,9 @@ const planCount = document.querySelector("#plan-count");
 const planPager = document.querySelector("#plan-pager");
 const planPrev = document.querySelector("#plan-prev");
 const planNext = document.querySelector("#plan-next");
+const planTopPager = document.querySelector("#plan-top-pager");
+const planTopPrev = document.querySelector("#plan-top-prev");
+const planTopNext = document.querySelector("#plan-top-next");
 const planPageLabel = document.querySelector("#plan-page-label");
 const PLAN_PAGE_SIZE = 20;
 let planPage = 1;
@@ -1926,6 +1929,8 @@ export async function renderPlan() {
       const sb = subjectsById.get(b.subjectId)?.name ?? "";
       return sa.localeCompare(sb) || b.studyDate.localeCompare(a.studyDate);
     });
+  } else if (planSortValue === "content") {
+    sorted = [...learningUnits].sort((a, b) => a.title.localeCompare(b.title, "pt-BR", { sensitivity: "base", numeric: true }) || b.studyDate.localeCompare(a.studyDate));
   } else if (planSortValue === "next-review") {
     const nextByUnit = new Map();
     for (const t of allTasks) {
@@ -1987,7 +1992,7 @@ export async function renderPlan() {
   const planFrom = (planPage - 1) * PLAN_PAGE_SIZE;
   const pageUnits = filtered.slice(planFrom, planFrom + PLAN_PAGE_SIZE);
   if (planCount) {
-    planCount.hidden = learningUnits.length === 0 || planPages === 1 && filtered.length === learningUnits.length;
+    planCount.hidden = learningUnits.length === 0;
     planCount.textContent = filtered.length === 0 ? "" : t("screens.plan.count", { matched: filtered.length, total: learningUnits.length, from: planFrom + 1, to: planFrom + pageUnits.length });
   }
   if (planPager) {
@@ -1995,6 +2000,11 @@ export async function renderPlan() {
     planPageLabel.textContent = t("screens.plan.page", { page: planPage, count: planPages });
     planPrev.disabled = planPage <= 1;
     planNext.disabled = planPage >= planPages;
+    if (planTopPager) {
+      planTopPager.hidden = planPages === 1;
+      planTopPrev.disabled = planPrev.disabled;
+      planTopNext.disabled = planNext.disabled;
+    }
   }
 
   planEmpty.hidden = filtered.length > 0;
@@ -5963,6 +5973,8 @@ planSearch?.addEventListener("input", () => {
 });
 planPrev?.addEventListener("click", () => { planPage -= 1; if (databaseAvailable) renderPlan().catch(console.error); });
 planNext?.addEventListener("click", () => { planPage += 1; if (databaseAvailable) renderPlan().catch(console.error); });
+planTopPrev?.addEventListener("click", () => planPrev?.click());
+planTopNext?.addEventListener("click", () => planNext?.click());
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
   if (!databaseAvailable) return;

@@ -1973,3 +1973,5 @@
 .sl-redesign .sl-profile-row h2 { margin:0;font-size:17px;overflow-wrap:anywhere; }
 .sl-redesign .sl-profile-row p { margin:3px 0 0;font-size:12px;color:var(--sl-muted); }
 .sl-redesign .sl-avatar { display:grid;place-items:center;flex:0 0 auto;width:46px;height:46px;border-radius:13px;background:var(--sl-soft);color:var(--sl-accent);font-size:18px;font-family:var(--sl-serif); }
+.sl-redesign .sl-sticky-bottom { display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 0; }
+.sl-redesign .sl-search { font-weight:400; }
