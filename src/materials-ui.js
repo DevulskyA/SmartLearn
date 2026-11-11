@@ -714,7 +714,11 @@ function renderExistingSources() {
   for (const source of view.items) {
     const li = document.createElement("li");
     li.className = "source-existing-item";
-    li.append(createTextElement("span", "source-existing-name", source.originalName));
+    const identity = document.createElement("span");
+    identity.className = "sl-source-identity";
+    identity.append(createTextElement("span", "source-existing-name", source.originalName));
+    identity.append(createTextElement("span", "sl-source-progress", source.draftCount > 0 ? tn("materials.existing.prepared", source.draftCount) : t("materials.existing.available")));
+    li.append(identity);
     if (source.pageCount) li.append(document.createTextNode(" "), createTextElement("span", "source-existing-pages", t("materials.existing.pages", { count: nf.format(source.pageCount) })));
     const open = document.createElement("button");
     open.type = "button";

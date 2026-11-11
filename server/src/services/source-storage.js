@@ -159,7 +159,14 @@ export function acceptUpload(db, userId, { buffer, originalName, contentType, so
 }
 
 export function list(db, userId) {
-  return db.prepare('SELECT * FROM sources WHERE user_id = ? ORDER BY id DESC').all(userId).map(toDto);
+  // draftCount: summaries already prepared from this document (open drafts and accepted ones), so the library can say
+  // "1 resumo preparado" instead of leaving every document looking untouched.
+  const counts = new Map(db.prepare(`
+    SELECT p.source_id AS source_id, COUNT(*) AS n
+    FROM generated_drafts d JOIN content_proposals p ON p.user_id = d.user_id AND p.id = d.proposal_id
+    WHERE d.user_id = ? AND d.status IN ('DRAFT', 'ACCEPTED')
+    GROUP BY p.source_id`).all(userId).map((r) => [r.source_id, r.n]));
+  return db.prepare('SELECT * FROM sources WHERE user_id = ? ORDER BY id DESC').all(userId).map((row) => ({ ...toDto(row), draftCount: counts.get(row.id) ?? 0 }));
 }
 
 /**
