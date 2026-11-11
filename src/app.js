@@ -15,6 +15,7 @@ import { weakPracticeReason } from "./priorities-text.js";
 import { groupUpcomingReviews } from "./upcoming-reviews.js";
 import {
   THEME_OPTIONS,
+  THEME_VARIABLES,
   applyThemePreference,
   getStoredThemePreference,
   quickToggleTarget,
@@ -5289,42 +5290,58 @@ function renderThemePicker(preference = currentThemePreference) {
 
   themePicker.replaceChildren();
 
-  const select = document.createElement("select");
-  select.className = "theme-select";
-  select.id = "theme-select";
-  select.setAttribute("aria-label", t("theme.selectLabel"));
-
   const groups = [
     { key: "system", options: THEME_OPTIONS.filter((option) => option.mode === "auto") },
     { key: "light", options: THEME_OPTIONS.filter((option) => option.mode === "light") },
     { key: "dark", options: THEME_OPTIONS.filter((option) => option.mode === "dark") },
   ];
+  // Markup copied from the V7.2 package (renderSettings): .sl-theme-group > h3.sl-theme-heading + .sl-theme-grid > button.sl-theme-option
+  // (span.sl-theme-swatch painted by --swatch-*, strong name, small description). "Sistema" previews the palette the system resolves to.
+  themePicker.classList.add("sl-theme-library");
+  const paletteOf = (id) => THEME_VARIABLES[id === "auto" ? (prefersDarkScheme.matches ? "night" : "paper") : id]?.tokens ?? {};
 
   for (const group of groups) {
     if (!group.options.length) continue;
-    const optionGroup = document.createElement("optgroup");
-    optionGroup.label = t(`theme.group.${group.key}`);
+    const section = document.createElement("section");
+    section.className = "sl-theme-group";
+    const headingId = `sl-theme-heading-${group.key}`;
+    section.setAttribute("aria-labelledby", headingId);
+    const heading = document.createElement("h3");
+    heading.id = headingId;
+    heading.className = "sl-theme-heading";
+    heading.textContent = t(`theme.group.${group.key}`);
+    const grid = document.createElement("div");
+    grid.className = "sl-theme-grid";
     for (const option of group.options) {
-      const item = document.createElement("option");
-      item.value = option.id;
-      item.textContent = option.label;
-      optionGroup.append(item);
+      const tokens = paletteOf(option.id);
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "sl-theme-option";
+      card.dataset.value = option.id;
+      card.setAttribute("aria-pressed", "false");
+      const swatch = document.createElement("span");
+      swatch.className = "sl-theme-swatch";
+      swatch.setAttribute("aria-hidden", "true");
+      swatch.style.cssText = `--swatch-bg:${tokens["--color-bg"]};--swatch-paper:${tokens["--color-surface"]};--swatch-ink:${tokens["--color-text"]};--swatch-accent:${tokens["--color-primary"]};--swatch-soft:${tokens["--color-primary-soft"]}`;
+      const name = document.createElement("strong");
+      name.textContent = option.label;
+      const description = document.createElement("small");
+      description.textContent = option.description;
+      card.append(swatch, name, description);
+      grid.append(card);
     }
-    select.append(optionGroup);
+    section.append(heading, grid);
+    themePicker.append(section);
   }
 
   const preview = document.createElement("div");
   preview.className = "theme-live-preview";
   preview.setAttribute("role", "status");
   preview.setAttribute("aria-live", "polite");
-  const swatch = document.createElement("span");
-  swatch.className = "theme-live-swatch";
-  swatch.setAttribute("aria-hidden", "true");
   const previewLabel = document.createElement("span");
   previewLabel.className = "theme-live-label";
-  preview.append(swatch, previewLabel);
-
-  themePicker.append(select, preview);
+  preview.append(previewLabel);
+  themePicker.append(preview);
 
   syncThemePicker(preference);
 }
@@ -5332,10 +5349,9 @@ function renderThemePicker(preference = currentThemePreference) {
 // Destaca o tema ativo na tela de Configurações.
 function syncThemePicker(preference) {
   if (!themePicker) return;
-  const select = themePicker.querySelector(".theme-select");
-  const previewLabel = themePicker.querySelector(".theme-live-label");
   const option = THEME_OPTIONS.find((item) => item.id === preference) ?? THEME_OPTIONS.find((item) => item.id === "auto");
-  if (select && option) select.value = option.id;
+  for (const card of themePicker.querySelectorAll(".sl-theme-option")) card.setAttribute("aria-pressed", String(card.dataset.value === option?.id));
+  const previewLabel = themePicker.querySelector(".theme-live-label");
   if (previewLabel && option) previewLabel.textContent = `${t("theme.preview")} · ${option.label}`;
 }
 
@@ -5361,9 +5377,9 @@ themeToggle.addEventListener("click", () => {
   setThemePreference(target);
 });
 
-themePicker?.addEventListener("change", (event) => {
-  if (!(event.target instanceof HTMLSelectElement)) return;
-  setThemePreference(event.target.value);
+themePicker?.addEventListener("click", (event) => {
+  const card = event.target instanceof Element ? event.target.closest(".sl-theme-option") : null;
+  if (card instanceof HTMLElement && card.dataset.value) setThemePreference(card.dataset.value);
 });
 
 // No modo automático, acompanha mudanças de tema do sistema em tempo real.

@@ -543,19 +543,18 @@
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>
-          <div class="screen-heading"><div><p class="eyebrow" data-i18n="screens.settings.eyebrow">Preferências</p><h1 id="title-settings" data-i18n="screens.settings.title">Configurações</h1></div></div>
+          <div class="screen-heading"><div><p class="eyebrow" data-i18n="screens.settings.eyebrow">Preferências</p><h1 id="title-settings" data-i18n="screens.settings.title">Configurações</h1><p class="sl-screen-description" data-i18n="screens.settings.description">Um ambiente de estudo do seu jeito.</p></div></div>
           <section class="settings-card" aria-labelledby="appearance-title">
             <div class="section-heading">
-              <p class="eyebrow" data-i18n="screens.settings.appearance.eyebrow">Aparência</p>
-              <h2 id="appearance-title" data-i18n="screens.settings.appearance.title">Tema</h2>
-              <p data-i18n="screens.settings.appearance.body">Escolha uma base de leitura. O ajuste fica salvo neste dispositivo.</p>
+              <h2 id="appearance-title" data-i18n="screens.settings.appearance.title">Uma atmosfera para se concentrar.</h2>
+              <p data-i18n="screens.settings.appearance.body">Escolha a aparência mais confortável para sua leitura. Os dados e as funções permanecem os mesmos.</p>
             </div>
-            <div class="theme-picker" id="theme-picker" aria-labelledby="appearance-title">
+            <div id="theme-picker" aria-labelledby="appearance-title">
             </div>
+            <p class="sl-caption sl-mt" data-i18n="screens.settings.appearance.caption">Suas escolhas ficam salvas neste dispositivo. O tema Sistema acompanha a aparência do Windows.</p>
           </section>
           <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
             <div class="section-heading">
-              <p class="eyebrow" data-i18n="screens.settings.language.eyebrow">Preferências de estudo</p>
               <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Idioma do conteúdo gerado</h2>
               <p data-i18n="screens.settings.language.body">Vale só para novos resumos, questões, respostas e explicações, independentemente do idioma do livro. Os botões e textos do aplicativo continuam em português. O conteúdo já salvo não será traduzido automaticamente.</p>
             </div>
@@ -571,6 +570,30 @@
             </div>
             <p class="form-message" id="generation-language-message" role="status" aria-live="polite"></p>
           </section>
+          <section class="settings-card" aria-labelledby="backup-title">
+            <div class="section-heading">
+              <h2 id="backup-title" data-i18n="screens.settings.backup.title">Backup</h2>
+              <p data-i18n="screens.settings.backup.body">Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações. PDFs e fontes enviadas não entram no backup.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="secondary-button" id="export-backup" type="button" data-i18n="screens.settings.backup.export">Exportar backup</button>
+              <button class="secondary-button file-button" id="choose-backup-file" type="button" data-i18n="screens.settings.backup.import">Importar backup</button>
+              <input class="visually-hidden" id="import-backup" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
+              <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
+            </div>
+            <p class="form-message" id="backup-message" role="status" aria-live="polite"></p>
+          </section>
+          <section class="settings-card" aria-labelledby="about-title">
+            <div class="section-heading">
+              <h2 id="about-title" data-i18n="screens.settings.about.title">Sobre o SmartLearn</h2>
+              <p data-i18n="screens.settings.about.body">Qual build está aberta agora. Informe estes dados ao relatar um problema.</p>
+            </div>
+            <dl class="about-identity" id="about-identity"></dl>
+            <div class="settings-actions">
+              <button class="secondary-button" id="copy-diagnostics" type="button" data-i18n="screens.settings.about.copy">Copiar diagnóstico</button>
+            </div>
+            <p class="form-message" id="copy-diagnostics-message" role="status" aria-live="polite"></p>
+          </section>
           <section class="settings-card" id="experiment-card" aria-labelledby="experiment-title">
             <div class="section-heading">
               <p class="eyebrow" data-i18n="experiment.card.eyebrow">Experimental</p>
@@ -581,32 +604,6 @@
               <span data-i18n="experiment.switch.label">Experimento: revisões por unidade e plano do dia</span>
             </label>
             <p class="lesson-hint" data-i18n="experiment.switch.hint">Mostra na tela Hoje um painel experimental. Não substitui o calendário padrão e pode ser desligado a qualquer momento.</p>
-          </section>
-          <section class="settings-card" aria-labelledby="about-title">
-            <div class="section-heading">
-              <p class="eyebrow" data-i18n="screens.settings.about.eyebrow">Sobre</p>
-              <h2 id="about-title" data-i18n="screens.settings.about.title">Sobre o SmartLearn</h2>
-              <p data-i18n="screens.settings.about.body">Qual build está aberta agora. Informe estes dados ao relatar um problema.</p>
-            </div>
-            <dl class="about-identity" id="about-identity"></dl>
-            <div class="settings-actions">
-              <button class="secondary-button" id="copy-diagnostics" type="button" data-i18n="screens.settings.about.copy">Copiar diagnóstico</button>
-            </div>
-            <p class="form-message" id="copy-diagnostics-message" role="status" aria-live="polite"></p>
-          </section>
-          <section class="settings-card" aria-labelledby="backup-title">
-            <div class="section-heading">
-              <p class="eyebrow" data-i18n="screens.settings.backup.eyebrow">Segurança dos dados</p>
-              <h2 id="backup-title" data-i18n="screens.settings.backup.title">Backup</h2>
-              <p data-i18n="screens.settings.backup.body">Salve uma cópia de disciplinas, estudos, revisões, exercícios, seu histórico de desempenho, suas tentativas e as respostas que você deu nas provas, além das configurações. PDFs e fontes enviadas não entram no backup.</p>
-            </div>
-            <div class="settings-actions">
-              <button class="primary-button" id="export-backup" type="button" data-i18n="screens.settings.backup.export">Exportar backup</button>
-              <button class="secondary-button file-button" id="choose-backup-file" type="button" data-i18n="screens.settings.backup.import">Importar backup</button>
-              <input class="visually-hidden" id="import-backup" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
-              <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
-            </div>
-            <p class="form-message" id="backup-message" role="status" aria-live="polite"></p>
           </section>
 
           <section class="settings-card danger-card" id="reset-card" aria-labelledby="reset-title">

@@ -132,7 +132,7 @@ try {
     await go('materials');
     const hashMaterials = await page.evaluate(() => location.hash);
     await go('settings');
-    await page.locator('#theme-select').selectOption('night');
+    await page.locator('.sl-theme-option[data-value="night"]').click();
     const themeAfterPick = await page.evaluate(() => document.documentElement.dataset.theme ?? document.documentElement.dataset.themeMode);
     await go('account');
     expect(await page.locator('#account-logged-in-view').isVisible(), 'Conta shows the signed-in view');
@@ -140,7 +140,7 @@ try {
     await go('settings');
     const themeBack = await page.evaluate(() => document.documentElement.dataset.theme ?? document.documentElement.dataset.themeMode);
     expect(themeBack === themeAfterPick, `theme changed across navigation: ${themeAfterPick} -> ${themeBack}`);
-    expect((await page.locator('#theme-select').inputValue()) === 'night', 'theme select lost its value after coming back');
+    expect((await page.locator('.sl-theme-option[data-value="night"]').getAttribute('aria-pressed')) === 'true', 'theme card lost its selection after coming back');
     await go('materials');
     expect((await page.evaluate(() => location.hash)) === hashMaterials, 'returning to Materiais did not restore its address');
     expect(await page.locator('#sources-card').isVisible(), 'Materiais content is back');

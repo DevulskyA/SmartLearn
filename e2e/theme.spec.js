@@ -16,33 +16,34 @@ async function freshApp(page) {
   await page.waitForLoadState('networkidle');
 }
 
-// Since 6f1fe2b the picker is one grouped combo (#theme-select: Sistema / Claros / Escuros), not a row of swatch buttons.
-test('picking a theme in Configurações updates data-theme/data-theme-mode and the combo shows the active option', async ({ page }) => {
+// The picker is a library of theme cards grouped Automático / Claros / Escuros (.sl-theme-option[data-value]); the chosen card is aria-pressed.
+test('picking a theme in Configurações updates data-theme/data-theme-mode and the card shows the active option', async ({ page }) => {
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
 
-  const select = page.locator('#theme-select');
-  await expect(select).toBeVisible();
-  await expect(select).toHaveValue('auto');
-  await expect(page.locator('#theme-select optgroup')).toHaveCount(3);
+  const card = (id) => page.locator(`.sl-theme-option[data-value="${id}"]`);
+  await expect(card('auto')).toBeVisible();
+  await expect(card('auto')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.sl-theme-group')).toHaveCount(3);
+  await expect(page.locator('.sl-theme-option')).toHaveCount(24);
 
-  await select.selectOption('sepia');
+  await card('sepia').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sepia');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
-  await expect(select).toHaveValue('sepia');
+  await expect(card('sepia')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.theme-live-label')).toContainText('Sépia');
 
-  await select.selectOption('night');
+  await card('night').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
-  await expect(select).toHaveValue('night');
+  await expect(card('night')).toHaveAttribute('aria-pressed', 'true');
 
-  await select.selectOption('ocean');
+  await card('ocean').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'ocean');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim())).not.toBe('');
 
-  await select.selectOption('dusk');
+  await card('dusk').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dusk');
   await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
 });
@@ -50,7 +51,7 @@ test('picking a theme in Configurações updates data-theme/data-theme-mode and 
 test('an explicit theme choice persists across reload (not silently reset to auto)', async ({ page }) => {
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('#theme-select').selectOption('contrast');
+  await page.locator('.sl-theme-option[data-value=\"contrast\"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'contrast');
 
   await page.reload();
@@ -68,7 +69,7 @@ test('"Sistema" follows the OS color scheme on first use and after an explicit s
   await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBeNull();
 
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('#theme-select').selectOption('auto');
+  await page.locator('.sl-theme-option[data-value=\"auto\"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('smartlearn:theme'))).toBe('auto');
 
@@ -104,16 +105,16 @@ test('the quick theme-toggle returns to the theme the user had chosen instead of
   await page.emulateMedia({ colorScheme: 'light' });
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('#theme-select').selectOption('dracula');
+  await page.locator('.sl-theme-option[data-value=\"dracula\"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
 
   await page.locator('#theme-toggle').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper');
-  await expect(page.locator('#theme-select')).toHaveValue('paper');
+  await expect(page.locator('.sl-theme-option[data-value=\"paper\"]')).toHaveAttribute('aria-pressed', 'true');
 
   await page.locator('#theme-toggle').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
-  await expect(page.locator('#theme-select')).toHaveValue('dracula');
+  await expect(page.locator('.sl-theme-option[data-value=\"dracula\"]')).toHaveAttribute('aria-pressed', 'true');
 
   // the memory survives a reload (per-viewer convenience in localStorage)
   await page.locator('#theme-toggle').click();
@@ -134,17 +135,18 @@ test('the quick theme-toggle changes the theme on the FIRST click under "Sistema
   await page.locator('#theme-toggle').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
   await page.locator('[data-screen="settings"]').click();
-  await expect(page.locator('#theme-select')).toHaveValue('auto');
+  await expect(page.locator('.sl-theme-option[data-value=\"auto\"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('the quick theme-toggle is a named button whose icon keeps AA contrast on its card in a corrected theme', async ({ page }) => {
   await freshApp(page);
   await page.locator('[data-screen="settings"]').click();
-  await page.locator('#theme-select').selectOption('solarized-light');
+  await page.locator('.sl-theme-option[data-value=\"solarized-light\"]').click();
   const button = page.locator('#theme-toggle');
   await expect(button).toHaveAccessibleName(/tema/i);
   const readRatio = () => button.evaluate((el) => {
-    const parse = (c) => c.match(/[\d.]+/g).map(Number).slice(0, 3);
+    // computed color-mix() results come back as `color(srgb 0.89 0.88 0.82)` (0..1), plain colors as `rgb(59, 81, 89)` (0..255)
+    const parse = (c) => { const n = c.match(/[\d.]+/g).map(Number).slice(0, 3); return c.startsWith('color(srgb') ? n.map((v) => v * 255) : n; };
     const lin = (v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
     const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
     const style = getComputedStyle(el);
