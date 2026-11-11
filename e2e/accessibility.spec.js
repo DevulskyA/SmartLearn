@@ -118,6 +118,7 @@ const CASES = [
 
 for (const { theme, width, height } of CASES) {
   test(`axe: no critical/serious violation on any main screen, theme ${theme} at ${width}px`, async ({ page }) => {
+    test.setTimeout(120000); // the first theme of a worker pays the cold start (50 s alone, 17 s warm); 60 s left no margin under 3 workers
     await page.setViewportSize({ width, height });
     await page.addInitScript((id) => { try { localStorage.setItem('smartlearn:theme', id); } catch { /* ignore */ } }, theme);
     await signIn(page);
