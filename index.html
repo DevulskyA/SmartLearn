@@ -451,7 +451,11 @@
             </section>
           </div>
 
-          <div class="view-tabs" role="tablist" aria-label="Profundidade da análise" data-i18n-aria-label="screens.stats.tabs.label">
+          <div class="v5-analysis-grid">
+          <aside id="stats-v5-left" aria-label="Rankings rápidos" data-i18n-aria-label="screens.stats.v5.mini.label"></aside>
+          <section id="stats-analysis-card" class="v5-card v5-analysis-card" aria-labelledby="stats-analysis-title">
+          <header class="v5-analysis-header"><div><p class="eyebrow" data-i18n="screens.stats.analysis.eyebrow">EXPLORAR TODOS OS REGISTROS</p><h2 id="stats-analysis-title" data-i18n="screens.stats.analysis.title">Análise completa</h2><p data-i18n="screens.stats.analysis.lede">Consulte todas as disciplinas, os conteúdos e cada aula. Ordene qualquer coluna de dados.</p></div></header>
+          <div class="view-tabs v5-tabs" role="tablist" aria-label="Profundidade da análise" data-i18n-aria-label="screens.stats.tabs.label">
             <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0" data-i18n="screens.stats.tabs.subject">Por disciplina</button>
             <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1" data-i18n="screens.stats.tabs.unit">Por conteúdo</button>
           </div>
@@ -537,6 +541,9 @@
                 <div id="unit-detail-body" hidden></div>
               </aside>
             </div>
+          </div>
+
+          </section>
           </div>
 
           <section class="stats-panel" aria-labelledby="exercise-notes-title">

@@ -10,6 +10,7 @@ const ICONS = {
   target: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4",
   warning: "M12 2 1.5 21h21L12 2Zm0 6v6m0 3h.01",
   arrow: "M5 12h14m-6-6 6 6-6 6",
+  award: "M12 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm-3 11-1.5 9L12 19l4.5 3L15 13",
 };
 
 export const statsOverviewState = { page: 1, order: "best" };
@@ -66,6 +67,15 @@ export function renderOverview(subjectRows) {
 <div class="v5-ranking-options"><label for="v5-ranking-order">${esc(t("screens.stats.v5.overview.order"))}</label><select id="v5-ranking-order" aria-label="${esc(t("screens.stats.v5.overview.orderLabel"))}"><option value="best" ${statsOverviewState.order === "best" ? "selected" : ""}>${esc(t("screens.stats.v5.overview.best"))}</option><option value="worst" ${statsOverviewState.order === "worst" ? "selected" : ""}>${esc(t("screens.stats.v5.overview.worst"))}</option></select></div>
 <ol class="v5-overview-rows" start="${first || 1}">${rowsHtml}</ol>
 <div class="v5-overview-footer"><span>${esc(t("screens.stats.v5.overview.range", { first, last, total: list.length }))}</span><div><button type="button" data-v5="overview-prev" aria-label="${esc(t("screens.stats.v5.overview.prev"))}" ${statsOverviewState.page <= 1 ? "disabled" : ""}>‹</button><span>${statsOverviewState.page} / ${pageCount}</span><button type="button" data-v5="overview-next" aria-label="${esc(t("screens.stats.v5.overview.next"))}" ${statsOverviewState.page >= pageCount ? "disabled" : ""}>›</button></div></div>`;
+}
+
+export function renderMiniRanks(subjectRows) {
+  const rows = subjectRows.map(view);
+  const best = rankBest(rows).slice(0, 3);
+  const weak = rankWorst(rows).filter((r) => r.accuracy < 80).slice(0, 3);
+  const list = (items) => items.map((r, i) => `<button type="button" class="v5-mini-row" data-v5="focus-subject" data-id="${r.id}"><span class="v5-mini-index">${i + 1}</span><span>${esc(r.name)}</span>${badge(r)}</button>`).join("") || `<p class="v5-empty">${esc(t("screens.stats.v5.mini.empty"))}</p>`;
+  const card = (iconName, title, lede, items, action, label) => `<section class="v5-card v5-mini-card"><div class="v5-card-head"><div><span class="v5-heading-icon">${icon(iconName)}</span><h2>${esc(title)}</h2><p>${esc(lede)}</p></div></div><div>${list(items)}</div><button type="button" class="v5-subtle-button" data-v5="${action}">${esc(label)} ${icon("arrow")}</button></section>`;
+  return `<div class="v5-side-rank">${card("award", t("screens.stats.v5.mini.bestTitle"), t("screens.stats.v5.mini.bestLede"), best, "see-best", t("screens.stats.v5.mini.bestAll"))}${card("target", t("screens.stats.v5.mini.weakTitle"), t("screens.stats.v5.mini.weakLede"), weak, "see-weak", t("screens.stats.v5.mini.weakAll"))}</div>`;
 }
 
 export function renderAttention(subjectRows) {

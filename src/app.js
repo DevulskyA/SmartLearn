@@ -28,7 +28,7 @@ import { findLesson } from "./lesson-link.js";
 import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
-import { renderAttention, renderOverview, statsOverviewState } from "./stats-v5.js";
+import { renderAttention, renderMiniRanks, renderOverview, statsOverviewState } from "./stats-v5.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
@@ -2570,17 +2570,19 @@ function renderStatsTop() {
   const attention = document.querySelector("#stats-attention");
   if (overview) overview.innerHTML = renderOverview(statsV5Rows);
   if (attention) attention.innerHTML = renderAttention(statsV5Rows);
+  const mini = document.querySelector("#stats-v5-left");
+  if (mini) mini.innerHTML = renderMiniRanks(statsV5Rows);
 }
 
 function wireStatsTop() {
-  const top = document.querySelector("#stats-v5-top");
+  const top = document.querySelector("#screen-stats");
   if (!top) return;
   top.addEventListener("click", (event) => {
     const button = event.target.closest("[data-v5]");
     if (!button || !top.contains(button)) return;
     switch (button.dataset.v5) {
       case "focus-subject": openSubjectContents(Number(button.dataset.id)); break;
-      case "see-all-subjects": case "see-weak": document.querySelector("#subject-kpi-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); break;
+      case "see-all-subjects": case "see-weak": case "see-best": document.querySelector("#subject-kpi-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); break;
       case "overview-prev": statsOverviewState.page -= 1; renderStatsTop(); break;
       case "overview-next": statsOverviewState.page += 1; renderStatsTop(); break;
       default: break;

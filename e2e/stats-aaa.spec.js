@@ -118,12 +118,10 @@ test('no layout surprises: no horizontal scroll, focus visible, side column belo
     expect(await page.locator('#subject-kpi-section .table-scroll').evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
     const table = await page.locator('#subject-kpi-section').boundingBox();
     const side = await page.locator('.stats-side').boundingBox();
-    if (size.width <= 900) expect(side.y).toBeGreaterThan(table.y + table.height - 1);
-    else {
-      expect(side.x).toBeGreaterThan(table.x + table.width - 1);
-      expect(table.width / (table.width + side.width)).toBeGreaterThan(0.6);
-      expect(table.width / (table.width + side.width)).toBeLessThan(0.72);
-    }
+    // V7.2 composition: the band distribution sits below the table, inside the analysis card, at every width.
+    expect(side.y).toBeGreaterThan(table.y + table.height - 1);
+    const card = await page.locator('#stats-analysis-card').boundingBox();
+    expect(table.width).toBeGreaterThan(card.width * 0.85);
     await page.locator('#subject-kpi-list tr.matrix-row').first().focus();
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
