@@ -66,17 +66,21 @@ export function colorVarForKey(colorKey) {
 }
 
 // PERFORMANCE_COLOR != SUBJECT_COLOR. This is a continuous visual signal for
-// how well a subject/unit is doing (0%=red, 60%=yellow, 100%=green); it does
+// how well a subject/unit is doing (0%=red, 60-79%=yellow, 80%=blue, 100%=dark blue); it does
 // not identify or replace the subject's own color (colorVarForKey above).
 // Keep the neutral performance state readable in every theme. `--color-text-muted`
 // was never part of the theme contract, so browsers fell back to the inherited
 // foreground and could render the neutral label with the wrong contrast.
 export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-muted)';
+// Owner decision (after V7.2): no green. Below 80% red -> orange -> yellow (yellow holds from 60% up to 80%);
+// from 80% blue, getting darker until 100%.
 const PERFORMANCE_COLOR_STOPS = [
   { pct: 0, rgb: [220, 38, 38] },   // red-600
   { pct: 60, rgb: [234, 179, 8] },  // yellow-500
-  { pct: 100, rgb: [22, 163, 74] }, // green-600
+  { pct: 80, rgb: [59, 130, 246] }, // blue-500
+  { pct: 100, rgb: [30, 58, 138] }, // blue-900
 ];
+const PERFORMANCE_BLUE_FROM = 80;
 
 function lerp(a, b, t) {
   return Math.round(a + (b - a) * t);
@@ -88,9 +92,13 @@ export function performanceColor(weightedAccuracy, totalQuestions) {
   if (!Number.isFinite(pct)) return PERFORMANCE_COLOR_NEUTRAL;
   const clamped = Math.min(100, Math.max(0, pct));
 
+  if (clamped > PERFORMANCE_COLOR_STOPS[1].pct && clamped < PERFORMANCE_BLUE_FROM) {
+    const [r, g, b] = PERFORMANCE_COLOR_STOPS[1].rgb;
+    return `rgb(${r}, ${g}, ${b})`;
+  }
   const [lo, hi] = clamped <= 60
     ? [PERFORMANCE_COLOR_STOPS[0], PERFORMANCE_COLOR_STOPS[1]]
-    : [PERFORMANCE_COLOR_STOPS[1], PERFORMANCE_COLOR_STOPS[2]];
+    : [PERFORMANCE_COLOR_STOPS[2], PERFORMANCE_COLOR_STOPS[3]];
   const t = (clamped - lo.pct) / (hi.pct - lo.pct);
 
   const [r, g, b] = [0, 1, 2].map((i) => lerp(lo.rgb[i], hi.rgb[i], t));

@@ -1,0 +1,21 @@
+function renderSettings() {
+    const groups = [
+        ['auto', 'Automático', THEMES.filter(t => t.mode === 'auto')],
+        ['light', 'Claros', THEMES.filter(t => t.mode === 'light')],
+        ['dark', 'Escuros', THEMES.filter(t => t.mode === 'dark')],
+    ];
+    $('#theme-picker').innerHTML = groups.map(([mode, groupName, options]) => `
+      <section class="sl-theme-group" aria-labelledby="sl-theme-heading-${mode}">
+        <h3 id="sl-theme-heading-${mode}" class="sl-theme-heading">${groupName}</h3>
+        <div class="sl-theme-grid">${options.map(t => {
+          const p = t.palette ?? THEME_BY_ID[resolvedTheme('auto')].palette;
+          const swatch = `--swatch-bg:${p.bg};--swatch-paper:${p.paper};--swatch-ink:${p.ink};--swatch-accent:${p.accent};--swatch-soft:${p.soft}`;
+          return `<button type="button" class="sl-theme-option" data-demo="theme" data-value="${t.id}" aria-pressed="${store.settings.theme === t.id}">
+             <span class="sl-theme-swatch" aria-hidden="true" style="${swatch}"></span>
+             <strong>${t.label}</strong><small>${t.description}</small>
+          </button>`;
+        }).join('')}</div>
+      </section>`).join('');
+    $('#settings-period-name').value = store.settings.periodName || '';
+    $('#generation-locale').value = store.settings.locale || 'pt';
+}

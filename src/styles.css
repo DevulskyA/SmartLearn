@@ -6096,17 +6096,24 @@ label.select-control:has(> .ui-select) {
 :root {
   --band-critical: oklch(0.56 0.2 27);
   --band-critical-text: oklch(0.47 0.17 27);
-  --band-attention: oklch(0.72 0.15 72);
-  --band-adequate: oklch(0.6 0.12 235);
-  --band-strong: oklch(0.6 0.14 155);
+  /* owner decision after V7.2: no green. red < orange < yellow below 80%, blue from 80% (STRONG). *-text = readable on paper */
+  --band-attention: oklch(0.7 0.17 50);
+  --band-attention-text: oklch(0.47 0.12 48);
+  --band-adequate: oklch(0.83 0.15 95);
+  --band-adequate-text: oklch(0.47 0.09 85);
+  --band-strong: oklch(0.55 0.17 255);
+  --band-strong-text: oklch(0.45 0.15 258);
   --band-none: oklch(0.72 0.02 260);
 }
 :root[data-theme-mode="dark"] {
   --band-critical: oklch(0.68 0.18 25);
   --band-critical-text: oklch(0.82 0.11 25);
-  --band-attention: oklch(0.8 0.14 78);
-  --band-adequate: oklch(0.74 0.12 232);
-  --band-strong: oklch(0.78 0.15 155);
+  --band-attention: oklch(0.78 0.15 55);
+  --band-attention-text: oklch(0.82 0.11 55);
+  --band-adequate: oklch(0.87 0.14 98);
+  --band-adequate-text: oklch(0.88 0.11 98);
+  --band-strong: oklch(0.72 0.14 250);
+  --band-strong-text: oklch(0.82 0.09 250);
   --band-none: oklch(0.45 0.02 262);
 }
 

@@ -1,0 +1,177 @@
+{
+  "screen": "materials",
+  "found": true,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "selectedTheme": "paper",
+  "totals": {
+    "headings": 3,
+    "buttons": 7,
+    "inputs": 2,
+    "selects": 1,
+    "cards": 1,
+    "themeOptions": 0
+  },
+  "themeGroups": [],
+  "elements": [
+    {
+      "role": "h1",
+      "id": "title-materials",
+      "label": "Materiais",
+      "x": 262,
+      "y": 129,
+      "width": 1132,
+      "height": 49,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "43px"
+    },
+    {
+      "role": "h2",
+      "id": null,
+      "label": "Um novo ponto de partida.",
+      "x": 299,
+      "y": 263,
+      "width": 891,
+      "height": 38,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(255, 255, 255)",
+      "font": "32px"
+    },
+    {
+      "role": "button",
+      "id": "sources-choose-file",
+      "label": "+ Adicionar PDF",
+      "x": 1218,
+      "y": 287,
+      "width": 139,
+      "height": 47,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(48, 35, 79)",
+      "font": "12px"
+    },
+    {
+      "role": "input",
+      "id": "sources-file-input",
+      "label": "Arquivo PDF",
+      "x": 1217,
+      "y": 286,
+      "width": 26,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "h3",
+      "id": "sources-existing-title",
+      "label": "Sua biblioteca",
+      "x": 262,
+      "y": 416,
+      "width": 1132,
+      "height": 29,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "23px"
+    },
+    {
+      "role": "input",
+      "id": "sources-library-search",
+      "label": "Título do PDF ou documento",
+      "x": 280,
+      "y": 522,
+      "width": 612,
+      "height": 38,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    },
+    {
+      "role": "select",
+      "id": "sources-library-sort",
+      "label": "Ordem original Nome (A–Z) Nome (Z–A) Mais páginas primeiro",
+      "x": 904,
+      "y": 522,
+      "width": 310,
+      "height": 38,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Costanzo — Fisiologia",
+      "x": 1190,
+      "y": 614,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Costanzo — Fisiologia",
+      "x": 1300,
+      "y": 615,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Guyton & Hall — Fisiologia Médica",
+      "x": 1190,
+      "y": 703,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Guyton & Hall — Fisiologia Médica",
+      "x": 1300,
+      "y": 705,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Moore — Anatomia Clínica",
+      "x": 1190,
+      "y": 792,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Moore — Anatomia Clínica",
+      "x": 1300,
+      "y": 794,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    }
+  ],
+  "jsErrors": []
+}

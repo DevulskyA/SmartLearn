@@ -1,0 +1,22 @@
+/** PT-BR UI copy; separated for the host catalogue migration. */
+export const COPY = Object.freeze({
+    appSection: 'Seu espa\u00e7o de aprendizagem',
+    library: 'Biblioteca', backLibrary: 'Voltar \u00e0 biblioteca',
+    selectedSource: 'Material selecionado', scopeTitle: 'Quais p\u00e1ginas voc\u00ea vai estudar?',
+    scopeHint: 'Escolha o intervalo. O SmartLearn prepara o resumo e as quest\u00f5es desse conte\u00fado.',
+    sourcePages: 'P\u00e1ginas do PDF', advanced: 'Outras formas de selecionar',
+    sourceContents: 'Explorar os conte\u00fados do documento',
+    sourceSearch: 'Buscar neste documento', sourceSearchPlaceholder: 'T\u00edtulo ou p\u00e1gina',
+    planSearch: 'Buscar nas aulas', planSearchPlaceholder: 'Conte\u00fado, disciplina ou fonte',
+    emptySearch: 'Nenhum resultado. Ajuste a busca ou os filtros.',
+    previous: 'Anterior', next: 'Pr\u00f3xima', page: 'P\u00e1gina',
+    editTitle: 'Editar t\u00edtulo', cancelEdit: 'Cancelar edi\u00e7\u00e3o',
+    registerStudy: 'Registrar estudo', close: 'Fechar',
+    registerNote: 'Use a data em que voc\u00ea estudou este conte\u00fado. O resumo preparado pode continuar salvo para depois.',
+    studyDate: 'Data do estudo', readerHint: 'Resumo e quest\u00f5es permanecem salvos enquanto voc\u00ea confere.',
+    readMode: 'Leitura focada', returnMode: 'Voltar \u00e0 navega\u00e7\u00e3o',
+    invalidRange: 'Confira as p\u00e1ginas antes de continuar.',
+    continueWork: 'Continue de onde parou', preparing: 'Preparando conte\u00fado',
+    showSource: 'Conferir fonte', newSource: 'Adicionar PDF',
+    count: (first, last, total) => total ? `${first}\u2013${last} de ${total}` : 'Nenhum resultado',
+});

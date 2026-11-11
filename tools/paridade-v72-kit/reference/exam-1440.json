@@ -1,0 +1,189 @@
+{
+  "screen": "exam",
+  "found": true,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "selectedTheme": "paper",
+  "totals": {
+    "headings": 2,
+    "buttons": 8,
+    "inputs": 4,
+    "selects": 0,
+    "cards": 1,
+    "themeOptions": 0
+  },
+  "themeGroups": [],
+  "elements": [
+    {
+      "role": "h1",
+      "id": "title-exam",
+      "label": "Prova",
+      "x": 368,
+      "y": 129,
+      "width": 802,
+      "height": 49,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "43px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "← Voltar ao Plano",
+      "x": 1186,
+      "y": 145,
+      "width": 102,
+      "height": 32,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(100, 55, 227)",
+      "font": "12px"
+    },
+    {
+      "role": "h2",
+      "id": null,
+      "label": "Seus conhecimentos em prática",
+      "x": 398,
+      "y": 252,
+      "width": 291,
+      "height": 26,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "20px"
+    },
+    {
+      "role": "input",
+      "id": null,
+      "label": "0",
+      "x": 420,
+      "y": 421,
+      "width": 17,
+      "height": 17,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "font": "13.3333px"
+    },
+    {
+      "role": "input",
+      "id": null,
+      "label": "1",
+      "x": 420,
+      "y": 485,
+      "width": 17,
+      "height": 17,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "font": "13.3333px"
+    },
+    {
+      "role": "input",
+      "id": null,
+      "label": "2",
+      "x": 420,
+      "y": 548,
+      "width": 17,
+      "height": 17,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "font": "13.3333px"
+    },
+    {
+      "role": "input",
+      "id": null,
+      "label": "3",
+      "x": 420,
+      "y": 612,
+      "width": 17,
+      "height": 17,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "font": "13.3333px"
+    },
+    {
+      "role": "button",
+      "id": "exam-prev-btn",
+      "label": "Anterior",
+      "x": 398,
+      "y": 665,
+      "width": 79,
+      "height": 40,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    },
+    {
+      "role": "button",
+      "id": "exam-next-btn",
+      "label": "Próxima",
+      "x": 486,
+      "y": 665,
+      "width": 79,
+      "height": 40,
+      "background": "rgb(100, 55, 227)",
+      "color": "rgb(255, 255, 255)",
+      "font": "12px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Questão 1",
+      "x": 398,
+      "y": 723,
+      "width": 36,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Questão 2",
+      "x": 441,
+      "y": 723,
+      "width": 36,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Questão 3",
+      "x": 484,
+      "y": 723,
+      "width": 36,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Questão 4",
+      "x": 527,
+      "y": 723,
+      "width": 36,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": "exam-submit-btn",
+      "label": "Concluir prova",
+      "x": 398,
+      "y": 777,
+      "width": 117,
+      "height": 40,
+      "background": "rgb(100, 55, 227)",
+      "color": "rgb(255, 255, 255)",
+      "font": "12px"
+    }
+  ],
+  "jsErrors": []
+}

@@ -140,8 +140,8 @@ test("performanceColor: 60% é amarelo puro (stop exato no ponto)", () => {
   assert.equal(performanceColor(60, 100), 'rgb(234, 179, 8)');
 });
 
-test("performanceColor: 100% é verde puro (stop final exato)", () => {
-  assert.equal(performanceColor(100, 100), 'rgb(22, 163, 74)');
+test("performanceColor: 100% é azul-escuro (stop final exato)", () => {
+  assert.equal(performanceColor(100, 100), 'rgb(30, 58, 138)');
 });
 
 test("performanceColor: A=20% interpola entre vermelho e amarelo", () => {
@@ -152,17 +152,26 @@ test("performanceColor: B=49% ainda no segmento vermelho->amarelo", () => {
   assert.equal(performanceColor(49, 100), 'rgb(231, 153, 14)');
 });
 
-test("performanceColor: D=70% interpola entre amarelo e verde", () => {
-  assert.equal(performanceColor(70, 100), 'rgb(181, 175, 25)');
+test("performanceColor: D=70% e 79% seguem amarelos (sem verde entre amarelo e azul)", () => {
+  assert.equal(performanceColor(70, 100), 'rgb(234, 179, 8)');
+  assert.equal(performanceColor(79, 100), 'rgb(234, 179, 8)');
 });
 
-test("performanceColor: E=80% interpola entre amarelo e verde", () => {
-  assert.equal(performanceColor(80, 100), 'rgb(128, 171, 41)');
+test("performanceColor: E=80% começa o azul", () => {
+  assert.equal(performanceColor(80, 100), 'rgb(59, 130, 246)');
 });
 
-test("performanceColor: F=95% próximo do verde (componente verde dominante)", () => {
+test("performanceColor: F=95% é azul (componente azul dominante) e mais escuro que 80%", () => {
   const [r, g, b] = rgbComponents(performanceColor(95, 100));
-  assert.ok(g > r && g > b, `esperava verde dominante em 95%, recebi rgb(${r},${g},${b})`);
+  assert.ok(b > r && b > g, `esperava azul dominante em 95%, recebi rgb(${r},${g},${b})`);
+  assert.ok(b < 246, 'azul a 95% deve ser mais escuro que o de 80%');
+});
+
+test("performanceColor: nenhuma nota de 0 a 100 produz verde dominante", () => {
+  for (let pct = 0; pct <= 100; pct += 1) {
+    const [r, g, b] = rgbComponents(performanceColor(pct, 100));
+    assert.ok(!(g > r && g > b), `${pct}% resultou em verde dominante rgb(${r},${g},${b})`);
+  }
 });
 
 test("performanceColor: G sem evidência é neutro, nunca vermelho", () => {
@@ -171,11 +180,11 @@ test("performanceColor: G sem evidência é neutro, nunca vermelho", () => {
   assert.doesNotMatch(PERFORMANCE_COLOR_NEUTRAL, /^rgb\(/);
 });
 
-test("performanceColor: 20% é claramente pior que 95% (componente vermelho maior, verde menor)", () => {
-  const [rA, gA] = rgbComponents(performanceColor(20, 100));
-  const [rF, gF] = rgbComponents(performanceColor(95, 100));
+test("performanceColor: 20% é claramente pior que 95% (mais vermelho, menos azul)", () => {
+  const [rA, , bA] = rgbComponents(performanceColor(20, 100));
+  const [rF, , bF] = rgbComponents(performanceColor(95, 100));
   assert.ok(rA > rF, `vermelho de 20% (${rA}) deveria ser maior que o de 95% (${rF})`);
-  assert.ok(gA < gF, `verde de 20% (${gA}) deveria ser menor que o de 95% (${gF})`);
+  assert.ok(bA < bF, `azul de 20% (${bA}) deveria ser menor que o de 95% (${bF})`);
 });
 
 test("performanceColor: subjectColor não altera performanceColor (mesma accuracy, cores de disciplina diferentes)", () => {

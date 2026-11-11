@@ -30,10 +30,11 @@ const realDir = real?.dir;
 const dataDir = mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
 
 if (!useSeed) {
-  // read-only on the original: plain file copies (database, its write-ahead log and shared-memory index, and the stored PDFs)
-  for (const suffix of ['.db', '.db-wal', '.db-shm']) {
-    if (existsSync(join(realDir, real.base + suffix))) cpSync(join(realDir, real.base + suffix), join(dataDir, 'preview' + suffix));
-  }
+  // read-only on the original: a transactionally consistent snapshot (VACUUM INTO reads one read transaction, WAL included),
+  // never a raw file copy of .db/-wal/-shm that could capture a half-written state while the owner's app writes
+  const original = new DatabaseSync(join(realDir, `${real.base}.db`), { readOnly: true });
+  original.exec(`VACUUM INTO '${join(dataDir, 'preview.db').replaceAll("'", "''")}'`);
+  original.close();
   if (existsSync(join(realDir, 'sources'))) cpSync(join(realDir, 'sources'), join(dataDir, 'sources'), { recursive: true });
   // the copy must be a healthy database before anything runs on it
   const copy = new DatabaseSync(join(dataDir, 'preview.db'));

@@ -273,6 +273,8 @@
 .sl-redesign #screen-today #today-primary-action-btn { background:#fff6e5;color:#392654;border-color:#fff6e5;min-height:42px;padding-inline:19px;box-shadow:0 4px 8px #22163420; }
 .sl-redesign #screen-today #today-focus-review-btn { background:transparent;border-color:#d5bdf4;color:#fff; }
 .sl-redesign .review-dashboard { display:grid;grid-template-columns:1fr 1fr;gap:25px; }
+/* only one block shown (e.g. just overdue reviews): use the full width instead of leaving a column empty */
+.sl-redesign .review-dashboard:not(:has(> .review-block:not([hidden]) ~ .review-block:not([hidden]))) { grid-template-columns:1fr; }
 .sl-redesign .review-block { min-width:0; }
 .sl-redesign .block-heading { display:flex;align-items:center;gap:8px;margin:0 0 13px; }
 .sl-redesign .block-heading h2 { font:normal 23px/1.25 var(--sl-serif);letter-spacing:-.65px;margin:0; }
@@ -570,20 +572,20 @@
 .sl-redesign .sl-search input[type='search'] { border:0 !important;background:transparent !important;box-shadow:none !important;outline:0;min-width:0; }
 .sl-redesign .sl-search:focus-within { outline:3px solid var(--sl-accent);outline-offset:2px; }
 /* V3: design tokens are inherited from the native SmartLearn authority.
-   ADEQUATE is blue and STRONG is green, as in the original 83716ca palette.
+   Owner decision after V7.2: no green; ADEQUATE is yellow, STRONG is blue (darker toward 100%).
    sRGB fallbacks are used only by the standalone demonstration. */
 :root.sl-redesign {
   --sl-grade-critical: var(--band-critical-text, #a32c3a);
-  --sl-grade-attention: var(--band-attention, #945500);
-  --sl-grade-adequate: var(--band-adequate, #285caa);
-  --sl-grade-strong: var(--band-strong, #167449);
+  --sl-grade-attention: var(--band-attention-text, #8a3b00);
+  --sl-grade-adequate: var(--band-adequate-text, #6f5200);
+  --sl-grade-strong: var(--band-strong-text, #1b49a0);
   --sl-grade-unmeasured: var(--color-muted, #746b7f);
 }
 :root.sl-redesign:is([data-theme='night'],[data-theme='contrast'],[data-theme-mode='dark']) {
   --sl-grade-critical: var(--band-critical-text, #ff9ba5);
-  --sl-grade-attention: var(--band-attention, #ffd389);
-  --sl-grade-adequate: var(--band-adequate, #92c6ff);
-  --sl-grade-strong: var(--band-strong, #83e4ab);
+  --sl-grade-attention: var(--band-attention-text, #ffb98a);
+  --sl-grade-adequate: var(--band-adequate-text, #f3d46a);
+  --sl-grade-strong: var(--band-strong-text, #9ccaff);
   --sl-grade-unmeasured: var(--color-muted, #bcb4ce);
 }
 /* One identifying cue instead of four competing marks. Its solid left edge
@@ -1732,9 +1734,13 @@
 /* TODAY: jewel-color action area plus still legible neutral review cards. */
 .sl-redesign #screen-today .primary-action-banner {
   color:#fff;
+  /* texto branco fixo: o fundo nunca passa de luminosidade oklch .50 (contraste AA >= 4,5:1 em qualquer tema, claro ou escuro) */
   background:
     radial-gradient(ellipse 320px 190px at 90% 15%,color-mix(in srgb,var(--sl-live-bright) 76%,transparent),transparent 82%),
-    linear-gradient(107deg,var(--sl-hero-deep),color-mix(in srgb,var(--sl-accent) 74%,#2648ba));
+    linear-gradient(107deg,color-mix(in srgb,var(--sl-hero-deep) 70%,#000),color-mix(in srgb,var(--sl-accent) 50%,#000));
+  background:
+    radial-gradient(ellipse 320px 190px at 90% 15%,oklch(from var(--sl-live-bright) min(l,.5) c h / .76),transparent 82%),
+    linear-gradient(107deg,oklch(from var(--sl-hero-deep) min(l,.4) c h),oklch(from color-mix(in srgb,var(--sl-accent) 74%,#2648ba) min(l,.5) c h));
   border:1px solid color-mix(in srgb,var(--sl-accent) 66%,var(--sl-live));
   box-shadow:0 14px 34px color-mix(in srgb,var(--sl-accent) 26%,transparent);
 }

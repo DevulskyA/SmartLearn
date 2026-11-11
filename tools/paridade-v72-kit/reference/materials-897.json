@@ -1,0 +1,177 @@
+{
+  "screen": "materials",
+  "found": true,
+  "viewport": {
+    "width": 897,
+    "height": 713
+  },
+  "selectedTheme": "paper",
+  "totals": {
+    "headings": 3,
+    "buttons": 7,
+    "inputs": 2,
+    "selects": 1,
+    "cards": 1,
+    "themeOptions": 0
+  },
+  "themeGroups": [],
+  "elements": [
+    {
+      "role": "h1",
+      "id": "title-materials",
+      "label": "Materiais",
+      "x": 241,
+      "y": 121,
+      "width": 631,
+      "height": 35,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "31px"
+    },
+    {
+      "role": "h2",
+      "id": null,
+      "label": "Um novo ponto de partida.",
+      "x": 278,
+      "y": 240,
+      "width": 419,
+      "height": 31,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(255, 255, 255)",
+      "font": "26px"
+    },
+    {
+      "role": "button",
+      "id": "sources-choose-file",
+      "label": "+ Adicionar PDF",
+      "x": 278,
+      "y": 354,
+      "width": 139,
+      "height": 47,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(48, 35, 79)",
+      "font": "12px"
+    },
+    {
+      "role": "input",
+      "id": "sources-file-input",
+      "label": "Arquivo PDF",
+      "x": 277,
+      "y": 353,
+      "width": 26,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "h3",
+      "id": "sources-existing-title",
+      "label": "Sua biblioteca",
+      "x": 241,
+      "y": 458,
+      "width": 631,
+      "height": 29,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "23px"
+    },
+    {
+      "role": "input",
+      "id": "sources-library-search",
+      "label": "Título do PDF ou documento",
+      "x": 259,
+      "y": 564,
+      "width": 343,
+      "height": 38,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    },
+    {
+      "role": "select",
+      "id": "sources-library-sort",
+      "label": "Ordem original Nome (A–Z) Nome (Z–A) Mais páginas primeiro",
+      "x": 614,
+      "y": 564,
+      "width": 240,
+      "height": 38,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Costanzo — Fisiologia",
+      "x": 673,
+      "y": 684,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Costanzo — Fisiologia",
+      "x": 778,
+      "y": 686,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Guyton & Hall — Fisiologia Médica",
+      "x": 673,
+      "y": 774,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Guyton & Hall — Fisiologia Médica",
+      "x": 778,
+      "y": 775,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Abrir Moore — Anatomia Clínica",
+      "x": 673,
+      "y": 863,
+      "width": 96,
+      "height": 36,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(84, 34, 170)",
+      "font": "11px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Remover Moore — Anatomia Clínica",
+      "x": 778,
+      "y": 864,
+      "width": 71,
+      "height": 33,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(83, 96, 119)",
+      "font": "11px"
+    }
+  ],
+  "jsErrors": []
+}

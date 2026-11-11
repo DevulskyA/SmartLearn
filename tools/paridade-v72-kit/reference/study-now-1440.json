@@ -1,0 +1,93 @@
+{
+  "screen": "study-now",
+  "found": true,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "selectedTheme": "paper",
+  "totals": {
+    "headings": 3,
+    "buttons": 3,
+    "inputs": 0,
+    "selects": 0,
+    "cards": 2,
+    "themeOptions": 0
+  },
+  "themeGroups": [],
+  "elements": [
+    {
+      "role": "h1",
+      "id": "title-study-now",
+      "label": "Filtração glomerular",
+      "x": 368,
+      "y": 129,
+      "width": 802,
+      "height": 49,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "43px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "← Voltar ao Plano",
+      "x": 1186,
+      "y": 145,
+      "width": 102,
+      "height": 32,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(100, 55, 227)",
+      "font": "12px"
+    },
+    {
+      "role": "h2",
+      "id": null,
+      "label": "Resumo Mestre",
+      "x": 398,
+      "y": 241,
+      "width": 105,
+      "height": 20,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "15px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Consultar resumo",
+      "x": 1155,
+      "y": 235,
+      "width": 103,
+      "height": 32,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(100, 55, 227)",
+      "font": "12px"
+    },
+    {
+      "role": "h2",
+      "id": null,
+      "label": "Praticar",
+      "x": 398,
+      "y": 412,
+      "width": 71,
+      "height": 26,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "20px"
+    },
+    {
+      "role": "button",
+      "id": "study-now-reveal-btn",
+      "label": "Ver resposta",
+      "x": 398,
+      "y": 551,
+      "width": 104,
+      "height": 40,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    }
+  ],
+  "jsErrors": []
+}

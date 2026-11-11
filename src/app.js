@@ -5322,7 +5322,7 @@ function renderThemePicker(preference = currentThemePreference) {
       const swatch = document.createElement("span");
       swatch.className = "sl-theme-swatch";
       swatch.setAttribute("aria-hidden", "true");
-      swatch.style.cssText = `--swatch-bg:${tokens["--color-bg"]};--swatch-paper:${tokens["--color-surface"]};--swatch-ink:${tokens["--color-text"]};--swatch-accent:${tokens["--color-primary"]};--swatch-soft:${tokens["--color-primary-soft"]}`;
+      for (const [name, token] of [["--swatch-bg", "--color-bg"], ["--swatch-paper", "--color-surface"], ["--swatch-ink", "--color-text"], ["--swatch-accent", "--color-primary"], ["--swatch-soft", "--color-primary-soft"]]) swatch.style.setProperty(name, tokens[token]);
       const name = document.createElement("strong");
       name.textContent = option.label;
       const description = document.createElement("small");

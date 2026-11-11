@@ -1,0 +1,153 @@
+{
+  "screen": "register",
+  "found": true,
+  "viewport": {
+    "width": 897,
+    "height": 713
+  },
+  "selectedTheme": "paper",
+  "totals": {
+    "headings": 1,
+    "buttons": 3,
+    "inputs": 4,
+    "selects": 1,
+    "cards": 0,
+    "themeOptions": 0
+  },
+  "themeGroups": [],
+  "elements": [
+    {
+      "role": "h1",
+      "id": "title-register",
+      "label": "Nova aula",
+      "x": 241,
+      "y": 121,
+      "width": 513,
+      "height": 35,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(32, 38, 64)",
+      "font": "31px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "← Voltar ao Plano",
+      "x": 770,
+      "y": 152,
+      "width": 102,
+      "height": 32,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(100, 55, 227)",
+      "font": "12px"
+    },
+    {
+      "role": "select",
+      "id": "register-subject",
+      "label": "Fisiologia Anatomia Farmacologia Patologia Bioquímica Semiologia",
+      "x": 268,
+      "y": 264,
+      "width": 280,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "input",
+      "id": "register-date",
+      "label": "2026-11-10",
+      "x": 566,
+      "y": 264,
+      "width": 280,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "input",
+      "id": "register-title",
+      "label": "Ex.: Transporte pela membrana celular",
+      "x": 268,
+      "y": 350,
+      "width": 577,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "input",
+      "id": "register-source",
+      "label": "Ex.: Costanzo, páginas 13 a 21",
+      "x": 268,
+      "y": 435,
+      "width": 577,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "textarea",
+      "id": "register-summary",
+      "label": "Cole ou escreva seu resumo. Você pode editar depois.",
+      "x": 268,
+      "y": 521,
+      "width": 577,
+      "height": 194,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "summary",
+      "id": null,
+      "label": "A aula aconteceu em outra data?",
+      "x": 268,
+      "y": 751,
+      "width": 577,
+      "height": 19,
+      "background": "rgba(0, 0, 0, 0)",
+      "color": "rgb(100, 55, 227)",
+      "font": "12px"
+    },
+    {
+      "role": "input",
+      "id": "register-lesson-date",
+      "label": "",
+      "x": 268,
+      "y": 813,
+      "width": 577,
+      "height": 42,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "13px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Registrar estudo",
+      "x": 268,
+      "y": 789,
+      "width": 127,
+      "height": 40,
+      "background": "rgb(100, 55, 227)",
+      "color": "rgb(255, 255, 255)",
+      "font": "12px"
+    },
+    {
+      "role": "button",
+      "id": null,
+      "label": "Cancelar",
+      "x": 405,
+      "y": 789,
+      "width": 83,
+      "height": 40,
+      "background": "rgb(255, 255, 255)",
+      "color": "rgb(32, 38, 64)",
+      "font": "12px"
+    }
+  ],
+  "jsErrors": []
+}
