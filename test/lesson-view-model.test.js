@@ -64,7 +64,7 @@ test("COPY: copying the summary returns only the summary; copying a question onl
   assert.equal(copyTextOf(draft, "summary"), draft.summary);
   assert.equal(copyTextOf(draft, "q1"), "P1?\n\nR1\n\nE1");
   assert.equal(copyTextOf(draft, "q2"), "P2?\n\nR2");
-  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar rascunho|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece|Poucas palavras em comum|Palavra que a fonte não repete|Palavra que a página citada não repete/;
+  const UI_WORDS = /Corrigir|Sinalizada|Salvar|Ver trecho|Gerar resumo|Nova disciplina|Aceitar e criar|Pouco apoio|Termo que não aparece|Poucas palavras em comum|Palavra que a fonte não repete|Palavra que a página citada não repete/;
   for (const part of ["summary", "q1", "q2", "q3", "q4"]) assert.doesNotMatch(copyTextOf(draft, part), UI_WORDS);
   assert.equal(copyTextOf(draft, "nope"), "");
 });
@@ -114,7 +114,7 @@ test("jobElapsedMs counts from when the job started running (or was created whil
 test("jobFailureMessage: a typed error code becomes plain Portuguese; the raw server text is never the only thing shown", () => {
   for (const errorCode of ["PROVIDER_ERROR", "TIMEOUT", "SERVER_RESTARTED", "INTERNAL_ERROR", "BUDGET_EXCEEDED", "LANGUAGE_MISMATCH", "SCOPE_CHANGED", "WHATEVER_NEW"]) {
     const text = jobFailureMessage(job({ state: "FAILED", errorCode, errorMessage: "ProviderRequestError: boom" }));
-    assert.match(text, /^Não foi possível gerar o rascunho/, errorCode);
+    assert.match(text, /^Não foi possível gerar o resumo/, errorCode);
     assert.doesNotMatch(text, /ProviderRequestError|boom|undefined|null/, errorCode);
     assert.match(text, /Nada foi salvo/, errorCode);
   }
@@ -173,13 +173,13 @@ test("findings are grouped by WHY they were raised, most serious cause first; a 
 
 test("the header state follows the REAL state of the draft: draft -> pending critical items -> accepted; the automatic check never changes it", () => {
   const open = (extra = {}) => ({ status: "DRAFT", acceptanceBlockers: { questions: [], summary: 0 }, ...extra });
-  assert.deepEqual(draftState(open()), { key: "draft", label: "Rascunho gerado por IA — aguardando sua conferência", pending: 0 });
+  assert.deepEqual(draftState(open()), { key: "draft", label: "Resumo gerado por IA — aguardando sua conferência", pending: 0 });
   assert.equal(draftState({ status: "DRAFT" }).key, "draft", "a draft without the blockers field is still just a draft");
   // critical points waiting for the person: one question, then the summary and two questions
   const one = draftState(open({ acceptanceBlockers: { questions: ["q2"], summary: 0 } }));
-  assert.deepEqual(one, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 1 item crítico", pending: 1 });
+  assert.deepEqual(one, { key: "pending", label: "Resumo gerado por IA — conferência pendente: 1 item crítico", pending: 1 });
   const many = draftState(open({ acceptanceBlockers: { questions: ["q1", "q2"], summary: 3 } }));
-  assert.deepEqual(many, { key: "pending", label: "Rascunho gerado por IA — conferência pendente: 3 itens críticos", pending: 3 });
+  assert.deepEqual(many, { key: "pending", label: "Resumo gerado por IA — conferência pendente: 3 itens críticos", pending: 3 });
   // resolving them (the server answers with an empty list) brings the draft back to waiting for the person
   assert.equal(draftState(open({ acceptanceBlockers: { questions: [], summary: 0 } })).key, "draft");
   // accepted: by this window, or because the server says so, whatever blockers were left over

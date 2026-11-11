@@ -18,7 +18,7 @@ import { startEditingSummary } from './support/summary-editing.js';
 const SERVER_PORT = serverPort(13971);
 const API_BASE = `http://localhost:${SERVER_PORT}`;
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
-const UI_WORDS = /Corrigir|Salvar|Ver trecho|Gerar rascunho|Aceitar e criar|Criar nova disciplina|Voltar às unidades/;
+const UI_WORDS = /Corrigir|Salvar|Ver trecho|Gerar resumo|Aceitar e criar|Criar nova disciplina|Voltar às unidades/;
 
 let serverProcess;
 let dataDir;
@@ -360,7 +360,7 @@ test('a draft in progress is listed under "Rascunhos em andamento", outside the 
   await expect(box).toBeVisible();
   await expect(box.locator('.source-draft-item')).toHaveCount(1);
   await expect(page.locator('#sources-index').locator('#sources-drafts')).toHaveCount(0);
-  await box.getByRole('button', { name: /Abrir rascunho/ }).click();
+  await box.getByRole('button', { name: /Revisar resumo/ }).click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
@@ -381,7 +381,7 @@ test('a legacy draft (no stored scope) still names its document and pages in the
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'legado.pdf' }).locator('[data-action="open-source"]').click();
-  await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
+  await page.locator('#sources-drafts').getByRole('button', { name: /Revisar resumo/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -414,7 +414,7 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'regras.pdf' }).locator('[data-action="open-source"]').click();
-  await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
+  await page.locator('#sources-drafts').getByRole('button', { name: /Revisar resumo/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -470,7 +470,7 @@ test('a critical finding stops the acceptance until the reviewer resolves it: qu
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'critico.pdf' }).locator('[data-action="open-source"]').click();
-  await page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ }).first().click();
+  await page.locator('#sources-drafts').getByRole('button', { name: /Revisar resumo/ }).first().click();
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);

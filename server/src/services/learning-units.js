@@ -3,6 +3,7 @@ import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-
 import { checkIdempotency, recordIdempotency } from './idempotency.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { dm, splitMessage } from '../api-error-messages.js';
+import { firstUnusedColor } from './subjects.js';
 
 export class LearningUnitError extends Error {
   constructor(code, message, field) {
@@ -86,7 +87,7 @@ export function describeSubject(db, userId, { subjectId, newSubjectName, newSubj
       throw new LearningUnitError('SUBJECT_CONFLICT', dm(existing.is_active ? 'SUBJECT_NAME_CONFLICT' : 'SUBJECT_ARCHIVED_NAME_CONFLICT'), 'newSubjectName');
     }
 
-    return { existing: null, create: { name: normalizeEntityName(newSubjectName), color: newSubjectColor || 'DISC-BLUE' } };
+    return { existing: null, create: { name: normalizeEntityName(newSubjectName), color: newSubjectColor || firstUnusedColor(db, userId) } };
   }
 
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 4: found in a real manual journey —

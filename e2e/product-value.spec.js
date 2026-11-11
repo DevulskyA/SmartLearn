@@ -105,7 +105,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
 
   // 6. Draft generation using the deterministic test provider.
   await item.locator('[data-action="generate-draft"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 10000 });
   const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
   await draftPanel.getByRole('tab', { name: /Questões/ }).click();
@@ -256,14 +256,14 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
     const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });
     return res.json();
   }, API_BASE);
-  expect(unitsAfter.units.length).toBe(1);
+  expect(unitsAfter.units).toHaveLength(1);
   const unitId = unitsAfter.units[0].id;
 
   const evidenceAfter = await page.evaluate(async ({ base, id }) => {
     const res = await fetch(`${base}/v1/learning-evidence?unitId=${id}`, { credentials: 'include' });
     return res.json();
   }, { base: API_BASE, id: unitId });
-  expect(evidenceAfter.evidence.length).toBe(1);
+  expect(evidenceAfter.evidence).toHaveLength(1);
   expect(evidenceAfter.evidence[0].type).toBe('INITIAL_PRACTICE');
   expect(evidenceAfter.evidence[0].questionsCount).toBe(2);
   expect(evidenceAfter.evidence[0].correctCount).toBe(1);
@@ -273,7 +273,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
     const res = await fetch(`${base}/v1/review-tasks?unitId=${id}`, { credentials: 'include' });
     return res.json();
   }, { base: API_BASE, id: unitId });
-  expect(reviewTasksAfter.reviewTasks.length).toBe(16);
+  expect(reviewTasksAfter.reviewTasks).toHaveLength(16);
   expect(reviewTasksAfter.reviewTasks.every((t) => t.completedAt === null)).toBe(true);
 
   // 16. Next review is shown, and matches the earliest real pending due date.
@@ -296,7 +296,7 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
     const res = await fetch(`${base}/v1/learning-evidence?unitId=${id}`, { credentials: 'include' });
     return res.json();
   }, { base: API_BASE, id: unitId });
-  expect(evidenceAfterReload.evidence.length).toBe(1);
+  expect(evidenceAfterReload.evidence).toHaveLength(1);
 });
 
 test('REMOTE_AUTHORITY without LOCAL_AUTHORITY: Materiais is in the menu but shows only a notice, never the library', async ({ page }) => {

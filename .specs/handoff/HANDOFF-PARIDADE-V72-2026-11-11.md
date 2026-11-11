@@ -65,6 +65,21 @@ Verificador do kit (só estrutura, não mede cor nem fonte): Hoje 15 divergênci
 
 Parte das diferenças em Hoje e Plano é de **dados** (o V7.2 usa conteúdo de demonstração; o app usa os dados do dono). Não "corrigir" título, data ou contagem.
 
+### 3.4 Contrato cromático V7.2 (decisão posterior do dono; prevalece sobre o V7.2 em desempenho)
+
+- **Desempenho (texto):** `--band-*-text` em `src/styles.css` = `#B4232E` / `#9A3412` / `#854D0E` / `#1E40AF` (claro) e `#FDA4AF` / `#FDBA74` / `#FDE68A` / `#93C5FD` (escuro). Medido no navegador (Paper e Noite): texto sobre a etiqueta tingida >= 5,17:1.
+- **Desempenho (preenchimento):** `--band-*` (barras, medidores, segmentos) = `#DC2626` / `#EA580C` / `#F59E0B` / `#2563EB` (claro) e `#F87171` / `#FB923C` / `#FBBF24` / `#60A5FA` (escuro). Em `experience.css` os consumidores de preenchimento usam `--sl-fill-*`; texto usa `--sl-grade-*`. O âmbar sobre o papel claro mede 2,15:1, então todo preenchimento ganhou contorno na cor de texto da faixa (contrato D.4).
+- **`performanceColor`** (`src/performance-thresholds.js`) interpola os pontos do contrato (0, 50, 65, 79,99, 80, 90, 100) para tema claro e escuro; abaixo de 10 questões é neutra. Testes em `test/performance-thresholds.test.js`.
+- **Rótulos:** 1-9 questões "Amostra insuficiente"; 0 questões "Sem evidência" (`screens.stats.v5.band.insufficient`, `screens.stats.v5.noEvidence`).
+- **Histórico de exercícios:** o percentual deixou de ser texto sem cor e usa a mesma etiqueta de faixa das outras tabelas (`gradeHtml` em `src/stats-history.js`), com a regra do mínimo de 10 questões.
+- **Etiquetas de disciplina:** faixa lateral de 7 px, fundo 34% (claro) e 35% (escuro) da cor, texto `--sl-ink`; também na tabela de Estatísticas (`.v5-subject`). Verde só identifica disciplina.
+- **Removido:** as quatro regras que misturavam 79% de tinta no texto das faixas em Estatísticas; elas apagavam a cor do contrato. O contraste é conferido por `e2e/accessibility.spec.js` nos 24 temas.
+- **Pares próximos** (azul/índigo, turquesa/ciano, vermelho/rose/rosa) conferidos renderizados em Paper e Noite: distinguíveis pelo matiz e pelo nome; sem ajuste.
+- **Leitura em Estatísticas (pedido do dono):** o V7.2 usa 9-11 px; medido antes, 55% do texto da página estava em 11 px ou menos. Piso novo de 12 px (13 px no texto corrido) só em `#screen-stats` (`experience.css`, 52 regras + a regra final). Sem overflow a 1440 e 390 px; o seletor "Ordem" ganhou largura para não cortar "Melhores primeiro". Divergência intencional do V7.2, por acessibilidade.
+- **Paleta de disciplinas:** 18 identidades (as 12 originais primeiro; mais fúcsia, ardósia, marrom, esmeralda, céu, oliva). O servidor escolhe a primeira cor ainda não usada quando a criação não informa cor.
+- **Exercícios da revisão (Hoje/Plano):** bloco nativo redesenhado só em CSS (numeração, painel de resposta, Acertei/Errei de 44 px); 44 px também no botão de resposta no celular.
+- **Não alterado (decisão do dono):** a cor de cada disciplina vem do dado. A cópia do banco da Homologação não tem cores atribuídas, por isso o preview real mostra tudo em azul.
+
 ## 4. Como rodar e medir
 
 ```bash
@@ -106,3 +121,10 @@ Para gerar o `state.json` sem digitar no formulário: `POST <API>/v1/auth/login`
 3. Plano: faixa de cabeçalho, contador, paginação e rodapé do V7.2.
 4. Comparar imagem a imagem Materiais, Configurações, Conta; depois Cadastro, Estudo, Prova.
 5. Fechar: lint, E2E completo, verificador final, jornada no WebView2 (login → PDF → resumo → questão → evidência → Estatísticas).
+
+## 6. Ajustes posteriores (2026-11-11)
+
+- **Conta (sessão iniciada):** uma coluna (identidade, atalhos, segurança, sair); "Continuar estudo" é o botão principal e leva ao Plano, como no V7.2 (`data-demo="go-plan"`). "Alterar senha" abre o formulário no lugar; "Sair" fica separado, em cor de alerta. Ids e comportamentos iguais (`#account-logout-btn`).
+- **Rascunho vira Resumo:** o texto visível ao usuário chama de "resumo" o que a IA gera e ainda não foi aceito (antes: "rascunho"). O botão que o abre é "Revisar resumo", para não se confundir com "Abrir Resumo" (já aceito). Textos em `src/i18n/locales/pt-BR/{editor,lesson,materials,status}.js`, `server/src/api-error-messages.js`, `server/src/ai/audit-messages.js`, `shared/import-warnings.js`; ids de código (`draft`, `DRAFT`) não mudaram.
+- **Paleta de 18 cores:** as seis novas têm nome em `subject.color.*`; `test/performance-thresholds.test.js` falha se uma cor da paleta ficar sem nome.
+- **Relatório de segurança rápida (18 alertas):** rotas "sem login" são falso positivo; `server/test/auth-default-deny.test.js` chama todas as rotas de `/v1` sem sessão e exige que nenhuma responda 2xx (só login, cadastro e redefinição são públicas). A senha da conta DEV continua como a decisão F-61 (só loopback, trava em `scripts/inspect-package.mjs`). Arquivos com mais de 1.000 linhas (`src/app.js`, `src/styles.css`) são dívida real, fora desta frente.

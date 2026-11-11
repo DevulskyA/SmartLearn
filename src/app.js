@@ -1829,7 +1829,10 @@ function getPlanPerfBadge(evidence) {
   // getState's states (STRONG/ADEQUATE/ATTENTION/CRITICAL) match dataset.perf's
   // own lowercase vocabulary exactly — see getPerformanceBandClass above for
   // why this delegates to getState instead of an independent threshold chain.
-  span.dataset.perf = getState(pct, total).toLowerCase();
+  // Contrato cromático V7.2: below MIN_SAMPLE_QUESTIONS the percentage is "Amostra insuficiente" in a neutral colour, never a confident band.
+  const enough = total >= MIN_SAMPLE_QUESTIONS;
+  span.dataset.perf = enough ? getState(pct, total).toLowerCase() : "insufficient";
+  if (!enough) span.title = t("screens.stats.v5.band.insufficient");
   span.textContent = formatPerformanceScore(pct);
   return span;
 }

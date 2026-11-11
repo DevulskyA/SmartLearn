@@ -10,6 +10,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { homedir, networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SUBJECT_COLOR_KEYS } from '../src/performance-thresholds.js';
 import { waitForServerReady } from '../e2e/support/wait-for-server.js';
 import { DatabaseSync } from 'node:sqlite';
 import { DEV_ACCOUNT, seedDev } from './seed-dev.mjs';
@@ -45,6 +46,14 @@ if (!useSeed) {
   const copy = new DatabaseSync(join(dataDir, 'preview.db'));
   const integrity = copy.prepare('PRAGMA integrity_check').get().integrity_check;
   const counts = Object.fromEntries(['users', 'subjects', 'learning_units', 'exercises', 'review_tasks', 'sources'].map((t) => [t, copy.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n]));
+  // The Homologacao store keeps every subject on the default DISC-BLUE, so a preview of it shows one colour. On the COPY ONLY (never the original),
+  // give subjects that all share one colour distinct identities, so the discipline colours of the redesign can be judged.
+  const used = new Set(copy.prepare('SELECT DISTINCT color FROM subjects').all().map((r) => r.color));
+  if (used.size === 1) {
+    const paint = copy.prepare('UPDATE subjects SET color = ? WHERE id = ?');
+    copy.prepare('SELECT id FROM subjects ORDER BY id').all().forEach((r, i) => paint.run(SUBJECT_COLOR_KEYS[i % SUBJECT_COLOR_KEYS.length], r.id));
+    console.log('[design-preview] the copy had a single subject colour; gave each subject its own (copy only)');
+  }
   copy.close();
   console.log(`[design-preview] copy of ${realDir} -> ${dataDir} (original untouched); integrity_check=${integrity}; rows=${JSON.stringify(counts)}`);
   if (integrity !== 'ok') { rmSync(dataDir, { recursive: true, force: true }); throw new Error('the copied database failed integrity_check'); }

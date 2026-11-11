@@ -11,7 +11,7 @@ const TEXT = {
   DEFAULTED_SORT_ORDER: ({ id }) => 'Disciplina ' + id + ' sem ordem na origem — usando ordem 0.',
   DEFAULTED_TIMESTAMP: ({ id }) => 'Unidade ' + id + ' sem createdAt/updatedAt na origem — usando a data de estudo.',
   UNKNOWN_FIELDS_IGNORED: ({ set, fields }) => `Campos desconhecidos em ${set} foram ignorados: ${fields}.`,
-  MATERIALS_NOT_RESTORED: () => 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, rascunhos, imagens dos resumos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
+  MATERIALS_NOT_RESTORED: () => 'Materiais não são restaurados: PDFs, fontes, páginas, propostas, resumos em revisão, imagens dos resumos e as citações de origem ficam de fora deste backup. Seus estudos, revisões, exercícios, tentativas e provas serão restaurados.',
   MEDIA_NOT_INCLUDED: () => 'Este arquivo foi exportado sem as imagens dos resumos: no lugar de cada figura há uma frase descritiva. Para recuperar as imagens use o backup operacional.',
 };
 

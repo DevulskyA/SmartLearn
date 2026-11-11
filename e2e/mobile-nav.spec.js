@@ -9,10 +9,10 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
 // Bottom navigation at phone width: EVERY visible destination must be inside
-// the viewport and tappable. The bar holds Hoje, Plano, Estatísticas and "Mais" (Materiais joins them only under
-// LOCAL_DESKTOP_AUTHORITY); Configurações and Conta sit behind "Mais" so each target stays large and each label legible.
+// the viewport and tappable. The bar holds Hoje, Materiais, Plano, Estatísticas and "Mais" (Materiais is always in the menu, as in V7.2;
+// without a local server its screen shows a notice); Configurações and Conta sit behind "Mais" so each target stays large and each label legible.
 for (const localAuthority of [false, true]) {
-  test(`375px bottom nav keeps every destination reachable (${localAuthority ? '5 items, Materiais visible' : '4 items'})`, async ({ page }) => {
+  test(`375px bottom nav keeps every destination reachable (5 items, Materiais always visible, ${localAuthority ? 'local server' : 'no local server'})`, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript((local) => {
       window.__SMARTLEARN_REMOTE_MODE__ = true;
@@ -22,7 +22,7 @@ for (const localAuthority of [false, true]) {
     await page.waitForLoadState('networkidle');
 
     const items = page.locator('.app-nav > .nav-item:visible');
-    await expect(items).toHaveCount(localAuthority ? 5 : 4);
+    await expect(items).toHaveCount(5);
     const boxes = await items.evaluateAll((els) => els.map((el) => {
       const r = el.getBoundingClientRect();
       return { name: el.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom };

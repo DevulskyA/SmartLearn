@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import ptBR from "../src/i18n/locales/pt-BR.js";
 import {
   getState,
   PERFORMANCE_STATES,
@@ -40,8 +41,10 @@ test("getState retorna CRITICAL quando accuracy < 50", () => {
   assert.equal(getState(49.9, 50), PERFORMANCE_STATES.CRITICAL);
 });
 
-test("SUBJECT_COLORS tem exatamente 12 entradas", () => {
-  assert.equal(SUBJECT_COLOR_KEYS.length, 12);
+test("SUBJECT_COLORS: as 12 identidades originais continuam as primeiras e há mais 6 (18 no total)", () => {
+  assert.deepEqual(SUBJECT_COLOR_KEYS.slice(0, 12), ['DISC-BLUE', 'DISC-GREEN', 'DISC-PURPLE', 'DISC-ORANGE', 'DISC-RED', 'DISC-TEAL', 'DISC-PINK', 'DISC-INDIGO', 'DISC-LIME', 'DISC-AMBER', 'DISC-CYAN', 'DISC-ROSE']);
+  assert.equal(SUBJECT_COLOR_KEYS.length, 18);
+  assert.equal(new Set(Object.values(SUBJECT_COLORS).map((c) => c.light)).size, 18, 'nenhuma cor clara repetida');
 });
 
 test("SUBJECT_COLORS inclui DISC-BLUE e DISC-ROSE", () => {
@@ -136,35 +139,54 @@ test("performanceColor: 0% é vermelho puro (stop inicial exato)", () => {
   assert.equal(performanceColor(0, 100), 'rgb(220, 38, 38)');
 });
 
-test("performanceColor: 60% é amarelo puro (stop exato no ponto)", () => {
-  assert.equal(performanceColor(60, 100), 'rgb(234, 179, 8)');
+test("performanceColor: 50% é laranja e 65% é âmbar (stops exatos do contrato V7.2)", () => {
+  assert.equal(performanceColor(50, 100), 'rgb(234, 88, 12)');
+  assert.equal(performanceColor(65, 100), 'rgb(245, 158, 11)');
 });
 
 test("performanceColor: 100% é azul-escuro (stop final exato)", () => {
   assert.equal(performanceColor(100, 100), 'rgb(30, 58, 138)');
 });
 
-test("performanceColor: A=20% interpola entre vermelho e amarelo", () => {
-  assert.equal(performanceColor(20, 100), 'rgb(225, 85, 28)');
+test("performanceColor: A=20% interpola entre vermelho e laranja", () => {
+  assert.equal(performanceColor(20, 100), 'rgb(226, 58, 28)');
 });
 
-test("performanceColor: B=49% ainda no segmento vermelho->amarelo", () => {
-  assert.equal(performanceColor(49, 100), 'rgb(231, 153, 14)');
+test("performanceColor: B=49% ainda no segmento vermelho->laranja, quase no laranja", () => {
+  assert.equal(performanceColor(49, 100), 'rgb(234, 87, 13)');
 });
 
-test("performanceColor: D=70% e 79% seguem amarelos (sem verde entre amarelo e azul)", () => {
-  assert.equal(performanceColor(70, 100), 'rgb(234, 179, 8)');
-  assert.equal(performanceColor(79, 100), 'rgb(234, 179, 8)');
+test("performanceColor: D=70% e 79% evoluem de âmbar a amarelo (sem verde entre amarelo e azul)", () => {
+  assert.equal(performanceColor(70, 100), 'rgb(241, 165, 10)');
+  assert.equal(performanceColor(79, 100), 'rgb(235, 178, 8)');
+  assert.equal(performanceColor(79.99, 100), 'rgb(234, 179, 8)');
 });
 
-test("performanceColor: E=80% começa o azul", () => {
-  assert.equal(performanceColor(80, 100), 'rgb(59, 130, 246)');
+test("performanceColor: E=80% começa o azul-claro e 90% é o azul médio", () => {
+  assert.equal(performanceColor(80, 100), 'rgb(96, 165, 250)');
+  assert.equal(performanceColor(90, 100), 'rgb(37, 99, 235)');
+});
+
+test("performanceColor: tema escuro usa os stops do contrato para fundo escuro", () => {
+  const dark = { dark: true };
+  assert.equal(performanceColor(0, 100, dark), 'rgb(248, 113, 113)');
+  assert.equal(performanceColor(50, 100, dark), 'rgb(251, 146, 60)');
+  assert.equal(performanceColor(65, 100, dark), 'rgb(251, 191, 36)');
+  assert.equal(performanceColor(79.99, 100, dark), 'rgb(253, 224, 71)');
+  assert.equal(performanceColor(80, 100, dark), 'rgb(147, 197, 253)');
+  assert.equal(performanceColor(90, 100, dark), 'rgb(96, 165, 250)');
+  assert.equal(performanceColor(100, 100, dark), 'rgb(59, 130, 246)');
+});
+
+test("performanceColor: 1 a 9 questões é amostra insuficiente (neutro), 10 já colore", () => {
+  assert.equal(performanceColor(90, 9), PERFORMANCE_COLOR_NEUTRAL);
+  assert.notEqual(performanceColor(90, 10), PERFORMANCE_COLOR_NEUTRAL);
 });
 
 test("performanceColor: F=95% é azul (componente azul dominante) e mais escuro que 80%", () => {
   const [r, g, b] = rgbComponents(performanceColor(95, 100));
   assert.ok(b > r && b > g, `esperava azul dominante em 95%, recebi rgb(${r},${g},${b})`);
-  assert.ok(b < 246, 'azul a 95% deve ser mais escuro que o de 80%');
+  assert.ok(b < 250, 'azul a 95% deve ser mais escuro que o de 80%');
 });
 
 test("performanceColor: nenhuma nota de 0 a 100 produz verde dominante", () => {
@@ -234,7 +256,7 @@ test("performanceColor: amostra abaixo do mínimo é neutra (1 erro em 1 questã
   assert.equal(performanceColor(0, 10), 'rgb(220, 38, 38)');
 });
 
-test("performanceColor não muda com o volume: 60% é amarelo puro com 10, 100 ou 100000 questões", () => {
+test("performanceColor não muda com o volume: 60% é a mesma cor com 10, 100 ou 100000 questões", () => {
   const expected = performanceColor(60, 100);
   assert.equal(performanceColor(60, 10), expected);
   assert.equal(performanceColor(60, 100000), expected);
@@ -289,8 +311,8 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
   assert.equal(volumeBarWidth(byName.A.totalQuestions, maxVolume), 100);
   assert.equal(volumeBarWidth(byName.F.totalQuestions, maxVolume), 10);
 
-  // C: amarelo em performance, independentemente de ter 80 questões.
-  assert.equal(performanceColor(byName.C.weightedAccuracy, byName.C.totalQuestions), 'rgb(234, 179, 8)');
+  // C: laranja-âmbar (60%) em performance, independentemente de ter 80 questões.
+  assert.equal(performanceColor(byName.C.weightedAccuracy, byName.C.totalQuestions), 'rgb(241, 135, 11)');
 
   // G: sem evidência, nunca "0% vermelho".
   assert.equal(byName.G.weightedAccuracy, null);
@@ -303,4 +325,11 @@ test("SLICE 2 discriminante: A (20%/200q) é pior desempenho e maior volume; F (
   // volumeBarWidth nem recebe accuracy — a independência é estrutural, não
   // só observada neste fixture.
   assert.equal(performanceColor(60, 80), performanceColor(60, 10));
+});
+
+test("every discipline colour in the palette has a readable name in the catalog (picker aria-labels)", () => {
+  for (const key of SUBJECT_COLOR_KEYS) {
+    const label = ptBR[`subject.color.${key.replace("DISC-", "").toLowerCase()}`];
+    assert.match(label ?? "", /^[A-ZÀ-Ý]/, key);
+  }
 });

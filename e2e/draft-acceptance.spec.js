@@ -78,8 +78,8 @@ async function openFirstDraft(page, name, pages) {
 
 test('generating and accepting a draft through the real UI creates a real unit with reviews and exercises, and a repeated accept does not duplicate it', async ({ page }) => {
   const editor = await openFirstDraft(page, 'farmaco.pdf', ['Farmacocinética: absorção e distribuição']);
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
-  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado');
+  await expect(editor.locator('.lesson-head .eyebrow')).toHaveText('Resumo gerado por IA — aguardando sua conferência');
 
   // The drafted answer is attributable to the exact real source text.
   await editor.getByRole('tab', { name: /Questões/ }).click();
@@ -148,7 +148,7 @@ test('generating and accepting a draft through the real UI creates a real unit w
     const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });
     return res.json();
   }, API_BASE);
-  expect(unitsAfter.units.length).toBe(1);
+  expect(unitsAfter.units).toHaveLength(1);
 });
 
 test('P1_PRODUCT A: accepting a second draft can reuse an existing subject instead of only creating a new one', async ({ page }) => {
@@ -195,14 +195,14 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
     const res = await fetch(`${base}/v1/subjects`, { credentials: 'include' });
     return res.json();
   }, API_BASE);
-  expect(subjectsAfter.subjects.length).toBe(1);
+  expect(subjectsAfter.subjects).toHaveLength(1);
   expect(subjectsAfter.subjects[0].name).toBe('Fisiologia A');
 
   const unitsAfter = await page.evaluate(async (base) => {
     const res = await fetch(`${base}/v1/learning-units`, { credentials: 'include' });
     return res.json();
   }, API_BASE);
-  expect(unitsAfter.units.length).toBe(2);
+  expect(unitsAfter.units).toHaveLength(2);
   expect(unitsAfter.units.every((u) => u.subjectId === subjectsAfter.subjects[0].id)).toBe(true);
 });
 
@@ -300,11 +300,11 @@ test('R-5: the header follows the real state - critical item pending, then waiti
   });
   const editor = await openFirstDraft(page, 'estado-r5.pdf', ['Farmacocinética: absorção e distribuição']);
   const header = editor.locator('.lesson-head .eyebrow');
-  await expect(header).toHaveText('Rascunho gerado por IA — conferência pendente: 1 item crítico');
+  await expect(header).toHaveText('Resumo gerado por IA — conferência pendente: 1 item crítico');
 
   await editor.getByRole('tab', { name: /Questões/ }).click();
   await editor.locator('[data-action="accept-question"]').click();
-  await expect(header).toHaveText('Rascunho gerado por IA — aguardando sua conferência');
+  await expect(header).toHaveText('Resumo gerado por IA — aguardando sua conferência');
 
   await editor.locator('.source-draft-subject-input').fill('Estado R5');
   await editor.locator('.source-draft-date-input').fill('2026-04-01');

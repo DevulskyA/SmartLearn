@@ -102,7 +102,7 @@ test('dense pages: chunks close before the model input limit, so every proposal 
   await first.locator('[data-action="generate-draft"]').click();
   await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
   await expect(page.locator('.lesson-editor .lesson-qitem').first()).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado');
   await page.locator('[data-action="lesson-back"]').click();
 
   // a single page above the limit cannot be split: the student is told plainly (not a raw engineering message),

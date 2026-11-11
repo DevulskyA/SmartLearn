@@ -21,11 +21,11 @@ export default {
   'materials.kind.appendix': 'Apêndice',
   'materials.kind.other': 'Outro',
   'materials.kind.notStudy': 'Não é conteúdo de estudo',
-  'materials.kind.noDraft': '{label} — não gera rascunho.',
+  'materials.kind.noDraft': '{label} — não gera resumo.',
 
   // Generation progress panel
-  'materials.progress.title': 'Gerando rascunho com IA — {title}',
-  'materials.progress.note': 'A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o rascunho aparece na lista quando ficar pronto.',
+  'materials.progress.title': 'Gerando resumo com IA — {title}',
+  'materials.progress.note': 'A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o resumo aparece na lista quando ficar pronto.',
   'materials.progress.background': 'Continuar em segundo plano',
   'materials.progress.cancel': 'Cancelar geração',
   'materials.progress.cancelling': 'Cancelando a geração…',
@@ -34,25 +34,25 @@ export default {
   'materials.progress.cancelFailed': 'Não foi possível cancelar a geração.',
 
   // Generation outcomes
-  'materials.generation.finished': 'Rascunho pronto: {title}. Abra-o na lista para revisar antes de aceitar.',
-  'materials.generation.draftReady': 'Rascunho gerado. Revise antes de aceitar.',
+  'materials.generation.finished': 'Resumo pronto: {title}. Abra-o na lista para revisar antes de aceitar.',
+  'materials.generation.draftReady': 'Resumo gerado. Revise antes de aceitar.',
   'materials.generation.cancelled': 'A geração foi cancelada. O trecho está livre para gerar de novo.',
   'materials.generation.inBackground': 'A geração continua em segundo plano. Quando ficar pronta, o trecho mostra Pronto na lista.',
-  'materials.generation.startFailed': 'Não foi possível gerar o rascunho.',
+  'materials.generation.startFailed': 'Não foi possível gerar o resumo.',
 
   // Drafts
-  'materials.draft.openFailed': 'Não foi possível abrir o rascunho.',
-  'materials.draft.fallbackTitle': 'Rascunho',
+  'materials.draft.openFailed': 'Não foi possível abrir o resumo.',
+  'materials.draft.fallbackTitle': 'Resumo',
   'materials.draft.showProgressLabel': 'Ver andamento da geração: {title}, {range}',
   'materials.draft.retryLabel': 'Tentar gerar de novo: {title}, {range}',
-  'materials.draft.openLabel': 'Abrir rascunho: {title}, {range}',
+  'materials.draft.openLabel': 'Revisar resumo: {title}, {range}',
 
   // Buttons and hints on a trecho
   'materials.action.showProgress': 'Ver andamento',
   'materials.action.retry': 'Tentar de novo',
   'materials.action.openSummary': 'Abrir Resumo',
-  'materials.action.openDraft': 'Abrir rascunho',
-  'materials.action.generate': 'Gerar rascunho com IA',
+  'materials.action.openDraft': 'Revisar resumo',
+  'materials.action.generate': 'Gerar resumo com IA',
   'materials.proposal.fallbackTitle': 'Trecho',
   'materials.proposal.titleLabel': 'Título do trecho, {range}',
   'materials.proposal.saveTitle': 'Salvar título',
@@ -64,8 +64,8 @@ export default {
   'materials.proposal.stalledHint': 'Sem sinal do serviço de IA há algum tempo. Isso nem sempre é problema; a geração continua.',
 
   // Document index
-  'materials.index.summary.one': 'Índice do documento ({count} unidade)',
-  'materials.index.summary.other': 'Índice do documento ({count} unidades)',
+  'materials.index.summary.one': 'Explorar os conteúdos do documento ({count})',
+  'materials.index.summary.other': 'Explorar os conteúdos do documento ({count})',
   'materials.editorial.summary': 'Páginas editoriais ({count}) — não geram conteúdo',
 
   // Topic search

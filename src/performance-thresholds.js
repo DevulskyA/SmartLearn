@@ -38,6 +38,12 @@ export const SUBJECT_COLORS = {
   'DISC-AMBER': { light: '#d97706', dark: '#fbbf24', css: 'disc-amber' },
   'DISC-CYAN': { light: '#0891b2', dark: '#22d3ee', css: 'disc-cyan' },
   'DISC-ROSE': { light: '#e11d48', dark: '#fb7185', css: 'disc-rose' },
+  'DISC-FUCHSIA': { light: '#c026d3', dark: '#e879f9', css: 'disc-fuchsia' },
+  'DISC-SLATE': { light: '#475569', dark: '#94a3b8', css: 'disc-slate' },
+  'DISC-BROWN': { light: '#92400e', dark: '#d4a373', css: 'disc-brown' },
+  'DISC-EMERALD': { light: '#059669', dark: '#34d399', css: 'disc-emerald' },
+  'DISC-SKY': { light: '#0284c7', dark: '#38bdf8', css: 'disc-sky' },
+  'DISC-OLIVE': { light: '#4d7c0f', dark: '#9aa84a', css: 'disc-olive' },
 };
 
 export const DEFAULT_SUBJECT_COLOR = 'DISC-BLUE';
@@ -72,35 +78,44 @@ export function colorVarForKey(colorKey) {
 // was never part of the theme contract, so browsers fell back to the inherited
 // foreground and could render the neutral label with the wrong contrast.
 export const PERFORMANCE_COLOR_NEUTRAL = 'var(--color-muted)';
-// Owner decision (after V7.2): no green. Below 80% red -> orange -> yellow (yellow holds from 60% up to 80%);
-// from 80% blue, getting darker until 100%.
-const PERFORMANCE_COLOR_STOPS = [
-  { pct: 0, rgb: [220, 38, 38] },   // red-600
-  { pct: 60, rgb: [234, 179, 8] },  // yellow-500
-  { pct: 80, rgb: [59, 130, 246] }, // blue-500
-  { pct: 100, rgb: [30, 58, 138] }, // blue-900
-];
-const PERFORMANCE_BLUE_FROM = 80;
+// Contrato cromático V7.2 (decisão do dono: sem verde para desempenho). Pontos de referência, interpolados linearmente
+// dentro de cada faixa: 0-50 vermelho>laranja, 50-65 laranja>âmbar, 65-79,99 âmbar>amarelo; em 80% o azul começa (salto
+// intencional) e escurece até 100%. Há um conjunto para temas claros e outro para escuros.
+const PERFORMANCE_STOPS = {
+  light: [
+    { pct: 0, rgb: [220, 38, 38] },     // #DC2626
+    { pct: 50, rgb: [234, 88, 12] },    // #EA580C
+    { pct: 65, rgb: [245, 158, 11] },   // #F59E0B
+    { pct: 79.99, rgb: [234, 179, 8] }, // #EAB308
+    { pct: 80, rgb: [96, 165, 250] },   // #60A5FA
+    { pct: 90, rgb: [37, 99, 235] },    // #2563EB
+    { pct: 100, rgb: [30, 58, 138] },   // #1E3A8A
+  ],
+  dark: [
+    { pct: 0, rgb: [248, 113, 113] },    // #F87171
+    { pct: 50, rgb: [251, 146, 60] },    // #FB923C
+    { pct: 65, rgb: [251, 191, 36] },    // #FBBF24
+    { pct: 79.99, rgb: [253, 224, 71] }, // #FDE047
+    { pct: 80, rgb: [147, 197, 253] },   // #93C5FD
+    { pct: 90, rgb: [96, 165, 250] },    // #60A5FA
+    { pct: 100, rgb: [59, 130, 246] },   // #3B82F6
+  ],
+};
 
 function lerp(a, b, t) {
   return Math.round(a + (b - a) * t);
 }
 
-export function performanceColor(weightedAccuracy, totalQuestions) {
+export function performanceColor(weightedAccuracy, totalQuestions, { dark = false } = {}) {
   if (totalQuestions == null || totalQuestions < MIN_SAMPLE_QUESTIONS) return PERFORMANCE_COLOR_NEUTRAL;
   const pct = Number(weightedAccuracy);
   if (!Number.isFinite(pct)) return PERFORMANCE_COLOR_NEUTRAL;
   const clamped = Math.min(100, Math.max(0, pct));
-
-  if (clamped > PERFORMANCE_COLOR_STOPS[1].pct && clamped < PERFORMANCE_BLUE_FROM) {
-    const [r, g, b] = PERFORMANCE_COLOR_STOPS[1].rgb;
-    return `rgb(${r}, ${g}, ${b})`;
-  }
-  const [lo, hi] = clamped <= 60
-    ? [PERFORMANCE_COLOR_STOPS[0], PERFORMANCE_COLOR_STOPS[1]]
-    : [PERFORMANCE_COLOR_STOPS[2], PERFORMANCE_COLOR_STOPS[3]];
-  const t = (clamped - lo.pct) / (hi.pct - lo.pct);
-
+  const stops = PERFORMANCE_STOPS[dark ? 'dark' : 'light'];
+  const hiIndex = stops.findIndex((stop) => clamped <= stop.pct);
+  const hi = stops[hiIndex];
+  const lo = stops[Math.max(0, hiIndex - 1)];
+  const t = hi.pct === lo.pct ? 0 : (clamped - lo.pct) / (hi.pct - lo.pct);
   const [r, g, b] = [0, 1, 2].map((i) => lerp(lo.rgb[i], hi.rgb[i], t));
   return `rgb(${r}, ${g}, ${b})`;
 }

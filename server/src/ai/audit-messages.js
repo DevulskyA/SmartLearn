@@ -34,7 +34,7 @@ const TEXT = {
   // --- claim (generatedClaim), only where it is the audit's own sentence and not the draft's text
   CLAIM_VOLUME_COUNT: ({ count }) => `Questões para uma fonte desse tamanho: ${count}.`,
   CLAIM_SOURCE_TEXT_STATS: ({ chars, pages }) => `Páginas aprovadas: ${pages} · caracteres de texto: ${chars}.`,
-  CLAIM_LANGUAGES_DIFFER: () => 'A fonte e o rascunho estão em idiomas diferentes.',
+  CLAIM_LANGUAGES_DIFFER: () => 'A fonte e o resumo estão em idiomas diferentes.',
 
   // --- repair (repair)
   REPAIR_SUMMARY_UNSUPPORTED_VALUE: ({ value }) => `O valor ${value} não aparece na fonte. Use o valor que a fonte traz ou remova a afirmação.`,
@@ -54,13 +54,13 @@ const TEXT = {
   REPAIR_LITERAL_COPY: () => 'Prefira reformular para testar compreensão, não cópia.',
   REPAIR_VOLUME_TOO_MANY: () => 'Considere remover as questões menos importantes ou repetitivas; nada foi cortado automaticamente.',
   REPAIR_VOLUME_TOO_FEW: () => 'Considere acrescentar questões sobre os conceitos que ficaram sem pergunta.',
-  REPAIR_SOURCE_TEXT_ADVICE: () => 'Se o PDF for escaneado ou depender de figuras, leia a fonte original: nenhum ponto sinalizado vale menos aqui. É um aviso, não prova de erro no rascunho.',
+  REPAIR_SOURCE_TEXT_ADVICE: () => 'Se o PDF for escaneado ou depender de figuras, leia a fonte original: nenhum ponto sinalizado vale menos aqui. É um aviso, não prova de erro no resumo.',
   REPAIR_CROSS_LANGUAGE: () => 'O apoio de significado (tradução fiel, mecanismo, qualificadores como "geralmente", "pode", "apenas") depende da auditoria do modelo e da sua leitura da fonte.',
   REPAIR_UNIT_MISMATCH: ({ value, sourceUnit, unit }) => `A fonte traz ${value} em ${sourceUnit}, não em ${unit}. Use a unidade da fonte.`,
-  REPAIR_QUALIFIER_LOST: () => 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do rascunho não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.',
-  REPAIR_NEGATION_LOST: () => 'A fonte nega esta afirmação (por exemplo "não", "sem", "ausência de") e a frase do rascunho não traz a negação. Sem ela o sentido pode ficar invertido: confira na fonte.',
-  REPAIR_NEGATION_ADDED: () => 'A frase do rascunho nega algo ("não", "sem", "ausência de") que o trecho correspondente da fonte não nega. Sem a negação na fonte o sentido pode estar invertido: confira.',
-  REPAIR_QUALIFIER_ADDED: () => 'A frase do rascunho usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.',
+  REPAIR_QUALIFIER_LOST: () => 'A fonte restringe esta afirmação (por exemplo "apenas", "geralmente", "pode") e a frase do resumo não traz a restrição. Sem ela a afirmação fica mais forte do que a fonte.',
+  REPAIR_NEGATION_LOST: () => 'A fonte nega esta afirmação (por exemplo "não", "sem", "ausência de") e a frase do resumo não traz a negação. Sem ela o sentido pode ficar invertido: confira na fonte.',
+  REPAIR_NEGATION_ADDED: () => 'A frase do resumo nega algo ("não", "sem", "ausência de") que o trecho correspondente da fonte não nega. Sem a negação na fonte o sentido pode estar invertido: confira.',
+  REPAIR_QUALIFIER_ADDED: () => 'A frase do resumo usa um termo absoluto ("sempre", "nunca", "apenas", "todos") que o trecho correspondente da fonte não usa. Confira se a afirmação não foi exagerada.',
 };
 
 export const AUDIT_MESSAGE_CODES = Object.freeze(Object.keys(TEXT));

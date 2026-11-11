@@ -207,7 +207,7 @@ test('a failed generation says so in plain Portuguese, in the list too, and the 
   await expect(progress(page)).toBeHidden({ timeout: 15000 });
   const message = page.locator('#sources-message');
   await expect(message).toHaveClass(/is-error/);
-  await expect(message).toContainText('Não foi possível gerar o rascunho');
+  await expect(message).toContainText('Não foi possível gerar o resumo');
   await expect(message).not.toContainText(/boom|ProviderRequestError|undefined/);
   await expect(firstItem(page)).toContainText('Falhou');
   await expect(page.locator('#sources-drafts')).toContainText('Falhou');

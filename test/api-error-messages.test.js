@@ -10,12 +10,12 @@ import { API_ERROR_MESSAGE_CODES, apiMessageText } from '../server/src/api-error
 
 test('a code the catalog knows shows the catalog text with its parameters, not the server text', () => {
   const err = new ApiError('INVALID_STATE', 'texto do servidor', { msg: { code: 'DRAFT_STATE_NOT_EDITABLE', params: { status: 'ACCEPTED' } } });
-  assert.equal(err.message, 'Rascunho no estado ACCEPTED não pode ser editado.');
+  assert.equal(err.message, 'Resumo no estado ACCEPTED não pode ser editado.');
   assert.equal(err.code, 'INVALID_STATE');
 });
 
 test('no code (an old server) or an unknown code (a newer server) falls back to the server text, never to the bare code', () => {
-  assert.equal(new ApiError('NOT_FOUND', 'Rascunho não encontrado.').message, 'Rascunho não encontrado.');
+  assert.equal(new ApiError('NOT_FOUND', 'Resumo não encontrado.').message, 'Resumo não encontrado.');
   assert.equal(new ApiError('NOT_FOUND', 'Algo novo.', { msg: { code: 'SOMETHING_NEW', params: {} } }).message, 'Algo novo.');
   assert.equal(new ApiError('NOT_FOUND', 'Algo novo.', { msg: { params: {} } }).message, 'Algo novo.');
   assert.equal(new ApiError('UNKNOWN_ERROR', undefined).message, 'UNKNOWN_ERROR');

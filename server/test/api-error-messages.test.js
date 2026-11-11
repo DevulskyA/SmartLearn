@@ -13,10 +13,10 @@ const reply = () => ({ statusCode: 0, status(n) { this.statusCode = n; return th
 
 test('a DraftError built with a dm() sentence keeps the old text in message and exposes its code and params in msg', () => {
   const err = new DraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_EDITABLE', { status: 'ACCEPTED' }));
-  assert.equal(err.message, 'Rascunho no estado ACCEPTED não pode ser editado.');
+  assert.equal(err.message, 'Resumo no estado ACCEPTED não pode ser editado.');
   assert.deepEqual(err.msg, { code: 'DRAFT_STATE_NOT_EDITABLE', params: { status: 'ACCEPTED' } });
   const accept = new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'), 'draft');
-  assert.equal(accept.message, 'Rascunho não encontrado.');
+  assert.equal(accept.message, 'Resumo não encontrado.');
   assert.equal(accept.field, 'draft');
   assert.deepEqual(accept.msg, { code: 'DRAFT_NOT_FOUND', params: {} });
 });
@@ -132,7 +132,7 @@ test('proposal search/scope and generation errors carry code + params with the o
   const cases = [
     [new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal'), 'Seção não encontrada neste documento.', 'SECTION_NOT_FOUND'],
     [new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE')), 'O provedor falhou de forma inesperada. Nada foi salvo.', 'PROVIDER_UNEXPECTED_FAILURE'],
-    [new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT')), 'A geração foi interrompida; nenhum rascunho foi salvo.', 'GENERATION_CANCELLED_NO_DRAFT'],
+    [new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT')), 'A geração foi interrompida; nenhum resumo foi salvo.', 'GENERATION_CANCELLED_NO_DRAFT'],
   ];
   for (const [err, text, code] of cases) {
     assert.equal(err.message, text);

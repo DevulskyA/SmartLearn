@@ -11,7 +11,7 @@ import { signInRegistered } from './support/session.js';
 
 // Real keyboard / screen-reader / text-size sweep of Materiais with a multi-trecho PDF (found running a real 28-page
 // textbook chapter with 11 trechos): the title field of every trecho had NO accessible name, the repeated
-// "Salvar título" / "Ver trecho da fonte" / "Gerar rascunho" buttons could not be told apart, the field was a 27px
+// "Salvar título" / "Ver trecho da fonte" / "Gerar resumo" buttons could not be told apart, the field was a 27px
 // target, and with the browser text size at 200% the whole page scrolled horizontally (html/body min-width in rem).
 
 const SERVER_PORT = serverPort(13978);

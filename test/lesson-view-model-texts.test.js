@@ -68,21 +68,21 @@ test("job phase labels and the generic fallback", () => {
   assert.equal(phase("CALLING_PROVIDER", "GENERATING"), "Gerando resumo e questões");
   assert.equal(phase("CALLING_PROVIDER", "AUDITING"), "Conferindo com a fonte");
   assert.equal(phase("CALLING_PROVIDER", "REPAIRING"), "Corrigindo o que a conferência encontrou");
-  assert.equal(phase("CALLING_PROVIDER", "SAVING"), "Salvando o rascunho");
+  assert.equal(phase("CALLING_PROVIDER", "SAVING"), "Salvando o resumo");
   assert.equal(phase("CALLING_PROVIDER", "SOMETHING_NEW"), "Gerando resumo e questões");
   assert.equal(jobPhaseLabel(undefined), "Gerando resumo e questões");
 });
 
 test("job failure messages: exact sentence per code, unknown code, server text kept only for BUDGET_EXCEEDED", () => {
   const tail = " Nada foi salvo; você pode tentar de novo.";
-  const head = "Não foi possível gerar o rascunho. ";
+  const head = "Não foi possível gerar o resumo. ";
   const reasons = {
     PROVIDER_ERROR: "O serviço de IA não respondeu como esperado.",
     TIMEOUT: "A geração passou do tempo limite e foi interrompida.",
     SERVER_RESTARTED: "O servidor foi reiniciado durante a geração.",
     INTERNAL_ERROR: "Houve um erro interno.",
     BUDGET_EXCEEDED: "O limite de uso da geração foi atingido.",
-    LANGUAGE_MISMATCH: "O rascunho veio em um idioma diferente do pedido.",
+    LANGUAGE_MISMATCH: "O resumo veio em um idioma diferente do pedido.",
     SCOPE_CHANGED: "O texto do trecho mudou desde que a geração foi pedida.",
     WHATEVER_NEW: "A geração não terminou.",
   };
@@ -95,7 +95,7 @@ test("job failure messages: exact sentence per code, unknown code, server text k
 });
 
 test("job list status labels", () => {
-  assert.deepEqual(jobListStatus({ state: "CALLING_PROVIDER", phase: "SAVING" }), { kind: "generating", label: "Gerando… Salvando o rascunho", stalled: false });
+  assert.deepEqual(jobListStatus({ state: "CALLING_PROVIDER", phase: "SAVING" }), { kind: "generating", label: "Gerando… Salvando o resumo", stalled: false });
   assert.deepEqual(jobListStatus({ state: "QUEUED", phase: "QUEUED" }), { kind: "generating", label: "Gerando… Na fila para começar", stalled: false });
   assert.deepEqual(jobListStatus({ state: "SUCCEEDED" }), { kind: "ready", label: "Pronto", stalled: false });
   assert.deepEqual(jobListStatus({ state: "FAILED" }), { kind: "failed", label: "Falhou", stalled: false });

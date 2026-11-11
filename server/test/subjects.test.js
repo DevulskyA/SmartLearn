@@ -52,6 +52,31 @@ test('create + list: a new subject appears in the owner\'s list', async () => {
   } finally { await app.close(); cleanup(); }
 });
 
+test('a subject created without a colour gets one this user does not use yet; an explicit colour is kept', async () => {
+  const { app, cleanup } = await freshApp();
+  try {
+    const { cookie, csrfToken } = await registerAndAuth(app, 'cora@example.com');
+    const headers = { cookie, 'x-csrf-token': csrfToken };
+    await post(app, '/v1/subjects', { name: 'Anatomia' }, headers);
+    await post(app, '/v1/subjects', { name: 'Fisiologia' }, headers);
+    await post(app, '/v1/subjects', { name: 'Farmacologia', color: 'DISC-LIME' }, headers);
+    await post(app, '/v1/subjects', { name: 'Neurologia' }, headers);
+    const { subjects } = JSON.parse((await app.inject({ method: 'GET', url: '/v1/subjects', headers: { cookie } })).body);
+    const colorOf = (name) => subjects.find((s) => s.name === name).color;
+    assert.equal(colorOf('Anatomia'), 'DISC-BLUE');
+    assert.equal(colorOf('Fisiologia'), 'DISC-GREEN');
+    assert.equal(colorOf('Farmacologia'), 'DISC-LIME');
+    assert.equal(colorOf('Neurologia'), 'DISC-PURPLE');
+    assert.equal(new Set(subjects.map((s) => s.color)).size, 4);
+  } finally { await app.close(); cleanup(); }
+});
+
+test('the server palette is the client palette (same 12 keys, same order)', async () => {
+  const { SUBJECT_COLOR_KEYS: server } = await import('../src/services/subjects.js');
+  const { SUBJECT_COLOR_KEYS: client } = await import('../../src/performance-thresholds.js');
+  assert.deepEqual(server, client);
+});
+
 test('medical Unicode subject name round trips exactly', async () => {
   const { app, cleanup } = await freshApp();
   try {

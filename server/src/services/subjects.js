@@ -1,6 +1,16 @@
 import { validateNamingField, normalizeEntityName, nameKey } from '../../../shared/text-validation.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 
+// Same identities (the original 12, then 6 more) as the client's SUBJECT_COLORS (src/performance-thresholds.js); a test pins the equality.
+export const SUBJECT_COLOR_KEYS = ['DISC-BLUE', 'DISC-GREEN', 'DISC-PURPLE', 'DISC-ORANGE', 'DISC-RED', 'DISC-TEAL', 'DISC-PINK', 'DISC-INDIGO', 'DISC-LIME', 'DISC-AMBER', 'DISC-CYAN', 'DISC-ROSE', 'DISC-FUCHSIA', 'DISC-SLATE', 'DISC-BROWN', 'DISC-EMERALD', 'DISC-SKY', 'DISC-OLIVE'];
+
+// When the caller does not choose a colour, a new subject gets the first identity this user does not use yet
+// (the user can change it afterwards; an explicit colour is never replaced).
+export function firstUnusedColor(db, userId) {
+  const used = new Set(db.prepare('SELECT color FROM subjects WHERE user_id = ?').all(userId).map((r) => r.color));
+  return SUBJECT_COLOR_KEYS.find((key) => !used.has(key)) ?? SUBJECT_COLOR_KEYS[0];
+}
+
 export class SubjectError extends Error {
   constructor(code, message) {
     const { text, msg } = splitMessage(message);
@@ -35,7 +45,7 @@ function nextSortOrder(db, userId) {
   return next;
 }
 
-export function create(db, userId, { name, color = 'DISC-BLUE' }) {
+export function create(db, userId, { name, color }) {
   const error = validateNamingField(name, 'o nome da disciplina');
   if (error) throw new SubjectError('VALIDATION_FAILED', error);
 
@@ -53,7 +63,7 @@ export function create(db, userId, { name, color = 'DISC-BLUE' }) {
   const result = db.prepare(`
     INSERT INTO subjects (user_id, name, color, is_active, sort_order, created_at, updated_at)
     VALUES (?, ?, ?, 1, ?, ?, ?)
-  `).run(userId, normalized, color, sortOrder, now, now);
+  `).run(userId, normalized, color || firstUnusedColor(db, userId), sortOrder, now, now);
 
   return toDto(findOwned(db, userId, result.lastInsertRowid));
 }

@@ -167,7 +167,7 @@ test('"Voltar às unidades" puts the focus on the draft just left (in "Rascunhos
   await editor.locator('[data-action="lesson-back"]').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#sources-card')).toBeVisible();
-  await expect(page.locator('#sources-drafts').getByRole('button', { name: /Abrir rascunho/ })).toBeFocused({ timeout: 8000 });
+  await expect(page.locator('#sources-drafts').getByRole('button', { name: /Revisar resumo/ })).toBeFocused({ timeout: 8000 });
 });
 
 test('every question of the list has one clean accessible name: number, state and points', async ({ page }) => {

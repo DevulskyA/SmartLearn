@@ -2,9 +2,9 @@
 // Rows are the real completed exercises from Stats.calculate; nothing is recomputed here.
 import { t } from "./i18n/index.js";
 import { syncSelect } from "./select-ui.js";
-import { colorVarForKey } from "./performance-thresholds.js";
+import { colorVarForKey, getState, MIN_SAMPLE_QUESTIONS } from "./performance-thresholds.js";
 import { csvFrom, downloadCsv, normalize, paginate, sortRows } from "./stats-table.js";
-import { esc, number, percent } from "./stats-v5.js";
+import { bandLabel, esc, number, percent } from "./stats-v5.js";
 
 const PER_PAGE = 12;
 export const historyState = { query: "", subjectId: 0, sortKey: "date", sortAsc: false, page: 1 };
@@ -42,9 +42,19 @@ function typeLabel(type) {
   return label === key ? "" : label;
 }
 
+// The percentage wears the same band colour as every other Estatísticas table (contrato cromático V7.2, no green).
+// Fewer than MIN_SAMPLE_QUESTIONS questions is "Amostra insuficiente": neutral colour, never a confident band.
+const BAND_BY_STATE = { CRITICAL: "critical", ATTENTION: "attention", ADEQUATE: "adequate", STRONG: "strong" };
+function gradeHtml(row) {
+  const enough = row.accuracy != null && (row.questions ?? 0) >= MIN_SAMPLE_QUESTIONS;
+  const band = enough ? BAND_BY_STATE[getState(row.accuracy, row.questions)] ?? "insufficient" : "insufficient";
+  const title = enough ? bandLabel(band) : t(row.questions ? "screens.stats.v5.band.insufficient" : "screens.stats.v5.noEvidence");
+  return `<span class="v5-grade" data-band="${band}" title="${esc(title)}">${percent(row.accuracy)}</span>`;
+}
+
 function rowHtml(row) {
   const caption = typeLabel(row.type);
-  return `<tr class="exercise-row" tabindex="0" data-evidence-id="${esc(row.id)}"><td>${esc(brDate(row.date))}</td><td><span class="subject-chip" style="--subject-color:var(${colorVarForKey(row.color)})">${esc(row.subjectName)}</span></td><td>${esc(row.title)}${caption ? `<span class="sl-block sl-caption">${esc(caption)}</span>` : ""}</td><td>${row.questions == null ? "—" : number(row.questions)}</td><td>${number(row.correct)}</td><td><strong>${percent(row.accuracy)}</strong></td></tr>`;
+  return `<tr class="exercise-row" tabindex="0" data-evidence-id="${esc(row.id)}"><td>${esc(brDate(row.date))}</td><td><span class="subject-chip" style="--subject-color:var(${colorVarForKey(row.color)})">${esc(row.subjectName)}</span></td><td>${esc(row.title)}${caption ? `<span class="sl-block sl-caption">${esc(caption)}</span>` : ""}</td><td>${row.questions == null ? "—" : number(row.questions)}</td><td>${number(row.correct)}</td><td>${gradeHtml(row)}</td></tr>`;
 }
 
 export function renderHistory() {

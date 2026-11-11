@@ -9,7 +9,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 
 // REALMODEL-1 (CODEX): the whole content pipeline with a REAL model, through the real UI:
-//   PDF upload -> extraction -> proposal -> "Gerar rascunho com IA" -> Codex (generation, model audit, at most one
+//   PDF upload -> extraction -> proposal -> "Gerar resumo com IA" -> Codex (generation, model audit, at most one
 //   repair) -> schema validation + deterministic audit -> DRAFT shown for human review -> accept -> a real unit.
 // The model is the Codex CLI the operator is already logged into with ChatGPT (no API key). Because it spends a real
 // model run (minutes) and sends the source text to the model provider, this spec is OPT-IN and skipped otherwise:
@@ -83,11 +83,11 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
 
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 600_000 });
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 600_000 });
 
   const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();
-  await expect(draftPanel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
+  await expect(draftPanel.locator('.lesson-head .eyebrow')).toHaveText(/^Resumo gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
   await draftPanel.getByRole('tab', { name: /Questões/ }).click();
   expect(await draftPanel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(5);
   await draftPanel.getByRole('tab', { name: /Revisão/ }).click();

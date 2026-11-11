@@ -151,7 +151,7 @@
             </section>
             <section class="review-block review-block-done" id="block-done-today" aria-labelledby="title-done-today" hidden>
               <div class="block-heading">
-                <h2 id="title-done-today" data-i18n="screens.today.block.done">Feitas hoje</h2>
+                <h2 id="title-done-today" data-i18n="screens.today.block.done">Concluídas hoje</h2>
                 <span class="block-count is-done" data-count-for="doneToday"></span>
               </div>
               <div class="review-list" data-review-list="doneToday"></div>
@@ -475,7 +475,7 @@
           </div>
           <div id="stats-analysis-filters" class="v5-filter-grid">
             <label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-filter-subject" aria-label="Filtrar disciplina" data-i18n-aria-label="screens.stats.table.filter.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label>
-            <label class="field-group"><span data-i18n="screens.stats.table.filter.band">Faixa de desempenho</span><select id="stats-filter-band" aria-label="Filtrar faixa de desempenho" data-i18n-aria-label="screens.stats.table.filter.bandAria"><option value="all" data-i18n="screens.stats.table.filter.bandAll">Todas as faixas</option><option value="critical" data-i18n="screens.stats.table.filter.critical">Crítico (&lt;50%)</option><option value="attention" data-i18n="screens.stats.table.filter.attention">Atenção (50–64%)</option><option value="adequate" data-i18n="screens.stats.table.filter.adequate">Adequado (65–79%)</option><option value="strong" data-i18n="screens.stats.table.filter.strong">Forte (80%+)</option><option value="insufficient" data-i18n="screens.stats.table.filter.insufficient">Pouca evidência</option></select></label>
+            <label class="field-group"><span data-i18n="screens.stats.table.filter.band">Faixa de desempenho</span><select id="stats-filter-band" aria-label="Filtrar faixa de desempenho" data-i18n-aria-label="screens.stats.table.filter.bandAria"><option value="all" data-i18n="screens.stats.table.filter.bandAll">Todas as faixas</option><option value="critical" data-i18n="screens.stats.table.filter.critical">Crítico (&lt;50%)</option><option value="attention" data-i18n="screens.stats.table.filter.attention">Atenção (50–64%)</option><option value="adequate" data-i18n="screens.stats.table.filter.adequate">Adequado (65–79%)</option><option value="strong" data-i18n="screens.stats.table.filter.strong">Forte (80%+)</option><option value="insufficient" data-i18n="screens.stats.table.filter.insufficient">Amostra insuficiente</option></select></label>
             <label class="field-group"><span data-i18n="screens.stats.col.trend">Tendência</span><select id="stats-filter-trend" aria-label="Filtrar tendência" data-i18n-aria-label="screens.stats.table.filter.trendAria"><option value="all" data-i18n="screens.stats.table.filter.trendAll">Todas</option><option value="DECLINING" data-i18n="screens.stats.table.filter.declining">Em queda</option><option value="IMPROVING" data-i18n="screens.stats.table.filter.improving">Em melhora</option><option value="STABLE" data-i18n="screens.stats.table.filter.stable">Estável</option><option value="INSUFFICIENT" data-i18n="screens.stats.table.filter.insufficientTrend">Sem tendência confiável</option></select></label>
             <label class="field-group v5-table-search"><span data-i18n="screens.stats.table.filter.search">Pesquisar resultados</span><input type="search" id="stats-table-search" aria-label="Pesquisar todas as disciplinas, conteúdos e aulas" data-i18n-aria-label="screens.stats.table.filter.searchAria" placeholder="Buscar por nome ou data…" data-i18n-placeholder="screens.stats.table.filter.searchPlaceholder"></label>
           </div>
@@ -650,9 +650,9 @@
                   <span data-i18n="screens.materials.library.sort">Organizar</span>
                   <select id="library-sort">
                     <option value="original" data-i18n="screens.materials.library.sort.original">Ordem original</option>
-                    <option value="name-asc" data-i18n="screens.materials.library.sort.nameAsc">Nome, A a Z</option>
-                    <option value="name-desc" data-i18n="screens.materials.library.sort.nameDesc">Nome, Z a A</option>
-                    <option value="pages-desc" data-i18n="screens.materials.library.sort.pagesDesc">Mais páginas</option>
+                    <option value="name-asc" data-i18n="screens.materials.library.sort.nameAsc">Nome (A–Z)</option>
+                    <option value="name-desc" data-i18n="screens.materials.library.sort.nameDesc">Nome (Z–A)</option>
+                    <option value="pages-desc" data-i18n="screens.materials.library.sort.pagesDesc">Mais páginas primeiro</option>
                   </select>
                 </label>
                 <span class="sl-list-count" id="library-count" role="status" aria-live="polite" hidden></span>
@@ -677,7 +677,7 @@
             <div id="sources-proposals-panel" hidden>
               <p id="sources-coverage-note" class="form-message" role="note" hidden></p>
               <div class="sources-drafts" id="sources-drafts" hidden>
-                <h3 class="sources-subheading" id="sources-drafts-title" data-i18n="screens.materials.drafts.title">Rascunhos em andamento</h3>
+                <h3 class="sources-subheading" id="sources-drafts-title" data-i18n="screens.materials.drafts.title">Continue de onde parou</h3>
                 <ul class="sources-drafts-list" id="sources-drafts-list" aria-labelledby="sources-drafts-title"></ul>
               </div>
               <div class="sources-topic">
@@ -689,21 +689,21 @@
                     <input class="sources-range-input" id="sources-range-start" type="number" min="1" inputmode="numeric" required />
                     <label for="sources-range-end" data-i18n="screens.materials.range.to">até</label>
                     <input class="sources-range-input" id="sources-range-end" type="number" min="1" inputmode="numeric" required />
-                    <button class="primary-button" type="submit" data-i18n="screens.materials.range.generate">Gerar destas páginas</button>
+                    <button class="primary-button" type="submit" data-i18n="screens.materials.range.generate">Preparar resumo →</button>
                   </div>
-                  <p class="lesson-hint" data-i18n="screens.materials.range.hint">Números das páginas do PDF. Só o texto desse intervalo será enviado à IA.</p>
+                  <p class="lesson-hint" data-i18n="screens.materials.range.hint">Use a numeração do PDF. Só o texto desse intervalo será enviado à IA.</p>
                 </form>
                 <p class="sources-or" aria-hidden="true" data-i18n="screens.materials.or">ou</p>
-                <p class="sources-choice-label" id="sources-search-label" data-i18n="screens.materials.topic.byTitle">Por título da seção</p>
+                <p class="sources-choice-label" id="sources-search-label" data-i18n="screens.materials.topic.byTitle">Localizar pelo título da seção</p>
                 <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-search-label">
-                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: Taxa de filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
+                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
                   <button class="secondary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
                 </form>
-                <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">Digite parte do título da seção como aparece no livro. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
+                <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">O resultado aponta para o trecho exato. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
                 <ul class="sources-topic-results" id="sources-topic-results"></ul>
               </div>
               <details class="sources-index" id="sources-index">
-                <summary id="sources-index-summary">Índice do documento</summary>
+                <summary id="sources-index-summary">Explorar os conteúdos do documento</summary>
                 <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
               </details>
               <details class="sources-index" id="sources-editorial" hidden>
@@ -896,8 +896,8 @@
               </div>
             </div>
             <div class="settings-actions sl-mt">
-              <button class="primary-button" type="button" data-go-screen="settings" data-i18n="screens.account.goSettings">Preferências e dados</button>
-              <button class="secondary-button" type="button" data-go-screen="plan" data-i18n="screens.account.goStudy">Continuar estudo</button>
+              <button class="primary-button" type="button" data-go-screen="plan" data-i18n="screens.account.goStudy">Continuar estudo</button>
+              <button class="secondary-button" type="button" data-go-screen="settings" data-i18n="screens.account.goSettings">Preferências e dados</button>
             </div>
             <details class="account-password-details" id="account-password-details">
             <summary class="secondary-button" data-i18n="screens.account.changePassword">Alterar senha</summary>

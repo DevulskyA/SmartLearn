@@ -71,7 +71,7 @@ async function acceptDraftAndGetStudyNowButton(page, { subjectName, sourceText, 
 
   const item = page.locator('.source-proposal-item').first();
   await item.locator('[data-action="generate-draft"]').click();
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado', { timeout: 10000 });
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 10000 });
 
   const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();

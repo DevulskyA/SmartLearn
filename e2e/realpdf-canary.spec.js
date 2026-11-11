@@ -8,7 +8,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 
 // VALID-4 (H0.4): the REAL-medical-source canary, through the real UI.
-//   real PDF upload -> extraction -> semantic proposals -> pick ONE bounded section -> "Gerar rascunho com IA"
+//   real PDF upload -> extraction -> semantic proposals -> pick ONE bounded section -> "Gerar resumo com IA"
 //   -> Codex (generation, model audit, at most one repair) -> schema + deterministic audit -> DRAFT in the review UI.
 // The draft is NOT accepted: this proves production + review, and writes the draft JSON for a source x draft comparison.
 // OPT-IN (spends a real Codex run and sends one section of the source to the model provider). The PDF path is never in the
@@ -93,12 +93,12 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
   await expect(item).toBeVisible({ timeout: 30_000 });
   await item.locator('[data-action="generate-topic"]').click();
   // Either outcome ends the wait: an error message must fail the test now, not after the full timeout.
-  await expect(page.locator('#sources-message')).toContainText(/Rascunho gerado|Tempo limite|Não foi possível|Erro|erro|falh/i, { timeout: 1_200_000 });
-  await expect(page.locator('#sources-message')).toContainText('Rascunho gerado');
+  await expect(page.locator('#sources-message')).toContainText(/Resumo gerado|Tempo limite|Não foi possível|Erro|erro|falh/i, { timeout: 1_200_000 });
+  await expect(page.locator('#sources-message')).toContainText('Resumo gerado');
 
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('.lesson-head .eyebrow')).toHaveText(/^Rascunho gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
+  await expect(panel.locator('.lesson-head .eyebrow')).toHaveText(/^Resumo gerado por IA — (aguardando sua conferência|conferência pendente: \d+ itens? críticos?)$/);
   await panel.getByRole('tab', { name: /Questões/ }).click();
   expect(await panel.locator('.lesson-qitem').count()).toBeGreaterThanOrEqual(3);
   await panel.getByRole('tab', { name: /Revisão/ }).click();
@@ -125,7 +125,7 @@ test('VALID-4: real PDF -> bounded section -> Codex draft -> review UI', async (
     if (found.length > 0) { proposal = candidate; drafts = found; break; }
   }
   expect(proposal, 'exactly the proposal that was generated has a draft').toBeTruthy();
-  expect(drafts.length).toBe(1);
+  expect(drafts).toHaveLength(1);
   writeFileSync(outPath, JSON.stringify({ proposal, draft: drafts[0] }, null, 2));
   console.log(`REALPDF section "${proposal.title}" pages ${proposal.pageStart ?? proposal.page_start}-${proposal.pageEnd ?? proposal.page_end}; draft ${drafts[0].questions.length} questions; audit ${drafts[0].audit?.result}`);
 });

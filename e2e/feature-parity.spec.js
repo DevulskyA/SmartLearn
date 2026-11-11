@@ -114,7 +114,7 @@ test('Estatisticas and Acompanhamento render real server data without error afte
 
   await page.locator('[data-screen="today"]').click();
   await page.locator('[data-review-list="overdue"] [data-action="review-done"]').first().check();
-  await expect(page.locator('text=1 feita')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#today-load-summary', { hasText: '1 concluída' })).toBeVisible({ timeout: 5000 });
 
   await page.locator('[data-screen="stats"]').click();
   await expect(page.locator('#metric-questions')).toBeVisible();

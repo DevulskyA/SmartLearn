@@ -71,6 +71,12 @@
   --disc-color-disc-amber: #d97706;
   --disc-color-disc-cyan: #0891b2;
   --disc-color-disc-rose: #e11d48;
+  --disc-color-disc-fuchsia: #c026d3;
+  --disc-color-disc-slate: #475569;
+  --disc-color-disc-brown: #92400e;
+  --disc-color-disc-emerald: #059669;
+  --disc-color-disc-sky: #0284c7;
+  --disc-color-disc-olive: #4d7c0f;
 }
 
 :root[data-theme-mode="dark"] {
@@ -102,6 +108,12 @@
   --disc-color-disc-amber: #fbbf24;
   --disc-color-disc-cyan: #22d3ee;
   --disc-color-disc-rose: #fb7185;
+  --disc-color-disc-fuchsia: #e879f9;
+  --disc-color-disc-slate: #94a3b8;
+  --disc-color-disc-brown: #d4a373;
+  --disc-color-disc-emerald: #34d399;
+  --disc-color-disc-sky: #38bdf8;
+  --disc-color-disc-olive: #9aa84a;
 }
 
 /* Status colors that live outside the core tokens need a dark pass too. */
@@ -6094,26 +6106,27 @@ label.select-control:has(> .ui-select) {
    so a band means the same thing everywhere on the screen. Colours are never the only signal: every
    band also has its name and its number next to it. */
 :root {
-  --band-critical: oklch(0.56 0.2 27);
-  --band-critical-text: oklch(0.47 0.17 27);
-  /* owner decision after V7.2: no green. red < orange < yellow below 80%, blue from 80% (STRONG). *-text = readable on paper */
-  --band-attention: oklch(0.7 0.17 50);
-  --band-attention-text: oklch(0.47 0.12 48);
-  --band-adequate: oklch(0.83 0.15 95);
-  --band-adequate-text: oklch(0.47 0.09 85);
-  --band-strong: oklch(0.55 0.17 255);
-  --band-strong-text: oklch(0.45 0.15 258);
+  /* Contrato cromático V7.2: *-text = texto do indicador (legível sobre o papel); sem *-text = preenchimento (barras, medidores).
+     Verde não classifica desempenho: abaixo de 80% vermelho > laranja > âmbar/amarelo; de 80% azul. */
+  --band-critical: #dc2626;
+  --band-critical-text: #b4232e;
+  --band-attention: #ea580c;
+  --band-attention-text: #9a3412;
+  --band-adequate: #f59e0b;
+  --band-adequate-text: #854d0e;
+  --band-strong: #2563eb;
+  --band-strong-text: #1e40af;
   --band-none: oklch(0.72 0.02 260);
 }
 :root[data-theme-mode="dark"] {
-  --band-critical: oklch(0.68 0.18 25);
-  --band-critical-text: oklch(0.82 0.11 25);
-  --band-attention: oklch(0.78 0.15 55);
-  --band-attention-text: oklch(0.82 0.11 55);
-  --band-adequate: oklch(0.87 0.14 98);
-  --band-adequate-text: oklch(0.88 0.11 98);
-  --band-strong: oklch(0.72 0.14 250);
-  --band-strong-text: oklch(0.82 0.09 250);
+  --band-critical: #f87171;
+  --band-critical-text: #fda4af;
+  --band-attention: #fb923c;
+  --band-attention-text: #fdba74;
+  --band-adequate: #fbbf24;
+  --band-adequate-text: #fde68a;
+  --band-strong: #60a5fa;
+  --band-strong-text: #93c5fd;
   --band-none: oklch(0.45 0.02 262);
 }
 
