@@ -26,3 +26,10 @@ Commit testado: `d89014b` (pai `af98eb1`), branch `design/redesign-geral-2026111
 - **C3 (contas)**: o e-mail do dono existe so no banco da Homologacao; o banco DEV tem apenas a conta de desenvolvimento. Entrar no DEV com o e-mail da Homologacao da `INVALID_CREDENTIALS` (401).
 - **Homologacao**: backend instalado, login e UI de login funcionam (conta temporaria em copia do banco; 1280 e 390 px). Nenhum dado nem senha do dono foi lido ou alterado.
 - **Decisoes do dono**: liberar a branch em `work-branches.json` e autorizar `42` no launcher DEV, ou usar a Homologacao. Runbook de senha: `.specs/runbooks/SENHA-E-CONTAS.md`.
+
+## Login: conclusao final (2026-11-11)
+
+- No banco da Homologacao, `o e-mail do dono` existe e a senha informada pelo dono confere com o hash (verificacao em copia somente leitura; nenhuma senha foi lida ou alterada). O banco DEV nao tem essa conta.
+- O servidor da Homologacao em codigo vivo (porta 3000) nao bloqueia por tentativas (resposta ~0,5 s = hash calculado). O login completo da credencial passa na copia isolada da porta 5188 (HTTP 200, `/auth/me` 200).
+- O botao de olho na senha so existe no front-end desta arvore; Homologacao instalada, DEV empacotado e a arvore combinada nao o tem. O print com o erro veio, portanto, de um preview de design: 5190 (dados sinteticos) ou 5192 (copia com senha temporaria do agente, ja encerrada). Usar `http://localhost:5188` (copia isolada da Homologacao).
+- `scripts/design-preview.mjs --require-real` (novo): falha explicitamente se a Homologacao nao existir e nunca cai para seed. Configuracao `design-real` em `.claude/launch.json` (local).

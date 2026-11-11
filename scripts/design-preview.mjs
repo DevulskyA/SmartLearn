@@ -25,6 +25,11 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 // the owner's own account lives in the Homologação store; the DEV store is the fallback
 const candidates = [['SmartLearn-Homologacao-Data', 'smartlearn-homologacao'], ['SmartLearn-DevData', 'smartlearn-dev']].map(([d, b]) => ({ dir: join(homedir(), d), base: b }));
 const real = candidates.find((c) => existsSync(join(c.dir, `${c.base}.db`)));
+// --require-real: validation runs must use the owner's Homologacao store (a throwaway COPY); a missing store is an error, never a silent seed fallback
+if (process.argv.includes('--require-real')) {
+  if (process.argv.includes('--seed')) throw new Error('--require-real and --seed are mutually exclusive');
+  if (real?.base !== 'smartlearn-homologacao') throw new Error(`--require-real: the Homologacao store was not found (${join(homedir(), 'SmartLearn-Homologacao-Data', 'smartlearn-homologacao.db')}); refusing to fall back to ${real ? real.dir : 'seed data'}`);
+}
 const useSeed = process.argv.includes('--seed') || !real;
 const realDir = real?.dir;
 const dataDir = mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
