@@ -14,8 +14,9 @@ import { waitForServerReady } from '../e2e/support/wait-for-server.js';
 import { DatabaseSync } from 'node:sqlite';
 import { DEV_ACCOUNT, seedDev } from './seed-dev.mjs';
 
-const SERVER_PORT = 13999;
-const VITE_PORT = 5188;
+const argValue = (name, fallback) => { const i = process.argv.indexOf(name); return i > -1 ? Number(process.argv[i + 1]) : fallback; };
+const VITE_PORT = argValue('--port', 5188);
+const SERVER_PORT = VITE_PORT === 5188 ? 13999 : VITE_PORT + 8811; // a second instance (e.g. --seed --port 5190) never collides with the owner's
 const LAN = process.argv.includes('--lan'); // listen on the local network too (the OS firewall prompt is the owner's to answer)
 const lanOrigins = LAN ? Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `http://${i.address}:${VITE_PORT}`) : [];
 const ORIGIN = `http://localhost:${VITE_PORT}`;

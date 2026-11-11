@@ -45,6 +45,17 @@
         "--lan"
       ],
       "port": 5188
+    },
+    {
+      "name": "design-audit",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/design-preview.mjs",
+        "--seed",
+        "--port",
+        "5190"
+      ],
+      "port": 5190
     }
   ]
 }
