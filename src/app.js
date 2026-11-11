@@ -394,30 +394,6 @@ const todayLoadingState = document.querySelector("#today-loading");
 const todaySuccessState = document.querySelector("#today-success-state");
 const todayTomorrow = document.querySelector("#today-tomorrow");
 const todayLoadSummary = document.querySelector("#today-load-summary");
-const todayDayStrip = document.querySelector("#today-day-strip");
-
-// Yesterday / today / tomorrow tiles. `yesterdayDone` is null when yesterday could not be read: that tile is then left out, never shown as 0.
-function renderTodayDayStrip({ yesterdayDone, todoToday, doneToday = 0, overdue, tomorrow }) {
-  if (!todayDayStrip) return;
-  const tile = (key, count, note, isToday = false) => {
-    const el = document.createElement("div");
-    el.className = `today-day${isToday ? " is-today" : ""}`;
-    const name = document.createElement("span"); name.className = "today-day-name"; name.textContent = t(`today.day.${key}`);
-    const n = document.createElement("strong"); n.className = "today-day-count"; n.textContent = String(count);
-    const small = document.createElement("span"); small.className = "today-day-note"; small.textContent = note;
-    el.append(name, n, small);
-    return el;
-  };
-  const tiles = [];
-  if (yesterdayDone !== null) tiles.push(tile("yesterday", yesterdayDone, tn("today.day.done", yesterdayDone)));
-  // "N feitas" hoje stays visible: the text line that carried it is hidden online now that the strip exists.
-  const todayNote = [overdue > 0 ? t("today.day.overdueNote", { count: overdue }) : tn("today.day.todo", todoToday), doneToday > 0 ? tn("today.load.done", doneToday) : ""].filter(Boolean).join(" · ");
-  tiles.push(tile("today", todoToday, todayNote, true));
-  tiles.push(tile("tomorrow", tomorrow, tn("today.day.scheduled", tomorrow)));
-  todayDayStrip.style.gridTemplateColumns = `repeat(${tiles.length}, minmax(0, 1fr))`;
-  todayDayStrip.replaceChildren(...tiles);
-  todayDayStrip.hidden = false;
-}
 const weakBlock = document.querySelector("#block-weak");
 const upcomingBlock = document.querySelector("#block-upcoming");
 const weakList = document.querySelector("#weak-list");
@@ -847,6 +823,77 @@ function revealFolded(el) {
   if (folded?.hidden) folded.closest(".review-list")?.querySelector("[data-fold-toggle]")?.click();
 }
 
+// V7.2 writes dates on the cards as 01/11/2026
+const V72_DATE = { day: "2-digit", month: "2-digit", year: "numeric" };
+// V7.2 card parts, shared by the review rows and the read-only "Próximas revisões" cards.
+function createReviewChip(subject) {
+  const chip = createTextElement("span", "subject-chip", subject?.name ?? t("stats.noSubject"));
+  chip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
+  return chip;
+}
+
+/** "source" on one line, "Estudado em dd/mm/aaaa · R4" on the next (V7.2); the R-number stays visible this way. */
+function createReviewMeta(unit, task) {
+  const meta = document.createElement("p");
+  meta.className = "review-meta";
+  if (unit?.sourceText) meta.append(unit.sourceText, document.createElement("br"));
+  meta.append(t("today.review.studiedOn", { date: formatDate(unit?.studyDate, V72_DATE), number: task.reviewNumber }));
+  return meta;
+}
+
+function createLessonButton(unit) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "text-button review-open-lesson";
+  button.dataset.action = "open-lesson";
+  button.dataset.unitId = String(unit?.id ?? "");
+  button.textContent = t("today.review.viewLesson");
+  button.setAttribute("aria-label", t("today.review.viewLesson.aria", { title: unit?.title ?? t("today.review.done.fallbackTitle") }));
+  return button;
+}
+
+/** A coming review: read-only (a review is only done from its due date on), with the way to its lesson. */
+function createUpcomingCard(task, unit, subject) {
+  const row = document.createElement("article");
+  row.className = "review-row review-row-upcoming";
+  row.dataset.reviewId = String(task.id);
+  row.dataset.unitId = String(unit?.id ?? "");
+  row.dataset.group = "upcoming";
+  const header = document.createElement("div");
+  header.className = "sl-review-row";
+  const due = createTextElement("span", "review-status sl-status", formatDate(task.dueDate, V72_DATE));
+  due.dataset.status = "draft";
+  header.append(createReviewChip(subject), due);
+  const actions = document.createElement("div");
+  actions.className = "review-row-actions";
+  actions.append(createLessonButton(unit));
+  row.append(header, createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent")), createReviewMeta(unit, task), actions);
+  return row;
+}
+
+/** V7.2 "Próximas revisões": the next three reviews after today, in date order. */
+function renderUpcomingReviews(allTasks, unitsById, subjectsById, today) {
+  if (!upcomingBlock) return;
+  const next = allTasks
+    .filter((task) => !task.reviewDone && task.dueDate > today && unitsById.has(task.unitId))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id)
+    .slice(0, 3);
+  const count = upcomingBlock.querySelector("#upcoming-count");
+  count.textContent = "";
+  count.hidden = true;
+  upcomingBlock.querySelector("#upcoming-note").hidden = true;
+  upcomingBlock.querySelector("#upcoming-more").hidden = true;
+  const list = document.createElement("div");
+  list.className = "review-list";
+  list.dataset.reviewList = "upcoming";
+  for (const task of next) {
+    const unit = unitsById.get(task.unitId);
+    list.append(createUpcomingCard(task, unit, subjectsById.get(unit?.subjectId)));
+  }
+  upcomingBlock.querySelector("#upcoming-groups").replaceChildren(list);
+  upcomingBlock.hidden = next.length === 0;
+}
+
 function createReviewRow(task, unit, subject, groupName, today, exercises = [], judgments = [], priorWrong = new Set(), questionFlags = new Map()) {
   const row = document.createElement("article");
   row.className = "review-row";
@@ -854,34 +901,23 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   row.dataset.unitId = String(unit?.id ?? "");
   row.dataset.group = groupName;
 
-  // Header: review-number marker + identity + status/score tags
+  // V7.2 card: [subject chip + status] / title / source + "Estudado em" / actions. The R-number marker and the score pill stay in the
+  // DOM (handlers write to them) but are not drawn; the R-number moves to the "Estudado em" line.
   const header = document.createElement("div");
-  header.className = "review-row-header";
+  header.className = "sl-review-row";
 
   const marker = createTextElement("span", "review-marker", `R${task.reviewNumber}`);
   marker.classList.add(`is-${groupName === "doneToday" ? "done" : groupName}`);
   marker.setAttribute("aria-label", t("today.review.marker.aria", { number: task.reviewNumber }));
+  marker.hidden = true;
 
-  const heading = document.createElement("div");
-  heading.className = "review-row-heading";
-  const subjectChip = document.createElement("span");
-  subjectChip.className = "subject-chip";
-  subjectChip.textContent = subject?.name ?? t("stats.noSubject");
-  subjectChip.style.setProperty("--subject-color", `var(${colorVarForKey(subject?.color ?? "DISC-BLUE")})`);
-  heading.append(subjectChip);
-  heading.append(createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent")));
-  heading.append(
-    createTextElement(
-      "p",
-      "review-meta",
-      `${unit?.sourceText ?? ""} · ${formatDate(unit?.studyDate)}`.replace(/^\s*·\s*/, ""),
-    ),
-  );
+  const subjectChip = createReviewChip(subject);
 
   const tags = document.createElement("div");
   tags.className = "review-row-tags";
-  const statusBadge = createTextElement("span", "review-status", getReviewStatusLabel(groupName, task, today));
+  const statusBadge = createTextElement("span", "review-status sl-status", getReviewStatusLabel(groupName, task, today));
   statusBadge.classList.add(`is-${groupName === "doneToday" ? "done" : groupName}`);
+  statusBadge.dataset.status = groupName === "doneToday" ? "ready" : groupName === "today" ? "pending" : "overdue";
   const initialScoreValues = getReviewScoreValues(task.questionsCount, task.correctCount);
   const scorePill = createTextElement("span", "review-score-pill", formatReviewScore(initialScoreValues.scorePercent));
   scorePill.classList.toggle("is-empty", initialScoreValues.scorePercent == null);
@@ -900,11 +936,14 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     }
   }
 
-  header.append(marker, heading, tags);
+
+  header.append(marker, subjectChip, tags);
+  const titleEl = createTextElement("h3", "review-content", unit?.title ?? t("stats.unavailableContent"));
+  const metaEl = createReviewMeta(unit, task);
 
   // Primary action row: mark review done + expand toggle
   const primary = document.createElement("div");
-  primary.className = "review-row-primary";
+  primary.className = "review-row-primary review-row-actions";
 
   const reviewDoneLabel = document.createElement("label");
   reviewDoneLabel.className = "check-control review-toggle";
@@ -1000,12 +1039,13 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   // externos open on demand instead of every card rendering fully expanded.
   const toggleRowBtn = document.createElement("button");
   toggleRowBtn.type = "button";
-  toggleRowBtn.className = "review-row-toggle";
+  toggleRowBtn.className = "small-button review-row-toggle";
   toggleRowBtn.dataset.action = "toggle-row";
   toggleRowBtn.setAttribute("aria-expanded", "false");
-  toggleRowBtn.textContent = t("shell.action.viewContent");
+  toggleRowBtn.textContent = t("today.review.open");
+  const lessonBtn = createLessonButton(unit);
 
-  primary.append(reviewDoneLabel);
+  primary.append(toggleRowBtn, lessonBtn, reviewDoneLabel);
   if (task.reviewDone) {
     // J02: a review marked by mistake can be taken back with a button that says so (the same audited reopen as clearing the box)
     const undoBtn = document.createElement("button");
@@ -1019,7 +1059,6 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
     });
     primary.append(undoBtn);
   }
-  primary.append(toggleRowBtn);
 
   const secondaryControls = document.createElement("div");
   secondaryControls.className = "review-row-secondary-controls";
@@ -1250,7 +1289,7 @@ function createReviewRow(task, unit, subject, groupName, today, exercises = [], 
   } else {
     body.append(summarySection, secondaryControls, detail, externalSection);
   }
-  row.append(header, primary, body);
+  row.append(header, titleEl, metaEl, primary, body);
   const restoredSection = row.querySelector("[data-exercises-total]");
   if (restoredSection && Number(restoredSection.dataset.exercisesAnswered) > 0) {
     const total = Number(restoredSection.dataset.exercisesTotal);
@@ -1503,9 +1542,9 @@ export async function renderToday() {
 
   const today = getLocalDateValue();
   const tomorrow = getTomorrowValue(today);
-  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects;
+  let pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects, allTasks;
   try {
-    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects] =
+    [pendingToday, overdueReviews, completedToday, tomorrowReviews, learningUnits, subjects, allTasks] =
       await Promise.all([
         DB.reviewTasks.getForToday(today),
         DB.reviewTasks.getOverdue(today),
@@ -1513,6 +1552,7 @@ export async function renderToday() {
         DB.reviewTasks.getTomorrow(tomorrow),
         DB.learningUnits.getAll(),
         DB.subjects.getAll(),
+        DB.reviewTasks.getAll(),
       ]);
     if (todayLoadingState) todayLoadingState.hidden = true;
   } catch (error) {
@@ -1538,7 +1578,6 @@ export async function renderToday() {
   }
   if (renderId !== todayRenderSeq) return; // a newer render started: its data wins
   if (existingOfflineBanner) existingOfflineBanner.hidden = true;
-  if (upcomingBlock) upcomingBlock.hidden = true; // offline-only block: online Hoje has its own "Amanhã" line
   const questionFlags = await loadQuestionFlags();
   if (renderId !== todayRenderSeq) return;
   const unitsById = new Map(learningUnits.map((unit) => [unit.id, unit]));
@@ -1649,6 +1688,7 @@ export async function renderToday() {
     appendFoldedList(list, groupName, items);
   }
 
+  renderUpcomingReviews(allTasks ?? [], unitsById, subjectsById, today);
   renderWeakPractice(today).catch(console.error); // not awaited: suggestions must never delay Hoje
 
   // Slice 3 (SMARTLEARN_PRODUCT_FIRST_V1): "o que eu faço agora?" answered
@@ -1663,12 +1703,7 @@ export async function renderToday() {
       const lead = overdueReviews.length > 0
         ? (overdueReviews.length === 1 ? t("today.primary.overdue.one", { count: overdueReviews.length }) : t("today.primary.overdue.other", { count: overdueReviews.length }))
         : (pendingToday.length === 1 ? t("today.primary.today.one", { count: pendingToday.length }) : t("today.primary.today.other", { count: pendingToday.length }));
-      const unitTitle = unitsById.get(primaryTask.unitId)?.title;
-      todayPrimaryActionText.textContent = unitTitle
-        ? (pick.reinforce > 0
-          ? t("today.primary.startReinforce", { lead, title: unitTitle, count: pick.reinforce })
-          : t("today.primary.start", { lead, title: unitTitle }))
-        : lead;
+      todayPrimaryActionText.textContent = unitsById.get(primaryTask.unitId)?.title ?? lead;
       todayPrimaryActionBtn.dataset.reviewId = String(primaryTask.id);
       // "Revisar uma por vez" opens the questions of this review one at a time; only offered while some are still unanswered.
       if (todayFocusReviewBtn) {
@@ -1683,17 +1718,23 @@ export async function renderToday() {
     }
   }
 
-  // Load summary above fold
+  // V7.2 summary line: "3 vencidas · 3 para hoje · 0 concluídas"; yesterday's and tomorrow's figures (the old Ontem/Amanhã tiles) follow it when there are any
   if (todayLoadSummary) {
-    // the day strip above carries these figures online (including "N feitas" in the Hoje tile); the offline snapshot below has its own text line
-    todayLoadSummary.hidden = true;
-    todayLoadSummary.textContent = "";
+    let yesterdayDone = 0;
+    if (learningUnits.length > 0) {
+      try { yesterdayDone = (await DB.reviewTasks.getCompletedToday(subtractDays(today, 1))).length; } catch { /* the figure is left out */ }
+    }
+    if (renderId !== todayRenderSeq) return;
+    const parts = [
+      tn("today.summary.overdue", overdueReviews.length),
+      t("today.summary.today", { count: pendingToday.length }),
+      tn("today.summary.done", completedToday.length),
+    ];
+    if (yesterdayDone > 0) parts.push(tn("today.summary.yesterday", yesterdayDone));
+    if (tomorrowReviews.length > 0) parts.push(tn("today.summary.tomorrow", tomorrowReviews.length));
+    todayLoadSummary.textContent = parts.join(" · ");
+    todayLoadSummary.hidden = learningUnits.length === 0;
   }
-  if (learningUnits.length > 0) {
-    let yesterdayDone = null;
-    try { yesterdayDone = (await DB.reviewTasks.getCompletedToday(subtractDays(today, 1))).length; } catch { /* tile left out */ }
-    renderTodayDayStrip({ yesterdayDone, todoToday: overdueReviews.length + pendingToday.length, doneToday: completedToday.length, overdue: overdueReviews.length, tomorrow: tomorrowReviews.length });
-  } else if (todayDayStrip) todayDayStrip.hidden = true;
 
   const pendingCount = overdueReviews.length + pendingToday.length;
   const hasData = learningUnits.length > 0;
@@ -1704,11 +1745,8 @@ export async function renderToday() {
   todayTomorrow.textContent = "";
   todayTomorrow.hidden = true;
 
-  todayDateLabel.textContent = formatIntlDate(new Date(), {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
+  const dateText = formatIntlDate(new Date(), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  todayDateLabel.textContent = dateText.charAt(0).toLocaleUpperCase() + dateText.slice(1);
 
   // Show/hide daily summary button based on studies with study_date === today
   const todayStudies = learningUnits.filter((u) => u.studyDate === today);
@@ -5187,7 +5225,14 @@ reviewDashboard.addEventListener("click", (event) => {
   body.hidden = !expanded;
   row.classList.toggle("is-open", expanded);
   button.setAttribute("aria-expanded", String(expanded));
-  button.textContent = t(expanded ? "shell.action.collapse" : "shell.action.viewContent");
+  button.textContent = t(expanded ? "shell.action.collapse" : "today.review.open");
+});
+
+// "Ver aula": the lesson in Plano (the same shortcut Estatísticas uses); it opens nothing when the lesson is gone.
+reviewDashboard.addEventListener("click", async (event) => {
+  const button = event.target.closest('[data-action="open-lesson"]');
+  if (!button) return;
+  await openLessonInPlan(button.dataset.unitId);
 });
 
 reviewDashboard.addEventListener("click", (event) => {

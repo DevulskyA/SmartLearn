@@ -76,7 +76,7 @@ test('revealing an answer and judging it in the real review UI creates a server-
   // scan every row themselves.
   const primaryAction = page.locator('#today-primary-action');
   await expect(primaryAction).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('#today-primary-action-text')).toContainText('vencida');
+  await expect(page.locator('#today-load-summary')).toContainText('vencida');
   const primaryReviewId = await page.locator('#today-primary-action-btn').getAttribute('data-review-id');
   expect(primaryReviewId).toBeTruthy();
   await page.locator('#today-primary-action-btn').click();

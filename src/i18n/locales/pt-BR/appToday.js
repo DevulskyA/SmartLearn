@@ -10,6 +10,10 @@ export default {
   'today.review.undo': 'Desfazer conclusão',
   'today.review.undo.aria': 'Desfazer conclusão: {title}, revisão número {number}',
   'today.review.viewPerformance': 'Ver desempenho',
+  'today.review.open': 'Revisar agora →',
+  'today.review.viewLesson': 'Ver aula',
+  'today.review.viewLesson.aria': 'Ver aula: {title}',
+  'today.review.studiedOn': 'Estudado em {date} · R{number}',
   'today.review.questionsDone': 'Questões feitas',
   'today.review.performance': 'Aproveitamento',
   'today.review.performance.aria': 'Percentual de acertos',
@@ -50,6 +54,17 @@ export default {
   'today.day.scheduled.one': 'revisão agendada',
   'today.day.scheduled.other': 'revisões agendadas',
   'today.day.overdueNote': 'incluindo {count} vencidas',
+
+  // Summary line under the title (V7.2)
+  'today.summary.overdue.one': '{count} vencida',
+  'today.summary.overdue.other': '{count} vencidas',
+  'today.summary.today': '{count} para hoje',
+  'today.summary.done.one': '{count} concluída',
+  'today.summary.done.other': '{count} concluídas',
+  'today.summary.yesterday.one': '{count} feita ontem',
+  'today.summary.yesterday.other': '{count} feitas ontem',
+  'today.summary.tomorrow.one': '{count} agendada para amanhã',
+  'today.summary.tomorrow.other': '{count} agendadas para amanhã',
 
   // Load summary and primary action
   'today.load.overdue.one': '{count} vencida',

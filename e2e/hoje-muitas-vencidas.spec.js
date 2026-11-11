@@ -159,7 +159,8 @@ test('Hoje with 18 overdue + 12 done on a phone: "Começar agora" in the first s
   const m = await measure(page);
   console.log('MEDIDA celular', JSON.stringify(m));
   expect(m.primaryBottom, '"Começar agora" is on the first screen').toBeLessThanOrEqual(m.viewport);
-  expect(m.pageHeight, 'Hoje height (px)').toBeLessThanOrEqual(3000);
+  // V7.2 adds "Próximas revisões" (three cards, stacked on a phone) at the very end of Hoje: the guard is about the lists above it
+  expect(m.pageHeight - (m.blocks['block-upcoming'] ?? 0), 'Hoje height without "Próximas revisões" (px)').toBeLessThanOrEqual(3000);
 });
 
 test('"Começar agora" always points at a visible review, and a card the student opened is never folded again by a re-render', async ({ page }) => {

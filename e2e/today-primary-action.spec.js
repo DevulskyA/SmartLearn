@@ -70,8 +70,9 @@ test('Hoje "Começar agora" goes to a review with something to retrieve, not the
 
   await page.locator('[data-screen="today"]').click();
   const text = page.locator('#today-primary-action-text');
-  await expect(text).toContainText('vencidas', { timeout: 5000 });
-  await expect(text).toContainText('Comece por “Aula Com Exercicio”');
+  // V7.2: the banner names the review to start; the counts are in the summary line under the title
+  await expect(page.locator('#today-load-summary')).toContainText('vencidas', { timeout: 5000 });
+  await expect(text).toHaveText('Aula Com Exercicio');
 
   // The very first overdue row IS the empty one (oldest) -- the button must not point at it.
   const firstRowId = await page.locator('[data-review-list="overdue"] .review-row').first().getAttribute('data-review-id');

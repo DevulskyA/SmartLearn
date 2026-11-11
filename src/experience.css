@@ -274,7 +274,7 @@
 .sl-redesign #screen-today #today-focus-review-btn { background:transparent;border-color:#d5bdf4;color:#fff; }
 .sl-redesign .review-dashboard { display:grid;grid-template-columns:1fr 1fr;gap:25px; }
 /* only one block shown (e.g. just overdue reviews): use the full width instead of leaving a column empty */
-.sl-redesign .review-dashboard:not(:has(> .review-block:not([hidden]) ~ .review-block:not([hidden]))) { grid-template-columns:1fr; }
+.sl-redesign .review-dashboard:not(:has(:is(#block-overdue,#block-today,#block-done-today):not([hidden]) ~ :is(#block-overdue,#block-today,#block-done-today):not([hidden]))) { grid-template-columns:1fr; }
 .sl-redesign .review-block { min-width:0; }
 .sl-redesign .block-heading { display:flex;align-items:center;gap:8px;margin:0 0 13px; }
 .sl-redesign .block-heading h2 { font:normal 23px/1.25 var(--sl-serif);letter-spacing:-.65px;margin:0; }
@@ -1950,3 +1950,19 @@
 .sl-redesign #screen-stats .sl-history-panel .stats-panel-heading {flex-wrap:nowrap;align-items:flex-start;}
 .sl-redesign #screen-stats .sl-history-panel .stats-panel-heading > div {min-width:0;}
 .sl-redesign #screen-stats .sl-history-panel .stats-panel-heading > .text-button {flex:none;white-space:nowrap;}
+
+/* HOJE (V7.2): a review card is [subject chip + status] / title / source + "Estudado em" / actions */
+.sl-redesign #screen-today .review-row { display:block; }
+.sl-redesign #screen-today .sl-review-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.sl-redesign #screen-today .sl-review-row .review-row-tags { flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px; }
+.sl-redesign #screen-today .review-row .review-status { padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;line-height:1.4;letter-spacing:0; }
+.sl-redesign #screen-today .review-row .review-score-pill { display:none; }
+.sl-redesign #screen-today .review-row .review-meta { display:block;margin:0; }
+.sl-redesign #screen-today .review-row-actions { display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:8px;margin-top:13px; }
+.sl-redesign #screen-today .review-row-actions .review-toggle { margin-left:auto;font-size:11px; }
+.sl-redesign #screen-today .review-row-toggle { min-height:33px;padding:7px 11px;border:1px solid var(--sl-line);border-radius:9px;background:var(--sl-paper);color:var(--sl-ink);font-size:11px;font-weight:650; }
+.sl-redesign #screen-today .review-row-toggle::after { content:none; }
+.sl-redesign #screen-today .review-row-body { margin-top:13px; }
+.sl-redesign #screen-today .sl-review-row { flex-wrap:wrap; }
+.sl-redesign #screen-today .sl-review-row .subject-chip { flex:0 1 auto;min-width:min-content;max-width:100%;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:none; }
+.sl-redesign #screen-today .sl-review-row .review-row-tags { flex:0 0 auto;margin-left:auto; }
