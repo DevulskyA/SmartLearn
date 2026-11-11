@@ -1968,3 +1968,8 @@
 .sl-redesign #screen-today .sl-review-row .subject-chip { flex:0 1 auto;min-width:min-content;max-width:100%;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:none; }
 .sl-redesign #screen-today .sl-review-row .review-row-tags { flex:0 0 auto;margin-left:auto; }
 .sl-redesign #screen-materials #library-count {align-self:center;text-align:right;font-size:11px;max-width:192px;line-height:1.5;}
+/* CONTA (V7.2): profile row */
+.sl-redesign .sl-profile-row { display:flex;gap:15px;align-items:center;margin-bottom:22px; }
+.sl-redesign .sl-profile-row h2 { margin:0;font-size:17px;overflow-wrap:anywhere; }
+.sl-redesign .sl-profile-row p { margin:3px 0 0;font-size:12px;color:var(--sl-muted); }
+.sl-redesign .sl-avatar { display:grid;place-items:center;flex:0 0 auto;width:46px;height:46px;border-radius:13px;background:var(--sl-soft);color:var(--sl-accent);font-size:18px;font-family:var(--sl-serif); }

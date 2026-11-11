@@ -6156,9 +6156,17 @@ async function renderAccount() {
   // a signed-in screen never leaves the password fields open for typing: they stay behind the button
   if (!loggedIn || !accountLoggedInView) accountPasswordDetails?.removeAttribute("open");
   if (loggedIn && accountLoggedInAs) {
-    accountLoggedInAs.textContent = t("account.connectedAs", { email: user.emailDisplay });
+    accountLoggedInAs.textContent = user.emailDisplay;
+    const avatar = document.querySelector("#account-avatar");
+    if (avatar) avatar.textContent = String(user.emailDisplay ?? "").trim().charAt(0).toLocaleUpperCase();
   }
 }
+
+// V7.2 shortcuts on the Conta card: "Preferências e dados" and "Continuar estudo".
+document.addEventListener("click", (event) => {
+  const go = event.target.closest?.("[data-go-screen]");
+  if (go) showScreen(go.dataset.goScreen, { focus: true });
+});
 
 document.querySelector("#account-show-register")?.addEventListener("click", () => {
   accountLoginForm.hidden = true;

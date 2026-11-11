@@ -818,12 +818,13 @@
         <section class="screen" id="screen-account" data-screen-panel="account" aria-labelledby="title-account" hidden>
           <div class="screen-heading">
             <div>
-              <p class="eyebrow" data-i18n="screens.account.eyebrow">Servidor central</p>
+              <p class="eyebrow" data-i18n="screens.account.eyebrow">Seu espaço</p>
               <h1 id="title-account" data-i18n="screens.account.title">Conta</h1>
+              <p class="sl-screen-description" data-i18n="screens.account.description">Sua conta e a continuidade dos seus estudos.</p>
             </div>
           </div>
 
-          <div class="form-card" id="account-logged-out-view">
+          <div class="settings-card" id="account-logged-out-view">
             <form class="study-form" id="account-login-form">
               <h2 id="account-login-title" data-i18n="screens.account.login">Entrar</h2>
               <div class="field-group">
@@ -870,8 +871,18 @@
             </form>
           </div>
 
-          <div class="form-card" id="account-logged-in-view" hidden>
-            <p class="account-status" id="account-logged-in-as"></p>
+          <div class="settings-card" id="account-logged-in-view" hidden>
+            <div class="sl-profile-row">
+              <div class="sl-avatar" id="account-avatar" aria-hidden="true"></div>
+              <div>
+                <h2 id="account-logged-in-as"></h2>
+                <p data-i18n="screens.account.connectedSubtitle">Conectado ao servidor central</p>
+              </div>
+            </div>
+            <div class="settings-actions sl-mt">
+              <button class="primary-button" type="button" data-go-screen="settings" data-i18n="screens.account.goSettings">Preferências e dados</button>
+              <button class="secondary-button" type="button" data-go-screen="plan" data-i18n="screens.account.goStudy">Continuar estudo</button>
+            </div>
             <details class="account-password-details" id="account-password-details">
             <summary class="secondary-button" data-i18n="screens.account.changePassword">Alterar senha</summary>
             <form class="study-form" id="account-password-form">
