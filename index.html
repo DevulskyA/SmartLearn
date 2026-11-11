@@ -315,33 +315,26 @@
         </section>
 
         <section class="screen" id="screen-register" data-screen-panel="register" aria-labelledby="title-register" hidden>
-          <h1 id="title-register" data-i18n="screens.register.title">Cadastro</h1>
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow" data-i18n="screens.register.eyebrow">Registro do aprendizado</p>
+              <h1 id="title-register" data-i18n="screens.register.title">Nova aula</h1>
+              <p class="sl-screen-description" data-i18n="screens.register.lede">Registre o conteúdo estudado. O sistema organiza as revisões.</p>
+            </div>
+            <button class="text-button" type="button" data-go-screen="plan" data-i18n="screens.register.back">← Voltar ao Plano</button>
+          </div>
           <div class="form-card">
             <form class="study-form" id="study-form" novalidate>
-              <div class="section-heading">
-                <p class="eyebrow" data-i18n="screens.register.eyebrow">Novo estudo</p>
-                <h2 data-i18n="screens.register.quick">Cadastro rápido</h2>
-                <p data-i18n="screens.register.body">Escolha a disciplina, informe a fonte e o conteúdo do estudo.</p>
-              </div>
-
               <div class="form-grid">
-                <div class="field-group form-grid-wide">
+                <div class="field-group">
                   <label for="subject-select" data-i18n="screens.form.subject">Disciplina</label>
-                  <div class="inline-form-row inline-select-row">
-                    <select id="subject-select" name="subject">
-                      <option value="" data-i18n="screens.form.select">Selecione…</option>
-                    </select>
-                    <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
-                      <span aria-hidden="true">+</span> <span data-i18n="screens.form.newSubject">Nova disciplina</span>
-                    </button>
-                  </div>
+                  <select id="subject-select" name="subject">
+                    <option value="" data-i18n="screens.form.select">Selecione…</option>
+                  </select>
+                  <button class="text-button" id="show-subject-form" type="button" aria-expanded="false" aria-controls="new-subject-form">
+                    <span aria-hidden="true">+</span> <span data-i18n="screens.form.newSubject">Nova disciplina</span>
+                  </button>
                   <p class="field-message" id="subject-message" role="alert" aria-live="polite"></p>
-                </div>
-
-                <div class="field-group form-grid-wide">
-                  <label for="study-source-text" data-i18n="screens.form.source">Fonte</label>
-                  <input id="study-source-text" name="studySourceText" type="text" maxlength="200" placeholder="Ex.: Guyton &amp; Hall, cap. 1" data-i18n-placeholder="screens.form.sourcePlaceholder" />
-                  <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
                 </div>
 
                 <div class="field-group">
@@ -349,24 +342,35 @@
                   <input id="study-date" name="studyDate" type="date" required />
                 </div>
 
-                <div class="field-group">
-                  <label for="study-lesson-date" data-i18n="screens.form.lessonDate">Data da aula (opcional)</label>
-                  <input id="study-lesson-date" name="lessonDate" type="date" />
+                <div class="field-group form-grid-wide">
+                  <label for="study-content" data-i18n="screens.register.contentLabel">O que você estudou?</label>
+                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Transporte pela membrana celular" data-i18n-placeholder="screens.register.contentPlaceholder" required />
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-content" data-i18n="screens.form.content">Conteúdo estudado</label>
-                  <input id="study-content" name="studyContent" type="text" maxlength="240" placeholder="Ex.: Funções quadráticas" data-i18n-placeholder="screens.register.contentPlaceholder" required />
+                  <label for="study-source-text" data-i18n="screens.register.sourceLabel">Fonte e páginas</label>
+                  <input id="study-source-text" name="studySourceText" type="text" maxlength="200" placeholder="Ex.: Costanzo, páginas 13 a 21" data-i18n-placeholder="screens.register.sourcePlaceholder" />
+                  <p class="field-message" id="source-message" role="alert" aria-live="polite"></p>
                 </div>
 
                 <div class="field-group form-grid-wide">
-                  <label for="study-summary"><span data-i18n="screens.form.summary">Resumo Mestre</span> <span class="optional-label" data-i18n="screens.form.optional">(opcional)</span></label>
-                  <textarea id="study-summary" name="studySummary" rows="5" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
+                  <label for="study-summary" data-i18n="screens.form.summary">Resumo Mestre</label>
+                  <textarea id="study-summary" name="studySummary" rows="8" placeholder="Cole ou escreva seu resumo. Você pode editar depois." data-i18n-placeholder="screens.register.summaryPlaceholder"></textarea>
                 </div>
               </div>
 
+              <details class="sl-disclosure">
+                <summary data-i18n="screens.register.otherDate">A aula aconteceu em outra data?</summary>
+                <div class="field-group sl-mt">
+                  <label for="study-lesson-date" data-i18n="screens.form.lessonDate">Data da aula (opcional)</label>
+                  <input id="study-lesson-date" name="lessonDate" type="date" />
+                  <p class="sl-caption" data-i18n="screens.register.otherDateNote">As revisões usam a data do estudo.</p>
+                </div>
+              </details>
+
               <div class="form-actions">
-                <button class="primary-button" type="submit" data-i18n="screens.register.save">Salvar estudo</button>
+                <button class="primary-button" type="submit" data-i18n="screens.register.save">Registrar estudo</button>
+                <button class="secondary-button" type="button" data-go-screen="plan" data-i18n="screens.register.cancel">Cancelar</button>
                 <p class="form-message" id="study-message" role="status" aria-live="polite"></p>
               </div>
             </form>
@@ -716,19 +720,23 @@
           <div class="screen-heading">
             <div>
               <p class="eyebrow" id="exam-unit"></p>
-              <h1 id="title-exam" tabindex="-1">Prova</h1>
+              <h1 id="title-exam" tabindex="-1" data-i18n="appExam.title">Prova</h1>
             </div>
+            <button class="text-button" type="button" data-go-screen="plan" data-i18n="screens.register.back">← Voltar ao Plano</button>
           </div>
           <p class="form-message" id="exam-message" role="status" aria-live="polite"></p>
 
           <section class="settings-card" id="exam-taking" aria-label="Fazendo a prova" data-i18n-aria-label="screens.exam.taking.label" hidden>
-            <p class="study-now-progress" id="exam-progress"></p>
+            <div class="sl-progress-meta">
+              <h2 data-i18n="appExam.practiceTitle">Seus conhecimentos em prática</h2>
+              <span id="exam-progress"></span>
+            </div>
             <p id="exam-question-text"></p>
             <label class="exam-answer-label" for="exam-answer-input" data-i18n="screens.exam.answer">Sua resposta</label>
             <textarea id="exam-answer-input" rows="5" maxlength="5000" aria-describedby="exam-progress exam-question-text"></textarea>
-            <div class="settings-actions">
+            <div class="settings-actions sl-mt">
               <button class="secondary-button" id="exam-prev-btn" type="button" data-i18n="screens.exam.prev">Anterior</button>
-              <button class="secondary-button" id="exam-next-btn" type="button" data-i18n="screens.exam.next">Próxima</button>
+              <button class="primary-button" id="exam-next-btn" type="button" data-i18n="screens.exam.next">Próxima</button>
             </div>
             <ol class="exam-nav" id="exam-nav" aria-label="Questões da prova" data-i18n-aria-label="screens.exam.navLabel"></ol>
             <div class="settings-actions">
@@ -761,6 +769,7 @@
               <p class="eyebrow" id="study-now-subject"></p>
               <h1 id="title-study-now"></h1>
             </div>
+            <button class="text-button" type="button" data-go-screen="plan" data-i18n="screens.register.back">← Voltar ao Plano</button>
           </div>
 
           <section class="settings-card" id="study-now-summary-card" aria-labelledby="study-now-summary-title" hidden>
@@ -771,10 +780,11 @@
           </section>
 
           <section class="settings-card" id="study-now-practice-card" aria-labelledby="study-now-practice-title">
-            <div class="section-heading compact-heading">
+            <div class="sl-progress-meta">
               <h2 id="study-now-practice-title">Praticar</h2>
-              <p id="study-now-progress"></p>
+              <span id="study-now-progress"></span>
             </div>
+            <div class="sl-session-progress" aria-hidden="true"><span id="study-now-progress-bar"></span></div>
             <div class="study-now-resume" id="study-now-resume" role="group" aria-labelledby="study-now-resume-text" hidden>
               <p id="study-now-resume-text"></p>
               <div class="settings-actions">
@@ -785,7 +795,7 @@
             <div id="study-now-question-area">
               <p id="study-now-question-text"></p>
               <p id="study-now-hint-text" class="study-now-hint" hidden></p>
-              <button class="primary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
+              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
               <p id="study-now-answer-text" hidden></p>
               <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
               <div id="study-now-judgment" class="exercise-judgment" hidden>

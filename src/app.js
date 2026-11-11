@@ -520,6 +520,7 @@ const studyNowTitleEl = document.querySelector("#title-study-now");
 const studyNowSummaryCard = document.querySelector("#study-now-summary-card");
 const studyNowSummaryBody = document.querySelector("#study-now-summary-body");
 const studyNowProgress = document.querySelector("#study-now-progress");
+const studyNowProgressBar = document.querySelector("#study-now-progress-bar");
 const studyNowQuestionArea = document.querySelector("#study-now-question-area");
 const studyNowQuestionText = document.querySelector("#study-now-question-text");
 const studyNowHintText = document.querySelector("#study-now-hint-text");
@@ -1993,7 +1994,7 @@ export async function renderPlan() {
   const pageUnits = filtered.slice(planFrom, planFrom + PLAN_PAGE_SIZE);
   if (planCount) {
     planCount.hidden = learningUnits.length === 0;
-    planCount.textContent = filtered.length === 0 ? "" : t("screens.plan.count", { matched: filtered.length, total: learningUnits.length, from: planFrom + 1, to: planFrom + pageUnits.length });
+    planCount.textContent = filtered.length === 0 ? "" : t("screens.plan.count", { matched: filtered.length, from: planFrom + 1, to: planFrom + pageUnits.length });
   }
   if (planPager) {
     planPager.hidden = planPages === 1;
@@ -3310,6 +3311,7 @@ function renderStudyNowQuestion() {
   const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
   studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
   studyNowProgress.style.setProperty("--p", String((state.index + 1) / state.exercises.length));
+  studyNowProgressBar.style.width = `${((state.index + 1) / state.exercises.length) * 100}%`;
   studyNowPracticeTitle.textContent = t(titleKey);
   // The Resumo Mestre contains the very answers being retrieved: showing it
   // above a redo question would turn retrieval practice into reading.
@@ -3575,8 +3577,8 @@ async function openExam(begin, { subjectName, fallbackTitle }) {
     const title = exam.title ?? fallbackTitle ?? "";
     examState = { exam, index: 0, dirty: false, unitTitle: title, subjectName, unsaved: new Map() };
     restoreExamPending(examState);
-    examEls.unit.textContent = exam.scope === "SUBJECT" ? t("appExam.scope.subject") : (subjectName ?? "");
-    examEls.title.textContent = t("appExam.title", { title });
+    examEls.unit.textContent = t("appExam.eyebrow", { context: exam.scope === "SUBJECT" ? t("appExam.scope.subject") : (subjectName ?? ""), title }).replace(/^ · | · $/g, "");
+    examEls.title.textContent = t("appExam.title");
     examEls.message.textContent = "";
     showScreen("exam", { focus: true });
     if (exam.status === "IN_PROGRESS") {

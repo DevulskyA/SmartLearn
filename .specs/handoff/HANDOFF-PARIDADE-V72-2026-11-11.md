@@ -31,11 +31,13 @@ Verificador do kit (só estrutura, não mede cor nem fonte): Hoje 15 divergênci
 |---|---|---|
 | Estatísticas | **Feita** (commits `dba8573`…`d89014b`; 86 e2e passaram) | tabela de análise, distribuição, janela de detalhe e histórico seguem o V7.2; ver `.specs/evidence/stats-v72-2026-11-11/RESULTADOS.md` |
 | Hoje | **Refeita** (`99a1cf6`): linha de resumo, banner, cartões V7.2, "Próximas revisões"; Ontem/Hoje/Amanhã viraram texto na linha de resumo | itens nativos mantidos (ver 3.3) |
-| Plano | **Próxima** | ver 3.2 |
+| Plano | **Feita** (`8bdf3aa`): faixa de cabeçalho, contador "a–b de N", paginação no topo, ordenação A–Z | falta o seletor de página no rodapé e "Ler resumos em conjunto →" (sem função no app) |
 | Materiais | **Feita** (`bec8188`): cartão de busca/ordenar, contagem "N de N materiais · a–b exibidos", paginação | texto extra "O SmartLearn guarda uma cópia…" mantido (nativo) |
 | Configurações | **Feita** (`576efbe`): cartão de idioma com o layout de campos do V7.2 | falta "Nome do período" (recurso novo do V7.2, sem suporte no app) e "Restaurar backup" |
 | Conta | **Feita** (`feef66a`): cartão de perfil (avatar, e-mail, atalhos); Alterar senha e Sair mantidos | formulários de login/cadastro (sem login) não comparados |
-| Cadastro, Estudo, Prova | Não iniciadas | exigem fluxo (Playwright/E2E) |
+| Cadastro | **Feita**: "Nova aula" (eyebrow, descrição, ← Voltar ao Plano, Disciplina + Data, "O que você estudou?", "Fonte e páginas", Resumo Mestre, disclosure da data da aula, Registrar estudo/Cancelar) | "Nova disciplina", gerenciador de estudos (exercícios) e de disciplinas mantidos abaixo do formulário (funções nativas; a tela é a única entrada de edição de exercícios) |
+| Estudo | **Feita**: ← Voltar ao Plano, cartão "Praticar" com linha de progresso e barra, largura 920 px, "Ver resposta" secundário | resumo oculto durante a prática (regra nativa `STUDY_NOW_HIDES_SUMMARY_WHILE_PRACTISING`, recuperação antes de ler); botão "Errei" (V7.2 diz "Preciso reforçar"; 10+ specs usam "Errei"); botões de 44 px |
+| Prova | **Feita**: eyebrow "DISCIPLINA · AULA", título "Prova", ← Voltar ao Plano, cabeçalho "Seus conhecimentos em prática" com progresso, Próxima primária | só questões discursivas no app (sem opções A–D); "Submeter prova" mantém confirmação; nav 44 px |
 
 ### 3.1 Hoje (V7.2 × app, 1440 px)
 

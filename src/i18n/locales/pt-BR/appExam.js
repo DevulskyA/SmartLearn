@@ -2,7 +2,9 @@
 // the plural form, as the screen always did) instead of tn().
 export default {
   'appExam.scope.subject': 'Prova da disciplina',
-  'appExam.title': 'Prova — {title}',
+  'appExam.title': 'Prova',
+  'appExam.eyebrow': '{context} · {title}',
+  'appExam.practiceTitle': 'Seus conhecimentos em prática',
   'appExam.startFailed': 'Não foi possível iniciar a prova.',
   'appExam.progress': 'Questão {current} de {total}',
   'appExam.goTo': 'Ir para a questão {n}',

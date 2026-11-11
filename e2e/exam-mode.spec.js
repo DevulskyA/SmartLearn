@@ -341,7 +341,8 @@ test('EXAM-4: a discipline exam mixes the units, shows no gabarito before submit
   await row.locator('.plan-expand-btn').click();
   await row.locator('[data-action="plan-subject-exam"]').click();
   await expect(page.locator('#exam-progress')).toHaveText('Questão 1 de 4');
-  await expect(page.locator('#title-exam')).toHaveText('Prova — Disciplina Prova');
+  await expect(page.locator('#title-exam')).toHaveText('Prova');
+  await expect(page.locator('#exam-unit')).toHaveText('Prova da disciplina · Disciplina Prova');
   const seen = new Set();
   for (let i = 0; i < 4; i += 1) {
     seen.add(await page.locator('#exam-question-text').innerText());

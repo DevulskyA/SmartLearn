@@ -1975,3 +1975,16 @@
 .sl-redesign .sl-avatar { display:grid;place-items:center;flex:0 0 auto;width:46px;height:46px;border-radius:13px;background:var(--sl-soft);color:var(--sl-accent);font-size:18px;font-family:var(--sl-serif); }
 .sl-redesign .sl-sticky-bottom { display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 0; }
 .sl-redesign .sl-search { font-weight:400; }
+/* V7.2: Cadastro disclosure, spacing helper and the graded-exam card */
+.sl-redesign .sl-mt { margin-top:18px; }
+.sl-redesign .sl-disclosure { margin-top:20px;padding-top:15px;border-top:1px solid var(--sl-line); }
+.sl-redesign .sl-disclosure summary { font-size:12px;color:var(--sl-accent);cursor:pointer; }
+.sl-redesign .sl-exam-graded { padding:18px;background:var(--sl-soft);border-radius:11px;margin:15px 0; }
+@media (max-width:700px) { .sl-redesign .sl-exam-graded { padding:14px; } }
+.sl-redesign #screen-register .field-group > .field-message:empty { min-height:0;height:0;margin:-7px 0 0; }
+/* V7.2 Estudo agora: practice card spans the 920px screen; progress is a meta row plus a bar */
+.sl-redesign #study-now-practice-card { width:100%; }
+.sl-redesign .sl-progress-meta { display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px; }
+.sl-redesign .sl-progress-meta h2 { font-size:20px;font-weight:700;letter-spacing:-.5px; }
+.sl-redesign #study-now-progress { margin:0;font-weight:400; }
+.sl-redesign #study-now-progress:not(:empty)::after { content:none; }

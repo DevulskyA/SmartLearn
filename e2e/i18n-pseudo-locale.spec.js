@@ -53,8 +53,8 @@ function untranslatedOf([screenId, studentText]) {
     if (!el || ['SCRIPT', 'STYLE', 'OPTION'].includes(el.tagName) || !visible(el)) continue;
     const s = n.nodeValue.replace(/\s+/g, ' ').trim();
     // Not catalog text, on purpose: a date formatted by the active locale, the commit hash and channel of the build, and the
-    // name of each language written in that language (autonyms never change with the interface language).
-    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$|^(Português \(Brasil\)|Español|English)$/.test(s);
+    // name of each language written in that language, and the signed-in e-mail address (user data, shown on Conta) (autonyms never change with the interface language).
+    const isDate = /^\S+@\S+\.\S+$|^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$|^(Português \(Brasil\)|Español|English)$/.test(s);
     if (prose(s) && !s.includes('\u27E6') && !isStudent(s) && !isDate) found.add(`text: ${s}`);
   }
   for (const el of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) {
