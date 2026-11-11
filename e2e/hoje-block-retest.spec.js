@@ -305,6 +305,11 @@ test('Retention cue: an item still wrong at its last attempt is flagged in the n
 
   // Redo A correctly (Refazer erros, shared flow) -> the cue is gone next time.
   await r1.getByRole('button', { name: 'Refazer erros (1)' }).click();
+  // Started from Hoje: the top button goes back to Hoje, not to Plano.
+  await expect(page.locator('#study-now-back-btn')).toHaveText('← Voltar para Hoje');
+  await page.locator('#study-now-back-btn').click();
+  await expect(page.locator('#screen-today')).toBeVisible();
+  await r1.getByRole('button', { name: 'Refazer erros (1)' }).click();
   await page.locator('#study-now-reveal-btn').click();
   await page.locator('#study-now-correct-btn').click();
   await expect(page.locator('#study-now-result-text')).toHaveText('1/1 erros corrigidos');

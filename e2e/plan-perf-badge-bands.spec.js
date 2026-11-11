@@ -5,10 +5,12 @@ import { test, expect } from '@playwright/test';
 
 for (const mode of ['light', 'dark']) {
   test(`performance badge bands: AA contrast on --band-* colours (${mode})`, async ({ page }) => {
+    // The palette is applied by the theme system (inline tokens + data-theme), so pick a real theme instead of faking the mode attribute.
+    await page.addInitScript((id) => localStorage.setItem('smartlearn:theme', id), mode === 'dark' ? 'night' : 'paper');
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const result = await page.evaluate((themeMode) => {
-      document.documentElement.setAttribute('data-theme-mode', themeMode);
+      if (document.documentElement.dataset.themeMode !== themeMode) throw new Error(`theme mode is ${document.documentElement.dataset.themeMode}, expected ${themeMode}`);
       const toRgb = (css) => {
         const c = document.createElement('canvas');
         c.width = c.height = 1;

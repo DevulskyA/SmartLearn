@@ -417,6 +417,7 @@ export default {
   'screens.studyNow.incorrect': 'Errei',
   'screens.studyNow.noExercises': 'Esta aula ainda não tem exercícios.',
   'screens.studyNow.done': 'Voltar para Hoje',
+  'screens.studyNow.backToday': '← Voltar para Hoje',
   'screens.dialog.confirm': 'Confirmar',
   'screens.dialog.close': 'Fechar',
   'screens.nav.brandLabel': 'SmartLearn - ir para Hoje',

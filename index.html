@@ -769,7 +769,7 @@
               <p class="eyebrow" id="study-now-subject"></p>
               <h1 id="title-study-now"></h1>
             </div>
-            <button class="text-button" type="button" data-go-screen="plan" data-i18n="screens.register.back">← Voltar ao Plano</button>
+            <button class="text-button" id="study-now-back-btn" type="button" data-go-screen="plan" data-i18n="screens.register.back">← Voltar ao Plano</button>
           </div>
 
           <section class="settings-card" id="study-now-summary-card" aria-labelledby="study-now-summary-title" hidden>
@@ -933,6 +933,25 @@
           </div>
         </section>
       </main>
+      <script>
+        // O app principal (src/app.js) espera o banco abrir antes de escolher a tela; ate la o HTML so mostra Hoje.
+        // Este trecho roda na hora e abre direto a tela do endereco (F5 em Conta nao pisca Hoje). O app refaz o mesmo
+        // trabalho depois (showScreen), inclusive os redirecionamentos de sessao.
+        (function () {
+          var alias = { tracking: "plan", subjects: "plan", "study-now": "plan", exam: "plan" };
+          var id = window.location.hash.slice(1);
+          id = alias[id] || id;
+          if (!/^[a-z-]+$/.test(id)) return;
+          var panel = document.querySelector('[data-screen-panel="' + id + '"]');
+          if (!panel) return;
+          document.querySelectorAll("[data-screen-panel]").forEach(function (p) { p.hidden = p !== panel; });
+          document.querySelectorAll(".app-nav [data-screen]").forEach(function (n) {
+            var on = n.dataset.screen === id;
+            n.classList.toggle("is-active", on);
+            n.setAttribute("aria-current", on ? "page" : "false");
+          });
+        })();
+      </script>
     </div>
 
     <dialog id="confirm-dialog" aria-modal="true">

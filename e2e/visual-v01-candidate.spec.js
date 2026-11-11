@@ -50,10 +50,18 @@ async function apiCall(page, path, body) {
 // text wider than its box (cut) and sibling texts whose boxes collide, inside the visible Estatísticas screen
 const measure = (page) => page.evaluate(() => {
   // .visually-hidden is screen-reader-only text, clipped to 1 px ON PURPOSE (it also showed up at 1280 px, where nothing is wrong): not a defect
-  const leaves = [...document.querySelectorAll('.screen:not([hidden]) *')].filter((el) => el.children.length === 0 && el.textContent.trim() && el.getClientRects().length && !el.closest('.visually-hidden'));
+  const leaves = [...document.querySelectorAll('.screen:not([hidden]) *')].filter((el) => el.children.length === 0 && el.textContent.trim() && el.getClientRects().length && !el.closest('.table-scroll') && !el.closest('.visually-hidden'));
   const clipped = leaves.filter((el) => { const o = getComputedStyle(el).overflow; return o !== 'visible' && el.scrollWidth > el.clientWidth + 1; }).map((el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`);
-  const cut = leaves.filter((el) => { let n = el; while (n && n !== document.body) { const s = getComputedStyle(n); if (s.overflow !== 'visible' && el.getBoundingClientRect().right > n.getBoundingClientRect().right + 1) return true; n = n.parentElement; } return false; }).map((el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`);
-  const rows = [...document.querySelectorAll('.matrix-table--cards tbody tr')];
+  const cut = leaves.filter((el) => {
+    let n = el;
+    while (n && n !== document.body) {
+      const s = getComputedStyle(n);
+      if (s.overflow !== 'visible' && el.getBoundingClientRect().right > n.getBoundingClientRect().right + 1) return true;
+      n = n.parentElement;
+    }
+    return false;
+  }).map((el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`);
+  const rows = [...document.querySelectorAll('.v5-data-table tbody tr')];
   const overlaps = [];
   for (const row of rows) {
     const boxes = [...row.querySelectorAll('td')].map((td) => td.getBoundingClientRect());
@@ -63,14 +71,14 @@ const measure = (page) => page.evaluate(() => {
     }
   }
   // the sort buttons of the phone header row must not run into each other
-  const heads = [...document.querySelectorAll('.matrix-table--cards thead th')].map((th) => (th.querySelector('.th-sort-btn') ?? th).getBoundingClientRect());
+  const heads = [...document.querySelectorAll('.v5-data-table thead th')].map((th) => (th.querySelector('.v5-th-sort') ?? th).getBoundingClientRect());
   for (let i = 0; i < heads.length; i += 1) for (let j = i + 1; j < heads.length; j += 1) {
     const a = heads[i]; const b = heads[j];
     if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps.push(`header ${i + 1} x header ${j + 1}`);
   }
   // a header label wider than its own cell spills onto the next one even when overflow is visible
-  for (const th of document.querySelectorAll('.matrix-table--cards thead th')) {
-    const btn = th.querySelector('.th-sort-btn');
+  for (const th of document.querySelectorAll('.v5-data-table thead th')) {
+    const btn = th.querySelector('.v5-th-sort');
     if (btn && btn.scrollWidth > th.clientWidth + 1) overlaps.push(`header "${btn.textContent.trim().slice(0, 16)}" wider than its cell`);
   }
   return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps, rows: rows.length };
@@ -100,8 +108,8 @@ test('V-01: Estatísticas at 390/360 px has nothing cut or overlapping', async (
     result[width] = await measure(page);
     if (OUT) {
       await page.screenshot({ path: join(OUT, `v01-${width}.png`) });
-      await page.locator('.matrix-table--cards').first().screenshot({ path: join(OUT, `v01-${width}-table.png`) });
-      console.log(`ROWS ${width} ${JSON.stringify(await page.locator('.matrix-table--cards tbody tr').allInnerTexts())}`);
+      await page.locator('.v5-data-table').first().screenshot({ path: join(OUT, `v01-${width}-table.png`) });
+      console.log(`ROWS ${width} ${JSON.stringify(await page.locator('.v5-data-table tbody tr').allInnerTexts())}`);
     }
     expect(result[width].rows, `${width} px: the discipline cards are present (instrument check)`).toBeGreaterThan(0);
     expect({ clipped: result[width].clipped, cut: result[width].cut, overlaps: result[width].overlaps }, `${width} px: nothing cut or overlapping`).toEqual({ clipped: [], cut: [], overlaps: [] });

@@ -351,7 +351,7 @@
 .sl-redesign .sl-theme-swatch { display:flex;gap:4px;height:52px;border-radius:6px;margin:0 0 10px;padding:9px; }
 .sl-redesign .sl-theme-swatch i { width:22%;border-radius:3px; }
 .sl-redesign .sl-theme-card span { font-size:12px;font-weight:600; }
-.sl-redesign #screen-account .settings-card { max-width:500px;margin-inline:auto; }
+.sl-redesign #screen-account .settings-card { max-width:500px;margin-inline:0 auto; }
 .sl-redesign #screen-account .field-group { margin:15px 0; }
 .sl-redesign .panel-empty { padding:28px;border:1px dashed var(--sl-line);border-radius:12px;background:var(--sl-paper);color:var(--sl-muted);font-size:13px;text-align:center; }
 .sl-redesign .sl-preview-ribbon { display:flex;align-items:center;gap:10px;padding:7px 20px;font-size:10px;background:#ede6f7;border-bottom:1px solid #d4c6eb;color:#51406d; }
@@ -922,7 +922,7 @@
 .sl-redesign #screen-stats .v5-number {text-align:right;font-variant-numeric:tabular-nums;font-weight:650;}
 .sl-redesign #screen-stats .v5-data-muted {color:var(--sl-muted);white-space:nowrap;font-variant-numeric:tabular-nums;}
 .sl-redesign #screen-stats .v5-data-table .v5-grade {font-size:12px;}
-.sl-redesign #screen-stats .v5-th-sort {display:inline-flex;align-items:center;gap:5px;padding:2px 1px;min-height:23px;border:0;background:transparent;color:var(--sl-ink);font-size:12px;font-weight:770;white-space:nowrap;}
+.sl-redesign #screen-stats .v5-th-sort {display:inline-flex;align-items:center;gap:5px;padding:2px 1px;min-height:24px;border:0;background:transparent;color:var(--sl-ink);font-size:12px;font-weight:770;white-space:nowrap;}
 .sl-redesign #screen-stats th[aria-sort='ascending'] .v5-th-sort, .sl-redesign #screen-stats th[aria-sort='descending'] .v5-th-sort {color:var(--sl-accent-strong);}
 .sl-redesign #screen-stats .v5-th-sort:hover {text-decoration:underline;}
 .sl-redesign #screen-stats .v5-trend {display:inline-flex;white-space:nowrap;font-size:12px;font-weight:770;color:var(--sl-muted);}
@@ -1481,8 +1481,19 @@
   border-color:var(--sl-paper);
 }
 .sl-redesign #screen-today #today-focus-review-btn {
-  color:var(--sl-on);
-  border-color:color-mix(in srgb,var(--sl-on) 55%,transparent);
+  /* o fundo da faixa e sempre escuro (ver bloco TODAY adiante): texto e contorno brancos fixos, nunca --sl-on (que e escuro nos temas escuros) */
+  min-height:42px;padding-inline:19px;
+  background:rgb(0 0 0 / .24);
+  color:#fff;
+  border:1px solid rgb(255 255 255 / .82);
+}
+.sl-redesign #screen-today #today-focus-review-btn:hover:not(:disabled) {
+  background:rgb(0 0 0 / .36);
+  border-color:#fff;
+  color:#fff;
+}
+.sl-redesign #screen-today #today-focus-review-btn:focus-visible {
+  outline:2px solid #fff;outline-offset:2px;
 }
 .sl-redesign #screen-today .review-row {
   background:linear-gradient(158deg,var(--sl-chroma-panel),var(--sl-paper) 36%);
@@ -2068,3 +2079,6 @@
 @media(max-width:540px) { .sl-redesign #account-logged-in-view { padding:18px 16px; } }
 .sl-redesign #account-logged-in-view .account-password-details .form-actions { display:block; }
 .sl-redesign #account-logged-in-view .account-password-details .form-actions .primary-button { width:100%;min-height:48px; }
+
+/* Estatisticas, filtros em 360-420 px: duas colunas deixam ~160 px para o texto; o rotulo longo ("Todas as disciplinas (2)") quebra em duas linhas em vez de ser cortado com reticencias. */
+@media (max-width:420px) { .sl-redesign #screen-stats .v5-filter-grid .ui-select-trigger { height:auto;min-height:32px; }.sl-redesign #screen-stats .v5-filter-grid .ui-select-trigger-text { white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;padding-block:2px; } }

@@ -4728,6 +4728,16 @@ function closeMobileMore({ restoreFocus = false } = {}) {
   if (restoreFocus && wasOpen) mobileMoreToggle?.focus();
 }
 
+let studyNowOrigin = "plan";
+function syncStudyNowBackButton() {
+  const button = document.querySelector("#study-now-back-btn");
+  if (!button) return;
+  const toToday = studyNowOrigin === "today";
+  button.dataset.goScreen = toToday ? "today" : "plan";
+  button.dataset.i18n = toToday ? "screens.studyNow.backToday" : "screens.register.back";
+  button.textContent = t(button.dataset.i18n);
+}
+
 export function showScreen(screenId, { focus = false } = {}) {
   closeMobileMore();
   if (screenId === "tracking") screenId = "plan"; // Acompanhar was folded into Plano: an old link or bookmark lands there
@@ -4759,6 +4769,13 @@ export function showScreen(screenId, { focus = false } = {}) {
   // A redo's "return to the block" intent only lives until the student is
   // back on Hoje; wandering elsewhere drops it instead of surprising them later.
   if (nextScreen !== "today" && nextScreen !== "study-now") pendingTodayReturnReviewId = null;
+
+  // The top "back" button of the study screen returns to where the student came from: Hoje when they started there, Plano otherwise.
+  if (nextScreen === "study-now") {
+    const from = screenPanels.find((panel) => !panel.hidden)?.dataset.screenPanel;
+    if (from && from !== "study-now") studyNowOrigin = from === "today" ? "today" : "plan";
+    syncStudyNowBackButton();
+  }
 
   let leftStudyResultUnsent = false;
   for (const panel of screenPanels) {

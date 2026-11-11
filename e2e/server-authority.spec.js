@@ -123,11 +123,11 @@ test('two browser contexts logged in as the SAME account observe the exact same 
   // after its own next refresh (state lives on the server, not in either
   // browser's local storage).
   await pageB.locator('[data-review-list="overdue"] [data-action="review-done"]').first().check();
-  await expect(pageB.locator('text=1 feita')).toBeVisible({ timeout: 5000 });
+  await expect(pageB.locator('text=1 concluída')).toBeVisible({ timeout: 5000 });
 
   await pageA.locator('[data-screen="plan"]').click();
   await pageA.locator('[data-screen="today"]').click();
-  await expect(pageA.locator('text=1 feita')).toBeVisible({ timeout: 15000 });
+  await expect(pageA.locator('text=1 concluída')).toBeVisible({ timeout: 15000 });
 
   await contextA.close();
   await contextB.close();
