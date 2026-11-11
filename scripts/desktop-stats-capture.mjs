@@ -123,7 +123,7 @@ async function signIn() {
 
 async function openStats() {
   await page.locator('[data-screen="stats"]:visible').first().click();
-  await page.locator('#subject-kpi-list tr.matrix-row').first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('#subject-kpi-list tr[data-v5-row]').first().waitFor({ state: 'visible', timeout: 20000 });
 }
 
 // Sets the OUTER window rect so the page viewport (client area) is as close as the OS allows to w x h: one measure-and-correct pass.
@@ -194,10 +194,10 @@ try {
       const rect = await resizeClient(app.pid, origin[0], origin[1], w, h);
       const m = await page.evaluate(() => {
         const text = (sel) => document.querySelector(sel)?.textContent.trim() ?? null;
-        const rows = [...document.querySelectorAll('#subject-kpi-list tr.matrix-row')];
-        const rowQuestions = rows.map((r) => Number((r.querySelector('.practice-compact')?.textContent.match(/\d[\d.]*/)?.[0] ?? '0').replace(/\./g, '')));
+        const rows = [...document.querySelectorAll('#subject-kpi-list tr[data-v5-row]')];
+        const rowQuestions = rows.map((r) => Number((r.querySelector('td.v5-number')?.textContent.match(/\d[\d.]*/)?.[0] ?? '0').replace(/\./g, '')));
         const side = document.querySelector('.stats-side')?.getBoundingClientRect();
-        const tablePanel = document.querySelector('#subject-kpi-section')?.getBoundingClientRect();
+        const tablePanel = document.querySelector('#stats-analysis-card')?.getBoundingClientRect();
         const clipped = [...document.querySelectorAll('#screen-stats *')].filter((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX === 'visible' && el.clientWidth > 0 && el.children.length === 0).length;
         return {
           period: document.querySelector('#stats-unit-filter-period')?.value ?? null,
@@ -206,7 +206,7 @@ try {
           average: text('#metric-average'), questions: text('#metric-questions'), subjects: text('#metric-subjects'),
           rows: rows.length, tableQuestionsSum: rowQuestions.reduce((a, b) => a + b, 0),
           sideBelowTable: side && tablePanel ? side.top >= tablePanel.bottom - 1 : null,
-          tableScrollOverflow: (() => { const t = document.querySelector('#view-stats-subject .table-scroll'); return t ? t.scrollWidth > t.clientWidth + 1 : null; })(),
+          tableScrollOverflow: (() => { const t = document.querySelector('#stats-body .v5-table-scroll'); return t ? t.scrollWidth > t.clientWidth + 1 : null; })(),
           textOverflowLeaves: clipped,
         };
       });
