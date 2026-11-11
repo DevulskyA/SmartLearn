@@ -1,22 +1,35 @@
-// Design preview with a REAL local server on throwaway data (never the human database).
-// Starts server/src/main.js on its own port with a temp DB + sources dir, creates a demo account with 3 PDFs,
-// then starts Vite on 5188 proxying /v1 to that server and flagging the page as desktop (REMOTE_MODE + LOCAL_AUTHORITY),
-// so Materiais shows exactly what the desktop app shows. Demo sign-in: DEMO_EMAIL / DEMO_PASSWORD below.
+// Design preview on :5188 with a REAL local server running on a COPY of the owner's data.
+//
+// Default: copies ~/SmartLearn-DevData (database + WAL + PDFs) into a temp folder and runs server/src/main.js on the copy, so the
+// owner signs in with their own account and sees their own subjects, lessons, history and PDFs. The original files are only READ
+// (copied); the server, its migrations and every write happen on the copy, and the copy is deleted when the preview stops.
+// `--seed`: throwaway synthetic data instead (scripts/seed-dev.mjs + 3 demo PDFs); sign in with DEV_ACCOUNT.
+// Vite proxies /v1 to that server and flags the page as the desktop app (REMOTE_MODE + LOCAL_AUTHORITY).
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitForServerReady } from '../e2e/support/wait-for-server.js';
+import { DEV_ACCOUNT, seedDev } from './seed-dev.mjs';
 
 const SERVER_PORT = 13999;
 const VITE_PORT = 5188;
 const ORIGIN = `http://localhost:${VITE_PORT}`;
 const API = `http://localhost:${SERVER_PORT}`;
-const DEMO_EMAIL = 'design@example.com';
-const DEMO_PASSWORD = 'a genuinely long design password 1';
 const root = fileURLToPath(new URL('..', import.meta.url));
+const realDir = join(homedir(), 'SmartLearn-DevData');
+const useSeed = process.argv.includes('--seed') || !existsSync(join(realDir, 'smartlearn-dev.db'));
 const dataDir = mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
+
+if (!useSeed) {
+  // read-only on the original: plain file copies (database, its write-ahead log and shared-memory index, and the stored PDFs)
+  for (const f of ['smartlearn-dev.db', 'smartlearn-dev.db-wal', 'smartlearn-dev.db-shm']) {
+    if (existsSync(join(realDir, f))) cpSync(join(realDir, f), join(dataDir, f.replace('smartlearn-dev', 'preview')));
+  }
+  if (existsSync(join(realDir, 'sources'))) cpSync(join(realDir, 'sources'), join(dataDir, 'sources'), { recursive: true });
+  console.log(`[design-preview] copy of ${realDir} -> ${dataDir} (original untouched)`);
+}
 
 const server = spawn(process.execPath, [join(root, 'server/src/main.js')], {
   env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'preview.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: 'localhost', NODE_ENV: 'test', SMARTLEARN_ALLOWED_ORIGINS: ORIGIN },
@@ -24,24 +37,29 @@ const server = spawn(process.execPath, [join(root, 'server/src/main.js')], {
 });
 await waitForServerReady(API, { label: 'design preview' });
 
-const json = { 'content-type': 'application/json', origin: ORIGIN };
-await fetch(`${API}/v1/auth/register`, { method: 'POST', headers: json, body: JSON.stringify({ email: DEMO_EMAIL, password: DEMO_PASSWORD }) });
-const login = await fetch(`${API}/v1/auth/login`, { method: 'POST', headers: json, body: JSON.stringify({ email: DEMO_EMAIL, password: DEMO_PASSWORD }) });
-const cookie = (login.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
-const { csrfToken } = await (await fetch(`${API}/v1/auth/me`, { headers: { cookie } })).json();
-const pdf = readFileSync(join(root, '.specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf'));
-const names = ['Costanzo Physiology, 7th edition.pdf', 'Guyton & Hall - Fisiologia Medica.pdf', 'Moore - Anatomia Clinica.pdf'];
-for (const [i, name] of names.entries()) {
-  const form = new FormData();
-  // a trailing PDF comment keeps each file valid but gives it its own checksum (the server merges identical files)
-  form.append('file', new Blob([pdf, Buffer.from(`\n%design-preview-${i}\n`)], { type: 'application/pdf' }), name);
-  const res = await fetch(`${API}/v1/sources`, { method: 'POST', headers: { origin: ORIGIN, cookie, 'x-csrf-token': csrfToken }, body: form });
-  const { source } = await res.json();
-  // the library lists only extracted documents (src/materials-ui.js loadExistingSources)
-  const extracted = await fetch(`${API}/v1/sources/${source.id}/extract`, { method: 'POST', headers: { origin: ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' }, body: '{}' });
-  console.log(`[design-preview] ${name}: upload HTTP ${res.status}, extract HTTP ${extracted.status}`);
+if (useSeed) {
+  const json = { 'content-type': 'application/json', origin: ORIGIN };
+  const seeded = await seedDev({ base: API, origin: ORIGIN, log: (m) => console.log(`[design-preview] seed: ${m}`) });
+  console.log(`[design-preview] seed: ${JSON.stringify(seeded)}`);
+  const login = await fetch(`${API}/v1/auth/login`, { method: 'POST', headers: json, body: JSON.stringify(DEV_ACCOUNT) });
+  const cookie = (login.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
+  const { csrfToken } = await (await fetch(`${API}/v1/auth/me`, { headers: { cookie } })).json();
+  const pdf = readFileSync(join(root, '.specs/evidence/ui-funcional-2026-11-01/farmacologia-cap1.pdf'));
+  const names = ['Costanzo Physiology, 7th edition.pdf', 'Guyton & Hall - Fisiologia Medica.pdf', 'Moore - Anatomia Clinica.pdf'];
+  for (const [i, name] of names.entries()) {
+    const form = new FormData();
+    // a trailing PDF comment keeps each file valid but gives it its own checksum (the server merges identical files)
+    form.append('file', new Blob([pdf, Buffer.from(`\n%design-preview-${i}\n`)], { type: 'application/pdf' }), name);
+    const res = await fetch(`${API}/v1/sources`, { method: 'POST', headers: { origin: ORIGIN, cookie, 'x-csrf-token': csrfToken }, body: form });
+    const { source } = await res.json();
+    // the library lists only extracted documents (src/materials-ui.js loadExistingSources)
+    const extracted = await fetch(`${API}/v1/sources/${source.id}/extract`, { method: 'POST', headers: { origin: ORIGIN, cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' }, body: '{}' });
+    console.log(`[design-preview] ${name}: upload HTTP ${res.status}, extract HTTP ${extracted.status}`);
+  }
+  console.log(`[design-preview] ${ORIGIN}  (sign in: ${DEV_ACCOUNT.email} / DEV_ACCOUNT.password in scripts/seed-dev.mjs)`);
+} else {
+  console.log(`[design-preview] ${ORIGIN}  (sign in with your own account: the data is a copy of ${realDir})`);
 }
-console.log(`[design-preview] ${ORIGIN}  (sign in: ${DEMO_EMAIL} / see DEMO_PASSWORD in scripts/design-preview.mjs)`);
 
 const vite = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), '--port', String(VITE_PORT), '--strictPort'], {
   cwd: root,
