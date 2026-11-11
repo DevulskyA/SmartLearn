@@ -45,7 +45,7 @@ export function badge(row) {
 
 function meter(row) {
   const value = Math.max(0, Math.min(100, row.accuracy ?? 0));
-  const valueAttr = row.accuracy == null ? `aria-valuetext="${esc(t("screens.stats.v5.noEvidence"))}"` : `aria-valuenow="${Math.round(value)}"`;
+  const valueAttr = row.accuracy == null ? `aria-valuenow="0" aria-valuetext="${esc(t("screens.stats.v5.noEvidence"))}"` : `aria-valuenow="${Math.round(value)}"`;
   return `<span class="v5-meter" data-band="${row.band}" role="meter" aria-label="${esc(t("screens.stats.v5.meterLabel", { name: row.name }))}" aria-valuemin="0" aria-valuemax="100" ${valueAttr}><span style="width:${value}%"></span></span>`;
 }
 

@@ -155,6 +155,8 @@ export default {
   'screens.stats.tabs.lesson': 'Por aula',
   'screens.stats.table.advanced': 'Distribuição por faixa ▾',
   'screens.stats.table.filter.subjectAria': 'Filtrar disciplina',
+  'screens.stats.table.filter.bandAria': 'Filtrar faixa de desempenho',
+  'screens.stats.table.filter.trendAria': 'Filtrar tendência',
   'screens.stats.table.filter.band': 'Faixa de desempenho',
   'screens.stats.table.filter.bandAll': 'Todas as faixas',
   'screens.stats.table.filter.critical': 'Crítico (<50%)',
