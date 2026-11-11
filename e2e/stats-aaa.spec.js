@@ -84,11 +84,11 @@ test('evolution chart: points follow dates, quiet gaps are not joined, filter fo
   await openStats(page);
   expect(pageErrors, "no script errors while rendering Estatísticas").toEqual([]);
   await expect(page.locator('#evolution-svg')).toBeVisible();
-  const dots = page.locator('#evolution-svg .evo-dot');
+  const dots = page.locator('#evolution-svg .v5-chart-point');
   expect(await dots.count()).toBeGreaterThan(1);
   const geometry = await page.locator('#evolution-svg').evaluate((svg) => ({
-    xs: [...svg.querySelectorAll('.evo-dot')].map((c) => Number(c.getAttribute('cx'))),
-    lines: svg.querySelectorAll('.evo-line').length,
+    xs: [...svg.querySelectorAll('.v5-chart-point')].map((c) => Number(c.getAttribute('cx'))),
+    lines: svg.querySelectorAll('.v5-chart-line').length,
     desc: document.querySelector('#evolution-svg-description').textContent,
   }));
   expect([...geometry.xs]).toEqual([...geometry.xs].sort((a, b) => a - b));

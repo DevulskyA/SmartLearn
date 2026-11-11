@@ -19,7 +19,7 @@ import { test, expect } from '@playwright/test';
 // widths/table-layout/overflow/identity/practice/trend cells must keep
 // every test in this file green across every listed width, on both tabs.
 
-const WIDTHS = [375, 390, 768, 800, 900, 1280];
+const WIDTHS = [375, 390, 768, 800, 900, 1280, 1440];
 
 async function seedUatAndOpenStats(page, width) {
   await page.setViewportSize({ width, height: 900 });
@@ -109,6 +109,15 @@ for (const width of WIDTHS) {
       const titleEl = identityCell.locator('.unit-title');
       expect(await approxVisibleChars(chip), `discipline chip must not collapse to a 1-3 char fragment at ${width}px`).toBeGreaterThan(3);
       expect(await approxVisibleChars(titleEl), `content title must not collapse to a 1-3 char fragment at ${width}px`).toBeGreaterThan(3);
+
+      // A word broken letter by letter ("Farm/ac/ol/og/ia") passes a char-count check, so assert the shape: one line, never taller than two text lines.
+      const chipShape = await chip.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const line = parseFloat(getComputedStyle(el).lineHeight) || 16;
+        return { lines: Math.round((box.height - 2 * 4) / line), wrap: getComputedStyle(el).whiteSpace, overflowWrap: getComputedStyle(el).overflowWrap };
+      });
+      expect(chipShape.lines, `discipline chip must stay on one line at ${width}px (was ${chipShape.lines})`).toBeLessThanOrEqual(2);
+      expect(chipShape.overflowWrap, 'chip never breaks inside a word').not.toBe('anywhere');
 
       // Full text always available via title, and it matches the real
       // (untruncated) text node exactly.

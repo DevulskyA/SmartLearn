@@ -22,12 +22,13 @@ import {
   readQuickToggleMemory,
   writeQuickToggleMemory,
 } from "./theme.js";
-import { colorVarForKey, getState, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, getState, MIN_SAMPLE_QUESTIONS, THRESHOLDS } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
 import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
+import { renderAttention, renderOverview, statsOverviewState } from "./stats-v5.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
@@ -443,6 +444,10 @@ const metricElements = {
   avgScore: document.querySelector("#metric-average"),
   subjects: document.querySelector("#metric-subjects"),
   subjectsWithData: document.querySelector("#metric-subjects-with-data"),
+  averageQuestions: document.querySelector("#metric-average-questions"),
+  attention: document.querySelector("#metric-attention"),
+  reviewsDone: document.querySelector("#metric-reviews-done"),
+  reviewsPending: document.querySelector("#metric-reviews-pending"),
 };
 const statsBandList = document.querySelector("#stats-band-list");
 const subjectKpiList = document.querySelector("#subject-kpi-list");
@@ -2543,14 +2548,61 @@ function bandRange(state) {
 }
 
 // Indicators line: the same rows the table shows, so questions and subjects always reconcile.
-function renderStatsHeader(summary) {
+function renderStatsHeader(summary, rows = [], reviewTasks = []) {
   metricElements.avgScore.textContent = formatAverageScore(summary.average);
   metricElements.avgScore.dataset.state = getState(summary.average, summary.totalQuestions);
   metricElements.totalQuestions.textContent = formatNumber(summary.totalQuestions);
   metricElements.totalCorrect.textContent = formatNumber(summary.totalCorrect);
   metricElements.subjects.textContent = formatNumber(summary.subjectCount);
   metricElements.subjectsWithData.textContent = formatNumber(summary.withEvidence);
+  metricElements.averageQuestions.textContent = formatNumber(summary.totalQuestions);
+  // "Em atenção" = disciplines the table itself colours critical or attention, with enough questions to judge (MIN_SAMPLE_QUESTIONS).
+  metricElements.attention.textContent = formatNumber(rows.filter((r) => r.totalQuestions >= MIN_SAMPLE_QUESTIONS && (r.state === "CRITICAL" || r.state === "ATTENTION")).length);
+  const done = reviewTasks.filter((task) => task.reviewDone).length;
+  metricElements.reviewsDone.textContent = formatNumber(done);
+  metricElements.reviewsPending.textContent = formatNumber(reviewTasks.length - done);
 }
+
+// Panorama + "Onde preciso melhorar" (V7.2 composition) over the same period rows the matrix shows.
+let statsV5Rows = [];
+function renderStatsTop() {
+  const overview = document.querySelector("#stats-overview");
+  const attention = document.querySelector("#stats-attention");
+  if (overview) overview.innerHTML = renderOverview(statsV5Rows);
+  if (attention) attention.innerHTML = renderAttention(statsV5Rows);
+}
+
+function wireStatsTop() {
+  const top = document.querySelector("#stats-v5-top");
+  if (!top) return;
+  top.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-v5]");
+    if (!button || !top.contains(button)) return;
+    switch (button.dataset.v5) {
+      case "focus-subject": openSubjectContents(Number(button.dataset.id)); break;
+      case "see-all-subjects": case "see-weak": document.querySelector("#subject-kpi-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); break;
+      case "overview-prev": statsOverviewState.page -= 1; renderStatsTop(); break;
+      case "overview-next": statsOverviewState.page += 1; renderStatsTop(); break;
+      default: break;
+    }
+  });
+  top.addEventListener("change", (event) => {
+    if (event.target.id !== "v5-ranking-order") return;
+    statsOverviewState.order = event.target.value === "worst" ? "worst" : "best";
+    statsOverviewState.page = 1;
+    renderStatsTop();
+  });
+}
+wireStatsTop();
+document.querySelector("#evolution-mode")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-mode]");
+  if (!button) return;
+  evolutionMode = button.dataset.mode === "volume" ? "volume" : "accuracy";
+  for (const b of document.querySelectorAll("#evolution-mode [data-mode]")) b.setAttribute("aria-pressed", String(b === button));
+  Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()])
+    .then(([evidence, units, subjects]) => renderEvolutionSvg(evidence, units, subjects))
+    .catch(console.error);
+});
 
 function renderStatsDistribution(rows) {
   if (!statsBandList) return;
@@ -2582,10 +2634,11 @@ export async function renderStatsBySubject() {
   if (!subjectKpiList) return;
   const renderId = ++statsSubjectRenderSeq;
   const today = getLocalDateValue();
-  const [evidence, units, subjects] = await Promise.all([
+  const [evidence, units, subjects, reviewTasks] = await Promise.all([
     DB.learningEvidence.getAll(),
     DB.learningUnits.getAll(),
     DB.subjects.getAll(),
+    DB.reviewTasks.getAll(),
   ]);
   if (renderId !== statsSubjectRenderSeq) return;
   const periodValue = statsUnitFilterPeriod?.value ?? "";
@@ -2593,7 +2646,9 @@ export async function renderStatsBySubject() {
   const history = validEvidence(evidence);
   await renderStudyVerdict(Analytics.bySubject(history, units, subjects, today), Analytics.byUnit(history, units, subjects));
   let results = periodSubjectRows(evidence, units, subjects, { periodValue, today });
-  renderStatsHeader(periodSummary(results));
+  renderStatsHeader(periodSummary(results), results, reviewTasks);
+  statsV5Rows = results;
+  renderStatsTop();
   renderStatsDistribution(results);
   results = sortMatrixRows(results, subjectSortState);
   wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
@@ -3130,6 +3185,22 @@ const shortDate = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 // General evolution of the CURRENT period and subject filter, from the same evidence as the header and
 // table. X is proportional to calendar time; an interval without questions is not a point and breaks the
 // line, so a silent stretch is never drawn as a steady trend.
+let evolutionMode = "accuracy";
+function renderEvolutionValues(points) {
+  const body = document.querySelector("#evolution-values-body");
+  if (!body) return;
+  body.replaceChildren();
+  for (const p of points) {
+    const row = document.createElement("tr");
+    for (const text of [`${shortDate(p.from)} – ${shortDate(p.to)}`, formatNumber(p.questions), formatNumber(p.correct), `${formatDecimal(p.accuracy)}%`]) {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.append(cell);
+    }
+    body.append(row);
+  }
+}
+
 function renderEvolutionSvg(evidence, units, subjects) {
   if (!evolutionSvg) return false;
   const today = getLocalDateValue();
@@ -3148,24 +3219,34 @@ function renderEvolutionSvg(evidence, units, subjects) {
     return false;
   }
 
-  const W = 360, H = 200, padL = 36, padR = 14, padT = 12, padB = 26;
+  // V7.2 chart geometry (viewBox 610x245, plot x 46..570, y 28..190); points keep the real, date-proportional offsets of evolutionSeries.
+  const W = 610, H = 245, padL = 46, padR = 40, padT = 28, padB = 55;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
+  const volume = evolutionMode === "volume";
+  const volumeRange = Math.max(10, Math.ceil(Math.max(...series.points.map((p) => p.questions)) / 10) * 10);
+  const valueOf = (p) => (volume ? (100 * p.questions) / volumeRange : p.accuracy);
   const xOf = (offset) => padL + (series.spanDays > 1 ? (offset / (series.spanDays - 1)) * chartW : chartW / 2);
   const yOf = (pct) => padT + chartH * (1 - pct / 100);
+  const axisText = (pct) => (volume ? formatNumber((volumeRange * pct) / 100) : `${pct}%`);
 
   evolutionSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   evolutionSvg.replaceChildren();
+  const defs = svgElement("defs");
+  const gradient = svgElement("linearGradient", { id: "v5-chart-fill", x1: 0, y1: 0, x2: 0, y2: 1 });
+  gradient.append(svgElement("stop", { offset: "0%", "stop-color": "var(--sl-accent)", "stop-opacity": ".24" }), svgElement("stop", { offset: "100%", "stop-color": "var(--sl-accent)", "stop-opacity": ".01" }));
+  defs.append(gradient);
+  evolutionSvg.append(defs);
 
-  for (const pct of [0, 25, 50, 75, 100]) {
-    evolutionSvg.append(svgElement("line", { class: "evo-grid", x1: padL, x2: W - padR, y1: yOf(pct), y2: yOf(pct) }));
-    const label = svgElement("text", { class: "evo-axis", x: padL - 6, y: yOf(pct) + 3.5, "text-anchor": "end" });
-    label.textContent = `${pct}%`;
+  for (const pct of [0, 50, 100]) {
+    evolutionSvg.append(svgElement("line", { class: "v5-gridline", x1: padL, x2: W - padR, y1: yOf(pct), y2: yOf(pct) }));
+    const label = svgElement("text", { class: "v5-axis", x: padL - 11, y: yOf(pct) + 5, "text-anchor": "end" });
+    label.textContent = axisText(pct);
     evolutionSvg.append(label);
   }
   const last = series.spanDays - 1;
-  [0, last / 2, last].forEach((offset, index) => {
-    const label = svgElement("text", { class: "evo-axis", x: xOf(offset), y: H - 8, "text-anchor": index === 0 ? "start" : index === 2 ? "end" : "middle" });
+  [0, last / 2, last].forEach((offset) => {
+    const label = svgElement("text", { class: "v5-axis v5-date-axis", x: xOf(offset), y: 222, "text-anchor": "middle" });
     label.textContent = shortDate(subtractDays(series.from, -Math.round(offset)));
     evolutionSvg.append(label);
   });
@@ -3177,25 +3258,29 @@ function renderEvolutionSvg(evidence, units, subjects) {
     const x0 = xOf(gapStart);
     evolutionSvg.append(svgElement("rect", { class: "evo-gap", x: x0, y: padT, width: W - padR - x0, height: chartH }));
     if (W - padR - x0 > 60) {
-      const note = svgElement("text", { class: "evo-axis evo-gap-label", x: (x0 + W - padR) / 2, y: padT + chartH / 2, "text-anchor": "middle" });
+      const note = svgElement("text", { class: "v5-axis evo-gap-label", x: (x0 + W - padR) / 2, y: padT + chartH / 2, "text-anchor": "middle" });
       note.textContent = t("statsView.evolution.gap", { date: shortDate(lastPoint.to) });
       evolutionSvg.append(note);
     }
   }
 
+  // Segments stay separate on purpose: a week without questions is a blank, never an interpolated line.
   for (const segment of series.segments) {
     if (segment.length < 2) continue;
-    evolutionSvg.append(svgElement("polyline", { class: "evo-line", points: segment.map((p) => `${xOf(p.offset).toFixed(1)},${yOf(p.accuracy).toFixed(1)}`).join(" ") }));
+    const coords = segment.map((p) => `${xOf(p.offset).toFixed(2)} ${yOf(valueOf(p)).toFixed(2)}`);
+    evolutionSvg.append(svgElement("path", { class: "v5-chart-area", d: `M ${coords.join(" L ")} L ${xOf(segment.at(-1).offset).toFixed(2)} ${padT + chartH} L ${xOf(segment[0].offset).toFixed(2)} ${padT + chartH} Z` }));
+    evolutionSvg.append(svgElement("path", { class: "v5-chart-line", d: `M ${coords.join(" L ")}` }));
   }
   for (const p of series.points) {
-    const dot = svgElement("circle", { class: "evo-dot", cx: xOf(p.offset).toFixed(1), cy: yOf(p.accuracy).toFixed(1), r: 3.6 });
+    const dot = svgElement("circle", { class: "v5-chart-point", cx: xOf(p.offset).toFixed(2), cy: yOf(valueOf(p)).toFixed(2), r: 3.5 });
     const title = svgElement("title");
-    title.textContent = t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) });
+    title.textContent = t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions, { count: formatNumber(p.questions) }) });
     dot.append(title);
     evolutionSvg.append(dot);
   }
 
-  if (evolutionCaption) evolutionCaption.textContent = t("statsView.evolution.caption", { days: series.bucketDays });
+  if (evolutionCaption) evolutionCaption.textContent = t("screens.stats.evolution.note", { count: series.points.length, days: series.bucketDays });
+  renderEvolutionValues(series.points);
   if (evolutionDescription) {
     evolutionDescription.textContent = series.points
       .map((p) => t("statsView.evolution.point", { from: shortDate(p.from), to: shortDate(p.to), percent: Math.round(p.accuracy), questions: tn("statsView.evidence.questions", p.questions) }))

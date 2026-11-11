@@ -13,8 +13,8 @@ test('390px: Estatísticas heading is left-aligned with the page content', async
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="stats"]').click();
   const left = (sel) => page.locator(sel).first().evaluate((el) => Math.round(el.getBoundingClientRect().left));
-  const kpiLeft = await left('.stats-kpis');
+  const kpiLeft = await left('.v5-kpis');
   expect(await left('#title-stats')).toBe(kpiLeft);
   expect(await left('.stats-lede')).toBe(kpiLeft);
-  expect(await left('.stats-heading .select-control')).toBe(kpiLeft);
+  expect(await left('.v5-top-controls .select-control')).toBe(kpiLeft);
 });

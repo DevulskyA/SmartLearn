@@ -1921,3 +1921,9 @@
   .sl-redesign #screen-materials .sl-library-heading {background:#fff;color:#000;border-color:#777;box-shadow:none;}
   .sl-redesign #screen-materials .sl-library-heading :is(h2,h3,p,.section-heading) {color:#000;}
 }
+
+/* Estatisticas: a etiqueta de disciplina nunca quebra no meio da palavra nem encolhe; a celula de identidade empilha etiqueta e titulo em qualquer largura. */
+.sl-redesign #screen-stats .stats-table :is(.subject-cell,.subject-chip) {flex:0 1 auto;min-width:min-content;max-width:100%;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:none;}
+.sl-redesign #screen-stats .unit-identity-cell {display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;gap:6px;overflow:visible;}
+.sl-redesign #screen-stats .unit-identity-cell .subject-cell--compact {max-width:100%;}
+.sl-redesign #screen-stats .unit-identity-cell>:not(.subject-cell) {min-width:0;overflow-wrap:break-word;white-space:normal;}
