@@ -62,6 +62,7 @@ const SPECS = {
       { name: 'source_text', type: 'text', nullable: true },
       { name: 'summary_body', type: 'text', nullable: true },
       { name: 'study_date', type: 'timestamp' },
+      { name: 'lesson_date', type: 'timestamp', nullable: true }, // the day the class was given; optional, older backups simply lack it
       { name: 'created_at', type: 'timestamp' },
       { name: 'updated_at', type: 'timestamp' },
     ],

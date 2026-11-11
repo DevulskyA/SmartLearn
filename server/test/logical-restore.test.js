@@ -90,6 +90,8 @@ function seedRichAccount(db, userId) {
   const U1 = run('INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)', userId, S1, 'Farmacocinética', 'Goodman cap. 3', 'Absorção, distribuição, metabolismo e excreção.', '2026-03-03', t(3), t(3));
   const U2 = run('INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)', userId, S2, 'Anamnese', null, null, '2026-03-04', t(4), t(5));
 
+  run('UPDATE learning_units SET lesson_date = ? WHERE id = ?', '2026-02-25', U1); // the day the class was given (U2 keeps it unknown)
+
   const RT1 = run('INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, completed_at, created_at) VALUES (?,?,?,?,?,?)', userId, U1, 1, '2026-03-04', t(4), t(3));
   run('INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, completed_at, created_at) VALUES (?,?,?,?,?,?)', userId, U1, 7, '2026-03-10', null, t(3));
   run('INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, completed_at, created_at) VALUES (?,?,?,?,?,?)', userId, U2, 1, '2026-03-05', null, t(4));
@@ -214,6 +216,7 @@ test('IMPORT-1: export A -> restore B -> export B is logically equivalent (conte
     // Spot checks on what the student cares about, stated directly rather than via the helper.
     assert.equal(exportB.settings.timezone, 'America/Manaus');
     assert.deepEqual(exportB.subjects.map((s) => [s.name, s.is_active]), [['Farmacologia', 1], ['História clínica', 0]]);
+    assert.deepEqual(exportB.learningUnits.map((u) => u.lesson_date), ['2026-02-25', null], 'lesson_date survives the round trip (known and unknown)');
     assert.equal(exportB.exercises.filter((e) => e.archived_at !== null).length, 1);
     assert.equal(exportB.examItems.find((i) => i.student_answer === 'Fração absorvida').outcome, 'CORRECT');
     const correction = exportB.learningEvents.find((e) => e.kind === 'CORRECTION');
@@ -525,7 +528,7 @@ test('IMPORT-1: createLogicalExport is the shape the restore consumes (guards ex
     seedRichAccount(db, a.userId);
     const exported = createLogicalExport(db, a.userId);
     const known = {
-      subjects: 8, learningUnits: 9, reviewTasks: 7, exercises: 7, exerciseVersions: 10, learningEvidence: 9,
+      subjects: 8, learningUnits: 10, reviewTasks: 7, exercises: 7, exerciseVersions: 10, learningEvidence: 9,
       exerciseAttempts: 11, exerciseFlagEvents: 7, learningEvents: 18, exams: 9, examItems: 8, examEvidence: 3,
     };
     for (const [key, columns] of Object.entries(known)) {

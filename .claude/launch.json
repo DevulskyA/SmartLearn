@@ -28,6 +28,14 @@
         "false"
       ],
       "port": 5175
+    },
+    {
+      "name": "design-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/design-preview.mjs"
+      ],
+      "port": 5188
     }
   ]
 }

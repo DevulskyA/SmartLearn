@@ -203,5 +203,10 @@
     "version": 41,
     "name": "source-openings-removable-with-source",
     "checksum": "5a463f50d02104adb453b8ff8e2b130e78b2d42da8ed3d3a1a5e80649c0ea5df"
+  },
+  {
+    "version": 42,
+    "name": "lesson-date",
+    "checksum": "3afd1eefd7401b0824dc7222142c867011b815b36ce463832bfbdf063a642d9f"
   }
 ]

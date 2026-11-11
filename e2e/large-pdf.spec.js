@@ -129,10 +129,12 @@ test('TRACKUX-1: on a 375px Materiais the proposals are cards with a full-width 
   const item = page.locator('.source-proposal-item').first();
   const m = await item.evaluate((el) => {
     const input = el.querySelector('.source-proposal-title-input').getBoundingClientRect();
-    return { inputWidth: input.width, itemWidth: el.getBoundingClientRect().width, bullet: getComputedStyle(el).listStyleType, border: getComputedStyle(el).borderTopWidth };
+    // a proposal is a card on its own, or a row of one bordered block (the approved V6 list grammar)
+    const border = Math.max(parseFloat(getComputedStyle(el).borderTopWidth), parseFloat(getComputedStyle(el.parentElement).borderTopWidth));
+    return { inputWidth: input.width, itemWidth: el.getBoundingClientRect().width, bullet: getComputedStyle(el).listStyleType, border };
   });
   expect(m.bullet, 'no bare bullets').toBe('none');
   expect(m.inputWidth / m.itemWidth, 'the title box uses the card width').toBeGreaterThan(0.85);
-  expect(parseFloat(m.border), 'each proposal is a card').toBeGreaterThan(0);
+  expect(m.border, 'each proposal is a card or a row of a bordered block').toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

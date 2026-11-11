@@ -1,5 +1,5 @@
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
-import { resolveOrCreateSubject, describeSubject, LearningUnitError } from './learning-units.js';
+import { resolveOrCreateSubject, describeSubject, normalizeLessonDate, LearningUnitError } from './learning-units.js';
 import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { carry, dm, splitMessage } from '../api-error-messages.js';
@@ -23,7 +23,7 @@ function subjectDto(row) {
 function unitDto(row) {
   return {
     id: row.id, subjectId: row.subject_id, title: row.title,
-    sourceText: row.source_text, summaryBody: row.summary_body, studyDate: row.study_date,
+    sourceText: row.source_text, summaryBody: row.summary_body, studyDate: row.study_date, lessonDate: row.lesson_date ?? null,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -34,7 +34,7 @@ function unitDto(row) {
  * Shared by acceptDraft and previewAcceptance so the preview can never describe something acceptance would not do.
  * `requireRevision` is true for acceptance; the preview only checks a revision it was given.
  */
-function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision, acknowledgeSummaryFindings = false }) {
+function prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expectedRevision, requireRevision, acknowledgeSummaryFindings = false }) {
   // C3 (audit): the caller must identify EXACTLY the revision it reviewed.
   // A concurrent edit (replaceDraftContent) bumps this draft's revision — if that
   // happened between the caller's last read and this accept call, fail
@@ -58,6 +58,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
     // Was an untyped Error (an HTTP 500); found by the preview/accept parity test. A bad date is the caller's mistake.
     throw new AcceptDraftError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
   }
+  const storedLessonDate = normalizeLessonDate(lessonDate, studyDate, AcceptDraftError); // optional; never moves the schedule
 
   const proposal = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, draftRow.proposal_id);
   if (!proposal) throw new AcceptDraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
@@ -88,7 +89,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
   );
 
 
-  return { proposal, dueDates, draftContent, excluded, pageTextByIndex, sourceRow, blockers };
+  return { storedLessonDate, proposal, dueDates, draftContent, excluded, pageTextByIndex, sourceRow, blockers };
 }
 
 /**
@@ -109,7 +110,7 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, 
  * medically validated — it is ordinary, editable learning material like
  * any manually created exercise, just tagged with its real provenance.
  */
-export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
+export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
 
@@ -120,8 +121,8 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
   }
 
-  const plan = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
-  const { proposal, dueDates, draftContent, pageTextByIndex, sourceRow, blockers } = plan;
+  const plan = prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
+  const { storedLessonDate, proposal, dueDates, draftContent, pageTextByIndex, sourceRow, blockers } = plan;
   if (blockers.questions.length > 0 || blockers.summary > 0) {
     throw new AcceptDraftError('FINDINGS_UNRESOLVED', dm('FINDINGS_UNRESOLVED', { questions: blockers.questions.length, summary: blockers.summary }));
   }
@@ -141,9 +142,9 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
 
     const nowIso = now().toISOString();
     const unitResult = db.prepare(`
-      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at)
-      VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
-    `).run(userId, subject.id, proposal.title, draftContent.summary, studyDate, nowIso, nowIso);
+      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, lesson_date, created_at, updated_at)
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)
+    `).run(userId, subject.id, proposal.title, draftContent.summary, studyDate, storedLessonDate, nowIso, nowIso);
     const unit = db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unitResult.lastInsertRowid);
 
     // The summary's own provenance, frozen like a question citation. A draft created before summary
@@ -211,7 +212,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
  * acceptance (revision if given, date, source freshness, rejected questions) and the SAME subject validation, then describes
  * the result; it writes nothing. An already accepted draft returns the frozen result of its acceptance.
  */
-export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, expectedRevision, acknowledgeSummaryFindings } = {}) {
+export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, expectedRevision, acknowledgeSummaryFindings } = {}) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
   if (draftRow.status === 'ACCEPTED') {
@@ -220,7 +221,7 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
   if (draftRow.status !== 'DRAFT') {
     throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
   }
-  const { proposal, dueDates, draftContent, excluded, pageTextByIndex, blockers } = prepareAcceptance(db, userId, draftRow, { studyDate, expectedRevision, requireRevision: false, acknowledgeSummaryFindings });
+  const { storedLessonDate, proposal, dueDates, draftContent, excluded, pageTextByIndex, blockers } = prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expectedRevision, requireRevision: false, acknowledgeSummaryFindings });
   let subject;
   try {
     subject = describeSubject(db, userId, { subjectId, newSubjectName, newSubjectColor });
@@ -238,7 +239,7 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
     subject: subject.existing
       ? { id: subject.existing.id, name: subject.existing.name, color: subject.existing.color, isNew: false }
       : { id: null, name: subject.create.name, color: subject.create.color, isNew: true },
-    unit: { title: proposal.title, summary: draftContent.summary, studyDate, summaryPages: [...new Set(summaryPages)].sort((a, b) => a - b) },
+    unit: { title: proposal.title, summary: draftContent.summary, studyDate, lessonDate: storedLessonDate, summaryPages: [...new Set(summaryPages)].sort((a, b) => a - b) },
     reviews: { count: dueDates.length, dueDates },
     exercises: draftContent.questions.map((q, order) => ({
       order,

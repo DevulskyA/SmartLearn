@@ -9,6 +9,11 @@ import { THEME_OPTIONS, THEME_VARIABLES } from "../src/theme.js";
 // and are deliberately not asserted.
 
 const parseColor = (value) => {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+  if (hex) {
+    const h = hex[1].length === 3 ? [...hex[1]].map((c) => c + c).join('') : hex[1];
+    return [0, 2, 4].map((i) => srgbToLinear(parseInt(h.slice(i, i + 2), 16) / 255));
+  }
   const rgb = /^rgb\((\d+) (\d+) (\d+)\)$/.exec(value);
   if (rgb) return rgb.slice(1).map((x) => srgbToLinear(Number(x) / 255));
   const ok = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);

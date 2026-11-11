@@ -13,7 +13,13 @@ export default defineConfig(({ command }) => {
   return {
   clearScreen: false,
   define: { __APP_IDENTITY__: JSON.stringify(identity) },
-  plugins: [{
+  plugins: [
+    // Only for scripts/design-preview.mjs: mark the page as the desktop app talking to a local server (same origin, proxied).
+    ...(process.env.SMARTLEARN_PREVIEW_LOCAL === "1" ? [{
+      name: "smartlearn-preview-local-flags",
+      transformIndexHtml: () => [{ tag: "script", injectTo: "head-prepend", children: "window.__SMARTLEARN_API_BASE__=window.location.origin;window.__SMARTLEARN_REMOTE_MODE__=true;window.__SMARTLEARN_LOCAL_AUTHORITY__=true;" }],
+    }] : []),
+    {
     name: "smartlearn-build-info",
     generateBundle() { this.emitFile({ type: "asset", fileName: "build-info.json", source: JSON.stringify({ ...identity, builtAt: new Date().toISOString() }) }); },
   }],

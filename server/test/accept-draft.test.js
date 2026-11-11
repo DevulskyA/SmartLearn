@@ -12,7 +12,7 @@ import { extractSource } from '../src/services/source-extraction.js';
 import * as proposals from '../src/services/content-proposals.js';
 import * as drafts from '../src/services/generated-drafts.js';
 import * as exercisesService from '../src/services/exercises.js';
-import { acceptDraft, AcceptDraftError } from '../src/services/accept-draft.js';
+import { acceptDraft, previewAcceptance, AcceptDraftError } from '../src/services/accept-draft.js';
 import * as learningUnitsService from '../src/services/learning-units.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 
@@ -382,5 +382,25 @@ test('a draft whose summary cites only some pages freezes exactly those pages, n
     db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(content), draft.id);
     const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Parcial', studyDate: '2026-03-01', expectedRevision: row.revision });
     assert.deepEqual(learningUnitsService.summarySources(db, userId, result.unit.id).map((s) => s.pageIndex), [2]);
+  } finally { cleanup(); }
+});
+
+test('lessonDate on accept: stored and returned, preview shows it, a later-than-study date is refused identically by preview and accept, reviews stay on studyDate', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'lesson-date@example.com');
+    const { draft } = await makeDraft(db, userId, sourcesDir, ['Farmacocinética básica', 'Farmacodinâmica básica']);
+    const args = { newSubjectName: 'Farmacologia', studyDate: '2026-03-10', expectedRevision: draft.revision };
+
+    assert.equal(previewAcceptance(db, userId, draft.id, { ...args, lessonDate: '2026-03-02' }).unit.lessonDate, '2026-03-02');
+    assert.throws(() => previewAcceptance(db, userId, draft.id, { ...args, lessonDate: '2026-03-11' }), (e) => e.field === 'lessonDate');
+    assert.throws(() => acceptDraft(db, userId, draft.id, { ...args, lessonDate: '2026-03-11' }), (e) => e.field === 'lessonDate');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_units WHERE user_id = ?').get(userId).n, 0, 'a refused accept writes nothing');
+
+    const result = acceptDraft(db, userId, draft.id, { ...args, lessonDate: '2026-03-02' });
+    assert.equal(result.unit.lessonDate, '2026-03-02');
+    assert.equal(result.unit.studyDate, '2026-03-10');
+    assert.equal(db.prepare('SELECT lesson_date FROM learning_units WHERE id = ?').get(result.unit.id).lesson_date, '2026-03-02');
+    assert.equal(db.prepare('SELECT MIN(due_date) AS d FROM review_tasks WHERE unit_id = ?').get(result.unit.id).d, '2026-03-11', 'first review = studyDate + 1');
   } finally { cleanup(); }
 });

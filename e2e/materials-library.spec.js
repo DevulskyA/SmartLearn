@@ -104,10 +104,11 @@ test('search ignores accents and case, counts before paging and goes back to pag
   await expect(page.locator('.source-existing-item').first()).toContainText('Anatomia 1.pdf');
 });
 
-test('with few documents the search and order controls stay out of the way, and the list is still complete', async ({ page }) => {
+test('with few documents the search and order controls are there (approved V6 design), the list is complete and there is no pager', async ({ page }) => {
   await openMaterials(page, fakeSources(3));
   await expect(page.locator('.source-existing-item')).toHaveCount(3);
-  await expect(page.locator('#library-tools')).toBeHidden();
+  await expect(page.locator('#library-tools')).toBeVisible();
+  await expect(page.locator('#library-count')).toHaveText('3 documentos · 1 a 3 exibidos');
   await expect(page.locator('#library-pager')).toBeHidden();
 });
 

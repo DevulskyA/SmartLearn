@@ -2,8 +2,8 @@
 // The count is always computed over the FULL list the server returned, before paging, so "3 de 39" is true.
 
 export const LIBRARY_PAGE_SIZE = 12;
-/** Below this many documents the search and order controls would only add noise; they appear from here on. */
-export const LIBRARY_TOOLS_FROM = 7;
+/** The approved V6 design shows the search and order controls as soon as there is a library to search (one document or more). */
+export const LIBRARY_TOOLS_FROM = 1;
 
 export const LIBRARY_SORTS = Object.freeze(["original", "name-asc", "name-desc", "pages-desc"]);
 

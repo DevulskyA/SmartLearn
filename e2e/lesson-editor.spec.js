@@ -174,6 +174,25 @@ test('a rejected question does not become an exercise when the lesson is accepte
   await expect(editor.locator('.source-draft-result')).toContainText(/Aula criada: 2 exercícios/, { timeout: 10000 });
 });
 
+test('the accept dialog keeps "Data do estudo" and an optional "Data da aula" apart: the preview shows the lesson date and the lesson is stored with it', async ({ page }) => {
+  await openLesson(page);
+  const editor = page.locator('.lesson-editor');
+  await expect(editor.locator('.lesson-accept label', { hasText: 'Data do estudo' })).toBeVisible();
+  await expect(editor.locator('.lesson-accept label', { hasText: 'Data da aula (opcional)' })).toBeVisible();
+  await editor.locator('.source-draft-subject-input').fill('Fisiologia');
+  await editor.getByLabel('Data da aula (opcional)').fill('2020-01-02');
+  await editor.locator('[data-action="preview-accept"]').click();
+  await expect(editor.locator('.lesson-accept-preview')).toContainText('Aula dada em 2020-01-02');
+  await editor.locator('[data-action="accept-draft"]').click();
+  await expect(editor.locator('.source-draft-result')).toContainText(/Aula criada/, { timeout: 10000 });
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const unit = db.prepare('SELECT study_date, lesson_date FROM learning_units ORDER BY id DESC LIMIT 1').get();
+    expect(unit.lesson_date).toBe('2020-01-02');
+    expect(unit.study_date).not.toBe('2020-01-02');
+  } finally { db.close(); }
+});
+
 test('PREVIEW before accepting: shows what will be created, writes nothing, is dropped when the lesson changes, and matches the real acceptance', async ({ page }) => {
   await openLesson(page);
   const editor = page.locator('.lesson-editor');

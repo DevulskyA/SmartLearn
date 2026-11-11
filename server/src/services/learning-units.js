@@ -16,6 +16,19 @@ export class LearningUnitError extends Error {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * lessonDate = the day the class was given; studyDate = the day it was studied (the anchor of the review schedule). They are different facts.
+ * lessonDate is optional ("" and null mean unknown), must be a real calendar day and cannot be later than the study date.
+ * Returns the value to store (an ISO day or null); never touches the review schedule.
+ */
+export function normalizeLessonDate(lessonDate, studyDate, ErrorClass = LearningUnitError) {
+  if (lessonDate === undefined || lessonDate === null || lessonDate === '') return null;
+  const valid = typeof lessonDate === 'string' && DATE_RE.test(lessonDate) && new Date(`${lessonDate}T00:00:00.000Z`).toISOString().slice(0, 10) === lessonDate;
+  if (!valid) throw new ErrorClass('VALIDATION_FAILED', dm('LESSON_DATE_INVALID'), 'lessonDate');
+  if (lessonDate > studyDate) throw new ErrorClass('VALIDATION_FAILED', dm('LESSON_DATE_AFTER_STUDY'), 'lessonDate');
+  return lessonDate;
+}
+
 // A [[fig:UUID]] in a summary must point at one of the student's own visual assets; anything else is refused instead of saved as a dead reference.
 function assertFigureRefs(db, userId, summaryBody) {
   if (typeof summaryBody !== 'string' || !summaryBody.includes('[[fig:')) return;
@@ -44,6 +57,7 @@ function unitDto(row) {
     sourceText: row.source_text,
     summaryBody: row.summary_body,
     studyDate: row.study_date,
+    lessonDate: row.lesson_date ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -106,15 +120,16 @@ export function resolveOrCreateSubject(db, userId, input) {
  * conflicts (409) rather than silently doing something different.
  */
 export function create(db, userId, data) {
-  const { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, operationKey } = data;
+  const { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, lessonDate, operationKey } = data;
 
   const titleError = validateTitleField(title);
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
   if (!DATE_RE.test(studyDate ?? '')) throw new LearningUnitError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
   generateReviewDates(studyDate); // throws if calendar-invalid (e.g. Feb 30)
+  const storedLessonDate = normalizeLessonDate(lessonDate, studyDate);
   assertFigureRefs(db, userId, summaryBody);
 
-  const idempotencyPayload = { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate };
+  const idempotencyPayload = { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, lessonDate: storedLessonDate };
   const check = checkIdempotency(db, { userId, operation: 'create-learning-unit', operationKey, payload: idempotencyPayload });
   if (check.cached) return check.result;
 
@@ -123,9 +138,9 @@ export function create(db, userId, data) {
 
     const now = new Date().toISOString();
     const unitResult = db.prepare(`
-      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, subject.id, normalizeEntityName(title) || title.trim(), sourceText ?? null, summaryBody ?? null, studyDate, now, now);
+      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, lesson_date, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, subject.id, normalizeEntityName(title) || title.trim(), sourceText ?? null, summaryBody ?? null, studyDate, storedLessonDate, now, now);
     const unit = db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unitResult.lastInsertRowid);
 
     const dueDates = generateReviewDates(studyDate);
@@ -182,14 +197,14 @@ export function getById(db, userId, id) {
 }
 
 /**
- * Updates title/sourceText/summaryBody only. studyDate is deliberately NOT
+ * Updates title/sourceText/summaryBody/lessonDate only. studyDate is deliberately NOT
  * accepted here — design.md §4's date-correction contract (atomically
  * reprojecting still-pending review offsets while preserving completed
  * tasks/evidence) is real scheduling surgery, not a plain field edit, and
  * is out of this task's scope; a caller must get a clear rejection, not a
  * silent no-op, if they try.
  */
-export function updateFields(db, userId, id, { title, sourceText, summaryBody } = {}) {
+export function updateFields(db, userId, id, { title, sourceText, summaryBody, lessonDate } = {}) {
   const unit = findOwned(db, userId, id);
   if (!unit) throw new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
@@ -198,14 +213,16 @@ export function updateFields(db, userId, id, { title, sourceText, summaryBody } 
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
 
   assertFigureRefs(db, userId, summaryBody);
+  const nextLessonDate = lessonDate !== undefined ? normalizeLessonDate(lessonDate, unit.study_date) : (unit.lesson_date ?? null);
   const now = new Date().toISOString();
   db.prepare(`
-    UPDATE learning_units SET title = ?, source_text = ?, summary_body = ?, updated_at = ?
+    UPDATE learning_units SET title = ?, source_text = ?, summary_body = ?, lesson_date = ?, updated_at = ?
     WHERE user_id = ? AND id = ?
   `).run(
     normalizeEntityName(nextTitle) || nextTitle.trim(),
     sourceText !== undefined ? sourceText : unit.source_text,
     summaryBody !== undefined ? summaryBody : unit.summary_body,
+    nextLessonDate,
     now, userId, id,
   );
   return getById(db, userId, id);

@@ -299,14 +299,11 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   expect(evidenceAfterReload.evidence.length).toBe(1);
 });
 
-test('REMOTE_AUTHORITY without LOCAL_AUTHORITY: Materiais never appears as a product surface', async ({ page }) => {
+test('REMOTE_AUTHORITY without LOCAL_AUTHORITY: Materiais is in the menu but shows only a notice, never the library', async ({ page }) => {
   await registerAndLogin(page, { localAuthority: false });
 
-  // Nav item hidden.
-  await expect(page.locator('[data-screen="materials"]')).toBeHidden();
-
-  // Direct hash access must not expose the screen either.
-  await page.evaluate(() => { window.location.hash = '#materials'; });
-  await page.waitForTimeout(200);
-  await expect(page.locator('#screen-materials')).toBeHidden();
+  await expect(page.locator('nav [data-screen="materials"], [data-screen="materials"].nav-item').first()).toBeVisible();
+  await page.locator('.nav-item[data-screen="materials"]').first().click();
+  await expect(page.locator('#screen-materials')).toBeVisible();
+  await expect(page.locator('#materials-unavailable')).toBeVisible();
 });

@@ -267,6 +267,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const dateField = labelledField(`${uid}-date`, t("editor.accept.date"), "input", today);
   dateField.input.type = "date";
   dateField.input.classList.add("source-draft-date-input");
+  // The day the class was given: optional, a different fact from the study date (which anchors the 16 reviews). Never later than the study date.
+  const lessonDateField = labelledField(`${uid}-lesson-date`, t("editor.accept.lessonDate"), "input", "");
+  lessonDateField.input.type = "date";
+  lessonDateField.input.classList.add("source-draft-lesson-date-input");
+  lessonDateField.input.setAttribute("aria-describedby", `${uid}-lesson-date-hint`);
+  const lessonDateHint = createTextElement("p", "lesson-hint", t("editor.accept.lessonDateHint"));
+  lessonDateHint.id = `${uid}-lesson-date-hint`;
+  lessonDateField.wrap.append(lessonDateHint);
+  const lessonDateOrNull = () => lessonDateField.input.value || null;
   // Read-only preview of what accepting creates, shown BEFORE the final button; it writes nothing and is dropped as soon as the lesson changes.
   const previewBtn = button("secondary-button", t("editor.accept.preview"), "preview-accept");
   const previewPanel = document.createElement("div");
@@ -293,7 +302,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const acceptActions = document.createElement("div");
   acceptActions.className = "lesson-accept-actions";
   acceptActions.append(acceptBtn, previewBtn);
-  footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
+  footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     newSubject.setEnabled(!picked);
@@ -717,6 +726,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     for (const line of [
       preview.subject.isNew ? t("editor.preview.subjectNew", { name: preview.subject.name }) : t("editor.preview.subject", { name: preview.subject.name }),
       t("editor.preview.lesson", { title: preview.unit.title, date: preview.unit.studyDate }),
+      ...(preview.unit.lessonDate ? [t("editor.preview.lessonDate", { date: preview.unit.lessonDate })] : []),
       t("editor.preview.counts", { exercises: exercisesText(preview.exercises.length), reviews: preview.reviews.count }),
     ]) summary.append(createTextElement("li", "", line));
     const exercises = document.createElement("ol");
@@ -878,6 +888,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
       newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
       studyDate: dateField.input.value,
+      lessonDate: lessonDateOrNull(),
       expectedRevision: draft.revision,
       acknowledgeSummaryFindings: ackBox.checked,
     });
@@ -901,6 +912,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
       newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
       studyDate: dateField.input.value,
+      lessonDate: lessonDateOrNull(),
       expectedRevision: draft.revision,
       acknowledgeSummaryFindings: ackBox.checked,
     });

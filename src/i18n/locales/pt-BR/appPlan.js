@@ -1,7 +1,8 @@
 // Plano screen: lesson (unit) list, details, summary editor and new lesson form (src/app.js)
 export default {
   // Tracking state badges
-  'plan.unit.dateRequired': 'Informe a data da aula.',
+  'plan.unit.dateRequired': 'Informe a data do estudo.',
+  'plan.unit.lessonDateLater': 'A data da aula não pode ser posterior à data do estudo.',
   'plan.unit.subjectRequired': 'Selecione uma disciplina.',
   'plan.unit.saved': 'Aula salva. 16 revisões criadas.',
   'plan.unit.savedReload': 'Aula salva. Recarregue para ver o resultado.',
@@ -17,6 +18,7 @@ export default {
   'plan.empty.withMaterials': 'Nenhuma aula cadastrada. Envie um PDF em Materiais ou crie uma aula em “+ Nova aula”.',
   'plan.empty': 'Nenhuma aula cadastrada.',
   'plan.row.exercises': '{count} ex.',
+  'plan.row.lessonDate': 'aula em {date}',
   'plan.row.summary.yes': 'Resumo ✓',
   'plan.row.summary.no': 'Resumo —',
   'plan.row.next': 'Próx. {date}',

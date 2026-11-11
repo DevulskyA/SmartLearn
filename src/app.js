@@ -1,4 +1,5 @@
 ﻿import "./styles.css";
+import "./experience.css";
 import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError, apiRequest } from "./api-client.js";
@@ -37,6 +38,7 @@ import { isExperimentOn, setExperiment, renderObligationsPanel } from "./experim
 import { formatPageList, createSourceDetails, citationDetails, setSourceOpeningRecorder, appendSummarySources as appendSummarySourcesFrom } from "./source-details-ui.js";
 import { configureMaterialsUI } from "./materials-ui.js";
 import "./build-identity-ui.js";
+import "./chrome-ui.js";
 import { createTextElement } from "./dom-utils.js";
 import { showConfirm } from "./confirm-dialog.js";
 import { askPostpone } from "./postpone-dialog.js";
@@ -270,7 +272,13 @@ const LOCAL_AUTHORITY = typeof window !== "undefined" && window.__SMARTLEARN_LOC
 // module loads), so it's safe to apply it once here rather than on every
 // navigation.
 const materialsNavItem = document.querySelector('[data-screen="materials"]');
-if (materialsNavItem) materialsNavItem.hidden = !(REMOTE_MODE && LOCAL_AUTHORITY);
+// Materiais sempre aparece no menu; sem servidor local a tela mostra um aviso em vez de sumir.
+if (materialsNavItem) {
+  materialsNavItem.hidden = false;
+  const materialsAvailable = REMOTE_MODE && LOCAL_AUTHORITY;
+  const unavailableCard = document.getElementById("materials-unavailable");
+  if (unavailableCard) unavailableCard.hidden = materialsAvailable;
+}
 
 let databaseAvailable = false;
 // In remote mode, "available" also requires a logged-in session — there is
@@ -370,6 +378,7 @@ const subjectsEmpty = document.querySelector("#subjects-empty");
 const subjectManagerMessage = document.querySelector("#subject-manager-message");
 const studyForm = document.querySelector("#study-form");
 const studyDateInput = document.querySelector("#study-date");
+const studyLessonDateInput = document.querySelector("#study-lesson-date");
 const studyContentInput = document.querySelector("#study-content");
 const studySummaryTextarea = document.querySelector("#study-summary");
 const studySourceTextInput = document.querySelector("#study-source-text");
@@ -490,6 +499,14 @@ const planFilterSubject = document.querySelector("#plan-filter-subject");
 const planFilterState = document.querySelector("#plan-filter-state");
 const planFilterPeriod = document.querySelector("#plan-filter-period");
 const planSort = document.querySelector("#plan-sort");
+const planSearch = document.querySelector("#plan-search");
+const planCount = document.querySelector("#plan-count");
+const planPager = document.querySelector("#plan-pager");
+const planPrev = document.querySelector("#plan-prev");
+const planNext = document.querySelector("#plan-next");
+const planPageLabel = document.querySelector("#plan-page-label");
+const PLAN_PAGE_SIZE = 20;
+let planPage = 1;
 const planNewUnitBtn = document.querySelector("#plan-new-unit-btn");
 const planManageSubjectsBtn = document.querySelector("#plan-manage-subjects-btn");
 const planSubjectsPanel = document.querySelector("#plan-subjects-panel");
@@ -504,6 +521,7 @@ const planSubjectForm = createSubjectCreateForm({
 });
 const planStudySource = document.querySelector("#plan-study-source");
 const planStudyDate = document.querySelector("#plan-study-date");
+const planLessonDate = document.querySelector("#plan-lesson-date");
 const planStudyTitle = document.querySelector("#plan-study-title");
 const planStudySummary = document.querySelector("#plan-study-summary");
 const planUnitSaveBtn = document.querySelector("#plan-unit-save-btn");
@@ -2022,13 +2040,37 @@ export async function renderPlan() {
   const subjectFilter = planFilterSubject?.value ?? "";
   const stateFilter = planFilterState?.value ?? "";
   const periodFilter = planFilterPeriod?.value ?? "";
+  const planQuery = (planSearch?.value ?? "").trim().toLocaleLowerCase("pt-BR");
   const periodCutoff = periodFilter ? subtractDays(today, periodFilter === "last-30" ? 30 : periodFilter === "last-90" ? 90 : 365) : null;
   const filtered = sorted.filter((unit) => {
     if (subjectFilter && String(unit.subjectId) !== subjectFilter) return false;
     if (stateFilter && getTrackingState(unit.id, allTasks, allEvidence, today) !== stateFilter) return false;
     if (periodCutoff && unit.studyDate < periodCutoff) return false;
+    if (planQuery) {
+      const hay = `${unit.title} ${subjectsById.get(unit.subjectId)?.name ?? ""} ${unit.sourceText ?? ""}`.toLocaleLowerCase("pt-BR");
+      if (!hay.includes(planQuery)) return false;
+    }
     return true;
   });
+  const planPages = Math.max(1, Math.ceil(filtered.length / PLAN_PAGE_SIZE));
+  // a row requested by "Ver no Plano" must be on the page shown
+  if (pendingPlanFocusUnitId != null) {
+    const at = filtered.findIndex((unit) => unit.id === pendingPlanFocusUnitId);
+    if (at >= 0) planPage = Math.floor(at / PLAN_PAGE_SIZE) + 1;
+  }
+  planPage = Math.min(Math.max(1, planPage), planPages);
+  const planFrom = (planPage - 1) * PLAN_PAGE_SIZE;
+  const pageUnits = filtered.slice(planFrom, planFrom + PLAN_PAGE_SIZE);
+  if (planCount) {
+    planCount.hidden = learningUnits.length === 0 || planPages === 1 && filtered.length === learningUnits.length;
+    planCount.textContent = filtered.length === 0 ? "" : t("screens.plan.count", { matched: filtered.length, total: learningUnits.length, from: planFrom + 1, to: planFrom + pageUnits.length });
+  }
+  if (planPager) {
+    planPager.hidden = planPages === 1;
+    planPageLabel.textContent = t("screens.plan.page", { page: planPage, count: planPages });
+    planPrev.disabled = planPage <= 1;
+    planNext.disabled = planPage >= planPages;
+  }
 
   planEmpty.hidden = filtered.length > 0;
   // no lessons at all: the way to start sits in the body too, not only in the heading
@@ -2039,7 +2081,7 @@ export async function renderPlan() {
     : t("plan.empty");
   planList.replaceChildren();
 
-  for (const unit of filtered) {
+  for (const unit of pageUnits) {
     const subject = subjectsById.get(unit.subjectId);
     const evidence = evidenceByUnitId.get(unit.id) ?? [];
     const state = getTrackingState(unit.id, allTasks, allEvidence, today);
@@ -2052,10 +2094,10 @@ export async function renderPlan() {
 
     // Compact summary line
     const compact = document.createElement("div");
-    compact.className = "plan-row-compact";
+    compact.className = "plan-row-compact sl-compact-normalized";
 
     const subjectChip = document.createElement("span");
-    subjectChip.className = "subject-chip";
+    subjectChip.className = "subject-chip sl-plan-identity";
     subjectChip.textContent = subject?.name ?? t("stats.noSubject");
     subjectChip.style.setProperty(
       "--subject-color",
@@ -2069,6 +2111,7 @@ export async function renderPlan() {
     const meta = document.createElement("span");
     meta.className = "plan-unit-meta";
     const parts = [formatDate(unit.studyDate)];
+    if (unit.lessonDate) parts.push(t("plan.row.lessonDate", { date: formatDate(unit.lessonDate) }));
     if (unit.sourceText) parts.push(unit.sourceText);
     if (exerciseCount > 0) parts.push(t("plan.row.exercises", { count: exerciseCount }));
     parts.push(unit.summaryBody ? t("plan.row.summary.yes") : t("plan.row.summary.no"));
@@ -2078,7 +2121,7 @@ export async function renderPlan() {
     meta.textContent = parts.join(" · ");
 
     const badges = document.createElement("span");
-    badges.className = "plan-row-badges";
+    badges.className = "plan-row-badges sl-plan-state";
     badges.append(getPlanStateBadge(state));
     const perfBadge = getPlanPerfBadge(evidence);
     if (perfBadge) badges.append(perfBadge);
@@ -2093,7 +2136,11 @@ export async function renderPlan() {
     expandBtn.setAttribute("aria-expanded", "false");
     expandBtn.setAttribute("aria-label", t("plan.row.expand", { title: titleSpan.textContent }));
 
-    compact.append(subjectChip, titleSpan, meta, badges, expandBtn);
+    // V6 row: identity | name (title + meta) | state | chevron
+    const nameBlock = document.createElement("div");
+    nameBlock.className = "sl-plan-name";
+    nameBlock.append(titleSpan, meta);
+    compact.append(subjectChip, nameBlock, badges, expandBtn);
 
     // Expansion panel (lazy rendered)
     const detail = document.createElement("div");
@@ -5145,9 +5192,7 @@ export function showScreen(screenId, { focus = false } = {}) {
   // REMOTE_AUTHORITY (no local backend), even though the nav item is
   // already hidden for that case (hiding the nav button alone doesn't
   // stop a direct hash navigation).
-  if (nextScreen === "materials" && !(REMOTE_MODE && LOCAL_AUTHORITY)) {
-    nextScreen = DEFAULT_SCREEN;
-  }
+  // (Revisado a pedido do dono: Materiais fica visível e mostra um aviso; a biblioteca continua só com autoridade local.)
 
   // The study and exam screens only exist while their in-memory session does. After a reload (or a stale link) there is
   // nothing to show: an empty card with a "Ver resposta" that does nothing is worse than starting over from Plano, where
@@ -6263,7 +6308,14 @@ studyForm.addEventListener("submit", async (event) => {
   const studyDate = studyDateInput.value;
   const content = studyContentInput.value.trim();
   const summaryBody = studySummaryTextarea.value.trim() || null;
+  const lessonDate = studyLessonDateInput?.value || null;
 
+  if (lessonDate && studyDate && lessonDate > studyDate) {
+    studyMessage.classList.add("is-error");
+    studyMessage.textContent = t("appRegister.form.lessonDateLater");
+    studyLessonDateInput.focus();
+    return;
+  }
   if (!subjectId || !studyDate || !content) {
     studyMessage.classList.add("is-error");
     if (!subjectId) {
@@ -6291,6 +6343,7 @@ studyForm.addEventListener("submit", async (event) => {
       subjectId,
       sourceText,
       studyDate,
+      lessonDate,
       title: content,
       summaryBody,
       operationKey: studySaveOperation.key,
@@ -6300,6 +6353,7 @@ studyForm.addEventListener("submit", async (event) => {
     await renderStudies();
     studyContentInput.value = "";
     studySummaryTextarea.value = "";
+    if (studyLessonDateInput) studyLessonDateInput.value = "";
     if (studySourceTextInput) studySourceTextInput.value = "";
     studyMessage.textContent = t("appRegister.form.studySaved");
     studyContentInput.focus();
@@ -6406,18 +6460,29 @@ evolutionFilterSubject?.addEventListener("change", async () => {
 });
 
 planFilterSubject?.addEventListener("change", () => {
+  planPage = 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 planFilterState?.addEventListener("change", () => {
+  planPage = 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 planSort?.addEventListener("change", () => {
+  planPage = 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
 
 planFilterPeriod?.addEventListener("change", () => {
+  planPage = 1;
   if (databaseAvailable) renderPlan().catch(console.error);
 });
+
+planSearch?.addEventListener("input", () => {
+  planPage = 1;
+  if (databaseAvailable) renderPlan().catch(console.error);
+});
+planPrev?.addEventListener("click", () => { planPage -= 1; if (databaseAvailable) renderPlan().catch(console.error); });
+planNext?.addEventListener("click", () => { planPage += 1; if (databaseAvailable) renderPlan().catch(console.error); });
 
 statsUnitFilterPeriod?.addEventListener("change", () => {
   if (!databaseAvailable) return;
@@ -6500,9 +6565,11 @@ planUnitSaveBtn?.addEventListener("click", async () => {
 
   const title = planStudyTitle?.value.trim() ?? "";
   const studyDate = planStudyDate?.value ?? "";
+  const lessonDate = planLessonDate?.value || null;
 
   // Validate unit fields first — before creating any discipline
   if (!studyDate) { setPlanFormMessage(t("plan.unit.dateRequired"), true); planStudyDate?.focus(); return; }
+  if (lessonDate && lessonDate > studyDate) { setPlanFormMessage(t("plan.unit.lessonDateLater"), true); planLessonDate?.focus(); return; }
   const titleError = validateTitleField(title, t("shell.field.studyContent"));
   if (titleError) { setPlanFormMessage(titleError, true); planStudyTitle?.focus(); return; }
 
@@ -6527,8 +6594,8 @@ planUnitSaveBtn?.addEventListener("click", async () => {
   planUnitSaveBtn.disabled = true;
   try {
     const studyData = newSubjectName
-      ? { newSubjectName, newSubjectColor: planSubjectForm.color, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key }
-      : { subjectId, sourceText, studyDate, title, summaryBody, operationKey: planSaveOperation.key };
+      ? { newSubjectName, newSubjectColor: planSubjectForm.color, sourceText, studyDate, lessonDate, title, summaryBody, operationKey: planSaveOperation.key }
+      : { subjectId, sourceText, studyDate, lessonDate, title, summaryBody, operationKey: planSaveOperation.key };
     const saved = await generateReviewTasks(studyData);
     // Save succeeded (or an idempotent retry returned the original result)
     // — this intent is done, the next save is a genuinely new one.
@@ -6537,6 +6604,7 @@ planUnitSaveBtn?.addEventListener("click", async () => {
     planStudyTitle.value = "";
     planStudySource.value = "";
     planStudySummary.value = "";
+    if (planLessonDate) planLessonDate.value = "";
     planSubjectForm?.reset();
     planSubjectForm?.hide();
     setPlanFormMessage(t("plan.unit.saved"));
@@ -6619,6 +6687,26 @@ document.querySelector("#account-show-register")?.addEventListener("click", () =
 document.querySelector("#account-show-login")?.addEventListener("click", () => {
   accountRegisterForm.hidden = true;
   accountLoginForm.hidden = false;
+});
+
+// Eye button: shows the typed password as text and hides it again; the field value is never read or stored here.
+document.addEventListener("click", (event) => {
+  const toggle = event.target.closest?.(".password-toggle");
+  if (!toggle) return;
+  const field = document.getElementById(toggle.getAttribute("aria-controls"));
+  if (!field) return;
+  const show = field.type === "password";
+  field.type = show ? "text" : "password";
+  toggle.setAttribute("aria-pressed", String(show));
+});
+
+// A reset form (after sign-in or a password change) goes back to hidden characters.
+document.addEventListener("reset", (event) => {
+  for (const toggle of event.target.querySelectorAll?.(".password-toggle") ?? []) {
+    const field = document.getElementById(toggle.getAttribute("aria-controls"));
+    if (field) field.type = "password";
+    toggle.setAttribute("aria-pressed", "false");
+  }
 });
 
 accountLoginForm?.addEventListener("submit", async (event) => {
