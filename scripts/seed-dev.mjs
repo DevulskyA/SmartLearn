@@ -34,7 +34,9 @@ export function isoDay(today, offsetDays) {
 
 // Synthetic, clinically conservative content. `state` documents what each unit
 // is meant to exhibit in the product (used by the test that proves coverage).
-export function buildPlan(today = new Date()) {
+export // One hue per discipline, as in the V7.2 reference (each discipline reads as its own colour, not all default blue).
+const SUBJECT_COLORS = { 'Anatomia': 'DISC-ROSE', 'Fisiologia': 'DISC-PURPLE', 'Farmacologia': 'DISC-TEAL', 'Semiologia Médica': 'DISC-INDIGO', 'Patologia Geral': 'DISC-AMBER', 'Neurologia': 'DISC-BLUE' };
+function buildPlan(today = new Date()) {
   const day = (o) => isoDay(today, o);
   const subjects = ['Anatomia', 'Fisiologia', 'Farmacologia', 'Semiologia Médica', 'Patologia Geral', 'Neurologia'];
   const units = [
@@ -150,7 +152,7 @@ export async function seedDev({ base = 'http://127.0.0.1:3000', origin = 'http:/
 
   const plan = buildPlan(today);
   const subjectId = new Map();
-  for (const name of plan.subjects) subjectId.set(name, (await api.call('POST', '/subjects', { name })).body.subject.id);
+  for (const name of plan.subjects) subjectId.set(name, (await api.call('POST', '/subjects', { name, color: SUBJECT_COLORS[name] ?? 'DISC-BLUE' })).body.subject.id);
 
   const unitByKey = new Map();
   for (const u of plan.units) {
