@@ -1015,9 +1015,10 @@
   align-items:end;gap:12px;padding:15px 17px;margin-bottom:10px;
   background:var(--sl-paper);border:1px solid var(--sl-line);border-radius:12px;
 }
-.sl-redesign #screen-materials .sl-library-tools .field-group {gap:5px;}
-.sl-redesign #screen-materials .sl-library-tools .field-group span {
-  font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--sl-muted);
+.sl-redesign #screen-materials .sl-library-tools .field-group {gap:5px;font-weight:400;}
+/* only the caption: the custom select (select-ui) draws its own <span> inside the label */
+.sl-redesign #screen-materials .sl-library-tools .field-group > span:first-child {
+  font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--sl-muted);
 }
 .sl-redesign #screen-materials .sl-library-tools :is(input,select) {width:100%;min-height:38px;font-size:12px;}
 .sl-redesign #screen-materials #sources-library-count {align-self:center;text-align:right;font-size:11px;max-width:192px;line-height:1.5;}
@@ -1966,3 +1967,4 @@
 .sl-redesign #screen-today .sl-review-row { flex-wrap:wrap; }
 .sl-redesign #screen-today .sl-review-row .subject-chip { flex:0 1 auto;min-width:min-content;max-width:100%;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:none; }
 .sl-redesign #screen-today .sl-review-row .review-row-tags { flex:0 0 auto;margin-left:auto; }
+.sl-redesign #screen-materials #library-count {align-self:center;text-align:right;font-size:11px;max-width:192px;line-height:1.5;}

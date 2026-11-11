@@ -66,7 +66,7 @@ async function openMaterials(page, sources) {
 test('with 30 documents: count is the real total, 12 per page, every page reachable, last item shown', async ({ page }) => {
   await openMaterials(page, fakeSources(30));
   await expect(page.locator('#library-tools')).toBeVisible();
-  await expect(page.locator('#library-count')).toHaveText('30 documentos · 1 a 12 exibidos');
+  await expect(page.locator('#library-count')).toHaveText('30 de 30 materiais · 1–12 exibidos');
   await expect(page.locator('.source-existing-item')).toHaveCount(12);
   await expect(page.locator('#library-prev')).toHaveAttribute('aria-disabled', 'true');
 
@@ -75,7 +75,7 @@ test('with 30 documents: count is the real total, 12 per page, every page reacha
   await page.locator('#library-next').click();
   await expect(page.locator('#library-page-label')).toHaveText('Página 3 de 3');
   await expect(page.locator('.source-existing-item')).toHaveCount(6);
-  await expect(page.locator('#library-count')).toHaveText('30 documentos · 25 a 30 exibidos');
+  await expect(page.locator('#library-count')).toHaveText('30 de 30 materiais · 25–30 exibidos');
   await expect(page.locator('.source-existing-item').last()).toContainText('Fisiologia Médica 30.pdf');
   await expect(page.locator('#library-next')).toHaveAttribute('aria-disabled', 'true');
   // the open/remove actions still sit on the real ids
@@ -88,11 +88,11 @@ test('search ignores accents and case, counts before paging and goes back to pag
   await expect(page.locator('#library-page-label')).toHaveText('Página 2 de 3');
 
   await page.locator('#library-search').fill('FISIOLOGIA medica');
-  await expect(page.locator('#library-count')).toHaveText('25 de 30 documentos · 1 a 12 exibidos');
+  await expect(page.locator('#library-count')).toHaveText('25 de 30 materiais · 1–12 exibidos');
   await expect(page.locator('#library-page-label')).toHaveText('Página 1 de 3');
 
   await page.locator('#library-search').fill('nada disso existe');
-  await expect(page.locator('#library-count')).toHaveText('Nenhum documento corresponde à busca.');
+  await expect(page.locator('#library-count')).toHaveText('Nenhum material corresponde à busca.');
   await expect(page.locator('.source-existing-item')).toHaveCount(0);
   await expect(page.locator('#library-pager')).toBeHidden();
 
@@ -108,7 +108,7 @@ test('with few documents the search and order controls are there (approved V6 de
   await openMaterials(page, fakeSources(3));
   await expect(page.locator('.source-existing-item')).toHaveCount(3);
   await expect(page.locator('#library-tools')).toBeVisible();
-  await expect(page.locator('#library-count')).toHaveText('3 documentos · 1 a 3 exibidos');
+  await expect(page.locator('#library-count')).toHaveText('3 de 3 materiais · 1–3 exibidos');
   await expect(page.locator('#library-pager')).toBeHidden();
 });
 

@@ -705,7 +705,7 @@ function renderExistingSources() {
   libraryPager.hidden = !showTools || view.pageCount <= 1;
   if (showTools) {
     const range = { matched: nf.format(view.matched), total: nf.format(view.total), from: nf.format(view.from), to: nf.format(view.to) };
-    libraryCount.textContent = view.matched === 0 ? t("materials.library.none") : (view.matched === view.total ? [tn("materials.library.countAll", view.total), ...(view.total > 1 ? [t("materials.library.range", range)] : [])].join(" · ") : t("materials.library.count", range));
+    libraryCount.textContent = view.matched === 0 ? t("materials.library.none") : tn("materials.library.count", view.total, range);
     libraryPageLabel.textContent = t("materials.library.page", { page: nf.format(view.page), count: nf.format(view.pageCount) });
     libraryPrev.setAttribute("aria-disabled", String(view.page <= 1));
     libraryNext.setAttribute("aria-disabled", String(view.page >= view.pageCount));

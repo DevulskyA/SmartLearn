@@ -629,27 +629,29 @@
             <div class="sources-existing" id="sources-existing" hidden>
               <h3 class="sources-subheading" id="sources-existing-title" data-i18n="screens.materials.existing.title">Sua biblioteca</h3>
               <p class="field-hint" data-i18n="screens.materials.existing.hint">Abra um material para escolher as páginas ou retomar um resumo preparado. O SmartLearn guarda uma cópia de cada PDF dentro do próprio app.</p>
-              <div class="library-tools" id="library-tools" hidden>
-                <div class="field-group">
-                  <label for="library-search" data-i18n="screens.materials.library.search">Buscar na biblioteca</label>
-                  <input id="library-search" type="search" autocomplete="off" placeholder="Título do documento" data-i18n-placeholder="screens.materials.library.searchPlaceholder" />
-                </div>
-                <div class="field-group">
-                  <label for="library-sort" data-i18n="screens.materials.library.sort">Organizar</label>
+              <div class="sl-library-tools" id="library-tools" aria-label="Encontrar materiais" data-i18n-aria-label="screens.materials.library.toolsLabel" hidden>
+                <label class="field-group" for="library-search">
+                  <span data-i18n="screens.materials.library.search">Buscar na biblioteca</span>
+                  <input id="library-search" type="search" autocomplete="off" placeholder="Título do PDF ou documento" data-i18n-placeholder="screens.materials.library.searchPlaceholder" />
+                </label>
+                <label class="field-group" for="library-sort">
+                  <span data-i18n="screens.materials.library.sort">Organizar</span>
                   <select id="library-sort">
                     <option value="original" data-i18n="screens.materials.library.sort.original">Ordem original</option>
                     <option value="name-asc" data-i18n="screens.materials.library.sort.nameAsc">Nome, A a Z</option>
                     <option value="name-desc" data-i18n="screens.materials.library.sort.nameDesc">Nome, Z a A</option>
                     <option value="pages-desc" data-i18n="screens.materials.library.sort.pagesDesc">Mais páginas</option>
                   </select>
-                </div>
+                </label>
+                <span class="sl-list-count" id="library-count" role="status" aria-live="polite" hidden></span>
               </div>
-              <p class="library-count" id="library-count" role="status" aria-live="polite" hidden></p>
               <ul class="sources-existing-list" id="sources-existing-list" aria-labelledby="sources-existing-title"></ul>
-              <nav class="library-pager" id="library-pager" aria-label="Páginas da biblioteca" data-i18n-aria-label="screens.materials.library.pagerLabel" hidden>
-                <button class="small-button" id="library-prev" type="button" data-i18n="screens.materials.library.prev">Anteriores</button>
+              <nav class="sl-pagination sl-library-pagination" id="library-pager" aria-label="Páginas da biblioteca" data-i18n-aria-label="screens.materials.library.pagerLabel" hidden>
                 <span id="library-page-label"></span>
-                <button class="small-button" id="library-next" type="button" data-i18n="screens.materials.library.next">Próximos</button>
+                <div class="sl-pagination-actions">
+                  <button class="small-button" id="library-prev" type="button" data-i18n="screens.materials.library.prev">← Anterior</button>
+                  <button class="small-button" id="library-next" type="button" data-i18n="screens.materials.library.next">Próxima →</button>
+                </div>
               </nav>
               <div class="sl-library-note">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5c4-2 7-1 9 1 2-2 5-3 9-1v15c-4-2-7-1-9 1-2-2-5-3-9-1zM12 6v15" /></svg>

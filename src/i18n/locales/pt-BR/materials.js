@@ -80,11 +80,10 @@ export default {
 
   // Documents already uploaded
   'materials.existing.pages': '{count} páginas',
-  'materials.library.count': '{matched} de {total} documentos · {from} a {to} exibidos',
-  'materials.library.countAll.one': '{count} documento',
-  'materials.library.countAll.other': '{count} documentos',
-  'materials.library.range': '{from} a {to} exibidos',
-  'materials.library.none': 'Nenhum documento corresponde à busca.',
+  // V7.2: "3 de 3 materiais · 1–3 exibidos" (the plural follows the total)
+  'materials.library.count.one': '{matched} de {total} material · {from}–{to} exibido',
+  'materials.library.count.other': '{matched} de {total} materiais · {from}–{to} exibidos',
+  'materials.library.none': 'Nenhum material corresponde à busca.',
   'materials.library.page': 'Página {page} de {count}',
   'materials.existing.open': 'Abrir material',
   'materials.existing.prepared.one': '{count} resumo preparado',
