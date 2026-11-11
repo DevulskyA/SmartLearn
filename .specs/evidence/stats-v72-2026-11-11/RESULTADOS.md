@@ -18,3 +18,11 @@ Commit testado: `d89014b` (pai `af98eb1`), branch `design/redesign-geral-2026111
 - **Atalho DEV**: `scripts/work-target-guard.mjs` recusa a branch `design/redesign-geral-20261110` (WRONG_BRANCH), e `launch-desktop-dev.ps1` roda `npm run build`, que passa pela guarda. Liberar a branch em `scripts/work-branches.json` e decisao do dono.
 - **Escopo visual**: o bloco "Tendencia historica" (verdict de estudo) fica entre o cartao de analise e o historico como texto simples; funcionalidade preservada do app, nao existe no V7.2.
 - 401 de `/auth/me` antes do login aparecem no console: esperado.
+
+## Login: causas provadas (2026-11-11)
+
+- **C1 (atalho DEV)**: `npm run build` do `launch-desktop-dev.ps1` falha na guarda `prebuild` (WRONG_BRANCH); `scripts/work-branches.json` nao lista `design/redesign-geral-20261110`. Reproduzido: `SMARTLEARN_BUILD_MODE=DEV npm run build` -> exit 1.
+- **C2 (atalho DEV)**: mesmo sem a guarda, o backend recusa a migracao 042 (`REFUSING to migrate ... 42 ... not authorized`); o launcher autoriza so `39,40,41`. Reproduzido em snapshot do banco DEV numa pasta temporaria.
+- **C3 (contas)**: o e-mail do dono existe so no banco da Homologacao; o banco DEV tem apenas a conta de desenvolvimento. Entrar no DEV com o e-mail da Homologacao da `INVALID_CREDENTIALS` (401).
+- **Homologacao**: backend instalado, login e UI de login funcionam (conta temporaria em copia do banco; 1280 e 390 px). Nenhum dado nem senha do dono foi lido ou alterado.
+- **Decisoes do dono**: liberar a branch em `work-branches.json` e autorizar `42` no launcher DEV, ou usar a Homologacao. Runbook de senha: `.specs/runbooks/SENHA-E-CONTAS.md`.
