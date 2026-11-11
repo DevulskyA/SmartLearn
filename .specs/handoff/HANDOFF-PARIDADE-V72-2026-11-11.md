@@ -30,9 +30,11 @@ Verificador do kit (só estrutura, não mede cor nem fonte): Hoje 15 divergênci
 | Tela | Estado | Diferenças vistas nas imagens |
 |---|---|---|
 | Estatísticas | **Feita** (commits `dba8573`…`d89014b`; 86 e2e passaram) | tabela de análise, distribuição, janela de detalhe e histórico seguem o V7.2; ver `.specs/evidence/stats-v72-2026-11-11/RESULTADOS.md` |
-| Hoje | **Longe do V7.2** | ver 3.1 |
-| Plano | Próxima | ver 3.2 |
-| Materiais, Configurações, Conta | **Não comparadas imagem a imagem nesta rodada** | só as contagens do verificador; comparar `aud/*-ref.png` com `*-app.png` |
+| Hoje | **Refeita** (`99a1cf6`): linha de resumo, banner, cartões V7.2, "Próximas revisões"; Ontem/Hoje/Amanhã viraram texto na linha de resumo | itens nativos mantidos (ver 3.3) |
+| Plano | **Próxima** | ver 3.2 |
+| Materiais | **Feita** (`bec8188`): cartão de busca/ordenar, contagem "N de N materiais · a–b exibidos", paginação | texto extra "O SmartLearn guarda uma cópia…" mantido (nativo) |
+| Configurações | **Feita** (`576efbe`): cartão de idioma com o layout de campos do V7.2 | falta "Nome do período" (recurso novo do V7.2, sem suporte no app) e "Restaurar backup" |
+| Conta | **Feita** (`feef66a`): cartão de perfil (avatar, e-mail, atalhos); Alterar senha e Sair mantidos | formulários de login/cadastro (sem login) não comparados |
 | Cadastro, Estudo, Prova | Não iniciadas | exigem fluxo (Playwright/E2E) |
 
 ### 3.1 Hoje (V7.2 × app, 1440 px)
@@ -51,6 +53,13 @@ Verificador do kit (só estrutura, não mede cor nem fonte): Hoje 15 divergênci
 - V7.2 tem a faixa de cabeçalho da lista ("SUAS AULAS" e "ABRA UMA LINHA PARA ESTUDAR OU EDITAR"); o app não tem.
 - V7.2 tem rodapé de paginação (Anterior / Próxima, "Página 1 de 10") e a nota "Ler resumos em conjunto →"; o app lista tudo sem paginação.
 - Seta da linha: V7.2 "↓", app "›". Linha de detalhe do app é mais longa (exercícios, resumo, revisões, próxima revisão).
+
+### 3.3 Funções nativas mantidas de propósito (regra do kit: diferença só se houver função nativa a preservar)
+
+- Hoje: botão "Revisar uma por vez" no banner; caixa "Revisão feita" na linha de ações do cartão; agrupamento de vencidas por conteúdo (acordeão) e "Ver mais N"; texto de status "Atrasada N dias"; chip "N para reforçar". "Ver aula" abre a aula no Plano (`openLessonInPlan`). "Próximas revisões" é só leitura (revisão antecipada não existe no app).
+- Materiais: frase extra na dica da biblioteca.
+- Ferramentas novas: `node scripts/css-diff-v72.mjs "<regex de seletor>"` compara regra a regra `src/experience.css` com o CSS do V7.2 (só texto, barato). `scripts/design-preview.mjs --require-real` abre cópia dos dados reais.
+- Testes ajustados por causa do V7.2: `today-primary-action`, `practice` (contagem agora na linha de resumo), `hoje-muitas-vencidas` (altura sem "Próximas revisões"), `materials-library` (texto "N de N materiais").
 
 Parte das diferenças em Hoje e Plano é de **dados** (o V7.2 usa conteúdo de demonstração; o app usa os dados do dono). Não "corrigir" título, data ou contagem.
 
