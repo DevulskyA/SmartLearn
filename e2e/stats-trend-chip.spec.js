@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-// A-09: the trend chip says "pontos" (not the unexplained "p.p.") and the comparison window is visible, not only in a tooltip.
+// A-09 in the V7.2 table: the trend says "+N p.p." / "-N p.p." / "Estável" / "Sem dados", and the comparison window is stated in the tooltip of every chip.
 
-test('Por disciplina: trend chip uses plain words and the window is stated on screen', async ({ page }) => {
+test('Por disciplina: the trend chip names its comparison window in the title', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.evaluate(async () => {
@@ -11,9 +11,13 @@ test('Por disciplina: trend chip uses plain words and the window is stated on sc
   await page.reload();
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="stats"]').click();
-  await expect(page.locator('#subject-kpi-list .trend-badge').first()).toBeVisible();
-  await expect(page.locator('#subject-trend-note')).toContainText('últimos 30 dias contra os 30 anteriores');
-  const labels = await page.locator('#subject-kpi-list .trend-badge').allTextContents();
-  for (const label of labels) expect(label).not.toContain('p.p.');
-  expect(labels.some((label) => /pontos/.test(label))).toBe(true);
+  await expect(page.locator('#subject-kpi-list .v5-trend').first()).toBeVisible();
+  const chips = page.locator('#subject-kpi-list .v5-trend');
+  const count = await chips.count();
+  for (let i = 0; i < count; i++) {
+    const title = await chips.nth(i).getAttribute('title');
+    expect(title, 'every trend chip explains itself').toMatch(/últimos 30 dias|Sem comparação/i);
+  }
+  const labels = await chips.allTextContents();
+  expect(labels.some((label) => /p\.p\./.test(label))).toBe(true);
 });

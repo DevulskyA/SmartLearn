@@ -397,6 +397,7 @@
               <p class="eyebrow" data-i18n="screens.stats.eyebrow">ESTATÍSTICAS DE ESTUDO</p>
               <h1 id="title-stats" data-i18n="screens.stats.heading">Análise de desempenho</h1>
               <p class="sl-screen-description stats-lede" data-i18n="screens.stats.lede">Acompanhe sua evolução, identifique seus pontos fortes e descubra quais matérias merecem mais revisão.</p>
+              <p class="v5-data-note" id="stats-summary-count"></p>
             </div>
             <div class="v5-top-controls">
               <label class="field-group select-control">
@@ -408,6 +409,7 @@
                   <option value="" data-i18n="screens.stats.period.all">Todo o histórico</option>
                 </select>
               </label>
+              <label class="field-group v5-global-search"><span data-i18n="screens.stats.search.label">Buscar</span><input id="stats-global-search" type="search" placeholder="Disciplina, conteúdo ou aula" data-i18n-placeholder="screens.stats.search.placeholder" aria-label="Buscar na análise completa" data-i18n-aria-label="screens.stats.search.aria"><small id="stats-global-search-count" class="v5-search-count" role="status" aria-live="polite"></small></label>
             </div>
           </header>
 
@@ -454,121 +456,44 @@
           <div class="v5-analysis-grid">
           <aside id="stats-v5-left" aria-label="Rankings rápidos" data-i18n-aria-label="screens.stats.v5.mini.label"></aside>
           <section id="stats-analysis-card" class="v5-card v5-analysis-card" aria-labelledby="stats-analysis-title">
-          <header class="v5-analysis-header"><div><p class="eyebrow" data-i18n="screens.stats.analysis.eyebrow">EXPLORAR TODOS OS REGISTROS</p><h2 id="stats-analysis-title" data-i18n="screens.stats.analysis.title">Análise completa</h2><p data-i18n="screens.stats.analysis.lede">Consulte todas as disciplinas, os conteúdos e cada aula. Ordene qualquer coluna de dados.</p></div></header>
+          <header class="v5-analysis-header"><div><p class="eyebrow" data-i18n="screens.stats.analysis.eyebrow">EXPLORAR TODOS OS REGISTROS</p><h2 id="stats-analysis-title" data-i18n="screens.stats.analysis.title">Análise completa</h2><p data-i18n="screens.stats.analysis.lede">Consulte todas as disciplinas, os conteúdos e cada aula. Ordene qualquer coluna de dados.</p></div><button type="button" class="v5-link-button" data-v5="advanced" aria-controls="stats-extra-analysis" aria-expanded="false" data-i18n="screens.stats.table.advanced">Distribuição por faixa ▾</button></header>
           <div class="view-tabs v5-tabs" role="tablist" aria-label="Profundidade da análise" data-i18n-aria-label="screens.stats.tabs.label">
-            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="view-stats-subject" tabindex="0" data-i18n="screens.stats.tabs.subject">Por disciplina</button>
-            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="view-stats-unit" tabindex="-1" data-i18n="screens.stats.tabs.unit">Por conteúdo</button>
+            <button type="button" class="view-tab is-active" id="tab-stats-subject" role="tab" aria-selected="true" aria-controls="stats-body" tabindex="0" data-v5="tab" data-value="subject" data-i18n="screens.stats.tabs.subject">Por disciplina</button>
+            <button type="button" class="view-tab" id="tab-stats-unit" role="tab" aria-selected="false" aria-controls="stats-body" tabindex="-1" data-v5="tab" data-value="unit" data-i18n="screens.stats.tabs.unit">Por conteúdo</button>
+            <button type="button" class="view-tab" id="tab-stats-lesson" role="tab" aria-selected="false" aria-controls="stats-body" tabindex="-1" data-v5="tab" data-value="lesson" data-i18n="screens.stats.tabs.lesson">Por aula</button>
           </div>
-
-          <div id="view-stats-subject" class="view-panel" role="tabpanel" aria-labelledby="tab-stats-subject">
-            <div class="workspace-grid">
-              <section class="stats-panel table-panel" aria-labelledby="subject-kpi-title" id="subject-kpi-section">
-                <div class="stats-panel-heading wrap">
-                  <div>
-                    <h2 id="subject-kpi-title" data-i18n="screens.stats.subject.title">Desempenho por disciplina</h2>
-                  </div>
-                </div>
-                <div class="table-scroll">
-                  <table class="stats-table matrix-table matrix-table--cards">
-                    <thead>
-                      <tr id="subject-kpi-head">
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.form.subject">Disciplina</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Evidência<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                      </tr>
-                    </thead>
-                    <tbody id="subject-kpi-list"></tbody>
-                  </table>
-                </div>
-                <p class="stats-trend-note" id="subject-trend-note" data-i18n="screens.stats.subject.trendNote">Tendência: últimos 30 dias contra os 30 anteriores, em pontos de acerto.</p>
-                <p class="panel-empty" id="subject-kpi-empty" hidden data-i18n="screens.stats.subject.empty">Registre questões para ver o desempenho por disciplina.</p>
-                <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
-                  <p class="stats-verdict-label" data-i18n="screens.stats.history.label">Tendência histórica · todo o histórico, não segue o filtro de período</p>
-                  <p class="stats-verdict-headline" id="stats-verdict-headline"></p>
-                  <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
-                  <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
-                    <span id="stats-verdict-attention-text"></span>
-                    <button type="button" class="text-button" id="stats-verdict-attention-btn" data-i18n="screens.stats.viewInPlan">Ver no Plano</button>
-                  </p>
-                </div>
-              </section>
-
-              <aside class="stats-side" aria-label="Evolução e distribuição" data-i18n-aria-label="screens.stats.side.label">
-                <section class="stats-panel analysis-panel" aria-labelledby="stats-band-title">
-                  <div class="stats-panel-heading">
-                    <h2 id="stats-band-title" data-i18n="screens.stats.bands.title">Distribuição do desempenho</h2>
-                  </div>
-                  <ul class="band-list" id="stats-band-list"></ul>
-                </section>
-              </aside>
-            </div>
+          <div id="stats-analysis-filters" class="v5-filter-grid">
+            <label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-filter-subject" aria-label="Filtrar disciplina" data-i18n-aria-label="screens.stats.table.filter.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label>
+            <label class="field-group"><span data-i18n="screens.stats.table.filter.band">Faixa de desempenho</span><select id="stats-filter-band"><option value="all" data-i18n="screens.stats.table.filter.bandAll">Todas as faixas</option><option value="critical" data-i18n="screens.stats.table.filter.critical">Crítico (&lt;50%)</option><option value="attention" data-i18n="screens.stats.table.filter.attention">Atenção (50–64%)</option><option value="adequate" data-i18n="screens.stats.table.filter.adequate">Adequado (65–79%)</option><option value="strong" data-i18n="screens.stats.table.filter.strong">Forte (80%+)</option><option value="insufficient" data-i18n="screens.stats.table.filter.insufficient">Pouca evidência</option></select></label>
+            <label class="field-group"><span data-i18n="screens.stats.col.trend">Tendência</span><select id="stats-filter-trend"><option value="all" data-i18n="screens.stats.table.filter.trendAll">Todas</option><option value="DECLINING" data-i18n="screens.stats.table.filter.declining">Em queda</option><option value="IMPROVING" data-i18n="screens.stats.table.filter.improving">Em melhora</option><option value="STABLE" data-i18n="screens.stats.table.filter.stable">Estável</option><option value="INSUFFICIENT" data-i18n="screens.stats.table.filter.insufficientTrend">Sem tendência confiável</option></select></label>
+            <label class="field-group v5-table-search"><span data-i18n="screens.stats.table.filter.search">Pesquisar resultados</span><input type="search" id="stats-table-search" aria-label="Pesquisar todas as disciplinas, conteúdos e aulas" data-i18n-aria-label="screens.stats.table.filter.searchAria" placeholder="Buscar por nome ou data…" data-i18n-placeholder="screens.stats.table.filter.searchPlaceholder"></label>
           </div>
-
-          <div id="view-stats-unit" class="view-panel is-hidden" role="tabpanel" aria-labelledby="tab-stats-unit">
-            <div class="content-context" id="content-context">
-              <div class="discipline-switch" id="discipline-switch">
-                <button type="button" class="subject-cell content-context-plate" id="content-context-plate" aria-haspopup="menu" aria-expanded="false" aria-controls="discipline-switch-list"></button>
-                <ul class="discipline-switch-list" id="discipline-switch-list" role="menu" aria-label="Trocar disciplina" data-i18n-aria-label="screens.stats.switchSubject" tabindex="-1" hidden></ul>
-              </div>
-              <p class="content-context-meta" id="content-context-meta"></p>
-            </div>
-            <div class="workspace-grid">
-              <section class="stats-panel table-panel" aria-labelledby="unit-stats-title">
-                <div class="stats-panel-heading wrap">
-                  <div>
-                    <h2 id="unit-stats-title" data-i18n="screens.stats.unit.title">Desempenho por conteúdo</h2>
-                  </div>
-                </div>
-                <div class="table-scroll">
-                  <table class="stats-table matrix-table">
-                    <thead>
-                      <tr id="unit-stats-head">
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="identity"><span data-i18n="screens.stats.col.content">Conteúdo</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="performance"><span data-i18n="screens.stats.col.performance">Desempenho</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn th-sort-btn-practice-recency" data-sort-key="practice">Evidência<span class="sort-arrow" aria-hidden="true"></span></button></th>
-                        <th scope="col"><button type="button" class="th-sort-btn" data-sort-key="trend"><span data-i18n="screens.stats.col.trend">Tendência</span><span class="sort-arrow" aria-hidden="true"></span></button></th>
-                      </tr>
-                    </thead>
-                    <tbody id="unit-stats-list"></tbody>
-                  </table>
-                </div>
-                <p class="panel-empty" id="unit-stats-empty" hidden data-i18n="screens.stats.unit.empty">Nenhum conteúdo com dados.</p>
-              </section>
-
-              <aside class="stats-panel analysis-panel" aria-label="Detalhe do conteúdo selecionado" data-i18n-aria-label="screens.stats.unit.detailLabel" id="unit-detail-panel">
-                <p class="panel-empty" id="unit-detail-empty" data-i18n="screens.stats.unit.detailEmpty">Selecione um conteúdo na lista para ver detalhes.</p>
-                <div id="unit-detail-body" hidden></div>
-              </aside>
-            </div>
-          </div>
-
+          <p class="v5-scroll-instruction" data-i18n="screens.stats.table.scrollInstruction">Em telas estreitas, deslize a tabela para consultar todas as colunas. A ordenação vale para todos os resultados, inclusive os de outras páginas.</p>
+          <div id="stats-body" role="tabpanel" tabindex="0" aria-labelledby="tab-stats-subject"></div>
+          <div class="v5-table-footer"><div id="stats-table-footer" class="v5-table-pagination" aria-live="polite"></div><div class="v5-table-actions"><label class="field-group"><span data-i18n="screens.stats.table.pageSize">Itens por página</span><select id="stats-page-size" aria-label="Itens por página" data-i18n-aria-label="screens.stats.table.pageSize"><option value="12" selected>12</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><button type="button" class="v5-link-button" data-v5="export-table" data-i18n="screens.stats.table.export">Exportar resultados filtrados CSV</button></div></div>
+          <div id="stats-extra-analysis" class="v5-extra-analysis" hidden></div>
           </section>
           </div>
 
-          <section class="stats-panel" aria-labelledby="exercise-notes-title">
-            <div class="stats-panel-heading">
-              <div>
-                <h2 id="exercise-notes-title" data-i18n="screens.stats.exercises.title">Exercícios resolvidos · histórico completo</h2>
-                <p class="stats-panel-note" data-i18n="screens.stats.exercises.note">Mostra todo o histórico: o filtro de período no topo da tela não se aplica a esta lista.</p>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <table class="stats-table stats-table-exercises">
-                <thead>
-                  <tr>
-                    <th scope="col" data-i18n="screens.form.subject">Disciplina</th>
-                    <th scope="col" data-i18n="screens.stats.col.content">Conteúdo</th>
-                    <th scope="col">Q</th>
-                    <th scope="col">A</th>
-                    <th scope="col" data-i18n="screens.stats.exercises.score">Nota %</th>
-                  </tr>
-                </thead>
-                <tbody id="exercise-notes-body"></tbody>
-              </table>
-            </div>
+          <div class="stats-verdict" id="stats-verdict" role="status" aria-live="polite" hidden>
+            <p class="stats-verdict-label" data-i18n="screens.stats.history.label">Tendência histórica · todo o histórico, não segue o filtro de período</p>
+            <p class="stats-verdict-headline" id="stats-verdict-headline"></p>
+            <p class="stats-verdict-detail" id="stats-verdict-detail"></p>
+            <p class="stats-verdict-attention" id="stats-verdict-attention" hidden>
+              <span id="stats-verdict-attention-text"></span>
+              <button type="button" class="text-button" id="stats-verdict-attention-btn" data-i18n="screens.stats.viewInPlan">Ver no Plano</button>
+            </p>
+          </div>
+
+          <section class="stats-panel sl-history-panel" id="stats-history-panel" aria-labelledby="exercise-notes-title">
+            <div class="stats-panel-heading"><div><h2 id="exercise-notes-title" data-i18n="screens.stats.history.title">Histórico de exercícios</h2><p class="stats-panel-note" data-i18n="screens.stats.history.note">Respostas registradas, com data e contexto. Mostra todo o histórico, sem o filtro de período.</p></div><button type="button" class="text-button" id="stats-export" data-i18n="screens.stats.history.export">Exportar CSV</button></div>
+            <div class="sl-history-tools"><label class="field-group"><span data-i18n="screens.stats.history.search">Buscar conteúdo</span><input id="stats-history-search" type="search" placeholder="Aula, tema, disciplina ou data" data-i18n-placeholder="screens.stats.history.searchPlaceholder" aria-label="Buscar no histórico" data-i18n-aria-label="screens.stats.history.searchAria"></label><label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-history-subject" aria-label="Filtrar histórico por disciplina" data-i18n-aria-label="screens.stats.history.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label></div>
+            <div class="table-scroll"><table class="stats-table" id="stats-history-table"><thead><tr><th scope="col" data-history-key="date" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="date" aria-label="Ordenar histórico por data" data-i18n-aria-label="screens.stats.history.col.dateAria"><span data-i18n="screens.stats.history.col.date">Data</span> <span class="sl-sort-glyph" aria-hidden="true">↓</span></button></th><th scope="col" data-history-key="subjectName" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="subjectName" aria-label="Ordenar histórico por disciplina" data-i18n-aria-label="screens.stats.history.col.subjectAria"><span data-i18n="screens.stats.history.col.subject">Disciplina</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="title" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="title" aria-label="Ordenar histórico por conteúdo" data-i18n-aria-label="screens.stats.history.col.contentAria"><span data-i18n="screens.stats.history.col.content">Conteúdo</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="questions" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="questions" aria-label="Ordenar histórico por questões" data-i18n-aria-label="screens.stats.history.col.questionsAria"><span data-i18n="screens.stats.history.col.questions">Questões</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="correct" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="correct" aria-label="Ordenar histórico por acertos" data-i18n-aria-label="screens.stats.history.col.correctAria"><span data-i18n="screens.stats.history.col.correct">Acertos</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="accuracy" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="accuracy" aria-label="Ordenar histórico por resultado" data-i18n-aria-label="screens.stats.history.col.resultAria"><span data-i18n="screens.stats.history.col.result">Resultado</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th></tr></thead><tbody id="exercise-notes-body"></tbody></table></div>
             <p class="panel-empty" id="exercise-notes-empty" data-i18n="screens.stats.exercises.empty">Registre exercícios concluídos para ver a lista.</p>
+            <div class="sl-sticky-bottom"><span class="sl-caption" id="evidence-count" role="status" aria-live="polite"></span><div class="settings-actions"><button type="button" class="small-button" data-history="prev" data-i18n="screens.stats.history.prev">Anterior</button><button type="button" class="small-button" data-history="next" data-i18n="screens.stats.history.next">Próxima</button></div></div>
           </section>
+
+          <dialog id="stats-detail-dialog" class="v5-detail-dialog" aria-labelledby="stats-detail-title"><div class="v5-dialog-head"><h2 id="stats-detail-title"></h2><button type="button" class="v5-close" data-v5="close-detail" aria-label="Fechar detalhes" data-i18n-aria-label="screens.stats.table.closeDetail">×</button></div><div id="stats-detail-body"></div></dialog>
         </section>
 
         <section class="screen" id="screen-settings" data-screen-panel="settings" aria-labelledby="title-settings" hidden>

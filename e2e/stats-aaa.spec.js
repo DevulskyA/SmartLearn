@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 // Estatísticas AAA (human-authorized redesign of a protected surface, ADR-0001): the header, the discipline
 // table, the distribution and the evolution chart must tell ONE truthful story, for every period. The UAT
 // fixture (DEV only, synthetic) has old evidence (up to ~300 days) and a discipline never practiced.
+// Selectors follow the V7.2 table (#stats-body, tr[data-v5-row]); the contracts are unchanged.
 
 const pageErrors = [];
 
@@ -20,22 +21,20 @@ async function openStats(page, size = { width: 1280, height: 820 }) {
   await page.reload();
   await page.waitForLoadState('networkidle');
   await page.locator('[data-screen="stats"]').click();
-  await expect(page.locator('#subject-kpi-list tr.matrix-row').first()).toBeVisible();
+  await expect(page.locator('#subject-kpi-list tr[data-v5-row]').first()).toBeVisible();
 }
 
 const num = (text) => Number(String(text).replace(/\D/g, '') || 0);
 
 async function readAll(page) {
-  const rows = await page.locator('#subject-kpi-list tr.matrix-row').evaluateAll((trs) => trs.map((tr) => ({
-    name: tr.querySelector('.subject-cell').textContent,
-    perf: tr.children[1].textContent,
-    state: tr.children[1].dataset.state,
-    evidence: tr.children[2].querySelector('.practice-compact').textContent,
+  const rows = await page.locator('#subject-kpi-list tr[data-v5-row]').evaluateAll((trs) => trs.map((tr) => ({
+    name: tr.querySelector('.v5-subject').textContent,
+    perf: tr.querySelector('.v5-grade').textContent,
+    band: tr.querySelector('.v5-grade').dataset.band,
+    questions: tr.querySelector('td.v5-number').textContent,
   })));
-  const bands = await page.locator('#stats-band-list .band-row').evaluateAll((lis) => lis.map((li) => ({
-    state: li.dataset.state,
-    text: li.querySelector('.band-figures').textContent,
-  })));
+  if (await page.locator('#stats-extra-analysis').isHidden()) await page.locator('[data-v5="advanced"]').click();
+  const bands = await page.locator('#stats-extra-analysis .v5-band-grid button').evaluateAll((buttons) => buttons.map((b) => ({ band: b.dataset.band, count: Number(b.querySelector('strong').textContent) })));
   return {
     rows,
     bands,
@@ -49,30 +48,25 @@ test('opens on 90 days with worst performance first', async ({ page }) => {
   await openStats(page);
   await expect(page.locator('#stats-unit-filter-period')).toHaveValue('last-90');
   const { rows } = await readAll(page);
-  const withEvidence = rows.filter((r) => r.state !== 'NO_EVIDENCE').map((r) => num(r.perf.split(',')[0]));
-  const sorted = [...withEvidence].sort((a, b) => a - b);
-  expect(withEvidence).toEqual(sorted);
-  expect(rows[rows.length - 1].state).toBe('NO_EVIDENCE');
+  const measured = rows.filter((r) => r.perf !== '—').map((r) => Number(r.perf.replace('%', '').replace(',', '.')));
+  expect(measured).toEqual([...measured].sort((a, b) => a - b));
+  expect(rows[rows.length - 1].perf).toBe('—');
 });
 
 test('header, table and distribution reconcile for every period, and a shorter period never keeps old questions', async ({ page }) => {
   await openStats(page);
   const totals = {};
   for (const period of ['last-30', 'last-90', 'last-365', '']) {
-    await page.locator('#stats-unit-filter-period').evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('change')); }, period);
-    await expect(page.locator('#subject-kpi-list tr.matrix-row').first()).toBeVisible();
+    await page.locator('#stats-unit-filter-period').evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, period);
+    await expect(page.locator('#subject-kpi-list tr[data-v5-row]').first()).toBeVisible();
     await page.waitForTimeout(250);
     const all = await readAll(page);
-    const tableQuestions = all.rows.reduce((s, r) => s + (r.state === 'NO_EVIDENCE' ? 0 : num(r.evidence)), 0);
+    const tableQuestions = all.rows.reduce((s, r) => s + num(r.questions), 0);
     expect(all.headerQuestions, `header questions = table sum (${period || 'any'})`).toBe(tableQuestions);
     expect(all.headerSubjects).toBe(all.rows.length);
-    const distCount = all.bands.reduce((s, b) => s + num(b.text.split('·')[1]), 0);
-    expect(distCount, 'distribution counts every discipline once').toBe(all.rows.length);
-    const distPercent = all.bands.reduce((s, b) => s + num(b.text.split('%')[0]), 0);
-    expect(distPercent).toBe(100);
-    const noEvidenceBand = all.bands.find((b) => b.state === 'NO_EVIDENCE');
-    expect(num(noEvidenceBand.text.split('·')[1])).toBe(all.rows.filter((r) => r.state === 'NO_EVIDENCE').length);
-    for (const r of all.rows.filter((x) => x.state === 'NO_EVIDENCE')) expect(r.perf).toMatch(/Sem evidência/);
+    expect(all.bands.reduce((s, b) => s + b.count, 0), 'distribution counts every discipline once').toBe(all.rows.length);
+    for (const b of all.bands) expect(b.count, `band ${b.band}`).toBe(all.rows.filter((r) => r.band === b.band).length);
+    for (const r of all.rows.filter((x) => x.questions.trim() === '0')) expect(r.perf).toBe('—');
     totals[period || 'any'] = all.headerQuestions;
   }
   expect(totals['last-30']).toBeLessThan(totals['last-90']);
@@ -80,7 +74,7 @@ test('header, table and distribution reconcile for every period, and a shorter p
   expect(totals['last-365']).toBeLessThanOrEqual(totals.any);
 });
 
-test('evolution chart: points follow dates, quiet gaps are not joined, filter follows the table row', async ({ page }) => {
+test('evolution chart: points follow dates, quiet gaps are not joined, filter follows the panorama click', async ({ page }) => {
   await openStats(page);
   expect(pageErrors, "no script errors while rendering Estatísticas").toEqual([]);
   await expect(page.locator('#evolution-svg')).toBeVisible();
@@ -88,44 +82,41 @@ test('evolution chart: points follow dates, quiet gaps are not joined, filter fo
   expect(await dots.count()).toBeGreaterThan(1);
   const geometry = await page.locator('#evolution-svg').evaluate((svg) => ({
     xs: [...svg.querySelectorAll('.v5-chart-point')].map((c) => Number(c.getAttribute('cx'))),
-    lines: svg.querySelectorAll('.v5-chart-line').length,
     desc: document.querySelector('#evolution-svg-description').textContent,
   }));
   expect([...geometry.xs]).toEqual([...geometry.xs].sort((a, b) => a - b));
   expect(geometry.desc.length).toBeGreaterThan(10);
-  // a click on a row selects its discipline in the chart filter
-  const row = page.locator('#subject-kpi-list tr.matrix-row', { has: page.locator('.subject-cell', { hasText: 'Anatomia' }) });
-  const id = await row.getAttribute('data-subject-id');
+  // a click on a discipline of the panorama selects it in the chart filter and opens its contents
+  const row = page.locator('.v5-overview-row', { hasText: 'Anatomia' });
+  const id = await row.getAttribute('data-id');
   await row.click();
-  await page.locator('#tab-stats-subject').click();
   await expect(page.locator('#evolution-filter-subject')).toHaveValue(id);
-  await expect(row).toHaveClass(/is-selected/);
+  await expect(page.locator('#stats-filter-subject')).toHaveValue(id);
 });
 
-test('trend shows percentage points or says the sample is insufficient', async ({ page }) => {
+test('trend shows percentage points or says the sample is insufficient, and names its window in the tooltip', async ({ page }) => {
   await openStats(page);
-  const texts = await page.locator('#subject-kpi-list .trend-badge').allTextContents();
+  const texts = await page.locator('#subject-kpi-list .v5-trend').allTextContents();
   expect(texts.length).toBeGreaterThan(3);
-  for (const text of texts) expect(text.trim()).toMatch(/^([+−]\d+ pontos|Estável|Amostra insuficiente)$/);
-  expect(await page.locator('#subject-kpi-list .trend-badge[title]').count()).toBe(texts.length);
+  for (const text of texts) expect(text.trim()).toMatch(/^([+-]\d+ p\.p\.|Estável|Sem dados)$/);
+  expect(await page.locator('#subject-kpi-list .v5-trend[title]').count()).toBe(texts.length);
 });
 
-test('no layout surprises: no horizontal scroll, focus visible, side column below at 800x600', async ({ page }) => {
+test('no layout surprises: no page overflow at 800/1280/1920, the table scrolls inside its own region, focus is visible', async ({ page }) => {
   for (const size of [{ width: 800, height: 600 }, { width: 1280, height: 820 }, { width: 1920, height: 1080 }]) {
     await openStats(page, size);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     expect(overflow, `page overflows at ${size.width}`).toBe(false);
-    expect(await page.locator('#subject-kpi-section .table-scroll').evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
-    const table = await page.locator('#subject-kpi-section').boundingBox();
-    const side = await page.locator('.stats-side').boundingBox();
-    // V7.2 composition: the band distribution sits below the table, inside the analysis card, at every width.
-    expect(side.y).toBeGreaterThan(table.y + table.height - 1);
+    const region = page.locator('#stats-body .v5-table-scroll');
+    await expect(region).toHaveAttribute('role', 'region');
+    await expect(region).toHaveAttribute('tabindex', '0');
     const card = await page.locator('#stats-analysis-card').boundingBox();
-    expect(table.width).toBeGreaterThan(card.width * 0.85);
-    await page.locator('#subject-kpi-list tr.matrix-row').first().focus();
+    const table = await region.boundingBox();
+    expect(table.width).toBeGreaterThan(card.width * 0.6);
+    await page.locator('#subject-kpi-list [data-v5="inspect"]').first().focus();
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
-    const outline = await page.locator('#subject-kpi-list tr.matrix-row').first().evaluate((el) => getComputedStyle(el).outlineStyle);
+    const outline = await page.locator('#subject-kpi-list [data-v5="inspect"]').first().evaluate((el) => getComputedStyle(el).outlineStyle);
     expect(outline).not.toBe('none');
     await page.screenshot({ path: `test-results/stats-aaa-${size.width}x${size.height}.png`, fullPage: true });
   }

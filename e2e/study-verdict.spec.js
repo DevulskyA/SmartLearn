@@ -143,12 +143,12 @@ test('the historical trend is a labelled note under the table, and the exercises
   await expect(verdict).toBeVisible({ timeout: 8000 });
   await expect(verdict).toContainText('Tendência histórica');
   await expect(verdict).toContainText('não segue o filtro de período');
-  const tableBox = await page.locator('#subject-kpi-section .table-scroll').boundingBox();
+  const tableBox = await page.locator('#stats-body .v5-table-scroll').boundingBox();
   const verdictBox = await verdict.boundingBox();
   expect(verdictBox.y).toBeGreaterThanOrEqual(tableBox.y + tableBox.height - 1);
   expect(await verdict.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
-  await expect(page.locator('#exercise-notes-title')).toContainText('histórico completo');
-  await expect(page.locator('#screen-stats .stats-panel-note')).toContainText('não se aplica a esta lista');
+  await expect(page.locator('#exercise-notes-title')).toContainText('Histórico de exercícios');
+  await expect(page.locator('#screen-stats .stats-panel-note')).toContainText('sem o filtro de período');
 });
 
 test('mobile 375: the answer fits without horizontal page scroll and the action stays reachable', async ({ page }) => {

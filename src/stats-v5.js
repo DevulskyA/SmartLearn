@@ -10,15 +10,16 @@ const ICONS = {
   target: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4",
   warning: "M12 2 1.5 21h21L12 2Zm0 6v6m0 3h.01",
   arrow: "M5 12h14m-6-6 6 6-6 6",
+  search: "m20 20-4-4m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
   award: "M12 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm-3 11-1.5 9L12 19l4.5 3L15 13",
 };
 
 export const statsOverviewState = { page: 1, order: "best" };
 
-const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const icon = (name) => `<svg class="v5-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
-const number = (value) => Number(value ?? 0).toLocaleString("pt-BR");
-const percent = (value) => (value == null ? "—" : `${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
+export const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+export const icon = (name) => `<svg class="v5-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
+export const number = (value) => Number(value ?? 0).toLocaleString("pt-BR");
+export const percent = (value) => (value == null ? "—" : `${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
 
 export function bandLabel(key) {
   return t(`screens.stats.v5.band.${key}`);
@@ -38,7 +39,7 @@ const view = (row) => ({
   band: v5Band(row),
 });
 
-function badge(row) {
+export function badge(row) {
   return `<span class="v5-grade" data-band="${row.band}" title="${esc(bandLabel(row.band))} — ${number(row.questions)} ${esc(t("screens.stats.v5.questions"))}">${percent(row.accuracy)}</span>`;
 }
 

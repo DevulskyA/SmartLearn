@@ -22,13 +22,15 @@ import {
   readQuickToggleMemory,
   writeQuickToggleMemory,
 } from "./theme.js";
-import { colorVarForKey, getState, MIN_SAMPLE_QUESTIONS, THRESHOLDS } from "./performance-thresholds.js";
+import { colorVarForKey, getState, MIN_SAMPLE_QUESTIONS } from "./performance-thresholds.js";
 import { createSubjectCreateForm, buildColorPicker } from "./subject-create-form.js";
 import { findLesson } from "./lesson-link.js";
-import { Analytics, subtractDays, sortMatrixRows, verdictText, validEvidence, evidenceInPeriod, periodSubjectRows, periodSummary, performanceDistribution, evolutionSeries, TREND_WINDOW_DAYS } from "./analytics.js";
+import { Analytics, subtractDays, verdictText, validEvidence, periodSubjectRows, periodSummary, evolutionSeries } from "./analytics.js";
 import { formatDate as formatIntlDate, formatDecimal, formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import { renderAttention, renderMiniRanks, renderOverview, statsOverviewState } from "./stats-v5.js";
+import { buildHistoryRows, setHistory, wireHistory } from "./stats-history.js";
+import { buildTableModel, focusSubject, handleTableAction, handleTableControl, setTableModel } from "./stats-table.js";
 import { applyStaticTexts } from "./i18n/dom.js";
 import { DEFAULT_LOCALE } from "../shared/locales.js";
 import { getTrackingState } from "./tracking-state.js";
@@ -48,7 +50,7 @@ import { renderSummary } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import * as OfflineStore from "./offline-store.js";
 import * as OfflineUI from "./offline-ui.js";
-import { enhanceAllSelects, syncSelect, wireListboxKeyboard } from "./select-ui.js";
+import { enhanceAllSelects, syncSelect } from "./select-ui.js";
 
 // index.html carries the pt-BR text only as first-paint fallback; every [data-i18n*] element is filled from the catalog.
 applyStaticTexts(document);
@@ -449,30 +451,17 @@ const metricElements = {
   reviewsDone: document.querySelector("#metric-reviews-done"),
   reviewsPending: document.querySelector("#metric-reviews-pending"),
 };
-const statsBandList = document.querySelector("#stats-band-list");
-const subjectKpiList = document.querySelector("#subject-kpi-list");
-const subjectKpiEmpty = document.querySelector("#subject-kpi-empty");
 const studyVerdictEl = document.querySelector("#stats-verdict");
 const studyVerdictHeadline = document.querySelector("#stats-verdict-headline");
 const studyVerdictDetail = document.querySelector("#stats-verdict-detail");
 const studyVerdictAttention = document.querySelector("#stats-verdict-attention");
 const studyVerdictAttentionText = document.querySelector("#stats-verdict-attention-text");
 const studyVerdictAttentionBtn = document.querySelector("#stats-verdict-attention-btn");
-const unitStatsList = document.querySelector("#unit-stats-list");
-const unitStatsEmpty = document.querySelector("#unit-stats-empty");
-const unitDetailPanel = document.querySelector("#unit-detail-panel");
-const unitDetailEmpty = document.querySelector("#unit-detail-empty");
-const unitDetailBody = document.querySelector("#unit-detail-body");
-const contentContextPlate = document.querySelector("#content-context-plate");
-const disciplineSwitchList = document.querySelector("#discipline-switch-list");
-const contentContextMeta = document.querySelector("#content-context-meta");
 const statsUnitFilterPeriod = document.querySelector("#stats-unit-filter-period");
 const evolutionSvg = document.querySelector("#evolution-svg");
 const evolutionFilterSubject = document.querySelector("#evolution-filter-subject");
 const evolutionDescription = document.querySelector("#evolution-svg-description");
 const evolutionCaption = document.querySelector("#evolution-caption");
-const exerciseNotesBody = document.querySelector("#exercise-notes-body");
-const exerciseNotesEmpty = document.querySelector("#exercise-notes-empty");
 const chartEmpty = document.querySelector("#chart-empty");
 const exportBackupButton = document.querySelector("#export-backup");
 const chooseBackupFileButton = document.querySelector("#choose-backup-file");
@@ -647,80 +636,6 @@ function formatPerformanceScore(value) {
   if (!Number.isFinite(number)) return "—";
   // same one-decimal policy as the Estatísticas average (formatAverageScore): 2/3 reads 66,7% on both screens
   return `${formatDecimal(number)}%`;
-}
-
-const PERFORMANCE_BAND_CLASS = {
-  CRITICAL: "performance-badge--critical",
-  ATTENTION: "performance-badge--attention",
-  ADEQUATE: "performance-badge--good",
-  STRONG: "performance-badge--strong",
-};
-
-// Delegates the actual threshold comparison to getState (performance-
-// thresholds.js, already unit-tested) instead of a second independent
-// >= THRESHOLDS.X chain — this file previously had three copies of the
-// exact same 3-cutoff banding logic (this function, getPlanPerfBadge
-// below, and getState itself), a real drift risk if THRESHOLDS ever
-// changed and only some copies were updated. totalQuestions=1 is a
-// sentinel (any truthy value works): this function only ever receives a
-// raw percent, with no question-count context of its own, and the
-// !Number.isFinite guard above already covers the "no real value" case
-// getState's own totalQuestions===0 check exists for.
-function getPerformanceBandClass(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "";
-  return PERFORMANCE_BAND_CLASS[getState(number, 1)];
-}
-
-function createPerformanceBadge(value) {
-  const badge = document.createElement("span");
-  badge.className = ["performance-badge", getPerformanceBandClass(value)].filter(Boolean).join(" ");
-  badge.textContent = formatPerformanceScore(value);
-  return badge;
-}
-
-function createExerciseRow(exercise) {
-  const row = document.createElement("tr");
-  row.className = "exercise-row";
-  // Same activate-a-row idiom as unit-stats-list's .matrix-row below
-  // (tabIndex + click/keydown, no role override — a table row's default
-  // `row` role stays correct for a screen reader; this only adds a second
-  // way to activate it, same as a normal clickable table row does).
-  row.tabIndex = 0;
-
-  const subjectCell = document.createElement("th");
-  subjectCell.scope = "row";
-  subjectCell.dataset.cell = "subject";
-  subjectCell.textContent = exercise.subjectName;
-
-  const contentCell = document.createElement("td");
-  contentCell.dataset.cell = "content";
-  contentCell.textContent = exercise.title;
-
-  const questionsCell = document.createElement("td");
-  questionsCell.dataset.cell = "q";
-  questionsCell.dataset.prefix = t("statsView.exercises.prefix.q");
-  questionsCell.textContent = exercise.questionsCount == null ? "—" : String(exercise.questionsCount);
-
-  const correctCell = document.createElement("td");
-  correctCell.dataset.cell = "a";
-  correctCell.dataset.prefix = t("statsView.exercises.prefix.a");
-  correctCell.textContent = String(exercise.correctCount);
-
-  const scoreCell = document.createElement("td");
-  scoreCell.dataset.cell = "score";
-  scoreCell.dataset.prefix = t("statsView.exercises.prefix.score");
-  scoreCell.append(createPerformanceBadge(exercise.scorePercent));
-
-  row.append(subjectCell, contentCell, questionsCell, correctCell, scoreCell);
-  row.addEventListener("click", () => openExerciseDetail(exercise));
-  row.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openExerciseDetail(exercise);
-    }
-  });
-  return row;
 }
 
 const OUTCOME_LABEL = {
@@ -1819,33 +1734,6 @@ export async function renderToday() {
   }
 }
 
-// SLICE 2 (Stats Visual Intelligence): performance and volume are two
-// different questions ("how well" vs "how much") and must never share a
-// bar or a color scale — a short green bar (little practice, good score)
-// must never look like a short red one (lots of practice, bad score).
-function createComparisonBar(fillPercent, state) {
-  const bar = document.createElement("div");
-  bar.className = "subject-compare-bar";
-  const fill = document.createElement("div");
-  fill.className = "subject-compare-bar-fill";
-  fill.dataset.state = state;
-  fill.style.width = `${Math.min(100, Math.max(0, fillPercent))}%`;
-  bar.append(fill);
-  return bar;
-}
-
-function createComparisonCell(valueText, bar) {
-  const cell = document.createElement("td");
-  const wrap = document.createElement("div");
-  wrap.className = "subject-compare-cell";
-  const value = document.createElement("span");
-  value.className = "subject-compare-value";
-  value.textContent = valueText;
-  wrap.append(value, bar);
-  cell.append(wrap);
-  return cell;
-}
-
 
 export async function renderStats() {
   const [reviewTasks, evidence, learningUnits, subjects] = await Promise.all([
@@ -1857,15 +1745,10 @@ export async function renderStats() {
   // The exercise list below is a ledger of finished exercises, not a period-bound indicator.
   const stats = Stats.calculate(reviewTasks, evidence, learningUnits, subjects);
 
-  exerciseNotesBody.replaceChildren();
-  exerciseNotesEmpty.hidden = stats.completedExercises.length > 0;
-  for (const exercise of stats.completedExercises) {
-    exerciseNotesBody.append(createExerciseRow(exercise));
-  }
+  setHistory(buildHistoryRows(stats.completedExercises, learningUnits, subjects), openExerciseDetail);
 
   // Header, table, distribution and chart all derive from the same period evidence (renderStatsBySubject).
   await renderStatsBySubject();
-  await renderStatsByUnit();
   if (evolutionFilterSubject && evolutionFilterSubject.options.length <= 1) {
     for (const s of subjects.filter((s) => s.isActive)) {
       const opt = document.createElement("option");
@@ -2389,125 +2272,6 @@ export async function renderPlan() {
   }
 }
 
-const TREND_ARROWS = {
-  IMPROVING: "M6 10V2M6 2L2.5 5.5M6 2l3.5 3.5",
-  DECLINING: "M6 2v8M6 10L2.5 6.5M6 10l3.5-3.5",
-  STABLE: "M2 6h8M10 6L6.5 2.5M10 6L6.5 9.5",
-  INSUFFICIENT: "M3 6h6",
-};
-
-// Trend in percentage points. The comparison windows are named in the tooltip; an insufficient
-// sample says so instead of showing a number or a "stable" it cannot support.
-function createTrendBadge(trend, kind = "subject") {
-  const { direction, delta, olderAccuracy, recentAccuracy, olderQuestions, recentQuestions } = trend;
-  const span = document.createElement("span");
-  span.className = "trend-badge";
-  span.dataset.direction = direction;
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 12 12");
-  svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("trend-arrow");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", TREND_ARROWS[direction] ?? TREND_ARROWS.INSUFFICIENT);
-  svg.append(path);
-  const points = delta == null ? 0 : Math.round(delta * 100);
-  const label = document.createElement("span");
-  label.textContent = direction === "INSUFFICIENT" ? t("statsView.trend.insufficient")
-    : points === 0 || direction === "STABLE" ? t("statsView.trend.stable")
-    : t(points > 0 ? "statsView.trend.up" : "statsView.trend.down", { points: Math.abs(points) });
-  span.append(svg, label);
-  span.title = direction === "INSUFFICIENT"
-    ? t(kind === "unit" ? "statsView.trend.title.unit.insufficient" : "statsView.trend.title.subject.insufficient", { days: TREND_WINDOW_DAYS })
-    : t(kind === "unit" ? "statsView.trend.title.unit" : "statsView.trend.title.subject", {
-      days: TREND_WINDOW_DAYS,
-      from: Math.round(olderAccuracy),
-      to: Math.round(recentAccuracy),
-      olderQuestions,
-      recentQuestions,
-    });
-  return span;
-}
-
-// Header-click sorting (approved pattern — no separate sort dropdown when a
-// table column can sort itself). One {key,dir} state per table; ascending
-// "performance" is the existing worst-first default in both tables.
-const subjectSortState = { key: "performance", dir: "asc" };
-const unitSortState = { key: "performance", dir: "asc" };
-
-// The global período control (screen heading) selects the evidence period (90 days at first) for the header,
-// both tables, the distribution and the chart; analytics.js owns that selection (evidenceInPeriod) and sortMatrixRows.
-
-// P0-3 (revised): Recência shares the exact same single Prática button
-// instead of a second stacked button — a visually-stacked version briefly
-// existed and was reverted (it changed the header cell's content shape at
-// every width, including the phone breakpoint commit ff7dec2 had already
-// fixed and locked, silently re-breaking it). One button, one line, zero
-// header-geometry change at any width: clicking it steps through this
-// fixed cycle instead.
-const PRACTICE_RECENCY_CYCLE = [
-  { key: "practice", dir: "asc" },
-  { key: "practice", dir: "desc" },
-  { key: "recency", dir: "asc" },
-  { key: "recency", dir: "desc" },
-];
-
-function updateSortHeaderUI(theadRow, state) {
-  if (!theadRow) return;
-  for (const th of theadRow.querySelectorAll("th")) {
-    const buttons = th.querySelectorAll(".th-sort-btn");
-    if (buttons.length === 0) continue;
-    let anyActive = false;
-    for (const btn of buttons) {
-      if (btn.classList.contains("th-sort-btn-practice-recency")) {
-        // This one button represents two sort dimensions; its label and
-        // data-sort-key follow whichever is currently engaged, defaulting
-        // back to its original "Prática" identity when neither is active
-        // (some other header is the current sort) — same idle appearance
-        // this button always had before Recência existed.
-        const engaged = state.key === "practice" || state.key === "recency";
-        const effectiveKey = engaged ? state.key : "practice";
-        btn.dataset.sortKey = effectiveKey;
-        const label = effectiveKey === "recency" ? t("statsView.sort.recency") : t("statsView.sort.practice");
-        if (btn.firstChild && btn.firstChild.nodeType === Node.TEXT_NODE) {
-          btn.firstChild.textContent = label;
-        }
-        btn.setAttribute("aria-label", effectiveKey === "recency" ? t("statsView.sort.recency.aria") : t("statsView.sort.practice.aria"));
-        if (engaged) anyActive = true;
-        btn.classList.toggle("is-active", engaged);
-        btn.dataset.dir = engaged ? state.dir : "";
-        continue;
-      }
-      const isActive = btn.dataset.sortKey === state.key;
-      if (isActive) anyActive = true;
-      btn.classList.toggle("is-active", isActive);
-      btn.dataset.dir = isActive ? state.dir : "";
-    }
-    th.setAttribute("aria-sort", anyActive ? (state.dir === "asc" ? "ascending" : "descending") : "none");
-  }
-}
-
-function wireSortableHeaders(rowId, state, onChange) {
-  const row = document.querySelector(`#${rowId}`);
-  if (!row || row.dataset.sortWired) return;
-  row.dataset.sortWired = "true";
-  row.addEventListener("click", (event) => {
-    const btn = event.target.closest(".th-sort-btn");
-    if (!btn) return;
-    if (btn.classList.contains("th-sort-btn-practice-recency")) {
-      const currentIndex = PRACTICE_RECENCY_CYCLE.findIndex((s) => s.key === state.key && s.dir === state.dir);
-      const next = PRACTICE_RECENCY_CYCLE[(currentIndex + 1 + PRACTICE_RECENCY_CYCLE.length) % PRACTICE_RECENCY_CYCLE.length];
-      state.key = next.key;
-      state.dir = next.dir;
-    } else {
-      const key = btn.dataset.sortKey;
-      state.dir = state.key === key && state.dir === "asc" ? "desc" : "asc";
-      state.key = key;
-    }
-    updateSortHeaderUI(row, state);
-    onChange();
-  });
-}
-
 // "Meu estudo está funcionando?" — plain text from observable evidence (see studyVerdict).
 // It ignores the period filter on purpose: a trend is a comparison over time, not a slice.
 async function renderStudyVerdict(subjectRows, unitRows) {
@@ -2533,18 +2297,6 @@ async function renderStudyVerdict(subjectRows, unitRows) {
     pendingPlanFocusUnitId = a.unitId;
     showScreen("plan");
   };
-}
-
-const BAND_LABELS = {
-  get CRITICAL() { return t("statsView.band.CRITICAL"); },
-  get ATTENTION() { return t("statsView.band.ATTENTION"); },
-  get ADEQUATE() { return t("statsView.band.ADEQUATE"); },
-  get STRONG() { return t("statsView.band.STRONG"); },
-  get NO_EVIDENCE() { return t("statsView.band.NO_EVIDENCE"); },
-};
-
-function bandRange(state) {
-  return t(`statsView.band.range.${state}`, { attention: THRESHOLDS.ATTENTION, adequate: THRESHOLDS.ADEQUATE, strong: THRESHOLDS.STRONG });
 }
 
 // Indicators line: the same rows the table shows, so questions and subjects always reconcile.
@@ -2582,20 +2334,37 @@ function wireStatsTop() {
     if (!button || !top.contains(button)) return;
     switch (button.dataset.v5) {
       case "focus-subject": openSubjectContents(Number(button.dataset.id)); break;
-      case "see-all-subjects": case "see-weak": case "see-best": document.querySelector("#subject-kpi-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); break;
       case "overview-prev": statsOverviewState.page -= 1; renderStatsTop(); break;
       case "overview-next": statsOverviewState.page += 1; renderStatsTop(); break;
-      default: break;
+      default: handleTableAction(button, { openUnit: (unitId) => openLessonInPlan(unitId) }); break;
     }
   });
   top.addEventListener("change", (event) => {
-    if (event.target.id !== "v5-ranking-order") return;
-    statsOverviewState.order = event.target.value === "worst" ? "worst" : "best";
-    statsOverviewState.page = 1;
-    renderStatsTop();
+    if (event.target.id === "v5-ranking-order") {
+      statsOverviewState.order = event.target.value === "worst" ? "worst" : "best";
+      statsOverviewState.page = 1;
+      renderStatsTop();
+      return;
+    }
+    handleTableControl(event.target);
+  });
+  top.addEventListener("input", (event) => {
+    if (event.target.matches("input[type=search]")) handleTableControl(event.target);
+  });
+  // Roving tabindex needs arrow keys, otherwise the two inactive tabs could never be reached from the keyboard.
+  top.addEventListener("keydown", (event) => {
+    const tab = event.target.closest('#screen-stats [role="tab"][data-v5="tab"]');
+    if (!tab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = [...tab.parentElement.querySelectorAll('[role="tab"]')];
+    const index = tabs.indexOf(tab);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    tabs[next].click();
+    document.querySelector(`#${tabs[next].id}`)?.focus();
   });
 }
 wireStatsTop();
+wireHistory();
 document.querySelector("#evolution-mode")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-mode]");
   if (!button) return;
@@ -2606,34 +2375,13 @@ document.querySelector("#evolution-mode")?.addEventListener("click", (event) => 
     .catch(console.error);
 });
 
-function renderStatsDistribution(rows) {
-  if (!statsBandList) return;
-  statsBandList.replaceChildren();
-  for (const band of performanceDistribution(rows)) {
-    const item = document.createElement("li");
-    item.className = "band-row";
-    item.dataset.state = band.state;
-    item.title = bandRange(band.state);
-    const name = document.createElement("span");
-    name.className = "band-name";
-    name.textContent = BAND_LABELS[band.state];
-    const bar = createComparisonBar(band.percent, band.state);
-    const figures = document.createElement("span");
-    figures.className = "band-figures";
-    figures.textContent = t("statsView.band.figures", { percent: band.percent, count: tn("statsView.band.subjects", band.count) });
-    item.append(name, bar, figures);
-    statsBandList.append(item);
-  }
-}
-
 // Estatísticas can be refreshed by navigation, period changes and row activation at
 // the same time. Only the newest async snapshot may publish DOM; otherwise an older
 // response can detach the detail action while the student is clicking it.
 let statsSubjectRenderSeq = 0;
-let statsUnitRenderSeq = 0;
 
 export async function renderStatsBySubject() {
-  if (!subjectKpiList) return;
+  if (!document.querySelector("#stats-body")) return;
   const renderId = ++statsSubjectRenderSeq;
   const today = getLocalDateValue();
   const [evidence, units, subjects, reviewTasks] = await Promise.all([
@@ -2651,73 +2399,7 @@ export async function renderStatsBySubject() {
   renderStatsHeader(periodSummary(results), results, reviewTasks);
   statsV5Rows = results;
   renderStatsTop();
-  renderStatsDistribution(results);
-  results = sortMatrixRows(results, subjectSortState);
-  wireSortableHeaders("subject-kpi-head", subjectSortState, () => renderStatsBySubject());
-  updateSortHeaderUI(document.querySelector("#subject-kpi-head"), subjectSortState);
-
-  const hasAny = results.some((r) => r.totalQuestions > 0);
-  subjectKpiEmpty.hidden = hasAny;
-  subjectKpiEmpty.textContent = t(results.length === 0 ? "screens.stats.subject.empty" : "statsView.period.empty");
-  subjectKpiList.replaceChildren();
-
-  // Matrix row: identity (subject-cell) | performance (% + band bar, never a number without evidence)
-  // | evidence (real question count) | trend (points between named windows). Activating a row opens its
-  // contents; the evolution filter follows it (see openSubjectContents).
-  for (const r of results) {
-    const row = document.createElement("tr");
-    row.className = "matrix-row";
-    row.tabIndex = 0;
-    row.dataset.subjectId = String(r.subjectId);
-
-    const identityCell = document.createElement("td");
-    const chip = document.createElement("span");
-    chip.className = "subject-cell";
-    chip.textContent = r.subjectName;
-    // At narrower widths the chip can be truncated (ellipsis); the native tooltip keeps the full name.
-    chip.title = r.subjectName;
-    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
-    identityCell.append(chip);
-
-    const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
-    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
-    perfCell.dataset.state = r.state;
-
-    const practiceCell = document.createElement("td");
-    practiceCell.className = "practice-cell";
-    const practiceMain = document.createElement("div");
-    practiceMain.className = "practice-compact";
-    practiceMain.textContent = hasEvidence ? tn("statsView.evidence.questions", r.totalQuestions, { count: formatNumber(r.totalQuestions) }) : t("statsView.evidence.none");
-    practiceCell.append(practiceMain);
-    if (r.lastEvidence) {
-      const last = document.createElement("div");
-      last.className = "practice-recent";
-      last.textContent = t("statsView.evidence.last", { date: formatIntlDate(new Date(`${String(r.lastEvidence.evidenceDate).slice(0, 10)}T12:00:00`), { day: "2-digit", month: "2-digit", year: "2-digit" }) });
-      practiceCell.append(last);
-    }
-
-    const trendCell = document.createElement("td");
-    trendCell.append(createTrendBadge(r.trend));
-
-    row.append(identityCell, perfCell, practiceCell, trendCell);
-    row.addEventListener("click", () => openSubjectContents(r.subjectId));
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openSubjectContents(r.subjectId);
-      }
-    });
-    subjectKpiList.append(row);
-  }
-  syncSelectedSubjectRow();
-}
-
-function syncSelectedSubjectRow() {
-  const selected = evolutionFilterSubject?.value ?? "";
-  for (const tr of subjectKpiList.querySelectorAll("tr.matrix-row")) {
-    tr.classList.toggle("is-selected", selected !== "" && tr.dataset.subjectId === selected);
-  }
+  setTableModel(buildTableModel({ subjectRows: results, evidence, units, subjects, periodValue, today }));
 }
 
 function selectSubjectForEvolution(subjectId) {
@@ -2726,32 +2408,13 @@ function selectSubjectForEvolution(subjectId) {
     syncSelect(evolutionFilterSubject);
     evolutionFilterSubject.dispatchEvent(new Event("change"));
   }
-  syncSelectedSubjectRow();
 }
 
-// Single semantic action for "activate a discipline row in Por disciplina":
-// used identically by click, Enter and Space so mouse and keyboard never
-// diverge. Restores the pre-regression behavior (row activation used to
-// switch to Por conteúdo) while keeping the newer evolution-chart sync,
-// which is still legitimate/useful on its own.
+// One action for "open this discipline's contents": the evolution chart follows the discipline and the
+// analysis table switches to Por conteúdo for it.
 function openSubjectContents(subjectId) {
-  // 1) keep discipline selection in sync — same mechanism the evolution
-  // chart already used (dropdown value + row highlight in Por disciplina).
   selectSubjectForEvolution(subjectId);
-  // 2) drive Por conteúdo to the same discipline.
-  selectedUnitSubjectId = subjectId;
-  // 3) activate the Por conteúdo tab (shared setStatsView, same path a real
-  // tab click uses — no parallel tab-activation logic).
-  const unitTab = document.querySelector("#tab-stats-unit");
-  if (unitTab) setStatsView(unitTab);
-  // 4) re-render Por conteúdo (updates the matrix rows AND, via
-  // renderContentContext inside it, the context-switcher trigger/menu).
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-  // 5) focus/ARIA coherence: move focus to the now-selected tab, matching
-  // the tablist's own roving-tabindex state (setStatsView already put
-  // tabindex=0 only on this tab) instead of leaving focus stranded on a
-  // row that just disappeared into the other, now-hidden panel.
-  unitTab?.focus();
+  focusSubject(subjectId);
 }
 
 export async function renderDisciplinas() {
@@ -2924,253 +2587,6 @@ export async function renderDisciplinas() {
     actions.append(editBtn, archiveBtn, deleteBtn);
     card.append(chipRow, metaEl, editForm, actions, deleteMsg);
     subjectsCatalog.append(card);
-  }
-}
-
-function buildSparkline(scores, width = 60, height = 24) {
-  const pts = scores.slice(-5);
-  if (pts.length < 2) return null;
-  const minY = Math.min(...pts);
-  const maxY = Math.max(...pts);
-  const rangeY = maxY - minY || 1;
-  const pad = 2;
-  const xStep = (width - pad * 2) / (pts.length - 1);
-  const points = pts
-    .map((v, i) => {
-      const x = pad + i * xStep;
-      const y = pad + (1 - (v - minY) / rangeY) * (height - pad * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  svg.setAttribute("aria-hidden", "true");
-  svg.className.baseVal = "sparkline";
-  const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  polyline.setAttribute("points", points);
-  polyline.setAttribute("fill", "none");
-  polyline.setAttribute("stroke", "currentColor");
-  polyline.setAttribute("stroke-width", "1.5");
-  polyline.setAttribute("stroke-linejoin", "round");
-  svg.append(polyline);
-  return svg;
-}
-
-let selectedUnitSubjectId = null;
-
-function formatContentContextMeta(row) {
-  if (!row || row.totalQuestions <= 0) return t("statsView.context.noEvidence");
-  const pct = formatDecimal(row.weightedAccuracy, 1, { trim: true });
-  return t("statsView.context.meta", { percent: pct, questions: row.totalQuestions });
-}
-
-// Context switcher aprovado: trigger mostra a disciplina atual; o menu que
-// ele abre nunca repete essa disciplina, só mostra as alternativas.
-function renderContentContext(activeSubjectRows, currentSubjectId) {
-  if (!contentContextPlate || !disciplineSwitchList) return;
-  const current = activeSubjectRows.find((r) => r.subjectId === currentSubjectId);
-
-  contentContextPlate.textContent = current?.subjectName ?? t("stats.noSubject");
-  contentContextPlate.title = current?.subjectName ?? t("stats.noSubject");
-  contentContextPlate.style.setProperty(
-    "--subject-fill",
-    `var(${colorVarForKey(current?.color ?? "DISC-BLUE")})`,
-  );
-  if (contentContextMeta) contentContextMeta.textContent = formatContentContextMeta(current);
-
-  disciplineSwitchList.replaceChildren();
-  let optionIndex = 0;
-  for (const row of activeSubjectRows) {
-    if (row.subjectId === currentSubjectId) continue;
-    const item = document.createElement("li");
-    // Menu Button pattern (DESIGN.md): this widget performs an action
-    // ("switch to this discipline"), it is not a value picker with a
-    // selection state — menuitem, never option/aria-selected.
-    item.setAttribute("role", "menuitem");
-    // Stable per-render id + tabIndex=-1: same roving-focus contract as
-    // select-ui.js's own Menu popup (see wireListboxKeyboard in
-    // src/select-ui.js) — real DOM focus stays on the list itself,
-    // individual items are only ever visually marked via .is-focused.
-    item.id = `discipline-switch-opt-${optionIndex++}`;
-    item.tabIndex = -1;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "subject-cell";
-    btn.textContent = row.subjectName;
-    btn.title = row.subjectName;
-    btn.dataset.subjectId = String(row.subjectId);
-    btn.style.setProperty("--subject-fill", `var(${colorVarForKey(row.color)})`);
-    item.append(btn);
-    disciplineSwitchList.append(item);
-  }
-}
-
-export async function renderStatsByUnit() {
-  if (!unitStatsList) return;
-  const renderId = ++statsUnitRenderSeq;
-  const today = getLocalDateValue();
-  const [evidence, units, subjects] = await Promise.all([
-    DB.learningEvidence.getAll(),
-    DB.learningUnits.getAll(),
-    DB.subjects.getAll(),
-  ]);
-  if (renderId !== statsUnitRenderSeq) return;
-  const periodValue = statsUnitFilterPeriod?.value ?? "";
-  let results = Analytics.byUnit(evidenceInPeriod(evidence, periodValue, today), units, subjects);
-  const subjectsById = new Map(subjects.map((s) => [s.id, s]));
-
-  // "Por conteúdo" analisa UMA disciplina por vez (context switcher aprovado:
-  // trigger = disciplina atual, menu = só as alternativas) em vez de um
-  // filtro "Todas as disciplinas" cruzando tudo — Analytics.bySubject já
-  // calcula exatamente o agregado por disciplina que o trigger/meta precisam,
-  // reaproveitado aqui, não recalculado.
-  const activeSubjectRows = periodSubjectRows(evidence, units, subjects, { periodValue, today }).filter(
-    (r) => subjectsById.get(r.subjectId)?.isActive,
-  );
-  if (selectedUnitSubjectId == null || !activeSubjectRows.some((r) => r.subjectId === selectedUnitSubjectId)) {
-    selectedUnitSubjectId = activeSubjectRows[0]?.subjectId ?? null;
-  }
-  renderContentContext(activeSubjectRows, selectedUnitSubjectId);
-
-  // Apply filters (AC-EST2-04)
-  if (selectedUnitSubjectId != null) results = results.filter((r) => r.subjectId === selectedUnitSubjectId);
-  if (periodValue) results = results.filter((r) => r.totalQuestions > 0);
-
-  // Sort (AC-EST2-05) — header-click sorting, same shared logic as Por disciplina
-  results = sortMatrixRows(results, unitSortState);
-  wireSortableHeaders("unit-stats-head", unitSortState, () => renderStatsByUnit());
-  updateSortHeaderUI(document.querySelector("#unit-stats-head"), unitSortState);
-
-  unitStatsEmpty.hidden = results.length > 0;
-  unitStatsList.replaceChildren();
-  if (unitDetailEmpty && unitDetailBody) {
-    unitDetailEmpty.hidden = false;
-    unitDetailBody.hidden = true;
-    unitDetailBody.replaceChildren();
-  }
-
-  // Matriz por conteúdo — mesma gramática da matriz por disciplina (mesmas
-  // 4 colunas), só a entidade muda. Identidade aqui é chip da disciplina
-  // (compacto) + título do conteúdo, porque esta lista cruza disciplinas
-  // (é filtro, não um drill-down já dentro de uma disciplina) — sem a cor
-  // a varredura visual entre disciplinas se perde. Sparkline/data completos
-  // ficam no painel de detalhe ao selecionar a linha, não espremidos na
-  // matriz.
-  for (const r of results) {
-    const row = document.createElement("tr");
-    row.className = "matrix-row";
-    row.tabIndex = 0;
-    row.dataset.unitId = String(r.unitId ?? r.id ?? "");
-
-    const identityCell = document.createElement("td");
-    identityCell.className = "unit-identity-cell";
-    const chip = document.createElement("span");
-    chip.className = "subject-cell subject-cell--compact";
-    chip.textContent = r.subjectName;
-    chip.title = r.subjectName;
-    chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
-    const title = document.createElement("span");
-    title.className = "unit-title";
-    title.textContent = r.unitTitle;
-    title.title = r.unitTitle;
-    identityCell.append(chip, title);
-
-    const hasEvidence = r.weightedAccuracy != null;
-    const perfValueText = hasEvidence ? `${formatDecimal(r.weightedAccuracy)}%` : t("statsView.noEvidence");
-    const perfCell = createComparisonCell(perfValueText, createComparisonBar(hasEvidence ? r.weightedAccuracy : 0, r.state));
-    perfCell.dataset.state = r.state;
-
-    const practiceCell = document.createElement("td");
-    practiceCell.className = "practice-cell";
-    const practiceMain = document.createElement("div");
-    practiceMain.className = "practice-compact";
-    practiceMain.textContent = hasEvidence ? t("statsView.unit.practice", { questions: r.totalQuestions }) : t("statsView.unit.noPractice");
-    practiceCell.append(practiceMain);
-    if (r.lastEvidence) {
-      const lastDate = document.createElement("div");
-      lastDate.className = "practice-recent";
-      lastDate.textContent = formatDate(r.lastEvidence.evidenceDate);
-      lastDate.title = formatDate(r.lastEvidence.evidenceDate);
-      practiceCell.append(lastDate);
-    }
-
-    const trendCell = document.createElement("td");
-    trendCell.append(createTrendBadge(r.trend, "unit"));
-
-    row.append(identityCell, perfCell, practiceCell, trendCell);
-    row.addEventListener("click", () => showUnitDetail(r));
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        showUnitDetail(r);
-      }
-    });
-    unitStatsList.append(row);
-  }
-}
-
-// Painel de detalhe do conteúdo selecionado — reaproveita exatamente os
-// mesmos campos que a linha da matriz já carregava (nada novo é calculado
-// aqui), só muda a representação: sparkline completa + data por extenso.
-function showUnitDetail(r) {
-  if (!unitDetailPanel) return;
-  for (const tr of unitStatsList.querySelectorAll("tr.matrix-row")) {
-    tr.classList.toggle("is-selected", tr.dataset.unitId === String(r.unitId ?? r.id ?? ""));
-  }
-  unitDetailEmpty.hidden = true;
-  unitDetailBody.hidden = false;
-  unitDetailBody.replaceChildren();
-
-  const heading = document.createElement("div");
-  heading.className = "unit-detail-heading";
-  const chip = document.createElement("span");
-  chip.className = "subject-cell";
-  chip.textContent = r.subjectName;
-  chip.title = r.subjectName;
-  chip.style.setProperty("--subject-fill", `var(${colorVarForKey(r.color)})`);
-  const title = document.createElement("h3");
-  title.className = "unit-detail-title";
-  title.textContent = r.unitTitle;
-  heading.append(chip, title);
-
-  const score = document.createElement("div");
-  score.className = "unit-detail-score";
-  score.textContent = r.weightedAccuracy != null
-    ? t("statsView.unit.score", { percent: formatDecimal(r.weightedAccuracy), questions: r.totalQuestions })
-    : t("statsView.unit.noEvidence");
-
-  const trend = createTrendBadge(r.trend, "unit");
-
-  unitDetailBody.append(heading, score, trend);
-
-  if (r.lastEvidence) {
-    const last = document.createElement("p");
-    last.className = "unit-detail-last";
-    last.textContent = t("statsView.unit.lastPractice", { date: formatDate(r.lastEvidence.evidenceDate) });
-    unitDetailBody.append(last);
-  }
-
-  const sparkEl = buildSparkline(r.scoresSequence, 260, 64);
-  if (sparkEl) {
-    sparkEl.classList.add("unit-detail-spark");
-    unitDetailBody.append(sparkEl);
-  }
-
-  // The weak spot is the lesson the row is about (the row comes from that lesson): one click opens it in Plano, with its Resumo and "Estudar agora"
-  if (r.unitId != null) {
-    const study = document.createElement("button");
-    study.type = "button";
-    study.className = "secondary-button unit-detail-study";
-    study.dataset.action = "study-unit";
-    study.textContent = t("statsView.unit.study");
-    const gone = createTextElement("p", "form-message is-error", "");
-    gone.setAttribute("role", "status");
-    study.addEventListener("click", async () => {
-      gone.textContent = (await openLessonInPlan(r.unitId)) ? "" : t("plan.openLesson.missing");
-    });
-    unitDetailBody.append(study, gone);
   }
 }
 
@@ -6474,90 +5890,8 @@ if (databaseAvailable && authenticated) {
   await renderToday();
 }
 
-// Estatísticas: duas profundidades do mesmo instrumento, não duas telas —
-// alternar não recarrega dados, só troca qual workspace-grid fica visível.
-const statsViewTabs = [
-  { tab: document.querySelector("#tab-stats-subject"), panel: document.querySelector("#view-stats-subject") },
-  { tab: document.querySelector("#tab-stats-unit"), panel: document.querySelector("#view-stats-unit") },
-];
-function setStatsView(activeTab) {
-  for (const { tab, panel } of statsViewTabs) {
-    if (!tab || !panel) continue;
-    const isActive = tab === activeTab;
-    tab.classList.toggle("is-active", isActive);
-    tab.setAttribute("aria-selected", String(isActive));
-    tab.tabIndex = isActive ? 0 : -1;
-    panel.classList.toggle("is-hidden", !isActive);
-  }
-}
-for (const { tab } of statsViewTabs) {
-  tab?.addEventListener("click", () => setStatsView(tab));
-}
-
-// Global select/combobox standardization: the discipline context switcher
-// is a LOCKED, already-approved pattern (trigger = current discipline,
-// menu = alternatives only, subject-cell chip identity preserved) — never
-// redesigned here — but it used to only support click + Escape, missing
-// the arrow-key/Home-End/typeahead roving focus every select-ui.js
-// consumer already has. It now shares the exact same keyboard mechanics
-// (wireListboxKeyboard, src/select-ui.js) as every other select in the
-// app, instead of a hand-rolled subset.
-function isContentContextOpen() {
-  return disciplineSwitchList?.hidden === false;
-}
-function openContentContextMenu() {
-  if (!contentContextPlate || !disciplineSwitchList || isContentContextOpen()) return;
-  contentContextPlate.setAttribute("aria-expanded", "true");
-  disciplineSwitchList.hidden = false;
-  contentContextListKeyboard.setActiveFirst();
-  disciplineSwitchList.tabIndex = 0;
-  disciplineSwitchList.focus({ preventScroll: true });
-}
-function closeContentContextMenu(returnFocus) {
-  if (!contentContextPlate || !disciplineSwitchList || !isContentContextOpen()) return;
-  disciplineSwitchList.hidden = true;
-  contentContextPlate.setAttribute("aria-expanded", "false");
-  if (returnFocus) contentContextPlate.focus();
-}
-function commitContentContextItem(item) {
-  const btn = item?.querySelector("button[data-subject-id]");
-  if (!btn) return;
-  selectedUnitSubjectId = Number(btn.dataset.subjectId);
-  closeContentContextMenu(true);
-  if (databaseAvailable) renderStatsByUnit().catch(console.error);
-}
-const contentContextListKeyboard = disciplineSwitchList
-  ? wireListboxKeyboard(disciplineSwitchList, {
-      getItems: () => Array.from(disciplineSwitchList.querySelectorAll("li[role=menuitem]")),
-      onCommit: commitContentContextItem,
-      onEscape: () => closeContentContextMenu(true),
-      onTabAway: () => closeContentContextMenu(false),
-    })
-  : null;
-
-contentContextPlate?.addEventListener("click", () => {
-  if (isContentContextOpen()) closeContentContextMenu(true);
-  else openContentContextMenu();
-});
-contentContextPlate?.addEventListener("keydown", (event) => {
-  if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
-    event.preventDefault();
-    openContentContextMenu();
-  }
-});
-disciplineSwitchList?.addEventListener("click", (event) => {
-  const item = event.target.closest("li[role=menuitem]");
-  if (!item) return;
-  commitContentContextItem(item);
-});
-document.addEventListener("click", (event) => {
-  if (!contentContextPlate || !isContentContextOpen()) return;
-  if (contentContextPlate.contains(event.target) || disciplineSwitchList.contains(event.target)) return;
-  closeContentContextMenu(false);
-});
 evolutionFilterSubject?.addEventListener("change", async () => {
   if (!databaseAvailable) return;
-  syncSelectedSubjectRow();
   const [ev, units, subjs] = await Promise.all([DB.learningEvidence.getAll(), DB.learningUnits.getAll(), DB.subjects.getAll()]);
   renderEvolutionSvg(ev, units, subjs);
 });

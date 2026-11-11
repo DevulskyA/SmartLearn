@@ -239,7 +239,7 @@ test('journey: PDF -> reviewed unit -> study with feedback -> exam with no feedb
   await page.locator('[data-screen="stats"]').click();
   await page.locator('#tab-stats-unit').click();
   await expect(page.locator('#unit-stats-list')).toContainText('fisiologia-renal', { timeout: 8000 });
-  await expect(page.locator('#unit-stats-empty')).toBeHidden();
+  await expect(page.locator('#unit-stats-list .v5-empty')).toHaveCount(0);
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await noHorizontalScroll(page)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
