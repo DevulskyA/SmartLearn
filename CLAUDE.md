@@ -1,61 +1,39 @@
-# SmartLearn — project instructions
+# SmartLearn — Claude Code
 
-EXECUTION_MODEL=OUTCOME_DRIVEN_LEAN
-Canonical policy (read it): `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution`
-Core rule: one observable outcome → proportional proof → next outcome. Ceremony shrinks; guarantees (data, isolation, auth, migration, provenance, security) do not.
-Do NOT create formal tasks for implementation mechanics, tests, documentation or findings that belong to the active outcome.
+`EXECUTION_MODEL=OUTCOME_DRIVEN_LEAN`
 
-Smallest complete solution (default for all engineering work, level FULL; it works inside the contracts below, never replaces them):
-deliver the smallest solution that is complete, correct, readable and maintainable, with the least code, dependencies, time and tokens, and without giving up any essential property.
-- Before writing code, look for what the project already has (module, helper, pattern, installed library, platform feature) and reuse it; reuse only where the meaning is the same (SAFE_SOFTWARE_EVOLUTION A3 / 4.8), never to force a shared abstraction.
-- No new feature, abstraction, option, dependency or layer without a demonstrated need; when a cause is structural, fix the cause instead of stacking patches, and prefer removing complexity to adding it.
-- Smallest check that would catch a material failure first, widen with risk; no speculative refactors, redundant docs, extra agents or planning that buy nothing.
-- "Smallest" means the smallest solution that stays correct for the relevant cases, not the fewest lines: never trade away data integrity, correctness, security, accessibility, medical fidelity, compatibility or tests the risk requires. Ask a human only where the existing authority rules say so; do not contest legitimate requests (this is not an ULTRA mode).
+## Authority and outcome
 
-Operational contract (permanent; canonical text: rule 10b in `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md`): authorized and executable task → act before reporting; done → show result and evidence; blocker → prove it and check independent authorized work; informational question → answer with no side effects; `/loop` with no material change → silence; never invent work or exceed an authorization. "Accepted", "understood", "will do later" are NOT deliveries. A recommendation is not a human decision.
+Before executing SmartLearn work, read in full:
 
-Before executing SmartLearn work, read `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md` and
-`.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md` in full: the canonical inherited quality-and-evolution contract.
-Task-local requirements add to it; they do not silently weaken it.
+* `.specs/governance/02_SMARTLEARN_QUALITY_STANDARD_V1.md`
+* `.specs/governance/SAFE_SOFTWARE_EVOLUTION_PRINCIPLES_V2.md`
 
-For product-intent and prioritization doubts, use `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` §0.1 as the tie-breaker.
-It controls DIRECTION; code, tests and Git control STATE. Conductor never becomes a second Constitution.
-For everything else (active feature, current checkpoint, dependency-ready task) reconcile from Git plus `.specs/STATE.md`, not from this file.
+Follow `.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md` (`#outcome-driven-lean-execution` and rule 10b). Task requirements strengthen, never weaken, these contracts. For product direction use `.specs/governance/SMARTLEARN_PRODUCT_CONSTITUTION_V1.md` §0.1; for actual implementation state trust Git and tests. Conductor chooses which outcome; TLC chooses the smallest correct implementation.
 
-Para saber ONDE está cada coisa no código (camadas, módulos, onde testar), leia `CODEMAP.md` antes de buscar; ele é verificado por teste.
+One observable outcome → smallest complete change → proportional proof → next outcome. Reuse existing code, patterns, libraries or platform features when semantics truly match; fix root causes, remove unnecessary complexity, and avoid speculative features, abstractions, dependencies, refactors or ceremony. "Smallest" means fully correct, readable and maintainable, not fewest lines. Never trade away data integrity, isolation, authentication, migrations, provenance, security, accessibility, medical fidelity, compatibility or the tests the risk requires. Do not create separate formal tasks for mechanics, tests, documentation or findings that belong to the active outcome.
 
-Frente "Clean Code moderno + internacionalização" (pedido do usuário, 2026-10-16): direção em `.specs/features/i18n-clean-code/BRIEF.md` (texto original), estado e próximos passos em `.specs/features/i18n-clean-code/PLAN.md`, fila em `.specs/LOOP_BACKLOG.md`. Regras vigentes: sem push, merge, deploy ou rebase sem autorização; fatias pequenas e reversíveis; testes rápidos rodam direto no agente principal; Haiku (agente `test-runner`) só para testes longos quando delegar reduz custo ou libera trabalho independente.
+Act → verify → report. Execute authorized work before narrating it; show the real result and evidence. "Accepted", "understood" and "will do later" are not deliveries. Prove blockers, then advance independent authorized work. Answer informational questions without side effects; a `/loop` with no material change stays silent. Do not contest legitimate requests. Ask humans only at existing authority gates; a recommendation is not authorization.
 
-## Estado e painel
+Owner-reserved gates: no push, merge, deploy or rebase without authorization; no migration without explicit authorization; `scripts/work-branches.json` and `scripts/launch-desktop-dev.ps1` are owner-reserved; ADR-0001 protects Estatísticas (human decision required).
 
-- Fonte única de estado: `tasks.md` da feature ativa (+ `PROGRAM.md` ordem, `spec.md` requisitos e portões, `validation.md` evidência). `plan.md`, o bloco ACTIVE TRACK de `conductor/tracks.md`, o painel HTML e o cockpit são PROJEÇÕES geradas: nunca editar à mão. `npm run plan:sync` / `node scripts/agent-tasklist.mjs` (`--watch` em segundo plano) as regeneram; painel velho é bug.
-- DECISÃO HUMANA (2026-09-19, preservada): a tasklist visual (`scripts/tasklist.mjs`, `tasklist.html`, painel, estados, tarefa ativa) é canônica COMO CAPACIDADE; só a fonte interna pode mudar (adaptar o gerador, manter a UI). O painel é uma lista simples (`[✓]` `[>]` `[ ]` `[!]` + "EXECUTANDO AGORA"), sem dashboard. Conductor decide QUAL outcome está ativo; TLC decide a menor implementação correta dele.
-- Ao iniciar/retomar, mostrar em uma linha: marco · progresso · outcome ativo · próximo · bloqueio. Só macro-tarefas (outcomes), sem narrar cada passo.
+## Truth, navigation and progress
 
-## Recuperação após /clear ou sessão nova
+* Git = real code, branch and worktree. `.specs/STATE.md` = tracked context/checkpoint. Active feature `tasks.md` = outcome status; its `PROGRAM.md` = ordering; `spec.md` = requirements/gates; `validation.md` = evidence. `.specs/ARTIFACTS.md` lists durable artifacts outside Git. Never promote chat or scratchpads to authority.
+* Read `CODEMAP.md` before searching for modules, layers or tests (verified by a test). For execution commands see `.specs/EXECUTION.md`. For the i18n / Clean Code front see `.specs/features/i18n-clean-code/{BRIEF,PLAN}.md` and `.specs/LOOP_BACKLOG.md`: small reversible slices.
+* `plan.md`, the ACTIVE TRACK block of `conductor/tracks.md`, the HTML panel and the cockpit are generated projections: never edit them by hand; refresh with `npm run plan:sync` or `node scripts/agent-tasklist.mjs` (optional `--watch`). Human decision (2026-09-19): the visual tasklist (`scripts/tasklist.mjs` and its generated panel) is canonical as a capability: simple `[✓] [>] [ ] [!]` states plus "EXECUTANDO AGORA", not a dashboard; only its internal source may change.
 
-Objetivo: posição + outcome ativo + próximo passo + bloqueios em ~15 linhas, e só então os trechos do outcome ativo.
-1. `git worktree list`, `git status`, `git log --oneline -5`. O Git vence qualquer texto. Em `main`: não desenvolver; ir para a worktree da branch de trabalho ativa (a que `git worktree list` e `.specs/STATE.md` apontam; em 2026-11-08 é `candidate/combinada-2026-11-08`). Atenção: a trava de execução é `scripts/work-target-guard.mjs` (autorizada em 2026-11-08): recusa checkout/diretório errado e branch fora de `scripts/work-branches.json`; CI e o executável empacotado não a usam. O launcher DEV antigo (`launch-desktop-dev.ps1`) ainda exige o NOME `claude/smartlearn-v1-complete`; o atalho "SmartLearn Homologação" usa `scripts/launch-homologacao.ps1`. Não contorne a trava sem ordem do dono.
-2. `npm run context:resume`: cockpit DERIVADO (nunca autoridade).
-3. Ler SOMENTE o bloco da tarefa ativa em `tasks.md` (busca pelo ID), a seção do mesmo ID em `validation.md`, os requisitos que o bloco cita em `spec.md` e o código necessário. Ampliar só se surgir dependência ou conflito.
-4. Mapa de leitura: `.specs/EXECUTION.md`; o que vive fora do Git: `.specs/ARTIFACTS.md`. `npm run context:check` deve passar.
+## Resume and persistence
 
-`.specs/HANDOFF.md` (local, gitignored) é conveniência derivada: apagá-lo não impede a retomada.
+1. Run `git worktree list`, `git status`, `git log --oneline -5`. On `main`, do not develop: switch to the authorized worktree identified by Git, `.specs/STATE.md` and `scripts/work-branches.json`. Respect `scripts/work-target-guard.mjs` and never bypass it; it applies to local runs only, not to CI or the packaged executable. Then `npm run context:resume` (derived cockpit, never authority).
+2. Report in one line: `marco · progresso · outcome ativo · próximo · bloqueio`. Read only the active ID in `tasks.md`, its section in `validation.md`, the `spec.md` requirements it cites and the code needed; expand only for a concrete dependency or conflict. Run `npm run context:check`.
+3. Persist durable decisions in their owner (`spec.md`, ADR, `tasks.md`), never only in a handoff. Before overwriting a state file: read it, carry forward what remains valid, archive the old one in `.specs/archive/`; then read the write back (prefer the Write tool for multiline: shell mangles backticks, slashes and CRLF/LF). Before `/clear`, compaction or handoff: exactly one `[>]` task with `Próximo passo:`, evidence of completed tasks in `validation.md`, `context:check` passing, tracked state committed. `.specs/HANDOFF.md` is optional, gitignored and derived.
+4. Stage and commit explicit files only: never `git add .` or `git add .specs`; never `.impeccable/` or `.specs/benchmarks/`. A failed path returns to the last verified checkpoint instead of summarizing the failed attempt into context.
 
-## Salvamento e continuidade
+## Agents and verification
 
-- Estado só existe se está no Git (ou em `ARTIFACTS.md`); chat, scratchpad e arquivos gitignored não são memória. Decisão durável vai para a autoridade (`spec.md`, ADR, `tasks.md`), nunca só para o handoff. Dado derivável é derivado, não copiado.
-- Antes de sobrescrever um arquivo de estado: ler, levar adiante o que continua válido, arquivar o anterior em `.specs/archive/`. Depois de gravar: ler de volta (o shell mutila crases e barras; há mistura CRLF/LF; edição multilinha segura = script gravado com a ferramenta Write).
-- Antes de /clear, compaction ou troca de sessão: Git reconciliado; `tasks.md` com exatamente UMA tarefa `[>]` (com `Próximo passo:`); `validation.md` com a prova das concluídas; `npm run context:check` PASS; estado rastreado commitado.
-- Commits só com arquivos explícitos (nunca `git add .` nem `git add .specs`); nunca `.impeccable/` nem `.specs/benchmarks/`.
-- Subagentes devolvem conclusão + evidência (arquivo:linha, comando, resultado), não logs. Caminho errado: voltar ao último checkpoint bom em vez de resumir a tentativa falha para dentro do contexto.
+Follow the global agent policy (`~/.claude/AGENTS.md`, item 0): choose the cheapest capable agent per subproblem and escalate only for real difficulty. Project specifics: run quick tests directly in the main agent; subagents return conclusion + file/command/result, never full logs; use only configurations that are available.
 
-## E2E com saída mínima
+Test the smallest discriminating risk first. E2E: `node scripts/e2e.mjs --changed`, `--failed` to retry, full suite once at the end of the batch; read only its failure/summary line, consulting `test-results/e2e-problems.txt` when needed (`E2E_VERBOSE=1` only to diagnose). Desktop flows, in order: API/CLI/headless → affected integration/E2E → one brief visual check only when appearance is an acceptance criterion. Do not keep desktop or browser windows open for functional validation, nor repeat a visual inspection after adequate proof.
 
-`node scripts/e2e.mjs` imprime só falhas e uma linha `E2E passed|failed: ...`. Leia apenas essa saída; detalhes em `test-results/e2e-problems.txt`. Dia a dia use `--changed` (specs afetadas) e `--failed` (repetir falhas); suíte completa 1x no fim do lote. `E2E_VERBOSE=1` ou `--reporter=...` restaura a lista completa.
-
-Para testar aplicativos desktop, a ordem obrigatória é: (1) API/CLI ou teste headless
-determinístico; (2) teste de integração/E2E somente no escopo afetado; (3) uma única
-inspeção visual curta, apenas se a aparência fizer parte do aceite. Não abrir nem manter
-a janela do aplicativo ou o navegador compartilhado durante a validação funcional. Se o
-teste headless já provar o fluxo, a inspeção visual não deve ser repetida.
+Launchers: legacy `launch-desktop-dev.ps1` requires the branch name `claude/smartlearn-v1-complete`; "SmartLearn Homologação" uses `scripts/launch-homologacao.ps1`. Launcher compatibility is not authorization to bypass worktree guards.
