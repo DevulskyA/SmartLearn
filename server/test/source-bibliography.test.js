@@ -197,3 +197,18 @@ test('migration 044 is purely additive: nothing but the eight bibliography colum
     db.close();
   } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+test('a scanned (image-only) book still gets the title, authors and language its PDF declares; it is never left without a name because it has no text', async () => {
+  await withApp(async ({ open }) => {
+    const ctx = await open();
+    const s = await session(ctx.app, 'bib-scan@example.com');
+    const scanned = buildFixturePdf(['p1', 'p2'], { emptyPages: [1, 2], info: { title: 'Fisiologia Medica', author: 'Guyton', language: 'pt-BR' } });
+    const uploaded = await s.upload('Guyton 2021.pdf', scanned);
+    const res = await s.extract(uploaded.id);
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).extraction.status, 'IMAGE_ONLY_OR_UNREADABLE');
+    const bib = (await s.get(uploaded.id)).bibliography;
+    assert.deepEqual([bib.title, bib.authors, bib.language, bib.year, bib.isbn], ['Fisiologia Medica', 'Guyton', 'pt', 2021, null]);
+    assert.equal(bib.origins.year, 'FILE_NAME');
+  });
+});
