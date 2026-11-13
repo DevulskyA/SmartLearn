@@ -8,6 +8,7 @@ import { openDb } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { buildApp } from '../src/app.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
+import { extractSource } from '../src/services/source-extraction.js';
 
 // BIBLIOGRAPHY end to end over HTTP on a DISPOSABLE database and real (generated) PDFs: upload -> extract -> metadata persisted ->
 // student correction -> re-extraction keeps the correction -> database reopened (an app restart) -> still there. No AI, no network.
@@ -54,7 +55,7 @@ async function withApp(fn) {
     opened.push(ctx);
     return ctx;
   };
-  try { await fn({ open, dbPath }); } finally { for (const c of opened) await c.close().catch(() => {}); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+  try { await fn({ open, dbPath, sourcesDir }); } finally { for (const c of opened) await c.close().catch(() => {}); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 }
 
 const COPYRIGHT_PAGE = 'Costanzo Physiology. Fifth Edition. Copyright 2012 by Elsevier. ISBN 978-0-306-40615-7';
@@ -210,5 +211,35 @@ test('a scanned (image-only) book still gets the title, authors and language its
     const bib = (await s.get(uploaded.id)).bibliography;
     assert.deepEqual([bib.title, bib.authors, bib.language, bib.year, bib.isbn], ['Fisiologia Medica', 'Guyton', 'pt', 2021, null]);
     assert.equal(bib.origins.year, 'FILE_NAME');
+  });
+});
+
+test('a re-extraction that fails (time limit) never erases what an earlier extraction identified', async () => {
+  await withApp(async ({ open, sourcesDir }) => {
+    const ctx = await open();
+    const s = await session(ctx.app, 'bib-fail@example.com');
+    const uploaded = await s.upload('costanzo.pdf', BOOK_5TH());
+    assert.equal((await s.extract(uploaded.id)).statusCode, 200);
+    const before = (await s.get(uploaded.id)).bibliography;
+    assert.equal(before.title, 'Physiology');
+    const userId = ctx.db.prepare('SELECT user_id FROM sources WHERE id = ?').get(uploaded.id).user_id;
+    const failed = await extractSource(ctx.db, userId, uploaded.id, { sourcesDir, deadlineMs: 1 });
+    assert.notEqual(failed.status, 'EXTRACTED', 'the instrument: this run really failed (' + failed.status + ')');
+    assert.deepEqual((await s.get(uploaded.id)).bibliography, before, 'title, authors and origins are unchanged by the failed run');
+  });
+});
+
+test('the title is read from the cover (first page) when the PDF declares none; a copyright line is never a title; otherwise the file name', async () => {
+  await withApp(async ({ open }) => {
+    const ctx = await open();
+    const s = await session(ctx.app, 'bib-cover@example.com');
+    const withCover = await s.upload('scan.pdf', buildFixturePdf(['Fisiologia Renal Integrada', 'Por Maria Silva', 'Segunda pagina']));
+    assert.equal((await s.extract(withCover.id)).statusCode, 200);
+    const bib = (await s.get(withCover.id)).bibliography;
+    assert.deepEqual([bib.title, bib.authors, bib.origins.title, bib.origins.authors], ['Fisiologia Renal Integrada', null, 'TEXT_HEURISTIC', undefined]);
+    const bare = await s.upload('apostila renal.pdf', buildFixturePdf(['Copyright 2020 by Editora. ISBN 978-0-306-40615-7', 'Pagina dois']));
+    assert.equal((await s.extract(bare.id)).statusCode, 200);
+    const b2 = (await s.get(bare.id)).bibliography;
+    assert.deepEqual([b2.title, b2.authors, b2.origins.title], ['apostila renal', null, 'FILE_NAME'], 'a copyright line is not a title; no label, no author');
   });
 });

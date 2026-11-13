@@ -131,7 +131,7 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
   // Bibliography: title, authors, edition, year, language and ISBN, from the PDF's metadata and first pages. Best-effort: a failure here never fails an extraction.
   // Also for a scanned or unreadable file: its PDF metadata and file name still name it (no text just means fewer fields).
   if (applied) {
-    try { applyExtractedBibliography(db, userId, sourceId, { pdfInfo: result.pdfInfo ?? {}, now }); } catch { /* metadata about the file is not part of the extraction contract */ }
+    try { applyExtractedBibliography(db, userId, sourceId, { pdfInfo: result.pdfInfo ?? {}, fillOnly: result.status !== 'EXTRACTED', now }); } catch { /* metadata about the file is not part of the extraction contract */ }
   }
 
   // C5 (audit): "existe algum texto" is not "extração válida" -- surface

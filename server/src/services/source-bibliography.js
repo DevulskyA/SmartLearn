@@ -15,18 +15,20 @@ function readRow(db, userId, sourceId) {
   return db.prepare('SELECT * FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
 }
 
-/** Fills the fields the student has not set, from the PDF's metadata, its first pages and its file name. Returns the bibliography, or null when the source is gone. */
-export function applyExtractedBibliography(db, userId, sourceId, { pdfInfo = {}, firstPagesText = null, now = () => new Date() } = {}) {
+/** Fills the fields the student has not set (with fillOnly, only the empty ones), from the PDF's metadata, its first pages and its file name. Returns the bibliography, or null when the source is gone. */
+export function applyExtractedBibliography(db, userId, sourceId, { pdfInfo = {}, firstPagesText = null, fillOnly = false, now = () => new Date() } = {}) {
   const row = readRow(db, userId, sourceId);
   if (!row) return null;
   const text = firstPagesText ?? db.prepare('SELECT text FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index <= 4 ORDER BY page_index')
-    .all(userId, sourceId).map((r) => r.text ?? '').join('\n');
+    .all(userId, sourceId).map((r) => r.text ?? '').join('\n\f\n'); // a form feed marks each page boundary: the cover is the first page only
   const found = identifyBibliography({ fileName: row.original_name, firstPagesText: text, pdfInfo });
   const current = bibliographyOf(row);
   const values = {};
   const origins = { ...current.origins };
   for (const field of FIELDS) {
     if (current.origins[field] === 'USER') { values[field] = current[field]; continue; }
+    // fillOnly (a failed run): what an earlier extraction identified stays; only empty fields may be filled.
+    if (fillOnly && current[field] !== null) { values[field] = current[field]; continue; }
     values[field] = found.fields[field];
     if (found.origins[field]) origins[field] = found.origins[field]; else delete origins[field];
   }

@@ -88,6 +88,42 @@ export function titleFromFileName(fileName) {
   return clean(String(fileName ?? '').replace(/\.(pdf|epub|docx?)$/i, '').replace(/\[[^\]]*\]/g, ' ').replace(/[_]+/g, ' ').replace(/\s*-\s*/g, ' - ')).replace(/^[\s-]+|[\s-]+$/g, '');
 }
 
+// ---- the cover: the first lines of the first pages (a heuristic, so its values carry the origin TEXT_HEURISTIC and the student can correct them) ----
+const firstLines = (text, count) => String(text ?? '').split(/\r?\n/).map((l) => clean(l)).filter(Boolean).slice(0, count);
+const NOT_A_TITLE = /(©|\(c\)|copyright|isbn|all rights|todos os direitos|edition|edi[cç][aã]o|edici[oó]n|https?:|www\.|@|^(by|por|autor(?:es|a|as)?|authors?|written by|escrito por|edited by|editado por|organizador(?:es)?)\b|^\d+$)/i;
+const AUTHOR_LABEL = /^(?:by|por|autor(?:es|a|as)?|authors?|written by|escrito por|edited by|editado por|organizador(?:es)?)\s*[:-]?\s+(.{3,150})$/i;
+
+/** The cover is the first page: pages are separated by a form feed (a text without one is taken as the cover as a whole). */
+const coverOf = (text) => String(text ?? '').split('\f')[0];
+
+/** Title Case or ALL CAPS: most words of 4+ letters start with a capital. A sentence of the body ("Pagina sem nenhuma informacao") is not a title. */
+function looksLikeATitle(line) {
+  const long = line.split(' ').filter((w) => w.replace(/[^A-Za-zÀ-ú]/g, '').length >= 4);
+  if (long.length === 0) return false;
+  return long.filter((w) => /^[A-ZÀ-Ý]/.test(w)).length / long.length >= 0.6;
+}
+
+/** The title on the cover: the first line that looks like a title (short, not a sentence, not a copyright/ISBN/edition/URL/author line). '' when none. */
+export function titleFromText(text) {
+  for (const line of firstLines(coverOf(text), 6)) {
+    const words = line.split(' ').length;
+    if (line.length < 4 || line.length > 150 || words > 15 || !/[A-Za-zÀ-ú]/.test(line) || !looksLikeATitle(line)) continue;
+    if (NOT_A_TITLE.test(line) || /[.:,;]$/.test(line) || JUNK_TITLE.test(line)) continue;
+    if ((line.match(/\d/g) ?? []).length > line.length / 3) continue;
+    return line;
+  }
+  return '';
+}
+
+/** Authors ONLY from an explicit label ("Por X", "By X", "Autor: X") in the first lines; without a label, nothing is guessed. */
+export function authorsFromText(text) {
+  for (const line of firstLines(coverOf(text), 15)) {
+    const m = AUTHOR_LABEL.exec(line);
+    if (m && !/\d/.test(m[1]) && usablePdfAuthors(m[1])) return m[1].trim();
+  }
+  return '';
+}
+
 const LANG_WORDS = {
   pt: ['de', 'da', 'do', 'que', 'não', 'para', 'com', 'uma', 'os', 'as', 'dos', 'das', 'em', 'por', 'ao', 'são', 'ou', 'mais', 'como', 'foi'],
   en: ['the', 'of', 'and', 'to', 'in', 'is', 'that', 'for', 'with', 'are', 'was', 'by', 'this', 'which', 'from', 'be', 'as', 'it', 'on', 'or'],
@@ -124,8 +160,12 @@ export function identifyBibliography({ fileName = '', firstPagesText = '', pdfIn
   const set = (field, value, origin) => { if (value !== null && value !== undefined && value !== '') { fields[field] = value; origins[field] = origin; } };
 
   const pdfTitle = usablePdfTitle(pdfInfo?.title);
-  if (pdfTitle) set('title', pdfTitle, 'PDF_METADATA'); else set('title', titleFromFileName(fileName), 'FILE_NAME');
-  set('authors', usablePdfAuthors(pdfInfo?.author), 'PDF_METADATA');
+  const coverTitle = pdfTitle ? '' : titleFromText(firstPagesText);
+  if (pdfTitle) set('title', pdfTitle, 'PDF_METADATA');
+  else if (coverTitle) set('title', coverTitle, 'TEXT_HEURISTIC');
+  else set('title', titleFromFileName(fileName), 'FILE_NAME');
+  const pdfAuthors = usablePdfAuthors(pdfInfo?.author);
+  if (pdfAuthors) set('authors', pdfAuthors, 'PDF_METADATA'); else set('authors', authorsFromText(firstPagesText), 'TEXT_HEURISTIC');
 
   const isbn = findIsbns(firstPagesText)[0];
   set('isbn', isbn, 'TEXT');

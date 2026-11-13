@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   identifyBibliography, bibliographyOf, findIsbns, isValidIsbn13, isValidIsbn10, isbn10To13, findEditionNumber, findPublicationYear,
-  usablePdfTitle, usablePdfAuthors, titleFromFileName, languageFromTag, guessLanguage,
+  usablePdfTitle, usablePdfAuthors, titleFromFileName, titleFromText, languageFromTag, guessLanguage,
 } from '../src/bibliography/identify.js';
 import { openCorpus } from '../src/corpus/corpus-index.js';
 import { normalizeItem } from '../src/corpus/item.js';
@@ -67,6 +67,16 @@ test('identifyBibliography: every value has an origin; a PDF that says nothing y
   const nothing = identifyBibliography({});
   assert.deepEqual(nothing.fields, { title: null, authors: null, edition: null, year: null, language: null, isbn: null });
   assert.deepEqual(nothing.origins, {});
+});
+
+test('cover text: the title is the first title-like line of the FIRST page, authors only with an explicit label; body sentences and later pages are never read as a cover', () => {
+  const cover = identifyBibliography({ fileName: 'scan.pdf', firstPagesText: 'Fisiologia Renal Integrada\nPor Maria Silva\n\f\nCapitulo Um\nPor Outro Autor' });
+  assert.deepEqual([cover.fields.title, cover.fields.authors, cover.origins.title, cover.origins.authors], ['Fisiologia Renal Integrada', 'Maria Silva', 'TEXT_HEURISTIC', 'TEXT_HEURISTIC']);
+  assert.equal(identifyBibliography({ fileName: 'x.pdf', firstPagesText: 'Autor: Joao Costa\nRenal Physiology' }).fields.authors, 'Joao Costa');
+  assert.equal(identifyBibliography({ fileName: 'x.pdf', firstPagesText: 'Maria Silva\nFisiologia Renal' }).fields.authors, null, 'no label, no author');
+  assert.equal(identifyBibliography({ fileName: 'notas de aula.pdf', firstPagesText: 'a filtracao glomerular depende da pressao hidrostatica.' }).origins.title, 'FILE_NAME', 'a body sentence is not a title');
+  assert.equal(titleFromText('Copyright 2020 Elsevier\nISBN 978-0-306-40615-7\nSeventh Edition'), '', 'copyright, ISBN and edition lines are not titles');
+  assert.equal(titleFromText('\f\nTitulo Na Segunda Pagina'), '', 'only the first page is the cover');
 });
 
 test('different editions of one title stay distinguishable by their own values', () => {
