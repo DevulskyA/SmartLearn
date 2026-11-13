@@ -500,9 +500,11 @@ export async function createDraft(db, userId, proposalId, {
     throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL'));
   }
 
+  // Summary first (Codex only, when configured): the generation writes just the Resumo Mestre and the draft carries no questions yet.
+  const deferQuestions = codex?.deferQuestions === true && provider.name === CODEX_PROVIDER_NAME;
   let raw;
   try {
-    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion, sourceLanguage, generationLocale }), deadlineMs, 'TIMEOUT');
+    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion, sourceLanguage, generationLocale, deferQuestions }), deadlineMs, 'TIMEOUT');
   } catch (err) {
     // Failures that happen BEFORE a request can leave (no credentials, CLI absent or not logged in, the local call limit)
     // spent nothing; any other failure may have happened after the model was reached and is charged.
@@ -516,7 +518,7 @@ export async function createDraft(db, userId, proposalId, {
 
   let validated;
   try {
-    validated = validateDraft(raw, { segments: found.segments });
+    validated = validateDraft(raw, { segments: found.segments, allowNoQuestions: deferQuestions });
   } catch (err) {
     if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
     throw err;
@@ -557,8 +559,10 @@ export async function createDraft(db, userId, proposalId, {
     summarySourceSpans: validated.summarySourceSpans,
     summaryEvidence: validated.summaryEvidence ?? [],
     questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
+    ...(deferQuestions && validated.questions.length === 0 ? { questionsDeferred: true } : {}),
     quarantinedCount: validated.quarantinedCount,
-    audit: { ...audited.audit, rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
+    // a summary-only draft has no questions on purpose: "volume out of range" would only mislead
+    audit: { ...audited.audit, ...(deferQuestions && validated.questions.length === 0 ? { findings: audited.audit.findings.filter((f) => f.issue !== 'QUESTION_VOLUME_OUT_OF_RANGE') } : {}), rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
     sourceLanguage,
     generationLocale,
     languageCheck: languageCheck.status,
@@ -647,7 +651,7 @@ export function replaceDraftContent(db, userId, draftId, { summary, questions } 
     promptVersion: draftRow.prompt_version,
   };
 
-  const validated = validateOrThrow(candidate, found.segments);
+  const validated = validateOrThrow(candidate, found.segments, { allowNoQuestions: current.questionsDeferred === true });
 
   // Identity survives a whole-draft edit: while the question list keeps its length each question keeps its id and
   // status, and only the ones whose text changed get a new version.
@@ -671,9 +675,10 @@ export function replaceDraftContent(db, userId, draftId, { summary, questions } 
 const EDITABLE_FIELDS = ['question', 'answer', 'explanation', 'questionType', 'hint', 'sourceSpans'];
 const editableQuestion = (q) => Object.fromEntries(EDITABLE_FIELDS.map((k) => [k, q[k] ?? null]));
 
-function validateOrThrow(candidate, segments) {
+// allowNoQuestions: only a summary-first draft (questionsDeferred) may be edited while it has no questions.
+function validateOrThrow(candidate, segments, { allowNoQuestions = false } = {}) {
   try {
-    return validateDraft(candidate, { segments });
+    return validateDraft(candidate, { segments, allowNoQuestions });
   } catch (err) {
     if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
     throw err;
@@ -781,7 +786,7 @@ export function reviseSummary(db, userId, draftId, { summary, expectedVersion } 
   const validated = validateOrThrow({
     summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions.map(editableQuestion),
     modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
-  }, found.segments);
+  }, found.segments, { allowNoQuestions: current.questionsDeferred === true });
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: validated.summary,
     summarySourceSpans: validated.summarySourceSpans,

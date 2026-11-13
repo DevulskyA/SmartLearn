@@ -62,7 +62,7 @@ function validSourceSpans(rawSpans, validPageIndexes) {
  * @returns {{summary:string, questions:object[], modelVersion:string,
  *   promptVersion:string, quarantinedCount:number}}
  */
-export function validateDraft(raw, { segments }) {
+export function validateDraft(raw, { segments, allowNoQuestions = false }) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new DraftValidationError('INVALID_DRAFT', 'A resposta do provedor não é um objeto JSON válido.');
   }
@@ -75,7 +75,9 @@ export function validateDraft(raw, { segments }) {
   requireString(raw.summary, 'summary', MAX_SUMMARY_LENGTH);
   requireString(raw.modelVersion, 'modelVersion');
   requireString(raw.promptVersion, 'promptVersion');
-  if (!Array.isArray(raw.questions) || raw.questions.length === 0) {
+  // A summary-only generation (the questions are deliberately not part of it) has an empty list; every other draft still needs questions.
+  const summaryOnly = allowNoQuestions && Array.isArray(raw.questions) && raw.questions.length === 0;
+  if (!Array.isArray(raw.questions) || (raw.questions.length === 0 && !summaryOnly)) {
     throw new DraftValidationError('INVALID_DRAFT', 'questions deve ser uma lista não vazia.', 'questions');
   }
   if (raw.questions.length > MAX_QUESTIONS) {
@@ -145,7 +147,7 @@ export function validateDraft(raw, { segments }) {
     });
   }
 
-  if (acceptedQuestions.length === 0) {
+  if (acceptedQuestions.length === 0 && !summaryOnly) {
     throw new DraftValidationError('INVALID_DRAFT', 'Nenhuma questão do rascunho tinha citação válida — rascunho descartado.', 'questions');
   }
 

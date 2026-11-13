@@ -74,7 +74,10 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expect
   // A question the reviewer rejected never becomes an exercise; the rest of the lesson is unaffected.
   const excluded = content.questions.filter((q) => q.status === 'REJECTED');
   const draftContent = { ...content, questions: content.questions.filter((q) => q.status !== 'REJECTED') };
-  if (draftContent.questions.length === 0) {
+  // A summary-only draft (questionsDeferred, nothing rejected) becomes a lesson without exercises, exactly like a lesson written by hand;
+  // a draft that had questions and lost them all to rejection is still refused.
+  const summaryOnly = content.questionsDeferred === true && content.questions.length === 0;
+  if (draftContent.questions.length === 0 && !summaryOnly) {
     throw new AcceptDraftError('VALIDATION_FAILED', dm('ALL_QUESTIONS_REJECTED'), 'questions');
   }
 

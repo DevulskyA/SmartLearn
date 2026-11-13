@@ -400,7 +400,14 @@ async function generateSplit(groups, { segments, promptVersion, generationLocale
 }
 
 /** @returns {Promise<object>} the RAW parsed JSON, validated afterwards by draft-schema.js like every provider. */
-export async function generateDraft({ segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options = {}) {
+export async function generateDraft({ segments, promptVersion, generationLocale, signal, onProcess, onActivity, deferQuestions = false }, options = {}) {
+  // Summary first: ONE call writes only the Resumo Mestre (same prompt text plus the summary-only note), so the student gets it without
+  // waiting for the questions; those are produced separately, when they are needed.
+  if (deferQuestions) {
+    const prompt = `${buildDraftPrompt(segments, promptVersion, { generationLocale })}${SUMMARY_ONLY_NOTE}`;
+    const part = await callCodex(prompt, DRAFT_JSON_SCHEMA, 'part', options, { signal, onProcess, onActivity });
+    return part && typeof part === 'object' && !Array.isArray(part) ? { ...part, questions: [], modelVersion: versionOf(options), promptVersion } : part;
+  }
   const groups = planQuestionGroups(segments);
   if (groups) return generateSplit(groups, { segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options);
   const raw = await callCodex(buildDraftPrompt(segments, promptVersion, { generationLocale }), DRAFT_JSON_SCHEMA, 'generate', options, { signal, onProcess, onActivity });

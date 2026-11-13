@@ -60,7 +60,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
         provider: config.aiProvider,
         consentGranted: config.aiConsentGranted,
         budgetCapUsd: config.aiBudgetCapUsd,
-        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
+        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort, deferQuestions: config.codexDeferQuestions },
         timeoutMs: config.aiRequestTimeoutMs,
         maxInputChars: config.aiMaxInputChars,
         ...aiOptions,
