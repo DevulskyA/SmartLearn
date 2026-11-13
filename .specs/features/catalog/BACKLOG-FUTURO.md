@@ -23,3 +23,13 @@ quando trouxer benefício concreto ao fluxo básico e o dono pedir. Prioridade a
 ## Removido nesta etapa (estava só no repositório local, sem push)
 Tabelas `catalog_works`, `catalog_editions`, `catalog_edition_maps`, `source_editions`, o serviço de vínculo de edição e o `reuse-gate.js`.
 Recuperáveis no commit `c782bc3c` se a ideia 1 ou 2 for retomada.
+
+## Resumo primeiro (2026-11-13, commit 641cc9b2)
+- Entregue: `SMARTLEARN_CODEX_DEFER_QUESTIONS=true` faz a geração Codex escrever só o Resumo Mestre (1 chamada); o rascunho vem marcado
+  `questionsDeferred`, pode ser editado e aceito (lição com 16 revisões, sem exercícios; a data do estudo continua sendo a do aceite).
+  DESLIGADO por padrão: sem a continuação abaixo, uma lição Codex ficaria sem perguntas.
+- Falta (decisão de engenharia já tomada, não executada): job de perguntas em segundo plano (`generation_jobs.kind`, migração própria)
+  que gera só as perguntas necessárias. Restrição de segurança: pergunta de IA NUNCA entra numa lição aceita sem revisão humana
+  (invariante AI_OUTPUT = DRAFT); portanto as perguntas chegam num rascunho de perguntas a revisar, ou são anexadas ao rascunho ainda aberto.
+- Medição com Codex real (o dono executa): `node scripts/real-codex-generation.mjs --authorize-real-codex --pdf <arquivo> --from 267 --to 273 --mode summary-first`
+  (modos: split, summary-first, single). Compare `ms` entre os três.
