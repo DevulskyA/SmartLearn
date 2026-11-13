@@ -79,6 +79,17 @@ test('cover text: the title is the first title-like line of the FIRST page, auth
   assert.equal(titleFromText('\f\nTitulo Na Segunda Pagina'), '', 'only the first page is the cover');
 });
 
+test('real book layout (empty first page, promotional page, title on page 3): the promo is never the title, trusted PDF metadata wins, the file name is the fallback', () => {
+  const pages = ['', 'Download More Medical Books For Free\nVisit www.example-books.com\nJoin Our Telegram Channel', 'Renal Physiology\nBy Maria Silva\nSeventh Edition'];
+  const text = pages.join('\n\f\n');
+  const noMeta = identifyBibliography({ fileName: 'costanzo-physiology.pdf', firstPagesText: text });
+  assert.equal(noMeta.origins.title, 'FILE_NAME', 'nothing on the cover page: the file name names it, the promo page is not read');
+  assert.notEqual(noMeta.fields.title, 'Download More Medical Books For Free');
+  assert.equal(noMeta.fields.authors, null, 'authors on page 3 are not read as a cover');
+  const withMeta = identifyBibliography({ fileName: 'costanzo-physiology.pdf', firstPagesText: text, pdfInfo: { title: 'Costanzo Physiology', author: 'Linda Costanzo' } });
+  assert.deepEqual([withMeta.fields.title, withMeta.origins.title, withMeta.fields.authors, withMeta.origins.authors], ['Costanzo Physiology', 'PDF_METADATA', 'Linda Costanzo', 'PDF_METADATA']);
+});
+
 test('different editions of one title stay distinguishable by their own values', () => {
   const a = identifyBibliography({ fileName: 'Costanzo.pdf', firstPagesText: 'Fifth Edition Copyright © 2012 ISBN 978-0-306-40615-7' });
   const b = identifyBibliography({ fileName: 'Costanzo.pdf', firstPagesText: 'Seventh Edition Copyright © 2018 ISBN 978-0-323-79339-1' });
