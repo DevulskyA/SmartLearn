@@ -86,7 +86,9 @@ export const config = {
   codexTimeoutMs: process.env.SMARTLEARN_CODEX_TIMEOUT_MS ? Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS) : null,
   codexReasoningEffort: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'high',
   // true: the Codex generation writes only the Resumo Mestre (the draft opens in about a third of the time) and the questions are not part of it.
-  codexDeferQuestions: process.env.SMARTLEARN_CODEX_DEFER_QUESTIONS === 'true',
+  // Summary first is the default for Codex: the Resumo Mestre arrives alone and the student asks for the questions ("Gerar perguntas").
+  // SMARTLEARN_CODEX_DEFER_QUESTIONS=false restores the old single call that wrote summary and questions together.
+  codexDeferQuestions: process.env.SMARTLEARN_CODEX_DEFER_QUESTIONS !== 'false',
   // R-04: the hard time limit of a whole generation job (every provider call together). Deliberately above the 20 minutes the
   // student was told to expect, so moving generation to the background cannot make a long-but-healthy run fail sooner than before.
   // The VALUE is configurable and still to be confirmed with real measurements (HG-11).

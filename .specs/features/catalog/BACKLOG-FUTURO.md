@@ -31,7 +31,10 @@ Recuperáveis no commit `c782bc3c` se a ideia 1 ou 2 for retomada.
 - Fatia 2 entregue (commit 2582e4b9): `POST /drafts/:id/generate-questions` escreve as perguntas depois, a partir do mesmo texto-fonte, NO MESMO
   rascunho (PROPOSED/FLAGGED, origem GENERATED, nunca ACCEPTED); mantém o resumo do aluno; quantidade = a que o modelo escreveu; repetição é no-op;
   sem citação válida não altera nada. Executa dentro da requisição (sem job), então o tempo é o do Codex; falta a UI chamá-la.
-- Falta para ligar a flag por padrão: botão "Gerar perguntas" no rascunho `questionsDeferred` (UI mista com outra frente) e, opcionalmente, rodar
+- UI entregue (commit `e1b2fdbe`): botão "Gerar perguntas" nas abas Questões e Revisão do rascunho `questionsDeferred`, com teste de ponta a ponta
+  (resumo → perguntas → aceite). Por isso a flag passou a LIGADA por padrão (`SMARTLEARN_CODEX_DEFER_QUESTIONS=false` restaura a chamada única).
+  Ainda aberto: rodar as perguntas como job (reinício/orçamento) e medir com Codex real. O texto abaixo é o histórico do que faltava.
+- (histórico) Falta para ligar a flag por padrão: botão "Gerar perguntas" no rascunho `questionsDeferred` (UI mista com outra frente) e, opcionalmente, rodar
   isso como job (`generation_jobs.kind`, migração própria) para sobreviver a reinício e entrar no orçamento. Plano original do job: job de perguntas em segundo plano (`generation_jobs.kind`, migração própria)
   que gera só as perguntas necessárias. Restrição de segurança: pergunta de IA NUNCA entra numa lição aceita sem revisão humana
   (invariante AI_OUTPUT = DRAFT); portanto as perguntas chegam num rascunho de perguntas a revisar, ou são anexadas ao rascunho ainda aberto.
