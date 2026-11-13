@@ -21,14 +21,25 @@ import { buildDraftPrompt } from './draft-prompt.js';
 import { ProviderRequestError } from './anthropic-provider.js';
 
 export const CODEX_PROVIDER_NAME = 'CODEX';
-export const CODEX_DEFAULT_COMMAND = 'codex';
+const CODEX_DEFAULT_COMMAND = 'codex';
 export const CODEX_DEFAULT_TIMEOUT_MS = 240_000;
-export const CODEX_DEFAULT_REASONING_EFFORT = 'high';
+/**
+ * The time limit of ONE Codex call, grown with the size of what it must write: a fixed 4 minutes cut a 42 000-character source off
+ * (measured 2026-11-13: 20 000 characters took 139 s, 42 000 took more than 240 s). An explicit SMARTLEARN_CODEX_TIMEOUT_MS wins.
+ * The whole job still has its own hard limit (generationJobTimeoutMs), so this is a ceiling per call, never a promise.
+ */
+export function scaledCodexTimeoutMs(promptChars) {
+  return Math.min(600_000, Math.max(CODEX_DEFAULT_TIMEOUT_MS, 120_000 + 8 * promptChars));
+}
+/** The instructions around the source text in a draft prompt (measured), used to size the limit before the prompt exists. */
+export const CODEX_PROMPT_OVERHEAD_CHARS = 12_000;
+const CODEX_DEFAULT_REASONING_EFFORT = 'high';
 const LOGIN_CHECK_TIMEOUT_MS = 20_000;
 const MAX_CAPTURED_BYTES = 64 * 1024;
 
 // Bounded on purpose, per draft: 1 generation + 1 audit + at most 1 repair. Never an open loop.
-export const CODEX_CALL_LIMITS = Object.freeze({ generate: 1, audit: 1, repair: 1 });
+// `part` = the parallel calls of one split generation (one for the summary + up to MAX_QUESTION_GROUPS for the questions).
+export const CODEX_CALL_LIMITS = Object.freeze({ generate: 1, audit: 1, repair: 1, part: 4 });
 
 // Tools the model must not have: this provider is inference only.
 const DISABLED_FEATURES = ['shell_tool', 'apps', 'browser_use', 'computer_use', 'image_generation'];
@@ -271,7 +282,7 @@ export function ensureCodexReady(options = {}, { signal = null } = {}) {
  */
 export async function callCodex(prompt, schema, kind, options = {}, { signal = null, onProcess = null, onActivity = null } = {}) {
   const state = options.state ?? (options.state = {});
-  state.calls ??= { generate: 0, audit: 0, repair: 0 };
+  state.calls ??= { generate: 0, audit: 0, repair: 0, part: 0 };
   if (state.calls[kind] >= CODEX_CALL_LIMITS[kind]) {
     throw new ProviderRequestError('CALL_LIMIT_EXCEEDED', `Limite de chamadas ao Codex por rascunho excedido (${kind}).`);
   }
@@ -280,7 +291,7 @@ export async function callCodex(prompt, schema, kind, options = {}, { signal = n
   await ensureCodexReady(options, { signal });
   if (signal?.aborted) throw new ProviderRequestError('CANCELLED', 'A geração foi interrompida antes da chamada ao Codex.');
 
-  const timeoutMs = options.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? scaledCodexTimeoutMs(prompt.length);
   const dir = mkdtempSync(join(tmpdir(), 'sl-codex-'));
   try {
     const schemaPath = join(dir, 'schema.json');
@@ -328,8 +339,70 @@ export async function callCodex(prompt, schema, kind, options = {}, { signal = n
 /** Provider-owned metadata is not the model's to write. */
 const versionOf = (options) => `codex:${options.model || 'default'}`;
 
+// ---- split generation: the summary and the questions are written AT THE SAME TIME --------------------------------------------------
+// Measured 2026-11-13: the time is the size of the answer, not thinking (183 s for 8 692 output tokens at ~53 tokens/s), and the questions
+// are most of it. A big source is therefore answered by one call for the summary (whole text) plus one call per group of pages for the
+// questions, all in parallel: the wall time becomes that of the largest part. The MedSum prompt text is NOT changed: each call gets it as is,
+// plus a short mode note appended after it. Small sources keep the single call.
+export const SPLIT_MIN_SOURCE_CHARS = 12_000;
+const QUESTION_GROUP_TARGET_CHARS = 9_000;
+const MAX_QUESTION_GROUPS = 3;
+const SUMMARY_ONLY_NOTE = [
+  '',
+  '',
+  'SPLIT GENERATION MODE (SmartLearn): this call writes ONLY the summary part. Write `summary`, `summarySourceSpans` and `summaryEvidence` exactly as the rules above require for this whole source,',
+  'and return `questions` as an empty array: another call, running at the same time, writes the questions.',
+].join('\n');
+const QUESTIONS_ONLY_NOTE = [
+  '',
+  '',
+  'SPLIT GENERATION MODE (SmartLearn): this call writes ONLY the questions part. Write `questions` exactly as the rules above require for the source text given in this call (it may be only some pages of a larger source),',
+  'and return `summary` as the single character "-", `summarySourceSpans` and `summaryEvidence` as empty arrays: another call, running at the same time, writes the summary.',
+].join('\n');
+
+/** Contiguous groups of pages for the question calls, or null when the source is small enough for one call. */
+export function planQuestionGroups(segments) {
+  const total = segments.reduce((sum, s) => sum + (s.text?.length ?? 0), 0);
+  if (segments.length < 2 || total < SPLIT_MIN_SOURCE_CHARS) return null;
+  const count = Math.min(MAX_QUESTION_GROUPS, Math.ceil(total / QUESTION_GROUP_TARGET_CHARS), segments.length);
+  if (count < 2) return null;
+  const perGroup = total / count;
+  const groups = [];
+  let current = [];
+  let size = 0;
+  for (const segment of segments) {
+    current.push(segment);
+    size += segment.text?.length ?? 0;
+    if (size >= perGroup && groups.length < count - 1) { groups.push(current); current = []; size = 0; }
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+async function generateSplit(groups, { segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options) {
+  // One controller for the whole generation: an outside stop and the first failure of any part both stop every part (and their process trees).
+  const controller = new AbortController();
+  const stopAll = () => controller.abort();
+  if (signal?.aborted) controller.abort(); else signal?.addEventListener('abort', stopAll, { once: true });
+  const common = { signal: controller.signal, onProcess, onActivity };
+  const prompt = (parts, note) => `${buildDraftPrompt(parts, promptVersion, { generationLocale })}${note}`;
+  const calls = [
+    callCodex(prompt(segments, SUMMARY_ONLY_NOTE), DRAFT_JSON_SCHEMA, 'part', options, common),
+    ...groups.map((group) => callCodex(prompt(group, QUESTIONS_ONLY_NOTE), DRAFT_JSON_SCHEMA, 'part', options, common)),
+  ].map((call) => call.catch((err) => { controller.abort(); throw err; }));
+  let results;
+  try { results = await Promise.all(calls); } finally { signal?.removeEventListener('abort', stopAll); }
+  const [summaryPart, ...questionParts] = results;
+  const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+  if (![summaryPart, ...questionParts].every(isObject)) return summaryPart; // an invalid part is reported by the same validation as a single call
+  const questions = questionParts.flatMap((part) => (Array.isArray(part.questions) ? part.questions : []));
+  return { ...summaryPart, questions, modelVersion: versionOf(options), promptVersion };
+}
+
 /** @returns {Promise<object>} the RAW parsed JSON, validated afterwards by draft-schema.js like every provider. */
 export async function generateDraft({ segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options = {}) {
+  const groups = planQuestionGroups(segments);
+  if (groups) return generateSplit(groups, { segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options);
   const raw = await callCodex(buildDraftPrompt(segments, promptVersion, { generationLocale }), DRAFT_JSON_SCHEMA, 'generate', options, { signal, onProcess, onActivity });
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw, modelVersion: versionOf(options), promptVersion } : raw;
 }

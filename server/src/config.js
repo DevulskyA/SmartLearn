@@ -82,7 +82,8 @@ export const config = {
   // No API key and no USD budget cap apply; explicit consent (SMARTLEARN_AI_CONSENT=true) still does.
   codexCommand: process.env.SMARTLEARN_CODEX_COMMAND || 'codex',
   codexModel: process.env.SMARTLEARN_CODEX_MODEL || null,
-  codexTimeoutMs: Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS ?? 240_000),
+  // null = scaled with the size of the text (codex-provider.js scaledCodexTimeoutMs); a number set by the operator is used as is
+  codexTimeoutMs: process.env.SMARTLEARN_CODEX_TIMEOUT_MS ? Number(process.env.SMARTLEARN_CODEX_TIMEOUT_MS) : null,
   codexReasoningEffort: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'high',
   // R-04: the hard time limit of a whole generation job (every provider call together). Deliberately above the 20 minutes the
   // student was told to expect, so moving generation to the background cannot make a long-but-healthy run fail sooner than before.

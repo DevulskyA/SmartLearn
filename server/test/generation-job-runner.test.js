@@ -454,3 +454,41 @@ test('wiring: the real server process resumes a QUEUED job after a restart (FAKE
     ctx.cleanup();
   }
 });
+
+test('the job log: every job leaves one line per event (start, each provider call with its duration and activity, end), failures include the code and message', OPTS, async () => {
+  const ctx = tmpDb();
+  try {
+    const okUser = await userWithProposals(ctx, 'log-ok@example.com');
+    const okLog = [];
+    const ok = setup(ctx, okUser, controllable('ok'), { log: (entry) => okLog.push(entry) });
+    await ok.started();
+    assert.deepEqual(okLog.map((e) => e.event), ['job.start', 'call.start', 'call.end', 'job.end']);
+    assert.ok(okLog.every((e) => e.jobId === ok.job.id && typeof e.ts === 'string'));
+    assert.equal(okLog[1].phase, 'GENERATING');
+    assert.ok(okLog[1].inputChars > 0, 'the size of the text sent is logged');
+    assert.equal(okLog[2].ok, true);
+    assert.equal(typeof okLog[2].ms, 'number');
+    assert.equal(okLog[3].succeeded, true);
+
+    const badUser = await userWithProposals(ctx, 'log-bad@example.com');
+    const badLog = [];
+    const bad = setup(ctx, badUser, controllable('fail', { failCode: 'TIMEOUT' }), { log: (entry) => badLog.push(entry) });
+    await bad.started();
+    const callEnd = badLog.find((e) => e.event === 'call.end');
+    assert.equal(callEnd.ok, false);
+    assert.equal(callEnd.errorCode, 'TIMEOUT');
+    assert.match(callEnd.message, /boom/);
+    assert.equal(badLog.at(-1).event, 'job.end');
+    assert.equal(badLog.at(-1).succeeded, false);
+  } finally { ctx.cleanup(); }
+});
+
+test('a logger that throws never breaks a job', OPTS, async () => {
+  const ctx = tmpDb();
+  try {
+    const user = await userWithProposals(ctx, 'log-throw@example.com');
+    const { job, started } = setup(ctx, user, controllable('ok'), { log: () => { throw new Error('disk full'); } });
+    await started();
+    assert.equal(getJob(ctx.db, user.userId, job.id).state, 'SUCCEEDED');
+  } finally { ctx.cleanup(); }
+});

@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -56,7 +57,8 @@ if (args[0] === 'exec') {
   if (mode === 'exit1-stdout') { console.log('Texto da fonte: erro 401 Unauthorized, not logged in, please login'); process.stderr.write('boom\\n'); process.exit(1); }
   if (mode === 'nofile') process.exit(0);
   if (mode === 'badjson') { writeFileSync(get('-o'), 'this is not json'); process.exit(0); }
-  writeFileSync(get('-o'), JSON.stringify(cfg.responses[kind]));
+  const respKey = prompt.includes('ONLY the summary part') ? 'summaryPart' : prompt.includes('ONLY the questions part') ? 'questionsPart' : kind;
+  writeFileSync(get('-o'), JSON.stringify(cfg.responses[respKey] ?? cfg.responses[kind]));
   process.exit(0);
 }
 process.exit(2);
@@ -142,8 +144,8 @@ test('production config: CODEX needs only consent; the API-key rules still hold 
 
 test('a missing executable is CODEX_NOT_FOUND — nothing is generated', async () => {
   const ghost = join(tmpdir(), 'sl-no-such-dir', 'no-such-codex');
-  await rejects(generateDraft({ segments, promptVersion: '4' }, { command: ghost, timeoutMs: 5000 }), 'CODEX_NOT_FOUND');
-  await rejects(ensureCodexReady({ command: ghost }), 'CODEX_NOT_FOUND');
+  await assert.rejects(generateDraft({ segments, promptVersion: '4' }, { command: ghost, timeoutMs: 5000 }), { code: 'CODEX_NOT_FOUND' });
+  await assert.rejects(ensureCodexReady({ command: ghost }), { code: 'CODEX_NOT_FOUND' });
 });
 
 test('not authenticated is CODEX_NOT_AUTHENTICATED, checked locally BEFORE any model call', async () => {
@@ -157,7 +159,7 @@ test('not authenticated is CODEX_NOT_AUTHENTICATED, checked locally BEFORE any m
 test('an authentication failure surfacing during exec (stderr) is also CODEX_NOT_AUTHENTICATED', async () => {
   const fake = fakeCodex({ modes: { generate: 'unauth' } });
   try {
-    await rejects(generateDraft({ segments, promptVersion: '4' }, { command: fake.command, timeoutMs: 5000 }), 'CODEX_NOT_AUTHENTICATED');
+    await assert.rejects(generateDraft({ segments, promptVersion: '4' }, { command: fake.command, timeoutMs: 5000 }), { code: 'CODEX_NOT_AUTHENTICATED' });
   } finally { fake.cleanup(); }
 });
 
@@ -301,12 +303,12 @@ test('non-zero exit, missing final message and invalid JSON are explicit errors 
 test("the model's own text (stdout) never steers error classification: a source that says '401 not logged in' is still a plain PROVIDER_ERROR", async () => {
   const fake = fakeCodex({ mode: 'exit1-stdout' });
   try {
-    await rejects(generateDraft({ segments, promptVersion: '4' }, { command: fake.command, timeoutMs: 5000 }), 'PROVIDER_ERROR');
+    await assert.rejects(generateDraft({ segments, promptVersion: '4' }, { command: fake.command, timeoutMs: 5000 }), { code: 'PROVIDER_ERROR' });
   } finally { fake.cleanup(); }
 });
 
 test('structural limits per draft: 1 generation, 1 audit, at most 1 repair — a second call of any kind is refused', async () => {
-  assert.deepEqual({ ...CODEX_CALL_LIMITS }, { generate: 1, audit: 1, repair: 1 });
+  assert.deepEqual({ ...CODEX_CALL_LIMITS }, { generate: 1, audit: 1, repair: 1, part: 4 }); // part: the parallel calls of one split generation (1 summary + up to 3 question groups), still bounded per draft
   const fake = fakeCodex();
   try {
     const options = { command: fake.command, timeoutMs: 5000, state: {} };
@@ -434,7 +436,7 @@ test('HTTP: a Codex that is not installed answers 503 CODEX_NOT_FOUND, and a mis
         ai: { provider: 'CODEX', consentGranted: true, codex: { command: codexCommand, timeoutMs: 5000 } },
       });
       const post = (url, payload, headers = {}) => app.inject({ method: 'POST', url, payload, headers: { origin: 'https://smartlearn.test', ...headers } });
-      const email = `h${Math.random().toString(36).slice(2)}@example.com`;
+      const email = `h${randomUUID()}@example.com`;
       await post('/v1/auth/register', { email, password: 'a genuinely long test password 1' });
       const login = await post('/v1/auth/login', { email, password: 'a genuinely long test password 1' });
       const cookie = login.headers['set-cookie'].split(';')[0];
@@ -477,4 +479,70 @@ test('resolveCodexInvocation: .js runs under node; an npm .cmd shim resolves to 
 test('the Codex draft schema requires the declared `language`', () => {
   assert.ok(DRAFT_JSON_SCHEMA.properties.language, 'language is declared');
   assert.ok(DRAFT_JSON_SCHEMA.required.includes('language'), 'and required (strict structured output lists every property)');
+});
+
+test('the time limit of a Codex call grows with the size of the text (a fixed 4 minutes cut a 42 000-character source off) and has a ceiling', async () => {
+  const { scaledCodexTimeoutMs, CODEX_DEFAULT_TIMEOUT_MS } = await import('../src/ai/codex-provider.js');
+  assert.equal(scaledCodexTimeoutMs(1_000), CODEX_DEFAULT_TIMEOUT_MS, 'never below the old fixed limit');
+  assert.ok(scaledCodexTimeoutMs(20_000 + 12_000) >= 139_000 * 2, 'a 20 000-character source (139 s measured) has more than twice its time');
+  assert.ok(scaledCodexTimeoutMs(42_000 + 12_000) > 300_000, 'a 42 000-character source gets well over 4 minutes');
+  assert.equal(scaledCodexTimeoutMs(10_000_000), 600_000, 'ceiling per call');
+});
+
+// ---- split generation: summary + questions at the same time ----------------------------------------------------------------------
+
+const bigSegments = (count, chars = 5_000) => Array.from({ length: count }, (_, i) => ({ pageIndex: i + 1, text: `MARCA-PAGINA-${i + 1} ${'x'.repeat(chars)}` }));
+const questionFor = (page) => ({
+  question: `Pergunta da pagina ${page}?`, questionType: 'MECHANISM', answer: `Resposta ${page}.`, explanation: null, hint: null, sourceSpans: [{ pageIndex: page }],
+});
+
+test('planQuestionGroups: small sources keep ONE call; big ones are cut into contiguous groups of pages (at most 3)', async () => {
+  const { planQuestionGroups, SPLIT_MIN_SOURCE_CHARS } = await import('../src/ai/codex-provider.js');
+  assert.equal(planQuestionGroups(bigSegments(1, 50_000)), null, 'a single page cannot be split');
+  assert.equal(planQuestionGroups(bigSegments(3, 1_000)), null, `under ${SPLIT_MIN_SOURCE_CHARS} characters is one call`);
+  const groups = planQuestionGroups(bigSegments(6, 5_000));
+  assert.ok(groups.length >= 2 && groups.length <= 3);
+  assert.deepEqual(groups.flat().map((s) => s.pageIndex), [1, 2, 3, 4, 5, 6], 'every page exactly once, in order');
+  assert.equal(planQuestionGroups(bigSegments(20, 5_000)).length, 3, 'never more than 3 groups');
+});
+
+test('a big source is answered by parallel calls: the summary call sees the whole text, each question call only its pages; the draft joins them in page order', async () => {
+  const fake = fakeCodex({
+    responses: {
+      generate: goodDraft(), audit: PASS_AUDIT, repair: goodDraft(),
+      summaryPart: goodDraft({ summary: '## Titulo\n\nResumo de tudo.', questions: [] }),
+      questionsPart: goodDraft({ summary: '-', summarySourceSpans: [], questions: [questionFor(1)] }),
+    },
+  });
+  try {
+    const segs = bigSegments(6, 5_000);
+    const draft = await generateDraft({ segments: segs, promptVersion: '10' }, { command: fake.command, timeoutMs: 20_000 });
+    const execs = fake.execs();
+    const groups = (await import('../src/ai/codex-provider.js')).planQuestionGroups(segs);
+    assert.equal(execs.length, 1 + groups.length, 'one summary call + one call per group');
+    const summaryCall = execs.find((c) => c.prompt.includes('ONLY the summary part'));
+    assert.ok(segs.every((s) => summaryCall.prompt.includes(`MARCA-PAGINA-${s.pageIndex} `)), 'the summary call has every page');
+    const questionCalls = execs.filter((c) => c.prompt.includes('ONLY the questions part'));
+    assert.equal(questionCalls.length, groups.length);
+    const seenPages = questionCalls.flatMap((c) => segs.filter((s) => c.prompt.includes(`MARCA-PAGINA-${s.pageIndex} `)).map((s) => s.pageIndex));
+    assert.deepEqual(seenPages.sort(), [1, 2, 3, 4, 5, 6], 'the question calls partition the pages: none missing, none twice');
+    assert.equal(draft.summary, '## Titulo\n\nResumo de tudo.', 'the summary comes from the summary call');
+    assert.equal(draft.questions.length, groups.length, 'the questions of every group are joined');
+    assert.equal(draft.promptVersion, '10');
+    // the MedSum prompt text itself is untouched: the same rule text is in every call
+    for (const call of execs) assert.match(call.prompt, /DIDACTIC ORGANIZATION \/ REAL UI/);
+  } finally { fake.cleanup(); }
+});
+
+test('split generation: one failing part fails the whole generation with that error (no half draft), and a small source still makes exactly one call', async () => {
+  const fake = fakeCodex({ modes: { generate: 'exit1' } });
+  try {
+    await rejects(generateDraft({ segments: bigSegments(6, 5_000), promptVersion: '10' }, { command: fake.command, timeoutMs: 20_000 }), 'PROVIDER_ERROR');
+  } finally { fake.cleanup(); }
+  const ok = fakeCodex();
+  try {
+    await generateDraft({ segments, promptVersion: '10' }, { command: ok.command, timeoutMs: 20_000 });
+    assert.equal(ok.execs().length, 1);
+    assert.doesNotMatch(ok.execs()[0].prompt, /SPLIT GENERATION MODE/);
+  } finally { ok.cleanup(); }
 });

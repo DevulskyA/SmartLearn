@@ -27,13 +27,32 @@ import {
   JobError, SERVER_RESTARTED, TERMINAL_STATES, getJob, transitionJob, touchJob, markCancelRequested, assertJobScopeIntact, listQueuedJobs,
 } from './generation-jobs.js';
 
-export const DEFAULT_HARD_LIMIT_MS = 30 * 60 * 1000;
-export const DEFAULT_CANCEL_GRACE_MS = 10_000;
+const DEFAULT_HARD_LIMIT_MS = 30 * 60 * 1000;
+const DEFAULT_CANCEL_GRACE_MS = 10_000;
 // "Generous" silence: a model can think for many minutes without printing; this only decides when to WARN, never to fail.
-export const DEFAULT_SILENCE_MS = 10 * 60 * 1000;
-export const DEFAULT_SAMPLE_MS = 30_000;
+const DEFAULT_SILENCE_MS = 10 * 60 * 1000;
+const DEFAULT_SAMPLE_MS = 30_000;
 const ACTIVITY_WRITE_MS = 5_000; // chatty output does not become a database write per chunk
 const MIN_CPU_ACTIVITY_MS = 50;
+
+async function sampleProviderLiveness(probe, run, alive) {
+  if (!probe || run.pids.size === 0) return;
+  const sample = await probe(run.pids);
+  if (run.finished || run.controller.signal.aborted || !sample) return;
+  const previous = run.lastSample;
+  run.lastSample = sample;
+  if (previous && (sample.cpuMs - previous.cpuMs >= MIN_CPU_ACTIVITY_MS || sample.handles !== previous.handles)) alive(run);
+}
+
+function markJobStalledIfSilent(db, run, now, silenceMs) {
+  if (run.stalled || now().getTime() - run.lastSignalAt < silenceMs) return;
+  try {
+    transitionJob(db, run.job.id, 'STALLED', { now });
+    run.stalled = true;
+  } catch (err) {
+    if (!(err instanceof JobError)) throw err;
+  }
+}
 
 /** Sums the samples of every process the provider started; processes that are gone give no signal. */
 async function sampleAll(pids) {
@@ -49,7 +68,9 @@ const MESSAGES = {
 
 /** The AI settings of one run: config.js's, overridden by `aiOptions` (tests, dev). Shared by job creation and the runner. */
 export function resolveAiSettings(aiOptions = {}) {
-  const { jobRunner: _runner, jobRunnerOptions: _options, ...overrides } = aiOptions;
+  const overrides = { ...aiOptions };
+  delete overrides.jobRunner;
+  delete overrides.jobRunnerOptions;
   return {
     apiUrl: config.aiApiUrl, apiKey: config.aiApiKey, model: config.aiModel, provider: config.aiProvider,
     consentGranted: config.aiConsentGranted, budgetCapUsd: config.aiBudgetCapUsd,
@@ -75,7 +96,13 @@ class Abandoned extends Error {}
  *   silence before STALLED; how often the process tree is sampled; the sampler (null = none: only provider output counts)
  * @param {{setTimeout: Function, clearTimeout: Function, setInterval?: Function, clearInterval?: Function}} [options.timers] injectable clock for the hard limit and the grace
  */
+// `log(entry)` receives one object per event (what happened to a job and when; the job row only keeps the final state). The server writes to
+// the console only from main.js (a sensor enforces it), so main.js supplies the printer; here the default is silent. An entry carries counts,
+// codes and times, never source text, and a message only when it comes from the provider's own fixed texts (ProviderRequestError).
+const safeMessage = (err) => (err instanceof ProviderRequestError || err instanceof DraftError || err instanceof JobError ? String(err.message).slice(0, 300) : null);
+
 export function createJobRunner(db, {
+  log = () => {},
   settings = () => resolveAiSettings(),
   hardLimitMs = config.generationJobTimeoutMs ?? DEFAULT_HARD_LIMIT_MS,
   maxConcurrent = config.generationJobConcurrency ?? 2,
@@ -90,6 +117,10 @@ export function createJobRunner(db, {
   const waiting = []; // runs not yet dispatched, oldest first
   let running = 0;
   let closed = false;
+
+  const emit = (event, run, data = {}) => {
+    try { log({ ts: now().toISOString(), event, jobId: run.job.id, proposalId: run.job.proposalId, ...data }); } catch { /* a log never breaks a job */ }
+  };
 
   const stop = (run, reason) => {
     run.reason ??= reason;
@@ -107,6 +138,7 @@ export function createJobRunner(db, {
       else if (run.reason === 'SHUTDOWN') transitionJob(db, job.id, 'FAILED', { errorCode: SERVER_RESTARTED, errorMessage: MESSAGES.SERVER_RESTARTED, consumedUnits, now });
       else {
         const known = error instanceof DraftError || error instanceof JobError;
+        emit('job.error', run, { code: known ? error.code : 'INTERNAL_ERROR', message: safeMessage(error), type: error?.name ?? null });
         transitionJob(db, job.id, 'FAILED', {
           errorCode: known ? error.code : 'INTERNAL_ERROR', errorMessage: known ? error.message : MESSAGES.INTERNAL_ERROR, consumedUnits, now,
         });
@@ -114,6 +146,7 @@ export function createJobRunner(db, {
     } catch (err) {
       if (!(err instanceof JobError) || (err.code !== 'INVALID_TRANSITION' && err.code !== 'NOT_FOUND')) throw err;
     }
+    emit('job.end', run, { succeeded: Boolean(draft), reason: run.reason ?? null, errorCode: error?.code ?? null, totalMs: run.startedAtMs ? now().getTime() - run.startedAtMs : null, consumedUnits: consumedUnits ?? null });
   }
 
   /**
@@ -138,18 +171,9 @@ export function createJobRunner(db, {
     if (run.ticking || run.finished || run.controller.signal.aborted) return;
     run.ticking = true;
     try {
-      if (probe && run.pids.size > 0) {
-        const sample = await probe(run.pids);
-        if (run.finished || run.controller.signal.aborted) return;
-        if (sample) {
-          const before = run.lastSample;
-          run.lastSample = sample;
-          if (before && (sample.cpuMs - before.cpuMs >= MIN_CPU_ACTIVITY_MS || sample.handles !== before.handles)) alive(run);
-        }
-      }
-      if (!run.stalled && now().getTime() - run.lastSignalAt >= silenceMs) {
-        try { transitionJob(db, run.job.id, 'STALLED', { now }); run.stalled = true; } catch (err) { if (!(err instanceof JobError)) throw err; }
-      }
+      await sampleProviderLiveness(probe, run, alive);
+      if (run.finished || run.controller.signal.aborted) return;
+      markJobStalledIfSilent(db, run, now, silenceMs);
     } finally { run.ticking = false; }
   }
 
@@ -160,7 +184,19 @@ export function createJobRunner(db, {
       ? async (input) => {
         if (signal.aborted) throw new ProviderRequestError('CANCELLED', 'A geração foi interrompida; nenhuma outra chamada foi feita.');
         alive(run, { phase });
-        return fn({ ...input, signal, onActivity: () => alive(run), onProcess: (pid) => { run.pids.add(pid); alive(run); } });
+        const startedAt = now().getTime();
+        let pulses = 0;
+        let lastPulseAt = startedAt;
+        const inputChars = Array.isArray(input?.segments) ? input.segments.reduce((sum, s) => sum + (s.text?.length ?? 0), 0) : null;
+        emit('call.start', run, { phase, provider: base.name, inputChars });
+        try {
+          const result = await fn({ ...input, signal, onActivity: () => { pulses += 1; lastPulseAt = now().getTime(); alive(run); }, onProcess: (pid) => { run.pids.add(pid); alive(run); } });
+          emit('call.end', run, { phase, ok: true, ms: now().getTime() - startedAt, pulses });
+          return result;
+        } catch (err) {
+          emit('call.end', run, { phase, ok: false, errorCode: err?.code ?? null, message: safeMessage(err), type: err?.name ?? null, ms: now().getTime() - startedAt, pulses, silentMs: now().getTime() - lastPulseAt });
+          throw err;
+        }
       }
       : undefined);
     return { ...base, generate: phased(base.generate, 'GENERATING'), audit: phased(base.audit, 'AUDITING'), repair: phased(base.repair, 'REPAIRING') };
@@ -177,7 +213,7 @@ export function createJobRunner(db, {
       onBudgetClosed: (budget) => { run.budget = budget; },
       onPhase: (phase) => alive(run, { phase }),
     };
-    return createDraft(db, job.userId, job.proposalId, { ...options, providerImpl: wrapProvider(base, run), regenerate: job.regenerate === true, hooks, now });
+    return createDraft(db, job.userId, job.proposalId, { ...options, providerImpl: wrapProvider(base, run), regenerate: job.regenerate === true, generationLocaleOverride: job.generationLocale ?? null, hooks, now });
   }
 
   async function execute(run) {
@@ -187,7 +223,10 @@ export function createJobRunner(db, {
     let graceTimer = null;
     let sampler = null;
     try {
-      if (signal.aborted) { if (run.reason !== 'SHUTDOWN') conclude(run); return; } // stopped while waiting for a slot (a shutdown leaves it QUEUED for the next start)
+      if (signal.aborted) {
+        if (run.reason !== 'SHUTDOWN') conclude(run);
+        return;
+      } // stopped while waiting for a slot (a shutdown leaves it QUEUED for the next start)
       try {
         transitionJob(db, job.id, 'CALLING_PROVIDER', { phase: 'PREPARING', now });
       } catch (err) {
@@ -195,6 +234,8 @@ export function createJobRunner(db, {
         throw err;
       }
       run.started = true;
+      run.startedAtMs = now().getTime();
+      emit('job.start', run, { provider: job.provider, locale: job.generationLocale, regenerate: job.regenerate === true, sourceLanguage: job.sourceLanguage ?? null });
       run.phase = 'PREPARING';
       run.lastSignalAt = now().getTime();
       run.lastWriteAt = run.lastSignalAt;

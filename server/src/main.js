@@ -84,7 +84,12 @@ if (orphanReservations > 0) console.log(`SmartLearn settled ${orphanReservations
 // R-04: no provider call of a previous process survives a restart, so a job left calling the provider can never finish: it is marked failed, never left "generating" forever.
 const orphanJobs = recoverOrphanJobs(db);
 if (orphanJobs > 0) console.log(`SmartLearn recovered ${orphanJobs} orphaned generation job(s) as FAILED(SERVER_RESTARTED)`);
+// One JSON line per generation-job event (start, each provider call with its duration, end): the only trace of why a job was slow or failed.
+// Off with SMARTLEARN_JOB_LOG=off; in tests only when SMARTLEARN_JOB_LOG=on.
+const jobLogOn = process.env.SMARTLEARN_JOB_LOG === 'on' || (process.env.SMARTLEARN_JOB_LOG !== 'off' && process.env.NODE_ENV !== 'test');
+const jobLog = (entry) => { if (jobLogOn) console.log(`[generation-job] ${JSON.stringify(entry)}`); };
 const app = await buildApp(db, undefined, {
+  ai: { jobRunnerOptions: { log: jobLog } },
   isProduction: config.isProduction,
   allowedOrigins: config.allowedOrigins,
   trustProxy: config.trustProxy,
