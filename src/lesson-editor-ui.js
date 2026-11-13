@@ -226,6 +226,41 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     reauditMessage.focus({ preventScroll: true });
   });
 
+  // Offered where the student looks for the questions (Questões) and where the checks are (Revisão); one live region per panel, both kept in step.
+  const laterMessages = new Map([[reviewPanel, statusMessage()], [questionsPanel, statusMessage()]]);
+  for (const node of laterMessages.values()) node.tabIndex = -1;
+  const setLaterMessage = (panel, text, isError = false) => {
+    for (const node of laterMessages.values()) setMessage(node, text, isError);
+    laterMessages.get(panel).focus({ preventScroll: true });
+  };
+  for (const panel of laterMessages.keys()) {
+    panel.addEventListener("click", async (event) => {
+      const trigger = event.target.closest?.('[data-action="generate-questions"]');
+      if (!trigger || !deps.generateQuestions) return;
+      trigger.disabled = true;
+      setMessage(laterMessages.get(panel), t("editor.questionsLater.generating"));
+      const result = await deps.generateQuestions(draft.id);
+      if (!result.ok) {
+        setLaterMessage(panel, result.message || t("editor.questionsLater.failed"), true);
+        trigger.disabled = false;
+        trigger.focus({ preventScroll: true });
+        return;
+      }
+      applyDraft(result.draft, { keepSelection: null });
+      setLaterMessage(panel, t("editor.questionsLater.done"));
+    });
+  }
+  /** The invitation to write the questions now: only for a summary-first draft that is still open. Null otherwise. */
+  function questionsLaterBlock(panel) {
+    if (draft.questionsDeferred !== true || accepted || !deps.generateQuestions) return null;
+    const later = document.createElement("div");
+    later.className = "lesson-audit-stale lesson-questions-later";
+    later.append(createTextElement("p", "lesson-hint", t("editor.questionsLater.hint")));
+    later.append(button("secondary-button lesson-generate-questions", t("editor.questionsLater.generate"), "generate-questions"));
+    later.append(laterMessages.get(panel));
+    return later;
+  }
+
   // ---- ACCEPT footer ---------------------------------------------------------------------------------------------------
   const footer = document.createElement("section");
   footer.className = "lesson-accept";
@@ -422,9 +457,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const q = questionById(selectedId);
     if (q?.id !== qMessageFor) { setMessage(qMessage, ""); qMessageFor = q?.id ?? null; }
     if (!q) {
-      qForm.append(createTextElement("p", "lesson-hint", t("editor.questions.none")));
+      const later = questionsLaterBlock(questionsPanel);
+      if (later) qForm.append(later);
+      else qForm.append(createTextElement("p", "lesson-hint", t("editor.questions.none")), laterMessages.get(questionsPanel));
       return;
     }
+    qForm.append(laterMessages.get(questionsPanel)); // the "questions ready" notice stays announced after they arrive
     const buffer = questionBuffers.get(q.id) ?? {};
     const value = (key) => (buffer[key] !== undefined ? buffer[key] : (q[key] ?? ""));
     const index = draft.questions.indexOf(q);
@@ -652,6 +690,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     reviewPanel.replaceChildren();
     const overview = reviewOverview(draft);
     const groups = groupFindings(draft);
+    const laterInReview = questionsLaterBlock(reviewPanel);
+    if (laterInReview) reviewPanel.append(laterInReview);
+    else reviewPanel.append(laterMessages.get(reviewPanel)); // keeps the live region attached once the questions have arrived
     // T-F2-03: opening never recalculates; an audit written by older rules is only SAID to be old, and re-running it is an explicit action.
     if (draft.auditStale && !accepted && deps.reauditDraft) {
       const stale = document.createElement("div");

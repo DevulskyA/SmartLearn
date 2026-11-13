@@ -51,6 +51,14 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
+/** Summary-first draft: writes the questions NOW, into the same draft (they still need the student's review before the lesson is accepted). */
+export async function generateDraftQuestions(draftId) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/generate-questions`, { method: 'POST', body: {} });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
 /** Saves ONE question by its stable id (text, citation and/or review status); nothing else in the lesson changes. */
 export async function reviseQuestion(draftId, questionId, patch) {
   try {
