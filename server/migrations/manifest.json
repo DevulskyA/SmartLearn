@@ -208,5 +208,10 @@
     "version": 42,
     "name": "lesson-date",
     "checksum": "3afd1eefd7401b0824dc7222142c867011b815b36ce463832bfbdf063a642d9f"
+  },
+  {
+    "version": 43,
+    "name": "draft-replacements",
+    "checksum": "abd672fa5a851fbee463ca2626a022316877404d8f0613ec52ad3f436cb3912c"
   }
 ]
