@@ -94,6 +94,41 @@ test('summary-only draft: created without questions, opens, is accepted into a l
   } finally { cleanup(); }
 });
 
+test('questions written later: they join the SAME draft as PROPOSED/GENERATED, the edited summary is kept, a repeat is a no-op, an answer with no valid citation changes nothing', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db);
+    const proposal = await proposalFor(db, userId, sourcesDir);
+    const draft = await drafts.createDraft(db, userId, proposal.id, { providerImpl: summaryOnlyProvider([]), codex: { deferQuestions: true }, generationLocaleOverride: 'pt-BR' });
+    drafts.reviseSummary(db, userId, draft.id, { summary: '## Filtracao glomerular\n\nTexto revisado pelo aluno.', expectedVersion: draft.summaryVersion ?? 1 });
+    let calls = 0;
+    const withQuestions = (questions) => ({
+      ...summaryOnlyProvider([]),
+      async generateQuestions() { calls += 1; return { summary: '-', summarySourceSpans: [], summaryEvidence: [], questions, modelVersion: 'codex:test', promptVersion: '10' }; },
+    });
+    const good = (n) => ({ question: `Pergunta ${n}: de que depende a filtracao glomerular?`, answer: 'Da pressao hidrostatica.', explanation: 'A pressao empurra o filtrado.', hint: 'Pense na forca.', questionType: 'OPEN', sourceSpans: [{ pageIndex: 1 }] });
+
+    const uncited = await drafts.generateDeferredQuestions(db, userId, draft.id, { providerImpl: withQuestions([{ ...good(1), sourceSpans: [{ pageIndex: 99 }] }]) }).catch((err) => err);
+    assert.equal(uncited.code, 'INVALID_DRAFT', 'no question with a valid citation: refused');
+    assert.equal(drafts.getDraft(db, userId, draft.id).questions.length, 0, 'and the draft is unchanged');
+
+    const after = await drafts.generateDeferredQuestions(db, userId, draft.id, { providerImpl: withQuestions([good(1), good(2), good(3)]) });
+    assert.equal(after.questions.length, 3, 'as many as the model wrote, no fixed quantity');
+    assert.ok(after.questions.every((q) => q.origin === 'GENERATED' && ['PROPOSED', 'FLAGGED'].includes(q.status)), 'none arrives ACCEPTED: the human review still decides');
+    const stored = drafts.getDraft(db, userId, draft.id);
+    assert.match(stored.summary, /revisado pelo aluno/);
+
+    await drafts.generateDeferredQuestions(db, userId, draft.id, { providerImpl: withQuestions([good(9)]) });
+    assert.equal(drafts.getDraft(db, userId, draft.id).questions.length, 3, 'a repeat does not add more');
+    assert.equal(calls, 2, 'the repeat did not even reach the model');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM learning_units').get().n, 0, 'still no lesson before the student accepts');
+
+    const current = drafts.getDraft(db, userId, draft.id);
+    const result = acceptDraft(db, userId, draft.id, { newSubjectName: 'Fisiologia', studyDate: '2026-11-20', expectedRevision: current.revision, acknowledgeSummaryFindings: true });
+    assert.equal(result.exerciseCount, 3);
+  } finally { cleanup(); }
+});
+
 test('a draft that HAD questions and lost them all to rejection is still refused; a normal generation is unchanged (no deferQuestions, questions required)', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {

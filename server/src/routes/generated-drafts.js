@@ -152,6 +152,24 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // Summary-first drafts: writes the questions after the summary, into the same DRAFT (still to be reviewed before the lesson is accepted).
+  app.post('/drafts/:id/generate-questions', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const draft = await drafts.generateDeferredQuestions(db, request.actor.userId, id, {
+        provider: config.aiProvider,
+        consentGranted: config.aiConsentGranted,
+        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
+        timeoutMs: config.aiRequestTimeoutMs,
+        ...aiOptions,
+      });
+      return { draft };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   app.post('/drafts/:id/questions', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },

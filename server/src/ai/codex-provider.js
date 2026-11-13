@@ -414,6 +414,29 @@ export async function generateDraft({ segments, promptVersion, generationLocale,
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw, modelVersion: versionOf(options), promptVersion } : raw;
 }
 
+/**
+ * The questions of a summary-first draft, written later from the same source text. Same prompt plus the questions-only note; a big source is
+ * split into page groups answered in parallel (as in split generation). Returns the raw draft shape with a placeholder summary: the caller keeps
+ * the student's summary and takes only `questions`.
+ */
+export async function generateQuestions({ segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options = {}) {
+  const groups = planQuestionGroups(segments) ?? [segments];
+  const controller = new AbortController();
+  const stopAll = () => controller.abort();
+  if (signal?.aborted) controller.abort(); else signal?.addEventListener('abort', stopAll, { once: true });
+  const common = { signal: controller.signal, onProcess, onActivity };
+  const calls = groups.map((group) => callCodex(`${buildDraftPrompt(group, promptVersion, { generationLocale })}${QUESTIONS_ONLY_NOTE}`, DRAFT_JSON_SCHEMA, 'part', options, common)
+    .catch((err) => { controller.abort(); throw err; }));
+  let parts;
+  try { parts = await Promise.all(calls); } finally { signal?.removeEventListener('abort', stopAll); }
+  if (!parts.every((p) => p && typeof p === 'object' && !Array.isArray(p))) return parts.find((p) => !p || typeof p !== 'object' || Array.isArray(p));
+  return {
+    summary: '-', summarySourceSpans: [], summaryEvidence: [],
+    questions: parts.flatMap((p) => (Array.isArray(p.questions) ? p.questions : [])),
+    modelVersion: versionOf(options), promptVersion,
+  };
+}
+
 export async function auditDraftWithModel({ draft, segments, signal, onProcess, onActivity }, options = {}) {
   const raw = await callCodex(buildAuditPrompt(draft, segments), AUDIT_JSON_SCHEMA, 'audit', options, { signal, onProcess, onActivity });
   return parseModelAudit(raw, { questionCount: draft.questions.length, segments });

@@ -11,7 +11,7 @@ import {
   generateDraft as openaiGenerateDraft, auditDraftWithModel as openaiAudit, repairDraftWithModel as openaiRepair, OPENAI_PROVIDER_NAME,
 } from '../ai/openai-provider.js';
 import {
-  generateDraft as codexGenerateDraft, auditDraftWithModel as codexAudit, repairDraftWithModel as codexRepair,
+  generateDraft as codexGenerateDraft, generateQuestions as codexGenerateQuestions, auditDraftWithModel as codexAudit, repairDraftWithModel as codexRepair,
   CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS,
 } from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
@@ -80,6 +80,7 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
         // The outer deadline sits just above the child-process deadline so the child is killed first.
         timeoutMs: (codex.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS) + 5_000,
         generate: (input) => codexGenerateDraft(input, codexOptions),
+        generateQuestions: (input) => codexGenerateQuestions(input, codexOptions),
         audit: (input) => codexAudit(input, codexOptions),
         repair: (input) => codexRepair(input, codexOptions),
       };
@@ -759,6 +760,7 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     summarySourceSpans: next.summarySourceSpans,
     questions: next.questions,
     summaryVersion: next.summaryVersion,
+    ...(next.questionsDelivered ? { questionsDeferred: false } : {}),
     summaryOrigin: next.summaryOrigin ?? current.summaryOrigin,
     summaryEditedAt: next.summaryEditedAt ?? current.summaryEditedAt,
     quarantinedCount: next.quarantinedCount ?? current.quarantinedCount,
@@ -857,6 +859,40 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans,
     questions: [...current.questions, added], summaryVersion: current.summaryVersion,
+  }, now);
+}
+
+/**
+ * Summary-first draft: writes its questions LATER, from the same source text, and puts them in the SAME draft as PROPOSED, origin GENERATED.
+ * The student's summary (edited or not) is never touched; the questions still need the human review before the lesson is accepted
+ * (AI output stays a DRAFT). The number of questions is whatever the model wrote for the source (no fixed quantity); a model that writes
+ * none, or none with a valid citation, changes nothing and the draft stays summary-only. A repeat once the questions are there is a no-op.
+ */
+export async function generateDeferredQuestions(db, userId, draftId, {
+  promptVersion = '10', provider: declaredProvider = null, providerImpl = null, consentGranted = false, codex = {}, timeoutMs = 30_000, signal = null, now = () => new Date(),
+} = {}) {
+  const first = loadEditable(db, userId, draftId);
+  if (first.current.questionsDeferred !== true) return toDraftDto(first.draftRow, { db, userId });
+  const provider = providerImpl ?? selectProvider({ provider: declaredProvider, consentGranted, codex });
+  if (typeof provider.generateQuestions !== 'function') throw new DraftError('INVALID_STATE', dm('QUESTIONS_LATER_UNSUPPORTED'));
+  const chars = first.found.segments.reduce((sum, s) => sum + s.text.length, 0);
+  const deadlineMs = provider.deadlineFor?.(chars) ?? provider.timeoutMs ?? timeoutMs;
+  const raw = await withTimeout(Promise.resolve(provider.generateQuestions({
+    segments: first.found.segments, promptVersion, generationLocale: first.current.generationLocale, signal,
+  })), deadlineMs, 'TIMEOUT');
+  // Reload after the (long) call: the student may have edited the summary, or a repeat request may have delivered the questions already.
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  if (current.questionsDeferred !== true) return toDraftDto(draftRow, { db, userId });
+  const validated = validateOrThrow({
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: raw?.questions ?? [],
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments);
+  if (validated.questions.length === 0) throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'questions');
+  const generatedBy = { provider: provider.name, modelVersion: raw?.modelVersion ?? draftRow.model_version, promptVersion };
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
+    questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
+    questionsDelivered: true,
   }, now);
 }
 

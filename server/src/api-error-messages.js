@@ -17,6 +17,7 @@ const TEXT = {
   QUESTION_STATE_INVALID: () => 'Estado de questão inválido.',
   CITATION_OUT_OF_RANGE: () => 'A citação da questão aponta para uma página fora do trecho da fonte.',
   LAST_QUESTION_REQUIRED: () => 'A aula precisa manter ao menos uma questão.',
+  QUESTIONS_LATER_UNSUPPORTED: () => 'Este gerador não escreve as questões depois do resumo.',
   DRAFT_CHANGED_REORDER: () => 'O resumo foi alterado desde a última leitura. Recarregue e reordene de novo.',
   ORDER_INVALID: () => 'A ordem deve listar exatamente as questões atuais, cada uma uma vez.',
   REJECTED_QUESTIONS_REPLACE: () => 'Há questões rejeitadas: altere a lista por questão (editar ou excluir), não substituindo todas de uma vez.',

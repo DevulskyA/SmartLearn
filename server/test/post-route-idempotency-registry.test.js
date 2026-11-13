@@ -37,6 +37,7 @@ const REGISTRY = {
   'exercises.js POST /learning-units/:unitId/exercises/reorder': 'ACTION',
   'generated-drafts.js POST /proposals/:id/drafts': 'STATE',
   'generated-drafts.js POST /drafts/:id/questions': 'STATE',
+  'generated-drafts.js POST /drafts/:id/generate-questions': 'STATE',
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
   'generated-drafts.js POST /drafts/:id/accept': 'STATE',
   'generation-jobs.js POST /generation-jobs': 'STATE',
