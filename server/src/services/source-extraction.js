@@ -3,6 +3,7 @@ import { dm, splitMessage } from '../api-error-messages.js';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { sha256Hex } from './source-storage.js';
+import { recordSourceEdition } from './catalog.js';
 import { fileURLToPath } from 'node:url';
 
 const WORKER_PATH = fileURLToPath(new URL('../pdf/extract-worker.js', import.meta.url));
@@ -126,6 +127,11 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
     }
     return true;
   })();
+
+  // Catalog: note which edition of which work this file is. Best-effort and additive: a failure here never fails an extraction.
+  if (applied && result.status === 'EXTRACTED') {
+    try { recordSourceEdition(db, userId, sourceId, { now }); } catch { /* the catalog is an index, not part of the extraction contract */ }
+  }
 
   // C5 (audit): "existe algum texto" is not "extração válida" -- surface
   // the per-page breakdown alongside the document-level status so a

@@ -213,5 +213,10 @@
     "version": 43,
     "name": "draft-replacements",
     "checksum": "abd672fa5a851fbee463ca2626a022316877404d8f0613ec52ad3f436cb3912c"
+  },
+  {
+    "version": 44,
+    "name": "catalog",
+    "checksum": "68292631fee5ab4ceef437044f7ceab6e0cd2aa6ba98711831af50a72bba38dd"
   }
 ]

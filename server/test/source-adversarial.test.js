@@ -224,7 +224,7 @@ test('instructions injected in the PDF text are kept as inert data end to end: s
 
     const after = snapshot();
     const grown = tables.filter((t) => after[t] !== before[t]).sort();
-    assert.deepEqual(grown, ['content_proposals', 'generated_drafts', 'source_outline', 'source_pages', 'sources', 'user_settings'].filter((t) => after[t] !== before[t]).sort());
+    assert.deepEqual(grown, ['content_proposals', 'generated_drafts', 'source_outline', 'source_pages', 'sources', 'user_settings', 'catalog_works', 'catalog_editions', 'source_editions'].filter((t) => after[t] !== before[t]).sort());
     assert.equal(after.users, before.users, 'no user was deleted or created');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM user_settings WHERE user_id <> ?').get(userId).n, 0, 'only the uploading user may gain a settings row');
     assert.equal(sourceFileCount(sourcesDir), 1, 'no file other than the stored upload');

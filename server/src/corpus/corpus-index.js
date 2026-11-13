@@ -34,7 +34,10 @@ function recordsOf(path) {
   }
   try {
     const parsed = JSON.parse(text);
-    const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : [parsed]);
+    let list;
+    if (Array.isArray(parsed)) list = parsed;
+    else if (Array.isArray(parsed?.items)) list = parsed.items;
+    else list = [parsed];
     return list.map((raw, i) => ({ line: i + 1, raw }));
   } catch { return [{ line: 1, error: 'invalid JSON' }]; }
 }
@@ -62,6 +65,19 @@ const ftsQuery = (text) => {
   return tokens.length === 0 ? null : tokens.map((t) => `"${t.replace(/"/g, '')}"`).join(' OR ');
 };
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+function matchesSearchFilters(item, { excluded, exam, year }) {
+  return !excluded.has(item.id) && item.status === 'ACTIVE'
+    && (!exam || same(item.exam, exam))
+    && (!year || item.year === year);
+}
+
+function isExactSearchMatch(item, { competency, topic, itemType }) {
+  return Boolean(competency || topic)
+    && (!competency || same(item.competency, competency))
+    && (!topic || same(item.topic, topic))
+    && (!itemType || same(item.item_type, itemType));
+}
 
 /**
  * @param root configuration, or null/undefined for "no corpus"
@@ -99,13 +115,13 @@ export function openCorpus({ root = null, items: given = null } = {}) {
         ? db.prepare('SELECT items.json AS json, bm25(fts) AS rank FROM fts JOIN items ON items.rowid = fts.rowid WHERE fts MATCH ? ORDER BY rank LIMIT 200').all(match)
         : db.prepare('SELECT json, 0 AS rank FROM items LIMIT 200').all();
       const excluded = new Set(excludeIds);
+      const filters = { excluded, exam, year };
+      const exactFilters = { competency, topic, itemType };
       const out = [];
       for (const row of rows) {
         const item = JSON.parse(row.json);
-        if (excluded.has(item.id) || item.status !== 'ACTIVE') continue;
-        if (exam && !same(item.exam, exam)) continue;
-        if (year && item.year !== year) continue;
-        const exact = (competency ? same(item.competency, competency) : true) && (topic ? same(item.topic, topic) : true) && (itemType ? same(item.item_type, itemType) : true) && Boolean(competency || topic);
+        if (!matchesSearchFilters(item, filters)) continue;
+        const exact = isExactSearchMatch(item, exactFilters);
         out.push({ item, exact, score: Number((-row.rank).toFixed(6)) });
       }
       out.sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score);

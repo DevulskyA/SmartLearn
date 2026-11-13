@@ -11,7 +11,7 @@ import { canReuseText } from './item.js';
 
 // A near candidate must have matched the need's words in the full-text index at all (score > 0); a listing with no text query has no
 // notion of "near" and never produces one.
-export const MIN_NEAR_SCORE = 0;
+const MIN_NEAR_SCORE = 0;
 
 export function resolveNeed(corpus, need, { exposed = [] } = {}) {
   if (!corpus || corpus.status === 'CORPUS_EMPTY') return { action: 'GENERATE', reason: 'CORPUS_EMPTY', candidates: 0 };

@@ -7,12 +7,16 @@ import { createHash } from 'node:crypto';
  * What may be done with an item's TEXT. Only OFFICIAL_PUBLIC and LICENSED are candidates for textual reuse. REFERENCE_ONLY may teach
  * structure and patterns but is never republished automatically. UNKNOWN (the default) fails closed for textual reuse.
  */
-export const USAGE_STATUS = Object.freeze(['OFFICIAL_PUBLIC', 'LICENSED', 'REFERENCE_ONLY', 'UNKNOWN']);
-export const ORIGINS = Object.freeze(['original', 'generated', 'derived']);
+const USAGE_STATUS = Object.freeze(['OFFICIAL_PUBLIC', 'LICENSED', 'REFERENCE_ONLY', 'UNKNOWN']);
+const ORIGINS = Object.freeze(['original', 'generated', 'derived']);
 const TEXT_REUSABLE = new Set(['OFFICIAL_PUBLIC', 'LICENSED']);
 
 const str = (v) => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
-const int = (v) => (Number.isInteger(v) ? v : (typeof v === 'string' && /^\d{4}$/.test(v.trim()) ? Number(v) : null));
+const int = (v) => {
+  if (Number.isInteger(v)) return v;
+  if (typeof v === 'string' && /^\d{4}$/.test(v.trim())) return Number(v);
+  return null;
+};
 
 /** Whether the item's text may be handed to a student as it is: an allowed right AND an answer key to grade against. */
 export function canReuseText(item) {
