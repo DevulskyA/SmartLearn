@@ -3,6 +3,7 @@ import { extractSource, SourceExtractionError } from '../services/source-extract
 import { config } from '../config.js';
 import { join, dirname } from 'node:path';
 import * as sourceOpenings from '../services/source-openings.js';
+import { updateBibliography } from '../services/source-bibliography.js';
 import { IdempotencyConflictError } from '../services/idempotency.js';
 
 function handleError(err, reply) {
@@ -37,6 +38,28 @@ export function registerSourceRoutes(app, db, { sourcesDir = config.sourcesDir, 
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       return { source: sourceStorage.getById(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // The student's correction of the file's bibliography (title, authors, edition, year, language, ISBN). Only the fields sent change; null clears one.
+  // A corrected field is the student's from then on: a later extraction never overwrites it. Same body twice gives the same state.
+  app.patch('/sources/:id/bibliography', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: ['string', 'null'] }, authors: { type: ['string', 'null'] }, edition: { type: ['string', 'null'] },
+          year: { type: ['integer', 'null'] }, language: { type: ['string', 'null'] }, isbn: { type: ['string', 'null'] },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { bibliography: updateBibliography(db, request.actor.userId, id, request.body) };
     } catch (err) { return handleError(err, reply); }
   });
 

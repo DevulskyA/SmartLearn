@@ -79,7 +79,15 @@ async function run() {
     outline = keepPresentHeadings(found, (pageIndex) => pages[pageIndex - 1]?.text ?? '').map((entry) => ({ ...entry, detected: true }));
   }
 
-  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline });
+  // The file's own descriptive metadata (untrusted text; bounded and cleaned where it is used). Absent or unreadable metadata is simply {}.
+  let pdfInfo = {};
+  try {
+    const meta = await doc.getMetadata();
+    const text = (v) => (typeof v === 'string' ? v.slice(0, 500) : undefined);
+    pdfInfo = { title: text(meta?.info?.Title), author: text(meta?.info?.Author), language: text(meta?.info?.Language) ?? text(meta?.metadata?.get?.('dc:language')) };
+  } catch { /* no metadata is not an error */ }
+
+  parentPort.postMessage({ status: rollUpExtractionStatus(pages), pages, pageCount: doc.numPages, parserVersion: pdfjs.version, outline, pdfInfo });
 }
 
 run().catch((err) => {

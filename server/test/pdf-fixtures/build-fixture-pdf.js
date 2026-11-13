@@ -19,7 +19,7 @@ function pdfObject(id, body) {
  *   direct reproduction against the real pdf.js parser).
  * @returns {Buffer} a well-formed single/multi-page PDF.
  */
-export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {}) {
+export function buildFixturePdf(pagesText, { emptyPages = [], outline = [], info = null } = {}) {
   const pageCount = pagesText.length;
   const header = '%PDF-1.4\n';
 
@@ -56,8 +56,15 @@ export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {
     outlineDocs.push({ id: outlineRootId, body: pdfObject(outlineRootId, `<< /Type /Outlines /First ${topIds[0]} 0 R /Last ${topIds[topIds.length - 1]} 0 R /Count ${topIds.length} >>`) });
   }
 
-  const catalogObj = pdfObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outline.length > 0 ? ` /Outlines ${outlineRootId} 0 R` : ''} >>`);
-  const pagesObj = pdfObject(pagesId, `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageCount} >>`);
+  const outlineReference = outline.length > 0 ? ` /Outlines ${outlineRootId} 0 R` : '';
+  // Optional descriptive metadata, as a real PDF carries it: /Info (Title, Author) in the trailer and /Lang in the catalog.
+  const esc = (v) => String(v).replace(/[\\()]/g, (ch) => `\\${ch}`);
+  const infoId = info ? nextId++ : null;
+  const infoParts = info ? [info.title && `/Title (${esc(info.title)})`, info.author && `/Author (${esc(info.author)})`].filter(Boolean) : [];
+  const langPart = info?.language ? ` /Lang (${esc(info.language)})` : '';
+  const catalogObj = pdfObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outlineReference}${langPart} >>`);
+  const pageReferences = pageIds.map((id) => `${id} 0 R`).join(' ');
+  const pagesObj = pdfObject(pagesId, `<< /Type /Pages /Kids [${pageReferences}] /Count ${pageCount} >>`);
   // WinAnsiEncoding so Latin-1-encoded accented characters (e.g. the
   // Portuguese fixture text below) map to the correct glyphs -- without an
   // explicit /Encoding, Helvetica's built-in StandardEncoding does not
@@ -84,7 +91,12 @@ export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {
     // A "\n" in the page text becomes a real new text line (Td down 22pt), like a real multi-line page.
     // A line starting with "# " is a heading: drawn larger (26pt) than the body (18pt), like a real book's headings.
     const lines = text.split('\n').map((line) => ({ heading: line.startsWith('# '), text: (line.startsWith('# ') ? line.slice(2) : line).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)') }));
-    const stream = `BT 20 100 Td${lines.map((l, k) => `${k > 0 ? ' 0 -22 Td' : ''} /F1 ${l.heading ? 26 : 18} Tf (${l.text}) Tj`).join('')} ET`;
+    const lineCommands = lines.map((line, index) => {
+      const lineOffset = index > 0 ? ' 0 -22 Td' : '';
+      const fontSize = line.heading ? 26 : 18;
+      return `${lineOffset} /F1 ${fontSize} Tf (${line.text}) Tj`;
+    }).join('');
+    const stream = `BT 20 100 Td${lineCommands} ET`;
     return pdfObject(contentIds[i], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
 
@@ -95,6 +107,7 @@ export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {
     ...pageIds.map((id, i) => ({ id, body: pageObjs[i] })),
     ...contentIds.map((id, i) => ({ id, body: contentObjs[i] })),
     ...outlineDocs,
+    ...(info ? [{ id: infoId, body: pdfObject(infoId, `<< ${infoParts.join(' ')} >>`) }] : []),
   ].sort((a, b) => a.id - b.id);
 
   let body = header;
@@ -112,7 +125,7 @@ export function buildFixturePdf(pagesText, { emptyPages = [], outline = [] } = {
     xref += `${String(offset).padStart(10, '0')} 00000 n \n`;
   }
 
-  const trailer = `trailer\n<< /Size ${maxId + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  const trailer = `trailer\n<< /Size ${maxId + 1} /Root ${catalogId} 0 R${info ? ` /Info ${infoId} 0 R` : ""} >>\nstartxref\n${xrefOffset}\n%%EOF`;
 
   return Buffer.from(body + xref + trailer, 'latin1');
 }

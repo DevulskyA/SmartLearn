@@ -3,7 +3,7 @@ import { dm, splitMessage } from '../api-error-messages.js';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { sha256Hex } from './source-storage.js';
-import { recordSourceEdition } from './catalog.js';
+import { applyExtractedBibliography } from './source-bibliography.js';
 import { fileURLToPath } from 'node:url';
 
 const WORKER_PATH = fileURLToPath(new URL('../pdf/extract-worker.js', import.meta.url));
@@ -128,9 +128,9 @@ export async function extractSource(db, userId, sourceId, { sourcesDir, deadline
     return true;
   })();
 
-  // Catalog: note which edition of which work this file is. Best-effort and additive: a failure here never fails an extraction.
+  // Bibliography: title, authors, edition, year, language and ISBN, from the PDF's metadata and first pages. Best-effort: a failure here never fails an extraction.
   if (applied && result.status === 'EXTRACTED') {
-    try { recordSourceEdition(db, userId, sourceId, { now }); } catch { /* the catalog is an index, not part of the extraction contract */ }
+    try { applyExtractedBibliography(db, userId, sourceId, { pdfInfo: result.pdfInfo ?? {}, now }); } catch { /* metadata about the file is not part of the extraction contract */ }
   }
 
   // C5 (audit): "existe algum texto" is not "extração válida" -- surface

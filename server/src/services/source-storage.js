@@ -3,6 +3,7 @@ import { dm, splitMessage } from '../api-error-messages.js';
 import { mkdirSync, writeFileSync, unlinkSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { referencesOf } from './visual-assets.js';
+import { bibliographyOf } from '../bibliography/identify.js';
 
 export class SourceError extends Error {
   constructor(code, message, field) {
@@ -91,6 +92,7 @@ function toDto(row) {
     extractionStatus: row.extraction_status ?? null,
     pageCount: row.page_count ?? null,
     createdAt: row.created_at,
+    bibliography: bibliographyOf(row),
   };
 }
 
