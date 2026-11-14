@@ -13,7 +13,7 @@ import {
 } from '../ai/openai-provider.js';
 import {
   generateDraft as codexGenerateDraft, generateQuestions as codexGenerateQuestions, auditDraftWithModel as codexAudit, repairDraftWithModel as codexRepair,
-  CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS, scaledCodexTimeoutMs, CODEX_PROMPT_OVERHEAD_CHARS,
+  CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS, scaledCodexTimeoutMs, CODEX_PROMPT_OVERHEAD_CHARS, codexCallPlan,
 } from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
@@ -71,6 +71,7 @@ function createCodexProvider(codex) {
     deadlineFor: (payloadChars) => (codex.timeoutMs ?? scaledCodexTimeoutMs(payloadChars + CODEX_PROMPT_OVERHEAD_CHARS)) + 5_000,
     generate: (input) => codexGenerateDraft(input, codexOptions),
     generateQuestions: (input) => codexGenerateQuestions(input, codexOptions),
+    callPlan: (segments, mode) => codexCallPlan(segments, mode),
     audit: (input) => codexAudit(input, codexOptions),
     repair: (input) => codexRepair(input, codexOptions),
   };
@@ -443,12 +444,17 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
 /** Provider failures that prove no request left the machine: nothing was spent, so the reservation is released. */
 const PRE_SEND_FAILURES = new Set(['MISSING_CREDENTIALS', 'CODEX_NOT_FOUND', 'CODEX_NOT_AUTHENTICATED', 'CALL_LIMIT_EXCEEDED', 'UNKNOWN_PROVIDER']);
 
-function reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plannedCalls, budgetLimits, now, hooks) {
+/** Calls and whole-text passes of the generation step itself; a provider that does not report a plan makes one call over the text. */
+function generationPlan(provider, segments, mode) {
+  return provider.callPlan?.(segments, mode) ?? { calls: 1, inputPasses: 1 };
+}
+
+function reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plan, budgetLimits, now, hooks) {
   if (provider.live !== true) return null;
   try {
     const reservation = reserve(db, userId, {
       proposalId,
-      estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }),
+      estimatedUnits: estimateCostUnits({ payloadChars, ...plan }),
       limits: budgetLimits,
       now,
     });
@@ -680,10 +686,15 @@ export async function createDraft(db, userId, proposalId, {
   // CREDIT (R-12): a provider that reaches an external model never runs without a reservation inside the limits. The
   // estimate counts every call this provider may make (generate, independent audit, one repair). Refused here = nothing was
   // sent and nothing is debited. The deterministic test double (live:false) spends nothing external and skips the ledger.
-  const plannedCalls = 1 + (provider.audit ? 1 : 0) + (provider.repair ? 1 : 0);
+  // Summary first (Codex only, when configured): the generation writes just the Resumo Mestre and the draft carries no questions yet.
+  const deferQuestions = codex?.deferQuestions === true && provider.name === CODEX_PROVIDER_NAME;
+  // A split generation is several calls (summary + one per question group), not one: the ledger prices what is really sent.
+  const generation = generationPlan(provider, found.segments, { deferQuestions });
+  const followUp = (provider.audit ? 1 : 0) + (provider.repair ? 1 : 0);
+  const plannedPlan = { calls: generation.calls + followUp, inputPasses: generation.inputPasses + followUp };
   const payloadChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
-  const reservation = reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plannedCalls, budgetLimits, now, hooks);
-  let callsMade = 1;
+  const reservation = reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plannedPlan, budgetLimits, now, hooks);
+  let madePlan = generation;
   let budgetClosed = reservation === null;
   // Exactly one of settle/release, once. Release = nothing external happened; settle = it may have, charged at the estimate of
   // the calls actually made (no provider reports a measurable cost yet, so the basis is ESTIMATED).
@@ -696,7 +707,7 @@ export async function createDraft(db, userId, proposalId, {
       budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'RELEASED', consumedUnits: 0 });
     } else {
-      const consumedUnits = estimateCostUnits({ payloadChars, calls: callsMade });
+      const consumedUnits = estimateCostUnits({ payloadChars, ...madePlan });
       settle(db, reservation.id, { consumedUnits, basis: 'ESTIMATED', now });
       budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'SETTLED', consumedUnits });
@@ -710,15 +721,13 @@ export async function createDraft(db, userId, proposalId, {
     throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL'));
   }
 
-  // Summary first (Codex only, when configured): the generation writes just the Resumo Mestre and the draft carries no questions yet.
-  const deferQuestions = codex?.deferQuestions === true && provider.name === CODEX_PROVIDER_NAME;
   const { raw, validated: initialDraft } = await generateAndValidate(provider, found.segments, {
     segments: found.segments, promptVersion, sourceLanguage, generationLocale, deferQuestions,
   }, deadlineMs, closeBudget);
   let validated = initialDraft;
   // From here the audit and the repair may reach the model: an unexpected error before the exact count below settles at every
   // planned call (it may have happened), never at the generation alone.
-  callsMade = plannedCalls;
+  madePlan = plannedPlan;
 
   // Wrong language = contract failure: refused BEFORE spending an audit on it, and nothing is stored.
   // The built-in deterministic test double only slices the source text: it cannot write in another language, so the contract
@@ -730,7 +739,8 @@ export async function createDraft(db, userId, proposalId, {
   validated = audited.draft;
   // A repair that does not return evidence keeps the entries already confirmed; any whose sentence it rewrote simply stop holding (recomputed on read).
   if (!validated.summaryEvidence?.length) validated = { ...validated, summaryEvidence: proposedEvidence };
-  callsMade = 1 + (audited.audit.modelAudit !== 'NOT_RUN' ? 1 : 0) + (audited.audit.repaired || audited.audit.repairRejected ? 1 : 0);
+  const followUpMade = (audited.audit.modelAudit !== 'NOT_RUN' ? 1 : 0) + (audited.audit.repaired || audited.audit.repairRejected ? 1 : 0);
+  madePlan = { calls: generation.calls + followUpMade, inputPasses: generation.inputPasses + followUpMade };
   // A repair may have rewritten text: the final content is what must be in the target language.
   const languageCheck = checkLanguageContract(validated, provider, generationLocale, raw.language);
   closeBudget();
@@ -1147,10 +1157,12 @@ export async function generateDeferredQuestions(db, userId, draftId, {
   // CREDIT (R-12), exactly like the summary: a provider that reaches an external model never runs without a reservation inside the limits.
   // One call, so one call is held. Released when nothing could have left (stopped before the call, or a failure that proves no request was
   // sent); settled at the estimate when the call may have happened (it is never refunded, and it is closed once).
+  // A big source is answered in page groups, one call each (the text goes out once): the plan says how many calls to hold.
+  const plan = generationPlan(provider, first.found.segments, { questionsOnly: true });
   let reservation = null;
   if (provider.live === true) {
     try {
-      reservation = reserve(db, userId, { proposalId: first.draftRow.proposal_id, estimatedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), limits: budgetLimits, now });
+      reservation = reserve(db, userId, { proposalId: first.draftRow.proposal_id, estimatedUnits: estimateCostUnits({ payloadChars: chars, ...plan }), limits: budgetLimits, now });
       hooks?.onReservation?.(reservation);
     } catch (err) {
       if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
@@ -1165,7 +1177,7 @@ export async function generateDeferredQuestions(db, userId, draftId, {
       budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'RELEASED', consumedUnits: 0 });
     } else {
-      const consumedUnits = estimateCostUnits({ payloadChars: chars, calls: 1 });
+      const consumedUnits = estimateCostUnits({ payloadChars: chars, ...plan });
       settle(db, reservation.id, { consumedUnits, basis: 'ESTIMATED', now });
       budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'SETTLED', consumedUnits });

@@ -379,6 +379,18 @@ export function planQuestionGroups(segments) {
   return groups;
 }
 
+/**
+ * How many model calls generateDraft / generateQuestions make for these segments, and how many times the whole text goes out (the budget
+ * ledger prices them). Summary first = one call; questions only = one call per group, the text sent once; split generation = the summary call
+ * over the whole text plus one call per group (the text goes out twice in total).
+ */
+export function codexCallPlan(segments, { deferQuestions = false, questionsOnly = false } = {}) {
+  if (deferQuestions) return { calls: 1, inputPasses: 1 };
+  const groups = planQuestionGroups(segments);
+  if (questionsOnly) return { calls: groups ? groups.length : 1, inputPasses: 1 };
+  return groups ? { calls: 1 + groups.length, inputPasses: 2 } : { calls: 1, inputPasses: 1 };
+}
+
 async function generateSplit(groups, { segments, promptVersion, generationLocale, signal, onProcess, onActivity }, options) {
   // One controller for the whole generation: an outside stop and the first failure of any part both stop every part (and their process trees).
   const controller = new AbortController();

@@ -35,11 +35,16 @@ export const ESTIMATION = Object.freeze({
 
 const BASES = new Set(['MEASURED', 'ESTIMATED', 'ESTIMATED_ORPHAN']);
 
-/** @returns estimated units for ONE generation attempt over `payloadChars` of approved source text. */
-export function estimateCostUnits({ payloadChars, calls = ESTIMATION.defaultCalls }) {
+/**
+ * @returns estimated units for ONE generation attempt over `payloadChars` of approved source text.
+ * `inputPasses` = how many times the whole text is sent in total (default: once per call). A split generation sends it twice (whole for the
+ * summary, then in parts for the questions) over more calls, each of which writes its own output.
+ */
+export function estimateCostUnits({ payloadChars, calls = ESTIMATION.defaultCalls, inputPasses = calls }) {
   if (!Number.isFinite(payloadChars) || payloadChars < 0) throw new RangeError('payloadChars must be a non-negative number');
   if (!Number.isInteger(calls) || calls < 1) throw new RangeError('calls must be a positive integer');
-  return calls * (Math.ceil(payloadChars / ESTIMATION.charsPerUnit) + ESTIMATION.outputUnitsPerCall);
+  if (!Number.isInteger(inputPasses) || inputPasses < 1) throw new RangeError('inputPasses must be a positive integer');
+  return inputPasses * Math.ceil(payloadChars / ESTIMATION.charsPerUnit) + calls * ESTIMATION.outputUnitsPerCall;
 }
 
 /** UTC ISO week ("2026-W41", Monday start, year of the week's Thursday) and calendar month ("2026-10") of an instant. */
