@@ -1,0 +1,20 @@
+// Flags for problematic questions.
+export default Object.freeze({
+  'questionFlag.reason.confusingStatement': 'Confusing prompt',
+  'questionFlag.reason.doubtfulAnswerKey': 'Questionable answer key',
+  'questionFlag.reason.contentError': 'Content error',
+  'questionFlag.reason.other': 'Other reason',
+  'questionFlag.action': 'Flag question as problematic',
+  'questionFlag.marked': 'Question flagged as problematic',
+  'questionFlag.remove': 'Remove question flag',
+  'questionFlag.reason': 'Reason',
+  'questionFlag.comment': 'Optional comment',
+  'questionFlag.commentPlaceholder': 'Briefly explain the problem (optional)',
+  'questionFlag.save': 'Save flag',
+  'questionFlag.cancel': 'Cancel',
+  'questionFlag.previous': 'Question assessed previously',
+  'questionFlag.resultTitle': 'Questions flagged as problematic',
+  'questionFlag.saved': 'Flag saved.',
+  'questionFlag.removed': 'Flag removed.',
+  'questionFlag.failed': 'Could not save the flag.',
+});

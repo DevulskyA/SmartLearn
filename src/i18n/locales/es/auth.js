@@ -1,0 +1,28 @@
+// Mensajes de cuenta y autenticación. Los códigos de error siguen siendo identificadores estables.
+export default Object.freeze({
+  'auth.login.title': 'Iniciar sesión',
+  'auth.register.title': 'Crear cuenta',
+  'auth.email.label': 'Correo electrónico',
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Visible field label, not a credential.
+  'auth.password.label': 'Contraseña',
+  'auth.password.hint': 'Al menos 8 caracteres.',
+  'auth.newPassword.label': 'Nueva contraseña',
+  'auth.currentPassword.label': 'Contraseña actual',
+  'auth.submit.login': 'Iniciar sesión',
+  'auth.submit.register': 'Crear cuenta',
+  'auth.submit.changePassword': 'Cambiar contraseña',
+  'auth.submit.logout': 'Cerrar sesión',
+  'auth.switchToRegister': '¿Aún no tienes cuenta? Crea una',
+  'auth.switchToLogin': '¿Ya tienes cuenta? Inicia sesión',
+  'auth.loggedInAs': 'Sesión iniciada como',
+  'auth.error.INVALID_CREDENTIALS': 'El correo electrónico o la contraseña son incorrectos.',
+  'auth.error.CURRENT_PASSWORD_INVALID': 'La contraseña actual es incorrecta.',
+  'auth.error.EMAIL_CONFLICT': 'Ya existe una cuenta con este correo electrónico.',
+  'auth.error.VALIDATION_FAILED': 'Revisa los datos ingresados.',
+  'auth.error.INVALID_RESET_TOKEN': 'El token para restablecer la contraseña no es válido o caducó.',
+  'auth.error.UNAUTHENTICATED': 'Tu sesión ha caducado. Inicia sesión de nuevo.',
+  'auth.error.generic': 'No se pudo completar la operación. Inténtalo de nuevo.',
+  'auth.success.register': 'Cuenta creada correctamente.',
+  'auth.success.passwordChanged': 'Contraseña cambiada correctamente.',
+  'auth.success.loggedOut': 'Sesión cerrada.',
+});

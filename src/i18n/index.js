@@ -1,4 +1,4 @@
-// i18n catalog reader. pt-BR is the only translated locale in V1 (HG-13: es/en fall back to pt-BR until real translations exist),
+// i18n catalog reader. pt-BR, English and Spanish catalogs are assembled per area,
 // so a key is looked up in the active locale, then in pt-BR, and a key that exists nowhere is returned as itself (callers and
 // tests can see it; nothing is invented).
 //
@@ -9,9 +9,11 @@
 //
 // Keys are 'area.what.detail' and are literals at the call site, so scripts/scan-portuguese-i18n.mjs and the key test can find them.
 import ptBR from './locales/pt-BR.js';
+import en from './locales/en.js';
+import es from './locales/es.js';
 import { DEFAULT_LOCALE, resolveSupportedLocale } from '../../shared/locales.js';
 
-const catalogs = { [DEFAULT_LOCALE]: ptBR };
+const catalogs = { [DEFAULT_LOCALE]: ptBR, en, es };
 let activeLocale = DEFAULT_LOCALE;
 
 /** The locale the interface is shown in. An unsupported tag leaves the default in place. */
@@ -26,7 +28,7 @@ export function getLocale() {
   return activeLocale;
 }
 
-/** Test seam: register or replace the catalog of a locale (a real es/en catalog arrives with HG-13). */
+/** Test seam: register or replace a locale catalog. */
 export function registerCatalog(locale, catalog) {
   catalogs[locale] = catalog;
 }

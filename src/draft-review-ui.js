@@ -37,6 +37,36 @@ export async function getDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
+/** The pending choice between a new version and the previous one for this trecho ({newDraftId, previousDraftId, ...}), or null. */
+export async function getDecision(proposalId) {
+  try {
+    const { pending } = await apiRequest(`/v1/proposals/${proposalId}/decision`);
+    return { ok: true, pending };
+  } catch (err) { return fail(err); }
+}
+
+/** Keeps the new version (KEEP_NEW) or goes back to the previous one (RESTORE_PREVIOUS). Deleting a version the student edited needs confirmDiscard. */
+export async function decideReplacement(draftId, decision, { confirmDiscard = false } = {}) {
+  try {
+    const result = await apiRequest(`/v1/drafts/${draftId}/decision`, { method: 'POST', body: confirmDiscard ? { decision, confirmDiscard: true } : { decision } });
+    return { ok: true, ...result };
+  } catch (err) { return fail(err); }
+}
+
+/** Discards an unfinished summary. The server refuses when the student edited it unless `confirmDiscard` is true (code DISCARD_NEEDS_CONFIRMATION). */
+export async function discardDraft(draftId, { confirmDiscard = false } = {}) {
+  try {
+    await apiRequest(`/v1/drafts/${draftId}${confirmDiscard ? '?confirmDiscard=true' : ''}`, { method: 'DELETE' });
+    return { ok: true };
+  } catch (err) {
+    // a bare 404 (no message from the draft service) means the server does not know this route yet: say so, never show the raw code
+    if (err instanceof ApiError && err.code === 'NOT_FOUND' && (!err.message || err.message === 'NOT_FOUND')) {
+      return { ok: false, code: 'ROUTE_MISSING', message: t('materials.draft.discardUnavailable') };
+    }
+    return fail(err);
+  }
+}
+
 /** Saves ONLY the summary (the questions are untouched). `expectedVersion` = summaryVersion the caller read. */
 export async function reviseSummary(draftId, { summary, expectedVersion }) {
   try {
@@ -53,7 +83,15 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
-const ACTIVE_JOB_STATES = new Set(['QUEUED', 'CALLING_PROVIDER', 'STALLED']);
+/** Asks the AI to check the summary AS IT IS against the source. Only reports (never rewrites the student's text); uses one credit. */
+export async function auditSummary(draftId) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/audit-summary`, { method: 'POST', body: {} });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
+const ACTIVE_JOB_STATES =new Set(['QUEUED', 'CALLING_PROVIDER', 'STALLED']);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**

@@ -36,6 +36,7 @@ export default {
   'appExam.judge.incorrect': 'Errei',
   'appExam.judge.aria': '{label} — questão {n}',
   'appExam.redo': 'Refazer erros ({count})',
+  'appExam.retestErrors': 'Refazer erros',
   'appExam.final': 'Resultado registrado no seu histórico ({correct}/{total}).',
   'appExam.final.byUnit': 'Resultado registrado no seu histórico ({correct}/{total}), por aula ({units}).',
   'appExam.final.reinforce': 'Os erros passam a aparecer como “para reforçar” no Plano.',

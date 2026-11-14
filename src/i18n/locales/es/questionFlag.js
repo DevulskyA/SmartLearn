@@ -1,0 +1,20 @@
+// Reportes de preguntas problemáticas.
+export default Object.freeze({
+  'questionFlag.reason.confusingStatement': 'Enunciado confuso',
+  'questionFlag.reason.doubtfulAnswerKey': 'Clave de respuesta dudosa',
+  'questionFlag.reason.contentError': 'Error en el contenido',
+  'questionFlag.reason.other': 'Otro motivo',
+  'questionFlag.action': 'Marcar pregunta como problemática',
+  'questionFlag.marked': 'Pregunta marcada como problemática',
+  'questionFlag.remove': 'Quitar marca de la pregunta',
+  'questionFlag.reason': 'Motivo',
+  'questionFlag.comment': 'Comentario opcional',
+  'questionFlag.commentPlaceholder': 'Explica brevemente el problema (opcional)',
+  'questionFlag.save': 'Guardar marca',
+  'questionFlag.cancel': 'Cancelar',
+  'questionFlag.previous': 'Pregunta evaluada anteriormente',
+  'questionFlag.resultTitle': 'Preguntas marcadas como problemáticas',
+  'questionFlag.saved': 'Marca guardada.',
+  'questionFlag.removed': 'Marca quitada.',
+  'questionFlag.failed': 'No se pudo guardar la marca.',
+});

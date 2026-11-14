@@ -6,6 +6,8 @@ export default {
   'materials.range.page': 'Página {page}',
   'materials.range.pages': 'Páginas {start}–{end}',
   'materials.range.pageLower': 'página {page}',
+  'materials.range.front': 'Início do livro',
+  'materials.range.frontLower': 'início do livro',
   'materials.range.pagesLower': 'páginas {start}–{end}',
 
   // What kind of page a trecho is, when it is not study content
@@ -25,7 +27,17 @@ export default {
 
   // Generation progress panel
   'materials.progress.title': 'Gerando resumo com IA — {title}',
-  'materials.progress.note': 'A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o resumo aparece na lista quando ficar pronto.',
+  'materials.progress.activityQueued': 'Na fila: começa assim que houver vaga.',
+  'materials.progress.activityNone': 'Iniciada. Aguardando a primeira resposta da IA…',
+  'materials.progress.activityLast': 'Funcionando. Última resposta da IA: {ago}.',
+  'materials.progress.activitySeen': 'Última atividade que a tela viu: {ago}.',
+  'materials.progress.activityNow': 'agora mesmo',
+  'materials.progress.activitySeconds': 'há {seconds} s',
+  'materials.progress.activityMinutes': 'há {minutes} min',
+  'materials.progress.connectionLost': 'Sem conexão com o servidor. A geração continua lá; tentando de novo a cada segundo.',
+  'materials.progress.translateTitle':'Traduzindo para {language} — {title}',
+  'materials.progress.translateNote': 'A tradução pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e a nova versão aparece na lista quando ficar pronta. A versão atual continua guardada.',
+  'materials.progress.note':'A geração pode levar alguns minutos. Você pode sair desta tela: ela continua no servidor e o resumo aparece na lista quando ficar pronto.',
   'materials.progress.background': 'Continuar em segundo plano',
   'materials.progress.cancel': 'Cancelar geração',
   'materials.progress.cancelling': 'Cancelando a geração…',
@@ -43,6 +55,13 @@ export default {
   // Drafts
   'materials.draft.openFailed': 'Não foi possível abrir o resumo.',
   'materials.draft.fallbackTitle': 'Resumo',
+  'materials.draft.discard': 'Descartar',
+  'materials.draft.discardLabel': 'Descartar o rascunho do resumo de {title}',
+  'materials.draft.discardConfirm1': 'Descartar o rascunho do resumo "{title}"? O livro e as aulas já aceitas não são apagados.',
+  'materials.draft.discardConfirm2': 'Confirma mesmo? O rascunho de "{title}" será apagado e não poderá ser recuperado.',
+  'materials.draft.discardDone': 'Rascunho descartado. O trecho continua no livro.',
+  'materials.draft.discardUnavailable': 'O servidor ainda não tem esta função. Reinicie o aplicativo e tente de novo. Nada foi apagado.',
+  'materials.draft.discardFailed': 'Não foi possível descartar o rascunho.',
   'materials.draft.showProgressLabel': 'Ver andamento da geração: {title}, {range}',
   'materials.draft.retryLabel': 'Tentar gerar de novo: {title}, {range}',
   'materials.draft.openLabel': 'Revisar resumo: {title}, {range}',
@@ -62,6 +81,7 @@ export default {
   'materials.proposal.titleSaved': 'Título salvo',
   'materials.proposal.saveFailed': 'Não foi possível salvar o título.',
   'materials.proposal.showExcerpt': 'Ver trecho da fonte',
+  'materials.range.use': 'Usar estas páginas',
   'materials.proposal.hideExcerpt': 'Ocultar trecho da fonte',
   'materials.proposal.lessonCreated': 'Aula já criada a partir deste trecho.',
   'materials.proposal.stalledHint': 'Sem sinal do serviço de IA há algum tempo. Isso nem sempre é problema; a geração continua.',
@@ -69,7 +89,9 @@ export default {
   // Document index
   'materials.index.summary.one': 'Explorar os conteúdos do documento ({count})',
   'materials.index.summary.other': 'Explorar os conteúdos do documento ({count})',
+  'materials.index.summary.initial': 'Explorar os conteúdos do documento',
   'materials.editorial.summary': 'Páginas editoriais ({count}) — não geram conteúdo',
+  'materials.editorial.summary.initial': 'Páginas editoriais',
 
   // Topic search
   'materials.topic.rangeChars': '{range} · {chars} caracteres',
@@ -108,6 +130,7 @@ export default {
   'materials.upload.extractFailed': 'Não foi possível extrair o texto do PDF.',
   'materials.upload.chunking': 'Gerando trechos propostos…',
   'materials.upload.chunkFailed': 'Não foi possível gerar propostas para este PDF.',
+  'materials.editor.subjectsFailed': 'Não foi possível carregar suas disciplinas. Você ainda pode informar o nome de uma disciplina ao aceitar a aula.',
   'materials.upload.processFailed': 'Não foi possível processar o arquivo selecionado.',
   'materials.upload.proposed.one': '{count} trecho proposto. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.',
   'materials.upload.proposed.other': '{count} trechos propostos. Diga o que você quer estudar, ou escolha no índice; revise os títulos antes de qualquer uso.',

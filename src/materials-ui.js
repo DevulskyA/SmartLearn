@@ -12,6 +12,7 @@ import { showConfirm } from "./confirm-dialog.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
 import * as GenerationJobsUI from "./generation-jobs-ui.js";
 import { libraryView, LIBRARY_TOOLS_FROM } from "./materials-library.js";
+import { printedOfPdfPage } from "../shared/page-numbering.js";
 import {
   elapsedLabel, jobIsActive, latestJobsByProposal, jobPhaseLabel, jobElapsedMs, jobFailureMessage, jobListStatus,
 } from "./lesson-view-model.js";
@@ -40,6 +41,50 @@ const generationBox = document.querySelector("#sources-generation");
 const editorView = document.querySelector("#sources-editor-view");
 const existingBox = document.querySelector("#sources-existing");
 const existingList = document.querySelector("#sources-existing-list");
+const openBar = document.querySelector("#sources-open-bar");
+const openTitle = document.querySelector("#sources-open-title");
+const backToLibraryButton = document.querySelector("#sources-back");
+
+// One thing at a time: with a material open the screen shows only that material (back link, drafts, pages, other ways to choose);
+// the library and its heading come back with "Voltar à biblioteca". The library keeps its own rendering; only the card's mode changes.
+let currentSourceName = "";
+function setOpenMaterial(open) {
+  sourcesCard?.classList.toggle("is-open-material", open);
+  if (openBar) openBar.hidden = !open;
+  if (open && openTitle) openTitle.textContent = existingSources.find((s) => s.id === currentSourceId)?.originalName ?? currentSourceName;
+  if (open && currentSourceId != null) loadPageNumbering(currentSourceId); else numberingFor = null;
+}
+
+// Page numbers: the ones printed in the book when the PDF shows them (the server detects it), else the PDF's own. The student types
+// and reads the same numbers; only the server converts to PDF pages.
+let pageNumbering = { mode: "pdf" };
+let numberingFor = null;
+const shownPages = (proposal) => [printedOfPdfPage(pageNumbering, proposal.pageStart), printedOfPdfPage(pageNumbering, proposal.pageEnd)];
+// The range as the student reads it in the book; the front matter (cover, contents) has no printed number and says so instead of showing one.
+function bookRangeLabel(proposal, lower = false) {
+  const [start, end] = shownPages(proposal);
+  if (start === null || end === null) return t(lower ? "materials.range.frontLower" : "materials.range.front");
+  if (start === end) return t(lower ? "materials.range.pageLower" : "materials.range.page", { page: start });
+  return t(lower ? "materials.range.pagesLower" : "materials.range.pages", { start, end });
+}
+function updateRangeHint() {
+  const hint = rangeForm?.querySelector(".lesson-hint");
+  if (!hint) return;
+  const key = pageNumbering.mode === "printed" ? "screens.materials.range.hintBook" : "screens.materials.range.hint";
+  hint.dataset.i18n = key;
+  hint.textContent = t(key);
+}
+async function loadPageNumbering(sourceId) {
+  if (numberingFor === sourceId) return;
+  numberingFor = sourceId;
+  pageNumbering = { mode: "pdf" };
+  updateRangeHint();
+  const result = await SourceProposalsUI.getPageNumbering(sourceId);
+  if (numberingFor !== sourceId) return; // another material was opened meanwhile
+  pageNumbering = result.ok ? result.numbering : { mode: "pdf" };
+  updateRangeHint();
+  if (pageNumbering.mode === "printed") renderSourceProposals(currentProposals);
+}
 
 // "1 trecho proposto" / "N trechos propostos" (0 too: only 1 is singular, unlike the pt-BR plural category tn() would pick).
 function proposedText(count, note) {
@@ -110,14 +155,22 @@ async function showBrowse() {
   (back ?? sourcesChooseFileButton)?.focus({ preventScroll: false });
 }
 
+// A lost connection is a different problem from an unreadable file: say which one, so the student retries or changes the file.
+function uploadFailureMessage(error) {
+  const connectionLost = error?.name === "OfflineError" || error?.name === "NetworkError";
+  return connectionLost ? t("store.error.offline") : t("materials.upload.processFailed");
+}
+
 async function openEditor(draft, title) {
   closeProgressPanel();
-  const subjects = await deps.listActiveSubjects().catch(() => []);
+  let subjectsFailed = false;
+  const subjects = await deps.listActiveSubjects().catch(() => { subjectsFailed = true; return []; });
   activeEditor?.destroy();
   const editor = createLessonEditor({
     draft,
     title,
     subjects,
+    subjectsFailed,
     today: deps.getLocalDateValue(),
     deps: {
       reviseSummary: DraftReviewUI.reviseSummary,
@@ -126,10 +179,34 @@ async function openEditor(draft, title) {
       acceptDraft: DraftReviewUI.acceptDraft,
       previewAcceptance: DraftReviewUI.previewAcceptance,
       reauditDraft: DraftReviewUI.reauditDraft,
+      auditSummary: DraftReviewUI.auditSummary,
       generateQuestions: DraftReviewUI.generateDraftQuestions,
       activeQuestionsJob: DraftReviewUI.activeQuestionsJob,
       cancelQuestions: DraftReviewUI.cancelQuestionsJob,
       getDraft: DraftReviewUI.getDraft,
+      getDecision: DraftReviewUI.getDecision,
+      decideReplacement: DraftReviewUI.decideReplacement,
+      // Translation = a new version of the same trecho in another language; the job runs on the server like any generation.
+      translateDraft: async (proposalId, targetLocale) => {
+        const created = await GenerationJobsUI.createJob(proposalId, { targetLocale });
+        if (!created.ok) return created;
+        await showBrowse();
+        openProgressPanel(created.job, proposalId, title, { translateTo: targetLocale });
+        return { ok: true };
+      },
+      // Regenerate = the same trecho again with today's prompt, as a new version beside this one (the student chooses which to keep).
+      regenerateDraft: async (proposalId) => {
+        const created = await GenerationJobsUI.createJob(proposalId, { regenerate: true });
+        if (!created.ok) return created;
+        await showBrowse();
+        openProgressPanel(created.job, proposalId, title);
+        return { ok: true };
+      },
+      openDraftById: async (draftId) => {
+        const opened = await DraftReviewUI.getDraft(draftId);
+        if (opened.ok) await openEditor(opened.draft, title);
+        return opened.ok;
+      },
       onBack: showBrowse,
       startStudyNow: (unit, subjectName) => deps.startStudyNow(unit, subjectName),
       openSummary: (unitId) => deps.openSummary(unitId),
@@ -191,53 +268,88 @@ async function runPoll() {
     pollRunning = false;
   }
   if (watched) watched.polls = (watched.polls ?? 0) + 1;
-  ensurePolling(!watched ? POLL_BACKGROUND_MS : watched.polls <= POLL_QUICK_TICKS ? POLL_WATCHING_QUICK_MS : POLL_WATCHING_MS);
+  ensurePolling(nextPollingDelay());
 }
 
-async function pollJobs() {
-  const result = await GenerationJobsUI.listJobs();
-  if (!result.ok) return; // a network blip: the screen keeps what it last knew and tries again at the next tick
-  const latest = latestJobsByProposal(result.jobs);
+function nextPollingDelay() {
+  if (!watched) return POLL_BACKGROUND_MS;
+  return watched.polls <= POLL_QUICK_TICKS ? POLL_WATCHING_QUICK_MS : POLL_WATCHING_MS;
+}
+
+function finishedJobs(latest) {
   const finished = [];
   for (const proposal of currentProposals) {
     const job = latest.get(proposal.id) ?? null;
     if (jobIsActive(proposal.latestJob) && !jobIsActive(job) && proposal.id !== watched?.proposalId) finished.push({ proposal, job });
   }
+  return finished;
+}
+
+async function proposalsAfterJobs(latest, finished) {
   let proposals = currentProposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
-  if (finished.length > 0 && currentSourceId) {
-    // a job ended: its draft (or nothing, if it failed) is a fact of the trecho, read it from the server
-    const listed = await SourceProposalsUI.listProposals(currentSourceId);
-    if (listed.ok) proposals = listed.proposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
-  }
-  applyProposals(proposals);
+  if (finished.length === 0 || !currentSourceId) return proposals;
+  // a job ended: its draft (or nothing, if it failed) is a fact of the trecho, read it from the server
+  const listed = await SourceProposalsUI.listProposals(currentSourceId);
+  if (listed.ok) proposals = listed.proposals.map((proposal) => ({ ...proposal, latestJob: latest.get(proposal.id) ?? null }));
+  return proposals;
+}
+
+function announceFinishedJobs(finished) {
   for (const { proposal, job } of finished) {
     if (job?.state === "SUCCEEDED") setSourcesMessage(t("materials.generation.finished", { title: proposal.title }));
     else if (job?.state === "FAILED") setSourcesMessage(jobFailureMessage(job), true);
   }
-  if (watched) {
-    const job = result.jobs.find((candidate) => candidate.id === watched.job.id);
-    if (!job) return;
-    if (jobIsActive(job)) {
-      watched.job = job;
-      renderProgress();
-    } else {
-      await concludeWatched(job);
-    }
-  }
+}
+
+async function updateWatchedJob(jobs) {
+  if (!watched) return;
+  const job = jobs.find((candidate) => candidate.id === watched.job.id);
+  if (!job) return;
+  if (jobIsActive(job)) {
+    watched.job = job;
+    renderProgress();
+  } else await concludeWatched(job);
+}
+
+async function pollJobs() {
+  const result = await GenerationJobsUI.listJobs();
+  if (watched) { watched.connectionLost = !result.ok; renderLiveness(); }
+  if (!result.ok) return; // a network blip: the screen keeps what it last knew (and says so) and tries again at the next tick
+  const latest = latestJobsByProposal(result.jobs);
+  const finished = finishedJobs(latest);
+  applyProposals(await proposalsAfterJobs(latest, finished));
+  announceFinishedJobs(finished);
+  await updateWatchedJob(result.jobs);
 }
 
 // -- the progress panel of the generation the student is waiting for ------------------------------------------------------------
-function openProgressPanel(job, proposalId, title) {
+// The language a translation job was asked for, by job id (a regeneration in the same language is not one): remembered across a reload below.
+const translationTargets = new Map();
+function openProgressPanel(job, proposalId, title, { translateTo = null } = {}) {
   closeProgressPanel();
-  const heading = createTextElement("p", "sources-generation-title", progressTitle(title));
+  if (translateTo) translationTargets.set(job.id, translateTo);
+  const translate = Boolean(translateTo);
+  const heading = createTextElement("p", "sources-generation-title", translate
+    ? t("materials.progress.translateTitle", { title, language: t(`editor.translate.lang.${translateTo}`) })
+    : progressTitle(title));
   heading.tabIndex = -1;
   const timer = createTextElement("p", "sources-generation-timer", elapsedLabel(jobElapsedMs(job, Date.now())));
   timer.setAttribute("aria-hidden", "true"); // ticks every second: not announced
-  const phase = createTextElement("p", "sources-generation-phase", jobPhaseLabel(job));
+  const phase = createTextElement("p", "sources-generation-phase", jobPhaseLabel(job, { translate }));
   phase.setAttribute("role", "status"); // announced when the REAL phase changes, not every second
+  // Proof of life: the dot beats and the line says when the AI last wrote something, so "working" never looks like "frozen".
+  const live = document.createElement("p");
+  live.className = "sources-generation-live";
+  live.setAttribute("aria-hidden", "true"); // ticks every second: the phase and the stalled warning are what is announced
+  const liveDot = document.createElement("span");
+  liveDot.className = "sources-generation-pulse";
+  const liveText = document.createElement("span");
+  live.append(liveDot, liveText);
+  const connection = createTextElement("p", "sources-generation-connection", "");
+  connection.setAttribute("role", "alert");
   const stalled = createTextElement("p", "lesson-hint sources-generation-stalled", "");
   stalled.setAttribute("role", "status");
-  const note = createTextElement("p", "lesson-hint", t("materials.progress.note"));
+  const note = createTextElement("p", "lesson-hint", t(translate ? "materials.progress.translateNote" : "materials.progress.note"));
   const actions = document.createElement("div");
   actions.className = "sources-generation-actions";
   const background = createTextElement("button", "small-button", t("materials.progress.background"));
@@ -247,20 +359,71 @@ function openProgressPanel(job, proposalId, title) {
   cancel.type = "button";
   cancel.dataset.action = "generation-cancel";
   actions.append(background, cancel);
-  generationBox.replaceChildren(heading, timer, phase, stalled, note, actions);
+  generationBox.replaceChildren(heading, timer, phase, live, connection, stalled, note, actions);
   generationBox.hidden = false;
-  const ticker = setInterval(() => { timer.textContent = elapsedLabel(jobElapsedMs(watched?.job ?? job, Date.now())); }, 1000);
-  watched = { job, proposalId, title, ticker, elements: { timer, phase, stalled, cancel } };
+  const ticker = setInterval(() => {
+    timer.textContent = elapsedLabel(jobElapsedMs(watched?.job ?? job, Date.now()));
+    renderLiveness();
+  }, 1000);
+  watched = { job, proposalId, title, translate, ticker, seenActivity: job.lastActivityAt ?? null, activityAt: Date.now(), connectionLost: false, elements: { timer, phase, stalled, cancel, liveDot, liveText, connection } };
+  rememberWatched(proposalId, title, job.id, translateTo);
+  renderLiveness();
   setBusy(true);
   heading.focus({ preventScroll: false });
   stopPolling();
   ensurePolling(POLL_FIRST_MS);
 }
 
+const agoLabel = (ms) => (ms < 5000
+  ? t("materials.progress.activityNow")
+  : ms < 60_000 ? t("materials.progress.activitySeconds", { seconds: Math.round(ms / 1000) }) : t("materials.progress.activityMinutes", { minutes: Math.floor(ms / 60_000) }));
+
+/** The "is it alive" line: queued, waiting for the first output, or when the AI last wrote; and a clear warning when the server cannot be reached. */
+function renderLiveness() {
+  if (!watched) return;
+  const { job, elements } = watched;
+  const sinceActivity = Date.now() - watched.activityAt;
+  const waitingFirst = job.state !== "QUEUED" && !job.lastActivityAt;
+  let text;
+  if (job.state === "QUEUED") text = t("materials.progress.activityQueued");
+  else if (waitingFirst) text = t("materials.progress.activityNone");
+  else text = t(watched.connectionLost ? "materials.progress.activitySeen" : "materials.progress.activityLast", { ago: agoLabel(sinceActivity) });
+  if (elements.liveText.textContent !== text) elements.liveText.textContent = text;
+  elements.liveDot.classList.toggle("is-alive", !watched.connectionLost && job.state === "CALLING_PROVIDER" && sinceActivity < 20_000);
+  const connectionText = watched.connectionLost ? t("materials.progress.connectionLost") : "";
+  if (elements.connection.textContent !== connectionText) elements.connection.textContent = connectionText;
+}
+
+// A page reload drops everything in memory but the job lives on the server: remember which one the student was watching, and open it again.
+const RESUME_KEY = "smartlearn.watchedGeneration";
+function rememberWatched(proposalId, title, jobId, translateTo) {
+  try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ sourceId: currentSourceId, proposalId, title, jobId, translateTo })); } catch { /* storage may be blocked: the list still shows "Ver progresso" */ }
+}
+function forgetWatched() {
+  try { sessionStorage.removeItem(RESUME_KEY); } catch { /* same */ }
+}
+let resumeTried = false;
+async function resumeWatchedAfterReload() {
+  if (resumeTried) return;
+  resumeTried = true;
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(RESUME_KEY) ?? "null"); } catch { /* ignore */ }
+  if (!saved?.sourceId || !saved.proposalId || watched) return;
+  const listed = await SourceProposalsUI.listProposals(saved.sourceId);
+  if (!listed.ok) { forgetWatched(); return; }
+  currentSourceId = saved.sourceId;
+  await showProposals(listed.proposals);
+  if (saved.translateTo && saved.jobId) translationTargets.set(saved.jobId, saved.translateTo);
+  await showGenerationOf(saved.proposalId, saved.title); // opens the panel while the job is active; otherwise the list already tells how it ended
+  if (!watched) forgetWatched();
+}
+
 function renderProgress() {
   if (!watched) return;
   const { job, elements } = watched;
-  const phaseText = watched.cancelling ? t("materials.progress.cancelling") : jobPhaseLabel(job);
+  if (job.lastActivityAt !== watched.seenActivity) { watched.seenActivity = job.lastActivityAt; watched.activityAt = Date.now(); }
+  renderLiveness();
+  const phaseText = watched.cancelling ? t("materials.progress.cancelling") : jobPhaseLabel(job, { translate: watched.translate });
   if (elements.phase.textContent !== phaseText) elements.phase.textContent = phaseText;
   const stalledText = job.state === "STALLED"
     ? t("materials.progress.stalled")
@@ -270,6 +433,7 @@ function renderProgress() {
 
 function closeProgressPanel() {
   if (watched) clearInterval(watched.ticker);
+  forgetWatched();
   watched = null;
   generationBox.hidden = true;
   generationBox.replaceChildren();
@@ -371,7 +535,8 @@ async function showGenerationOf(proposalId, title) {
     await refreshProposals(); // it ended meanwhile: the list says how
     return;
   }
-  openProgressPanel(proposal.latestJob, proposal.id, title ?? proposal.title);
+  const job = proposal.latestJob;
+  openProgressPanel(job, proposal.id, title ?? proposal.title, { translateTo: translationTargets.get(job.id) ?? null });
 }
 
 function setBusy(busy) {
@@ -379,12 +544,36 @@ function setBusy(busy) {
 }
 
 // ---- proposal index ----------------------------------------------------------------------------------------------------
+// Titles and the index only ORIENT: this fills the page range (the one place that chooses what to study) with the pages of the title.
+// Front matter has no printed number, so it offers nothing to copy.
+function createUseRangeButton(range) {
+  if (range.generatable === false) return null;
+  const [start, end] = shownPages(range);
+  if (start === null || end === null) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "text-button";
+  button.dataset.action = "use-range";
+  button.dataset.start = String(start);
+  button.dataset.end = String(end);
+  button.textContent = t("materials.range.use");
+  return button;
+}
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.('[data-action="use-range"]');
+  if (!button || !rangeStartInput || !rangeEndInput) return;
+  rangeStartInput.value = button.dataset.start;
+  rangeEndInput.value = button.dataset.end;
+  rangeForm?.scrollIntoView({ block: "center", behavior: "auto" });
+  rangeStartInput.focus({ preventScroll: true });
+});
+
 function createSourceProposalItem(proposal) {
   const li = document.createElement("li");
   li.className = "source-proposal-item";
   li.dataset.proposalId = String(proposal.id);
 
-  const rangeText = proposal.pageStart === proposal.pageEnd ? t("materials.range.page", { page: proposal.pageStart }) : t("materials.range.pages", { start: proposal.pageStart, end: proposal.pageEnd });
+  const rangeText = bookRangeLabel(proposal);
   const range = createTextElement("p", "source-proposal-range", rangeText);
   range.id = `source-proposal-range-${proposal.id}`;
 
@@ -410,9 +599,10 @@ function createSourceProposalItem(proposal) {
 
   const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
   excerpt.hidden = true;
+  const useRangeBtn = createUseRangeButton(proposal);
 
   // The same buttons repeat in every trecho: the pages of the trecho they belong to are their description.
-  for (const button of [saveBtn, toggleBtn]) button.setAttribute("aria-describedby", range.id);
+  for (const button of [saveBtn, toggleBtn, useRangeBtn].filter(Boolean)) button.setAttribute("aria-describedby", range.id);
   // What comes after is what the trecho DOES now (generate / generating / ready / failed): it is redrawn when the server says its job moved.
   const slot = document.createElement("div");
   slot.className = "source-proposal-slot";
@@ -421,7 +611,7 @@ function createSourceProposalItem(proposal) {
   const saved = createTextElement("p", "source-proposal-saved", "");
   saved.setAttribute("role", "status");
   titleInput.addEventListener("input", () => { saved.textContent = ""; }); // an edit makes "Título salvo" stale
-  li.append(range, titleInput, saveBtn, saved, toggleBtn, excerpt, slot);
+  li.append(range, titleInput, saveBtn, saved, toggleBtn, ...(useRangeBtn ? [useRangeBtn] : []), excerpt, slot);
   if (!proposal.generatable) li.classList.add("is-editorial");
   renderActionSlot(li, proposal);
   return li;
@@ -446,51 +636,69 @@ function actionButton(label, action, rangeId) {
   return button;
 }
 
+function acceptedDraftParts(proposal, rangeId) {
+  const parts = [createTextElement("p", "lesson-hint", t("materials.proposal.lessonCreated"))];
+  // the lesson exists: its Resumo is one click away (only offered while the server says the lesson is still there)
+  if (proposal.latestDraft.acceptedUnitId != null && deps.openSummary) {
+    const open = actionButton(t("materials.action.openSummary"), "open-summary", rangeId);
+    open.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
+    parts.push(open);
+  }
+  // A lesson accepted as a summary only can still get its questions: they are reviewed in a draft of their own before they join the lesson
+  const later = proposal.latestDraft.lessonQuestions;
+  if (later?.state === "AVAILABLE" && proposal.latestDraft.acceptedUnitId != null) {
+    const ask = actionButton(t("materials.action.lessonQuestions"), "lesson-questions", rangeId);
+    ask.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
+    parts.push(ask);
+  } else if (later?.state === "IN_REVIEW") {
+    const review = actionButton(t("materials.action.reviewLessonQuestions"), "open-draft", rangeId);
+    review.dataset.draftId = String(later.draftId);
+    parts.push(review);
+  }
+  return parts;
+}
+
+function generatingDraftParts(job, status, rangeId) {
+  const parts = [statusLine(status)];
+  if (status.stalled) parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
+  const show = actionButton(t("materials.action.showProgress"), "show-generation", rangeId);
+  show.dataset.jobId = String(job.id);
+  parts.push(show);
+  return parts;
+}
+
+function existingDraftParts(proposal, job, status, rangeId) {
+  const parts = [];
+  if (status?.kind === "ready" && job.draftId === proposal.latestDraft.id) parts.push(statusLine(status));
+  const open = actionButton(t("materials.action.openDraft"), "open-draft", rangeId);
+  open.dataset.draftId = String(proposal.latestDraft.id);
+  parts.push(open);
+  return parts;
+}
+
+function idleDraftParts(job, status, rangeId) {
+  const parts = [];
+  const failed = status?.kind === "failed";
+  if (failed) parts.push(statusLine(status), createTextElement("p", "lesson-hint", jobFailureMessage(job)));
+  parts.push(actionButton(t(failed ? "materials.action.retry" : "materials.action.generate"), "generate-draft", rangeId));
+  return parts;
+}
+
+function proposalActionParts(proposal, job, status, rangeId) {
+  if (!proposal.generatable) return [createTextElement("p", "lesson-hint", notStudyNote(proposal.kind))];
+  if (proposal.latestDraft?.status === "ACCEPTED") return acceptedDraftParts(proposal, rangeId);
+  if (status?.kind === "generating") return generatingDraftParts(job, status, rangeId);
+  if (proposal.latestDraft) return existingDraftParts(proposal, job, status, rangeId);
+  return idleDraftParts(job, status, rangeId);
+}
+
 function renderActionSlot(li, proposal) {
   const slot = li.querySelector(".source-proposal-slot");
   const rangeId = li.querySelector(".source-proposal-range")?.id;
   const hadFocus = slot.contains(document.activeElement);
   const job = proposal.latestJob ?? null;
   const status = jobListStatus(job);
-  const parts = [];
-  if (!proposal.generatable) {
-    parts.push(createTextElement("p", "lesson-hint", notStudyNote(proposal.kind)));
-  } else if (proposal.latestDraft?.status === "ACCEPTED") {
-    parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.lessonCreated")));
-    // the lesson exists: its Resumo is one click away (only offered while the server says the lesson is still there)
-    if (proposal.latestDraft.acceptedUnitId != null && deps.openSummary) {
-      const open = actionButton(t("materials.action.openSummary"), "open-summary", rangeId);
-      open.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
-      parts.push(open);
-    }
-    // A lesson accepted as a summary only can still get its questions: they are reviewed in a draft of their own before they join the lesson
-    const later = proposal.latestDraft.lessonQuestions;
-    if (later?.state === "AVAILABLE" && proposal.latestDraft.acceptedUnitId != null) {
-      const ask = actionButton(t("materials.action.lessonQuestions"), "lesson-questions", rangeId);
-      ask.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
-      parts.push(ask);
-    } else if (later?.state === "IN_REVIEW") {
-      const review = actionButton(t("materials.action.reviewLessonQuestions"), "open-draft", rangeId);
-      review.dataset.draftId = String(later.draftId);
-      parts.push(review);
-    }
-  } else if (status?.kind === "generating") {
-    parts.push(statusLine(status));
-    if (status.stalled) parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
-    const show = actionButton(t("materials.action.showProgress"), "show-generation", rangeId);
-    show.dataset.jobId = String(job.id);
-    parts.push(show);
-  } else if (proposal.latestDraft) {
-    if (status?.kind === "ready" && job.draftId === proposal.latestDraft.id) parts.push(statusLine(status));
-    const open = actionButton(t("materials.action.openDraft"), "open-draft", rangeId);
-    open.dataset.draftId = String(proposal.latestDraft.id);
-    parts.push(open);
-  } else {
-    if (status?.kind === "failed") {
-      parts.push(statusLine(status), createTextElement("p", "lesson-hint", jobFailureMessage(job)));
-    }
-    parts.push(actionButton(status?.kind === "failed" ? t("materials.action.retry") : t("materials.action.generate"), "generate-draft", rangeId));
-  }
+  const parts = proposalActionParts(proposal, job, status, rangeId);
   slot.replaceChildren(...parts);
   li.dataset.signature = proposalSignature(proposal);
   if (hadFocus) slot.querySelector("button")?.focus({ preventScroll: true }); // a redrawn button must not drop keyboard focus
@@ -510,50 +718,65 @@ function applyProposals(proposals) {
 
 // Units with an unaccepted draft, or a generation going on or failed, are listed apart from the (often collapsed) index:
 // work in progress must never hide inside a 100-unit list.
+function draftInProgressState(proposal) {
+  if (!proposal.generatable || proposal.latestDraft?.status === "ACCEPTED") return null;
+  const status = jobListStatus(proposal.latestJob);
+  const generating = status?.kind === "generating";
+  const failed = !generating && !proposal.latestDraft && status?.kind === "failed";
+  const ready = !generating && status?.kind === "ready" && proposal.latestJob.draftId === proposal.latestDraft?.id;
+  if (!proposal.latestDraft && !generating && !failed) return null;
+  return { proposal, status, generating, failed, ready };
+}
+
+function renderDraftInProgressItem({ proposal, status, generating, failed, ready }) {
+  const li = document.createElement("li");
+  li.className = "source-draft-item";
+  li.dataset.proposalId = String(proposal.id);
+  const rangeText = bookRangeLabel(proposal, true);
+  const title = createTextElement("span", "source-draft-item-title", proposal.title);
+  const range = createTextElement("span", "lesson-hint", rangeText);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "small-button";
+  button.dataset.title = proposal.title;
+  if (generating) {
+    button.dataset.action = "show-generation";
+    button.textContent = t("materials.action.showProgress");
+    button.setAttribute("aria-label", t("materials.draft.showProgressLabel", { title: proposal.title, range: rangeText }));
+  } else if (failed) {
+    button.dataset.action = "retry-generation";
+    button.textContent = t("materials.action.retry");
+    button.setAttribute("aria-label", t("materials.draft.retryLabel", { title: proposal.title, range: rangeText }));
+  } else {
+    button.dataset.action = "open-draft-in-progress";
+    button.dataset.draftId = String(proposal.latestDraft.id);
+    button.textContent = t("materials.action.openDraft");
+    button.setAttribute("aria-label", t("materials.draft.openLabel", { title: proposal.title, range: rangeText }));
+  }
+  li.append(title, range);
+  if (generating || failed || ready) li.append(statusLine(status));
+  li.append(button);
+  if (!generating && !failed && proposal.latestDraft?.status === "DRAFT") {
+    const discard = document.createElement("button");
+    discard.type = "button";
+    discard.className = "small-button is-danger";
+    discard.dataset.action = "discard-draft";
+    discard.dataset.draftId = String(proposal.latestDraft.id);
+    discard.dataset.title = proposal.title;
+    discard.textContent = t("materials.draft.discard");
+    discard.setAttribute("aria-label", t("materials.draft.discardLabel", { title: proposal.title }));
+    li.append(discard);
+  }
+  return li;
+}
+
 function renderDraftsInProgress(proposals) {
   if (!draftsList) return;
   const focused = draftsList.contains(document.activeElement) ? document.activeElement : null;
   const wasFocused = focused ? { proposalId: focused.closest("li")?.dataset.proposalId } : null;
   draftsList.replaceChildren();
-  const open = proposals.filter((p) => {
-    if (!p.generatable || p.latestDraft?.status === "ACCEPTED") return false;
-    const kind = jobListStatus(p.latestJob)?.kind;
-    return Boolean(p.latestDraft) || kind === "generating" || kind === "failed";
-  });
-  for (const proposal of open) {
-    const li = document.createElement("li");
-    li.className = "source-draft-item";
-    li.dataset.proposalId = String(proposal.id);
-    const rangeText = proposal.pageStart === proposal.pageEnd ? t("materials.range.pageLower", { page: proposal.pageStart }) : t("materials.range.pagesLower", { start: proposal.pageStart, end: proposal.pageEnd });
-    const title =createTextElement("span", "source-draft-item-title", proposal.title);
-    const range = createTextElement("span", "lesson-hint", rangeText);
-    const status = jobListStatus(proposal.latestJob);
-    const generating = status?.kind === "generating";
-    const failed = !generating && !proposal.latestDraft && status?.kind === "failed";
-    const ready = !generating && status?.kind === "ready" && proposal.latestJob.draftId === proposal.latestDraft?.id;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "small-button";
-    button.dataset.title = proposal.title;
-    if (generating) {
-      button.dataset.action = "show-generation";
-      button.textContent = t("materials.action.showProgress");
-      button.setAttribute("aria-label", t("materials.draft.showProgressLabel", { title: proposal.title, range: rangeText }));
-    } else if (failed) {
-      button.dataset.action = "retry-generation";
-      button.textContent = t("materials.action.retry");
-      button.setAttribute("aria-label", t("materials.draft.retryLabel", { title: proposal.title, range: rangeText }));
-    } else {
-      button.dataset.action = "open-draft-in-progress";
-      button.dataset.draftId = String(proposal.latestDraft.id);
-      button.textContent = t("materials.action.openDraft");
-      button.setAttribute("aria-label", t("materials.draft.openLabel", { title: proposal.title, range: rangeText }));
-    }
-    li.append(title, range);
-    if (generating || failed || ready) li.append(statusLine(status));
-    li.append(button);
-    draftsList.append(li);
-  }
+  const open = proposals.map(draftInProgressState).filter(Boolean);
+  for (const state of open) draftsList.append(renderDraftInProgressItem(state));
   if (draftsBox) draftsBox.hidden = open.length === 0;
   if (wasFocused) draftsList.querySelector(`[data-proposal-id="${wasFocused.proposalId}"] [data-action]`)?.focus({ preventScroll: true });
 }
@@ -568,6 +791,23 @@ draftsList?.addEventListener("click", async (event) => {
   if (retry) {
     const proposal = currentProposals.find((p) => p.id === Number(retry.closest("li").dataset.proposalId));
     if (proposal) await generateFor(proposal);
+    return;
+  }
+  const discard = event.target.closest('[data-action="discard-draft"]');
+  if (discard) {
+    // two explicit confirmations: discarding is the only way a student's unfinished summary disappears
+    const params = { title: discard.dataset.title };
+    if (!(await showConfirm(t("materials.draft.discardConfirm1", params)))) return;
+    if (!(await showConfirm(t("materials.draft.discardConfirm2", params)))) return;
+    discard.disabled = true;
+    const result = await DraftReviewUI.discardDraft(discard.dataset.draftId, { confirmDiscard: true });
+    if (!result.ok) {
+      discard.disabled = false;
+      setSourcesMessage(result.message || t("materials.draft.discardFailed"), true);
+      return;
+    }
+    setSourcesMessage(t("materials.draft.discardDone"));
+    await refreshProposals();
     return;
   }
   const button = event.target.closest('[data-action="open-draft-in-progress"]');
@@ -593,13 +833,16 @@ function renderSourceProposals(proposals) {
   for (const proposal of editorial) editorialList?.append(createSourceProposalItem(proposal));
   // content.length can be 0: the singular is chosen explicitly (tn would treat 0 as singular in pt-BR)
   if (indexSummary) indexSummary.textContent = content.length === 1 ? t("materials.index.summary.one", { count: content.length }) : t("materials.index.summary.other", { count: content.length });
-  if (indexDetails) indexDetails.open = content.length <= INDEX_OPEN_UP_TO;
+  if (indexDetails) { indexDetails.hidden = content.length === 0; indexDetails.open = content.length <= INDEX_OPEN_UP_TO; } // an empty index is not offered
   if (editorialDetails) {
     editorialDetails.hidden = editorial.length === 0;
     editorialDetails.open = false;
     if (editorialSummary) editorialSummary.textContent = t("materials.editorial.summary", { count: editorial.length });
   }
-  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = proposals.length === 0;
+  // A material with no trechos (no outline in the PDF) still needs the page range and the title search: the panel follows the open
+  // material, never the number of proposals (with 0 of them the student had nothing to act on).
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = currentSourceId == null;
+  setOpenMaterial(currentSourceId != null);
   renderDraftsInProgress(proposals);
   topicResults?.replaceChildren();
   if (watched) setBusy(true);
@@ -614,6 +857,8 @@ function createTopicItem(candidate, query) {
   li.append(createTextElement("p", "source-proposal-range", t("materials.topic.rangeChars", { range: rangeLabel(candidate.pageStart, candidate.pageEnd), chars: nf.format(candidate.chars) })));
   if (candidate.excerpt) li.append(createTextElement("p", "source-topic-excerpt", candidate.excerpt));
   if (candidate.generatable) {
+    const useRange = createUseRangeButton(candidate);
+    if (useRange) li.append(useRange);
     const generate = document.createElement("button");
     generate.type = "button";
     generate.className = "small-button";
@@ -759,8 +1004,16 @@ function renderExistingSources() {
 // aria-disabled (not disabled) on the pager buttons: a button that disables itself under the focus would drop the keyboard position.
 librarySearch?.addEventListener("input", () => { libraryState.query = librarySearch.value; libraryState.page = 1; renderExistingSources(); });
 librarySort?.addEventListener("change", () => { libraryState.sort = librarySort.value; libraryState.page = 1; renderExistingSources(); });
-libraryPrev?.addEventListener("click", () => { if (libraryPrev.getAttribute("aria-disabled") === "true") return; libraryState.page -= 1; renderExistingSources(); });
-libraryNext?.addEventListener("click", () => { if (libraryNext.getAttribute("aria-disabled") === "true") return; libraryState.page += 1; renderExistingSources(); });
+libraryPrev?.addEventListener("click", () => {
+  if (libraryPrev.getAttribute("aria-disabled") === "true") return;
+  libraryState.page -= 1;
+  renderExistingSources();
+});
+libraryNext?.addEventListener("click", () => {
+  if (libraryNext.getAttribute("aria-disabled") === "true") return;
+  libraryState.page += 1;
+  renderExistingSources();
+});
 
 existingList?.addEventListener("click", async (event) => {
   const removeButton = event.target.closest('[data-action="remove-source"]');
@@ -775,10 +1028,17 @@ existingList?.addEventListener("click", async (event) => {
       removeButton.focus({ preventScroll: true });
       return;
     }
-    if (currentSourceId === id) { currentSourceId = null; if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true; }
+    if (currentSourceId === id) { currentSourceId = null; if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true; setOpenMaterial(false); }
     await loadExistingSources();
     setSourcesMessage(t("materials.existing.removed"));
     sourcesChooseFileButton?.focus({ preventScroll: true });
+    return;
+  }
+  // Pointer shortcut: a click on the name opens the material like its "Abrir" button. The name is not focusable and has no role, so
+  // keyboard and screen-reader users keep exactly one control per action (the button); a text selection is not treated as a click.
+  const identity = event.target.closest(".sl-source-identity");
+  if (identity && !event.target.closest("button") && !window.getSelection()?.toString()) {
+    identity.closest("li")?.querySelector('[data-action="open-source"]:not(:disabled)')?.click();
     return;
   }
   const button = event.target.closest('[data-action="open-source"]');
@@ -800,7 +1060,32 @@ existingList?.addEventListener("click", async (event) => {
 
 // The list is refreshed whenever the student opens Materiais (an upload elsewhere, another window, a first visit).
 // A generation that went on while the student was elsewhere is read from the server again as soon as the list is on screen.
-document.querySelector('[data-screen="materials"]')?.addEventListener("click", () => { loadExistingSources(); ensurePolling(); });
+// Watching the screen itself (not the nav button) also covers F5 and a link straight to #materials, where nobody clicks the button.
+const materialsScreen = document.querySelector("#screen-materials");
+function onMaterialsShown() {
+  if (!materialsScreen || materialsScreen.hidden) return;
+  // Coming back to Materiais lands on the library; a lesson still open in the editor is not touched.
+  if (currentSourceId != null && editorView?.hidden !== false) showLibrary();
+  loadExistingSources();
+  ensurePolling();
+  resumeWatchedAfterReload();
+}
+if (materialsScreen) {
+  new MutationObserver(onMaterialsShown).observe(materialsScreen, { attributes: true, attributeFilter: ["hidden"] });
+  onMaterialsShown();
+}
+
+function showLibrary({ focus = false } = {}) {
+  currentSourceId = null;
+  currentSourceName = "";
+  if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
+  sourcesCoverageNote?.setAttribute("hidden", "");
+  topicResults?.replaceChildren();
+  setOpenMaterial(false);
+  setSourcesMessage("");
+  if (focus) (existingList?.querySelector('[data-action="open-source"]') ?? sourcesChooseFileButton)?.focus({ preventScroll: false });
+}
+backToLibraryButton?.addEventListener("click", () => showLibrary({ focus: true }));
 
 // ---- upload ------------------------------------------------------------------------------------------------------------
 sourcesChooseFileButton?.addEventListener("click", () => {
@@ -831,6 +1116,7 @@ sourcesFileInput?.addEventListener("change", async () => {
       return;
     }
     currentSourceId = uploadResult.source.id;
+    currentSourceName = uploadResult.source.originalName ?? file.name;
 
     setSourcesMessage(t("materials.upload.extracting"));
     const extractResult = await SourceProposalsUI.extractSource(uploadResult.source.id);
@@ -864,7 +1150,7 @@ sourcesFileInput?.addEventListener("change", async () => {
     topicInput?.focus({ preventScroll: true });
     loadExistingSources();
   } catch (error) {
-    setSourcesMessage(t("materials.upload.processFailed"), true);
+    setSourcesMessage(uploadFailureMessage(error), true);
     console.error("Falha ao processar fonte enviada.", error);
   } finally {
     sourcesFileInput.value = "";
@@ -872,98 +1158,113 @@ sourcesFileInput?.addEventListener("change", async () => {
 });
 
 // ---- index list actions ------------------------------------------------------------------------------------------------
+async function toggleProposalExcerpt(event, item, proposalId) {
+  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
+  if (!toggleBtn) return false;
+  const excerptEl = item.querySelector(".source-proposal-excerpt");
+  if (!excerptEl) return true;
+  if (excerptEl.hidden) {
+    const result = await SourceProposalsUI.getProposal(proposalId);
+    if (result.ok) excerptEl.textContent = result.proposal.excerpt;
+    excerptEl.hidden = false;
+    toggleBtn.setAttribute("aria-expanded", "true");
+    toggleBtn.textContent = t("materials.proposal.hideExcerpt");
+  } else {
+    excerptEl.hidden = true;
+    toggleBtn.setAttribute("aria-expanded", "false");
+    toggleBtn.textContent = t("materials.proposal.showExcerpt");
+  }
+  return true;
+}
+
+async function saveProposalTitle(event, item, proposalId) {
+  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
+  if (!saveBtn) return false;
+  const input = item.querySelector(".source-proposal-title-input");
+  if (!input) return true;
+  const saved = item.querySelector(".source-proposal-saved");
+  if (saved) saved.textContent = "";
+  saveBtn.disabled = true;
+  try {
+    const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
+    if (result.ok) {
+      if (saved) saved.textContent = t("materials.proposal.titleSaved");
+    } else {
+      setSourcesMessage(result.message || t("materials.proposal.saveFailed"), true);
+    }
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
+  }
+  return true;
+}
+
+async function openAcceptedSummary(event) {
+  const summaryBtn = event.target.closest('[data-action="open-summary"]');
+  if (!summaryBtn) return false;
+  if (!(await deps.openSummary(Number(summaryBtn.dataset.unitId)))) setSourcesMessage(t("plan.openLesson.missing"), true);
+  return true;
+}
+
+async function openLessonQuestionsFromIndex(event, item) {
+  const askBtn = event.target.closest('[data-action="lesson-questions"]');
+  if (!askBtn) return false;
+  askBtn.disabled = true;
+  const result = await DraftReviewUI.openLessonQuestions(Number(askBtn.dataset.unitId));
+  askBtn.disabled = false;
+  if (!result.ok) {
+    setSourcesMessage(result.message || t("materials.lessonQuestions.failed"), true);
+    return true;
+  }
+  await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
+  return true;
+}
+
+async function openDraftFromIndex(event, item) {
+  const openBtn = event.target.closest('[data-action="open-draft"]');
+  if (!openBtn) return false;
+  openBtn.disabled = true;
+  const result = await DraftReviewUI.getDraft(openBtn.dataset.draftId);
+  openBtn.disabled = false;
+  if (!result.ok) {
+    setSourcesMessage(result.message || t("materials.draft.openFailed"), true);
+    return true;
+  }
+  await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
+  return true;
+}
+
+async function showGenerationFromIndex(event, item, proposalId) {
+  const showBtn = event.target.closest('[data-action="show-generation"]');
+  if (!showBtn) return false;
+  await showGenerationOf(proposalId, item.querySelector(".source-proposal-title-input")?.value);
+  return true;
+}
+
+async function generateDraftFromIndex(event, item, proposalId) {
+  const generateBtn = event.target.closest('[data-action="generate-draft"]');
+  if (!generateBtn) return false;
+  const proposal = {
+    id: Number(proposalId),
+    title: item.querySelector(".source-proposal-title-input")?.value ?? t("materials.proposal.fallbackTitle"),
+    pageStart: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.[0]),
+    pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
+  };
+  await generateFor(proposal);
+  return true;
+}
+
 async function onIndexClick(event) {
   const item = event.target.closest(".source-proposal-item");
   if (!item) return;
   const proposalId = item.dataset.proposalId;
-
-  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
-  if (toggleBtn) {
-    const excerptEl = item.querySelector(".source-proposal-excerpt");
-    if (!excerptEl) return;
-    if (excerptEl.hidden) {
-      const result = await SourceProposalsUI.getProposal(proposalId);
-      if (result.ok) excerptEl.textContent = result.proposal.excerpt;
-      excerptEl.hidden = false;
-      toggleBtn.setAttribute("aria-expanded", "true");
-      toggleBtn.textContent = t("materials.proposal.hideExcerpt");
-    } else {
-      excerptEl.hidden = true;
-      toggleBtn.setAttribute("aria-expanded", "false");
-      toggleBtn.textContent = t("materials.proposal.showExcerpt");
-    }
-    return;
-  }
-
-  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
-  if (saveBtn) {
-    const input = item.querySelector(".source-proposal-title-input");
-    if (!input) return;
-    const saved = item.querySelector(".source-proposal-saved");
-    if (saved) saved.textContent = "";
-    saveBtn.disabled = true;
-    try {
-      const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
-      if (result.ok) {
-        if (saved) saved.textContent = t("materials.proposal.titleSaved");
-      } else {
-        setSourcesMessage(result.message || t("materials.proposal.saveFailed"), true);
-      }
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
-    }
-    return;
-  }
-
-  const summaryBtn = event.target.closest('[data-action="open-summary"]');
-  if (summaryBtn) {
-    if (!(await deps.openSummary(Number(summaryBtn.dataset.unitId)))) setSourcesMessage(t("plan.openLesson.missing"), true);
-    return;
-  }
-
-  const askBtn = event.target.closest('[data-action="lesson-questions"]');
-  if (askBtn) {
-    askBtn.disabled = true;
-    const result = await DraftReviewUI.openLessonQuestions(Number(askBtn.dataset.unitId));
-    askBtn.disabled = false;
-    if (!result.ok) {
-      setSourcesMessage(result.message || t("materials.lessonQuestions.failed"), true);
-      return;
-    }
-    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
-    return;
-  }
-
-  const openBtn = event.target.closest('[data-action="open-draft"]');
-  if (openBtn) {
-    openBtn.disabled = true;
-    const result = await DraftReviewUI.getDraft(openBtn.dataset.draftId);
-    openBtn.disabled = false;
-    if (!result.ok) {
-      setSourcesMessage(result.message || t("materials.draft.openFailed"), true);
-      return;
-    }
-    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
-    return;
-  }
-
-  const showBtn = event.target.closest('[data-action="show-generation"]');
-  if (showBtn) {
-    await showGenerationOf(proposalId, item.querySelector(".source-proposal-title-input")?.value);
-    return;
-  }
-
-  const generateBtn = event.target.closest('[data-action="generate-draft"]');
-  if (generateBtn) {
-    const proposal = {
-      id: Number(proposalId),
-      title: item.querySelector(".source-proposal-title-input")?.value ?? t("materials.proposal.fallbackTitle"),
-      pageStart: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.[0]),
-      pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
-    };
-    await generateFor(proposal);
-  }
+  if (await toggleProposalExcerpt(event, item, proposalId)) return;
+  if (await saveProposalTitle(event, item, proposalId)) return;
+  if (await openAcceptedSummary(event)) return;
+  if (await openLessonQuestionsFromIndex(event, item)) return;
+  if (await openDraftFromIndex(event, item)) return;
+  if (await showGenerationFromIndex(event, item, proposalId)) return;
+  await generateDraftFromIndex(event, item, proposalId);
 }
 sourcesProposalsList?.addEventListener("click", onIndexClick);
 editorialList?.addEventListener("click", onIndexClick);

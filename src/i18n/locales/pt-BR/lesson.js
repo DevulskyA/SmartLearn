@@ -125,6 +125,8 @@ export default {
   'lesson.job.phase.auditing': 'Conferindo com a fonte',
   'lesson.job.phase.repairing': 'Corrigindo o que a conferência encontrou',
   'lesson.job.phase.saving': 'Salvando o resumo',
+  'lesson.job.phase.translating': 'Traduzindo resumo e questões',
+  'lesson.job.phase.savingTranslation': 'Salvando a tradução',
   'lesson.job.failure.providerError': 'O serviço de IA não respondeu como esperado.',
   'lesson.job.failure.timeout': 'A geração passou do tempo limite e foi interrompida.',
   'lesson.job.failure.serverRestarted': 'O servidor foi reiniciado durante a geração.',

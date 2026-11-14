@@ -38,6 +38,84 @@ const removedPointsText = (n) => (n === 1 ? t("editor.reaudit.removed.one", { co
 
 let editorSeq = 0;
 
+function nextEditorUid() {
+  editorSeq += 1;
+  return `lesson-${editorSeq}`;
+}
+
+function saveFailureKind(result) {
+  if (result.code === "NETWORK_ERROR") return "offline";
+  if (result.code === "ENTITY_CONFLICT" || result.code === "REVISION_CONFLICT") return "conflict";
+  return "error";
+}
+
+function findingNoteForCause(cause) {
+  if (cause === "wording") return t("editor.finding.note.wording");
+  if (cause === "notEvaluable") return t("editor.finding.note.notEvaluable");
+  return "";
+}
+
+function appendFindingGroup(block, group) {
+  block.append(createTextElement("h5", "lesson-findings-cause", `${group.label} (${group.findings.length})`));
+  const note = findingNoteForCause(group.cause);
+  if (note) block.append(createTextElement("p", "lesson-hint lesson-findings-note", note));
+  const list = document.createElement("ul");
+  list.className = "lesson-findings-list";
+  for (const finding of group.findings) {
+    const item = document.createElement("li");
+    item.append(createTextElement("p", "lesson-finding-issue", issueLabel(finding.issue)));
+    const [claim, evidence, repair] = ["claim", "evidence", "repair"].map((slot) => findingText(finding, slot));
+    if (claim) item.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: claim })));
+    if (evidence) item.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: evidence })));
+    if (repair && !note) item.append(createTextElement("p", "lesson-finding-repair", repair));
+    list.append(item);
+  }
+  block.append(list);
+}
+
+function hasRepairChanges(changes) {
+  return changes?.length > 0;
+}
+
+function sourcePageSpan(startPage, endPage) {
+  if (startPage === endPage) return t("lesson.source.page", { page: startPage });
+  return t("lesson.source.pages", { from: startPage, to: endPage });
+}
+
+function appendScopedSourceFacts(fact, scope) {
+  fact(t("editor.source.document"), scope.documentName);
+  fact(t("editor.source.topic"), scope.topic);
+  const [startPage, endPage] = scope.approvedPages ?? [];
+  const approvedPages = startPage === undefined ? null : sourcePageSpan(startPage, endPage);
+  fact(t("editor.source.approvedPages"), approvedPages);
+
+  let approvedText = null;
+  if (Number.isFinite(scope.sourceChars)) {
+    approvedText = t("lesson.source.chars", { count: formatNumber(scope.sourceChars) });
+  }
+  fact(t("editor.source.approvedText"), approvedText);
+
+  let sentToModel = null;
+  if (Number.isFinite(scope.payloadChars)) {
+    sentToModel = scope.payloadChars === scope.sourceChars
+      ? t("editor.source.sentExact", { count: formatNumber(scope.payloadChars) })
+      : t("lesson.source.chars", { count: formatNumber(scope.payloadChars) });
+  }
+  fact(t("editor.source.sentToModel"), sentToModel);
+}
+
+function appendUnitSourceFacts(fact, unit) {
+  fact(t("editor.source.document"), unit.documentName);
+  fact(t("editor.source.unit"), unit.title);
+  fact(t("editor.source.unitPages"), sourcePageSpan(unit.pageStart, unit.pageEnd));
+}
+
+function previewExerciseTag(origin) {
+  if (origin === "HUMAN_ADDED") return ` ${t("editor.preview.addedByYou")}`;
+  if (origin === "HUMAN_EDITED") return ` ${t("editor.preview.editedByYou")}`;
+  return "";
+}
+
 function button(className, text, action, type = "button") {
   const b = document.createElement("button");
   b.type = type;
@@ -83,8 +161,8 @@ function setMessage(el, text, isError = false) {
  *   today      "YYYY-MM-DD"
  *   deps       { reviseSummary, reviseQuestion, deleteQuestion, acceptDraft, previewAcceptance, getDraft, onBack, startStudyNow, refreshAfterAccept }
  */
-export function createLessonEditor({ draft: initialDraft, title, subjects = [], today, deps }) {
-  const uid = `lesson-${(editorSeq += 1)}`;
+export function createLessonEditor({ draft: initialDraft, title, subjects = [], subjectsFailed = false, today, deps }) {
+  const uid = nextEditorUid();
   let draft = initialDraft;
   let activeTab = "summary";
   let selectedId = draft.questions[0]?.id ?? null;
@@ -101,8 +179,6 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   // recoverable copy (src/draft-recovery.js) that is erased only when the server has the text. Saving never accepts anything: only text fields are sent.
   const recovery = createRecoveryStore((() => { try { return createIndexedDbStorage(); } catch { return null; } })(), draft.id);
   const autosaveInfo = new Map(); // "summary" | "q:<id>" -> { state, info }: the last known state, to paint indicators that are rebuilt with the form
-  const kindOf = (result) => (result.code === "NETWORK_ERROR" ? "offline" : (result.code === "ENTITY_CONFLICT" || result.code === "REVISION_CONFLICT" ? "conflict" : "error"));
-
   const root = document.createElement("article");
   root.className = "lesson-editor";
   root.setAttribute("aria-labelledby", `${uid}-title`);
@@ -184,7 +260,69 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryTop = document.createElement("div");
   summaryTop.className = "lesson-summary-top";
   summaryTop.append(summaryToggle);
+  // Translate the whole lesson (summary + questions) into another language, here where the summary is. It makes a NEW version beside this
+  // one (one paid generation, confirmed first); this version stays until the student chooses which to keep.
+  const TRANSLATE_LOCALES = ["pt-BR", "en", "es"];
+  let translateSection = null;
+  let regenerateSection = null;
+  if (deps.translateDraft && draft.status === "DRAFT") {
+    const targets = TRANSLATE_LOCALES.filter((locale) => locale !== draft.generationLocale);
+    const translateWrap = document.createElement("section");
+    translateWrap.className = "lesson-translate";
+    translateWrap.append(createTextElement("h3", "lesson-translate-title", t("editor.translate.title")), createTextElement("p", "lesson-hint", t("editor.translate.hint")));
+    const translateSelect = document.createElement("select");
+    translateSelect.className = "lesson-translate-select";
+    translateSelect.setAttribute("aria-label", t("editor.translate.to"));
+    for (const locale of targets) {
+      const opt = document.createElement("option");
+      opt.value = locale;
+      opt.textContent = t(`editor.translate.lang.${locale}`);
+      translateSelect.append(opt);
+    }
+    // the button names its result ("Criar versão em Inglês"), so it never reads as an in-place edit of the text above
+    const createLabel = () => t("editor.translate.create", { language: t(`editor.translate.lang.${translateSelect.value}`) });
+    const translateBtn = button("secondary-button", createLabel(), "translate-draft");
+    translateSelect.addEventListener("change", () => { translateBtn.textContent = createLabel(); });
+    const translateRow = document.createElement("div");
+    translateRow.className = "lesson-translate-row";
+    translateRow.append(translateSelect, translateBtn);
+    translateWrap.append(translateRow);
+    translateBtn.addEventListener("click", async () => {
+      if (accepted || !draft.proposalId) return;
+      const locale = translateSelect.value;
+      translateBtn.disabled = true;
+      const result = await deps.translateDraft(draft.proposalId, locale);
+      if (!result.ok) {
+        translateBtn.disabled = false;
+        setMessage(summaryMessage, result.message || t("editor.translate.failed"), true);
+      }
+    });
+    translateSection = translateWrap;
+  }
+  // Generate this trecho again with today's prompt (after the prompt was corrected). Same language, same source: a NEW version beside this one.
+  if (deps.regenerateDraft && draft.status === "DRAFT" && draft.proposalId) {
+    const regenWrap = document.createElement("section");
+    regenWrap.className = "lesson-translate lesson-regenerate";
+    regenWrap.append(createTextElement("h3", "lesson-translate-title", t("editor.regenerate.title")), createTextElement("p", "lesson-hint", t("editor.regenerate.hint")));
+    const regenBtn = button("secondary-button", t("editor.regenerate.button"), "regenerate-draft");
+    const regenRow = document.createElement("div");
+    regenRow.className = "lesson-translate-row";
+    regenRow.append(regenBtn);
+    regenWrap.append(regenRow);
+    regenBtn.addEventListener("click", async () => {
+      if (accepted) return;
+      regenBtn.disabled = true;
+      const result = await deps.regenerateDraft(draft.proposalId);
+      if (!result.ok) {
+        regenBtn.disabled = false;
+        setMessage(summaryMessage, result.message || t("editor.regenerate.failed"), true);
+      }
+    });
+    regenerateSection = regenWrap;
+  }
   summaryPanel.append(summaryTop, summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
+  if (regenerateSection && !lessonTarget) summaryPanel.append(regenerateSection);
+  if (translateSection && !lessonTarget) summaryPanel.append(translateSection); // after the text it is about, not beside "Editar resumo"
 
   // ---- QUESTIONS panel -------------------------------------------------------------------------------------------------
   const questionsPanel = panels.get("questions");
@@ -234,6 +372,27 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     reauditMessage.focus({ preventScroll: true });
   });
 
+  // Model check of the summary as it is now (also the student's own text): reports findings, never rewrites. One live region, reused.
+  const auditSummaryMessage = statusMessage();
+  auditSummaryMessage.tabIndex = -1;
+  reviewPanel.addEventListener("click", async (event) => {
+    const trigger = event.target.closest?.('[data-action="audit-summary"]');
+    if (!trigger || !deps.auditSummary) return;
+    trigger.disabled = true;
+    setMessage(auditSummaryMessage, t("editor.review.auditSummaryRunning"));
+    const result = await deps.auditSummary(draft.id);
+    if (!result.ok) {
+      setMessage(auditSummaryMessage, result.message || t("editor.review.auditSummaryFailed"), true);
+      trigger.disabled = false;
+      trigger.focus({ preventScroll: true });
+      return;
+    }
+    applyDraft(result.draft, { keepSelection: selectedId });
+    setMessage(auditSummaryMessage, t("editor.review.auditSummaryDone", { points: pointsText(reviewOverview(draft).total) }));
+    auditSummaryMessage.focus({ preventScroll: true });
+  });
+
+  // Summary-first draft: the questions are written on request, into this same draft, and still have to be reviewed here.
   // Offered where the student looks for the questions (Questões) and where the checks are (Revisão); one live region per panel, both kept in step.
   const laterMessages = new Map([[reviewPanel, statusMessage()], [questionsPanel, statusMessage()]]);
   for (const node of laterMessages.values()) node.tabIndex = -1;
@@ -312,6 +471,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const newOption = document.createElement("option");
   newOption.value = "";
   newOption.textContent = t("editor.accept.newSubject");
+  // With disciplines registered, nothing is chosen for the student: a lesson filed under the wrong discipline would spoil its statistics and plan.
+  const CHOOSE = "choose";
+  if (subjects.length > 0) {
+    const chooseOption = document.createElement("option");
+    chooseOption.value = CHOOSE;
+    chooseOption.textContent = t("editor.accept.chooseSubject");
+    subjectSelect.append(chooseOption);
+  }
   subjectSelect.append(newOption);
   for (const subject of subjects) {
     const opt = document.createElement("option");
@@ -320,6 +487,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     subjectSelect.append(opt);
   }
   subjectField.append(subjectLabel, subjectSelect);
+  if (subjectsFailed) subjectField.append(createTextElement("p", "form-message is-error", t("materials.editor.subjectsFailed")));
   // A new discipline is the SAME registration as in Disciplinas, Cadastro and Plano (subject-create-form.js): same fields, same colour choice, same
   // validation. Here it is saved together with the lesson, so it has no button of its own; it is unusable once an existing discipline is picked.
   const newSubjectSlot = document.createElement("div");
@@ -369,7 +537,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   // buttons, which share one row.
   const acceptActions = document.createElement("div");
   acceptActions.className = "lesson-accept-actions";
-  acceptActions.append(acceptBtn, previewBtn);
+  // in the order the student does them: look at what will be created, then accept (the final, irreversible step comes last)
+  acceptActions.append(previewBtn, acceptBtn);
   footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
   if (lessonTarget) {
     for (const part of [subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot]) part.hidden = true;
@@ -383,6 +552,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     newSubjectSlot.hidden = picked;
     if (picked) newSubject.reset();
   });
+  if (subjects.length > 0) {
+    subjectSelect.value = CHOOSE;
+    subjectSelect.dispatchEvent(new Event("change"));
+  }
 
   // Unsaved changes found from an earlier session (window closed, connection lost): offered to the student, never applied behind their back
   const recoveryBanner = document.createElement("section");
@@ -391,7 +564,44 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   recoveryBanner.setAttribute("aria-label", t("editor.recovery.label"));
   recoveryBanner.hidden = true;
 
-  root.append(head, recoveryBanner, tablist, ...TABS.map((tab) => panels.get(tab.key)), footer);
+  // A translation (or a regeneration) keeps the previous version until the student chooses: shown here while that choice is pending.
+  const decisionBanner = document.createElement("section");
+  decisionBanner.className = "lesson-decision";
+  decisionBanner.setAttribute("role", "region");
+  decisionBanner.setAttribute("aria-label", t("editor.decision.label"));
+  decisionBanner.hidden = true;
+  if (deps.getDecision && deps.decideReplacement) {
+    deps.getDecision(draft.proposalId).then((result) => {
+      if (!result?.ok || result.pending?.newDraftId !== draft.id || accepted) return;
+      const keepNew = button("primary-button", t("editor.decision.keepNew"), "keep-new-version");
+      const restore = button("secondary-button", t("editor.decision.restore"), "restore-previous-version");
+      const note = createTextElement("p", "lesson-decision-note", t("editor.decision.text"));
+      const message = statusMessage();
+      const decide = async (decision) => {
+        keepNew.disabled = true;
+        restore.disabled = true;
+        let outcome = await deps.decideReplacement(draft.id, decision);
+        if (!outcome.ok && outcome.code === "DISCARD_NEEDS_CONFIRMATION") {
+          if (!(await showConfirm(t("editor.decision.confirmDiscard")))) { keepNew.disabled = false; restore.disabled = false; return; }
+          outcome = await deps.decideReplacement(draft.id, decision, { confirmDiscard: true });
+        }
+        if (!outcome.ok) {
+          keepNew.disabled = false;
+          restore.disabled = false;
+          setMessage(message, outcome.message || t("editor.decision.failed"), true);
+          return;
+        }
+        if (decision === "RESTORE_PREVIOUS") { await deps.openDraftById?.(outcome.currentDraftId); return; }
+        decisionBanner.hidden = true;
+      };
+      keepNew.addEventListener("click", () => decide("KEEP_NEW"));
+      restore.addEventListener("click", () => decide("RESTORE_PREVIOUS"));
+      decisionBanner.replaceChildren(note, keepNew, document.createTextNode(" "), restore, message);
+      decisionBanner.hidden = false;
+    });
+  }
+
+  root.append(head, decisionBanner, recoveryBanner, tablist, ...TABS.map((tab) => panels.get(tab.key)), footer);
 
   // ================================================================================================================
   // rendering
@@ -646,30 +856,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     block.append(createTextElement("h4", "lesson-findings-title", t("editor.findings.title", { heading, count: findings.length })));
     // Grouped by WHY the point was raised. A difference of words is never presented as an error, so for that cause the server's
     // "restore the term" advice is replaced by the note that a missing word proves nothing.
-    for (const group of groupByCause(findings)) {
-      block.append(createTextElement("h5", "lesson-findings-cause", `${group.label} (${group.findings.length})`));
-      const note = group.cause === "wording" ? t("editor.finding.note.wording") : group.cause === "notEvaluable" ? t("editor.finding.note.notEvaluable") : "";
-      if (note) block.append(createTextElement("p", "lesson-hint lesson-findings-note", note));
-      const list = document.createElement("ul");
-      list.className = "lesson-findings-list";
-      for (const f of group.findings) {
-        const li = document.createElement("li");
-        li.append(createTextElement("p", "lesson-finding-issue", issueLabel(f.issue)));
-        const [claim, evidence, repair] = ["claim", "evidence", "repair"].map((slot) => findingText(f, slot));
-        if (claim) li.append(createTextElement("p", "lesson-finding-claim", t("editor.finding.claim", { text: claim })));
-        if (evidence) li.append(createTextElement("p", "lesson-finding-evidence", t("editor.finding.evidence", { text: evidence })));
-        if (repair && !note) li.append(createTextElement("p", "lesson-finding-repair", repair));
-        list.append(li);
-      }
-      block.append(list);
-    }
+    for (const group of groupByCause(findings)) appendFindingGroup(block, group);
     return block;
   }
 
   /** After an automatic repair the text the model first wrote is still there: the reviewer can read what was rewritten. */
   function renderOriginal() {
     const { original, repairChanges } = draft.audit ?? {};
-    if (!draft.audit?.repaired || !original || !(repairChanges?.length > 0)) return null;
+    if (!draft.audit?.repaired || !original || !hasRepairChanges(repairChanges)) return null;
     const details = document.createElement("details");
     details.className = "lesson-original";
     details.append(createTextElement("summary", "", t("editor.review.original.title")));
@@ -697,24 +891,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       if (text === null || text === undefined || text === "") return;
       dl.append(createTextElement("dt", "lesson-fact-label", label), createTextElement("dd", "lesson-fact-value", text));
     };
-    const nf = { format: (value) => formatNumber(value) };
     if (scope) {
-      fact(t("editor.source.document"), scope.documentName);
-      fact(t("editor.source.topic"), scope.topic);
-      const [a, b] = scope.approvedPages ?? [];
-      fact(t("editor.source.approvedPages"), a === undefined ? null : (a === b ? t("lesson.source.page", { page: a }) : t("lesson.source.pages", { from: a, to: b })));
-      fact(t("editor.source.approvedText"), Number.isFinite(scope.sourceChars) ? t("lesson.source.chars", { count: nf.format(scope.sourceChars) }) : null);
-      fact(t("editor.source.sentToModel"), Number.isFinite(scope.payloadChars)
-        ? (scope.payloadChars === scope.sourceChars ? t("editor.source.sentExact", { count: nf.format(scope.payloadChars) }) : t("lesson.source.chars", { count: nf.format(scope.payloadChars) }))
-        : null);
+      appendScopedSourceFacts(fact, scope);
     } else {
       sourcePanel.append(createTextElement("p", "lesson-hint", t("editor.source.noScope")));
       const unit = draft.sourceUnit;
-      if (unit) {
-        fact(t("editor.source.document"), unit.documentName);
-        fact(t("editor.source.unit"), unit.title);
-        fact(t("editor.source.unitPages"), unit.pageStart === unit.pageEnd ? t("lesson.source.page", { page: unit.pageStart }) : t("lesson.source.pages", { from: unit.pageStart, to: unit.pageEnd }));
-      }
+      if (unit) appendUnitSourceFacts(fact, unit);
     }
     sourcePanel.append(dl);
     const pages = (draft.pages ?? []).filter((p) => p.text);
@@ -741,6 +923,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       reviewPanel.append(stale);
     }
     reviewPanel.append(reauditMessage);
+    if (!accepted && deps.auditSummary) {
+      const check = document.createElement("div");
+      check.className = "lesson-audit-stale";
+      check.append(createTextElement("p", "lesson-hint", t("editor.review.auditSummaryHint")));
+      check.append(button("secondary-button lesson-audit-summary", t("editor.review.auditSummary"), "audit-summary"));
+      check.append(auditSummaryMessage);
+      reviewPanel.append(check);
+    }
     reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.filter")));
     if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")), ...[renderOriginal()].filter(Boolean));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");
@@ -804,7 +994,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const clip = (text, max = 110) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
   const pagesLabel = (pages) => {
     if (pages.length === 0) return "";
-    return ` ${pages.length === 1 ? t("editor.preview.pages.one", { pages: pages.join(", ") }) : t("editor.preview.pages.other", { pages: pages.join(", ") })}`;
+    const key = pages.length === 1 ? "editor.preview.pages.one" : "editor.preview.pages.other";
+    return ` ${t(key, { pages: pages.join(", ") })}`;
   };
 
   function renderPreview(preview) {
@@ -822,7 +1013,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const exercises = document.createElement("ol");
     exercises.className = "lesson-accept-preview-exercises";
     for (const e of preview.exercises) {
-      const tag = e.origin === "HUMAN_ADDED" ? ` ${t("editor.preview.addedByYou")}` : e.origin === "HUMAN_EDITED" ? ` ${t("editor.preview.editedByYou")}` : "";
+      const tag = previewExerciseTag(e.origin);
       exercises.append(createTextElement("li", "", `${clip(e.question)}${tag}${pagesLabel(e.pages)}`));
     }
     const parts = [createTextElement("p", "lesson-accept-preview-title", t("editor.preview.title")), summary, exercises];
@@ -975,6 +1166,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   previewBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowPreview", "editor.accept.savePendingPreview")) return;
+    if (!lessonTarget && subjectSelect.value === CHOOSE) { setMessage(acceptMessage, t("editor.accept.chooseSubjectRequired"), true); return; }
     const pickedSubjectId = !lessonTarget && subjectSelect.value ? Number(subjectSelect.value) : null;
     if (!lessonTarget && newSubjectProblem(pickedSubjectId)) return;
     previewBtn.disabled = true;
@@ -999,6 +1191,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   acceptBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowAccept", "editor.accept.savePendingAccept")) return;
+    if (!lessonTarget && subjectSelect.value === CHOOSE) { setMessage(acceptMessage, t("editor.accept.chooseSubjectRequired"), true); return; }
     const pickedSubjectId = !lessonTarget && subjectSelect.value ? Number(subjectSelect.value) : null;
     if (!lessonTarget && newSubjectProblem(pickedSubjectId)) return;
     acceptBtn.disabled = true;
@@ -1081,6 +1274,52 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     hint: (typed.hint ?? q.hint ?? "").trim() || null,
   });
 
+  function handleSummarySaveFailure(result, manual) {
+    summarySave.disabled = summaryBuffer === null;
+    if (manual) {
+      setMessage(summaryMessage, result.message || t("editor.summary.saveFailed"), true);
+      summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
+    }
+    return { ok: false, kind: saveFailureKind(result), message: result.message };
+  }
+
+  function clearQuestionBufferIfCurrent(questionId, sent) {
+    if (JSON.stringify(questionBuffers.get(questionId) ?? null) !== sent) return false;
+    questionBuffers.delete(questionId);
+    recovery.clearQuestion(questionId);
+    return true;
+  }
+
+  function clearUnchangedQuestionBuffer(questionId, question, fields, sent) {
+    if (JSON.stringify(fields) !== JSON.stringify(fieldsOf(question, {}))) return false;
+    if (clearQuestionBufferIfCurrent(questionId, sent)) redrawQuestions();
+    return true;
+  }
+
+  function handleQuestionSaveFailure(questionId, result, manual) {
+    if (manual && selectedId === questionId) {
+      qMessageFor = questionId;
+      setMessage(qMessage, result.message || t("editor.question.saveFailed"), true);
+    }
+    return { ok: false, kind: saveFailureKind(result), message: result.message };
+  }
+
+  function finishQuestionSave(questionId, sent, result, manual, wasAccepted) {
+    clearQuestionBufferIfCurrent(questionId, sent);
+    const focus = captureFocus();
+    applyDraft(result.draft, { keepSelection: selectedId });
+    // the review status belongs to the text that was reviewed (server rule): an accepted question whose text changed is back in review, and the student is told
+    const backInReview = wasAccepted && questionById(questionId)?.status !== "ACCEPTED";
+    if (backInReview && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, t("editor.question.msg.backInReview")); }
+    if (manual && selectedId === questionId) {
+      qMessageFor = selectedId;
+      if (!backInReview) setMessage(qMessage, t("editor.question.msg.saved"));
+      // "Salvar questão" is disabled now (nothing left to save): the focus goes to the question itself, as after every other action on a question
+      (qForm.querySelector('[data-action="save-question"]:not(:disabled)') ?? qForm.querySelector(".lesson-qheading"))?.focus({ preventScroll: true });
+    } else restoreFocus(focus);
+    return { ok: true };
+  }
+
   async function saveSummaryNow({ manual }) {
     summaryAuthoring.flushVisual(); // visual edits are written to the text first; if that cannot be done faithfully, nothing is sent
     const guard = summaryAuthoring.saveGuard();
@@ -1096,14 +1335,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
     if (manual) { summarySave.disabled = true; setMessage(summaryMessage, t("editor.saving")); }
     const result = await deps.reviseSummary(draft.id, { summary: sent.trim(), expectedVersion: draft.summaryVersion });
-    if (!result.ok) {
-      summarySave.disabled = summaryBuffer === null;
-      if (manual) {
-        setMessage(summaryMessage, result.message || t("editor.summary.saveFailed"), true);
-        summarySave.focus({ preventScroll: true }); // a disabled button dropped the focus while the request ran
-      }
-      return { ok: false, kind: kindOf(result), message: result.message };
-    }
+    if (!result.ok) return handleSummarySaveFailure(result, manual);
     // what was sent is saved; whatever the student typed while the request was in flight is NOT, and stays in the field as unsaved text
     if (summaryBuffer === sent) { summaryBuffer = null; recovery.clearSummary(); }
     const focus = captureFocus();
@@ -1124,30 +1356,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (!q || !typed) { recovery.clearQuestion(questionId); return { ok: true, nothing: true }; }
     const sent = JSON.stringify(typed);
     const fields = fieldsOf(q, typed);
-    if (JSON.stringify(fields) === JSON.stringify(fieldsOf(q, {}))) { // typed back to what the server already has
-      if (JSON.stringify(questionBuffers.get(questionId) ?? null) === sent) { questionBuffers.delete(questionId); recovery.clearQuestion(questionId); redrawQuestions(); }
-      return { ok: true, nothing: true };
-    }
+    if (clearUnchangedQuestionBuffer(questionId, q, fields, sent)) return { ok: true, nothing: true }; // typed back to what the server already has
     if (manual && selectedId === questionId) setMessage(qMessage, t("editor.saving"));
     const wasAccepted = q.status === "ACCEPTED";
     const result = await deps.reviseQuestion(draft.id, questionId, { ...fields, expectedVersion: q.version });
-    if (!result.ok) {
-      if (manual && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, result.message || t("editor.question.saveFailed"), true); }
-      return { ok: false, kind: kindOf(result), message: result.message };
-    }
-    if (JSON.stringify(questionBuffers.get(questionId) ?? null) === sent) { questionBuffers.delete(questionId); recovery.clearQuestion(questionId); }
-    const focus = captureFocus();
-    applyDraft(result.draft, { keepSelection: selectedId });
-    // the review status belongs to the text that was reviewed (server rule): an accepted question whose text changed is back in review, and the student is told
-    const backInReview = wasAccepted && questionById(questionId)?.status !== "ACCEPTED";
-    if (backInReview && selectedId === questionId) { qMessageFor = questionId; setMessage(qMessage, t("editor.question.msg.backInReview")); }
-    if (manual && selectedId === questionId) {
-      qMessageFor = selectedId;
-      if (!backInReview) setMessage(qMessage, t("editor.question.msg.saved"));
-      // "Salvar questão" is disabled now (nothing left to save): the focus goes to the question itself, as after every other action on a question
-      (qForm.querySelector('[data-action="save-question"]:not(:disabled)') ?? qForm.querySelector(".lesson-qheading"))?.focus({ preventScroll: true });
-    } else restoreFocus(focus);
-    return { ok: true };
+    if (!result.ok) return handleQuestionSaveFailure(questionId, result, manual);
+    return finishQuestionSave(questionId, sent, result, manual, wasAccepted);
   }
 
   const autosaver = createAutosaver({

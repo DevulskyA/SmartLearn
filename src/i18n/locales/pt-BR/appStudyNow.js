@@ -11,6 +11,7 @@ export default {
   'appStudyNow.why': 'Por quê: {text}',
   'appStudyNow.whyLabel': 'Por quê',
   'appStudyNow.reveal': 'Ver resposta',
+  'appStudyNow.retestErrors': 'Refazer erros',
   'appStudyNow.progress.question': 'Questão {current} de {total}',
   'appStudyNow.progress.retest': 'Erro {current} de {total}',
   'appStudyNow.practiceTitle': 'Praticar',
