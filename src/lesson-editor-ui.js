@@ -896,6 +896,30 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     });
   }
 
+  // Only shown when the list is stacked above the editor (narrow windows, see styles.css): it takes the student back to the list
+  // at the question they were editing, instead of scrolling up through the whole editor.
+  function backToListButton(q) {
+    const toList = button("text-button lesson-qback", t("editor.questions.backToList"), "back-to-question-list");
+    toList.addEventListener("click", () => {
+      const item = qList.querySelector(`[data-qid="${CSS.escape(q.id)}"]`);
+      item?.scrollIntoView({ block: "nearest" });
+      item?.focus();
+    });
+    return toList;
+  }
+
+  function questionTitleRow(q, index) {
+    const titleRow = document.createElement("div");
+    titleRow.className = "lesson-qtitle";
+    const qHeading = createTextElement("h3", "lesson-qheading", t("editor.question.name", { number: index + 1 }));
+    qHeading.tabIndex = -1; // where the focus lands when the button that was pressed has nothing left to do (saved, accepted, deleted)
+    titleRow.append(qHeading);
+    if (q.questionType && QUESTION_TYPE_LABELS[q.questionType]) {
+      titleRow.append(document.createTextNode(" "), createTextElement("span", "study-now-chip lesson-qtype", QUESTION_TYPE_LABELS[q.questionType]));
+    }
+    return titleRow;
+  }
+
   function renderQuestionEditor() {
     qForm.replaceChildren();
     qFindings.replaceChildren();
@@ -913,23 +937,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const index = draft.questions.indexOf(q);
     const idBase = `${uid}-q-${q.id}`;
 
-    // Only shown when the list is stacked above the editor (narrow windows, see styles.css): it takes the student back to the list
-    // at the question they were editing, instead of scrolling up through the whole editor.
-    const toList = button("text-button lesson-qback", t("editor.questions.backToList"), "back-to-question-list");
-    toList.addEventListener("click", () => {
-      const item = qList.querySelector(`[data-qid="${CSS.escape(q.id)}"]`);
-      item?.scrollIntoView({ block: "nearest" });
-      item?.focus();
-    });
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "lesson-qtitle";
-    const qHeading = createTextElement("h3", "lesson-qheading", t("editor.question.name", { number: index + 1 }));
-    qHeading.tabIndex = -1; // where the focus lands when the button that was pressed has nothing left to do (saved, accepted, deleted)
-    titleRow.append(qHeading);
-    if (q.questionType && QUESTION_TYPE_LABELS[q.questionType]) {
-      titleRow.append(document.createTextNode(" "), createTextElement("span", "study-now-chip lesson-qtype", QUESTION_TYPE_LABELS[q.questionType]));
-    }
+    const toList = backToListButton(q);
+    const titleRow = questionTitleRow(q, index);
 
     const fPrompt = labelledField(`${idBase}-prompt`, t("editor.question.prompt"), "textarea", value("question"), 3);
     const fAnswer = labelledField(`${idBase}-answer`, t("editor.question.answer"), "textarea", value("answer"), 3);
@@ -1157,19 +1166,22 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     if (groups.other.length > 0) reviewPanel.append(renderFindingList(groups.other, t("editor.findings.other")));
   }
 
+  /** The sentence above the accept button: what will be kept, in the words of the kind of draft it is. */
+  function acceptNoteText({ keptText, rejected, summaryOnly }) {
+    if (lessonTarget) return t("editor.lessonQuestions.note", { kept: keptText });
+    if (summaryOnly) return t("editor.accept.summaryOnly");
+    if (rejected === 0) return t("editor.accept.note", { kept: keptText });
+    const rejectedText = rejected === 1 ? t("editor.accept.rejected.one", { count: rejected }) : t("editor.accept.rejected.other", { count: rejected });
+    return t("editor.accept.noteRejected", { kept: keptText, rejected: rejectedText });
+  }
+
   function renderAccept() {
     const kept = keptQuestionCount(draft);
     const rejected = draft.questions.length - kept;
     const keptText = kept === 1 ? t("editor.accept.kept.one", { count: kept }) : t("editor.accept.kept.other", { count: kept });
     // a summary-first draft with no questions yet is accepted as a lesson without exercises (the questions can be asked for later, in Materiais)
     const summaryOnly = draft.questionsDeferred === true && draft.questions.length === 0 && !lessonTarget;
-    acceptNote.textContent = lessonTarget
-      ? t("editor.lessonQuestions.note", { kept: keptText })
-      : summaryOnly
-      ? t("editor.accept.summaryOnly")
-      : rejected > 0
-      ? t("editor.accept.noteRejected", { kept: keptText, rejected: rejected === 1 ? t("editor.accept.rejected.one", { count: rejected }) : t("editor.accept.rejected.other", { count: rejected }) })
-      : t("editor.accept.note", { kept: keptText });
+    acceptNote.textContent = acceptNoteText({ keptText, rejected, summaryOnly });
     const summaryBlockers = draft.acceptanceBlockers?.summary ?? 0;
     ackWrap.hidden = accepted || summaryBlockers === 0;
     if (ackWrap.hidden) ackBox.checked = false;
