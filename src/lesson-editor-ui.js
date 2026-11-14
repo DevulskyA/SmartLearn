@@ -396,6 +396,88 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     auditSummaryMessage.focus({ preventScroll: true });
   });
 
+  // Per-excerpt corrections: the AI proposes a fix for what the check found; the student accepts or dismisses EACH excerpt. One live region.
+  const correctionsMessage = statusMessage();
+  correctionsMessage.tabIndex = -1;
+  const correctionCalls = {
+    "propose-corrections": async () => ({ result: await deps.proposeCorrections(draft.id), done: "editor.corrections.proposed" }),
+    "apply-correction": async (key) => ({ result: await deps.applyCorrection(draft.id, key), done: "editor.corrections.applied" }),
+    "dismiss-correction": async (key) => ({ result: await deps.dismissCorrection(draft.id, key), done: "editor.corrections.dismissed" }),
+  };
+  reviewPanel.addEventListener("click", async (event) => {
+    const trigger = event.target.closest?.("[data-correction-action]");
+    const call = trigger && deps.proposeCorrections ? correctionCalls[trigger.dataset.correctionAction] : null;
+    if (!call) return;
+    trigger.disabled = true;
+    setMessage(correctionsMessage, t("editor.corrections.running"));
+    const { result, done } = await call(trigger.dataset.key);
+    if (!result.ok) {
+      setMessage(correctionsMessage, result.message || t("editor.corrections.failed"), true);
+      trigger.disabled = false;
+      trigger.focus({ preventScroll: true });
+      return;
+    }
+    applyDraft(result.draft, { keepSelection: selectedId });
+    const count = result.draft.corrections?.items?.length ?? 0;
+    setMessage(correctionsMessage, done === "editor.corrections.proposed" && count === 0 ? t("editor.corrections.none") : t(done, { count }));
+    correctionsMessage.focus({ preventScroll: true });
+  });
+
+  /** The blocks that check and fix the summary in the review tab (model check, per-excerpt corrections, no-AI fidelity), in that order, for what the deps allow. */
+  function summaryCheckBlocks() {
+    const blocks = [];
+    if (deps.auditSummary) {
+      const check = document.createElement("div");
+      check.className = "lesson-audit-stale";
+      check.append(createTextElement("p", "lesson-hint", t("editor.review.auditSummaryHint")));
+      check.append(button("secondary-button lesson-audit-summary", t("editor.review.auditSummary"), "audit-summary"));
+      check.append(auditSummaryMessage);
+      blocks.push(check);
+    }
+    if (deps.proposeCorrections && !lessonTarget) blocks.push(createCorrectionsBlock());
+    if (deps.summaryFidelity) blocks.push(createFidelityBlock());
+    return blocks;
+  }
+
+  /** The invitation to ask for corrections and, once proposed, one card per excerpt (before / after / why) with its own accept and dismiss. */
+  function createCorrectionsBlock() {
+    const block = document.createElement("div");
+    block.className = "lesson-audit-stale lesson-corrections";
+    block.append(createTextElement("p", "lesson-hint", t("editor.corrections.hint")));
+    const hasFindings = (draft.audit?.findings ?? []).some((f) => f.scope === "summary" && f.severity !== "LOW");
+    const ask = button("secondary-button lesson-propose-corrections", t("editor.corrections.propose"), "propose-corrections");
+    ask.dataset.correctionAction = "propose-corrections";
+    ask.disabled = !hasFindings;
+    block.append(ask);
+    if (!hasFindings) block.append(createTextElement("p", "lesson-hint", t("editor.corrections.needsCheck")));
+    const unsaved = summaryBuffer !== null && summaryBuffer !== draft.summary;
+    const items = draft.corrections?.items ?? [];
+    const list = document.createElement("ul");
+    list.className = "lesson-corrections-list";
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.className = "lesson-correction";
+      li.append(
+        createTextElement("p", "lesson-correction-reason", item.reason || ""),
+        createTextElement("p", "lesson-correction-before", `${t("editor.corrections.before")}: ${item.original}`),
+        createTextElement("p", "lesson-correction-after", `${t("editor.corrections.after")}: ${item.proposed || t("editor.corrections.removed")}`),
+      );
+      const accept = button("primary-button", t("editor.corrections.accept"), "accept-correction");
+      accept.dataset.correctionAction = "apply-correction";
+      accept.dataset.key = item.key;
+      accept.disabled = unsaved;
+      const dismiss = button("text-button", t("editor.corrections.dismiss"), "dismiss-correction");
+      dismiss.dataset.correctionAction = "dismiss-correction";
+      dismiss.dataset.key = item.key;
+      li.append(accept, document.createTextNode(" "), dismiss);
+      list.append(li);
+    }
+    if (items.length > 0) block.append(list);
+    if (items.length > 0 && unsaved) block.append(createTextElement("p", "lesson-hint", t("editor.corrections.saveFirst")));
+    block.append(correctionsMessage);
+    return block;
+  }
+
   // Summary-first draft: the questions are written on request, into this same draft, and still have to be reviewed here.
   // Offered where the student looks for the questions (Questões) and where the checks are (Revisão); one live region per panel, both kept in step.
   const laterMessages = new Map([[reviewPanel, statusMessage()], [questionsPanel, statusMessage()]]);
@@ -1037,15 +1119,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       reviewPanel.append(stale);
     }
     reviewPanel.append(reauditMessage);
-    if (!accepted && deps.auditSummary) {
-      const check = document.createElement("div");
-      check.className = "lesson-audit-stale";
-      check.append(createTextElement("p", "lesson-hint", t("editor.review.auditSummaryHint")));
-      check.append(button("secondary-button lesson-audit-summary", t("editor.review.auditSummary"), "audit-summary"));
-      check.append(auditSummaryMessage);
-      reviewPanel.append(check);
-    }
-    if (!accepted && deps.summaryFidelity) reviewPanel.append(createFidelityBlock());
+    if (!accepted) reviewPanel.append(...summaryCheckBlocks());
     reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.filter")));
     if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")), ...[renderOriginal()].filter(Boolean));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");

@@ -6496,3 +6496,10 @@ label.select-control:has(> .ui-select) {
 .lesson-versions-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.75rem; margin-bottom: 0.5rem; }
 .lesson-versions-heading { margin: 0 0 0.25rem; font-size: 0.9rem; }
 .lesson-versions-text { margin: 0; padding: 0.5rem; max-height: 18rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; border: 1px solid var(--color-border); border-radius: 0.5rem; }
+
+/* per-excerpt corrections: one card per proposed excerpt */
+.lesson-corrections-list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.lesson-correction { padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 0.5rem; }
+.lesson-correction p { margin: 0 0 0.35rem; overflow-wrap: anywhere; }
+.lesson-correction-reason { font-weight: 600; }
+.lesson-correction-before { text-decoration: line-through; text-decoration-thickness: 1px; }

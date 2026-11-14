@@ -83,6 +83,30 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
+/** Asks the AI for corrections of what the check found in the summary, as excerpts. Never changes the summary; uses one credit. */
+export async function proposeCorrections(draftId) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/corrections`, { method: 'POST', body: {} });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
+/** Accepts ONE proposed excerpt (replaces exactly that text in the summary). */
+export async function applyCorrection(draftId, key) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/corrections/${key}/apply`, { method: 'POST', body: {} });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
+/** Dismisses ONE proposed excerpt; the summary is untouched. */
+export async function dismissCorrection(draftId, key) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/corrections/${key}`, { method: 'DELETE' });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
 /** Meaning-flipping words of the source missing from the summary (deterministic, no AI, no credit). */
 export async function summaryFidelity(draftId) {
   try {
