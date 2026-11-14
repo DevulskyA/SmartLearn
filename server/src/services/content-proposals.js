@@ -67,16 +67,33 @@ function proposalChars(db, userId, row) {
 /**
  * The newest draft of each proposal of a source (id, status, revision), so the student can reopen it instead of generating again.
  * `acceptedUnitId` is the lesson an ACCEPTED draft became, and only while that lesson still exists (null otherwise), so a link to it is trustworthy.
+ * A draft that only adds questions to an existing lesson (target_unit_id) is never "the newest draft": it is reported as the lesson's
+ * `lessonQuestions` instead -- AVAILABLE (a lesson accepted as a summary only, still without exercises) or IN_REVIEW (the draft to open).
  */
 function latestDraftsByProposal(db, userId, sourceId) {
   const rows = db.prepare(`
-    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision, u.id AS acceptedUnitId
+    SELECT d.proposal_id AS proposalId, d.id, d.status, d.revision, u.id AS acceptedUnitId, d.draft_json AS draftJson,
+           (SELECT COUNT(*) FROM exercises e WHERE e.user_id = d.user_id AND e.unit_id = u.id) AS exerciseCount,
+           (SELECT q.id FROM generated_drafts q WHERE q.user_id = d.user_id AND q.target_unit_id = u.id AND q.status = 'DRAFT') AS questionsDraftId
     FROM generated_drafts d
     LEFT JOIN learning_units u ON u.user_id = d.user_id AND u.id = d.accepted_unit_id
-    WHERE d.user_id = ? AND d.proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
+    WHERE d.user_id = ? AND d.target_unit_id IS NULL AND d.proposal_id IN (SELECT id FROM content_proposals WHERE user_id = ? AND source_id = ?)
     ORDER BY d.id ASC
   `).all(userId, userId, sourceId);
-  return new Map(rows.map((r) => [r.proposalId, { id: r.id, status: r.status, revision: r.revision, acceptedUnitId: r.acceptedUnitId ?? null }]));
+  return new Map(rows.map((r) => [r.proposalId, {
+    id: r.id, status: r.status, revision: r.revision, acceptedUnitId: r.acceptedUnitId ?? null,
+    lessonQuestions: lessonQuestionsState(r),
+  }]));
+}
+
+/** What the student can do about the questions of an accepted lesson (see latestDraftsByProposal); null when nothing applies. */
+function lessonQuestionsState(r) {
+  if (r.status !== 'ACCEPTED' || r.acceptedUnitId == null) return null;
+  if (r.questionsDraftId != null) return { state: 'IN_REVIEW', draftId: r.questionsDraftId };
+  if (r.exerciseCount > 0) return null;
+  try {
+    return JSON.parse(r.draftJson).questionsDeferred === true ? { state: 'AVAILABLE', draftId: null } : null;
+  } catch { return null; }
 }
 
 function toSummaryDto(row, latestDraft = null) {

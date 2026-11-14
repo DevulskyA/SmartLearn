@@ -95,6 +95,82 @@ function prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expect
   return { storedLessonDate, proposal, dueDates, draftContent, excluded, pageTextByIndex, sourceRow, blockers };
 }
 
+/** One exercise (with its first version and its frozen citations) per question, numbered from `firstIndex`. Shared by both acceptances. */
+function insertQuestionsAsExercises(db, userId, unitId, firstIndex, questions, { sourceId, pageTextByIndex, parserVersion }, nowIso) {
+  const insertExercise = db.prepare('INSERT INTO exercises (user_id, unit_id, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
+  const insertVersion = db.prepare(`
+    INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at, question_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertCitation = db.prepare(`
+    INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at, page_text_snapshot, parser_version_snapshot)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  questions.forEach((question, index) => {
+    const exerciseResult = insertExercise.run(userId, unitId, firstIndex + index, nowIso, nowIso);
+    const versionResult = insertVersion.run(userId, exerciseResult.lastInsertRowid, question.question, question.answer, question.explanation ?? null, question.hint ?? null,
+      // a question the student wrote is theirs, never labelled as AI; AI text the student edited stays AI-derived
+      question.origin === 'HUMAN_ADDED' ? 'MANUAL' : 'AI_GENERATED', nowIso, question.questionType ?? null);
+    for (const span of question.sourceSpans) {
+      insertCitation.run(userId, versionResult.lastInsertRowid, sourceId, span.pageIndex, nowIso, pageTextByIndex.get(span.pageIndex) ?? null, parserVersion);
+    }
+  });
+}
+
+/**
+ * QUESTIONS FOR AN EXISTING LESSON (draft with target_unit_id, migration 045). Same guarantees as an acceptance -- the revision the student
+ * reviewed, a source that still holds the text, no unresolved critical finding, rejected questions left out -- but it creates no lesson and
+ * no review calendar: the kept questions are APPENDED to the lesson, after the exercises it already has, which are untouched. The lesson's
+ * summary is not part of it (it is shown read-only), so summary findings and the study date do not apply.
+ */
+function prepareLessonQuestions(db, userId, draftRow, { expectedRevision, requireRevision }) {
+  const checkRevision = requireRevision || (expectedRevision !== undefined && expectedRevision !== null);
+  if (checkRevision && !Number.isInteger(expectedRevision)) {
+    throw new AcceptDraftError('VALIDATION_FAILED', 'Informe expectedRevision (a revisão do rascunho que foi revisada).', 'expectedRevision');
+  }
+  if (checkRevision && expectedRevision !== draftRow.revision) throw new AcceptDraftError('REVISION_CONFLICT', dm('ACCEPT_REVISION_CONFLICT'));
+  const unit = db.prepare('SELECT * FROM learning_units WHERE user_id = ? AND id = ?').get(userId, draftRow.target_unit_id);
+  if (!unit) throw new AcceptDraftError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
+  const proposal = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, draftRow.proposal_id);
+  if (!proposal) throw new AcceptDraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
+  if (isDraftStale(db, userId, draftRow)) throw new AcceptDraftError('SOURCE_CHANGED', dm('SOURCE_CHANGED_SINCE_DRAFT'));
+  const content = normalizeContent(JSON.parse(draftRow.draft_json));
+  const blockers = acceptanceBlockers(content, { acknowledgeSummaryFindings: true });
+  const kept = content.questions.filter((q) => q.status !== 'REJECTED');
+  const excluded = content.questions.filter((q) => q.status === 'REJECTED');
+  return { unit, proposal, blockers, kept, excluded };
+}
+
+function acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now) {
+  const { unit, proposal, blockers, kept } = prepareLessonQuestions(db, userId, draftRow, { expectedRevision, requireRevision: true });
+  if (blockers.questions.length > 0) throw new AcceptDraftError('FINDINGS_UNRESOLVED', dm('FINDINGS_UNRESOLVED', { questions: blockers.questions.length, summary: 0 }));
+  if (kept.length === 0) throw new AcceptDraftError('VALIDATION_FAILED', dm('QUESTIONS_NOTHING_TO_ADD'), 'questions');
+  const sourceRow = db.prepare('SELECT parser_version FROM sources WHERE user_id = ? AND id = ?').get(userId, proposal.source_id);
+  const pageTextByIndex = new Map(
+    db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ?').all(userId, proposal.source_id).map((row) => [row.page_index, row.text]),
+  );
+  return db.transaction(() => {
+    const nowIso = now().toISOString();
+    const { next } = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM exercises WHERE user_id = ? AND unit_id = ?').get(userId, unit.id);
+    insertQuestionsAsExercises(db, userId, unit.id, next, kept, { sourceId: proposal.source_id, pageTextByIndex, parserVersion: sourceRow?.parser_version ?? null }, nowIso);
+    db.prepare('UPDATE learning_units SET updated_at = ? WHERE user_id = ? AND id = ?').run(nowIso, userId, unit.id);
+    const subject = db.prepare('SELECT * FROM subjects WHERE user_id = ? AND id = ?').get(userId, unit.subject_id);
+    const result = {
+      subject: subject ? subjectDto(subject) : null,
+      unit: unitDto(db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unit.id)),
+      reviewCount: 0,
+      exerciseCount: kept.length,
+      addedToLessonId: unit.id,
+      draftId: draftRow.id,
+      acceptedBy: userId,
+      acceptedAt: nowIso,
+    };
+    db.prepare("UPDATE generated_drafts SET status = 'ACCEPTED', accepted_at = ?, accepted_unit_id = ?, acceptance_result_json = ? WHERE user_id = ? AND id = ?")
+      .run(nowIso, unit.id, JSON.stringify(result), userId, draftRow.id);
+    return result;
+  }).immediate();
+}
+
 /**
  * Accepts one DRAFT-status generated draft into normal study: creates (or
  * reuses) a subject, one learning unit, exactly 16 review_tasks, and one
@@ -123,6 +199,8 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
   if (draftRow.status !== 'DRAFT') {
     throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
   }
+
+  if (draftRow.target_unit_id != null) return acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now);
 
   const plan = prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expectedRevision, requireRevision: true, acknowledgeSummaryFindings });
   const { storedLessonDate, proposal, dueDates, draftContent, pageTextByIndex, sourceRow, blockers } = plan;
@@ -166,28 +244,7 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     const insertReview = db.prepare('INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, created_at) VALUES (?, ?, ?, ?, ?)');
     dueDates.forEach((dueDate, i) => insertReview.run(userId, unit.id, REVIEW_DAY_OFFSETS[i], dueDate, nowIso));
 
-    const insertExercise = db.prepare('INSERT INTO exercises (user_id, unit_id, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
-    const insertVersion = db.prepare(`
-      INSERT INTO exercise_versions (user_id, exercise_id, question, answer, explanation, hint, provenance, created_at, question_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertCitation = db.prepare(`
-      INSERT INTO exercise_source_citations (user_id, exercise_version_id, source_id, page_index, created_at, page_text_snapshot, parser_version_snapshot)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    draftContent.questions.forEach((question, index) => {
-      const exerciseResult = insertExercise.run(userId, unit.id, index, nowIso, nowIso);
-      const versionResult = insertVersion.run(userId, exerciseResult.lastInsertRowid, question.question, question.answer, question.explanation ?? null, question.hint ?? null,
-        // a question the student wrote is theirs, never labelled as AI; AI text the student edited stays AI-derived
-        question.origin === 'HUMAN_ADDED' ? 'MANUAL' : 'AI_GENERATED', nowIso, question.questionType ?? null);
-      for (const span of question.sourceSpans) {
-        insertCitation.run(
-          userId, versionResult.lastInsertRowid, proposal.source_id, span.pageIndex, nowIso,
-          pageTextByIndex.get(span.pageIndex) ?? null, sourceRow?.parser_version ?? null,
-        );
-      }
-    });
+    insertQuestionsAsExercises(db, userId, unit.id, 0, draftContent.questions, { sourceId: proposal.source_id, pageTextByIndex, parserVersion: sourceRow?.parser_version ?? null }, nowIso);
 
     const result = {
       subject: subjectDto(subject),
@@ -223,6 +280,23 @@ export function previewAcceptance(db, userId, draftId, { subjectId, newSubjectNa
   }
   if (draftRow.status !== 'DRAFT') {
     throw new AcceptDraftError('INVALID_STATE', dm('DRAFT_STATE_NOT_ACCEPTABLE', { status: draftRow.status }));
+  }
+  if (draftRow.target_unit_id != null) {
+    const { unit, kept, excluded: rejected, blockers: found } = prepareLessonQuestions(db, userId, draftRow, { expectedRevision, requireRevision: false });
+    return {
+      status: 'DRAFT',
+      draftId: draftRow.id,
+      revision: draftRow.revision,
+      addToLessonId: unit.id,
+      unit: { id: unit.id, title: unit.title, summary: unit.summary_body, studyDate: unit.study_date, lessonDate: unit.lesson_date ?? null, summaryPages: [] },
+      reviews: { count: 0, dueDates: [] },
+      exercises: kept.map((q, order) => ({
+        order, questionId: q.id, question: q.question, answer: q.answer, explanation: q.explanation ?? null, hint: q.hint ?? null,
+        questionType: q.questionType ?? null, pages: q.sourceSpans.map((span) => span.pageIndex), origin: q.origin,
+      })),
+      excluded: rejected.map((q) => ({ questionId: q.id, question: q.question, reason: 'REJECTED' })),
+      blockers: { questions: found.questions, summary: 0 },
+    };
   }
   const { storedLessonDate, proposal, dueDates, draftContent, excluded, pageTextByIndex, blockers } = prepareAcceptance(db, userId, draftRow, { studyDate, lessonDate, expectedRevision, requireRevision: false, acknowledgeSummaryFindings });
   let subject;

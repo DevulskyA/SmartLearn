@@ -20,7 +20,7 @@
 // Credit (R-12) is the existing createDraft logic: RELEASED when the run was stopped before a provider call could leave, SETTLED at
 // the estimate of the calls made when it was stopped during or after one.
 import { config } from '../config.js';
-import { createDraft, selectProvider, DraftError } from './generated-drafts.js';
+import { createDraft, generateDeferredQuestions, selectProvider, DraftError } from './generated-drafts.js';
 import { ProviderRequestError } from '../ai/anthropic-provider.js';
 import { sampleProcessTree } from './process-liveness.js';
 import {
@@ -199,7 +199,7 @@ export function createJobRunner(db, {
         }
       }
       : undefined);
-    return { ...base, generate: phased(base.generate, 'GENERATING'), audit: phased(base.audit, 'AUDITING'), repair: phased(base.repair, 'REPAIRING') };
+    return { ...base, generate: phased(base.generate, 'GENERATING'), generateQuestions: phased(base.generateQuestions, 'GENERATING'), audit: phased(base.audit, 'AUDITING'), repair: phased(base.repair, 'REPAIRING') };
   }
 
   async function generate(run) {
@@ -213,6 +213,8 @@ export function createJobRunner(db, {
       onBudgetClosed: (budget) => { run.budget = budget; },
       onPhase: (phase) => alive(run, { phase }),
     };
+    // The questions of a draft that already exists: written into THAT draft (still to be reviewed), same credit, consent and stop signal.
+    if (job.kind === 'QUESTIONS') return generateDeferredQuestions(db, job.userId, job.targetDraftId, { ...options, providerImpl: wrapProvider(base, run), hooks, now });
     return createDraft(db, job.userId, job.proposalId, { ...options, providerImpl: wrapProvider(base, run), regenerate: job.regenerate === true, generationLocaleOverride: job.generationLocale ?? null, hooks, now });
   }
 

@@ -354,6 +354,8 @@ function toDraftDto(row, { db, userId } = {}) {
     updatedAt: row.updated_at ?? row.created_at,
     acceptedAt: row.accepted_at ?? null,
     acceptedUnitId: row.accepted_unit_id ?? null,
+    // set on a draft that only ADDS questions to this existing lesson (migration 045); null on every ordinary draft
+    targetUnitId: row.target_unit_id ?? null,
     ...draft,
     // T-F2-03: a COMPARISON only (opening never recalculates nor writes); an audit stored without a version is older than any version.
     auditStale: Boolean(audit) && audit.rulesVersion !== AUDIT_RULES_VERSION,
@@ -601,7 +603,8 @@ export async function createDraft(db, userId, proposalId, {
 function reusableDraftRow(db, userId, proposalId) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
   if (!proposal) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
-  const rows = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId);
+  // a draft that only adds questions to an existing lesson is never "the unit's draft": the lesson (or its summary draft) answers
+  const rows = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND target_unit_id IS NULL ORDER BY id DESC').all(userId, proposalId);
   for (const row of rows) {
     if (row.status === 'ACCEPTED') return row;
     if (row.status === 'DRAFT' && !isDraftStale(db, userId, row)) return row;
@@ -613,7 +616,7 @@ function reusableDraftRow(db, userId, proposalId) {
 export function generationState(db, userId, proposalId) {
   const reusable = reusableDraftRow(db, userId, proposalId);
   if (reusable) return reusable.status === 'ACCEPTED' ? 'ACCEPTED' : 'DRAFT';
-  const any = db.prepare("SELECT 1 FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND status = 'DRAFT' LIMIT 1").get(userId, proposalId);
+  const any = db.prepare("SELECT 1 FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND status = 'DRAFT' AND target_unit_id IS NULL LIMIT 1").get(userId, proposalId);
   return any ? 'STALE' : 'NOT_GENERATED';
 }
 
@@ -780,6 +783,8 @@ function requireFresh(actual, expected, code) {
 /** Edits ONLY the summary: questions, their ids/status/versions and citations are untouched. */
 export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date()) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  // the summary of a lesson that already exists is edited in the lesson; a draft that only adds questions never rewrites it
+  if (draftRow.target_unit_id != null) throw new DraftError('INVALID_STATE', dm('LESSON_SUMMARY_READONLY'));
   requireFresh(current.summaryVersion, expectedVersion, 'SUMMARY_CHANGED_SINCE_READ');
   if (typeof summary !== 'string') throw new DraftError('VALIDATION_FAILED', dm('SUMMARY_REQUIRED'), 'summary');
   // a [[fig:UUID]] must be one of the student's own figures, and a PDF crop must come from THIS draft's source
@@ -869,7 +874,9 @@ export function addQuestion(db, userId, draftId, input = {}, now = () => new Dat
  * none, or none with a valid citation, changes nothing and the draft stays summary-only. A repeat once the questions are there is a no-op.
  */
 export async function generateDeferredQuestions(db, userId, draftId, {
-  promptVersion = '10', provider: declaredProvider = null, providerImpl = null, consentGranted = false, codex = {}, timeoutMs = 30_000, signal = null, now = () => new Date(),
+  promptVersion = '10', provider: declaredProvider = null, providerImpl = null, consentGranted = false, codex = {}, timeoutMs = 30_000, signal = null,
+  // Credit limits for this call (tests); undefined = the configured limits. `hooks` is set only by the background job runner (see createDraft).
+  budgetLimits = undefined, hooks = null, now = () => new Date(),
 } = {}) {
   const first = loadEditable(db, userId, draftId);
   if (first.current.questionsDeferred !== true) return toDraftDto(first.draftRow, { db, userId });
@@ -877,23 +884,124 @@ export async function generateDeferredQuestions(db, userId, draftId, {
   if (typeof provider.generateQuestions !== 'function') throw new DraftError('INVALID_STATE', dm('QUESTIONS_LATER_UNSUPPORTED'));
   const chars = first.found.segments.reduce((sum, s) => sum + s.text.length, 0);
   const deadlineMs = provider.deadlineFor?.(chars) ?? provider.timeoutMs ?? timeoutMs;
-  const raw = await withTimeout(Promise.resolve(provider.generateQuestions({
-    segments: first.found.segments, promptVersion, generationLocale: first.current.generationLocale, signal,
-  })), deadlineMs, 'TIMEOUT');
-  // Reload after the (long) call: the student may have edited the summary, or a repeat request may have delivered the questions already.
-  const { draftRow, found, current } = loadEditable(db, userId, draftId);
-  if (current.questionsDeferred !== true) return toDraftDto(draftRow, { db, userId });
-  const validated = validateOrThrow({
-    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: raw?.questions ?? [],
-    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
-  }, found.segments);
-  if (validated.questions.length === 0) throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'questions');
-  const generatedBy = { provider: provider.name, modelVersion: raw?.modelVersion ?? draftRow.model_version, promptVersion };
-  return persistEdit(db, userId, draftId, draftRow, found, current, {
-    summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
-    questions: validated.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null })),
-    questionsDelivered: true,
-  }, now);
+  const stopSignal = hooks?.signal ?? signal;
+
+  // CREDIT (R-12), exactly like the summary: a provider that reaches an external model never runs without a reservation inside the limits.
+  // One call, so one call is held. Released when nothing could have left (stopped before the call, or a failure that proves no request was
+  // sent); settled at the estimate when the call may have happened (it is never refunded, and it is closed once).
+  let reservation = null;
+  if (provider.live === true) {
+    try {
+      reservation = reserve(db, userId, { proposalId: first.draftRow.proposal_id, estimatedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), limits: budgetLimits, now });
+      hooks?.onReservation?.(reservation);
+    } catch (err) {
+      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
+      throw err;
+    }
+  }
+  let budgetClosed = reservation === null;
+  const closeBudget = ({ refund = false } = {}) => {
+    if (budgetClosed) return;
+    if (refund) {
+      release(db, reservation.id, { now });
+      budgetClosed = true;
+      hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'RELEASED', consumedUnits: 0 });
+    } else {
+      const consumedUnits = estimateCostUnits({ payloadChars: chars, calls: 1 });
+      settle(db, reservation.id, { consumedUnits, basis: 'ESTIMATED', now });
+      budgetClosed = true;
+      hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'SETTLED', consumedUnits });
+    }
+  };
+  try {
+    if (stopSignal?.aborted) {
+      closeBudget({ refund: true });
+      throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL'));
+    }
+    let raw;
+    try {
+      raw = await withTimeout(Promise.resolve(provider.generateQuestions({
+        segments: first.found.segments, promptVersion, generationLocale: first.current.generationLocale, signal: stopSignal,
+      })), deadlineMs, 'TIMEOUT');
+    } catch (err) {
+      closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
+      if (err instanceof DraftError) throw err;
+      if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
+      throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE')); // never an unshaped provider exception (credentials, source text)
+    }
+    closeBudget();
+
+    hooks?.onPhase?.('SAVING');
+    // A stopped job never leaves questions behind, not even a complete answer that came too late (the call happened: it is charged).
+    if (stopSignal?.aborted) throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_NO_DRAFT'));
+    // Reload after the (long) call: the student may have edited the summary or added/approved questions meanwhile, or a repeat request may
+    // have delivered the questions already.
+    const { draftRow, found, current } = loadEditable(db, userId, draftId);
+    if (current.questionsDeferred !== true) return toDraftDto(draftRow, { db, userId });
+    const validated = validateOrThrow({
+      summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: raw?.questions ?? [],
+      modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+    }, found.segments);
+    if (validated.questions.length === 0) throw new DraftError('INVALID_DRAFT', dm('CITATION_OUT_OF_RANGE'), 'questions');
+    const generatedBy = { provider: provider.name, modelVersion: raw?.modelVersion ?? draftRow.model_version, promptVersion };
+    // Everything the student already has stays EXACTLY as it is (text, id, review status, origin); the generated questions are added after
+    // them, and one that repeats a question already there is not added twice.
+    const have = new Set(current.questions.map(questionText));
+    const fresh = validated.questions.filter((q) => !have.has(questionText(q)));
+    return persistEdit(db, userId, draftId, draftRow, found, current, {
+      summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
+      questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null }))],
+      questionsDelivered: true,
+    }, now);
+  } finally {
+    // an unexpected error before the call closed the ledger: the call may have left, so it is settled, never left held
+    if (!budgetClosed) { try { closeBudget(); } catch { /* startup reconciliation settles what is still open */ } }
+  }
+}
+
+/**
+ * Questions for a lesson that ALREADY exists (it was accepted as a summary only). They are written into a draft of their own,
+ * hung on the lesson (target_unit_id), so they are reviewed like any AI output; accepting it only ADDS exercises (accept-draft.js).
+ * The draft is summary-first shaped (no questions, questionsDeferred) and carries the lesson's summary read-only. Asking again while
+ * one is open returns it. No provider is involved. NOT_FOUND for another student's lesson and for a lesson that did not come from a source.
+ */
+export function createLessonQuestionsDraft(db, userId, unitId, { now = () => new Date() } = {}) {
+  const unit = db.prepare('SELECT id, summary_body FROM learning_units WHERE user_id = ? AND id = ?').get(userId, unitId);
+  if (!unit) throw new DraftError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
+  const open = () => db.prepare("SELECT * FROM generated_drafts WHERE user_id = ? AND target_unit_id = ? AND status = 'DRAFT'").get(userId, unitId);
+  if (open()) return toDraftDto(open(), { db, userId });
+  const origin = db.prepare("SELECT * FROM generated_drafts WHERE user_id = ? AND accepted_unit_id = ? AND status = 'ACCEPTED' AND target_unit_id IS NULL ORDER BY id DESC LIMIT 1").get(userId, unitId);
+  if (!origin) throw new DraftError('NOT_FOUND', dm('LESSON_WITHOUT_SOURCE'));
+  const found = findOwnedProposalWithSegments(db, userId, origin.proposal_id);
+  if (!found) throw new DraftError('NOT_FOUND', dm('SOURCE_PROPOSAL_NOT_FOUND'));
+  const digest = segmentsDigest(found.segments);
+  // the questions must come from the text the lesson came from: a source extracted differently since then would attribute text B to a summary of text A
+  if (origin.input_sha256 && origin.input_sha256 !== digest) throw new DraftError('SOURCE_CHANGED', dm('SOURCE_CHANGED_SINCE_DRAFT'));
+  const prior = normalizeContent(JSON.parse(origin.draft_json), generatorOf(origin));
+  const nowIso = now().toISOString();
+  const content = normalizeContent({
+    summary: unit.summary_body || prior.summary,
+    summarySourceSpans: prior.summarySourceSpans,
+    summaryEvidence: [],
+    questions: [],
+    questionsDeferred: true,
+    quarantinedCount: 0,
+    audit: { result: AUDIT_RESULT.PASS, findings: [], auditedBy: ['DETERMINISTIC'], modelAudit: 'NOT_RUN', repaired: false, repairRejected: false, addressed: [], rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
+    sourceLanguage: prior.sourceLanguage,
+    generationLocale: prior.generationLocale,
+    languageCheck: prior.languageCheck,
+    sourceScope: prior.sourceScope,
+  });
+  const generation = db.prepare('SELECT extraction_generation FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.extraction_generation ?? null;
+  try {
+    db.prepare(`
+      INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation, target_unit_id)
+      VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?)
+    `).run(userId, origin.proposal_id, origin.provider, origin.model_version, origin.prompt_version, JSON.stringify(content), nowIso, digest, generation, unitId);
+  } catch (err) {
+    if (!open()) throw err; // two requests at once: the partial unique index let one in; the other gets that one
+  }
+  return toDraftDto(open(), { db, userId });
 }
 
 /**
@@ -959,5 +1067,5 @@ export function getDraft(db, userId, draftId) {
 export function listDrafts(db, userId, proposalId) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
   if (!proposal) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
-  return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? ORDER BY id DESC').all(userId, proposalId).map((row) => toDraftDto(row, { db, userId }));
+  return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND target_unit_id IS NULL ORDER BY id DESC').all(userId, proposalId).map((row) => toDraftDto(row, { db, userId }));
 }

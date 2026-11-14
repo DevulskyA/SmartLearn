@@ -17,7 +17,7 @@
 import { detectSourceLanguage } from '../ai/language-contract.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 import { estimateCostUnits } from './generation-budget.js';
-import { prepareGeneration, segmentsDigest, DraftError } from './generated-drafts.js';
+import { prepareGeneration, segmentsDigest, isDraftStale, DraftError } from './generated-drafts.js';
 import { ensureGenerationLocale } from './settings.js';
 
 export class JobError extends Error {
@@ -70,6 +70,9 @@ const toDto = (row) => ({
   errorMessage: row.error_message,
   draftId: row.draft_id,
   cancelRequestedAt: row.cancel_requested_at,
+  // DRAFT: summary [+ questions] for a proposal. QUESTIONS: the questions of the draft in targetDraftId, written into that same draft.
+  kind: row.kind ?? 'DRAFT',
+  targetDraftId: row.target_draft_id ?? null,
 });
 
 const ACTIVE_SQL = ACTIVE_STATES.map((s) => `'${s}'`).join(', ');
@@ -110,6 +113,50 @@ export function createJob(db, userId, proposalId, { provider, regenerate = false
                                    regenerate, estimated_units, created_at, last_activity_at)
       VALUES (?, ?, 'QUEUED', 'QUEUED', ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(userId, proposalId, provider.name, detectSourceLanguage(segments), generationLocale, segmentsDigest(segments), regenerate ? 1 : 0, estimatedUnits, at, at);
+    return { job: toDto(db.prepare('SELECT * FROM generation_jobs WHERE id = ?').get(result.lastInsertRowid)), created: true };
+  });
+  return run.immediate();
+}
+
+/**
+ * Records a job that writes the QUESTIONS of a summary-first draft (or of the draft that adds questions to an existing lesson) into that same
+ * draft. It is the same record, ledger, consent, cancellation and concurrency as the summary job: at most one ACTIVE job per proposal, so
+ * asking again while it runs returns it (created: false) and never a second call; once the questions are there nothing is created.
+ */
+export function createQuestionsJob(db, userId, draftId, { provider, maxInputChars = 50_000, now = () => new Date() } = {}) {
+  if (!provider || typeof provider.name !== 'string' || provider.name.length === 0) throw new JobError('VALIDATION_FAILED', 'Provedor da geração não informado.', 'provider');
+  const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
+  if (!draftRow) throw new JobError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  if (draftRow.status !== 'DRAFT') throw new JobError('INVALID_STATE', dm('DRAFT_STATE_NOT_EDITABLE', { status: draftRow.status }));
+  const sameJob = (row) => row.kind === 'QUESTIONS' && row.target_draft_id === draftId;
+  const existing = activeRow(db, userId, draftRow.proposal_id);
+  if (existing) {
+    if (sameJob(existing)) return { job: toDto(existing), created: false };
+    throw new JobError('GENERATION_IN_PROGRESS', 'Há outra geração em andamento para este trecho. Espere terminar ou cancele-a antes de pedir as perguntas.');
+  }
+  const content = JSON.parse(draftRow.draft_json);
+  if (content.questionsDeferred !== true) throw new JobError('INVALID_STATE', dm('QUESTIONS_ALREADY_WRITTEN'));
+  let prepared;
+  try {
+    prepared = prepareGeneration(db, userId, draftRow.proposal_id, { maxInputChars });
+  } catch (err) {
+    if (err instanceof DraftError) throw new JobError(err.code, err.message, err.field);
+    throw err;
+  }
+  if (isDraftStale(db, userId, draftRow)) throw new JobError('SOURCE_CHANGED', dm('SOURCE_CHANGED_SINCE_DRAFT'));
+  const { segments } = prepared.found;
+  const payloadChars = segments.reduce((sum, s) => sum + s.text.length, 0);
+  const estimatedUnits = provider.live === true ? estimateCostUnits({ payloadChars, calls: 1 }) : 0;
+  const at = now().toISOString();
+  const run = db.transaction(() => {
+    const raced = activeRow(db, userId, draftRow.proposal_id);
+    if (raced) return { job: toDto(raced), created: false };
+    const generationLocale = content.generationLocale || ensureGenerationLocale(db, userId, null);
+    const result = db.prepare(`
+      INSERT INTO generation_jobs (user_id, proposal_id, state, phase, provider, source_language, generation_locale, scope_digest,
+                                   regenerate, estimated_units, created_at, last_activity_at, kind, target_draft_id)
+      VALUES (?, ?, 'QUEUED', 'QUEUED', ?, ?, ?, ?, 0, ?, ?, ?, 'QUESTIONS', ?)
+    `).run(userId, draftRow.proposal_id, provider.name, content.sourceLanguage ?? detectSourceLanguage(segments), generationLocale, segmentsDigest(segments), estimatedUnits, at, at, draftId);
     return { job: toDto(db.prepare('SELECT * FROM generation_jobs WHERE id = ?').get(result.lastInsertRowid)), created: true };
   });
   return run.immediate();

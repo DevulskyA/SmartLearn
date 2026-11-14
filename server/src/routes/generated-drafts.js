@@ -152,6 +152,18 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // A lesson accepted without questions asks for them later: opens (or returns) the draft that will carry them. No model is called here;
+  // the questions are written by POST /generation-jobs { draftId } and reviewed before they are added to the lesson.
+  app.post('/learning-units/:unitId/questions-draft', {
+    schema: { params: { type: 'object', required: ['unitId'], properties: { unitId: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const unitId = Number(request.params.unitId);
+    if (!Number.isInteger(unitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { draft: drafts.createLessonQuestionsDraft(db, request.actor.userId, unitId) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
   // Summary-first drafts: writes the questions after the summary, into the same DRAFT (still to be reviewed before the lesson is accepted).
   app.post('/drafts/:id/generate-questions', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },

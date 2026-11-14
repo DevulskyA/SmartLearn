@@ -34,6 +34,12 @@ Modelo efetivamente usado pelo subagente: NÃO observável nesta sessão (o rela
   verdes de ~50 s; mutação desligando a ligação faz o teste falhar). Uma lacuna de UX achada na revisão visual (aba Questões dizia
   "não tem mais questões") corrigida no mesmo trabalho. Intervenções humanas: 0 além das autorizações iniciais.
 - Sem execução comparável anterior ⇒ NÃO se afirma economia.
+- Validação longa real (suíte completa do servidor, 1349 testes, 196 s): rodada em SEGUNDO PLANO pelo agente principal, sem subagente. Um comando em
+  segundo plano não gasta tokens de modelo enquanto espera; Haiku só custaria o contexto de partida e o relato. Para o piloto, isto vale
+  mais que uma delegação ao Haiku: a economia vem de NÃO delegar o que o shell já faz sozinho. Não foi uma delegação Haiku (continua pendente).
+- Trabalho com vários contratos (migração + serviço + runner + rota + tela): feito direto, com os testes escritos primeiro; a dificuldade
+  (concorrência de jobs, orçamento nunca cobrado duas vezes, preservação do que o aluno escreveu) foi tratada pelo próprio agente principal; nenhum
+  Sonnet xhigh dedicado, porque o contexto carregado (código de job/orçamento/aceite) já estava na sessão. Sem comparação com execução anterior: nenhuma economia afirmada.
 
 ## Decisão pendente
 Manter, ajustar ou descartar a política só depois de mais trabalho real com pelo menos uma delegação de cada tipo (teste longo em Haiku;

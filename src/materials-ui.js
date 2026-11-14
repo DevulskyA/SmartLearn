@@ -127,6 +127,8 @@ async function openEditor(draft, title) {
       previewAcceptance: DraftReviewUI.previewAcceptance,
       reauditDraft: DraftReviewUI.reauditDraft,
       generateQuestions: DraftReviewUI.generateDraftQuestions,
+      activeQuestionsJob: DraftReviewUI.activeQuestionsJob,
+      cancelQuestions: DraftReviewUI.cancelQuestionsJob,
       getDraft: DraftReviewUI.getDraft,
       onBack: showBrowse,
       startStudyNow: (unit, subjectName) => deps.startStudyNow(unit, subjectName),
@@ -426,7 +428,7 @@ function createSourceProposalItem(proposal) {
 }
 
 /** Everything that tells two states of a trecho apart on screen: when it changes, its slot is redrawn. */
-const proposalSignature = (p) => JSON.stringify([p.generatable, p.latestDraft?.id, p.latestDraft?.status, p.latestJob?.id, p.latestJob?.state, p.latestJob?.phase]);
+const proposalSignature = (p) => JSON.stringify([p.generatable, p.latestDraft?.id, p.latestDraft?.status, p.latestDraft?.lessonQuestions?.state, p.latestJob?.id, p.latestJob?.state, p.latestJob?.phase]);
 
 function statusLine(status) {
   const line = createTextElement("p", `source-job-status is-${status.kind}`, status.label);
@@ -460,6 +462,17 @@ function renderActionSlot(li, proposal) {
       const open = actionButton(t("materials.action.openSummary"), "open-summary", rangeId);
       open.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
       parts.push(open);
+    }
+    // A lesson accepted as a summary only can still get its questions: they are reviewed in a draft of their own before they join the lesson
+    const later = proposal.latestDraft.lessonQuestions;
+    if (later?.state === "AVAILABLE" && proposal.latestDraft.acceptedUnitId != null) {
+      const ask = actionButton(t("materials.action.lessonQuestions"), "lesson-questions", rangeId);
+      ask.dataset.unitId = String(proposal.latestDraft.acceptedUnitId);
+      parts.push(ask);
+    } else if (later?.state === "IN_REVIEW") {
+      const review = actionButton(t("materials.action.reviewLessonQuestions"), "open-draft", rangeId);
+      review.dataset.draftId = String(later.draftId);
+      parts.push(review);
     }
   } else if (status?.kind === "generating") {
     parts.push(statusLine(status));
@@ -906,6 +919,19 @@ async function onIndexClick(event) {
   const summaryBtn = event.target.closest('[data-action="open-summary"]');
   if (summaryBtn) {
     if (!(await deps.openSummary(Number(summaryBtn.dataset.unitId)))) setSourcesMessage(t("plan.openLesson.missing"), true);
+    return;
+  }
+
+  const askBtn = event.target.closest('[data-action="lesson-questions"]');
+  if (askBtn) {
+    askBtn.disabled = true;
+    const result = await DraftReviewUI.openLessonQuestions(Number(askBtn.dataset.unitId));
+    askBtn.disabled = false;
+    if (!result.ok) {
+      setSourcesMessage(result.message || t("materials.lessonQuestions.failed"), true);
+      return;
+    }
+    await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
     return;
   }
 

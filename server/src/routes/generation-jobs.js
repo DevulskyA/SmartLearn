@@ -7,7 +7,7 @@ function handleError(err, reply) {
     const statusByCode = {
       NOT_FOUND: 404, VALIDATION_FAILED: 400, UNKNOWN_PROVIDER: 400,
       INPUT_TOO_LARGE: 413, NO_USABLE_TEXT: 409, NOT_GENERATABLE: 409, SCOPE_VIOLATION: 409, SCOPE_CHANGED: 409,
-      INVALID_TRANSITION: 409, MISSING_CREDENTIALS: 409,
+      INVALID_TRANSITION: 409, MISSING_CREDENTIALS: 409, INVALID_STATE: 409, GENERATION_IN_PROGRESS: 409, SOURCE_CHANGED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
@@ -23,7 +23,8 @@ function handleError(err, reply) {
 export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
   app.post('/generation-jobs', {
     schema: {
-      body: { type: 'object', required: ['proposalId'], properties: { proposalId: { type: 'integer', minimum: 1 }, regenerate: { type: 'boolean' } } },
+      // proposalId: the summary job. draftId: the questions job of that (summary-first or lesson-questions) draft.
+      body: { type: 'object', minProperties: 1, properties: { proposalId: { type: 'integer', minimum: 1 }, draftId: { type: 'integer', minimum: 1 }, regenerate: { type: 'boolean' } } },
     },
   }, async (request, reply) => {
     try {
@@ -31,9 +32,13 @@ export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
       // Selecting only builds the provider description (name, live, how many calls it may make); nothing is sent anywhere.
       const selected = settings.providerImpl ?? selectProvider(settings);
       const provider = { name: selected.name, live: selected.live === true, plannedCalls: 1 + (selected.audit ? 1 : 0) + (selected.repair ? 1 : 0) };
-      const { job, created } = jobs.createJob(db, request.actor.userId, request.body.proposalId, {
-        provider, regenerate: request.body.regenerate === true, maxInputChars: settings.maxInputChars,
-      });
+      const { proposalId, draftId } = request.body;
+      if ((proposalId === undefined) === (draftId === undefined)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED', field: 'proposalId' } }; }
+      const { job, created } = draftId !== undefined
+        ? jobs.createQuestionsJob(db, request.actor.userId, draftId, { provider: { ...provider, plannedCalls: 1 }, maxInputChars: settings.maxInputChars })
+        : jobs.createJob(db, request.actor.userId, proposalId, {
+          provider, regenerate: request.body.regenerate === true, maxInputChars: settings.maxInputChars,
+        });
       // A job nobody in this process is running (new, or left QUEUED by a crash) is handed to the runner; a running one is left alone.
       if (job.state === 'QUEUED') runner.start({ ...job, userId: request.actor.userId });
       reply.status(created ? 201 : 200);

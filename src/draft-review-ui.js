@@ -7,6 +7,8 @@
 // it again for an already-accepted draft returns the original result.
 import { apiRequest, ApiError, NetworkError } from './api-client.js';
 import { t } from './i18n/index.js';
+import { jobFailureMessage } from './lesson-view-model.js';
+import * as GenerationJobsUI from './generation-jobs-ui.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
@@ -51,10 +53,51 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
-/** Summary-first draft: writes the questions NOW, into the same draft (they still need the student's review before the lesson is accepted). */
-export async function generateDraftQuestions(draftId) {
+const ACTIVE_JOB_STATES = new Set(['QUEUED', 'CALLING_PROVIDER', 'STALLED']);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Summary-first draft (or the draft that adds questions to a lesson): writes the questions into THAT draft, as a background job on the
+ * server (same record, credit, consent and cancel as the summary), and waits for it. The state shown always comes from the server, so a
+ * job already running (the student left and came back) is joined, not repeated: pass its `jobId`. `onJob(job)` sees every state.
+ * The questions still need the student's review before anything reaches a lesson.
+ */
+export async function generateDraftQuestions(draftId, { jobId = null, onJob = () => {}, pollMs = 1500 } = {}) {
   try {
-    const { draft } = await apiRequest(`/v1/drafts/${draftId}/generate-questions`, { method: 'POST', body: {} });
+    let { job } = jobId === null
+      ? await apiRequest('/v1/generation-jobs', { method: 'POST', body: { draftId } })
+      : await apiRequest(`/v1/generation-jobs/${jobId}`);
+    onJob(job);
+    while (ACTIVE_JOB_STATES.has(job.state)) {
+      await sleep(pollMs);
+      ({ job } = await apiRequest(`/v1/generation-jobs/${job.id}`));
+      onJob(job);
+    }
+    if (job.state === 'SUCCEEDED') {
+      const { draft } = await apiRequest(`/v1/drafts/${draftId}`);
+      return { ok: true, draft };
+    }
+    if (job.state === 'CANCELLED') return { ok: false, code: 'CANCELLED', message: t('editor.questionsLater.cancelled') };
+    return { ok: false, code: job.errorCode, message: jobFailureMessage(job) };
+  } catch (err) { return fail(err); }
+}
+
+/** The questions job of this draft that is running right now (the student left and came back), or null. */
+export async function activeQuestionsJob(draft) {
+  const listed = await GenerationJobsUI.listJobs();
+  if (!listed.ok) return null;
+  return listed.jobs.find((job) => job.kind === 'QUESTIONS' && job.targetDraftId === draft.id && ACTIVE_JOB_STATES.has(job.state)) ?? null;
+}
+
+/** Stops the questions job; the server ends the provider's process tree. */
+export function cancelQuestionsJob(jobId) {
+  return GenerationJobsUI.cancelJob(jobId);
+}
+
+/** A lesson accepted without questions asks for them: opens (or returns) the draft that will carry them. No model is called here. */
+export async function openLessonQuestions(unitId) {
+  try {
+    const { draft } = await apiRequest(`/v1/learning-units/${unitId}/questions-draft`, { method: 'POST', body: {} });
     return { ok: true, draft };
   } catch (err) { return fail(err); }
 }

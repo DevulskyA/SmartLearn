@@ -92,6 +92,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const questionBuffers = new Map(); // questionId -> { question, answer, explanation, hint } typed but not saved
   const revealedAnswers = new Set(); // questionIds whose answer the student chose to see in this window (author mode, see renderQuestionEditor)
   let accepted = false;
+  // A draft that only ADDS questions to a lesson that already exists: the summary is the lesson's (read only here), there is no discipline
+  // or study date to choose and accepting adds exercises without creating a lesson or a review calendar.
+  const lessonTarget = draft.targetUnitId != null;
 
   // ---- autosave ---------------------------------------------------------------------------------------------------------
   // The summary and each question save themselves 2.5 s after the last keystroke (src/draft-autosave.js). Every keystroke is first kept in a local,
@@ -233,30 +236,55 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     for (const node of laterMessages.values()) setMessage(node, text, isError);
     laterMessages.get(panel).focus({ preventScroll: true });
   };
+  // The questions are written by a background job: the state comes from the server, so leaving and coming back joins it instead of repeating it.
+  let questionsJob = null; // the job being waited for in this window (null = none)
+  async function runQuestionsJob(panel, { jobId = null } = {}) {
+    if (questionsJob) return;
+    questionsJob = { id: jobId };
+    setMessage(laterMessages.get(panel), t("editor.questionsLater.generating"));
+    for (const node of root.querySelectorAll('[data-action="generate-questions"]')) node.disabled = true;
+    for (const node of root.querySelectorAll('[data-action="cancel-questions"]')) node.hidden = false;
+    const result = await deps.generateQuestions(draft.id, { jobId, onJob: (job) => { questionsJob.id = job.id; } });
+    questionsJob = null;
+    for (const node of root.querySelectorAll('[data-action="cancel-questions"]')) node.hidden = true;
+    if (!result.ok) {
+      setLaterMessage(panel, result.message || t("editor.questionsLater.failed"), true);
+      for (const node of root.querySelectorAll('[data-action="generate-questions"]')) node.disabled = false;
+      root.querySelector('[data-action="generate-questions"]')?.focus({ preventScroll: true });
+      return;
+    }
+    applyDraft(result.draft, { keepSelection: null });
+    setLaterMessage(panel, t("editor.questionsLater.done"));
+  }
   for (const panel of laterMessages.keys()) {
     panel.addEventListener("click", async (event) => {
-      const trigger = event.target.closest?.('[data-action="generate-questions"]');
-      if (!trigger || !deps.generateQuestions) return;
-      trigger.disabled = true;
-      setMessage(laterMessages.get(panel), t("editor.questionsLater.generating"));
-      const result = await deps.generateQuestions(draft.id);
-      if (!result.ok) {
-        setLaterMessage(panel, result.message || t("editor.questionsLater.failed"), true);
-        trigger.disabled = false;
-        trigger.focus({ preventScroll: true });
+      if (event.target.closest?.('[data-action="cancel-questions"]')) {
+        if (questionsJob?.id && deps.cancelQuestions) await deps.cancelQuestions(questionsJob.id);
         return;
       }
-      applyDraft(result.draft, { keepSelection: null });
-      setLaterMessage(panel, t("editor.questionsLater.done"));
+      const trigger = event.target.closest?.('[data-action="generate-questions"]');
+      if (!trigger || !deps.generateQuestions) return;
+      await runQuestionsJob(panel);
     });
+  }
+  // The student left while the questions were being written: coming back shows it and waits for it, never asks (or charges) again.
+  if (draft.questionsDeferred === true && draft.status === "DRAFT" && deps.generateQuestions && deps.activeQuestionsJob) {
+    deps.activeQuestionsJob(draft).then((job) => { if (job && !questionsJob && !accepted) runQuestionsJob(questionsPanel, { jobId: job.id }); }).catch(() => {});
   }
   /** The invitation to write the questions now: only for a summary-first draft that is still open. Null otherwise. */
   function questionsLaterBlock(panel) {
     if (draft.questionsDeferred !== true || accepted || !deps.generateQuestions) return null;
     const later = document.createElement("div");
     later.className = "lesson-audit-stale lesson-questions-later";
-    later.append(createTextElement("p", "lesson-hint", t("editor.questionsLater.hint")));
-    later.append(button("secondary-button lesson-generate-questions", t("editor.questionsLater.generate"), "generate-questions"));
+    later.append(createTextElement("p", "lesson-hint", t(lessonTarget ? "editor.lessonQuestions.hint" : "editor.questionsLater.hint")));
+    const ask = button("secondary-button lesson-generate-questions", t("editor.questionsLater.generate"), "generate-questions");
+    ask.disabled = questionsJob !== null; // a job already running is waited for, never asked twice
+    later.append(ask);
+    if (deps.cancelQuestions) {
+      const cancel = button("text-button", t("editor.questionsLater.cancel"), "cancel-questions");
+      cancel.hidden = questionsJob === null;
+      later.append(" ", cancel);
+    }
     later.append(laterMessages.get(panel));
     return later;
   }
@@ -338,6 +366,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptActions.className = "lesson-accept-actions";
   acceptActions.append(acceptBtn, previewBtn);
   footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
+  if (lessonTarget) {
+    for (const part of [subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot]) part.hidden = true;
+    acceptTitle.textContent = t("editor.lessonQuestions.acceptTitle");
+    acceptBtn.textContent = t("editor.lessonQuestions.submit");
+    footer.setAttribute("aria-label", t("editor.lessonQuestions.acceptTitle"));
+  }
   subjectSelect.addEventListener("change", () => {
     const picked = subjectSelect.value !== "";
     newSubject.setEnabled(!picked);
@@ -365,7 +399,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function renderHeader() {
-    eyebrow.textContent = draftState(draft, { accepted }).label;
+    eyebrow.textContent = lessonTarget && !accepted ? t("editor.lessonQuestions.eyebrow") : draftState(draft, { accepted }).label;
     sourceEl.textContent = sourceLine(draft);
     sourceEl.hidden = sourceEl.textContent === "";
   }
@@ -743,14 +777,21 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     const kept = keptQuestionCount(draft);
     const rejected = draft.questions.length - kept;
     const keptText = kept === 1 ? t("editor.accept.kept.one", { count: kept }) : t("editor.accept.kept.other", { count: kept });
-    acceptNote.textContent = rejected > 0
+    // a summary-first draft with no questions yet is accepted as a lesson without exercises (the questions can be asked for later, in Materiais)
+    const summaryOnly = draft.questionsDeferred === true && draft.questions.length === 0 && !lessonTarget;
+    acceptNote.textContent = lessonTarget
+      ? t("editor.lessonQuestions.note", { kept: keptText })
+      : summaryOnly
+      ? t("editor.accept.summaryOnly")
+      : rejected > 0
       ? t("editor.accept.noteRejected", { kept: keptText, rejected: rejected === 1 ? t("editor.accept.rejected.one", { count: rejected }) : t("editor.accept.rejected.other", { count: rejected }) })
       : t("editor.accept.note", { kept: keptText });
     const summaryBlockers = draft.acceptanceBlockers?.summary ?? 0;
     ackWrap.hidden = accepted || summaryBlockers === 0;
     if (ackWrap.hidden) ackBox.checked = false;
-    acceptBtn.disabled = accepted || kept === 0;
-    previewBtn.disabled = accepted || kept === 0 || !deps.previewAcceptance;
+    const nothingToAccept = kept === 0 && !summaryOnly;
+    acceptBtn.disabled = accepted || nothingToAccept;
+    previewBtn.disabled = accepted || nothingToAccept || !deps.previewAcceptance;
     previewPanel.hidden = true;
     previewPanel.replaceChildren();
   }
@@ -764,12 +805,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   function renderPreview(preview) {
     const summary = document.createElement("ul");
     summary.className = "lesson-accept-preview-summary";
-    for (const line of [
-      preview.subject.isNew ? t("editor.preview.subjectNew", { name: preview.subject.name }) : t("editor.preview.subject", { name: preview.subject.name }),
-      t("editor.preview.lesson", { title: preview.unit.title, date: preview.unit.studyDate }),
-      ...(preview.unit.lessonDate ? [t("editor.preview.lessonDate", { date: preview.unit.lessonDate })] : []),
-      t("editor.preview.counts", { exercises: exercisesText(preview.exercises.length), reviews: preview.reviews.count }),
-    ]) summary.append(createTextElement("li", "", line));
+    const lines = preview.addToLessonId != null
+      ? [t("editor.lessonQuestions.previewAdd", { title: preview.unit.title, exercises: exercisesText(preview.exercises.length) })]
+      : [
+        preview.subject.isNew ? t("editor.preview.subjectNew", { name: preview.subject.name }) : t("editor.preview.subject", { name: preview.subject.name }),
+        t("editor.preview.lesson", { title: preview.unit.title, date: preview.unit.studyDate }),
+        ...(preview.unit.lessonDate ? [t("editor.preview.lessonDate", { date: preview.unit.lessonDate })] : []),
+        t("editor.preview.counts", { exercises: exercisesText(preview.exercises.length), reviews: preview.reviews.count }),
+      ];
+    for (const line of lines) summary.append(createTextElement("li", "", line));
     const exercises = document.createElement("ol");
     exercises.className = "lesson-accept-preview-exercises";
     for (const e of preview.exercises) {
@@ -877,6 +921,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     summarySave.hidden = quiet;
   }
   summaryToggle.addEventListener("click", () => setSummaryReading(summaryRead.hidden));
+  if (lessonTarget) {
+    summaryToggle.hidden = true;
+    summaryHint.textContent = t("editor.lessonQuestions.summaryReadonly");
+    setSummaryReading(true);
+  }
 
   summaryField.input.addEventListener("input", () => {
     summaryBuffer = summaryField.input.value;
@@ -921,13 +970,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   previewBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowPreview", "editor.accept.savePendingPreview")) return;
-    const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
-    if (newSubjectProblem(pickedSubjectId)) return;
+    const pickedSubjectId = !lessonTarget && subjectSelect.value ? Number(subjectSelect.value) : null;
+    if (!lessonTarget && newSubjectProblem(pickedSubjectId)) return;
     previewBtn.disabled = true;
     const result = await deps.previewAcceptance(draft.id, {
       subjectId: pickedSubjectId ?? undefined,
-      newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
-      newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
+      newSubjectName: pickedSubjectId || lessonTarget ? undefined : newSubject.input.value,
+      newSubjectColor: pickedSubjectId || lessonTarget ? undefined : newSubject.color,
       studyDate: dateField.input.value,
       lessonDate: lessonDateOrNull(),
       expectedRevision: draft.revision,
@@ -945,13 +994,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   acceptBtn.addEventListener("click", async () => {
     if (await pendingBeforeAccepting("editor.accept.savedNowAccept", "editor.accept.savePendingAccept")) return;
-    const pickedSubjectId = subjectSelect.value ? Number(subjectSelect.value) : null;
-    if (newSubjectProblem(pickedSubjectId)) return;
+    const pickedSubjectId = !lessonTarget && subjectSelect.value ? Number(subjectSelect.value) : null;
+    if (!lessonTarget && newSubjectProblem(pickedSubjectId)) return;
     acceptBtn.disabled = true;
     const result = await deps.acceptDraft(draft.id, {
       subjectId: pickedSubjectId ?? undefined,
-      newSubjectName: pickedSubjectId ? undefined : newSubject.input.value,
-      newSubjectColor: pickedSubjectId ? undefined : newSubject.color,
+      newSubjectName: pickedSubjectId || lessonTarget ? undefined : newSubject.input.value,
+      newSubjectColor: pickedSubjectId || lessonTarget ? undefined : newSubject.color,
       studyDate: dateField.input.value,
       lessonDate: lessonDateOrNull(),
       expectedRevision: draft.revision,
@@ -967,10 +1016,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     renderHeader(); // the header says what is true now: a person accepted it
     acceptBtn.textContent = t("editor.accept.done");
     const reviewCount = result.acceptance.reviewCount;
-    setMessage(acceptMessage, t("editor.accept.created", {
-      exercises: exercisesText(result.acceptance.exerciseCount),
-      reviews: t(reviewCount === 1 ? "editor.accept.reviews.one" : "editor.accept.reviews.other", { count: reviewCount }),
-    }));
+    setMessage(acceptMessage, lessonTarget
+      ? t("editor.lessonQuestions.added", { exercises: exercisesText(result.acceptance.exerciseCount) })
+      : t("editor.accept.created", {
+        exercises: exercisesText(result.acceptance.exerciseCount),
+        reviews: t(reviewCount === 1 ? "editor.accept.reviews.one" : "editor.accept.reviews.other", { count: reviewCount }),
+      }));
     const study = button("primary-button", t("editor.accept.studyNow"), "study-now");
     study.addEventListener("click", () => deps.startStudyNow(result.acceptance.unit, result.acceptance.subject?.name));
     const summary = deps.openSummary ? button("secondary-button", t("editor.accept.openSummary"), "open-summary") : null;
