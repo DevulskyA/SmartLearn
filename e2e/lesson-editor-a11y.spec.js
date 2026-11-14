@@ -107,7 +107,7 @@ test('keyboard only: open a question, edit and save it; the confirmation is anno
   await expect(editor.locator('.lesson-qeditor textarea').nth(1)).toBeFocused();
   await page.keyboard.press('Control+A');
   await page.keyboard.type('Resposta escrita só com o teclado');
-  const status = editor.locator('.lesson-qeditor [role="status"]');
+  const status = editor.locator('.lesson-qeditor [role="status"]:not([tabindex])');
   await expect(status).toHaveCount(1);
   await tagRegion(status);
   await tabTo(page, editor.locator('[data-action="save-question"]'));
@@ -127,7 +127,7 @@ test('keyboard only: open a question, edit and save it; the confirmation is anno
 test('reject and restore keep the focus on the same button; accept moves it to the question; messages are announced', async ({ page }) => {
   const editor = page.locator('.lesson-editor');
   await editor.getByRole('tab', { name: /Questões/ }).click();
-  const status = editor.locator('.lesson-qeditor [role="status"]');
+  const status = editor.locator('.lesson-qeditor [role="status"]:not([tabindex])');
   await tagRegion(status);
   const reject = editor.locator('[data-action="toggle-reject-question"]');
   await reject.focus();

@@ -143,11 +143,11 @@ test('a 50-question draft: find the flagged items from the findings, fix them, k
   await panel.locator('.lesson-qeditor textarea').nth(1).fill(`O parâmetro Omega${FLAG_THIN}.`);
   await panel.locator('.lesson-qeditor textarea').nth(2).fill(`O marcador Zeta${FLAG_THIN} eleva o parâmetro Omega${FLAG_THIN} durante a fase experimental.`);
   await panel.locator('[data-action="save-question"]').click();
-  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  await expect(panel.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva', { timeout: 15000 });
   await panel.locator('.lesson-qitem').nth(9).click();
   await panel.locator('.lesson-qeditor textarea').first().fill('O que o marcador Zeta10 eleva, segundo a página?');
   await panel.locator('[data-action="save-question"]').click();
-  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  await expect(panel.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva', { timeout: 15000 });
   // the fixed question is no longer flagged; the other flagged question still is; nothing else moved
   await expect(panel.locator('.lesson-qitem[data-state="flagged"]')).toHaveCount(1);
   await expect(panel.locator('.lesson-qitem').nth(FLAG_VALUE - 1)).toContainText('Sinalizada');
@@ -159,7 +159,7 @@ test('a 50-question draft: find the flagged items from the findings, fix them, k
   await panel.locator('.lesson-qitem').nth(FLAG_VALUE - 1).click();
   await panel.locator('.lesson-qeditor textarea').nth(2).fill(`O marcador Zeta${FLAG_VALUE} eleva o parâmetro Omega${FLAG_VALUE} durante a fase experimental.`);
   await panel.locator('[data-action="save-question"]').click();
-  await expect(panel.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva', { timeout: 15000 });
+  await expect(panel.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva', { timeout: 15000 });
   await expect(panel.locator('.lesson-qitem[data-state="flagged"]')).toHaveCount(0);
 
   // the summary was flagged too (words the source never uses): fixed in its own area, without touching a question

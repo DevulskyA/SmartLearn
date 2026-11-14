@@ -280,8 +280,8 @@ test('a correction the server rejects (empty answer) is reported in place and th
   await editor.getByRole('tab', { name: /Questões/ }).click();
   await editor.locator('.lesson-qeditor textarea').nth(1).fill('');
   await editor.locator('[data-action="save-question"]').click();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toHaveClass(/is-error/, { timeout: 10000 });
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toHaveText('');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toHaveClass(/is-error/, { timeout: 10000 });
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).not.toHaveText('');
   expect(await editor.getAttribute('data-revision')).toBe(revisionBefore);
 });
 

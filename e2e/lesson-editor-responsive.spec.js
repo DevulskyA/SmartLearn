@@ -146,7 +146,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 
     await editor.locator('.lesson-qitem').nth(1).click();
     await editor.locator('.lesson-qeditor textarea').nth(1).fill('Resposta editada em tela estreita');
     await editor.locator('[data-action="save-question"]').click();
-    await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+    await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva');
     for (const action of ['accept-question', 'toggle-reject-question', 'delete-question']) await expect(editor.locator(`[data-action="${action}"]`)).toBeVisible();
     await expect(editor.locator(".lesson-actions + .field-hint")).toContainText("Excluir apaga a questão de vez");
     await editor.getByRole('tab', { name: /Fonte/ }).click();

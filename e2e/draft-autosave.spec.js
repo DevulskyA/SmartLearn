@@ -429,7 +429,7 @@ test('an accepted question whose text changes goes back to review: the server do
   await editor.getByRole('tab', { name: /Questões/ }).click();
   await editor.locator('.lesson-qitem').nth(1).click();
   await editor.locator('[data-action="accept-question"]').click();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão aceita');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão aceita');
   expect((await serverDraft(page, editor)).questions[1].status).toBe('ACCEPTED');
   await expect(editor.locator('[data-action="accept-question"]')).toBeDisabled(); // accepted: nothing left to accept
 
@@ -440,7 +440,7 @@ test('an accepted question whose text changes goes back to review: the server do
   await expect.poll(async () => (await serverDraft(page, editor)).questions[1].status, { timeout: 8000 }).not.toBe('ACCEPTED');
   const changed = (await serverDraft(page, editor)).questions[1];
   expect(changed.answer).toContain('ajustada depois de aceita'); // the text was saved...
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('voltou a "proposta"'); // ...the student is told what that did...
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('voltou a "proposta"'); // ...the student is told what that did...
   await expect(editor.locator('[data-action="accept-question"]')).toBeEnabled(); // ...and can accept the new text on purpose
   await editor.locator('[data-action="accept-question"]').click();
   await expect.poll(async () => (await serverDraft(page, editor)).questions[1].status, { timeout: 5000 }).toBe('ACCEPTED');
@@ -484,7 +484,7 @@ test('answers that arrive out of order never roll the screen back: an OLDER answ
   await answer().pressSequentially(' e mais');
   await expect.poll(async () => (await serverDraft(page, editor)).questions[1].answer, { timeout: 8000 }).toBe(`${base} pergunta nova e mais`);
   await expect(questionIndicator(editor)).toHaveAttribute('data-state', 'saved');
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).not.toContainText('alterada em outro lugar');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).not.toContainText('alterada em outro lugar');
   expect((await serverDraft(page, editor)).summary).toBe('Base. resumo novo');
 });
 

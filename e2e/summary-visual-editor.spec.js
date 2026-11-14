@@ -603,11 +603,11 @@ test('typing in a question while its save is in flight is kept too: the answer n
   await answer().press('End');
   await answer().pressSequentially(' Digitada durante o envio.');
   held.release();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva');
   await expect(answer()).toHaveValue('Resposta enviada. Digitada durante o envio.');
   await expect(editor.locator('[data-action="save-question"]')).toBeEnabled(); // and it is still unsaved
   await editor.locator('[data-action="save-question"]').click();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva');
   const id = await editor.getAttribute('data-draft-id');
   const saved = await page.evaluate(async ({ base, draftId }) => (await (await fetch(`${base}/v1/drafts/${draftId}`, { credentials: 'include' })).json()).draft.questions[1].answer, { base: API_BASE, draftId: id });
   expect(saved).toBe('Resposta enviada. Digitada durante o envio.');

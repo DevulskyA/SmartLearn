@@ -148,7 +148,7 @@ test('saving ONE question changes only that question and shows immediately, with
   await answer.fill('Resposta da questão 2 corrigida à mão');
   await expect(editor.locator('.lesson-qitem').nth(1)).toContainText('não salva');
   await editor.locator('[data-action="save-question"]').click();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva');
   await expect(editor.locator('.lesson-qeditor textarea').nth(1)).toHaveValue('Resposta da questão 2 corrigida à mão');
   await expect(editor.locator('.lesson-qitem').nth(1)).not.toContainText('não salva');
 
@@ -331,7 +331,7 @@ test('RELOAD: a saved question and a saved summary survive a full page reload; u
   await list.nth(1).click();
   await editor.locator('.lesson-qeditor textarea').nth(1).fill('Resposta 2 persistida');
   await editor.locator('[data-action="save-question"]').click();
-  await expect(editor.locator('.lesson-qeditor .lesson-message')).toContainText('Questão salva');
+  await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toContainText('Questão salva');
   await editor.getByRole('tab', { name: /Resumo/ }).click();
   await editor.locator('.lesson-summary-input').fill('Resumo persistido após recarga');
   await editor.locator('[data-action="save-summary"]').click();
@@ -424,10 +424,10 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
   const reread = new Database(dbPath, { readonly: true });
   try { expect(reread.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(before.id).draft_json).toBe(before.draft_json); } finally { reread.close(); }
   await review.getByRole('button', { name: 'Reauditar' }).click();
-  await expect(review.locator('.lesson-message')).toContainText('Auditoria atualizada com as regras atuais', { timeout: 10000 });
-  await expect(review.locator('.lesson-message')).toContainText('1 ponto removido');
+  await expect(review.locator('.lesson-message', { hasText: 'Auditoria atualizada' })).toContainText('Auditoria atualizada com as regras atuais', { timeout: 10000 });
+  await expect(review.locator('.lesson-message', { hasText: 'Auditoria atualizada' })).toContainText('1 ponto removido');
   await expect(review.getByRole('button', { name: 'Reauditar' })).toHaveCount(0);
-  await expect(review.locator('.lesson-message')).toBeFocused();
+  await expect(review.locator('.lesson-message', { hasText: 'Auditoria atualizada' })).toBeFocused();
   const check = new Database(dbPath, { readonly: true });
   try {
     const after = check.prepare('SELECT draft_json, revision FROM generated_drafts WHERE id = ?').get(before.id);
