@@ -24,6 +24,7 @@ import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
 import { privateBankItems } from '../corpus/private-bank.js';
+import { measureFidelityLoss } from '../ai/fidelity-loss.js';
 import { recordSummaryVersion, listSummaryVersions, getSummaryVersion } from './draft-summary-versions.js';
 import { findPending, recordReplacement, applyDecision, discardDraft, settleExpired, REPLACEMENT_DECISIONS } from './draft-replacements.js';
 
@@ -998,6 +999,12 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
       .run(JSON.stringify(content), now().toISOString(), userId, draftId);
   })();
   return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+}
+
+/** Words that flip the meaning (negation, qualifier, number) present in the source and missing from the summary sentence that restates them. No AI, no credit, read-only. */
+export function summaryFidelity(db, userId, draftId) {
+  const { found, current } = loadEditable(db, userId, draftId);
+  return measureFidelityLoss(found.segments.map((seg) => seg.text).join('\n'), current.summary);
 }
 
 /** Earlier texts of this draft's summary, newest first (no text). */

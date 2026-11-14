@@ -660,6 +660,34 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     summaryPanel.insertBefore(box, summaryHint);
   }
 
+  /** Words of the source that change the meaning (negation, qualifier, number) and are missing from the summary. Deterministic, no AI, no credit. */
+  function createFidelityBlock() {
+    const element = document.createElement("details");
+    element.className = "lesson-audit-stale lesson-fidelity";
+    element.append(createTextElement("summary", "lesson-fidelity-title", t("editor.fidelity.title")));
+    const body = document.createElement("div");
+    body.setAttribute("role", "status");
+    element.append(createTextElement("p", "lesson-hint", t("editor.fidelity.hint")), body);
+    const kindText = (kind) => t(`editor.fidelity.kind.${kind}`);
+    element.addEventListener("toggle", async () => {
+      if (!element.open) return;
+      body.textContent = t("editor.fidelity.running");
+      const result = await deps.summaryFidelity(draft.id);
+      if (!result.ok) { body.textContent = result.message || t("editor.fidelity.failed"); return; }
+      const { checked, lost } = result.fidelity;
+      if (lost.length === 0) { body.textContent = t("editor.fidelity.none", { count: checked }); return; }
+      const list = document.createElement("ul");
+      list.className = "lesson-fidelity-list";
+      for (const item of lost) {
+        const li = document.createElement("li");
+        li.append(createTextElement("strong", "", `${kindText(item.kind)}: “${item.term}”`), document.createTextNode(" "), createTextElement("span", "", t("editor.fidelity.inSource", { text: item.sourceSentence })));
+        list.append(li);
+      }
+      body.replaceChildren(createTextElement("p", "", t("editor.fidelity.found", { count: lost.length })), list);
+    });
+    return element;
+  }
+
   function createSummaryVersions() {
     const element = document.createElement("details");
     element.className = "lesson-translate lesson-versions";
@@ -1017,6 +1045,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       check.append(auditSummaryMessage);
       reviewPanel.append(check);
     }
+    if (!accepted && deps.summaryFidelity) reviewPanel.append(createFidelityBlock());
     reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.filter")));
     if (draft.audit?.repaired) reviewPanel.append(createTextElement("p", "lesson-hint", t("editor.review.repaired")), ...[renderOriginal()].filter(Boolean));
     const skipped = (draft.audit?.findings ?? []).find((f) => f.issue === "LEXICAL_CHECK_SKIPPED_CROSS_LANGUAGE");

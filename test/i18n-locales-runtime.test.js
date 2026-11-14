@@ -44,7 +44,7 @@ afterEach(() => setLocale(DEFAULT_LOCALE));
 
 test('all locale catalogs have exact key and placeholder parity with pt-BR and every key resolves from its own catalog', () => {
   const keys = Object.keys(ptBR).sort();
-  assert.equal(keys.length, 1847);
+  assert.equal(keys.length, 1858);
   for (const locale of SUPPORTED_LOCALES) {
     const catalog = catalogByLocale[locale];
     assert.deepEqual(Object.keys(catalog).sort(), keys, `${locale} key set`);

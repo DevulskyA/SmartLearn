@@ -225,6 +225,15 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // Meaning-flipping words lost from the summary (deterministic, no AI, no credit).
+  app.get('/drafts/:id/fidelity', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { fidelity: drafts.summaryFidelity(db, request.actor.userId, id) }; } catch (err) { return handleError(err, reply); }
+  });
+
   // History of the summary text (migration 048): list earlier versions, read one, restore one. Restoring keeps the text it replaces.
   const versionParams = { type: 'object', required: ['id', 'version'], properties: { id: { type: 'string' }, version: { type: 'string' } } };
   app.get('/drafts/:id/summary-versions', {

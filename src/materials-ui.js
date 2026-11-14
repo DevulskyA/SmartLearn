@@ -180,6 +180,7 @@ async function openEditor(draft, title) {
       previewAcceptance: DraftReviewUI.previewAcceptance,
       reauditDraft: DraftReviewUI.reauditDraft,
       auditSummary: DraftReviewUI.auditSummary,
+      summaryFidelity: DraftReviewUI.summaryFidelity,
       listSummaryVersions: DraftReviewUI.listSummaryVersions,
       readSummaryVersion: DraftReviewUI.readSummaryVersion,
       restoreSummaryVersion: DraftReviewUI.restoreSummaryVersion,

@@ -83,6 +83,14 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
+/** Meaning-flipping words of the source missing from the summary (deterministic, no AI, no credit). */
+export async function summaryFidelity(draftId) {
+  try {
+    const { fidelity } = await apiRequest(`/v1/drafts/${draftId}/fidelity`);
+    return { ok: true, fidelity };
+  } catch (err) { return fail(err); }
+}
+
 /** Earlier texts of the summary (migration 048), newest first, without the text. */
 export async function listSummaryVersions(draftId) {
   try {

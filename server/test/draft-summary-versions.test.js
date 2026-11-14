@@ -110,6 +110,20 @@ test('restore puts an earlier text back, keeps the text it replaced and is refus
   } finally { cleanup(); }
 });
 
+test('summaryFidelity reads the source of the draft and reports only, for the owner only', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db);
+    const other = makeUser(db, 'b@example.com');
+    const draft = await draftFor(db, userId, sourcesDir);
+    const result = drafts.summaryFidelity(db, userId, draft.id);
+    assert.equal(typeof result.checked, 'number');
+    assert.ok(Array.isArray(result.lost));
+    assert.equal(drafts.getDraft(db, userId, draft.id).revision, draft.revision, 'read-only');
+    assert.throws(() => drafts.summaryFidelity(db, other, draft.id), (err) => err.code === 'NOT_FOUND');
+  } finally { cleanup(); }
+});
+
 test('discarding the draft discards its history', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {
