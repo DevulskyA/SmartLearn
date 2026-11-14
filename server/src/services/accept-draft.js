@@ -1,6 +1,7 @@
 import { generateReviewDates, REVIEW_DAY_OFFSETS } from '../../../shared/review-schedule.js';
 import { resolveOrCreateSubject, describeSubject, normalizeLessonDate, LearningUnitError } from './learning-units.js';
 import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-drafts.js';
+import { contributeAcceptedDraft } from './shared-reuse.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { carry, dm, splitMessage } from '../api-error-messages.js';
 
@@ -141,6 +142,14 @@ function prepareLessonQuestions(db, userId, draftRow, { expectedRevision, requir
   return { unit, proposal, blockers, kept, excluded };
 }
 
+/** Offering the accepted AI content to other students is optional and consent-based; a failure here never undoes an acceptance. */
+function contributeQuietly(db, userId, draftId, sourceId, now) {
+  try {
+    const row = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
+    contributeAcceptedDraft(db, userId, row, normalizeContent(JSON.parse(row.draft_json)), { sourceId, now });
+  } catch { /* the lesson is already accepted */ }
+}
+
 function acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now) {
   const { unit, proposal, blockers, kept } = prepareLessonQuestions(db, userId, draftRow, { expectedRevision, requireRevision: true });
   if (blockers.questions.length > 0) throw new AcceptDraftError('FINDINGS_UNRESOLVED', dm('FINDINGS_UNRESOLVED', { questions: blockers.questions.length, summary: 0 }));
@@ -149,7 +158,7 @@ function acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now) 
   const pageTextByIndex = new Map(
     db.prepare('SELECT page_index, text FROM source_pages WHERE user_id = ? AND source_id = ?').all(userId, proposal.source_id).map((row) => [row.page_index, row.text]),
   );
-  return db.transaction(() => {
+  const accepted = db.transaction(() => {
     const nowIso = now().toISOString();
     const { next } = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM exercises WHERE user_id = ? AND unit_id = ?').get(userId, unit.id);
     insertQuestionsAsExercises(db, userId, unit.id, next, kept, { sourceId: proposal.source_id, pageTextByIndex, parserVersion: sourceRow?.parser_version ?? null }, nowIso);
@@ -169,6 +178,8 @@ function acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now) 
       .run(nowIso, unit.id, JSON.stringify(result), userId, draftRow.id);
     return result;
   }).immediate();
+  contributeQuietly(db, userId, draftRow.id, proposal.source_id, now);
+  return accepted;
 }
 
 /**
@@ -264,7 +275,9 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     return result;
   });
 
-  return run();
+  const result = run();
+  contributeQuietly(db, userId, draftId, proposal.source_id, now);
+  return result;
 }
 
 /**

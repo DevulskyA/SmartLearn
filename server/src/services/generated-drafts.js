@@ -21,6 +21,7 @@ import { carry, dm, splitMessage } from '../api-error-messages.js';
 import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '../ai/draft-audit.js';
 import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
+import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -460,6 +461,11 @@ export async function createDraft(db, userId, proposalId, {
   const sourceLanguage = detectSourceLanguage(found.segments);
   const generationLocale = ensureGenerationLocale(db, userId, localeHint);
 
+  // REUSE first (a regenerate is an explicit wish for a new one): reviewed content for exactly this text costs nothing and needs no provider.
+  if (!regenerate) {
+    const reused = reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, inputGeneration, sourceLanguage, generationLocale, questionsLater: codex?.deferQuestions === true, now });
+    if (reused) return reused;
+  }
   const provider = providerImpl ?? selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
   // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
   const deadlineMs = provider.timeoutMs ?? timeoutMs;
@@ -719,6 +725,72 @@ function loadEditable(db, userId, draftId) {
 
 /** Re-screens deterministically (a human edit changes the text, so earlier findings describe text that is gone), writes ONE row update and bumps the draft revision. */
 /** The fields of a question a reviewer can change the MEANING of (status, version and timestamps are not content). */
+/**
+ * REUSE before GENERATE: when another student already had the SAME text (same digest, same language) turned into a reviewed summary, this student
+ * gets that content as a DRAFT of their own, with no model call and no credit. It is audited again here against THEIR source text and still has to
+ * be reviewed and accepted. A summary without questions only suits the summary-first flow (the questions are then asked for later). Returns null on a miss.
+ */
+function reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, inputGeneration, sourceLanguage, generationLocale, questionsLater, now }) {
+  const shared = findShared(db, { digest: inputDigest, locale: generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
+  if (!shared) return null;
+  const hasQuestions = shared.questions.length > 0;
+  if (!hasQuestions && !questionsLater) return null;
+  const nowIso = now().toISOString();
+  const content = normalizeContent({
+    summary: shared.summary,
+    summarySourceSpans: shared.summarySourceSpans,
+    summaryEvidence: shared.summaryEvidence ?? [],
+    questions: shared.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null })),
+    ...(hasQuestions ? {} : { questionsDeferred: true }),
+    quarantinedCount: 0,
+    audit: { result: AUDIT_RESULT.PASS, findings: [], auditedBy: ['DETERMINISTIC'], modelAudit: 'NOT_RUN', rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
+    sourceLanguage: sourceLanguage ?? shared.sourceLanguage,
+    generationLocale,
+    languageCheck: 'NOT_APPLICABLE',
+    reusedFrom: { sharedId: shared.id, at: nowIso },
+    sourceScope: {
+      documentId: found.proposal.source_id,
+      documentName: db.prepare('SELECT original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.original_name ?? null,
+      topic: found.proposal.topic ?? found.proposal.title,
+      approvedPages: [found.proposal.page_start, found.proposal.page_end],
+      spanCount: found.proposal.spans_json ? JSON.parse(found.proposal.spans_json).length : null,
+      sourceChars: scope.sourceChars,
+      payloadChars: scope.payloadChars,
+      payloadPages: scope.pages,
+    },
+  });
+  const inserted = db.transaction(() => {
+    const r = db.prepare(`
+      INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
+      VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
+    `).run(userId, proposalId, shared.generatedBy.provider, shared.generatedBy.modelVersion, shared.generatedBy.promptVersion, JSON.stringify(content), nowIso, inputDigest, inputGeneration);
+    recordReuse(db, shared.id);
+    return r;
+  })();
+  const { draft } = reauditDraft(db, userId, Number(inserted.lastInsertRowid), now);
+  return { ...draft, live: false, sharedReuse: true };
+}
+
+/** The questions of a summary-first draft, taken from reviewed content for the same text instead of asking the model. Null on a miss. */
+function reuseSharedQuestions(db, userId, draftId, first, now) {
+  const { draftRow, found, current } = first;
+  const shared = findShared(db, { digest: draftRow.input_sha256, locale: current.generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
+  if (!shared || shared.questions.length === 0) return null;
+  const validated = validateOrThrow({
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: shared.questions,
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments);
+  const have = new Set(current.questions.map(questionText));
+  const fresh = validated.questions.filter((q) => !have.has(questionText(q)));
+  if (fresh.length === 0) return null;
+  recordReuse(db, shared.id);
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
+    questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null }))],
+    questionsDelivered: true,
+  }, now);
+}
+
 const questionText = (q) => JSON.stringify([q.question, q.answer, q.explanation ?? null, q.hint ?? null, q.questionType ?? null]);
 
 /**
@@ -880,6 +952,8 @@ export async function generateDeferredQuestions(db, userId, draftId, {
 } = {}) {
   const first = loadEditable(db, userId, draftId);
   if (first.current.questionsDeferred !== true) return toDraftDto(first.draftRow, { db, userId });
+  const reusedQuestions = reuseSharedQuestions(db, userId, draftId, first, now);
+  if (reusedQuestions) return reusedQuestions;
   const provider = providerImpl ?? selectProvider({ provider: declaredProvider, consentGranted, codex });
   if (typeof provider.generateQuestions !== 'function') throw new DraftError('INVALID_STATE', dm('QUESTIONS_LATER_UNSUPPORTED'));
   const chars = first.found.segments.reduce((sum, s) => sum + s.text.length, 0);
