@@ -14,6 +14,8 @@ V1_STATUS=ENGINEERING_LOCAL em andamento; V1_VALIDATED exige VALID-8 (HG-06) e R
 
 PROIBIDO sem ordem explícita: Codex/Prompt Lab, chamada real a modelo, push, merge, deploy, release, rebase, squash, force-push; tocar o banco DEV humano (usar cópia). Ver `tasks.md` regras 8–9 e `PROGRAM.md` §1.
 
+PRODUCT_PHILOSOPHY_PATH=.specs/governance/SMARTLEARN_FILOSOFIA_PARA_IA.md (CANÔNICO por ordem do dono em 2026-11-14; texto salvo literalmente, versão 1.3 (a 1.1 está em `.specs/archive/SMARTLEARN_FILOSOFIA_PARA_IA-v1.1-ate-2026-11-14.md`). Leitura SOB DEMANDA: não carregar no início, na compactação nem no handoff; só a seção pertinente. Orienta decisões inéditas; não autoriza push/merge/migração/uso pago. Onde diz "Android como etapa futura" (§15.2), vale a decisão posterior do dono: Android no V1 com o mínimo de consultar resumos, ver o que estudar e fazer revisões. PDFs: ver DECISÃO ABERTA em `conductor/product-guidelines.md`.)
+
 DECISÕES E INVARIANTES HERDADOS (texto integral preservado, não duplicado): `.specs/archive/STATE-ate-2026-10-05.md` (STATE anterior), `.specs/archive/STATE-ate-2026-10-04.md` (STATE de 2.815 linhas) e `.specs/project/INVARIANTS.md`. Decisões de produto de 2026-10-04: `spec.md` R-12, R-13, INV-13/14 e §12.
 Esse STATE substitui `.specs/project/STATE.md` (arquivado em `.specs/archive/project-STATE-ate-2026-09-04.md`).
 AGENT_PRINCIPLES_PATH=.specs/governance/SMARTLEARN_AGENT_PRINCIPLES_V1.md (CANÔNICO por ordem do usuário em 2026-10-17; adendo de julgamento à Constituição do Produto, não segunda fonte de verdade; §XI = crítica PROPOSTA a ratificar). Pacote de retomada do primeiro estudo real: `.specs/features/first-real-study-v1/`.
