@@ -17,6 +17,7 @@ const TEXT = {
   DRAFT_STATE_NOT_EDITABLE: ({ status }) => `Resumo no estado ${status} não pode ser editado.`,
   DRAFT_STATE_NOT_ACCEPTABLE: ({ status }) => `Resumo no estado ${status} não pode ser aceito.`,
   SUMMARY_REQUIRED: () => 'Informe o texto do resumo.',
+  SUMMARY_VERSION_NOT_FOUND: () => 'Versão do resumo não encontrada.',
   QUESTION_STATE_INVALID: () => 'Estado de questão inválido.',
   CITATION_OUT_OF_RANGE: () => 'A citação da questão aponta para uma página fora do trecho da fonte.',
   LAST_QUESTION_REQUIRED: () => 'A aula precisa manter ao menos uma questão.',

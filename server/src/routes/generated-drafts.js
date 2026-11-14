@@ -225,6 +225,28 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // History of the summary text (migration 048): list earlier versions, read one, restore one. Restoring keeps the text it replaces.
+  const versionParams = { type: 'object', required: ['id', 'version'], properties: { id: { type: 'string' }, version: { type: 'string' } } };
+  app.get('/drafts/:id/summary-versions', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { versions: drafts.listDraftSummaryVersions(db, request.actor.userId, id) }; } catch (err) { return handleError(err, reply); }
+  });
+  app.get('/drafts/:id/summary-versions/:version', { schema: { params: versionParams } }, async (request, reply) => {
+    const id = Number(request.params.id);
+    const version = Number(request.params.version);
+    if (!Number.isInteger(id) || !Number.isInteger(version)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { version: drafts.readDraftSummaryVersion(db, request.actor.userId, id, version) }; } catch (err) { return handleError(err, reply); }
+  });
+  app.post('/drafts/:id/summary-versions/:version/restore', { schema: { params: versionParams } }, async (request, reply) => {
+    const id = Number(request.params.id);
+    const version = Number(request.params.version);
+    if (!Number.isInteger(id) || !Number.isInteger(version)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { draft: drafts.restoreSummaryVersion(db, request.actor.userId, id, version) }; } catch (err) { return handleError(err, reply); }
+  });
+
   // On-demand independent model check of the summary as it is now (the student's own text included). Only reports; never rewrites.
   app.post('/drafts/:id/audit-summary', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },

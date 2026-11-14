@@ -24,6 +24,7 @@ import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
 import { privateBankItems } from '../corpus/private-bank.js';
+import { recordSummaryVersion, listSummaryVersions, getSummaryVersion } from './draft-summary-versions.js';
 import { findPending, recordReplacement, applyDecision, discardDraft, settleExpired, REPLACEMENT_DECISIONS } from './draft-replacements.js';
 
 export class DraftError extends Error {
@@ -986,9 +987,36 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     quarantinedCount: next.quarantinedCount ?? current.quarantinedCount,
     audit,
   });
-  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
-    .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  db.transaction(() => {
+    // the text that is going away is kept before it is replaced: the student never loses what they wrote (migration 048)
+    if (next.summary !== current.summary) {
+      recordSummaryVersion(db, userId, draftId, {
+        version: current.summaryVersion, summary: current.summary, origin: current.summaryOrigin, force: next.keepPreviousSummary === true, now,
+      });
+    }
+    db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+      .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  })();
   return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+}
+
+/** Earlier texts of this draft's summary, newest first (no text). */
+export function listDraftSummaryVersions(db, userId, draftId) {
+  if (!db.prepare('SELECT 1 FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId)) throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  return listSummaryVersions(db, userId, draftId);
+}
+
+export function readDraftSummaryVersion(db, userId, draftId, version) {
+  if (!db.prepare('SELECT 1 FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId)) throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  const found = getSummaryVersion(db, userId, draftId, version);
+  if (!found) throw new DraftError('NOT_FOUND', dm('SUMMARY_VERSION_NOT_FOUND'));
+  return found;
+}
+
+/** Puts an earlier text back as the current summary. Goes through reviseSummary (same validation) and keeps the text it replaces as a version. */
+export function restoreSummaryVersion(db, userId, draftId, version, now = () => new Date()) {
+  const earlier = readDraftSummaryVersion(db, userId, draftId, version);
+  return reviseSummary(db, userId, draftId, { summary: earlier.summary }, now, { keepPreviousSummary: true });
 }
 
 function requireFresh(actual, expected, code) {
@@ -998,7 +1026,7 @@ function requireFresh(actual, expected, code) {
 }
 
 /** Edits ONLY the summary: questions, their ids/status/versions and citations are untouched. */
-export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date()) {
+export function reviseSummary(db, userId, draftId, { summary, expectedVersion } = {}, now = () => new Date(), { keepPreviousSummary = false } = {}) {
   const { draftRow, found, current } = loadEditable(db, userId, draftId);
   // the summary of a lesson that already exists is edited in the lesson; a draft that only adds questions never rewrites it
   if (draftRow.target_unit_id != null) throw new DraftError('INVALID_STATE', dm('LESSON_SUMMARY_READONLY'));
@@ -1017,6 +1045,7 @@ export function reviseSummary(db, userId, draftId, { summary, expectedVersion } 
     questions: current.questions,
     summaryVersion: validated.summary === current.summary ? current.summaryVersion : current.summaryVersion + 1,
     ...(validated.summary === current.summary ? {} : { summaryOrigin: 'HUMAN_EDITED', summaryEditedAt: now().toISOString() }),
+    keepPreviousSummary,
   }, now);
 }
 

@@ -42,6 +42,7 @@ const REGISTRY = {
   'generated-drafts.js POST /learning-units/:unitId/questions-draft': 'STATE', // returns the lesson's open questions draft (partial unique index), probed in lesson-questions.test.js
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
   'generated-drafts.js POST /drafts/:id/audit-summary': 'ACTION',
+  'generated-drafts.js POST /drafts/:id/summary-versions/:version/restore': 'STATE',
   'generated-drafts.js POST /drafts/:id/accept': 'STATE',
   'generated-drafts.js POST /drafts/:id/decision': 'STATE',
   'generation-jobs.js POST /generation-jobs': 'STATE',

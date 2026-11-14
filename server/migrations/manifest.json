@@ -233,5 +233,10 @@
     "version": 47,
     "name": "reuse-source-authorization",
     "checksum": "315275384c3191fdfa0c3bbc9a9e1c257a27b2b5937ab3d9d93e14d0387b7c93"
+  },
+  {
+    "version": 48,
+    "name": "draft-summary-versions",
+    "checksum": "d4c3ce189e06284f13dfc8e5f87587846d0fef707b4d5e0437c8446992a73a3f"
   }
 ]
