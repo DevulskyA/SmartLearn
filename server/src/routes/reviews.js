@@ -1,6 +1,7 @@
 import * as reviews from '../services/reviews.js';
 import { dailyPlan } from '../services/daily-plan-experiment.js';
 import { IdempotencyConflictError } from '../services/idempotency.js';
+import { bankPracticeFor } from '../corpus/bank-practice.js';
 
 function handleError(err, reply) {
   if (err instanceof reviews.ReviewError) {
@@ -25,6 +26,19 @@ export function registerReviewRoutes(app, db) {
       if (!Number.isInteger(unitId)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     }
     return { reviewTasks: reviews.list(db, request.actor.userId, { unitId }) };
+  });
+
+  // Extra PRACTICE for a lesson from the student's own accepted questions of other lessons (read-only, no model, no credit). Not review: the
+  // answers are ordinary attempts with no review task, so the schedule is untouched (see corpus/bank-practice.js).
+  app.get('/bank-practice', {
+    schema: { querystring: { type: 'object', required: ['unitId'], properties: { unitId: { type: 'string' }, limit: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const unitId = Number(request.query.unitId);
+    const limit = request.query.limit === undefined ? undefined : Number(request.query.limit);
+    if (!Number.isInteger(unitId) || (limit !== undefined && !Number.isInteger(limit))) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    const result = bankPracticeFor(db, request.actor.userId, unitId, { limit });
+    if (!result) { reply.status(404); return { error: { code: 'NOT_FOUND' } }; }
+    return result;
   });
 
   // `date` is the day the CLIENT calls "today", in the CLIENT's own timezone. For "completed today" to agree with that day the server must
