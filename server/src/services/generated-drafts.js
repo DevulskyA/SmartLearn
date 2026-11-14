@@ -25,6 +25,7 @@ import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
 import { privateBankItems } from '../corpus/private-bank.js';
 import { measureFidelityLoss } from '../ai/fidelity-loss.js';
+import { diffExcerpts, applyExcerpt, pruneExcerpts } from '../ai/summary-corrections.js';
 import { recordSummaryVersion, listSummaryVersions, getSummaryVersion } from './draft-summary-versions.js';
 import { findPending, recordReplacement, applyDecision, discardDraft, settleExpired, REPLACEMENT_DECISIONS } from './draft-replacements.js';
 
@@ -985,6 +986,8 @@ function persistEdit(db, userId, draftId, draftRow, found, current, next, now) {
     ...(next.questionsDelivered ? { questionsDeferred: false } : {}),
     summaryOrigin: next.summaryOrigin ?? current.summaryOrigin,
     summaryEditedAt: next.summaryEditedAt ?? current.summaryEditedAt,
+    // an excerpt proposed for text that has since changed is dropped, never applied to the wrong place
+    ...(current.corrections ? { corrections: { ...current.corrections, items: pruneExcerpts(current.corrections.items, next.summary) } } : {}),
     quarantinedCount: next.quarantinedCount ?? current.quarantinedCount,
     audit,
   });
@@ -1266,6 +1269,102 @@ export async function auditSummaryWithModel(db, userId, draftId, {
   } finally {
     if (!budgetClosed) { try { closeBudget(); } catch { /* startup reconciliation settles what is still open */ } }
   }
+}
+
+/**
+ * Per-excerpt corrections (P1-6). Asks the provider's ONE targeted repair to fix what the audit pointed at in the summary, then keeps ONLY the
+ * difference as excerpts { key, original, proposed, reason }: the summary itself is never changed here, the student accepts or dismisses each
+ * excerpt. Needs a live provider with `repair` and at least one non-LOW finding about the summary. One call, held and settled in the credit ledger.
+ */
+export async function proposeSummaryCorrections(db, userId, draftId, {
+  provider: declaredProvider = null, providerImpl = null, consentGranted = false, codex = {}, timeoutMs = 30_000, signal = null,
+  budgetLimits = undefined, now = () => new Date(),
+} = {}) {
+  const first = loadEditable(db, userId, draftId);
+  const provider = providerImpl ?? selectProvider({ provider: declaredProvider, consentGranted, codex });
+  if (provider.live !== true || typeof provider.repair !== 'function') throw new DraftError('INVALID_STATE', dm('MODEL_AUDIT_UNSUPPORTED'));
+  const findings = (first.current.audit?.findings ?? []).filter((f) => f.scope === 'summary' && f.severity !== 'LOW');
+  if (findings.length === 0) throw new DraftError('INVALID_STATE', dm('CORRECTION_NOTHING'));
+  const chars = first.found.segments.reduce((sum, s) => sum + s.text.length, 0) + first.current.summary.length;
+  const deadlineMs = provider.deadlineFor?.(chars) ?? provider.timeoutMs ?? timeoutMs;
+
+  let reservation;
+  try {
+    reservation = reserve(db, userId, { proposalId: first.draftRow.proposal_id, estimatedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), limits: budgetLimits, now });
+  } catch (err) {
+    if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
+    throw err;
+  }
+  let budgetClosed = false;
+  const closeBudget = ({ refund = false } = {}) => {
+    if (budgetClosed) return;
+    budgetClosed = true;
+    if (refund) release(db, reservation.id, { now });
+    else settle(db, reservation.id, { consumedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), basis: 'ESTIMATED', now });
+  };
+  try {
+    if (signal?.aborted) { closeBudget({ refund: true }); throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL')); }
+    let raw;
+    try {
+      raw = await withTimeout(Promise.resolve(provider.repair({
+        draft: { summary: first.current.summary, summarySourceSpans: first.current.summarySourceSpans, questions: first.current.questions, modelVersion: first.draftRow.model_version, promptVersion: first.draftRow.prompt_version },
+        findings, segments: first.found.segments, promptVersion: first.draftRow.prompt_version, signal,
+      })), deadlineMs, 'TIMEOUT');
+    } catch (err) {
+      closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
+      if (err instanceof DraftError) throw err;
+      if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
+      throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE'));
+    }
+    closeBudget();
+    const repaired = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
+    if (!repaired) throw new DraftError('INVALID_STATE', dm('CORRECTION_MALFORMED'));
+    return storeCorrections(db, userId, draftId, first.current.summary, repaired, findings, now);
+  } finally {
+    if (!budgetClosed) { try { closeBudget(); } catch { /* startup reconciliation settles what is still open */ } }
+  }
+}
+
+/** Keeps the excerpts of a repaired summary beside the draft. Reloads after the call: if the student kept typing, the proposal is about a text that is gone. */
+function storeCorrections(db, userId, draftId, judgedSummary, repairedSummary, findings, now) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  if (current.summary !== judgedSummary) throw new DraftError('ENTITY_CONFLICT', dm('SUMMARY_CHANGED_SINCE_READ'));
+  // the repaired text must satisfy the same rules as any summary (figure references, citations); an invalid one proposes nothing
+  validateOrThrow({
+    summary: repairedSummary, summarySourceSpans: current.summarySourceSpans, questions: current.questions.map(editableQuestion),
+    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+  }, found.segments, { allowNoQuestions: current.questionsDeferred === true });
+  // the finding that quotes this excerpt explains it; otherwise the first model finding (never an internal rule code when a model one exists)
+  const lowered = (s) => String(s ?? '').toLowerCase();
+  const fallback = (findings.find((f) => f.source === 'MODEL') ?? findings[0])?.issue ?? '';
+  const items = diffExcerpts(current.summary, repairedSummary).map((e) => ({
+    ...e,
+    reason: findings.find((f) => f.generatedClaim && lowered(e.original).includes(lowered(f.generatedClaim)))?.issue ?? fallback,
+  }));
+  const content = { ...JSON.parse(draftRow.draft_json), corrections: { createdAt: now().toISOString(), items } };
+  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+    .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+}
+
+/** Accepts ONE proposed excerpt: replaces exactly that text (it must still be in the summary exactly once), through reviseSummary so the version is kept. */
+export function applySummaryCorrection(db, userId, draftId, key, now = () => new Date()) {
+  const { current } = loadEditable(db, userId, draftId);
+  const item = (current.corrections?.items ?? []).find((e) => e.key === key);
+  const next = item ? applyExcerpt(current.summary, item) : null;
+  if (next === null) throw new DraftError('NOT_FOUND', dm('CORRECTION_NOT_FOUND'));
+  return reviseSummary(db, userId, draftId, { summary: next }, now);
+}
+
+/** Dismisses ONE proposed excerpt; the summary is untouched. */
+export function dismissSummaryCorrection(db, userId, draftId, key, now = () => new Date()) {
+  const { draftRow, current } = loadEditable(db, userId, draftId);
+  const items = current.corrections?.items ?? [];
+  if (!items.some((e) => e.key === key)) throw new DraftError('NOT_FOUND', dm('CORRECTION_NOT_FOUND'));
+  const content = { ...JSON.parse(draftRow.draft_json), corrections: { ...current.corrections, items: items.filter((e) => e.key !== key) } };
+  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+    .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
 }
 
 /** Saves a model audit of the summary. Reloads after the (long) call: the student may have kept typing, and a finding about a text that is gone is never shown. */

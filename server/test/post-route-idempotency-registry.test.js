@@ -43,6 +43,8 @@ const REGISTRY = {
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
   'generated-drafts.js POST /drafts/:id/audit-summary': 'ACTION',
   'generated-drafts.js POST /drafts/:id/summary-versions/:version/restore': 'STATE',
+  'generated-drafts.js POST /drafts/:id/corrections': 'ACTION',
+  'generated-drafts.js POST /drafts/:id/corrections/:key/apply': 'STATE',
   'generated-drafts.js POST /drafts/:id/accept': 'STATE',
   'generated-drafts.js POST /drafts/:id/decision': 'STATE',
   'generation-jobs.js POST /generation-jobs': 'STATE',

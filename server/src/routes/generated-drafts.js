@@ -225,6 +225,35 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // Per-excerpt corrections (P1-6): propose (one model call), accept one excerpt, dismiss one excerpt. Proposing never changes the summary.
+  const correctionParams = { type: 'object', required: ['id', 'key'], properties: { id: { type: 'string' }, key: { type: 'string', pattern: '^[0-9a-f]{10}$' } } };
+  app.post('/drafts/:id/corrections', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const draft = await drafts.proposeSummaryCorrections(db, request.actor.userId, id, {
+        provider: config.aiProvider,
+        consentGranted: config.aiConsentGranted,
+        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
+        timeoutMs: config.aiRequestTimeoutMs,
+        ...aiOptions,
+      });
+      return { draft };
+    } catch (err) { return handleError(err, reply); }
+  });
+  app.post('/drafts/:id/corrections/:key/apply', { schema: { params: correctionParams } }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { draft: drafts.applySummaryCorrection(db, request.actor.userId, id, request.params.key) }; } catch (err) { return handleError(err, reply); }
+  });
+  app.delete('/drafts/:id/corrections/:key', { schema: { params: correctionParams } }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try { return { draft: drafts.dismissSummaryCorrection(db, request.actor.userId, id, request.params.key) }; } catch (err) { return handleError(err, reply); }
+  });
+
   // Meaning-flipping words lost from the summary (deterministic, no AI, no credit).
   app.get('/drafts/:id/fidelity', {
     schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
