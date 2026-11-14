@@ -537,6 +537,22 @@
             <button class="secondary-button" id="generation-language-save" type="button" data-i18n="screens.settings.language.save">Salvar preferências</button>
             <p class="form-message" id="generation-language-message" role="status" aria-live="polite"></p>
           </section>
+          <section class="settings-card" id="reuse-card" aria-labelledby="reuse-title" hidden>
+            <div class="section-heading">
+              <p class="eyebrow" data-i18n="screens.settings.reuse.eyebrow">Compartilhamento</p>
+              <h2 id="reuse-title" data-i18n="screens.settings.reuse.title">Compartilhar conteúdo revisado</h2>
+              <p data-i18n="screens.settings.reuse.body">Permita que resumos e questões gerados por IA que você aceitou sem alterar ajudem outros estudantes que estudam exatamente o mesmo trecho. Vem desligado e você pode desligar quando quiser.</p>
+            </div>
+            <label class="experiment-switch">
+              <input type="checkbox" id="reuse-switch" aria-describedby="reuse-scope" />
+              <span data-i18n="screens.settings.reuse.switch">Compartilhar conteúdo revisado com outros estudantes</span>
+            </label>
+            <p class="lesson-hint" id="reuse-scope" data-i18n="screens.settings.reuse.scope">Podem ser compartilhados: resumos e questões gerados por IA que você aceitou sem alterar, só de materiais para os quais você declarar abaixo o direito de reutilização. Nunca são compartilhados: seus PDFs, suas edições e anotações, seu histórico de estudo e seus dados pessoais. Quem recebe não vê quem contribuiu e revisa o conteúdo como qualquer rascunho.</p>
+            <h3 class="reuse-sources-title" data-i18n="screens.settings.reuse.sourcesTitle">Materiais que posso compartilhar</h3>
+            <p class="lesson-hint" data-i18n="screens.settings.reuse.sourcesHint">Marque só materiais que são seus, que têm licença para reutilização ou que estão em domínio público. Sua escolha pessoal não substitui a autorização da obra.</p>
+            <div id="reuse-sources" class="reuse-sources"></div>
+            <p class="form-message" id="reuse-message" role="status" aria-live="polite"></p>
+          </section>
           <section class="settings-card" aria-labelledby="backup-title">
             <div class="section-heading">
               <h2 id="backup-title" data-i18n="screens.settings.backup.title">Seus dados, sob seu controle.</h2>

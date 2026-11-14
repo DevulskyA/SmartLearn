@@ -13,7 +13,8 @@ import * as drafts from '../src/services/generated-drafts.js';
 import { acceptDraft } from '../src/services/accept-draft.js';
 import { createJob, createQuestionsJob, getJob } from '../src/services/generation-jobs.js';
 import { createJobRunner } from '../src/services/generation-job-runner.js';
-import { setReuseConsent, isReuseGranted } from '../src/services/shared-reuse.js';
+import { setReuseConsent, isReuseGranted, setSourceReuseBasis } from '../src/services/shared-reuse.js';
+import { buildApp } from '../src/app.js';
 import { CODEX_PROVIDER_NAME } from '../src/ai/codex-provider.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 
@@ -25,6 +26,8 @@ const UPLOAD_DEFAULTS = { maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1
 const OPTS = { timeout: 60_000 };
 const PAGES = ['Filtracao glomerular depende da pressao hidrostatica.', 'Segunda pagina: o ritmo de filtracao glomerular.'];
 const good = (n, page = 1) => ({ question: `Pergunta ${n}: de que depende a filtracao glomerular?`, answer: 'Da pressao hidrostatica.', explanation: 'A pressao empurra o filtrado.', hint: 'Pense na forca.', questionType: 'OPEN', sourceSpans: [{ pageIndex: page }] });
+const TEST_ORIGIN = 'https://smartlearn.test';
+const PASSWORD = 'a genuinely long test password 1';
 const INPUT = { newSubjectName: 'Fisiologia Renal', studyDate: '2026-10-03' };
 
 function tmpDb() {
@@ -55,9 +58,12 @@ function counting({ withQuestions = true, live = false } = {}) {
   };
   return p;
 }
-async function proposalFor(ctx, userId, pages = PAGES, name = 'costanzo.pdf', range = null) {
+/** `basis`: the right to share this source (legal eligibility); left undefined, a student who already opted in declares it, one who did not does not. */
+async function proposalFor(ctx, userId, pages = PAGES, name = 'costanzo.pdf', range = null, basis = undefined) {
   const source = sourceStorage.acceptUpload(ctx.db, userId, { buffer: buildFixturePdf(pages), originalName: name, contentType: 'application/pdf', sourcesDir: ctx.sourcesDir, ...UPLOAD_DEFAULTS });
   await extractSource(ctx.db, userId, source.id, { sourcesDir: ctx.sourcesDir });
+  const declared = basis === undefined ? (isReuseGranted(ctx.db, userId) ? 'OWN_WORK' : null) : basis;
+  if (declared) setSourceReuseBasis(ctx.db, userId, source.id, declared);
   const list = proposals.chunkSource(ctx.db, userId, source.id, { maxPagesPerChunk: range ?? 10 });
   return { source, proposal: list[0], all: list };
 }
@@ -67,10 +73,10 @@ const exerciseCount = (db, userId) => db.prepare('SELECT COUNT(*) AS n FROM exer
 const shared = (db) => db.prepare('SELECT * FROM shared_content').all();
 
 /** Student A opted in, generated, reviewed WITHOUT editing and accepted. Returns the first student's world. */
-async function contributor(ctx, { consent = true, pages = PAGES, withQuestions = true } = {}) {
+async function contributor(ctx, { consent = true, authorize = true, pages = PAGES, withQuestions = true } = {}) {
   const userId = makeUser(ctx.db, 'a@example.com');
   if (consent) setReuseConsent(ctx.db, userId, true);
-  const { proposal, source } = await proposalFor(ctx, userId, pages);
+  const { proposal, source } = await proposalFor(ctx, userId, pages, 'costanzo.pdf', null, authorize ? 'OWN_WORK' : null); // legal eligibility is declared per source, not only per account
   const provider = counting({ withQuestions });
   const draft = await generate(ctx, userId, proposal, provider, withQuestions ? {} : { codex: { deferQuestions: true } });
   acceptDraft(ctx.db, userId, draft.id, { ...INPUT, expectedRevision: draft.revision });
@@ -299,7 +305,7 @@ test('through the background job: the summary and then the questions are reused 
     assert.equal(provider.calls, 0, 'the job reused reviewed content: no model call');
     assert.equal(ctx.db.prepare('SELECT COUNT(*) AS n FROM generation_reservations').get().n, 0, 'nothing was reserved');
     const draft = drafts.getDraft(ctx.db, b, done.draftId);
-    assert.equal(draft.sharedReuse ?? draft.reusedFrom != null, true);
+    assert.equal(draft.fromSharedReuse, true);
     assert.equal(draft.questionsDeferred, true);
 
     // reviewed questions for the same text appear meanwhile (another student's acceptance): the questions job reuses them too
@@ -311,4 +317,96 @@ test('through the background job: the summary and then the questions are reused 
     assert.equal(ctx.db.prepare('SELECT COUNT(*) AS n FROM generation_reservations').get().n, 0);
     assert.equal(drafts.getDraft(ctx.db, b, draft.id).questions.length, 2);
   } finally { ctx.cleanup(); }
+});
+
+test('legal eligibility: the account opt-in alone shares nothing; each source needs its own declared basis, and revoking it withdraws what came from it', OPTS, async () => {
+  const ctx = tmpDb();
+  try {
+    const a = await contributor(ctx, { authorize: false });
+    assert.equal(shared(ctx.db).length, 0, 'consent without a basis for THIS source offers nothing');
+
+    // the declaration is only ever about a source of the student, and only one of the known bases
+    const other = makeUser(ctx.db, 'other@example.com');
+    assert.equal(setSourceReuseBasis(ctx.db, other, a.source.id, 'OWN_WORK'), null, "someone else's source cannot be declared");
+    assert.equal(ctx.db.prepare('SELECT reuse_basis FROM sources WHERE id = ?').get(a.source.id).reuse_basis, null);
+    assert.throws(() => setSourceReuseBasis(ctx.db, a.userId, a.source.id, 'BECAUSE_I_SAID_SO'), TypeError);
+
+    // declared for a source, the next acceptance from it offers its content
+    const PAGES_2 = ['Reabsorcao tubular de sodio ocorre no tubulo proximal.', 'Segunda pagina: a alca de Henle concentra a urina.'];
+    const again = await proposalFor(ctx, a.userId, PAGES_2, 'costanzo-2.pdf', null, 'LICENSED');
+    const d2 = await generate(ctx, a.userId, again.proposal, counting());
+    acceptDraft(ctx.db, a.userId, d2.id, { ...INPUT, newSubjectName: 'Outra', expectedRevision: d2.revision });
+    assert.equal(shared(ctx.db).length, 1);
+    assert.equal(shared(ctx.db)[0].status, 'ACTIVE');
+
+    // revoking the basis withdraws what came from that source: a new student is no longer served from it
+    setSourceReuseBasis(ctx.db, a.userId, again.source.id, null);
+    assert.equal(shared(ctx.db)[0].status, 'WITHDRAWN');
+    const b = makeUser(ctx.db, 'b@example.com');
+    const { proposal } = await proposalFor(ctx, b, PAGES_2);
+    const providerB = counting();
+    const draft = await generate(ctx, b, proposal, providerB);
+    assert.equal(providerB.calls, 1, 'withdrawn: normal generation');
+    assert.equal(draft.fromSharedReuse, false);
+  } finally { ctx.cleanup(); }
+});
+
+test('HTTP: a hit is served with AI consent OFF and no credentials; a miss keeps the normal refusal; the settings routes work and stay per account', OPTS, async () => {
+  const ctx = tmpDb();
+  const app = await buildApp(ctx.db, MIGRATIONS_DIR, { isProduction: false, allowedOrigins: [TEST_ORIGIN], sources: { sourcesDir: ctx.sourcesDir, ...UPLOAD_DEFAULTS },
+    ai: { provider: 'CODEX', consentGranted: false, codex: { deferQuestions: false } } });
+  const login = async (email) => {
+    await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { origin: TEST_ORIGIN }, payload: { email, password: PASSWORD } });
+    const res = await app.inject({ method: 'POST', url: '/v1/auth/login', headers: { origin: TEST_ORIGIN }, payload: { email, password: PASSWORD } });
+    const cookie = res.headers['set-cookie'].split(';')[0];
+    const me = JSON.parse((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } })).body);
+    return { cookie, csrf: me.csrfToken, userId: me.user.id };
+  };
+  const call = (who, method, url, payload) => app.inject({ method, url: '/v1' + url, headers: { origin: TEST_ORIGIN, cookie: who.cookie, 'x-csrf-token': who.csrf, 'content-type': 'application/json' }, ...(payload ? { payload } : {}) });
+  try {
+    const a = await contributor(ctx);
+    const b = await login('b-http@example.com');
+    const c = await login('c-http@example.com');
+    const mineB = await proposalFor(ctx, b.userId);
+    const mineC = await proposalFor(ctx, c.userId, ['Texto totalmente outro sobre o ciclo de Krebs e a respiracao celular.']);
+
+    // hit: AI consent is OFF, yet the job is created and ends SUCCEEDED with the reviewed content (no model, nothing reserved)
+    const created = await call(b, 'POST', '/generation-jobs', { proposalId: mineB.proposal.id });
+    assert.equal(created.statusCode, 201, created.body);
+    let job = JSON.parse(created.body).job;
+    for (let i = 0; i < 100 && !['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(job.state); i += 1) {
+      await new Promise((r) => setTimeout(r, 50));
+      job = JSON.parse((await call(b, 'GET', '/generation-jobs/' + job.id)).body).job;
+    }
+    assert.equal(job.state, 'SUCCEEDED', JSON.stringify(job));
+    const shown = JSON.parse((await call(b, 'GET', '/drafts/' + job.draftId)).body).draft;
+    assert.equal(shown.fromSharedReuse, true);
+    assert.equal(shown.reusedFrom, undefined, 'the entry id and the contributor are not exposed');
+    assert.equal(JSON.stringify(shown).includes('a@example.com'), false);
+    assert.equal(ctx.db.prepare('SELECT COUNT(*) AS n FROM generation_reservations').get().n, 0);
+
+    // a miss without consent is refused as before, on the direct route and on the job route (no job row is left behind)
+    const directC = await call(c, 'POST', '/proposals/' + mineC.proposal.id + '/drafts', {});
+    assert.equal(directC.statusCode, 409);
+    assert.equal(JSON.parse(directC.body).error.code, 'MISSING_CREDENTIALS');
+    const jobsBefore = ctx.db.prepare('SELECT COUNT(*) AS n FROM generation_jobs').get().n;
+    const missed = await call(c, 'POST', '/generation-jobs', { proposalId: mineC.proposal.id });
+    assert.equal(missed.statusCode, 409);
+    assert.equal(JSON.parse(missed.body).error.code, 'MISSING_CREDENTIALS');
+    assert.equal(ctx.db.prepare('SELECT COUNT(*) AS n FROM generation_jobs').get().n, jobsBefore);
+
+    // settings: off by default; per-source basis; revoke; never another account's source
+    const initial = JSON.parse((await call(b, 'GET', '/settings/reuse')).body).reuse;
+    assert.equal(initial.granted, false);
+    assert.deepEqual(initial.sources.map((x) => [x.id, x.basis]), [[mineB.source.id, null]]);
+    assert.equal((await call(b, 'PUT', '/settings/reuse', { granted: true })).statusCode, 200);
+    assert.equal((await call(b, 'PUT', '/settings/reuse/sources/' + mineB.source.id, { basis: 'PUBLIC_DOMAIN' })).statusCode, 200);
+    assert.equal((await call(b, 'PUT', '/settings/reuse/sources/' + mineB.source.id, { basis: 'whatever' })).statusCode, 400);
+    assert.equal((await call(b, 'PUT', '/settings/reuse/sources/' + mineC.source.id, { basis: 'OWN_WORK' })).statusCode, 404, "another account's source");
+    assert.equal(JSON.parse((await call(b, 'GET', '/settings/reuse')).body).reuse.sources[0].basis, 'PUBLIC_DOMAIN');
+    assert.equal(JSON.parse((await call(c, 'GET', '/settings/reuse')).body).reuse.granted, false, 'C is unaffected by B');
+    assert.equal((await call(b, 'PUT', '/settings/reuse/sources/' + mineB.source.id, { basis: null })).statusCode, 200);
+    assert.equal(JSON.parse((await call(b, 'GET', '/settings/reuse')).body).reuse.sources[0].basis, null);
+    assert.equal(isReuseGranted(ctx.db, a.userId), true);
+  } finally { await app.close(); ctx.cleanup(); }
 });

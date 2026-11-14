@@ -1,4 +1,4 @@
-import { DraftError, selectProvider } from '../services/generated-drafts.js';
+import { DraftError, selectProvider, hasReusableContent, reuseOnlyProvider } from '../services/generated-drafts.js';
 import * as jobs from '../services/generation-jobs.js';
 import { resolveAiSettings } from '../services/generation-job-runner.js';
 
@@ -30,9 +30,19 @@ export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
     try {
       const settings = resolveAiSettings(aiOptions);
       // Selecting only builds the provider description (name, live, how many calls it may make); nothing is sent anywhere.
-      const selected = settings.providerImpl ?? selectProvider(settings);
-      const provider = { name: selected.name, live: selected.live === true, plannedCalls: 1 + (selected.audit ? 1 : 0) + (selected.repair ? 1 : 0) };
       const { proposalId, draftId } = request.body;
+      let selected;
+      try {
+        selected = settings.providerImpl ?? selectProvider(settings);
+      } catch (err) {
+        // No AI consent/credentials is not a refusal when reviewed content for exactly this text already exists: that needs no model and no credit.
+        const reusable = err instanceof DraftError && err.code === 'MISSING_CREDENTIALS'
+          && hasReusableContent(db, request.actor.userId, { proposalId: proposalId ?? null, draftId: draftId ?? null, regenerate: request.body.regenerate === true || request.body.targetLocale !== undefined,
+            targetLocale: request.body.targetLocale ?? null, deferQuestions: settings.codex?.deferQuestions === true, maxInputChars: settings.maxInputChars });
+        if (!reusable) throw err;
+        selected = reuseOnlyProvider(err);
+      }
+      const provider = { name: selected.name, live: selected.live === true, plannedCalls: 1 + (selected.audit ? 1 : 0) + (selected.repair ? 1 : 0) };
       if ((proposalId === undefined) === (draftId === undefined)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED', field: 'proposalId' } }; }
       const { job, created } = draftId !== undefined
         ? jobs.createQuestionsJob(db, request.actor.userId, draftId, { provider: { ...provider, plannedCalls: 1 }, maxInputChars: settings.maxInputChars })

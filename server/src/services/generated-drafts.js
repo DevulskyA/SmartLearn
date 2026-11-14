@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { generateDraft as fakeGenerateDraft, FAKE_PROVIDER_NAME } from '../ai/fake-provider.js';
 import { detectSourceLanguage, checkDraftLanguage, LanguageMismatch } from '../ai/language-contract.js';
 import { ensureGenerationLocale } from './settings.js';
+import { resolveSupportedLocale, DEFAULT_LOCALE } from '../../../shared/locales.js';
 import { estimateCostUnits, reserve, settle, release, BudgetError } from './generation-budget.js';
 import {
   generateDraft as anthropicGenerateDraft, auditDraftWithModel, repairDraftWithModel,
@@ -99,6 +100,15 @@ export function selectProvider({ provider: declared = null, apiKey, model, conse
   if (liveAvailable) return anthropic();
   return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
 }
+/**
+ * Stands in for a provider the account may not use (no AI consent or credentials) when reviewed content for the same text might still answer the
+ * request. It is never live and never reserves credit; if nothing reusable is found it fails with the SAME error the refused provider gave.
+ */
+export function reuseOnlyProvider(cause) {
+  const refuse = async () => { throw cause; };
+  return { name: 'SHARED_REUSE', live: false, languageContract: 'NOT_APPLICABLE', generate: refuse, generateQuestions: refuse };
+}
+
 function withTimeout(promise, timeoutMs, onTimeoutCode) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -358,6 +368,9 @@ function toDraftDto(row, { db, userId } = {}) {
     // set on a draft that only ADDS questions to this existing lesson (migration 045); null on every ordinary draft
     targetUnitId: row.target_unit_id ?? null,
     ...draft,
+    // a draft that came from reviewed content of the same text; WHO wrote it is never exposed, nor the internal entry id
+    fromSharedReuse: Boolean(draft.reusedFrom),
+    reusedFrom: undefined,
     // T-F2-03: a COMPARISON only (opening never recalculates nor writes); an audit stored without a version is older than any version.
     auditStale: Boolean(audit) && audit.rulesVersion !== AUDIT_RULES_VERSION,
     sourceStale: db ? isDraftStale(db, userId, row) : false,
@@ -772,23 +785,58 @@ function reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, i
 }
 
 /** The questions of a summary-first draft, taken from reviewed content for the same text instead of asking the model. Null on a miss. */
-function reuseSharedQuestions(db, userId, draftId, first, now) {
+function reusableQuestions(db, userId, first) {
   const { draftRow, found, current } = first;
   const shared = findShared(db, { digest: draftRow.input_sha256, locale: current.generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
   if (!shared || shared.questions.length === 0) return null;
-  const validated = validateOrThrow({
-    summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: shared.questions,
-    modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
-  }, found.segments);
+  let validated;
+  try { // reviewed elsewhere is not enough: each question must also cite a page of THIS student's text, else it is a miss and the normal flow runs
+    validated = validateOrThrow({
+      summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: shared.questions,
+      modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+    }, found.segments);
+  } catch (err) {
+    if (err instanceof DraftError) return null;
+    throw err;
+  }
   const have = new Set(current.questions.map(questionText));
   const fresh = validated.questions.filter((q) => !have.has(questionText(q)));
-  if (fresh.length === 0) return null;
+  return fresh.length === 0 ? null : { shared, fresh };
+}
+
+function reuseSharedQuestions(db, userId, draftId, first, now) {
+  const { draftRow, found, current } = first;
+  const hit = reusableQuestions(db, userId, first);
+  if (!hit) return null;
+  const { shared, fresh } = hit;
   recordReuse(db, shared.id);
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
     questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null }))],
     questionsDelivered: true,
   }, now);
+}
+
+/**
+ * Read-only: would asking for this (a summary job for `proposalId`, or the questions of `draftId`) be answered from reviewed content?
+ * The job route asks BEFORE it demands AI consent or credentials: a hit needs neither (no model is called, nothing is reserved). Never writes.
+ */
+export function hasReusableContent(db, userId, { proposalId = null, draftId = null, regenerate = false, targetLocale = null, deferQuestions = false, maxInputChars = 50_000 } = {}) {
+  try {
+    if (draftId !== null) {
+      const first = loadEditable(db, userId, draftId);
+      return first.current.questionsDeferred === true && reusableQuestions(db, userId, first) !== null;
+    }
+    if (regenerate || reusableDraftRow(db, userId, proposalId)) return false;
+    const { found } = prepareGeneration(db, userId, proposalId, { maxInputChars });
+    const settings = db.prepare('SELECT ui_locale, generation_locale FROM user_settings WHERE user_id = ?').get(userId);
+    const locale = (targetLocale && resolveSupportedLocale(targetLocale)) || settings?.generation_locale || settings?.ui_locale || DEFAULT_LOCALE;
+    const shared = findShared(db, { digest: segmentsDigest(found.segments), locale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
+    return shared !== null && (shared.questions.length > 0 || deferQuestions === true);
+  } catch (err) {
+    if (err instanceof DraftError) return false;
+    throw err;
+  }
 }
 
 const questionText = (q) => JSON.stringify([q.question, q.answer, q.explanation ?? null, q.hint ?? null, q.questionType ?? null]);

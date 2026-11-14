@@ -22,6 +22,37 @@ export function setReuseConsent(db, userId, granted, now = () => new Date()) {
   return { granted: granted === true };
 }
 
+export const REUSE_BASES = ['OWN_WORK', 'LICENSED', 'PUBLIC_DOMAIN'];
+
+/** Legal eligibility (migration 047): the student's own opt-in does not cover someone else's work, so each source needs its own declared basis. */
+export function sourceReuseBasis(db, userId, sourceId) {
+  return db.prepare('SELECT reuse_basis FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId)?.reuse_basis ?? null;
+}
+
+/** Declares (or, with null, revokes) the right to let content generated from ONE source be reused. Returns null when the source is not theirs. */
+export function setSourceReuseBasis(db, userId, sourceId, basis, now = () => new Date()) {
+  if (basis !== null && !REUSE_BASES.includes(basis)) throw new TypeError('invalid reuse basis');
+  const at = now().toISOString();
+  return db.transaction(() => {
+    const source = db.prepare('SELECT id, original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
+    if (!source) return null;
+    db.prepare('UPDATE sources SET reuse_basis = ?, reuse_declared_at = ? WHERE user_id = ? AND id = ?').run(basis, basis ? at : null, userId, sourceId);
+    if (basis === null) { // revoking stops offering what came from this source (copies already received stay with their owners)
+      db.prepare(`UPDATE shared_content SET status = 'WITHDRAWN', updated_at = ?
+                  WHERE contributor_user_id = ? AND content_digest IN (
+                    SELECT d.input_sha256 FROM generated_drafts d JOIN content_proposals p ON p.id = d.proposal_id
+                    WHERE d.user_id = ? AND p.source_id = ? AND d.input_sha256 IS NOT NULL)`).run(at, userId, userId, sourceId);
+    }
+    return { id: source.id, name: source.original_name, basis };
+  })();
+}
+
+/** What the Settings card shows: the account switch and, per source, whether the student declared the right to share it. */
+export function reuseOverview(db, userId) {
+  const sources = db.prepare('SELECT id, original_name AS name, reuse_basis AS basis FROM sources WHERE user_id = ? ORDER BY original_name COLLATE NOCASE, id').all(userId);
+  return { granted: isReuseGranted(db, userId), bases: REUSE_BASES, sources };
+}
+
 /** The edition identity this student's file declares (migration 044), used only to refuse a reuse that two known editions contradict. */
 export function bibliographyOf(db, userId, sourceId) {
   const row = db.prepare('SELECT bib_title, bib_edition, bib_year, bib_isbn FROM sources WHERE user_id = ? AND id = ?').get(userId, sourceId);
@@ -52,6 +83,7 @@ function eligibleParts(content) {
  */
 export function contributeAcceptedDraft(db, userId, draftRow, content, { sourceId, now = () => new Date() } = {}) {
   if (!draftRow.input_sha256 || !isReuseGranted(db, userId)) return { contributed: false };
+  if (!sourceReuseBasis(db, userId, sourceId)) return { contributed: false, reason: 'SOURCE_NOT_AUTHORIZED' };
   const locale = content.generationLocale;
   if (!locale) return { contributed: false };
   const { summaryOk, questions } = eligibleParts(content);

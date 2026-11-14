@@ -119,6 +119,11 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   heading.tabIndex = -1;
   const sourceEl = createTextElement("p", "lesson-source-line", "");
   head.append(back, eyebrow, heading, sourceEl);
+  if (draft.fromSharedReuse) { // content already reviewed for this same text: marked, never attributed to anyone
+    const reuse = createTextElement("p", "lesson-reuse", "");
+    reuse.append(createTextElement("span", "study-now-chip", t("editor.reuse.badge")), createTextElement("span", "", t("editor.reuse.note")));
+    head.append(reuse);
+  }
 
   // ---- tabs -----------------------------------------------------------------------------------------------------------
   const tablist = document.createElement("div");

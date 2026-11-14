@@ -62,6 +62,8 @@ export default {
   'editor.questions.backToList': 'Voltar à lista de questões',
   'editor.question.name': 'Questão {number}',
   'editor.question.unsaved': 'não salva',
+  'editor.reuse.badge': 'Reaproveitado',
+  'editor.reuse.note': 'Conteúdo já revisado para este mesmo trecho. Revise como qualquer rascunho antes de aceitar.',
   'editor.question.prompt': 'Pergunta',
   'editor.question.answer': 'Resposta',
   'editor.question.explanation': 'Explicação (por quê)',

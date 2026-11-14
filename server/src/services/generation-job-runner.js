@@ -20,7 +20,7 @@
 // Credit (R-12) is the existing createDraft logic: RELEASED when the run was stopped before a provider call could leave, SETTLED at
 // the estimate of the calls made when it was stopped during or after one.
 import { config } from '../config.js';
-import { createDraft, generateDeferredQuestions, selectProvider, DraftError } from './generated-drafts.js';
+import { createDraft, generateDeferredQuestions, selectProvider, reuseOnlyProvider, DraftError } from './generated-drafts.js';
 import { ProviderRequestError } from '../ai/anthropic-provider.js';
 import { sampleProcessTree } from './process-liveness.js';
 import {
@@ -206,7 +206,13 @@ export function createJobRunner(db, {
     const { job } = run;
     assertJobScopeIntact(db, job.userId, job.id); // INV-13: never on text other than the one validated and priced
     const options = settings();
-    const base = options.providerImpl ?? selectProvider(options);
+    let base;
+    try {
+      base = options.providerImpl ?? selectProvider(options);
+    } catch (err) {
+      if (!(err instanceof DraftError) || err.code !== 'MISSING_CREDENTIALS') throw err;
+      base = reuseOnlyProvider(err); // reviewed content for the same text may still answer without a model (a miss fails with this same error)
+    }
     const hooks = {
       signal: run.controller.signal,
       onReservation: (reservation) => touchJob(db, job.id, { reservationId: reservation.id, now }),

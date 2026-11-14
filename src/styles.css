@@ -6482,3 +6482,9 @@ label.select-control:has(> .ui-select) {
 }
 /* "Remover" na biblioteca: o vermelho fixo de .small-button.is-danger não atingia 4,5:1 sobre a superfície de 4 temas claros (catppuccin-latte, gruvbox-light, solarized-light, dracula-light); escurece com a cor de texto do tema. */
 .source-existing-item .small-button.is-danger { color: color-mix(in oklab, var(--color-danger, #dc2626) 62%, var(--color-text)); }
+
+/* Settings > "Compartilhar conteúdo revisado": one row per material, and the discreet "Reaproveitado" mark on a draft */
+.reuse-sources-title { margin: 1rem 0 0.25rem; font-size: 1rem; }
+.reuse-source-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; border-top: 1px solid var(--color-border); }
+.reuse-source-name { overflow-wrap: anywhere; flex: 1 1 14rem; }
+.lesson-reuse { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--color-muted); }

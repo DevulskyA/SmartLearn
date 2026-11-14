@@ -1,6 +1,7 @@
 ﻿import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError, apiRequest } from "./api-client.js";
+import { renderReuseSettings } from "./reuse-settings-ui.js";
 import { createStudyEvidenceQueue } from "./study-evidence-queue.js";
 import { Stats, formatAverageScore } from "./stats.js";
 import { readLastBackupAt, writeLastBackupAt } from "./backup-date.js";
@@ -575,6 +576,7 @@ let migrationLastReport = null;
 const themeToggle = document.querySelector("#theme-toggle");
 const themePicker = document.querySelector("#theme-picker");
 const generationLanguageCard = document.querySelector("#generation-language-card");
+const reuseCard = document.querySelector("#reuse-card");
 const generationLanguageSelect = document.querySelector("#generation-language-select");
 const generationLanguageSave = document.querySelector("#generation-language-save");
 const generationLanguageMessage = document.querySelector("#generation-language-message");
@@ -2761,6 +2763,11 @@ export async function renderSettings() {
   const settings = await DB.settings.get();
   // Language preference has real server authority only. Never present an inert selector in legacy local mode.
   if (generationLanguageCard) generationLanguageCard.hidden = !REMOTE_MODE;
+  // Sharing reviewed content needs the server (accounts exist only there), like the language preference.
+  if (reuseCard) {
+    reuseCard.hidden = !REMOTE_MODE;
+    if (REMOTE_MODE) void renderReuseSettings(reuseCard);
+  }
   if (REMOTE_MODE && generationLanguageSelect) {
     generationLanguageSelect.value = settings?.generationLocale ?? settings?.effectiveGenerationLocale ?? DEFAULT_LOCALE;
     syncSelect(generationLanguageSelect);
