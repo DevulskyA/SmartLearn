@@ -15,8 +15,9 @@ quando trouxer benefício concreto ao fluxo básico e o dono pedir. Prioridade a
 4. Banco de resumos por edição/cobertura e registro de permissão de reuso.
 5. Classificação matéria › assunto › tópico, gravada e buscável por FTS5.
 6. Coluna de modalidade (objetiva/discursiva) e estado de validade da questão.
-7. Ligar `private-bank.js` ao fluxo (REUSE / DERIVE / GENERATE antes de gerar) e usar o ISBN/edição/ano de `sources` em vez do ano derivado do nome do arquivo.
-8. Ligar `resolveReviewNeed` ao fluxo de revisões.
+7. FEITO em parte (05aeae4f): o banco privado é consultado antes do modelo ao pedir as perguntas de um rascunho (mesma fonte, páginas contidas no texto, outra aula). Falta usar o ISBN/edição/ano de `sources` em vez do ano derivado do nome do arquivo e o DERIVE.
+8. `resolveReviewNeed` AGUARDA consumidor: a revisão de hoje só reapresenta exercícios existentes e não gera perguntas, então não há ponto de decisão REUSE/DERIVE/GENERATE para ligar. Só vale criar quando existir uma revisão que gere itens novos (decisão de produto).
+11. Compartilhamento entre instalações (reaproveitamento, hoje por conta no mesmo servidor, migrações 046/047): o acervo `shared_content` é uma tabela chaveada por (digest do texto enviado ao modelo, idioma), sem identidade de quem contribuiu exposta. Para duas instalações, o mesmo registro (digest, idioma, resumo, perguntas, versões do modelo/prompt, base jurídica declarada) pode trafegar por um serviço central que só armazena e entrega esse registro; o receptor continua auditando de novo contra o próprio texto e revisando como rascunho. Falta decidir: serviço central e autenticação, retirada (WITHDRAWN) propagada, e moderação. Não implementado; sem publicação.
 9. Geração automática adicional (títulos com IA real, checagem de duplicatas entre questões geradas).
 10. Interface para o aluno ver e corrigir os metadados do material (hoje só a API; a tela de Materiais está em redesenho por outra frente).
 
