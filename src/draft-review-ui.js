@@ -83,6 +83,29 @@ export async function reauditDraft(draftId) {
   } catch (err) { return fail(err); }
 }
 
+/** Earlier texts of the summary (migration 048), newest first, without the text. */
+export async function listSummaryVersions(draftId) {
+  try {
+    const { versions } = await apiRequest(`/v1/drafts/${draftId}/summary-versions`);
+    return { ok: true, versions };
+  } catch (err) { return fail(err); }
+}
+
+export async function readSummaryVersion(draftId, version) {
+  try {
+    const { version: found } = await apiRequest(`/v1/drafts/${draftId}/summary-versions/${version}`);
+    return { ok: true, version: found };
+  } catch (err) { return fail(err); }
+}
+
+/** Puts an earlier text back as the current summary; the text it replaces stays in the history. */
+export async function restoreSummaryVersion(draftId, version) {
+  try {
+    const { draft } = await apiRequest(`/v1/drafts/${draftId}/summary-versions/${version}/restore`, { method: 'POST', body: {} });
+    return { ok: true, draft };
+  } catch (err) { return fail(err); }
+}
+
 /** Asks the AI to check the summary AS IT IS against the source. Only reports (never rewrites the student's text); uses one credit. */
 export async function auditSummary(draftId) {
   try {

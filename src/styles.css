@@ -6488,3 +6488,11 @@ label.select-control:has(> .ui-select) {
 .reuse-source-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; border-top: 1px solid var(--color-border); }
 .reuse-source-name { overflow-wrap: anywhere; flex: 1 1 14rem; }
 .lesson-reuse { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--color-muted); }
+
+/* summary history: earlier texts, one shown beside the current text */
+.lesson-versions > summary { cursor: pointer; font-weight: 600; }
+.lesson-versions-list { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.lesson-versions-item[aria-current="true"] { font-weight: 700; text-decoration: underline; }
+.lesson-versions-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.75rem; margin-bottom: 0.5rem; }
+.lesson-versions-heading { margin: 0 0 0.25rem; font-size: 0.9rem; }
+.lesson-versions-text { margin: 0; padding: 0.5rem; max-height: 18rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; border: 1px solid var(--color-border); border-radius: 0.5rem; }

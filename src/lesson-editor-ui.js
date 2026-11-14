@@ -321,6 +321,10 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     regenerateSection = regenWrap;
   }
   summaryPanel.append(summaryTop, summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
+  // Earlier texts of this summary (the AI's and the student's own): see one next to the current text and put it back. Nothing is ever lost.
+  const versions = deps.listSummaryVersions && deps.readSummaryVersion && deps.restoreSummaryVersion && draft.status === "DRAFT" && !lessonTarget
+    ? createSummaryVersions() : null;
+  if (versions) summaryPanel.append(versions.element);
   if (regenerateSection && !lessonTarget) summaryPanel.append(regenerateSection);
   if (translateSection && !lessonTarget) summaryPanel.append(translateSection); // after the text it is about, not beside "Editar resumo"
 
@@ -656,7 +660,89 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     summaryPanel.insertBefore(box, summaryHint);
   }
 
+  function createSummaryVersions() {
+    const element = document.createElement("details");
+    element.className = "lesson-translate lesson-versions";
+    const title = createTextElement("summary", "lesson-translate-title", t("editor.versions.title"));
+    const hint = createTextElement("p", "lesson-hint", t("editor.versions.hint"));
+    const list = document.createElement("ul");
+    list.className = "lesson-versions-list";
+    const compare = document.createElement("div");
+    compare.className = "lesson-versions-compare";
+    compare.hidden = true;
+    const message = statusMessage();
+    message.tabIndex = -1; // receives the focus after a restore, so the result is announced where the student pressed
+    element.append(title, hint, list, compare, message);
+    let loadedFor = null; // the summaryVersion the list was loaded for
+    let shown = null; // the earlier version on screen
+
+    const whenText = (iso) => new Date(iso).toLocaleString(document.documentElement.lang || undefined, { dateStyle: "short", timeStyle: "short" });
+    const originText = (origin) => t(origin === "HUMAN_EDITED" ? "editor.versions.origin.student" : "editor.versions.origin.ai");
+
+    function column(heading, text) {
+      const col = document.createElement("div");
+      col.className = "lesson-versions-col";
+      col.append(createTextElement("h4", "lesson-versions-heading", heading), createTextElement("pre", "lesson-versions-text", text));
+      return col;
+    }
+
+    async function show(item, trigger) {
+      for (const b of list.querySelectorAll("button")) b.removeAttribute("aria-current");
+      trigger.setAttribute("aria-current", "true");
+      const result = await deps.readSummaryVersion(draft.id, item.version);
+      if (!result.ok) { setMessage(message, result.message || t("editor.versions.failed"), true); return; }
+      shown = result.version;
+      setMessage(message, "");
+      const restore = button("secondary-button", t("editor.versions.restore"), "restore-summary-version");
+      const unsaved = summaryBuffer !== null && summaryBuffer !== draft.summary;
+      restore.disabled = unsaved || shown.summary === draft.summary;
+      const note = unsaved ? createTextElement("p", "lesson-hint", t("editor.versions.saveFirst")) : null;
+      restore.addEventListener("click", async () => {
+        restore.disabled = true;
+        const done = await deps.restoreSummaryVersion(draft.id, item.version);
+        if (!done.ok) { restore.disabled = false; setMessage(message, done.message || t("editor.versions.failed"), true); return; }
+        summaryBuffer = null;
+        recovery.clearSummary();
+        applyDraft(done.draft);
+        setMessage(message, t("editor.versions.restored"));
+        message.focus({ preventScroll: true });
+      });
+      const columns = document.createElement("div");
+      columns.className = "lesson-versions-cols";
+      columns.append(column(`${originText(item.origin)} · ${whenText(item.createdAt)}`, shown.summary), column(t("editor.versions.current"), draft.summary));
+      compare.replaceChildren(columns, ...(note ? [note] : []), restore);
+      compare.hidden = false;
+    }
+
+    async function refresh() {
+      if (!element.open || loadedFor === draft.summaryVersion) return;
+      const result = await deps.listSummaryVersions(draft.id);
+      if (!result.ok) { setMessage(message, result.message || t("editor.versions.failed"), true); return; }
+      loadedFor = draft.summaryVersion;
+      compare.hidden = true;
+      compare.replaceChildren();
+      list.replaceChildren();
+      if (result.versions.length === 0) {
+        const none = document.createElement("li");
+        none.className = "lesson-hint";
+        none.textContent = t("editor.versions.none");
+        list.append(none);
+        return;
+      }
+      for (const item of result.versions) {
+        const li = document.createElement("li");
+        const b = button("text-button lesson-versions-item", `${originText(item.origin)} · ${whenText(item.createdAt)}`, "show-summary-version");
+        b.addEventListener("click", () => show(item, b));
+        li.append(b);
+        list.append(li);
+      }
+    }
+    element.addEventListener("toggle", refresh);
+    return { element, refresh };
+  }
+
   function renderSummary() {
+    versions?.refresh();
     if (document.activeElement !== summaryField.input && summaryBuffer === null) { summaryField.input.value = draft.summary; summaryAuthoring.reloadVisual(); }
     // where the summary came from, with the page text one click away (read live from the proposal's own pages)
     summaryPanel.querySelector(":scope > .summary-source")?.remove();
