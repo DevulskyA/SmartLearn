@@ -43,7 +43,11 @@ export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
         if (!reusable) throw err;
         selected = reuseOnlyProvider(err);
       }
-      const provider = { name: selected.name, live: selected.live === true, plannedCalls: 1 + (selected.audit ? 1 : 0) + (selected.repair ? 1 : 0) };
+      // callPlan (Codex only) lets the job estimate a split generation as the several calls it really is.
+      const provider = {
+        name: selected.name, live: selected.live === true, plannedCalls: 1 + (selected.audit ? 1 : 0) + (selected.repair ? 1 : 0),
+        callPlan: selected.callPlan, deferQuestions: typeof selected.callPlan === 'function' && settings.codex?.deferQuestions === true,
+      };
       if ((proposalId === undefined) === (draftId === undefined)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED', field: 'proposalId' } }; }
       const { job, created } = draftId !== undefined
         ? jobs.createQuestionsJob(db, request.actor.userId, draftId, { provider: { ...provider, plannedCalls: 1 }, maxInputChars: settings.maxInputChars })

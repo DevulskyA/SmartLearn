@@ -14,6 +14,7 @@ import * as proposals from '../src/services/content-proposals.js';
 import {
   JOB_STATES, ACTIVE_STATES, TRANSITIONS, JobError, createJob, getJob, listJobs, transitionJob, recoverOrphanJobs, assertJobScopeIntact,
 } from '../src/services/generation-jobs.js';
+import { ESTIMATION } from '../src/services/generation-budget.js';
 import { buildFixturePdf } from './pdf-fixtures/build-fixture-pdf.js';
 
 // T-F3-01 (R-04 AC-04.1, R-12, R-13, INV-13): the generation job record and its state machine. This task only RECORDS and
@@ -358,4 +359,16 @@ test('HTTP: POST /v1/generation-jobs (auth + CSRF + validation), idempotent, GET
     await app.close();
     ctx.cleanup();
   }
+});
+
+test('a job estimate follows the provider call plan: a split generation is several calls over two passes of the text, not one', async () => {
+  const ctx = tmpDb();
+  try {
+    const same = 'Pagina com exatamente o mesmo texto de aula sobre fisiologia renal.';
+    const { userId, proposalIds } = await userWithProposals(ctx, 'plan@example.com', [same, same]);
+    const single = createJob(ctx.db, userId, proposalIds[0], { provider: { name: 'CODEX', live: true, plannedCalls: 1 }, now: T0 }).job.estimatedUnits;
+    const split = createJob(ctx.db, userId, proposalIds[1], { provider: { name: 'CODEX', live: true, plannedCalls: 1, callPlan: () => ({ calls: 3, inputPasses: 2 }) }, now: T0 }).job.estimatedUnits;
+    // single = in + out; split = 2*in + 3*out = 2*single + out
+    assert.equal(split, 2 * single + ESTIMATION.outputUnitsPerCall);
+  } finally { ctx.cleanup(); }
 });

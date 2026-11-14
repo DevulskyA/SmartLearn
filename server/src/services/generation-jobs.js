@@ -107,7 +107,11 @@ export function createJob(db, userId, proposalId, { provider, regenerate = false
   }
   const { segments } = prepared.found;
   const payloadChars = segments.reduce((sum, s) => sum + s.text.length, 0);
-  const estimatedUnits = provider.live === true ? estimateCostUnits({ payloadChars, calls: provider.plannedCalls ?? 1 }) : 0;
+  // The audit and the repair (plannedCalls beyond the first) each send the text once; the generation step may be several calls (split).
+  const followUp = Math.max(0, (provider.plannedCalls ?? 1) - 1);
+  const generation = provider.callPlan?.(segments, { deferQuestions: provider.deferQuestions === true }) ?? { calls: 1, inputPasses: 1 };
+  const estimatedUnits = provider.live === true
+    ? estimateCostUnits({ payloadChars, calls: generation.calls + followUp, inputPasses: generation.inputPasses + followUp }) : 0;
   const at = now().toISOString();
 
   const run = db.transaction(() => {
@@ -152,7 +156,8 @@ export function createQuestionsJob(db, userId, draftId, { provider, maxInputChar
   if (isDraftStale(db, userId, draftRow)) throw new JobError('SOURCE_CHANGED', dm('SOURCE_CHANGED_SINCE_DRAFT'));
   const { segments } = prepared.found;
   const payloadChars = segments.reduce((sum, s) => sum + s.text.length, 0);
-  const estimatedUnits = provider.live === true ? estimateCostUnits({ payloadChars, calls: 1 }) : 0;
+  const plan = provider.callPlan?.(segments, { questionsOnly: true }) ?? { calls: 1, inputPasses: 1 };
+  const estimatedUnits = provider.live === true ? estimateCostUnits({ payloadChars, ...plan }) : 0;
   const at = now().toISOString();
   const run = db.transaction(() => {
     const raced = activeRow(db, userId, draftRow.proposal_id);
