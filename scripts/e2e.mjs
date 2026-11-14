@@ -3,14 +3,16 @@
 // earlier run - or a second run at the same time - cannot take the suite down.
 //   node scripts/e2e.mjs [--suite materials] [playwright arguments...]
 import net from 'node:net';
-import { spawn } from 'node:child_process';
-import { openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync, mkdirSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { SUITE_WORKERS } from '../e2e/support/suites.js';
+import { admitNow, spawnSupervised, EXIT } from './process-supervisor.mjs';
+
+const STABLE_DIR = fileURLToPath(new URL('../test-results', import.meta.url)); // holds the per-run output directories and the carried failure list
 
 // the e2e specs use server/stub ports 13950..13998 (offset 0)
 export const SPEC_PORT_MIN = 13950;
@@ -85,10 +87,13 @@ const FLAG_ALIAS = { '-g': '--grep', '-j': '--workers', '-c': '--config' };
 const VALUE_FLAGS = new Set(['--grep', '--grep-invert', '--project', '--repeat-each', '--retries', '--workers', '--timeout', '--shard', '--reporter', '--output', '--config', '--tag', '--max-failures']);
 const NOT_PART_OF_SELECTION = new Set(['--reporter', '--output']);
 
-export function baselineIdentity({ suite, workers, args = [] }) {
+function noBaselineReason(args) {
   if (args.includes('--only-changed') || args.includes('--changed')) return { key: null, reason: '--changed selects the specs that differ from HEAD (the working tree), so two runs rarely select the same tests' };
   if (args.includes('--last-failed') || args.includes('--failed')) return { key: null, reason: '--failed selects what failed in the last run, so two runs rarely select the same tests' };
-  const base = `${suite || 'full'}@${workers}w`;
+  return null;
+}
+
+function selectionParts(args) {
   const files = [];
   const flags = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -101,6 +106,14 @@ export function baselineIdentity({ suite, workers, args = [] }) {
     if (NOT_PART_OF_SELECTION.has(name)) continue;
     flags.push(`${name}=${value ?? ''}`);
   }
+  return { files, flags };
+}
+
+export function baselineIdentity({ suite, workers, args = [] }) {
+  const noBaseline = noBaselineReason(args);
+  if (noBaseline) return noBaseline;
+  const base = `${suite || 'full'}@${workers}w`;
+  const { files, flags } = selectionParts(args);
   if (!files.length && !flags.length) return { key: base };
   const selection = JSON.stringify({ files: files.sort(), flags: flags.sort() });
   return { key: `${base}+sel-${createHash('sha1').update(selection).digest('hex').slice(0, 10)}`, selection };
@@ -114,7 +127,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const i = args.indexOf('--suite');
   if (i >= 0) { env.E2E_SUITE = args[i + 1]; args.splice(i, 2); }
   // full run = 3 workers (measured 2026-11-01: 2w 1024 s; 3w 799 s, 0 failures; 4w 653-852 s but 3 different tests failed in 3 of 3 runs, contention, not stable); area suites may override via SUITE_WORKERS
-  const workers = Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 3);
+  // resource gate (docs/engineering/process-lifecycle.md): fewer workers under memory/CPU pressure, a refusal when the machine cannot take a run now
+  const gate = admitNow(Number(env.E2E_WORKERS || SUITE_WORKERS[env.E2E_SUITE] || 3));
+  if (!gate.ok) { console.log(`[e2e] refused, retry later: ${gate.notes.join('; ')}`); process.exit(EXIT.REFUSED); }
+  for (const note of gate.notes) console.log(`[e2e] ${note}`);
+  const workers = gate.workers;
   env.E2E_WORKERS = String(workers);
   const { offset, vitePort, release } = await pickRunPorts({ workers });
   env.E2E_PORT_OFFSET = String(offset);
@@ -122,17 +139,57 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   env.E2E_RUN_ID = `${Date.now()}-${process.pid}`;
   // T-F6-10: the spec servers (all started with NODE_ENV=test) hash passwords with cheap scrypt params; see server/src/auth/passwords.js
   env.SMARTLEARN_TEST_FAST_SCRYPT = '1';
-  if (env.E2E_VERBOSE) console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : ''}`);
-  // --changed = only the specs whose files differ from HEAD (Playwright --only-changed); --failed = re-run last failures only
-  for (const [flag, pw] of [['--changed', '--only-changed'], ['--failed', '--last-failed']]) { const k = args.indexOf(flag); if (k >= 0) args[k] = pw; }
+  if (env.E2E_VERBOSE) {
+    const suiteDescription = env.E2E_SUITE ? `, suite ${env.E2E_SUITE}` : '';
+    console.log(`[e2e] run ${env.E2E_RUN_ID}: vite ${vitePort}, server ports +${offset}, ${workers} worker(s)${suiteDescription}`);
+  }
+  const callerArgs = [...args]; // the caller's arguments (identity), before --changed/--failed are expanded and the reporter is added
+  // --changed = the specs that exercise what differs from HEAD (or --base <ref>), by impact (scripts/e2e-impact.mjs), not Playwright's --only-changed
+  // (which only picks spec FILES that changed); --dry-run prints the selection and stops; --explain also lists why each path selected what it did
+  const take = (flag, withValue) => {
+    const at = args.indexOf(flag);
+    if (at < 0) return undefined;
+    const value = withValue ? args[at + 1] : true;
+    args.splice(at, withValue ? 2 : 1);
+    return value;
+  };
+  const base = take('--base', true); const files = take('--files', true); const dryRun = take('--dry-run'); const explain = take('--explain');
+  const k = args.indexOf('--changed');
+  if (k >= 0) {
+    args.splice(k, 1);
+    const { selectSpecs, loadSpecs, loadModules, gitChangedPaths, playwrightArgsFor } = await import('./e2e-impact.mjs');
+    const root = fileURLToPath(new URL('..', import.meta.url));
+    const selection = selectSpecs({ changed: files ? files.split(',').filter(Boolean) : gitChangedPaths(root, base || 'HEAD'), specs: loadSpecs(root), modules: loadModules(root) });
+    const label = selection.none ? 'no E2E impacted (docs/tooling only)' : `${selection.specs.length} spec(s): ${selection.specs.join(' ')}`;
+    const escalation = selection.escalate ? ' | ESCALATE: configuration changed, a full-suite milestone gate is justified' : '';
+    console.log(`[e2e] --changed${base ? ' --base ' + base : ''}: ${label}${escalation}`);
+    if (explain || env.E2E_VERBOSE) for (const r of selection.reasons) console.log(`  - ${r}`);
+    if (dryRun || selection.none) { release(); process.exit(0); }
+    args.push(...playwrightArgsFor(selection));
+  } else if (dryRun) { release(); console.log('[e2e] --dry-run only applies to --changed'); process.exit(0); }
+  // --failed = re-run only the tests that failed last time. Each run has its own output directory (E2E_RUN_ID), and Playwright keeps its failure list
+  // inside it, so the list is carried in a stable file and copied into this run's directory; with nothing recorded it stops (Playwright would run everything).
+  const stable = join(STABLE_DIR, '.last-failed.json');
+  const runDir = join(STABLE_DIR, env.E2E_RUN_ID);
+  const f = args.indexOf('--failed');
+  if (f >= 0) {
+    let failed = [];
+    try { failed = JSON.parse(readFileSync(stable, 'utf8')).failedTests ?? []; } catch { /* none recorded */ }
+    if (!failed.length) { release(); console.log('[e2e] --failed: no failures recorded from the last run; nothing to retry'); process.exit(0); }
+    mkdirSync(runDir, { recursive: true });
+    copyFileSync(stable, join(runDir, '.last-run.json'));
+    args[f] = '--last-failed';
+  }
+  try { const holder = Number(readFileSync(join(STABLE_DIR, '.global-run.lock'), 'utf8')); if (holder && holder !== process.pid && pidAlive(holder)) console.log(`[e2e] a global run is in progress (pid ${holder}): this run shares CPU, slower timings are expected`); } catch { /* no global run */ }
   // token-cheap output by default: only failures and one summary line; E2E_VERBOSE=1 or an explicit --reporter keeps Playwright's own
-  const identity = baselineIdentity({ suite: env.E2E_SUITE, workers, args: [...args] }); // the caller's arguments, not the reporter added below
+  const identity = baselineIdentity({ suite: env.E2E_SUITE, workers, args: callerArgs });
   if (!env.E2E_VERBOSE && !args.some((a) => a === '--reporter' || a.startsWith('--reporter='))) args.push(`--reporter=${fileURLToPath(new URL('../e2e/support/quiet-reporter.js', import.meta.url))}`);
   // run Playwright's CLI directly: no npx/npm "notice" lines, no shell quoting
   const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
-  const child = spawn(process.execPath, [cli, 'test', ...args], { env, stdio: 'inherit' });
+  // the whole run lives in one Job Object: its servers and browsers end with it, even if this process is killed; no job => no run
+  const { child } = spawnSupervised({ exe: process.execPath, args: [cli, 'test', ...args], env, stdio: 'inherit', label: `e2e ${env.E2E_RUN_ID}`, workers });
   const t0 = Date.now();
-  child.on('exit', (code) => { release(); const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: identity.key, reason: identity.reason, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
+  child.on('exit', (code) => { release(); try { copyFileSync(join(runDir, '.last-run.json'), stable); } catch { /* the run wrote no failure list */ } const dev = checkDuration({ seconds: (Date.now() - t0) / 1000, key: identity.key, reason: identity.reason, code, record: rec >= 0 }); process.exit(code === 0 && dev ? 5 : (code ?? 1)); });
   process.on('SIGINT', () => { release(); process.exit(130); });
 }
 

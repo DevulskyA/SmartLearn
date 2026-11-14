@@ -141,6 +141,7 @@ export function suitesAffectedBy(file) {
   if (/^(docs|\.specs|conductor)\//.test(f) || /\.md$/.test(f)) return [];
   if (TOOLING.test(f)) return ['unit'];
   if (/^(e2e|src|public)\//.test(f)) return ['e2e', 'unit'];
+  if (f.startsWith('server/test/')) return ['server']; // a server test file is exercised only by the server suite; no E2E or unit test loads it
   if (f.startsWith('server/')) return ['server', 'e2e', 'unit'];
   return ['unit', 'server', 'e2e'];
 }
@@ -155,10 +156,14 @@ export function unaffectedBy(paths, suite) {
  * The one-line answer to "was the CURRENT head validated?". An old PASS is never PASS of this head: every recorded suite must be
  * PASS for the current head (later commits that cannot affect the suite keep it valid); anything else, or nothing recorded, is NOT PROVEN.
  */
-export function headValidation(artifacts, { currentHead, alive, now, docsOnlySince } = {}) {
+export function headValidation(artifacts, { currentHead, alive, now, docsOnlySince, required = null } = {}) {
   const prefix = 'VALIDAÇÃO DO HEAD ATUAL:';
   if (!artifacts?.length) return { proven: false, line: `${prefix} ⚠ NÃO PROVADA (nenhuma validação registrada para este HEAD)` };
   const rows = artifacts.map((a) => ({ suite: a.suite, eff: effectiveState(a, { currentHead, alive, now, docsOnlySince }), tested: a.headTested }));
+  // `required` = the suites a GLOBAL claim needs. A suite never executed is its own state (NÃO EXECUTADO), not silence: green results of a
+  // subset are reported with their real scope and are not a global validation.
+  const notRun = (required ?? []).filter((suite) => !rows.some((r) => r.suite === suite));
+  if (rows.every((r) => r.eff.state === 'PASS') && notRun.length) return { proven: false, partial: true, notRun, line: `${prefix} ◐ PASS PARCIAL (${rows.map((r) => r.suite).join(', ')}); NÃO EXECUTADO: ${notRun.join(', ')}` };
   if (rows.every((r) => r.eff.state === 'PASS')) return { proven: true, line: `${prefix} ✓ PASS (${rows.map((r) => r.suite).join(', ')}) no HEAD atual` };
   const label = (st) => (st === 'STALE' ? 'DESATUALIZADO' : st);
   const detail = rows.map((r) => `${r.suite} ${label(r.eff.state)}${r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : ''}`).join(' · ');
@@ -169,7 +174,7 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
 export function headValidationFor(wt) {
   const git = (args) => { try { return execFileSync('git', args, { cwd: wt, encoding: 'utf8' }).trim(); } catch { return ''; } };
   const docsOnlySince = (from, to, suite) => unaffectedBy(git(['diff', '--name-only', from, to]).split('\n'), suite);
-  return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince });
+  return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince, required: Object.keys(SUITES) });
 }
 
 export function fmtDuration(ms) {
