@@ -121,6 +121,23 @@ test('2012 edition then 2025: stable science carries over, a time-sensitive reco
   } finally { cleanup(); }
 });
 
+test('edition year comes from the source bibliography when known, and from the file name only otherwise', () => {
+  const { db, cleanup } = tmpDb();
+  try {
+    const a = user(db, 'a@x.test');
+    const named = seed(db, a, { unit: 'Filtração glomerular', question: 'Q1?', answer: 'R1.', fileName: 'Costanzo Physiology 2012.pdf' });
+    const plain = seed(db, a, { unit: 'Hipertensão', question: 'Q2?', answer: 'R2.', fileName: 'apostila.pdf' });
+    db.prepare('UPDATE sources SET bib_year = 2021 WHERE user_id = ?').run(a);
+    const byId = Object.fromEntries(privateBankItems(db, a).map((i) => [i.id, i.year]));
+    assert.equal(byId[`ex${named.ex}`], 2021, 'the bibliography outranks a year typed in the file name');
+    assert.equal(byId[`ex${plain.ex}`], 2021, 'a file name without a year still gets the bibliography year');
+    db.prepare('UPDATE sources SET bib_year = NULL WHERE user_id = ?').run(a);
+    const fallback = Object.fromEntries(privateBankItems(db, a).map((i) => [i.id, i.year]));
+    assert.equal(fallback[`ex${named.ex}`], 2012);
+    assert.equal(fallback[`ex${plain.ex}`], null);
+  } finally { cleanup(); }
+});
+
 test('freshness and edition helpers are deterministic and conservative', () => {
   assert.equal(classifyFreshness({ stem: 'Qual a dose de amoxicilina?' }).needsVerification, true);
   assert.equal(classifyFreshness({ stem: 'Qual a função do néfron?' }).stability, 'STABLE');

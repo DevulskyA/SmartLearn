@@ -7,7 +7,7 @@
 //   exercise_versions.question / answer / explanation -> stem / key / explanation
 //   learning_units.title                              -> topic (the study unit the question came from)
 //   exercise_versions.question_type                   -> item_type (cognitive level; the stored data has no multiple-choice/essay field yet)
-//   exercise_source_citations (+ sources)             -> source (file name), pages and edition year when the file name states one
+//   exercise_source_citations (+ sources)             -> source (file name), pages and edition year (the bibliography on the source when known, else a year the file name states)
 //   provenance                                        -> provenance + origin (AI_GENERATED -> generated)
 // Usage rights: the student's own questions, made from the student's own material, are reusable PRIVATELY, so they are LICENSED here.
 // That never makes them public: the bank is built per user and is not shared between accounts.
@@ -38,7 +38,7 @@ function rowsFor(db, userId) {
 
 function citationsFor(db, userId, versionId) {
   return db.prepare(`
-    SELECT c.source_id, c.page_index, s.original_name
+    SELECT c.source_id, c.page_index, s.original_name, s.bib_year
       FROM exercise_source_citations c JOIN sources s ON s.user_id = c.user_id AND s.id = c.source_id
      WHERE c.user_id = ? AND c.exercise_version_id = ? ORDER BY c.page_index
   `).all(userId, versionId);
@@ -57,7 +57,7 @@ export function privateBankItems(db, userId) {
       source_file: cites[0] ? `source#${cites[0].source_id}` : null,
       usage_status: 'LICENSED',
       exam: null,
-      year: editionYearOf(sourceName),
+      year: cites[0]?.bib_year ?? editionYearOf(sourceName),
       topic: row.unit_title,
       competency: null,
       subcompetency: null,
