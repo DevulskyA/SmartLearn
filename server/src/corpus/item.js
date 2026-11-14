@@ -56,6 +56,8 @@ export function normalizeItem(raw, { sourceFile = null } = {}) {
       usage_status: usage,
       exam: str(raw.exam),
       year: int(raw.year),
+      isbn: str(raw.isbn),
+      edition: str(raw.edition === undefined || raw.edition === null ? null : String(raw.edition)),
       topic: str(raw.topic),
       competency: str(raw.competency),
       subcompetency: str(raw.subcompetency),

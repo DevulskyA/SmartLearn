@@ -38,7 +38,7 @@ function rowsFor(db, userId) {
 
 function citationsFor(db, userId, versionId) {
   return db.prepare(`
-    SELECT c.source_id, c.page_index, s.original_name, s.bib_year
+    SELECT c.source_id, c.page_index, s.original_name, s.bib_year, s.bib_isbn, s.bib_edition
       FROM exercise_source_citations c JOIN sources s ON s.user_id = c.user_id AND s.id = c.source_id
      WHERE c.user_id = ? AND c.exercise_version_id = ? ORDER BY c.page_index
   `).all(userId, versionId);
@@ -58,6 +58,8 @@ export function privateBankItems(db, userId) {
       usage_status: 'LICENSED',
       exam: null,
       year: cites[0]?.bib_year ?? editionYearOf(sourceName),
+      isbn: cites[0]?.bib_isbn ?? null,
+      edition: cites[0]?.bib_edition ?? null,
       topic: row.unit_title,
       competency: null,
       subcompetency: null,

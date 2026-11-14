@@ -17,7 +17,10 @@ export function resolveReviewNeed(db, userId, need, { now = new Date(), repeatAf
   const result = { ...answer, bank: corpus.size };
   if (answer.action !== 'REUSE') return result;
   const verdict = editionVerdict(answer.item, { studyingYear: need.studyingYear ?? null });
-  if (verdict.ok) return result;
+  // A different edition (by ISBN/edition, not only by year) holds time-sensitive content too; stable content still carries over.
+  const otherEdition = (answer.bibliographic === 'OTHER_EDITION' || answer.bibliographic === 'CONFLICT') && answer.item.needs_verification === true;
+  if (verdict.ok && !otherEdition) return result;
+  if (otherEdition) verdict.reason = 'OTHER_EDITION_TIME_SENSITIVE';
   return {
     action: 'DERIVE', parent_id: answer.item.id, relationship: 'REVALIDATE', copyText: false,
     reason: verdict.reason, verification: { required: true, because: verdict.reason, parentYear: answer.item.year ?? null },
